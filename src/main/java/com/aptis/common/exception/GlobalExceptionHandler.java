@@ -21,6 +21,9 @@ import com.aptis.modules.iam.constant.IamMessageConstants;
 import com.aptis.modules.iam.domain.exception.ImportValidationException;
 import com.aptis.modules.iam.dto.response.studentimport.ImportValidationErrorResponse;
 import com.aptis.modules.iam.dto.response.studentimport.RowError;
+import com.aptis.modules.questionbank.constant.QuestionBankConstants;
+import com.aptis.modules.questionbank.domain.exception.QuestionImportValidationException;
+import com.aptis.modules.questionbank.dto.response.QuestionImportValidationErrorResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -99,6 +102,30 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 ErrorCode.VALIDATION_ERROR.name(),
                 IamMessageConstants.IMPORT_VALIDATION_FAILED,
+                errorResponse,
+                null,
+                null,
+                request.getRequestURI(),
+                null);
+
+        return ResponseEntity
+                .badRequest()
+                .body(response);
+    }
+
+    @ExceptionHandler(QuestionImportValidationException.class)
+    public ResponseEntity<ApiResponse<QuestionImportValidationErrorResponse>> handleQuestionImportValidationException(
+            QuestionImportValidationException exception,
+            HttpServletRequest request) {
+        QuestionImportValidationErrorResponse errorResponse =
+                new QuestionImportValidationErrorResponse(exception.getErrors());
+
+        ApiResponse<QuestionImportValidationErrorResponse> response = new ApiResponse<>(
+                Instant.now(),
+                false,
+                HttpStatus.BAD_REQUEST.value(),
+                ErrorCode.VALIDATION_ERROR.name(),
+                QuestionBankConstants.QUESTION_IMPORT_VALIDATION_FAILED,
                 errorResponse,
                 null,
                 null,

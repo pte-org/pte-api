@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import com.aptis.modules.questionbank.domain.DifficultyLevel;
 import com.aptis.modules.questionbank.domain.Question;
+import com.aptis.modules.questionbank.domain.QuestionSource;
 import com.aptis.modules.questionbank.domain.QuestionStatus;
 import com.aptis.modules.questionbank.domain.QuestionType;
 import com.aptis.modules.questionbank.domain.Skill;
@@ -32,6 +33,10 @@ public record QuestionResponse(
         List<String> topicTags,
         QuestionStatus status,
         UUID createdBy,
+        UUID tenantId,
+        QuestionSource source,
+        LocalDateTime publishedAt,
+        AssetResponse audioAsset,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         List<String> options,
@@ -39,6 +44,10 @@ public record QuestionResponse(
 ) {
 
     public static QuestionResponse from(Question question, List<AssetResponse> assets) {
+        return from(question, assets, null);
+    }
+
+    public static QuestionResponse from(Question question, List<AssetResponse> assets, AssetResponse audioAsset) {
         return new QuestionResponse(
                 question.getPublicId(),
                 question.getVersion(),
@@ -60,6 +69,10 @@ public record QuestionResponse(
                 question.getTopicTags(),
                 question.getStatus(),
                 question.getCreatedBy(),
+                question.getTenantId(),
+                question.getSource(),
+                question.getPublishedAt(),
+                audioAsset,
                 question.getCreatedAt(),
                 question.getUpdatedAt(),
                 question.getOptions(),

@@ -15,6 +15,10 @@ public final class ExamOperationsApiConstants {
     public static final String PATH_ASSIGN = "/assign";
     public static final String PATH_EXAMS = "/exams";
 
+    // Sub-paths for exam controller
+    public static final String PATH_EXAM_ID = "/{examId}";
+    public static final String PATH_SETTINGS = "/{examId}/settings";
+
     // Spring Security expressions
     public static final String AUTHORITY_HOST = "hasAuthority('HOST')";
 

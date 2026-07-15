@@ -1,6 +1,7 @@
 package com.aptis.modules.examoperations.domain;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -58,6 +59,40 @@ public class Exam {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    // ── Session settings (skill subset, proctoring, availability window, retries) ──
+
+    @Column(name = "skill_subset_reading", nullable = false)
+    private Boolean skillSubsetReading = true;
+
+    @Column(name = "skill_subset_listening", nullable = false)
+    private Boolean skillSubsetListening = true;
+
+    @Column(name = "skill_subset_writing", nullable = false)
+    private Boolean skillSubsetWriting = true;
+
+    @Column(name = "skill_subset_speaking", nullable = false)
+    private Boolean skillSubsetSpeaking = true;
+
+    @Column(name = "proctor_required", nullable = false)
+    private Boolean proctorRequired = false;
+
+    @Column(name = "availability_start")
+    private OffsetDateTime availabilityStart;
+
+    @Column(name = "availability_end")
+    private OffsetDateTime availabilityEnd;
+
+    @Column(name = "max_retry_count", nullable = false)
+    private Integer maxRetryCount = 0;
+
+    public static Exam create(String name, String code, String hostId) {
+        Exam exam = new Exam();
+        exam.name = name;
+        exam.code = code;
+        exam.hostId = hostId;
+        return exam;
+    }
 
     public void addQuestion(ExamQuestion question) {
         if (question == null) {

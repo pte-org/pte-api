@@ -2,6 +2,7 @@ package com.aptis.modules.questionbank.repository;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.data.jpa.domain.Specification;
 
@@ -54,6 +55,23 @@ public final class QuestionSpecification {
             }
 
             return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
+        };
+    }
+
+    /**
+     * Tenant visibility: Vendor-shared content (tenant_id IS NULL) is always visible;
+     * Host-authored content is visible only to the Host's own tenant. A null
+     * {@code callerTenantId} (Vendor/Admin caller) sees Vendor-shared content only —
+     * Vendor has no standing authoring/moderation view into Host-private content.
+     */
+    public static Specification<Question> visibleTo(UUID callerTenantId) {
+        return (root, query, criteriaBuilder) -> {
+            if (callerTenantId == null) {
+                return criteriaBuilder.isNull(root.get("tenantId"));
+            }
+            return criteriaBuilder.or(
+                    criteriaBuilder.isNull(root.get("tenantId")),
+                    criteriaBuilder.equal(root.get("tenantId"), callerTenantId));
         };
     }
 }

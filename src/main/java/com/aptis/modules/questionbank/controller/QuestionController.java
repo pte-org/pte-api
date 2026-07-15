@@ -50,15 +50,14 @@ public class QuestionController {
         this.questionService = questionService;
     }
 
-    @PreAuthorize(QuestionBankApiConstants.AUTHORITY_ADMIN)
+    @PreAuthorize(QuestionBankApiConstants.AUTHORITY_ADMIN_OR_HOST)
     @PostMapping
     public ResponseEntity<ApiResponse<QuestionResponse>> createQuestion(
             @Valid @RequestBody CreateQuestionRequest request,
             @AuthenticationPrincipal JwtPrincipal principal,
             HttpServletRequest servletRequest) {
 
-        QuestionResponse response = questionService.createQuestion(
-                request, principal.userId());
+        QuestionResponse response = questionService.createQuestion(request, principal);
 
         return ResponseEntity
                 .status(HttpStatus.CREATED)
@@ -73,19 +72,20 @@ public class QuestionController {
     // createQuestionWithAsset has been removed in favor of the Two-Step Architecture.
     // Frontend should now call POST /api/v1/assets/upload first, then POST /api/v1/questions
 
-    @PreAuthorize(QuestionBankApiConstants.AUTHORITY_ADMIN)
+    @PreAuthorize(QuestionBankApiConstants.AUTHORITY_ADMIN_OR_HOST)
     @GetMapping(QuestionBankApiConstants.PATH_BY_ID)
     public ResponseEntity<ApiResponse<QuestionResponse>> getQuestion(
             @PathVariable UUID id,
+            @AuthenticationPrincipal JwtPrincipal principal,
             HttpServletRequest servletRequest) {
 
-        QuestionResponse response = questionService.getQuestion(id);
+        QuestionResponse response = questionService.getQuestion(id, principal);
 
         return ResponseEntity.ok(
                 ApiResponse.success(response, servletRequest.getRequestURI()));
     }
 
-    @PreAuthorize(QuestionBankApiConstants.AUTHORITY_ADMIN)
+    @PreAuthorize(QuestionBankApiConstants.AUTHORITY_ADMIN_OR_HOST)
     @PutMapping(QuestionBankApiConstants.PATH_BY_ID)
     public ResponseEntity<ApiResponse<QuestionResponse>> updateQuestion(
             @PathVariable UUID id,
@@ -93,8 +93,7 @@ public class QuestionController {
             @AuthenticationPrincipal JwtPrincipal principal,
             HttpServletRequest servletRequest) {
 
-        QuestionResponse response = questionService.updateQuestion(
-                id, request, principal.userId());
+        QuestionResponse response = questionService.updateQuestion(id, request, principal);
 
         return ResponseEntity.ok(
                 ApiResponse.success(
@@ -105,13 +104,14 @@ public class QuestionController {
                         servletRequest.getRequestURI()));
     }
 
-    @PreAuthorize(QuestionBankApiConstants.AUTHORITY_ADMIN)
+    @PreAuthorize(QuestionBankApiConstants.AUTHORITY_ADMIN_OR_HOST)
     @DeleteMapping(QuestionBankApiConstants.PATH_BY_ID)
     public ResponseEntity<ApiResponse<Void>> deleteQuestion(
             @PathVariable UUID id,
+            @AuthenticationPrincipal JwtPrincipal principal,
             HttpServletRequest servletRequest) {
 
-        questionService.deleteQuestion(id);
+        questionService.deleteQuestion(id, principal);
 
         return ResponseEntity.ok(
                 ApiResponse.success(
@@ -122,7 +122,44 @@ public class QuestionController {
                         servletRequest.getRequestURI()));
     }
 
-    @PreAuthorize(QuestionBankApiConstants.AUTHORITY_ADMIN)
+    @PreAuthorize(QuestionBankApiConstants.AUTHORITY_ADMIN_OR_HOST)
+    @PostMapping(QuestionBankApiConstants.PATH_PUBLISH)
+    public ResponseEntity<ApiResponse<QuestionResponse>> publishQuestion(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal JwtPrincipal principal,
+            HttpServletRequest servletRequest) {
+
+        QuestionResponse response = questionService.publishQuestion(id, principal);
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        HttpStatus.OK,
+                        QuestionBankConstants.OP_QUESTION_PUBLISH,
+                        QuestionBankConstants.QUESTION_PUBLISHED,
+                        response,
+                        servletRequest.getRequestURI()));
+    }
+
+    @PreAuthorize(QuestionBankApiConstants.AUTHORITY_ADMIN_OR_HOST)
+    @PostMapping(value = QuestionBankApiConstants.PATH_AUDIO, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<QuestionResponse>> uploadAudio(
+            @PathVariable UUID id,
+            @RequestPart("file") MultipartFile file,
+            @AuthenticationPrincipal JwtPrincipal principal,
+            HttpServletRequest servletRequest) {
+
+        QuestionResponse response = questionService.uploadAudio(id, file, principal);
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        HttpStatus.OK,
+                        QuestionBankConstants.OP_QUESTION_AUDIO_UPLOAD,
+                        QuestionBankConstants.QUESTION_AUDIO_UPLOADED,
+                        response,
+                        servletRequest.getRequestURI()));
+    }
+
+    @PreAuthorize(QuestionBankApiConstants.AUTHORITY_ADMIN_OR_HOST)
     @GetMapping
     public ResponseEntity<ApiResponse<List<QuestionResponse>>> listQuestions(
             @RequestParam(required = false) Skill skill,
@@ -131,11 +168,12 @@ public class QuestionController {
             @RequestParam(required = false) DifficultyLevel difficultyLevel,
             @RequestParam(required = false) QuestionStatus status,
             @RequestParam(required = false) Boolean isCurrent,
+            @AuthenticationPrincipal JwtPrincipal principal,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable,
             HttpServletRequest servletRequest) {
 
         Page<QuestionResponse> pageResponse = questionService.listQuestions(
-                skill, part, questionType, difficultyLevel, status, isCurrent, pageable);
+                skill, part, questionType, difficultyLevel, status, isCurrent, principal, pageable);
 
         return ResponseEntity.ok(
                 ApiResponse.paged(

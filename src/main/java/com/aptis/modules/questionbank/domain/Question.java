@@ -104,6 +104,23 @@ public class Question extends BaseEntity {
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 
+    /**
+     * Null = Vendor-owned/shared content, visible to every tenant.
+     * Non-null = Host-authored content, scoped to that tenant only.
+     */
+    @Column(name = "tenant_id")
+    private UUID tenantId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private QuestionSource source = QuestionSource.VENDOR;
+
+    @Column(name = "published_at")
+    private LocalDateTime publishedAt;
+
+    @Column(name = "audio_asset_id")
+    private UUID audioAssetId;
+
 
     @PrePersist
     protected void prePersist() {
