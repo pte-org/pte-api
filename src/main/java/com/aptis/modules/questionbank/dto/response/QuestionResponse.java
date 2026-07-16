@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import com.aptis.modules.questionbank.domain.enums.DifficultyLevel;
 import com.aptis.modules.questionbank.domain.Question;
+import com.aptis.modules.questionbank.domain.enums.PteTaskType;
 import com.aptis.modules.questionbank.domain.enums.QuestionSource;
 import com.aptis.modules.questionbank.domain.enums.QuestionStatus;
 import com.aptis.modules.questionbank.domain.enums.QuestionType;
@@ -40,7 +41,11 @@ public record QuestionResponse(
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         List<String> options,
-        List<String> correctAnswers
+        List<String> correctAnswers,
+        PteTaskType pteTaskType,
+        String referenceAnswerText,
+        Integer minWordCount,
+        Integer maxWordCount
 ) {
 
     public static QuestionResponse from(Question question, List<AssetResponse> assets) {
@@ -76,6 +81,10 @@ public record QuestionResponse(
                 question.getCreatedAt(),
                 question.getUpdatedAt(),
                 question.getOptions(),
-                question.getCorrectAnswers());
+                question.getCorrectAnswers(),
+                question.getPteTaskType(),
+                question.getReferenceAnswerText(),
+                question.getMinWordCount(),
+                question.getMaxWordCount());
     }
 }

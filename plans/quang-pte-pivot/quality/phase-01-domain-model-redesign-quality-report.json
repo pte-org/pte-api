@@ -1,0 +1,60 @@
+{
+  "mode": "gate",
+  "target": "phase-01-domain-model-redesign",
+  "verdict": "APPROVED",
+  "reviewed_at": "2026-07-16T00:00:00Z",
+  "reviewed_files": [
+    "src/main/java/com/aptis/modules/questionbank/domain/Question.java",
+    "src/main/java/com/aptis/modules/questionbank/domain/PteTaskTypeSkillMapping.java",
+    "src/main/java/com/aptis/modules/questionbank/domain/enums/DifficultyLevel.java",
+    "src/main/java/com/aptis/modules/questionbank/domain/enums/QuestionSource.java",
+    "src/main/java/com/aptis/modules/questionbank/domain/enums/QuestionStatus.java",
+    "src/main/java/com/aptis/modules/questionbank/domain/enums/QuestionType.java",
+    "src/main/java/com/aptis/modules/questionbank/domain/enums/Skill.java",
+    "src/main/java/com/aptis/modules/questionbank/domain/enums/PteTaskType.java",
+    "src/main/java/com/aptis/modules/questionbank/dto/request/CreateQuestionRequest.java",
+    "src/main/java/com/aptis/modules/questionbank/dto/request/UpdateQuestionRequest.java",
+    "src/main/java/com/aptis/modules/questionbank/dto/response/QuestionResponse.java",
+    "src/main/java/com/aptis/modules/questionbank/interfaces/QuestionOperations.java",
+    "src/main/java/com/aptis/modules/questionbank/repository/QuestionSpecification.java",
+    "src/main/java/com/aptis/modules/questionbank/controller/QuestionController.java",
+    "src/main/java/com/aptis/modules/questionbank/service/QuestionService.java",
+    "src/main/java/com/aptis/modules/questionbank/service/ParsedQuestionImportRow.java",
+    "src/main/java/com/aptis/modules/questionbank/service/QuestionImportService.java",
+    "src/main/java/com/aptis/modules/questionbank/service/QuestionImportWriter.java",
+    "src/main/java/com/aptis/modules/questionbank/constant/QuestionBankApiConstants.java",
+    "src/main/java/com/aptis/modules/examdelivery/service/ExamContentDeliveryService.java",
+    "src/main/java/com/aptis/modules/examdelivery/service/ProctorActionService.java",
+    "src/main/java/com/aptis/modules/examoperations/domain/SessionTimeOverride.java",
+    "src/main/java/com/aptis/modules/examoperations/repository/SessionTimeOverrideRepository.java",
+    "src/main/java/com/aptis/modules/examoperations/service/ExamService.java",
+    "src/main/resources/db/migration/V12__add_pte_task_type_to_questions.sql"
+  ],
+
+  "summary": {
+    "blocker": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "noted": 0
+  },
+
+  "findings": [
+    {
+      "id": "QUAL-001",
+      "severity": "HIGH",
+      "rule": "PTE_AUDIO_VALIDATION_GAP",
+      "status": "RESOLVED",
+      "introduced_by_current_change": true,
+      "applicable": true,
+      "confidence": "high",
+      "location": "src/main/java/com/aptis/modules/questionbank/service/QuestionService.java (publishQuestion, uploadAudio)",
+      "evidence": "Relaxing Question.skill to nullable (for new PTE questions) left publishQuestion/uploadAudio still branching on the deprecated skill field to decide audio-prompt requirements — for a PTE question with skill=null, publishQuestion silently skipped the audio-required check and uploadAudio always rejected the upload.",
+      "why_it_matters": "Would have made audio-prompt-bearing PTE task types (Repeat Sentence, Re-tell Lecture, Answer Short Question, all 8 Listening types) impossible to author correctly through the API.",
+      "required_action": "Added requiresAudioPrompt(boolean) per PteTaskType constant + a QuestionService.requiresAudioPrompt(Question) helper that prefers pteTaskType when set, falling back to the legacy skill-based check for APTIS-era questions.",
+      "owner": "cook"
+    }
+  ],
+
+  "report_path": "plans/quang-pte-pivot/quality/phase-01-domain-model-redesign-quality-report.json"
+}

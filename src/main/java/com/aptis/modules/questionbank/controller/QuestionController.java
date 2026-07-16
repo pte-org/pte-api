@@ -29,6 +29,7 @@ import com.aptis.common.security.JwtPrincipal;
 import com.aptis.modules.questionbank.constant.QuestionBankApiConstants;
 import com.aptis.modules.questionbank.constant.QuestionBankConstants;
 import com.aptis.modules.questionbank.domain.enums.DifficultyLevel;
+import com.aptis.modules.questionbank.domain.enums.PteTaskType;
 import com.aptis.modules.questionbank.domain.enums.QuestionStatus;
 import com.aptis.modules.questionbank.domain.enums.QuestionType;
 import com.aptis.modules.questionbank.domain.enums.Skill;
@@ -168,12 +169,13 @@ public class QuestionController {
             @RequestParam(required = false) DifficultyLevel difficultyLevel,
             @RequestParam(required = false) QuestionStatus status,
             @RequestParam(required = false) Boolean isCurrent,
+            @RequestParam(required = false) PteTaskType pteTaskType,
             @AuthenticationPrincipal JwtPrincipal principal,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable,
             HttpServletRequest servletRequest) {
 
         Page<QuestionResponse> pageResponse = questionService.listQuestions(
-                skill, part, questionType, difficultyLevel, status, isCurrent, principal, pageable);
+                skill, part, questionType, difficultyLevel, status, isCurrent, pteTaskType, principal, pageable);
 
         return ResponseEntity.ok(
                 ApiResponse.paged(

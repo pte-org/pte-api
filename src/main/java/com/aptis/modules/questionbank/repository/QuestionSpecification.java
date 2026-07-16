@@ -8,6 +8,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 import com.aptis.modules.questionbank.domain.enums.DifficultyLevel;
 import com.aptis.modules.questionbank.domain.Question;
+import com.aptis.modules.questionbank.domain.enums.PteTaskType;
 import com.aptis.modules.questionbank.domain.enums.QuestionStatus;
 import com.aptis.modules.questionbank.domain.enums.QuestionType;
 import com.aptis.modules.questionbank.domain.enums.Skill;
@@ -28,7 +29,8 @@ public final class QuestionSpecification {
             QuestionType questionType,
             DifficultyLevel difficultyLevel,
             QuestionStatus status,
-            Boolean isCurrent) {
+            Boolean isCurrent,
+            PteTaskType pteTaskType) {
 
         return (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -47,6 +49,9 @@ public final class QuestionSpecification {
             }
             if (status != null) {
                 predicates.add(criteriaBuilder.equal(root.get("status"), status));
+            }
+            if (pteTaskType != null) {
+                predicates.add(criteriaBuilder.equal(root.get("pteTaskType"), pteTaskType));
             }
 
             // Default to showing only current versions unless explicitly overridden
