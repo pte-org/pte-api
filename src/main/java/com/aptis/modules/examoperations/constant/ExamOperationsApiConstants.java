@@ -18,6 +18,7 @@ public final class ExamOperationsApiConstants {
     // Sub-paths for exam controller
     public static final String PATH_EXAM_ID = "/{examId}";
     public static final String PATH_SETTINGS = "/{examId}/settings";
+    public static final String PATH_PROCTOR = "/{examId}/proctor";
 
     // Spring Security expressions
     public static final String AUTHORITY_HOST = "hasAuthority('HOST')";

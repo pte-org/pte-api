@@ -7,15 +7,18 @@ import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.UUID;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.aptis.common.event.UserLoggedOutEvent;
 import com.aptis.common.exception.ApiException;
 import com.aptis.common.exception.ErrorCode;
 import com.aptis.common.security.JwtPrincipal;
 import com.aptis.modules.iam.constant.IamApiConstants;
 import com.aptis.modules.iam.domain.Admin;
 import com.aptis.modules.iam.domain.Host;
+import com.aptis.modules.iam.domain.Proctor;
 import com.aptis.modules.iam.domain.RefreshToken;
 import com.aptis.modules.iam.domain.Student;
 import com.aptis.modules.iam.domain.enums.UserStatus;
@@ -26,6 +29,7 @@ import com.aptis.modules.iam.interfaces.CredentialProvisioning;
 import com.aptis.modules.iam.interfaces.JwtOperations;
 import com.aptis.modules.iam.repository.AdminRepository;
 import com.aptis.modules.iam.repository.HostRepository;
+import com.aptis.modules.iam.repository.ProctorRepository;
 import com.aptis.modules.iam.repository.RefreshTokenRepository;
 import com.aptis.modules.iam.repository.StudentRepository;
 
@@ -40,6 +44,8 @@ public class AuthService implements AuthOperations {
     private final JwtOperations jwtOperations;
     private final RefreshTokenRepository refreshTokenRepository;
     private final StudentRepository studentRepository;
+    private final ProctorRepository proctorRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public AuthService(
             AdminRepository adminRepository,
@@ -48,7 +54,9 @@ public class AuthService implements AuthOperations {
             HostRepository hostRepository,
             JwtOperations jwtOperations,
             RefreshTokenRepository refreshTokenRepository,
-            StudentRepository studentRepository) {
+            StudentRepository studentRepository,
+            ProctorRepository proctorRepository,
+            ApplicationEventPublisher eventPublisher) {
         this.adminRepository = adminRepository;
         this.credentialProvisioning = credentialProvisioning;
         this.graderAuthHelper = graderAuthHelper;
@@ -56,6 +64,8 @@ public class AuthService implements AuthOperations {
         this.jwtOperations = jwtOperations;
         this.refreshTokenRepository = refreshTokenRepository;
         this.studentRepository = studentRepository;
+        this.proctorRepository = proctorRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -68,6 +78,8 @@ public class AuthService implements AuthOperations {
                         .map(student -> loginStudent(student, password)))
                 .or(() -> graderAuthHelper.findByUsername(credential)
                         .map(grader -> graderAuthHelper.login(grader, password)))
+                .or(() -> proctorRepository.findByUsername(credential)
+                        .map(proctor -> loginProctor(proctor, password)))
                 .orElseThrow(() -> new ApiException(ErrorCode.IAM_INVALID_CREDENTIAL));
     }
 
@@ -86,6 +98,10 @@ public class AuthService implements AuthOperations {
         if (IamApiConstants.USER_TYPE_GRADER.equals(refreshToken.getUserType())) {
             return graderAuthHelper.refresh(refreshToken.getUserId());
         }
+        if (IamApiConstants.USER_TYPE_PROCTOR.equals(refreshToken.getUserType())) {
+            Proctor proctor = findProctor(refreshToken.getUserId());
+            return createAuthResponse(proctor, null);
+        }
 
         Student student = findStudent(refreshToken.getUserId());
         return createAuthResponse(student, null);
@@ -101,6 +117,7 @@ public class AuthService implements AuthOperations {
 
         refreshToken.revoke(LocalDateTime.now());
         refreshTokenRepository.save(refreshToken);
+        eventPublisher.publishEvent(new UserLoggedOutEvent(principal.userId(), principal.userType()));
     }
 
     @Override
@@ -140,6 +157,17 @@ public class AuthService implements AuthOperations {
         if (IamApiConstants.USER_TYPE_GRADER.equals(principal.userType())) {
             return graderAuthHelper.getProfile(principal.userId());
         }
+        if (IamApiConstants.USER_TYPE_PROCTOR.equals(principal.userType())) {
+            Proctor proctor = findProctor(principal.userId());
+            return new UserProfileResponse(
+                    proctor.getId(),
+                    proctor.getFullName(),
+                    proctor.getUsername(),
+                    IamApiConstants.ROLE_PROCTOR,
+                    IamApiConstants.USER_TYPE_PROCTOR,
+                    proctor.getOrganizationId(),
+                    false);
+        }
 
         Student student = findStudent(principal.userId());
         return new UserProfileResponse(
@@ -163,6 +191,13 @@ public class AuthService implements AuthOperations {
         validateStatus(host.getStatus());
         validatePassword(password, host.getPasswordHash());
         return createAuthResponse(host, createRawRefreshToken(host.getId(), IamApiConstants.USER_TYPE_HOST));
+    }
+
+    private AuthResponse loginProctor(Proctor proctor, String password) {
+        validateStatus(proctor.getStatus());
+        validatePassword(password, proctor.getPasswordHash());
+        return createAuthResponse(
+                proctor, createRawRefreshToken(proctor.getId(), IamApiConstants.USER_TYPE_PROCTOR));
     }
 
     private AuthResponse loginStudent(Student student, String password) {
@@ -224,6 +259,23 @@ public class AuthService implements AuthOperations {
                 false);
     }
 
+    private AuthResponse createAuthResponse(Proctor proctor, String refreshToken) {
+        String accessToken = jwtOperations.generateToken(
+                proctor.getId(),
+                IamApiConstants.USER_TYPE_PROCTOR,
+                IamApiConstants.ROLE_PROCTOR,
+                proctor.getOrganizationId());
+        return new AuthResponse(
+                accessToken,
+                refreshToken,
+                IamApiConstants.TOKEN_TYPE_BEARER,
+                jwtOperations.getExpirationSeconds(),
+                IamApiConstants.ROLE_PROCTOR,
+                IamApiConstants.USER_TYPE_PROCTOR,
+                proctor.getOrganizationId(),
+                false);
+    }
+
     private String createRawRefreshToken(Long userId, String userType) {
         String rawRefreshToken = UUID.randomUUID().toString();
         RefreshToken refreshToken = new RefreshToken(
@@ -279,6 +331,11 @@ public class AuthService implements AuthOperations {
 
     private Student findStudent(Long userId) {
         return studentRepository.findById(userId)
+                .orElseThrow(() -> new ApiException(ErrorCode.UNAUTHENTICATED));
+    }
+
+    private Proctor findProctor(Long userId) {
+        return proctorRepository.findById(userId)
                 .orElseThrow(() -> new ApiException(ErrorCode.UNAUTHENTICATED));
     }
 }

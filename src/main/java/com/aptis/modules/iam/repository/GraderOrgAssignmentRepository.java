@@ -7,4 +7,6 @@ import com.aptis.modules.iam.domain.GraderOrgAssignmentId;
 
 public interface GraderOrgAssignmentRepository extends JpaRepository<GraderOrgAssignment, GraderOrgAssignmentId> {
     List<GraderOrgAssignment> findByIdGraderId(Long graderId);
+
+    boolean existsByIdGraderIdAndIdOrganizationId(Long graderId, Long organizationId);
 }

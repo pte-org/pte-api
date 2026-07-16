@@ -19,6 +19,8 @@ import com.aptis.modules.examoperations.dto.TimeOverrideResponse;
 import com.aptis.modules.examoperations.interfaces.ExamOperations;
 import com.aptis.modules.examoperations.repository.ExamRepository;
 import com.aptis.modules.examoperations.repository.SessionTimeOverrideRepository;
+import com.aptis.modules.iam.domain.Proctor;
+import com.aptis.modules.iam.repository.ProctorRepository;
 import com.aptis.modules.questionbank.domain.Skill;
 
 @Service
@@ -26,10 +28,15 @@ public class ExamService implements ExamOperations {
 
     private final ExamRepository examRepository;
     private final SessionTimeOverrideRepository timeOverrideRepository;
+    private final ProctorRepository proctorRepository;
 
-    public ExamService(ExamRepository examRepository, SessionTimeOverrideRepository timeOverrideRepository) {
+    public ExamService(
+            ExamRepository examRepository,
+            SessionTimeOverrideRepository timeOverrideRepository,
+            ProctorRepository proctorRepository) {
         this.examRepository = examRepository;
         this.timeOverrideRepository = timeOverrideRepository;
+        this.proctorRepository = proctorRepository;
     }
 
     @Override
@@ -64,6 +71,31 @@ public class ExamService implements ExamOperations {
 
         timeOverrideRepository.deleteByExamId(saved.getId());
         List<SessionTimeOverride> overrides = saveTimeOverrides(saved, request.timeOverrides());
+        return toDetailResponse(saved, overrides);
+    }
+
+    @Override
+    @Transactional
+    public ExamDetailResponse assignProctor(Long examId, Long proctorId, JwtPrincipal principal) {
+        Exam exam = findOwnedExam(examId, principal);
+
+        // Tenant check: the proctor must belong to the same organization as the assigning Host.
+        Proctor proctor = proctorRepository.findByIdAndOrganizationId(proctorId, principal.tenantId())
+                .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
+
+        exam.setProctorId(proctor.getId());
+        Exam saved = examRepository.save(exam);
+        List<SessionTimeOverride> overrides = timeOverrideRepository.findByExamId(saved.getId());
+        return toDetailResponse(saved, overrides);
+    }
+
+    @Override
+    @Transactional
+    public ExamDetailResponse unassignProctor(Long examId, JwtPrincipal principal) {
+        Exam exam = findOwnedExam(examId, principal);
+        exam.setProctorId(null);
+        Exam saved = examRepository.save(exam);
+        List<SessionTimeOverride> overrides = timeOverrideRepository.findByExamId(saved.getId());
         return toDetailResponse(saved, overrides);
     }
 
@@ -137,14 +169,9 @@ public class ExamService implements ExamOperations {
         return isStartable(exam);
     }
 
-    /**
-     * A proctor-required exam is never startable yet: there is no proctor-assignment
-     * mechanism until Phase 7 introduces it. This is therefore correct today (every
-     * proctor-required exam genuinely has zero assigned proctors) and forward-compatible —
-     * Phase 7 replaces this with a real assignment lookup.
-     */
+    /** A proctor-required exam is startable once a proctor is actually assigned (Phase 7). */
     private boolean isStartable(Exam exam) {
-        return !Boolean.TRUE.equals(exam.getProctorRequired());
+        return !Boolean.TRUE.equals(exam.getProctorRequired()) || exam.getProctorId() != null;
     }
 
     private ExamDetailResponse toDetailResponse(Exam exam, List<SessionTimeOverride> overrides) {
@@ -165,6 +192,7 @@ public class ExamService implements ExamOperations {
                 exam.getAvailabilityStart(),
                 exam.getAvailabilityEnd(),
                 exam.getMaxRetryCount(),
+                exam.getProctorId(),
                 overrideResponses,
                 isStartable(exam));
     }

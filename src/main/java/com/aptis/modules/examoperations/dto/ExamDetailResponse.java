@@ -16,6 +16,7 @@ public record ExamDetailResponse(
         OffsetDateTime availabilityStart,
         OffsetDateTime availabilityEnd,
         Integer maxRetryCount,
+        Long proctorId,
         List<TimeOverrideResponse> timeOverrides,
         boolean startable) {
 }

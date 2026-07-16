@@ -22,6 +22,7 @@ public final class IamApiConstants {
     // Full host endpoint paths
     public static final String HOST_STUDENTS_BASE = ApiVersion.V1 + "/host/students";
     public static final String HOST_STUDENT_IMPORT_BASE = ApiVersion.V1 + "/host/students/import";
+    public static final String HOST_PROCTORS_BASE = ApiVersion.V1 + "/host/proctors";
 
     // Sub-paths (used in @PostMapping / @GetMapping within controllers)
     public static final String PATH_LOGIN = "/login";
@@ -65,12 +66,14 @@ public final class IamApiConstants {
     public static final String ROLE_HOST = "HOST";
     public static final String ROLE_STUDENT = "STUDENT";
     public static final String ROLE_GRADER = "GRADER";
+    public static final String ROLE_PROCTOR = "PROCTOR";
 
     // User types
     public static final String USER_TYPE_ADMIN = "ADMIN";
     public static final String USER_TYPE_HOST = "HOST";
     public static final String USER_TYPE_STUDENT = "STUDENT";
     public static final String USER_TYPE_GRADER = "GRADER";
+    public static final String USER_TYPE_PROCTOR = "PROCTOR";
 
     // Status values
     public static final String STATUS_ACTIVE = "ACTIVE";
@@ -98,6 +101,7 @@ public final class IamApiConstants {
     public static final String AUTHORITY_HOST = "hasAuthority('HOST')";
     public static final String AUTHORITY_STUDENT = "hasAuthority('STUDENT')";
     public static final String AUTHORITY_GRADER = "hasAuthority('GRADER')";
+    public static final String AUTHORITY_PROCTOR = "hasAuthority('PROCTOR')";
 
     // Security configuration
     public static final int BCRYPT_COST = 12;
@@ -117,6 +121,10 @@ public final class IamApiConstants {
     public static final String GRADER_ORG_NOT_ASSIGNED = "GRADER_ORG_NOT_ASSIGNED";
     public static final String GRADER_NOT_ACTIVE = "GRADER_NOT_ACTIVE";
 
+    // Proctor error messages
+    public static final String PROCTOR_NOT_FOUND = "PROCTOR_NOT_FOUND";
+    public static final String PROCTOR_USERNAME_ALREADY_EXISTS = "PROCTOR_USERNAME_ALREADY_EXISTS";
+
     // Operation codes (for audit / logging)
     public static final String OP_ADMIN_CREATE = "iam.admin.create";
     public static final String OP_ADMIN_CREATE_GRADER = "iam.admin.create-grader";
@@ -125,6 +133,7 @@ public final class IamApiConstants {
     public static final String OP_AUTH_LOGOUT = "iam.auth.logout";
     public static final String OP_AUTH_CHANGE_PASSWORD = "iam.auth.change-password";
     public static final String OP_HOST_CREATE = "iam.host.create";
+    public static final String OP_HOST_CREATE_PROCTOR = "iam.host.create-proctor";
 
     // Seed data
     public static final String SYSTEM_ADMIN_NAME = "System Administrator";

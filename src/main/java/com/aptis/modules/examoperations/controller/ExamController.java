@@ -4,6 +4,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.aptis.common.response.ApiResponse;
 import com.aptis.common.security.JwtPrincipal;
 import com.aptis.modules.examoperations.constant.ExamOperationsApiConstants;
+import com.aptis.modules.examoperations.dto.AssignProctorRequest;
 import com.aptis.modules.examoperations.dto.CreateExamRequest;
 import com.aptis.modules.examoperations.dto.ExamDetailResponse;
 import com.aptis.modules.examoperations.dto.ExamSettingsRequest;
@@ -79,6 +81,43 @@ public class ExamController {
                         HttpStatus.OK,
                         "SUCCESS",
                         "Exam settings updated successfully",
+                        response,
+                        servletRequest.getRequestURI()));
+    }
+
+    @PreAuthorize(ExamOperationsApiConstants.AUTHORITY_HOST)
+    @PutMapping(ExamOperationsApiConstants.PATH_PROCTOR)
+    public ResponseEntity<ApiResponse<ExamDetailResponse>> assignProctor(
+            @PathVariable Long examId,
+            @Valid @RequestBody AssignProctorRequest request,
+            @AuthenticationPrincipal JwtPrincipal principal,
+            HttpServletRequest servletRequest) {
+
+        ExamDetailResponse response = examService.assignProctor(examId, request.proctorId(), principal);
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        HttpStatus.OK,
+                        "SUCCESS",
+                        "Proctor assigned successfully",
+                        response,
+                        servletRequest.getRequestURI()));
+    }
+
+    @PreAuthorize(ExamOperationsApiConstants.AUTHORITY_HOST)
+    @DeleteMapping(ExamOperationsApiConstants.PATH_PROCTOR)
+    public ResponseEntity<ApiResponse<ExamDetailResponse>> unassignProctor(
+            @PathVariable Long examId,
+            @AuthenticationPrincipal JwtPrincipal principal,
+            HttpServletRequest servletRequest) {
+
+        ExamDetailResponse response = examService.unassignProctor(examId, principal);
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        HttpStatus.OK,
+                        "SUCCESS",
+                        "Proctor unassigned successfully",
                         response,
                         servletRequest.getRequestURI()));
     }

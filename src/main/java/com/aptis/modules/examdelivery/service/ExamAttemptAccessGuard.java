@@ -33,8 +33,26 @@ public class ExamAttemptAccessGuard {
                 .orElseThrow(() -> new ApiException(
                         ErrorCode.RESOURCE_NOT_FOUND, ExamDeliveryConstants.ATTEMPT_NOT_FOUND + attemptId));
 
+        return verifyOwnership(attempt, principal);
+    }
+
+    /**
+     * Row-locked variant for mutating transitions (final submit): acquires the pessimistic
+     * lock and checks ownership against the locked row in one query, avoiding a separate
+     * unlocked read-then-lock sequence.
+     */
+    public ExamAttempt loadOwnedAttemptForUpdate(Long attemptId, JwtPrincipal principal) {
+        ExamAttempt attempt = examAttemptRepository.findByIdForUpdate(attemptId)
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.RESOURCE_NOT_FOUND, ExamDeliveryConstants.ATTEMPT_NOT_FOUND + attemptId));
+
+        return verifyOwnership(attempt, principal);
+    }
+
+    private ExamAttempt verifyOwnership(ExamAttempt attempt, JwtPrincipal principal) {
         if (!attempt.getStudentId().equals(principal.userId().toString())) {
-            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, ExamDeliveryConstants.ATTEMPT_NOT_FOUND + attemptId);
+            throw new ApiException(
+                    ErrorCode.RESOURCE_NOT_FOUND, ExamDeliveryConstants.ATTEMPT_NOT_FOUND + attempt.getId());
         }
         return attempt;
     }

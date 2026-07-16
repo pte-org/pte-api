@@ -12,13 +12,17 @@ public final class PublicApiEndpoints {
     private static final String API_DOCS_PATTERN = "/v3/api-docs/**";
     private static final String SWAGGER_UI_PATTERN = "/swagger-ui/**";
     private static final String SWAGGER_UI_HTML = "/swagger-ui.html";
+    // WebSocket handshake only — real authentication happens at the STOMP CONNECT frame
+    // (StompAuthChannelInterceptor), not at this HTTP upgrade request.
+    private static final String WEBSOCKET_ENDPOINT_PATTERN = "/ws/**";
 
     public static final String[] PUBLIC_ENDPOINTS = {
             AUTH_LOGIN,
             AUTH_REFRESH,
             API_DOCS_PATTERN,
             SWAGGER_UI_PATTERN,
-            SWAGGER_UI_HTML
+            SWAGGER_UI_HTML,
+            WEBSOCKET_ENDPOINT_PATTERN
     };
 
     private static final List<String> PUBLIC_ENDPOINT_LIST = List.of(PUBLIC_ENDPOINTS);

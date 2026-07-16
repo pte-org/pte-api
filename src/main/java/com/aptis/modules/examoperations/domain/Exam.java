@@ -86,6 +86,10 @@ public class Exam {
     @Column(name = "max_retry_count", nullable = false)
     private Integer maxRetryCount = 0;
 
+    /** Nullable = no proctor assigned. One proctor per exam/room at a time (Phase 7 decision). */
+    @Column(name = "proctor_id")
+    private Long proctorId;
+
     public static Exam create(String name, String code, String hostId) {
         Exam exam = new Exam();
         exam.name = name;

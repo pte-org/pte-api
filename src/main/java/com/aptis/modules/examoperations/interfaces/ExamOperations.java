@@ -13,6 +13,10 @@ public interface ExamOperations {
 
     ExamDetailResponse updateSettings(Long examId, ExamSettingsRequest request, JwtPrincipal principal);
 
+    ExamDetailResponse assignProctor(Long examId, Long proctorId, JwtPrincipal principal);
+
+    ExamDetailResponse unassignProctor(Long examId, JwtPrincipal principal);
+
     /**
      * Pre-start check usable by exam-delivery: an exam marked proctor_required cannot
      * start until a proctor is assigned. No assignment mechanism exists until Phase 7,
