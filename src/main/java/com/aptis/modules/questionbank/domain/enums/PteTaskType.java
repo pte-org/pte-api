@@ -1,22 +1,33 @@
 package com.aptis.modules.questionbank.domain.enums;
 
 /**
- * The 20 official PTE Academic scored item types, plus PERSONAL_INTRODUCTION
- * (unscored warm-up recording — not one of the 20, tracked separately).
- * Verified against Pearson's public PTE Academic item-type list (Phase 1, Step 1a).
+ * The 22 official PTE Academic scored item types (20 original + 2 added in Pearson's
+ * August 2025 update: RESPOND_TO_A_SITUATION, SUMMARIZE_GROUP_DISCUSSION — purely
+ * additive, no existing item type changed), plus PERSONAL_INTRODUCTION (unscored
+ * warm-up recording — not one of the 22, tracked separately).
+ * Verified against Pearson's public PTE Academic item-type list (Phase 1, Step 1a;
+ * corrected 2026-07-16 after the count discrepancy surfaced during Phase 7 research).
  */
 public enum PteTaskType {
 
     PERSONAL_INTRODUCTION(ScoringMode.UNSCORED, false),
 
-    // Speaking (5) — AI-scored (speech). Only Repeat Sentence/Re-tell Lecture/Answer Short
-    // Question present a recorded prompt (audioAssetId); Read Aloud's prompt is text,
-    // Describe Image's prompt is an image (assetIds), neither needs an audio prompt.
+    // Speaking (7) — AI-scored (speech), 7 of these also get human review per Pearson's
+    // Aug-2025 update (Describe Image, Respond to a Situation, Summarize Group Discussion,
+    // Re-tell Lecture, plus Writing's Summarize Written Text/Write Essay) for content that
+    // looks memorized/scripted; content-scoring flow should leave room for that fallback.
+    // Only Repeat Sentence/Re-tell Lecture/Answer Short Question/the 2 new Aug-2025 types
+    // present a recorded/spoken prompt (audioAssetId); Read Aloud's prompt is text,
+    // Describe Image's prompt is an image (assetIds) — neither needs an audio prompt.
     READ_ALOUD(ScoringMode.AI_SCORED, false),
     REPEAT_SENTENCE(ScoringMode.AI_SCORED, true),
     DESCRIBE_IMAGE(ScoringMode.AI_SCORED, false),
     RETELL_LECTURE(ScoringMode.AI_SCORED, true),
     ANSWER_SHORT_QUESTION(ScoringMode.AI_SCORED, true),
+    // Added August 2025: reads + listens to a short scenario, responds by speaking.
+    RESPOND_TO_A_SITUATION(ScoringMode.AI_SCORED, true),
+    // Added August 2025: listens to a 3-person discussion, summarizes it by speaking.
+    SUMMARIZE_GROUP_DISCUSSION(ScoringMode.AI_SCORED, true),
 
     // Writing (2) — AI-scored (essay), text prompt, no audio.
     SUMMARIZE_WRITTEN_TEXT(ScoringMode.AI_SCORED, false),

@@ -2,7 +2,7 @@
   "mode": "gate",
   "target": "phase-01-domain-model-redesign",
   "verdict": "APPROVED",
-  "reviewed_at": "2026-07-16T00:00:00Z",
+  "reviewed_at": "2026-07-16T01:00:00Z",
   "reviewed_files": [
     "src/main/java/com/aptis/modules/questionbank/domain/Question.java",
     "src/main/java/com/aptis/modules/questionbank/domain/PteTaskTypeSkillMapping.java",
@@ -52,6 +52,20 @@
       "evidence": "Relaxing Question.skill to nullable (for new PTE questions) left publishQuestion/uploadAudio still branching on the deprecated skill field to decide audio-prompt requirements — for a PTE question with skill=null, publishQuestion silently skipped the audio-required check and uploadAudio always rejected the upload.",
       "why_it_matters": "Would have made audio-prompt-bearing PTE task types (Repeat Sentence, Re-tell Lecture, Answer Short Question, all 8 Listening types) impossible to author correctly through the API.",
       "required_action": "Added requiresAudioPrompt(boolean) per PteTaskType constant + a QuestionService.requiresAudioPrompt(Question) helper that prefers pteTaskType when set, falling back to the legacy skill-based check for APTIS-era questions.",
+      "owner": "cook"
+    },
+    {
+      "id": "QUAL-002",
+      "severity": "NOTED",
+      "rule": "TASK_TYPE_COUNT_CORRECTION",
+      "status": "RESOLVED",
+      "introduced_by_current_change": true,
+      "applicable": true,
+      "confidence": "high",
+      "location": "src/main/java/com/aptis/modules/questionbank/domain/enums/PteTaskType.java",
+      "evidence": "Original PteTaskType enum was built on a 20-scored-item-type assumption; Pearson's official Score Guide (July 2025) and PTE-changes articles confirm 22 scored item types as of the August 2025 update (RESPOND_TO_A_SITUATION, SUMMARIZE_GROUP_DISCUSSION added, purely additive).",
+      "why_it_matters": "Would have shipped a domain model 2 task types short of the real current exam, discovered only much later once Phase 8 UI or Phase 2 timing work was already built around 20.",
+      "required_action": "Added both enum constants (AI_SCORED, requiresAudioPrompt=true), PteTaskTypeSkillMapping entries, DTO regex updates; re-verified 235/235 tests green. Reviewed separately by quality-reviewer (PASS) for this specific diff.",
       "owner": "cook"
     }
   ],

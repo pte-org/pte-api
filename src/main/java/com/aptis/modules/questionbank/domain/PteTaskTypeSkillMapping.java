@@ -8,8 +8,9 @@ import com.aptis.modules.questionbank.domain.enums.Skill;
 
 /**
  * Static task-type -> skill-contribution mapping (config-driven by design,
- * not a DB join-table — PTE's 20 item types are a fixed taxonomy, so a
- * per-question mapping row would be pure duplication).
+ * not a DB join-table — PTE's 22 item types (20 original + 2 added Aug 2025)
+ * are a fixed, Pearson-controlled taxonomy, so a per-question mapping row
+ * would be pure duplication).
  *
  * Skill sets below follow Pearson's publicly documented PTE Academic Score
  * Guide contribution matrix. Weights are uniform (1.0) placeholders — Phase 7
@@ -43,6 +44,11 @@ public final class PteTaskTypeSkillMapping {
                         Skill.SPEAKING, Skill.LISTENING, Skill.ORAL_FLUENCY, Skill.PRONUNCIATION)),
                 Map.entry(PteTaskType.ANSWER_SHORT_QUESTION, contributes(
                         Skill.SPEAKING, Skill.LISTENING, Skill.VOCABULARY)),
+                Map.entry(PteTaskType.RESPOND_TO_A_SITUATION, contributes(
+                        Skill.SPEAKING, Skill.LISTENING, Skill.READING, Skill.ORAL_FLUENCY,
+                        Skill.PRONUNCIATION, Skill.VOCABULARY)),
+                Map.entry(PteTaskType.SUMMARIZE_GROUP_DISCUSSION, contributes(
+                        Skill.SPEAKING, Skill.LISTENING, Skill.ORAL_FLUENCY, Skill.PRONUNCIATION)),
 
                 Map.entry(PteTaskType.SUMMARIZE_WRITTEN_TEXT, contributes(
                         Skill.WRITING, Skill.READING, Skill.GRAMMAR, Skill.VOCABULARY, Skill.WRITTEN_DISCOURSE)),

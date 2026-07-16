@@ -30,7 +30,7 @@
     "src/main/java/com/aptis/modules/questionbank/service/QuestionService.java",
     "src/main/resources/db/migration/V12__add_pte_task_type_to_questions.sql"
   ],
-  "source_fingerprint": "sha256:a8913a43f201f6fb2253d310ef7fb204a153fe07a4bf4c813b7b95cf73b8b550",
-  "reviewed_at": "2026-07-16T00:00:00Z",
+  "source_fingerprint": "sha256:9e9e99c9135f4b4acd839162b5b0f9017c21fb33267fc6df842e01ea98924242",
+  "reviewed_at": "2026-07-16T01:00:00Z",
   "open_blocking_findings": 0
 }
