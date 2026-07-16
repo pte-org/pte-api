@@ -8,6 +8,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.aptis.common.security.JwtPrincipal;
 import com.aptis.modules.questionbank.domain.enums.DifficultyLevel;
+import com.aptis.modules.questionbank.domain.enums.PteTaskType;
 import com.aptis.modules.questionbank.domain.enums.QuestionStatus;
 import com.aptis.modules.questionbank.domain.enums.QuestionType;
 import com.aptis.modules.questionbank.domain.enums.Skill;
@@ -38,6 +39,7 @@ public interface QuestionOperations {
             DifficultyLevel difficultyLevel,
             QuestionStatus status,
             Boolean isCurrent,
+            PteTaskType pteTaskType,
             JwtPrincipal principal,
             Pageable pageable);
 }

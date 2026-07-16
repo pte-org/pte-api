@@ -20,7 +20,7 @@ public record CreateQuestionRequest(
         Integer part,
 
         @NotNull(message = "Question type is required")
-        @Pattern(regexp = "MULTIPLE_CHOICE|FILL_IN_BLANK|MATCHING|DRAG_DROP|TEXT_INPUT|AUDIO_RECORD",
+        @Pattern(regexp = "MULTIPLE_CHOICE|FILL_IN_BLANK|MATCHING|TEXT_INPUT|AUDIO_RECORD|ORDERING",
                 message = "Invalid question type")
         String questionType,
 
@@ -51,6 +51,22 @@ public record CreateQuestionRequest(
 
         List<String> options,
 
-        List<String> correctAnswers
+        List<String> correctAnswers,
+
+        @Pattern(regexp = "PERSONAL_INTRODUCTION|READ_ALOUD|REPEAT_SENTENCE|DESCRIBE_IMAGE|RETELL_LECTURE"
+                + "|ANSWER_SHORT_QUESTION|SUMMARIZE_WRITTEN_TEXT|WRITE_ESSAY|READING_FILL_IN_THE_BLANKS"
+                + "|READING_WRITING_FILL_IN_THE_BLANKS|MULTIPLE_CHOICE_READING_SINGLE_ANSWER"
+                + "|MULTIPLE_CHOICE_READING_MULTIPLE_ANSWER|RE_ORDER_PARAGRAPHS|SUMMARIZE_SPOKEN_TEXT"
+                + "|MULTIPLE_CHOICE_LISTENING_SINGLE_ANSWER|MULTIPLE_CHOICE_LISTENING_MULTIPLE_ANSWER"
+                + "|LISTENING_FILL_IN_THE_BLANKS|HIGHLIGHT_CORRECT_SUMMARY|SELECT_MISSING_WORD"
+                + "|HIGHLIGHT_INCORRECT_WORDS|WRITE_FROM_DICTATION",
+                message = "Invalid PTE task type")
+        String pteTaskType,
+
+        String referenceAnswerText,
+
+        Integer minWordCount,
+
+        Integer maxWordCount
 ) {
 }

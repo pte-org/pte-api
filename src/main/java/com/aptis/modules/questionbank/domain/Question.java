@@ -68,7 +68,7 @@ public class Question extends BaseEntity {
      */
     @Deprecated
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column
     private Skill skill;
 
     @Enumerated(EnumType.STRING)

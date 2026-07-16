@@ -19,6 +19,7 @@ import com.aptis.modules.examoperations.repository.ExamQuestionRepository;
 import com.aptis.modules.questionbank.constant.QuestionBankApiConstants;
 import com.aptis.modules.questionbank.domain.enums.DifficultyLevel;
 import com.aptis.modules.questionbank.domain.Question;
+import com.aptis.modules.questionbank.domain.enums.PteTaskType;
 import com.aptis.modules.questionbank.domain.enums.QuestionSource;
 import com.aptis.modules.questionbank.domain.enums.QuestionStatus;
 import com.aptis.modules.questionbank.domain.enums.QuestionType;
@@ -77,7 +78,7 @@ public class QuestionService implements QuestionOperations {
 
     @Transactional
     public QuestionResponse createQuestion(CreateQuestionRequest request, JwtPrincipal principal) {
-        validateOptions(request.questionType(), request.options(), request.correctAnswers());
+        validateOptions(request.questionType(), request.pteTaskType(), request.correctAnswers());
 
         UUID createdBy = actorResolver.resolveActorPublicId(principal);
         boolean isHost = actorResolver.isHost(principal);
@@ -105,7 +106,7 @@ public class QuestionService implements QuestionOperations {
 
     @Transactional
     public QuestionResponse updateQuestion(UUID publicId, UpdateQuestionRequest request, JwtPrincipal principal) {
-        validateOptions(request.questionType(), request.options(), request.correctAnswers());
+        validateOptions(request.questionType(), request.pteTaskType(), request.correctAnswers());
 
         Question existing = questionRepository.findByPublicId(publicId)
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
@@ -162,9 +163,8 @@ public class QuestionService implements QuestionOperations {
             throw new ApiException(ErrorCode.VALIDATION_ERROR);
         }
 
-        // Pre-publish validation: Listening/Speaking content must have an audio attachment.
-        if ((question.getSkill() == Skill.LISTENING || question.getSkill() == Skill.SPEAKING)
-                && question.getAudioAssetId() == null) {
+        // Pre-publish validation: questions whose prompt is an audio clip must have an audio attachment.
+        if (requiresAudioPrompt(question) && question.getAudioAssetId() == null) {
             throw new ApiException(ErrorCode.VALIDATION_ERROR);
         }
 
@@ -190,7 +190,7 @@ public class QuestionService implements QuestionOperations {
 
         enforceOwnership(question, principal);
 
-        if (question.getSkill() != Skill.LISTENING && question.getSkill() != Skill.SPEAKING) {
+        if (!requiresAudioPrompt(question)) {
             throw new ApiException(ErrorCode.VALIDATION_ERROR);
         }
 
@@ -240,12 +240,13 @@ public class QuestionService implements QuestionOperations {
             DifficultyLevel difficultyLevel,
             QuestionStatus status,
             Boolean isCurrent,
+            PteTaskType pteTaskType,
             JwtPrincipal principal,
             Pageable pageable) {
 
         UUID callerTenantId = actorResolver.resolveCallerTenantId(principal);
         Specification<Question> spec = QuestionSpecification
-                .buildFilter(skill, part, questionType, difficultyLevel, status, isCurrent)
+                .buildFilter(skill, part, questionType, difficultyLevel, status, isCurrent, pteTaskType)
                 .and(QuestionSpecification.visibleTo(callerTenantId));
 
         Page<Question> page = questionRepository.findAll(spec, pageable);
@@ -280,11 +281,21 @@ public class QuestionService implements QuestionOperations {
 
     // ── Private helpers ──────────────────────────────────────────────
 
-    private void validateOptions(String questionType, List<String> options, List<String> correctAnswers) {
-        if (QuestionType.MULTIPLE_CHOICE.name().equals(questionType)) {
-            if (correctAnswers == null || correctAnswers.isEmpty()) {
-                throw new ApiException(ErrorCode.VALIDATION_ERROR);
-            }
+    /**
+     * Phase 1 Design Constraint: correct_answer(s) is mandatory for every objectively-scored
+     * PTE task type. When pteTaskType isn't set (legacy/APTIS-era callers), fall back to the
+     * old MULTIPLE_CHOICE-by-questionType check so existing callers keep working unchanged.
+     */
+    private void validateOptions(String questionType, String pteTaskType, List<String> correctAnswers) {
+        boolean correctAnswerRequired;
+        if (pteTaskType != null) {
+            correctAnswerRequired = PteTaskType.valueOf(pteTaskType).requiresCorrectAnswer();
+        } else {
+            correctAnswerRequired = QuestionType.MULTIPLE_CHOICE.name().equals(questionType);
+        }
+
+        if (correctAnswerRequired && (correctAnswers == null || correctAnswers.isEmpty())) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR);
         }
     }
 
@@ -322,6 +333,18 @@ public class QuestionService implements QuestionOperations {
                 ? assetOperations.getAsset(question.getAudioAssetId())
                 : null;
         return QuestionResponse.from(question, assets, audioAsset);
+    }
+
+    /**
+     * PTE questions (pteTaskType set) derive the audio-prompt requirement from the task type
+     * itself (e.g. Repeat Sentence needs one, Read Aloud doesn't, even though both are Speaking).
+     * Legacy APTIS questions (pteTaskType null) fall back to the old skill-based check.
+     */
+    private boolean requiresAudioPrompt(Question question) {
+        if (question.getPteTaskType() != null) {
+            return question.getPteTaskType().requiresAudioPrompt();
+        }
+        return question.getSkill() == Skill.LISTENING || question.getSkill() == Skill.SPEAKING;
     }
 
     private boolean isVisibleTo(Question question, UUID callerTenantId) {
@@ -364,6 +387,11 @@ public class QuestionService implements QuestionOperations {
         question.setTopicTags(request.topicTags() != null ? request.topicTags() : List.of());
         question.setOptions(request.options() != null ? request.options() : List.of());
         question.setCorrectAnswers(request.correctAnswers() != null ? request.correctAnswers() : List.of());
+
+        question.setPteTaskType(request.pteTaskType() != null ? PteTaskType.valueOf(request.pteTaskType()) : null);
+        question.setReferenceAnswerText(request.referenceAnswerText());
+        question.setMinWordCount(request.minWordCount());
+        question.setMaxWordCount(request.maxWordCount());
     }
 
     private void applyFields(Question question, UpdateQuestionRequest request) {
@@ -383,5 +411,10 @@ public class QuestionService implements QuestionOperations {
         question.setTopicTags(request.topicTags() != null ? request.topicTags() : List.of());
         question.setOptions(request.options() != null ? request.options() : List.of());
         question.setCorrectAnswers(request.correctAnswers() != null ? request.correctAnswers() : List.of());
+
+        question.setPteTaskType(request.pteTaskType() != null ? PteTaskType.valueOf(request.pteTaskType()) : null);
+        question.setReferenceAnswerText(request.referenceAnswerText());
+        question.setMinWordCount(request.minWordCount());
+        question.setMaxWordCount(request.maxWordCount());
     }
 }
