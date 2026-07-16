@@ -22,7 +22,7 @@ import com.aptis.common.exception.ApiException;
 import com.aptis.common.exception.ErrorCode;
 import com.aptis.common.security.JwtPrincipal;
 import com.aptis.modules.questionbank.constant.QuestionBankApiConstants;
-import com.aptis.modules.questionbank.domain.Skill;
+import com.aptis.modules.questionbank.domain.enums.Skill;
 import com.aptis.modules.questionbank.domain.exception.QuestionImportValidationException;
 import com.aptis.modules.questionbank.dto.response.QuestionImportResultResponse;
 import com.aptis.modules.questionbank.dto.response.QuestionImportRowError;

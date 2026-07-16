@@ -1,7 +1,7 @@
 package com.aptis.modules.questionbank.constant;
 
 import com.aptis.common.constant.ApiVersion;
-import com.aptis.modules.questionbank.domain.Skill;
+import com.aptis.modules.questionbank.domain.enums.Skill;
 
 public final class QuestionBankApiConstants {
 

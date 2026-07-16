@@ -24,7 +24,7 @@ import com.aptis.modules.examoperations.repository.SessionTimeOverrideRepository
 import com.aptis.modules.proctor.domain.ProctorActionType;
 import com.aptis.modules.proctor.service.ProctorActionAuditService;
 import com.aptis.modules.proctor.service.ProctorStatusPushService;
-import com.aptis.modules.questionbank.domain.Skill;
+import com.aptis.modules.questionbank.domain.enums.Skill;
 
 /**
  * Owns the 3 per-attempt privileged proctor actions (force-submit, extend-time,

@@ -12,11 +12,11 @@ import com.aptis.modules.asset.dto.request.CreateAssetRequest;
 import com.aptis.modules.asset.dto.response.AssetResponse;
 import com.aptis.modules.asset.interfaces.AssetOperations;
 import com.aptis.modules.questionbank.constant.QuestionBankApiConstants;
-import com.aptis.modules.questionbank.domain.DifficultyLevel;
+import com.aptis.modules.questionbank.domain.enums.DifficultyLevel;
 import com.aptis.modules.questionbank.domain.Question;
-import com.aptis.modules.questionbank.domain.QuestionSource;
-import com.aptis.modules.questionbank.domain.QuestionStatus;
-import com.aptis.modules.questionbank.domain.QuestionType;
+import com.aptis.modules.questionbank.domain.enums.QuestionSource;
+import com.aptis.modules.questionbank.domain.enums.QuestionStatus;
+import com.aptis.modules.questionbank.domain.enums.QuestionType;
 import com.aptis.modules.questionbank.repository.QuestionRepository;
 import com.aptis.modules.storage.dto.response.UploadResponse;
 

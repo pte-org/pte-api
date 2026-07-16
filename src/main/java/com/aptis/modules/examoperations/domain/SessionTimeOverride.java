@@ -18,7 +18,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
-import com.aptis.modules.questionbank.domain.Skill;
+import com.aptis.modules.questionbank.domain.enums.Skill;
 
 /**
  * Per-section (skill + part) time override for one exam session. A section with no row

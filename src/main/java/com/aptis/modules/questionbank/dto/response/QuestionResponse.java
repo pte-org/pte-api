@@ -4,12 +4,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-import com.aptis.modules.questionbank.domain.DifficultyLevel;
+import com.aptis.modules.questionbank.domain.enums.DifficultyLevel;
 import com.aptis.modules.questionbank.domain.Question;
-import com.aptis.modules.questionbank.domain.QuestionSource;
-import com.aptis.modules.questionbank.domain.QuestionStatus;
-import com.aptis.modules.questionbank.domain.QuestionType;
-import com.aptis.modules.questionbank.domain.Skill;
+import com.aptis.modules.questionbank.domain.enums.QuestionSource;
+import com.aptis.modules.questionbank.domain.enums.QuestionStatus;
+import com.aptis.modules.questionbank.domain.enums.QuestionType;
+import com.aptis.modules.questionbank.domain.enums.Skill;
 import com.aptis.modules.asset.dto.response.AssetResponse;
 
 public record QuestionResponse(

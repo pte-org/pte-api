@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.aptis.modules.examoperations.domain.SessionTimeOverride;
-import com.aptis.modules.questionbank.domain.Skill;
+import com.aptis.modules.questionbank.domain.enums.Skill;
 
 public interface SessionTimeOverrideRepository extends JpaRepository<SessionTimeOverride, Long> {
 

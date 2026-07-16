@@ -6,6 +6,8 @@
 
 New modules go in: `src/main/java/com/aptis/modules/{name}/{constant,controller,domain,dto,interfaces,repository,service}/`
 
+All `enum` types live in `domain/enums/` (package `...domain.enums`), never directly under `domain/`.
+
 ## Critical Rules (enforce on every file you write)
 
 1. **No hardcoded strings** — all messages, error codes, labels in `*Constants.java`
@@ -18,6 +20,7 @@ New modules go in: `src/main/java/com/aptis/modules/{name}/{constant,controller,
 8. **Multi-tenant methods** — new service methods receive `tenantId` as parameter, not from Security context inside Repository
 9. **Exception handling** — via `@ControllerAdvice` only; no try-catch in controller methods
 10. **N+1 prevention** — use `@EntityGraph` or JOIN FETCH when loading associations
+11. **Enums in `domain/enums/`** — never place an `enum` file directly in `domain/`
 
 ## File Size Rule — Auto-Generated Code
 

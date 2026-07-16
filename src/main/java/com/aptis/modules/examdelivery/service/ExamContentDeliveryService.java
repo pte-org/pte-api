@@ -28,7 +28,7 @@ import com.aptis.modules.examoperations.repository.ExamQuestionRepository;
 import com.aptis.modules.examoperations.repository.SessionTimeOverrideRepository;
 import com.aptis.modules.iam.repository.HostRepository;
 import com.aptis.modules.questionbank.domain.Question;
-import com.aptis.modules.questionbank.domain.Skill;
+import com.aptis.modules.questionbank.domain.enums.Skill;
 import com.aptis.modules.questionbank.repository.QuestionRepository;
 import com.aptis.modules.tenancy.repository.OrganizationRepository;
 
@@ -171,7 +171,10 @@ public class ExamContentDeliveryService {
             case LISTENING -> Boolean.TRUE.equals(exam.getSkillSubsetListening());
             case WRITING -> Boolean.TRUE.equals(exam.getSkillSubsetWriting());
             case SPEAKING -> Boolean.TRUE.equals(exam.getSkillSubsetSpeaking());
-            case GRAMMAR, VOCABULARY -> true; // not gated by the 4-skill session subset
+            // Enabling skills (Grammar, Vocabulary, Oral Fluency, Pronunciation, Spelling,
+            // Written Discourse) aren't independently gated — they ride along with whichever
+            // communicative-skill task produced them.
+            case GRAMMAR, VOCABULARY, ORAL_FLUENCY, PRONUNCIATION, SPELLING, WRITTEN_DISCOURSE -> true;
         };
     }
 

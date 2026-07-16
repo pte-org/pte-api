@@ -21,7 +21,7 @@ import com.aptis.modules.examoperations.repository.ExamRepository;
 import com.aptis.modules.examoperations.repository.SessionTimeOverrideRepository;
 import com.aptis.modules.iam.domain.Proctor;
 import com.aptis.modules.iam.repository.ProctorRepository;
-import com.aptis.modules.questionbank.domain.Skill;
+import com.aptis.modules.questionbank.domain.enums.Skill;
 
 @Service
 public class ExamService implements ExamOperations {

@@ -2,7 +2,7 @@ package com.aptis.modules.questionbank.service;
 
 import java.util.List;
 
-import com.aptis.modules.questionbank.domain.Skill;
+import com.aptis.modules.questionbank.domain.enums.Skill;
 
 /** One validated row from a bulk-import Excel file, ready to persist. Internal to the import flow. */
 record ParsedQuestionImportRow(

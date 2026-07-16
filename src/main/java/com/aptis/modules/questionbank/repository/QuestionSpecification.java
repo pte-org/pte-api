@@ -6,11 +6,11 @@ import java.util.UUID;
 
 import org.springframework.data.jpa.domain.Specification;
 
-import com.aptis.modules.questionbank.domain.DifficultyLevel;
+import com.aptis.modules.questionbank.domain.enums.DifficultyLevel;
 import com.aptis.modules.questionbank.domain.Question;
-import com.aptis.modules.questionbank.domain.QuestionStatus;
-import com.aptis.modules.questionbank.domain.QuestionType;
-import com.aptis.modules.questionbank.domain.Skill;
+import com.aptis.modules.questionbank.domain.enums.QuestionStatus;
+import com.aptis.modules.questionbank.domain.enums.QuestionType;
+import com.aptis.modules.questionbank.domain.enums.Skill;
 
 import jakarta.persistence.criteria.Predicate;
 

@@ -227,6 +227,9 @@ modules/{moduleName}/
 ├── domain/
 │   ├── Exam.java                   # JPA @Entity
 │   ├── ExamAttempt.java
+│   ├── enums/                      # All enum types owned by this module
+│   │   ├── ExamStatus.java
+│   │   └── Skill.java
 │   ├── event/                      # Domain events (optional)
 │   └── exception/
 │       ├── ExamNotFoundException.java
@@ -254,6 +257,7 @@ modules/{moduleName}/
 | **constant/** | Centralize strings, codes, numbers | Nothing | `public static final` constants |
 | **controller/** | Parse request, validate at boundary, delegate to service | `dto.request`, `service`, `constant` | `HttpStatus`, `ResponseEntity` |
 | **domain/** | Pure domain logic, entities, value objects, custom exceptions | Only other domain classes | `@Entity`, `RuntimeException` subclasses |
+| **domain/enums/** | Every `enum` owned by the module — one file per enum | Nothing except `java.*` | `enum` type |
 | **dto/** | Request/Response DTO, never expose entity | `domain` (read-only), `constant` | Serializable POJO |
 | **interfaces/** | Service contract/interface only | Nothing except generics | `interface` definition |
 | **repository/** | Spring Data JPA queries only, no business logic | `domain` | `CrudRepository`, `JpaRepository` |
@@ -266,6 +270,49 @@ controller → service → repository → domain
   ✗ No: repository → controller (upward reference)
   ✗ No: service → controller (service doesn't know HTTP)
 ```
+
+### Enum Placement — `domain/enums/`
+
+**Rule:** Mọi `enum` trong module phải nằm trong `domain/enums/`, không rải rác trực tiếp trong `domain/`. Package name là `enums` (số nhiều — `enum` là từ khoá reserved, không dùng làm tên package được). Mục đích: nhìn vào `domain/enums/` là thấy ngay toàn bộ "vocabulary" của module (trạng thái, loại, phân loại) mà không phải lọc giữa entity và enum.
+
+```
+✗ Violation:
+domain/
+├── Exam.java
+├── ExamStatus.java      ← enum lẫn với entity, khó tracking khi module lớn
+├── Skill.java            ← enum
+└── ExamAttempt.java
+
+✓ Correct:
+domain/
+├── Exam.java
+├── ExamAttempt.java
+└── enums/
+    ├── ExamStatus.java
+    └── Skill.java
+```
+
+```java
+// ✗ Violation: package công bố enum trực tiếp ở domain/
+package com.aptis.modules.questionbank.domain;
+
+public enum Skill { READING, LISTENING, WRITING, SPEAKING }
+
+// ✓ Correct: package con enums/
+package com.aptis.modules.questionbank.domain.enums;
+
+public enum Skill { READING, LISTENING, WRITING, SPEAKING }
+```
+
+Entity dùng enum từ subfolder này qua import bình thường — không có ngoại lệ vì cùng module:
+
+```java
+// Question.java (domain/Question.java)
+import com.aptis.modules.questionbank.domain.enums.Skill;
+import com.aptis.modules.questionbank.domain.enums.QuestionType;
+```
+
+**Áp dụng:** New code — bắt buộc từ đầu. Existing code — refactor theo Boy Scout Rule khi động vào file đó (không cần đi dọn hết module cùng lúc, trừ khi đang làm 1 thay đổi lớn như thêm/sửa nhiều enum liên quan — khi đó dọn cả module 1 lần để tránh nửa module theo convention cũ, nửa theo convention mới).
 
 ### File Size Limit — Max 300 lines
 Nếu file vượt 300 dòng → tách thành file con (`*Helper`, `*Processor`). Kiểm tra: `wc -l ClassName.java`
@@ -1527,6 +1574,10 @@ Checklist này dùng trong PR review. Tất cả items phải ✓ trước merge
   - Check: Mọi string/number constant nằm trong `ExamConstants`, `StudentConstants`, etc.
   - Check: Field name là `UPPER_SNAKE_CASE`
   - Fix: Move hardcoded value thành constant file
+
+- [ ] **All enums live in `domain/enums/`**
+  - Check: Không có file `*.java` chứa `public enum` nằm trực tiếp trong `domain/` (phải ở `domain/enums/`)
+  - Fix: Move file, đổi package thành `...domain.enums`, cập nhật import ở mọi nơi tham chiếu
 
 - [ ] **DTOs never expose domain objects directly**
   - Check: Response DTO không có `@Entity` field

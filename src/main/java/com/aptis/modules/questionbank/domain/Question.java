@@ -24,6 +24,12 @@ import lombok.Setter;
 import lombok.ToString;
 
 import com.aptis.common.domain.BaseEntity;
+import com.aptis.modules.questionbank.domain.enums.DifficultyLevel;
+import com.aptis.modules.questionbank.domain.enums.PteTaskType;
+import com.aptis.modules.questionbank.domain.enums.QuestionSource;
+import com.aptis.modules.questionbank.domain.enums.QuestionStatus;
+import com.aptis.modules.questionbank.domain.enums.QuestionType;
+import com.aptis.modules.questionbank.domain.enums.Skill;
 
 @Entity
 @Table(name = "questions")
@@ -53,9 +59,31 @@ public class Question extends BaseEntity {
     @Column(name = "is_immutable", nullable = false)
     private Boolean isImmutable = false;
 
+    /**
+     * @deprecated APTIS-era single-skill tag. PTE questions no longer map to
+     * exactly one skill — use {@link #pteTaskType} with
+     * {@link PteTaskTypeSkillMapping#skillsFor(PteTaskType)} instead. Column
+     * stays nullable-in-practice for PTE questions during the transition;
+     * legacy APTIS questions keep their value (archived, not migrated).
+     */
+    @Deprecated
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Skill skill; 
+    private Skill skill;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pte_task_type")
+    private PteTaskType pteTaskType;
+
+    /** Reference/model answer used as scoring context for AI-scored Speaking/Writing tasks. */
+    @Column(name = "reference_answer_text", columnDefinition = "text")
+    private String referenceAnswerText;
+
+    @Column(name = "min_word_count")
+    private Integer minWordCount;
+
+    @Column(name = "max_word_count")
+    private Integer maxWordCount;
 
     @Column(nullable = false)
     private Integer part;

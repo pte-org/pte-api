@@ -7,10 +7,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.aptis.common.security.JwtPrincipal;
-import com.aptis.modules.questionbank.domain.DifficultyLevel;
-import com.aptis.modules.questionbank.domain.QuestionStatus;
-import com.aptis.modules.questionbank.domain.QuestionType;
-import com.aptis.modules.questionbank.domain.Skill;
+import com.aptis.modules.questionbank.domain.enums.DifficultyLevel;
+import com.aptis.modules.questionbank.domain.enums.QuestionStatus;
+import com.aptis.modules.questionbank.domain.enums.QuestionType;
+import com.aptis.modules.questionbank.domain.enums.Skill;
 import com.aptis.modules.questionbank.dto.request.CreateQuestionRequest;
 import com.aptis.modules.questionbank.dto.request.UpdateQuestionRequest;
 import com.aptis.modules.questionbank.dto.response.QuestionResponse;
