@@ -48,7 +48,6 @@ public final class ExamDeliveryConstants {
     public static final String RETRY_ATTEMPT_NOT_SUBMITTED = "Cannot request a retry: this attempt has not been submitted yet";
     public static final String RETRY_ALREADY_PENDING_OR_APPROVED = "A retry request for this exam is already pending or approved";
     public static final String RETRY_BUDGET_EXHAUSTED = "Retry budget exhausted for this exam";
-    public static final String RETRY_REVIEWER_NOT_AUTHORIZED = "You are not authorized to review this retry request";
     public static final String RETRY_PENDING_BLOCKS_START = "A pending retry request must be reviewed before this exam can be started again";
 
     private ExamDeliveryConstants() {

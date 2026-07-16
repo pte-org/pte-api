@@ -2,6 +2,7 @@ package com.aptis.modules.examdelivery.service;
 
 import org.springframework.stereotype.Service;
 
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import com.aptis.common.exception.ApiException;
 import com.aptis.common.exception.ErrorCode;
@@ -74,8 +75,14 @@ public class ExamAttemptService implements ExamDeliveryOperations {
         }
     }
 
-    /** Lightweight: one locked read + one write, no extra queries beyond the status update. */
-    @Transactional
+    /**
+     * Lightweight: one locked read + one write, no extra queries beyond the status update.
+     * Isolation is explicit (not assumed from the DB default) because the NOT_STARTED branch
+     * reads RetryRequest state via {@link #enforceRetryGate} — Spring ignores an isolation
+     * level declared on a nested {@code @Transactional} call joining this one, so it must be
+     * set here, on the outermost transactional boundary (Phase 9 Design Constraint).
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public HeartbeatResponse recordHeartbeat(Long attemptId, JwtPrincipal principal) {
         ExamAttempt attempt = accessGuard.loadOwnedAttempt(attemptId, principal);
         if (attempt.getStatus() == ExamAttemptStatus.NOT_STARTED) {

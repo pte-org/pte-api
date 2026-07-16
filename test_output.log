@@ -7,7 +7,7 @@
 [INFO] 
 [INFO] --- resources:3.5.0:resources (default-resources) @ aptis-api ---
 [INFO] Copying 1 resource from src\main\resources to target\classes
-[INFO] Copying 10 resources from src\main\resources to target\classes
+[INFO] Copying 11 resources from src\main\resources to target\classes
 [INFO] 
 [INFO] --- compiler:3.15.0:compile (default-compile) @ aptis-api ---
 [INFO] Nothing to compile - all classes are up to date.
@@ -17,49 +17,106 @@
 [INFO] 
 [INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ aptis-api ---
 [INFO] Recompiling the module because of changed source code.
-[INFO] Compiling 21 source files with javac [debug parameters release 21] to target\test-classes
+[INFO] Compiling 23 source files with javac [debug parameters release 21] to target\test-classes
 WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
 WARNING: sun.misc.Unsafe::objectFieldOffset has been called by lombok.permit.Permit
 WARNING: Please consider reporting this to the maintainers of class lombok.permit.Permit
 WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
-[INFO] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/ProctorActionServiceTest.java: Some input files use unchecked or unsafe operations.
-[INFO] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/ProctorActionServiceTest.java: Recompile with -Xlint:unchecked for details.
+[INFO] Some messages have been simplified; recompile with -Xdiags:verbose to get full output
 [INFO] -------------------------------------------------------------
 [ERROR] COMPILATION ERROR : 
 [INFO] -------------------------------------------------------------
-[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/ProctorActionServiceTest.java:[69,31] ExamAttempt() has protected access in com.aptis.modules.examdelivery.domain.ExamAttempt
-[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/ProctorBroadcastServiceTest.java:[82,44] incompatible types: java.lang.Long cannot be converted to int
-[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/ProctorBroadcastServiceTest.java:[114,43] error: reference to convertAndSend is ambiguous
-        verify(messagingTemplate, never()).convertAndSend(any(), any());
-                                          ^
-  both method convertAndSend(java.lang.Object,java.util.Map<java.lang.String,java.lang.Object>) in org.springframework.messaging.core.AbstractMessageSendingTemplate and method convertAndSend(java.lang.Object,@org.jspecify.annotations.Nullable org.springframework.messaging.core.MessagePostProcessor) in org.springframework.messaging.core.AbstractMessageSendingTemplate match
-[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/ProctorBroadcastServiceTest.java:[132,43] reference to convertAndSend is ambiguous
-  both method convertAndSend(java.lang.Object,java.util.Map<java.lang.String,java.lang.Object>) in org.springframework.messaging.core.AbstractMessageSendingTemplate and method convertAndSend(java.lang.Object,@org.jspecify.annotations.Nullable org.springframework.messaging.core.MessagePostProcessor) in org.springframework.messaging.core.AbstractMessageSendingTemplate match
-[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/ProctorBroadcastServiceTest.java:[148,43] reference to convertAndSend is ambiguous
-  both method convertAndSend(java.lang.Object,java.util.Map<java.lang.String,java.lang.Object>) in org.springframework.messaging.core.AbstractMessageSendingTemplate and method convertAndSend(java.lang.Object,@org.jspecify.annotations.Nullable org.springframework.messaging.core.MessagePostProcessor) in org.springframework.messaging.core.AbstractMessageSendingTemplate match
-[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/ProctorBroadcastServiceTest.java:[171,34] reference to convertAndSend is ambiguous
-  both method convertAndSend(java.lang.Object,java.util.Map<java.lang.String,java.lang.Object>) in org.springframework.messaging.core.AbstractMessageSendingTemplate and method convertAndSend(java.lang.Object,@org.jspecify.annotations.Nullable org.springframework.messaging.core.MessagePostProcessor) in org.springframework.messaging.core.AbstractMessageSendingTemplate match
-[INFO] 6 errors 
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[81,31] ExamAttempt() has protected access in com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[84,16] cannot find symbol
+  symbol:   method setIsSubmitted(boolean)
+  location: variable attempt of type com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[89,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[123,31] ExamAttempt() has protected access in com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[124,16] cannot find symbol
+  symbol:   method setIsSubmitted(boolean)
+  location: variable attempt of type com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[145,31] ExamAttempt() has protected access in com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[148,16] cannot find symbol
+  symbol:   method setIsSubmitted(boolean)
+  location: variable attempt of type com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[174,31] ExamAttempt() has protected access in com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[177,16] cannot find symbol
+  symbol:   method setIsSubmitted(boolean)
+  location: variable attempt of type com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[204,31] ExamAttempt() has protected access in com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[207,16] cannot find symbol
+  symbol:   method setIsSubmitted(boolean)
+  location: variable attempt of type com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[216,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[217,31] incompatible types: long cannot be converted to java.lang.Integer
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[243,31] ExamAttempt() has protected access in com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[246,16] cannot find symbol
+  symbol:   method setIsSubmitted(boolean)
+  location: variable attempt of type com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[255,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[256,31] incompatible types: long cannot be converted to java.lang.Integer
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[294,22] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[299,22] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[304,22] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[330,22] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[337,22] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[344,22] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[368,22] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[408,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[455,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[507,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[554,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[578,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[INFO] 29 errors 
 [INFO] -------------------------------------------------------------
 [INFO] ------------------------------------------------------------------------
 [INFO] BUILD FAILURE
 [INFO] ------------------------------------------------------------------------
-[INFO] Total time:  5.770 s
-[INFO] Finished at: 2026-07-16T02:01:04+07:00
+[INFO] Total time:  5.210 s
+[INFO] Finished at: 2026-07-16T14:15:49+07:00
 [INFO] ------------------------------------------------------------------------
 [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.15.0:testCompile (default-testCompile) on project aptis-api: Compilation failure: Compilation failure: 
-[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/ProctorActionServiceTest.java:[69,31] ExamAttempt() has protected access in com.aptis.modules.examdelivery.domain.ExamAttempt
-[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/ProctorBroadcastServiceTest.java:[82,44] incompatible types: java.lang.Long cannot be converted to int
-[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/ProctorBroadcastServiceTest.java:[114,43] error: reference to convertAndSend is ambiguous
-[ERROR]         verify(messagingTemplate, never()).convertAndSend(any(), any());
-[ERROR]                                           ^
-[ERROR]   both method convertAndSend(java.lang.Object,java.util.Map<java.lang.String,java.lang.Object>) in org.springframework.messaging.core.AbstractMessageSendingTemplate and method convertAndSend(java.lang.Object,@org.jspecify.annotations.Nullable org.springframework.messaging.core.MessagePostProcessor) in org.springframework.messaging.core.AbstractMessageSendingTemplate match
-[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/ProctorBroadcastServiceTest.java:[132,43] reference to convertAndSend is ambiguous
-[ERROR]   both method convertAndSend(java.lang.Object,java.util.Map<java.lang.String,java.lang.Object>) in org.springframework.messaging.core.AbstractMessageSendingTemplate and method convertAndSend(java.lang.Object,@org.jspecify.annotations.Nullable org.springframework.messaging.core.MessagePostProcessor) in org.springframework.messaging.core.AbstractMessageSendingTemplate match
-[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/ProctorBroadcastServiceTest.java:[148,43] reference to convertAndSend is ambiguous
-[ERROR]   both method convertAndSend(java.lang.Object,java.util.Map<java.lang.String,java.lang.Object>) in org.springframework.messaging.core.AbstractMessageSendingTemplate and method convertAndSend(java.lang.Object,@org.jspecify.annotations.Nullable org.springframework.messaging.core.MessagePostProcessor) in org.springframework.messaging.core.AbstractMessageSendingTemplate match
-[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/ProctorBroadcastServiceTest.java:[171,34] reference to convertAndSend is ambiguous
-[ERROR]   both method convertAndSend(java.lang.Object,java.util.Map<java.lang.String,java.lang.Object>) in org.springframework.messaging.core.AbstractMessageSendingTemplate and method convertAndSend(java.lang.Object,@org.jspecify.annotations.Nullable org.springframework.messaging.core.MessagePostProcessor) in org.springframework.messaging.core.AbstractMessageSendingTemplate match
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[81,31] ExamAttempt() has protected access in com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[84,16] cannot find symbol
+[ERROR]   symbol:   method setIsSubmitted(boolean)
+[ERROR]   location: variable attempt of type com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[89,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[123,31] ExamAttempt() has protected access in com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[124,16] cannot find symbol
+[ERROR]   symbol:   method setIsSubmitted(boolean)
+[ERROR]   location: variable attempt of type com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[145,31] ExamAttempt() has protected access in com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[148,16] cannot find symbol
+[ERROR]   symbol:   method setIsSubmitted(boolean)
+[ERROR]   location: variable attempt of type com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[174,31] ExamAttempt() has protected access in com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[177,16] cannot find symbol
+[ERROR]   symbol:   method setIsSubmitted(boolean)
+[ERROR]   location: variable attempt of type com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[204,31] ExamAttempt() has protected access in com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[207,16] cannot find symbol
+[ERROR]   symbol:   method setIsSubmitted(boolean)
+[ERROR]   location: variable attempt of type com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[216,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[217,31] incompatible types: long cannot be converted to java.lang.Integer
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[243,31] ExamAttempt() has protected access in com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[246,16] cannot find symbol
+[ERROR]   symbol:   method setIsSubmitted(boolean)
+[ERROR]   location: variable attempt of type com.aptis.modules.examdelivery.domain.ExamAttempt
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[255,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[256,31] incompatible types: long cannot be converted to java.lang.Integer
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[294,22] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[299,22] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[304,22] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[330,22] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[337,22] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[344,22] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[368,22] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[408,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[455,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[507,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[554,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
+[ERROR] /D:/GitHub/aptis/aptis-api/src/test/java/com/aptis/modules/examdelivery/service/RetryRequestServiceTest.java:[578,21] Exam() has protected access in com.aptis.modules.examoperations.domain.Exam
 [ERROR] -> [Help 1]
 [ERROR] 
 [ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
