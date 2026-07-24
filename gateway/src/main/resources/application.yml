@@ -13,7 +13,7 @@ spring:
       resourceserver:
         jwt:
           # iam publishes JWKS; the gateway validates every token locally against it.
-          jwk-set-uri: ${IAM_JWKS_URI:http://localhost:8081/auth/jwks}
+          jwk-set-uri: ${IAM_JWKS_URI:http://localhost:8081/api/iam/auth/jwks}
   cloud:
     gateway:
       server:
