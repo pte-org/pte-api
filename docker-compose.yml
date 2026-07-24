@@ -1,90 +1,132 @@
-name: aptis-lms
+name: pte-platform
+
+# Local infrastructure for the PTE microservice platform (Phase 0).
+# Service apps are added as they are implemented; this file is the shared
+# backbone: one Postgres instance (database-per-service), Kafka + Schema
+# Registry + Debezium (event backbone, ADR-002), Redis (cache/rate-limit/
+# single-flight, ADR-003), RabbitMQ (work queue, ADR-002).
 
 services:
   postgres:
     image: postgres:17
-    container_name: aptis-postgres
+    container_name: pte-postgres
     restart: unless-stopped
-
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-
+      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
-
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-
+      - pte_postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    # wal_level=logical is required for Debezium CDC (outbox relay).
+    command: ["postgres", "-c", "wal_level=logical"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
+    networks: [pte-network]
 
-    networks:
-      - aptis-network
-
-  api:
-    container_name: aptis-api
-    build:
-      context: .
-      dockerfile: Dockerfile
-
+  redis:
+    image: redis:7-alpine
+    container_name: pte-redis
     restart: unless-stopped
-
-    environment:
-      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS}
-
-      ADMIN_SEED_EMAIL: ${ADMIN_SEED_EMAIL}
-      ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD}
-
-      HOST_SEED_CODE: ${HOST_SEED_CODE}
-      HOST_SEED_NAME: ${HOST_SEED_NAME}
-      HOST_SEED_EMAIL: ${HOST_SEED_EMAIL}
-      HOST_SEED_PASSWORD: ${HOST_SEED_PASSWORD}
-      HOST_SEED_ORGANIZATION_NAME: ${HOST_SEED_ORGANIZATION_NAME}
-      HOST_SEED_ORGANIZATION_TYPE: ${HOST_SEED_ORGANIZATION_TYPE}
-      HOST_SEED_ORGANIZATION_ADDRESS: ${HOST_SEED_ORGANIZATION_ADDRESS}
-      HOST_SEED_REPRESENTATIVE_NAME: ${HOST_SEED_REPRESENTATIVE_NAME}
-      HOST_SEED_REPRESENTATIVE_PHONE: ${HOST_SEED_REPRESENTATIVE_PHONE}
-      HOST_SEED_CONTRACT_CODE: ${HOST_SEED_CONTRACT_CODE}
-      HOST_SEED_PACKAGE_NAME: ${HOST_SEED_PACKAGE_NAME}
-      HOST_SEED_STUDENT_LIMIT: ${HOST_SEED_STUDENT_LIMIT}
-
-      STUDENT_SEED_USERNAME: ${STUDENT_SEED_USERNAME}
-      STUDENT_SEED_PASSWORD: ${STUDENT_SEED_PASSWORD}
-      STUDENT_SEED_FULL_NAME: ${STUDENT_SEED_FULL_NAME}
-      STUDENT_SEED_CODE: ${STUDENT_SEED_CODE}
-      STUDENT_SEED_CLASS_NAME: ${STUDENT_SEED_CLASS_NAME}
-      STUDENT_SEED_EMAIL: ${STUDENT_SEED_EMAIL}
-      STUDENT_SEED_PHONE: ${STUDENT_SEED_PHONE}
-
-      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
-      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
-      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
-
     ports:
-      - "${API_PORT}:8080"
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [pte-network]
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: pte-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-pte}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-pte}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [pte-network]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: pte-kafka
+    restart: unless-stopped
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+    environment:
+      # Single-node KRaft (no ZooKeeper).
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      CLUSTER_ID: pte-kafka-cluster-0001
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    networks: [pte-network]
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.7.1
+    container_name: pte-schema-registry
+    restart: unless-stopped
     depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "${SCHEMA_REGISTRY_PORT:-8091}:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    networks: [pte-network]
+
+  debezium-connect:
+    image: debezium/connect:2.7.3.Final
+    container_name: pte-debezium
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
       postgres:
         condition: service_healthy
-
-    networks:
-      - aptis-network
+    ports:
+      - "${DEBEZIUM_PORT:-8092}:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: pte-connect
+      CONFIG_STORAGE_TOPIC: _connect_configs
+      OFFSET_STORAGE_TOPIC: _connect_offsets
+      STATUS_STORAGE_TOPIC: _connect_status
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+    networks: [pte-network]
 
 volumes:
-  postgres_data:
-    name: aptis-api_postgres_data
+  pte_postgres_data:
+    name: pte_postgres_data
 
 networks:
-  aptis-network:
+  pte-network:
     driver: bridge

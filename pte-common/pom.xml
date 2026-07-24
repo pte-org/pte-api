@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>com.pte</groupId>
+		<artifactId>pte-api-parent</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+	</parent>
+
+	<artifactId>pte-common</artifactId>
+	<name>pte-common</name>
+	<description>Thin shared library: primitives + contracts only, zero business logic (CODING_STANDARDS_MICROSERVICE.md §4)</description>
+
+	<dependencies>
+		<!-- Web primitives: ApiResponse, @RestControllerAdvice, OncePerRequestFilter. Provided so downstream controls runtime. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webmvc</artifactId>
+			<scope>provided</scope>
+		</dependency>
+		<!-- Resource-server JWT types (Jwt, JwtAuthenticationToken) for CurrentUser extraction. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+			<scope>provided</scope>
+		</dependency>
+		<!-- JPA for BaseEntity @MappedSuperclass. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+			<scope>provided</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<optional>true</optional>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+			</plugin>
+			<!-- No spring-boot-maven-plugin: this is a library, not an executable jar. -->
+		</plugins>
+	</build>
+
+</project>
