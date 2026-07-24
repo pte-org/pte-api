@@ -1,10 +1,10 @@
-package com.pte.iam.domain;
+package com.pte.authoring.domain;
 
 import com.pte.common.messaging.AbstractOutboxEntry;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
-/** iam's concrete outbox table (structure from {@link AbstractOutboxEntry}). */
+/** authoring's concrete outbox table (structure from {@link AbstractOutboxEntry}). */
 @Entity
 @Table(name = "outbox")
 public class OutboxEntry extends AbstractOutboxEntry {

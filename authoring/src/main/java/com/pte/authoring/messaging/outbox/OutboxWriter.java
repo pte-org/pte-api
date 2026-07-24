@@ -1,12 +1,12 @@
-package com.pte.admin.messaging.outbox;
+package com.pte.authoring.messaging.outbox;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.pte.admin.domain.OutboxEntry;
-import com.pte.admin.repository.OutboxRepository;
+import com.pte.authoring.domain.OutboxEntry;
+import com.pte.authoring.repository.OutboxRepository;
 import com.pte.common.messaging.AbstractOutboxWriter;
 import org.springframework.stereotype.Component;
 
-/** Writes admin domain events to the outbox in the caller's transaction (ADR-002). */
+/** Writes authoring domain events to the outbox in the caller's transaction (ADR-002). */
 @Component
 public class OutboxWriter extends AbstractOutboxWriter<OutboxEntry> {
 

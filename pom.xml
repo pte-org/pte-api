@@ -26,6 +26,7 @@
 		<module>gateway</module>
 		<module>iam</module>
 		<module>admin</module>
+		<module>authoring</module>
 	</modules>
 
 	<dependencyManagement>

@@ -1,0 +1,33 @@
+server:
+  port: ${AUTHORING_PORT:8083}
+  servlet:
+    context-path: /api/authoring
+
+spring:
+  application:
+    name: authoring
+  datasource:
+    url: ${AUTHORING_DB_URL:jdbc:postgresql://localhost:5432/authoring}
+    username: ${AUTHORING_DB_USER:authoring_svc}
+    password: ${AUTHORING_DB_PASSWORD:authoring_dev_pw}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IAM_JWKS_URI:http://localhost:8081/api/iam/auth/jwks}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
