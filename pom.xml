@@ -25,6 +25,7 @@
 		<module>pte-common</module>
 		<module>gateway</module>
 		<module>iam</module>
+		<module>admin</module>
 	</modules>
 
 	<dependencyManagement>
