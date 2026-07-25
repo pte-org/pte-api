@@ -20,6 +20,11 @@ public final class SchedulingConstants {
     public static final String EVENT_SCORING_REQUESTED = "ScoringRequested";
     public static final String EVENT_PUBLISH_REQUESTED = "PublishRequested";
 
+    // Incoming event consumed from authoring's outbox.event.ExamSnapshot topic (Phase 6).
+    public static final String INCOMING_EVENT_SNAPSHOT_PUBLISHED = "ExamSnapshotPublished";
+    public static final String TOPIC_SNAPSHOT_EVENTS = "outbox.event.ExamSnapshot";
+    public static final String KAFKA_HEADER_EVENT_TYPE = "eventType";
+
     private SchedulingConstants() {
     }
 }
