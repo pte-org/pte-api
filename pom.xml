@@ -27,6 +27,7 @@
 		<module>iam</module>
 		<module>admin</module>
 		<module>authoring</module>
+		<module>scheduling</module>
 	</modules>
 
 	<dependencyManagement>
