@@ -15,6 +15,10 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> 
 
     Optional<ExamSession> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 
+    /** No tenant filter: used by the internal service surface, not a host-scoped caller. */
+    @EntityGraph(attributePaths = "composition")
+    Optional<ExamSession> findWithCompositionByPublicId(UUID publicId);
+
     @EntityGraph(attributePaths = "composition")
     List<ExamSession> findByTenantId(UUID tenantId);
 }

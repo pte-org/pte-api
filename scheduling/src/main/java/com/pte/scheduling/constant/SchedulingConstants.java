@@ -12,6 +12,7 @@ public final class SchedulingConstants {
     public static final String ALREADY_ASSIGNED = "ALREADY_ASSIGNED";
     public static final String HOST_CONTEXT_REQUIRED = "HOST_CONTEXT_REQUIRED";
     public static final String INVALID_SESSION_WINDOW = "INVALID_SESSION_WINDOW";
+    public static final String NOT_ENTITLED = "NOT_ENTITLED";
 
     public static final String AGGREGATE_SESSION = "ExamSession";
     public static final String EVENT_SESSION_SCHEDULED = "SessionScheduled";

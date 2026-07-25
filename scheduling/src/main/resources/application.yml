@@ -29,6 +29,12 @@ spring:
 authoring:
   base-url: ${AUTHORING_URL:http://localhost:8083/api/authoring}
 
+# Shared secret for the /internal/** service-to-service surface (ADR-003 mTLS
+# placeholder). MUST match the same env var on every service that calls or
+# exposes /internal/**. Dev default only.
+internal:
+  service-key: ${INTERNAL_SERVICE_KEY:dev-internal-service-key-change-me}
+
 # Guarded sync pull to authoring (phase-04 design constraint) — fail fast, don't
 # hang session creation if authoring is slow/down.
 resilience4j:

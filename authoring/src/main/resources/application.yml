@@ -26,6 +26,12 @@ spring:
         jwt:
           jwk-set-uri: ${IAM_JWKS_URI:http://localhost:8081/api/iam/auth/jwks}
 
+# Shared secret for the /internal/** service-to-service surface (ADR-003 mTLS
+# placeholder). MUST match the same env var on every service that calls or
+# exposes /internal/**. Dev default only — real envs inject via Vault/secret manager.
+internal:
+  service-key: ${INTERNAL_SERVICE_KEY:dev-internal-service-key-change-me}
+
 management:
   endpoints:
     web:

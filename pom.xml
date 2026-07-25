@@ -28,6 +28,7 @@
 		<module>admin</module>
 		<module>authoring</module>
 		<module>scheduling</module>
+		<module>exam-delivery</module>
 	</modules>
 
 	<dependencyManagement>

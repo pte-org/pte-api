@@ -1,0 +1,66 @@
+server:
+  port: ${EXAM_DELIVERY_PORT:8085}
+  servlet:
+    context-path: /api/exam-delivery
+
+spring:
+  application:
+    name: exam-delivery
+  datasource:
+    url: ${EXAM_DELIVERY_DB_URL:jdbc:postgresql://localhost:5432/exam_delivery}
+    username: ${EXAM_DELIVERY_DB_USER:exam_delivery_svc}
+    password: ${EXAM_DELIVERY_DB_PASSWORD:exam_delivery_dev_pw}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IAM_JWKS_URI:http://localhost:8081/api/iam/auth/jwks}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+authoring:
+  base-url: ${AUTHORING_URL:http://localhost:8083/api/authoring}
+scheduling:
+  base-url: ${SCHEDULING_URL:http://localhost:8084/api/scheduling}
+
+# Shared secret for calling authoring/scheduling's /internal/** surface
+# (ADR-003 mTLS placeholder). Must match the value configured on those services.
+internal:
+  service-key: ${INTERNAL_SERVICE_KEY:dev-internal-service-key-change-me}
+
+# The ONE guarded pull at attempt-create (phase-05). NotEntitledException is a
+# clean business denial, not an infra failure — excluded from the failure rate
+# so a wave of legitimate 403s never trips the breaker.
+resilience4j:
+  circuitbreaker:
+    instances:
+      scheduling:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        ignore-exceptions:
+          - com.pte.examdelivery.domain.exception.NotEntitledException
+      authoring:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

@@ -14,6 +14,7 @@ import com.pte.authoring.domain.event.ExamSnapshotPublishedEvent;
 import com.pte.authoring.domain.exception.BlueprintNotFoundException;
 import com.pte.authoring.domain.exception.EmptyBlueprintException;
 import com.pte.authoring.domain.exception.QuestionNotFoundException;
+import com.pte.authoring.dto.response.SnapshotContentResponse;
 import com.pte.authoring.dto.response.SnapshotResponse;
 import com.pte.authoring.mapper.SnapshotMapper;
 import com.pte.authoring.messaging.outbox.OutboxWriter;
@@ -78,6 +79,19 @@ public class SnapshotPublishService {
         blueprintRepository.save(blueprint);
         emitPublished(saved);
         return SnapshotMapper.toResponse(saved);
+    }
+
+    /**
+     * Full-fidelity content for the internal service-to-service surface (called
+     * by exam-delivery at attempt-create). No {@link CurrentUser} check here —
+     * the caller is authenticated as {@code ROLE_INTERNAL_SERVICE}, not a human;
+     * per-student entitlement was already gated by scheduling before this call.
+     */
+    @Transactional(readOnly = true)
+    public SnapshotContentResponse getContent(UUID publicId) {
+        ExamSnapshot snapshot = snapshotRepository.findWithItemsByPublicId(publicId)
+                .orElseThrow(BlueprintNotFoundException::new);
+        return SnapshotMapper.toContentResponse(snapshot);
     }
 
     @Transactional(readOnly = true)

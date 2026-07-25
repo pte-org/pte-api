@@ -1,0 +1,9 @@
+{
+  "_comment": "Per-task-type prep/response seconds. Config-driven (not hardcoded), matching authoring's task-skill-mapping.json pattern. Only Milestone-1's 3 delivered task types are configured — TimerService fails fast on any other type rather than silently defaulting. VALUES ARE APPROXIMATE PLACEHOLDERS pending official Pearson candidate-handbook sourcing (tracked risk in plan.md); verify before release.",
+  "version": 1,
+  "timings": {
+    "MC_READING_SINGLE": { "prepSeconds": 0, "responseSeconds": 60 },
+    "READ_ALOUD": { "prepSeconds": 35, "responseSeconds": 40 },
+    "WRITE_ESSAY": { "prepSeconds": 0, "responseSeconds": 1200 }
+  }
+}
