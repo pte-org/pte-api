@@ -24,16 +24,16 @@
 	<modules>
 		<module>pte-common</module>
 		<module>gateway</module>
-		<module>iam</module>
-		<module>admin</module>
-		<module>authoring</module>
-		<module>scheduling</module>
-		<module>exam-delivery</module>
-		<module>proctor</module>
-		<module>scoring</module>
-		<module>reporting</module>
-		<module>media</module>
-		<module>notification</module>
+		<module>services/iam</module>
+		<module>services/admin</module>
+		<module>services/authoring</module>
+		<module>services/scheduling</module>
+		<module>services/exam-delivery</module>
+		<module>services/proctor</module>
+		<module>services/scoring</module>
+		<module>services/reporting</module>
+		<module>services/media</module>
+		<module>services/notification</module>
 	</modules>
 
 	<dependencyManagement>
