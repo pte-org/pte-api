@@ -1,6 +1,7 @@
 package com.pte.scoring.config;
 
 import com.pte.scoring.constant.ScoringConstants;
+import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
@@ -8,11 +9,11 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
-import org.springframework.amqp.rabbit.retry.RejectAndDontRequeueRecoverer;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.retry.interceptor.MethodInvocationRecoverer;
 import org.springframework.retry.interceptor.RetryOperationsInterceptor;
 import org.springframework.retry.interceptor.RetryInterceptorBuilder;
 
@@ -20,10 +21,15 @@ import org.springframework.retry.interceptor.RetryInterceptorBuilder;
  * AI scoring work queue (Phase 9 activates what Phase 7 deliberately deferred
  * — objective scoring was fast/synchronous, needed no queue; a vendor call is
  * slow/unreliable and needs bounded retry + a DLQ). {@code AI_SCORING_QUEUE}
- * dead-letters to {@code AI_SCORING_DLQ} after 3 failed delivery attempts
- * (stateless retry interceptor + reject-and-dont-requeue recoverer) — a stuck
- * job lands somewhere host-visible ({@code ScoringAnswerStatus.SCORING_FAILED}),
- * never retries forever.
+ * dead-letters to {@code AI_SCORING_DLQ} after 3 failed delivery attempts —
+ * the recoverer throws {@link AmqpRejectAndDontRequeueException} once retries
+ * are exhausted, which the container turns into a NACK-without-requeue, and
+ * the queue's {@code x-dead-letter-exchange} routes it to the DLX. (NOTE:
+ * {@code RejectAndDontRequeueRecoverer} implements AMQP's {@code
+ * MessageRecoverer}, not Spring Retry's {@code MethodInvocationRecoverer} —
+ * the two are not interchangeable; this is the correct type for {@code
+ * RetryInterceptorBuilder.recoverer(...)}.) A stuck job lands somewhere
+ * host-visible ({@code ScoringAnswerStatus.SCORING_FAILED}), never retries forever.
  */
 @Configuration
 public class RabbitMqConfig {
@@ -76,10 +82,13 @@ public class RabbitMqConfig {
 
     @Bean
     public RetryOperationsInterceptor aiScoringRetryInterceptor() {
+        MethodInvocationRecoverer<Object> recoverer = (args, cause) -> {
+            throw new AmqpRejectAndDontRequeueException("AI scoring retries exhausted", cause);
+        };
         return RetryInterceptorBuilder.stateless()
                 .maxAttempts(MAX_ATTEMPTS)
                 .backOffOptions(INITIAL_INTERVAL_MS, MULTIPLIER, MAX_INTERVAL_MS)
-                .recoverer(new RejectAndDontRequeueRecoverer())
+                .recoverer(recoverer)
                 .build();
     }
 

@@ -33,6 +33,7 @@
 		<module>scoring</module>
 		<module>reporting</module>
 		<module>media</module>
+		<module>notification</module>
 	</modules>
 
 	<dependencyManagement>
