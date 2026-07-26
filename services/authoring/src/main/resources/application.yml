@@ -1,0 +1,46 @@
+server:
+  port: ${AUTHORING_PORT:8083}
+  servlet:
+    context-path: /api/authoring
+
+spring:
+  application:
+    name: authoring
+  datasource:
+    url: ${AUTHORING_DB_URL:jdbc:postgresql://localhost:5432/authoring}
+    username: ${AUTHORING_DB_USER:authoring_svc}
+    password: ${AUTHORING_DB_PASSWORD:authoring_dev_pw}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IAM_JWKS_URI:http://localhost:8081/api/iam/auth/jwks}
+
+# Shared secret for the /internal/** service-to-service surface (ADR-003 mTLS
+# placeholder). MUST match the same env var on every service that calls or
+# exposes /internal/**. Dev default only — real envs inject via Vault/secret manager.
+internal:
+  service-key: ${INTERNAL_SERVICE_KEY:dev-internal-service-key-change-me}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+

@@ -1,0 +1,67 @@
+server:
+  port: ${SCHEDULING_PORT:8084}
+  servlet:
+    context-path: /api/scheduling
+
+spring:
+  application:
+    name: scheduling
+  datasource:
+    url: ${SCHEDULING_DB_URL:jdbc:postgresql://localhost:5432/scheduling}
+    username: ${SCHEDULING_DB_USER:scheduling_svc}
+    password: ${SCHEDULING_DB_PASSWORD:scheduling_dev_pw}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: scheduling-snapshot-ref
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IAM_JWKS_URI:http://localhost:8081/api/iam/auth/jwks}
+
+authoring:
+  base-url: ${AUTHORING_URL:http://localhost:8083/api/authoring}
+
+# Shared secret for the /internal/** service-to-service surface (ADR-003 mTLS
+# placeholder). MUST match the same env var on every service that calls or
+# exposes /internal/**. Dev default only.
+internal:
+  service-key: ${INTERNAL_SERVICE_KEY:dev-internal-service-key-change-me}
+
+# Guarded sync pull to authoring (phase-04 design constraint) — fail fast, don't
+# hang session creation if authoring is slow/down.
+resilience4j:
+  circuitbreaker:
+    instances:
+      authoring:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+

@@ -1,0 +1,46 @@
+server:
+  port: ${MEDIA_PORT:8090}
+  servlet:
+    context-path: /api/media
+
+spring:
+  application:
+    name: media
+  datasource:
+    url: ${MEDIA_DB_URL:jdbc:postgresql://localhost:5432/media}
+    username: ${MEDIA_DB_USER:media_svc}
+    password: ${MEDIA_DB_PASSWORD:media_dev_pw}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IAM_JWKS_URI:http://localhost:8081/api/iam/auth/jwks}
+
+media:
+  storage:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ROOT_USER:pte-minio-admin}
+    secret-key: ${MINIO_ROOT_PASSWORD:pte-minio-dev-pw}
+    bucket: ${MEDIA_BUCKET:pte-media}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}

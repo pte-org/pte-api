@@ -1,0 +1,42 @@
+server:
+  port: ${IAM_PORT:8081}
+  servlet:
+    context-path: /api/iam
+
+spring:
+  application:
+    name: iam
+  datasource:
+    url: ${IAM_DB_URL:jdbc:postgresql://localhost:5432/iam}
+    username: ${IAM_DB_USER:iam_svc}
+    password: ${IAM_DB_PASSWORD:iam_dev_pw}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: iam-tenant-registry
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
