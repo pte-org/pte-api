@@ -30,6 +30,7 @@
 		<module>scheduling</module>
 		<module>exam-delivery</module>
 		<module>scoring</module>
+		<module>reporting</module>
 	</modules>
 
 	<dependencyManagement>
