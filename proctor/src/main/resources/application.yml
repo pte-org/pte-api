@@ -1,0 +1,64 @@
+server:
+  port: ${PROCTOR_PORT:8086}
+  servlet:
+    context-path: /api/proctor
+
+spring:
+  application:
+    name: proctor
+  datasource:
+    url: ${PROCTOR_DB_URL:jdbc:postgresql://localhost:5432/proctor}
+    username: ${PROCTOR_DB_USER:proctor_svc}
+    password: ${PROCTOR_DB_PASSWORD:proctor_dev_pw}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IAM_JWKS_URI:http://localhost:8081/api/iam/auth/jwks}
+
+scheduling:
+  base-url: ${SCHEDULING_URL:http://localhost:8084/api/scheduling}
+
+# Origins allowed to open the /ws STOMP endpoint (comma-separated). JWT auth on
+# CONNECT is the primary defense; this is cheap defense-in-depth, not "*".
+proctor:
+  ws:
+    allowed-origin-patterns: ${PROCTOR_WS_ALLOWED_ORIGINS:http://localhost:*}
+
+# Shared secret for calling scheduling's /internal/** surface (ADR-003 mTLS placeholder).
+internal:
+  service-key: ${INTERNAL_SERVICE_KEY:dev-internal-service-key-change-me}
+
+# The ONE guarded call, made once per ProctorSession-open (phase-10).
+resilience4j:
+  circuitbreaker:
+    instances:
+      scheduling:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        ignore-exceptions:
+          - com.pte.proctor.domain.exception.NotAssignedToSessionException
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}

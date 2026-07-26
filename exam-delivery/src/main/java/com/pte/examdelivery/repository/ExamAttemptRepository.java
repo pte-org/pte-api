@@ -13,4 +13,7 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long> 
 
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
     Optional<ExamAttempt> findWithPinnedByPublicIdAndStudentPublicId(UUID publicId, UUID studentPublicId);
+
+    /** Tenant-scoped, not student-owned — used by {@code ProctorCommandConsumer} (phase-10), where the actor is a verified proctor command, not the student. */
+    Optional<ExamAttempt> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 }

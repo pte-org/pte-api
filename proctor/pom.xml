@@ -8,14 +8,18 @@
 		<version>0.0.1-SNAPSHOT</version>
 	</parent>
 
-	<artifactId>exam-delivery</artifactId>
-	<name>exam-delivery</name>
-	<description>Critical path: attempt state machine, snapshot pinning, server-side timers, Transactional Outbox (ADR-001/002/004)</description>
+	<artifactId>proctor</artifactId>
+	<name>proctor</name>
+	<description>Live supervision: WebSocket/STOMP proctor console, force-submit/extend-time commands to exam-delivery, tamper-evident violation audit log (ADR-001/002/004)</description>
 
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-websocket</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -33,27 +37,17 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
-		<!-- Redis: warm cache + single-flight lock for pinned-snapshot reads (ADR-003). -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-redis</artifactId>
-		</dependency>
-		<!-- Guarded sync clients to authoring/scheduling at attempt-create only. -->
+		<!-- The one guarded sync call: proctor -> scheduling, to verify assignment at ProctorSession-open. -->
 		<dependency>
 			<groupId>io.github.resilience4j</groupId>
 			<artifactId>resilience4j-spring-boot3</artifactId>
 			<version>2.3.0</version>
 		</dependency>
-		<!-- Kafka consumer for proctor's ProctorCommand event (Phase 10) — exam-delivery's first consumer. -->
-		<dependency>
-			<groupId>org.springframework.kafka</groupId>
-			<artifactId>spring-kafka</artifactId>
-		</dependency>
 		<dependency>
 			<groupId>com.fasterxml.jackson.core</groupId>
 			<artifactId>jackson-databind</artifactId>
 		</dependency>
-		<!-- Distributed tracing (Phase 6): Micrometer Tracing -> OTLP -> Jaeger. -->
+		<!-- Distributed tracing (Phase 6 pattern). -->
 		<dependency>
 			<groupId>io.micrometer</groupId>
 			<artifactId>micrometer-tracing-bridge-otel</artifactId>

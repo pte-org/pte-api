@@ -17,6 +17,12 @@ public final class ExamDeliveryConstants {
     public static final String EVENT_ANSWER_SUBMITTED = "AnswerSubmitted";
     public static final String EVENT_ATTEMPT_SUBMITTED = "AttemptSubmitted";
 
+    // Incoming (Phase 10): proctor's outbox.event.ProctorCommand topic.
+    public static final String TOPIC_PROCTOR_COMMAND_EVENTS = "outbox.event.ProctorCommand";
+    public static final String KAFKA_HEADER_EVENT_TYPE = "eventType";
+    public static final String COMMAND_TYPE_FORCE_SUBMIT = "FORCE_SUBMIT";
+    public static final String COMMAND_TYPE_EXTEND_TIME = "EXTEND_TIME";
+
     public static final String CACHE_KEY_PREFIX = "exam-delivery:pinned-snapshot:";
     public static final String LOCK_KEY_PREFIX = "exam-delivery:lock:pinned-snapshot:";
 

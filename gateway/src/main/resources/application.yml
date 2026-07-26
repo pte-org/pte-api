@@ -45,6 +45,12 @@ spring:
               uri: ${EXAM_DELIVERY_URI:http://localhost:8085}
               predicates:
                 - Path=/api/exam-delivery/**
+            # More specific than the general "proctor" route below — must be listed first so the STOMP
+            # upgrade path matches before the general HTTP route (phase-10, runtime-verification TODO).
+            - id: proctor-ws
+              uri: ${PROCTOR_WS_URI:ws://localhost:8086}
+              predicates:
+                - Path=/api/proctor/ws/**
             - id: proctor
               uri: ${PROCTOR_URI:http://localhost:8086}
               predicates:

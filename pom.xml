@@ -29,6 +29,7 @@
 		<module>authoring</module>
 		<module>scheduling</module>
 		<module>exam-delivery</module>
+		<module>proctor</module>
 		<module>scoring</module>
 		<module>reporting</module>
 		<module>media</module>
