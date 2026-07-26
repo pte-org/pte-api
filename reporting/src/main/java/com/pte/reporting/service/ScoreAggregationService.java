@@ -61,12 +61,17 @@ public class ScoreAggregationService {
         return new AttemptScoreSummary(computeOverall(skillScores), skillScores);
     }
 
+    /**
+     * Phase 9 correction: every scorer (objective AND AI) reports {@code rawScore}
+     * on the SAME 0–100 percentage scale, so a skill fed by a mix of objective
+     * and AI-scored answers averages correctly — no per-source special-casing.
+     */
     private SkillScore computeSkillScore(List<AnswerProjection> contributing) {
         if (contributing.isEmpty()) {
             return SkillScore.insufficientData();
         }
-        long correct = contributing.stream().mapToInt(AnswerProjection::getRawScore).sum();
-        double percentCorrect = (double) correct / contributing.size();
+        double averageRawScore = contributing.stream().mapToInt(AnswerProjection::getRawScore).average().orElse(0);
+        double percentCorrect = averageRawScore / 100.0;
         return SkillScore.of((int) Math.round(SCALE_FLOOR + percentCorrect * SCALE_SPAN));
     }
 

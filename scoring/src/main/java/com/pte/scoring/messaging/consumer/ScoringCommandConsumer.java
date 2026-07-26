@@ -6,11 +6,12 @@ import com.pte.scoring.domain.ProcessedEvent;
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.domain.event.AnswerScoredEvent;
-import com.pte.scoring.domain.event.AttemptScoredEvent;
 import com.pte.scoring.messaging.consumer.dto.ScoringRequestedEvent;
 import com.pte.scoring.messaging.outbox.OutboxWriter;
 import com.pte.scoring.repository.ProcessedEventRepository;
 import com.pte.scoring.repository.ScoringAnswerRepository;
+import com.pte.scoring.service.AiScoringDispatcher;
+import com.pte.scoring.service.AttemptCompletionService;
 import com.pte.scoring.service.ObjectiveScoringService;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -25,9 +26,10 @@ import java.util.UUID;
 
 /**
  * Executes the host's {@code ScoringRequested} command (ADR-002 host-gated
- * model — scoring NEVER auto-triggers on submit). Scores every {@code PENDING}
- * answer in the session that {@link ObjectiveScoringService} currently
- * supports; unsupported types (speaking/writing, pending Phase 9) stay
+ * model — scoring NEVER auto-triggers on submit). For every {@code PENDING}
+ * answer in the session: {@link ObjectiveScoringService}-supported types score
+ * synchronously; {@link AiScoringDispatcher}-supported types (phase-09: Read
+ * Aloud, Write Essay) get queued to RabbitMQ instead; any other type stays
  * {@code PENDING} — honest completion, not a fake "skipped" status.
  * Idempotent (ADR-002): dedups by the producer's outbox row id.
  */
@@ -37,16 +39,22 @@ public class ScoringCommandConsumer {
     private final ProcessedEventRepository processedEventRepository;
     private final ScoringAnswerRepository scoringAnswerRepository;
     private final ObjectiveScoringService objectiveScoringService;
+    private final AiScoringDispatcher aiScoringDispatcher;
+    private final AttemptCompletionService attemptCompletionService;
     private final OutboxWriter outboxWriter;
     private final ObjectMapper objectMapper;
 
     public ScoringCommandConsumer(ProcessedEventRepository processedEventRepository,
                                   ScoringAnswerRepository scoringAnswerRepository,
-                                  ObjectiveScoringService objectiveScoringService, OutboxWriter outboxWriter,
+                                  ObjectiveScoringService objectiveScoringService,
+                                  AiScoringDispatcher aiScoringDispatcher,
+                                  AttemptCompletionService attemptCompletionService, OutboxWriter outboxWriter,
                                   ObjectMapper objectMapper) {
         this.processedEventRepository = processedEventRepository;
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.objectiveScoringService = objectiveScoringService;
+        this.aiScoringDispatcher = aiScoringDispatcher;
+        this.attemptCompletionService = attemptCompletionService;
         this.outboxWriter = outboxWriter;
         this.objectMapper = objectMapper;
     }
@@ -77,30 +85,31 @@ public class ScoringCommandConsumer {
 
         Set<UUID> touchedAttempts = new HashSet<>();
         for (ScoringAnswer answer : pending) {
-            if (!objectiveScoringService.supports(answer.getTaskType())) {
-                continue;
+            if (objectiveScoringService.supports(answer.getTaskType())) {
+                scoreObjectively(answer);
+                touchedAttempts.add(answer.getAttemptPublicId());
+            } else if (aiScoringDispatcher.supports(answer.getTaskType())) {
+                aiScoringDispatcher.dispatch(answer);
+                // Not touchedAttempts here: dispatch moves the row to AI_SCORING, still
+                // non-terminal — completion is checked later by the worker/review step.
             }
-            int rawScore = objectiveScoringService.score(answer);
-            answer.markScored(rawScore);
-            scoringAnswerRepository.save(answer);
-            touchedAttempts.add(answer.getAttemptPublicId());
-
-            outboxWriter.write(ScoringConstants.AGGREGATE_ANSWER, answer.getAnswerPublicId().toString(),
-                    ScoringConstants.EVENT_ANSWER_SCORED,
-                    new AnswerScoredEvent(answer.getAttemptPublicId(), answer.getAnswerPublicId(),
-                            answer.getTenantId(), rawScore),
-                    answer.getTenantId());
+            // Any other type: stays PENDING (honest completion, Phase 7).
         }
 
         for (UUID attemptPublicId : touchedAttempts) {
-            long stillPending = scoringAnswerRepository
-                    .countByAttemptPublicIdAndStatus(attemptPublicId, ScoringAnswerStatus.PENDING);
-            if (stillPending == 0) {
-                outboxWriter.write(ScoringConstants.AGGREGATE_ATTEMPT, attemptPublicId.toString(),
-                        ScoringConstants.EVENT_ATTEMPT_SCORED,
-                        new AttemptScoredEvent(attemptPublicId, event.sessionPublicId(), event.tenantId()),
-                        event.tenantId());
-            }
+            attemptCompletionService.checkAndEmitIfComplete(attemptPublicId, event.sessionPublicId(), event.tenantId());
         }
+    }
+
+    private void scoreObjectively(ScoringAnswer answer) {
+        int rawScore = objectiveScoringService.score(answer);
+        answer.markScored(rawScore);
+        scoringAnswerRepository.save(answer);
+
+        outboxWriter.write(ScoringConstants.AGGREGATE_ANSWER, answer.getAnswerPublicId().toString(),
+                ScoringConstants.EVENT_ANSWER_SCORED,
+                new AnswerScoredEvent(answer.getAttemptPublicId(), answer.getAnswerPublicId(),
+                        answer.getTenantId(), rawScore),
+                answer.getTenantId());
     }
 }

@@ -19,8 +19,20 @@ public final class ScoringConstants {
     public static final String EVENT_ANSWER_SCORED = "AnswerScored";
     public static final String EVENT_ATTEMPT_SCORED = "AttemptScored";
 
-    // Objective task types this phase can grade (Milestone 1: MCQ only — speaking/writing need Phase 9's AI vendor)
+    // Objective task types (Phase 7): rule-based, synchronous, no vendor call.
     public static final String TASK_TYPE_MC_READING_SINGLE = "MC_READING_SINGLE";
+
+    // AI-scorable task types (Phase 9): routed to the RabbitMQ vendor work queue.
+    public static final String TASK_TYPE_READ_ALOUD = "READ_ALOUD";
+    public static final String TASK_TYPE_WRITE_ESSAY = "WRITE_ESSAY";
+
+    // RabbitMQ (Phase 9 — activates what Phase 7 deferred: slow/unreliable vendor calls need a queue, objective scoring didn't).
+    public static final String AI_SCORING_EXCHANGE = "scoring.ai-scoring";
+    public static final String AI_SCORING_QUEUE = "scoring.ai-scoring-jobs";
+    public static final String AI_SCORING_DLQ = "scoring.ai-scoring-jobs.dlq";
+    public static final String AI_SCORING_ROUTING_KEY = "ai-scoring-job";
+
+    public static final String REVIEW_NOT_PENDING = "REVIEW_NOT_PENDING";
 
     private ScoringConstants() {
     }

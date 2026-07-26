@@ -43,6 +43,27 @@ services:
       retries: 10
     networks: [pte-network]
 
+  minio:
+    image: minio/minio:latest
+    container_name: pte-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pte-minio-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-pte-minio-dev-pw}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - pte_minio_data:/data
+    command: ["server", "/data", "--console-address", ":9001"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [pte-network]
+
   rabbitmq:
     image: rabbitmq:3-management
     container_name: pte-rabbitmq
@@ -161,6 +182,8 @@ services:
 volumes:
   pte_postgres_data:
     name: pte_postgres_data
+  pte_minio_data:
+    name: pte_minio_data
 
 networks:
   pte-network:

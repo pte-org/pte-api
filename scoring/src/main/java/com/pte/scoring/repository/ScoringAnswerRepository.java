@@ -15,4 +15,7 @@ public interface ScoringAnswerRepository extends JpaRepository<ScoringAnswer, Lo
     List<ScoringAnswer> findBySessionPublicIdAndStatus(UUID sessionPublicId, ScoringAnswerStatus status);
 
     long countByAttemptPublicIdAndStatus(UUID attemptPublicId, ScoringAnswerStatus status);
+
+    /** True while any row is still in a non-terminal state (PENDING/AI_SCORING/AI_SCORED_PENDING_REVIEW). */
+    boolean existsByAttemptPublicIdAndStatusIn(UUID attemptPublicId, List<ScoringAnswerStatus> statuses);
 }

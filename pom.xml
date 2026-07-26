@@ -31,6 +31,7 @@
 		<module>exam-delivery</module>
 		<module>scoring</module>
 		<module>reporting</module>
+		<module>media</module>
 	</modules>
 
 	<dependencyManagement>

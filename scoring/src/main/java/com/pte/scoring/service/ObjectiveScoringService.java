@@ -32,7 +32,13 @@ public class ObjectiveScoringService {
         return SUPPORTED_TASK_TYPES.contains(taskType);
     }
 
-    /** @return raw unscaled score: 1 correct, 0 incorrect. Phase 8 owns the 10–90 conversion. */
+    /**
+     * @return raw score on a 0–100 PERCENTAGE scale (100 correct, 0 incorrect)
+     * — NOT 0/1. Phase 9 correction: AI scoring (also 0–100) must combine with
+     * objective scores in reporting's aggregation formula (percentCorrect =
+     * average of contributing rawScores / 100), so every scorer must share one
+     * scale. Phase 8 owns the 10–90 conversion on top of that average.
+     */
     public int score(ScoringAnswer answer) {
         if (ScoringConstants.TASK_TYPE_MC_READING_SINGLE.equals(answer.getTaskType())) {
             return scoreSingleChoice(answer);
@@ -44,7 +50,7 @@ public class ObjectiveScoringService {
         Integer correctOrderIndex = correctOptionOrderIndex(answer.getOptionsJson());
         Integer submittedOrderIndex = parsePayloadAsOrderIndex(answer.getPayload());
         boolean correct = correctOrderIndex != null && correctOrderIndex.equals(submittedOrderIndex);
-        return correct ? 1 : 0;
+        return correct ? 100 : 0;
     }
 
     private Integer correctOptionOrderIndex(String optionsJson) {
