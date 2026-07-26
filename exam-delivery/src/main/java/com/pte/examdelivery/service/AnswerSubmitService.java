@@ -58,7 +58,8 @@ public class AnswerSubmitService {
         outboxWriter.write(ExamDeliveryConstants.AGGREGATE_ATTEMPT, attempt.getPublicId().toString(),
                 ExamDeliveryConstants.EVENT_ANSWER_SUBMITTED,
                 new AnswerSubmittedEvent(attempt.getPublicId(), saved.getPublicId(), item.getPublicId(),
-                        attempt.getTenantId(), expired),
+                        attempt.getSessionPublicId(), attempt.getTenantId(), expired,
+                        item.getTaskType(), payload, item.getCorrectAnswerText(), item.getOptionsJson()),
                 attempt.getTenantId());
         return saved;
     }

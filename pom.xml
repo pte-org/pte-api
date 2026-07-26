@@ -29,6 +29,7 @@
 		<module>authoring</module>
 		<module>scheduling</module>
 		<module>exam-delivery</module>
+		<module>scoring</module>
 	</modules>
 
 	<dependencyManagement>
