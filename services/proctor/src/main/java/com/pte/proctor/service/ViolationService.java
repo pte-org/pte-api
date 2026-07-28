@@ -4,9 +4,11 @@ import com.pte.common.security.CurrentUser;
 import com.pte.proctor.constant.ProctorConstants;
 import com.pte.proctor.domain.ProctorSession;
 import com.pte.proctor.domain.ViolationEvent;
+import com.pte.proctor.domain.enums.LiveProctorEventType;
 import com.pte.proctor.domain.event.ViolationDetectedEvent;
 import com.pte.proctor.domain.exception.ProctorSessionNotActiveException;
 import com.pte.proctor.dto.request.FlagViolationRequest;
+import com.pte.proctor.dto.response.LiveProctorEventResponse;
 import com.pte.proctor.dto.response.ViolationEventResponse;
 import com.pte.proctor.mapper.ProctorMapper;
 import com.pte.proctor.messaging.outbox.OutboxWriter;
@@ -84,12 +86,25 @@ public class ViolationService {
                 session.getTenantId());
 
         ViolationEventResponse response = mapper.toResponse(saved);
-        messagingTemplate.convertAndSend(ProctorConstants.TOPIC_PREFIX + session.getSessionPublicId(), response);
+        messagingTemplate.convertAndSend(
+                ProctorConstants.TOPIC_PREFIX + session.getSessionPublicId(),
+                new LiveProctorEventResponse<>(
+                        response.publicId(),
+                        LiveProctorEventType.VIOLATION_DETECTED,
+                        session.getSessionPublicId(),
+                        response.detectedAt(),
+                        response));
         return response;
     }
 
     @Transactional(readOnly = true)
     public List<ViolationEventResponse> listForSession(UUID sessionPublicId, CurrentUser caller) {
+        if (caller.hasRole("PROCTOR")) {
+            proctorSessionService.findActiveOwnedBySession(
+                    sessionPublicId,
+                    caller.userId(),
+                    caller.tenantId());
+        }
         return violationEventRepository.findBySessionPublicIdAndTenantIdOrderByDetectedAtAsc(sessionPublicId, caller.tenantId())
                 .stream().map(mapper::toResponse).toList();
     }

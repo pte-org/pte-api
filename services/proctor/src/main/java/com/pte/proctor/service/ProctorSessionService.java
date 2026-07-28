@@ -59,6 +59,19 @@ public class ProctorSessionService {
                 .orElseThrow(ProctorSessionNotFoundException::new);
     }
 
+    ProctorSession findActiveOwnedBySession(
+            UUID sessionPublicId,
+            UUID proctorPublicId,
+            UUID tenantId) {
+        return proctorSessionRepository
+                .findBySessionPublicIdAndProctorPublicIdAndTenantIdAndStatus(
+                        sessionPublicId,
+                        proctorPublicId,
+                        tenantId,
+                        ProctorSessionStatus.ACTIVE)
+                .orElseThrow(ProctorSessionNotFoundException::new);
+    }
+
     private ProctorSessionResponse openNew(UUID sessionPublicId, UUID proctorPublicId) {
         SchedulingProctorAssignmentResponse assignment = schedulingClient.checkAssignment(sessionPublicId, proctorPublicId);
         if (assignment == null) {

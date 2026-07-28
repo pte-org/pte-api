@@ -4,15 +4,18 @@ import com.pte.common.security.CurrentUser;
 import com.pte.proctor.constant.ProctorConstants;
 import com.pte.proctor.domain.ProctorSession;
 import com.pte.proctor.domain.enums.ProctorCommandType;
+import com.pte.proctor.domain.enums.LiveProctorEventType;
 import com.pte.proctor.domain.event.ProctorCommandPublished;
 import com.pte.proctor.domain.exception.ExtraSecondsRequiredException;
 import com.pte.proctor.domain.exception.ProctorSessionNotActiveException;
 import com.pte.proctor.dto.request.IssueCommandRequest;
+import com.pte.proctor.dto.response.LiveProctorEventResponse;
 import com.pte.proctor.messaging.outbox.OutboxWriter;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -52,6 +55,13 @@ public class ProctorCommandService {
                         request.commandType(), request.extraSeconds(), session.getTenantId()),
                 session.getTenantId());
 
-        messagingTemplate.convertAndSend(ProctorConstants.TOPIC_PREFIX + session.getSessionPublicId(), request);
+        messagingTemplate.convertAndSend(
+                ProctorConstants.TOPIC_PREFIX + session.getSessionPublicId(),
+                new LiveProctorEventResponse<>(
+                        UUID.randomUUID(),
+                        LiveProctorEventType.COMMAND_ACCEPTED,
+                        session.getSessionPublicId(),
+                        Instant.now(),
+                        request));
     }
 }
