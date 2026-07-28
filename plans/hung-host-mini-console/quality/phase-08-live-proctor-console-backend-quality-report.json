@@ -1,0 +1,66 @@
+{
+  "mode": "gate",
+  "target": "phase-08-live-proctor-console-backend",
+  "verdict": "IMPLEMENTED_AWAITING_RUNTIME_VERIFICATION",
+  "reviewed_at": "2026-07-28",
+  "reviewer": "codex-architecture-and-contract-review",
+  "implementation_commits": [
+    "07fc879",
+    "a50f114",
+    "743124e"
+  ],
+  "summary": {
+    "critical": 0,
+    "important_open": 1,
+    "minor_open": 0,
+    "resolved": 4
+  },
+  "contract_findings": [
+    {
+      "id": "HUNG-CONTRACT-801",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "location": "services/scheduling/src/main/java/com/pte/scheduling/controller/MyProctorAssignmentController.java",
+      "evidence": "GET /proctor-assignments/me accepts PROCTOR only and derives proctorPublicId and tenantId from CurrentUserContext. The repository predicate includes both identities and deterministic opensAt/publicId ordering.",
+      "resolution": "The Flutter client can discover only the authenticated proctor's tenant-scoped assignments without user or tenant override parameters."
+    },
+    {
+      "id": "HUNG-CONTRACT-802",
+      "severity": "CRITICAL",
+      "status": "RESOLVED",
+      "location": "services/proctor/src/main/java/com/pte/proctor/service/StompDestinationAuthorizationService.java",
+      "evidence": "Inbound SUBSCRIBE and SEND frames are authorized by destination, role, tenant, assignment and ACTIVE session state. Direct sends to broker destinations are rejected.",
+      "resolution": "Assigned PROCTOR can control, same-tenant HOST_ADMIN can subscribe read-only, and HOST_AUTHOR cannot access live session topics."
+    },
+    {
+      "id": "HUNG-CONTRACT-803",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "location": "services/proctor/src/main/java/com/pte/proctor/dto/response/LiveProctorEventResponse.java",
+      "evidence": "COMMAND_ACCEPTED and VIOLATION_DETECTED broadcasts use the typed eventId/eventType/sessionPublicId/occurredAt/data envelope.",
+      "resolution": "Flutter receives a stable live contract while existing outbox and Kafka event payloads remain unchanged."
+    },
+    {
+      "id": "HUNG-CONTRACT-804",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "location": "services/proctor/src/main/java/com/pte/proctor/service/ViolationService.java",
+      "evidence": "A PROCTOR REST recovery query requires an ACTIVE locally owned proctor session before the tenant-scoped violation snapshot is returned. HOST_ADMIN retains tenant-scoped audit access.",
+      "resolution": "Reconnect recovery cannot be used by an unassigned proctor to read another live session."
+    },
+    {
+      "id": "HUNG-RUNTIME-805",
+      "severity": "IMPORTANT",
+      "status": "OPEN_RUNTIME_GATE",
+      "location": "pte-api runtime environment",
+      "evidence": "docker compose ps returned no running services; the compose file does not start the application services.",
+      "resolution": "Start gateway, IAM, scheduling and proctor with fixtures, then demonstrate the approved three-role authorization matrix and one real violation event."
+    }
+  ],
+  "automated_verification": {
+    "focused_proctor_package": "11 tests passed",
+    "full_maven_reactor": "13 modules BUILD SUCCESS"
+  },
+  "open_source_blocking_findings": 0,
+  "runtime_gate_pending": true
+}

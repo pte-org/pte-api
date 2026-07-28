@@ -1,0 +1,40 @@
+{
+  "target": "phase-08-live-proctor-console-backend",
+  "verdict": "IMPLEMENTED_AWAITING_RUNTIME_VERIFICATION",
+  "policy_version": "1.0.0",
+  "report_path": "plans/hung-host-mini-console/quality/phase-08-live-proctor-console-backend-quality-report.json",
+  "source_fingerprint": "743124ef3d4ea4125013c58f6f148d682a3be07c",
+  "implementation_commits": [
+    "07fc879",
+    "a50f114",
+    "743124e"
+  ],
+  "reviewed_files": [
+    "services/proctor/src/main/java/com/pte/proctor/config/StompAuthChannelInterceptor.java",
+    "services/proctor/src/main/java/com/pte/proctor/constant/ProctorConstants.java",
+    "services/proctor/src/main/java/com/pte/proctor/domain/enums/LiveProctorEventType.java",
+    "services/proctor/src/main/java/com/pte/proctor/domain/exception/StompCommandForbiddenException.java",
+    "services/proctor/src/main/java/com/pte/proctor/domain/exception/StompSubscriptionForbiddenException.java",
+    "services/proctor/src/main/java/com/pte/proctor/dto/response/LiveProctorEventResponse.java",
+    "services/proctor/src/main/java/com/pte/proctor/repository/ProctorSessionRepository.java",
+    "services/proctor/src/main/java/com/pte/proctor/service/ProctorCommandService.java",
+    "services/proctor/src/main/java/com/pte/proctor/service/ProctorSessionService.java",
+    "services/proctor/src/main/java/com/pte/proctor/service/StompDestinationAuthorizationService.java",
+    "services/proctor/src/main/java/com/pte/proctor/service/ViolationService.java",
+    "services/proctor/src/test/java/com/pte/proctor/config/StompAuthChannelInterceptorTest.java",
+    "services/proctor/src/test/java/com/pte/proctor/service/ProctorCommandLiveEventTest.java",
+    "services/proctor/src/test/java/com/pte/proctor/service/StompDestinationAuthorizationServiceTest.java",
+    "services/proctor/src/test/java/com/pte/proctor/service/ViolationLiveEventTest.java",
+    "services/scheduling/src/main/java/com/pte/scheduling/constant/SchedulingConstants.java",
+    "services/scheduling/src/main/java/com/pte/scheduling/controller/MyProctorAssignmentController.java",
+    "services/scheduling/src/main/java/com/pte/scheduling/domain/exception/ProctorContextRequiredException.java",
+    "services/scheduling/src/main/java/com/pte/scheduling/dto/response/AssignedProctorSessionResponse.java",
+    "services/scheduling/src/main/java/com/pte/scheduling/repository/ProctorAssignmentRepository.java",
+    "services/scheduling/src/main/java/com/pte/scheduling/service/ProctorAssignmentQueryService.java",
+    "services/scheduling/src/test/java/com/pte/scheduling/controller/MyProctorAssignmentControllerTest.java",
+    "services/scheduling/src/test/java/com/pte/scheduling/service/ProctorAssignmentQueryServiceTest.java"
+  ],
+  "reviewed_at": "2026-07-28",
+  "open_source_blocking_findings": 0,
+  "runtime_gate_pending": true
+}
