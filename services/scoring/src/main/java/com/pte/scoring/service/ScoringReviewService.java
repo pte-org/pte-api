@@ -6,13 +6,18 @@ import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.domain.event.AnswerScoredEvent;
 import com.pte.scoring.domain.exception.AnswerNotFoundException;
+import com.pte.scoring.domain.exception.InvalidReviewQueryException;
 import com.pte.scoring.domain.exception.ReviewNotPendingException;
+import com.pte.scoring.dto.response.ScoringAnswerPageResponse;
 import com.pte.scoring.dto.response.ScoringAnswerResponse;
 import com.pte.scoring.mapper.ScoringAnswerMapper;
 import com.pte.scoring.messaging.outbox.OutboxWriter;
 import com.pte.scoring.repository.ScoringAnswerRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.util.UUID;
 
@@ -34,6 +39,42 @@ public class ScoringReviewService {
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.outboxWriter = outboxWriter;
         this.attemptCompletionService = attemptCompletionService;
+    }
+
+    @Transactional(readOnly = true)
+    public ScoringAnswerPageResponse listPending(
+            UUID sessionPublicId,
+            String status,
+            int page,
+            int size,
+            CurrentUser caller
+    ) {
+        if (!ScoringAnswerStatus.AI_SCORED_PENDING_REVIEW.name().equals(status)
+                || page < 0 || size < 1 || size > 100 || caller.tenantId() == null) {
+            throw new InvalidReviewQueryException();
+        }
+
+        PageRequest pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Direction.ASC, "createdAt")
+                        .and(Sort.by(Sort.Direction.ASC, "id"))
+        );
+        Page<ScoringAnswer> answers = scoringAnswerRepository
+                .findBySessionPublicIdAndTenantIdAndStatus(
+                        sessionPublicId,
+                        caller.tenantId(),
+                        ScoringAnswerStatus.AI_SCORED_PENDING_REVIEW,
+                        pageable
+                );
+
+        return new ScoringAnswerPageResponse(
+                answers.getContent().stream().map(ScoringAnswerMapper::toResponse).toList(),
+                page,
+                size,
+                answers.getTotalElements(),
+                answers.getTotalPages()
+        );
     }
 
     @Transactional

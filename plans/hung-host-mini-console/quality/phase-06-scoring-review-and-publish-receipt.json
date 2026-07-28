@@ -1,0 +1,9 @@
+{
+  "target": "phase-06-scoring-review-and-publish-backend",
+  "verdict": "APPROVED_WITH_RUNTIME_CHECK_PENDING",
+  "policy_version": "1.0.0",
+  "report_path": "plans/hung-host-mini-console/quality/phase-06-scoring-review-and-publish-quality-report.json",
+  "source_fingerprint": "phase-06-working-tree-before-commit",
+  "reviewed_at": "2026-07-28",
+  "open_blocking_findings": 0
+}

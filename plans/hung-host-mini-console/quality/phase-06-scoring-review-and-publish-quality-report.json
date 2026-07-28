@@ -1,0 +1,22 @@
+{
+  "mode": "gate",
+  "target": "phase-06-scoring-review-and-publish-backend",
+  "verdict": "APPROVED_WITH_RUNTIME_CHECK_PENDING",
+  "reviewed_at": "2026-07-28",
+  "reviewer": "codex-architecture-and-contract-review",
+  "summary": {
+    "critical": 0,
+    "important_open": 0,
+    "minor_open": 0,
+    "resolved": 0
+  },
+  "contract_findings": [
+    {
+      "id": "HUNG-CONTRACT-602",
+      "status": "ALIGNED",
+      "evidence": "The review query includes sessionPublicId, caller tenantId, exact AI_SCORED_PENDING_REVIEW status, bounded Pageable, and createdAt/id ordering in the database predicate.",
+      "resolution": "No in-memory tenant or status filtering is used; invalid status, bounds, and platform tenant omission return a domain validation error."
+    }
+  ],
+  "open_blocking_findings": 0
+}

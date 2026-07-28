@@ -33,6 +33,7 @@ public final class ScoringConstants {
     public static final String AI_SCORING_ROUTING_KEY = "ai-scoring-job";
 
     public static final String REVIEW_NOT_PENDING = "REVIEW_NOT_PENDING";
+    public static final String INVALID_REVIEW_QUERY = "INVALID_REVIEW_QUERY";
 
     private ScoringConstants() {
     }

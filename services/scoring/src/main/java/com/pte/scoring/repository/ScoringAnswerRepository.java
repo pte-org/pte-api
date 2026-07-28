@@ -2,6 +2,8 @@ package com.pte.scoring.repository;
 
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -13,6 +15,13 @@ public interface ScoringAnswerRepository extends JpaRepository<ScoringAnswer, Lo
     Optional<ScoringAnswer> findByAnswerPublicId(UUID answerPublicId);
 
     List<ScoringAnswer> findBySessionPublicIdAndStatus(UUID sessionPublicId, ScoringAnswerStatus status);
+
+    Page<ScoringAnswer> findBySessionPublicIdAndTenantIdAndStatus(
+            UUID sessionPublicId,
+            UUID tenantId,
+            ScoringAnswerStatus status,
+            Pageable pageable
+    );
 
     long countByAttemptPublicIdAndStatus(UUID attemptPublicId, ScoringAnswerStatus status);
 
