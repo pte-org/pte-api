@@ -1,0 +1,238 @@
+{
+  "env": {
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python \"D:\\\\FPT-FALL2026\\\\Capstore\\\\pte-api\\\\.claude\\\\skills\\\\ck-quality\\\\scripts\\\\receipt.py\" issue \"plans/ninh-student-exam-flow/quality/phase-05-objective-written-task-ui-quality-report.json\")",
+      "Bash(grep -n \"Future<void> start\\\\|Future<String?> stop\\\\|Future<bool> isRecording\\\\|class AudioRecorder\" \"/c/Users/NinhLe/AppData/Local/Pub/Cache/hosted/pub.dev/record-6.2.1/lib/src/audio_recorder.dart\" 2>/dev/null | head -20)",
+      "Read(//c/Users/NinhLe/AppData/Local/Pub/Cache/hosted/pub.dev/record-6.2.1/lib/src/**)",
+      "Read(//c/Users/NinhLe/AppData/Local/Pub/Cache/hosted/pub.dev/record-6.2.1/**)",
+      "Bash(xargs grep -ln \"class AudioRecorder\")",
+      "Read(//c/Users/NinhLe/AppData/Local/Pub/Cache/hosted/pub.dev/record-6.2.1/lib/**)",
+      "Bash(git rm *)",
+      "Bash(ls -la \"/d/FPT-FALL2026/Capstore/pte-app/plans/ninh-student-exam-flow/\" 2>&1 *)",
+      "Read(//d//**)",
+      "Bash(cat > *)",
+      "Bash(cat C:/Users/NinhLe/AppData/Local/Temp/claude/d--FPT-FALL2026-Capstore-pte-api/ce021871-af44-49c3-bc1d-e8839cce82bb/scratchpad/phase-06-quality-report.json)",
+      "Bash(cat)",
+      "Bash(echo wrote *)",
+      "Bash(cat C:/Users/NinhLe/AppData/Local/Temp/claude/d--FPT-FALL2026-Capstore-pte-api/ce021871-af44-49c3-bc1d-e8839cce82bb/scratchpad/write_report.py)",
+      "Bash(python C:/Users/NinhLe/AppData/Local/Temp/claude/d--FPT-FALL2026-Capstore-pte-api/ce021871-af44-49c3-bc1d-e8839cce82bb/scratchpad/write_report.py)",
+      "Bash(echo ran_ok)",
+      "Bash(python \"d:/FPT-FALL2026/Capstore/pte-api/.claude/skills/ck-quality/scripts/receipt.py\" issue \"d:/FPT-FALL2026/Capstore/pte-app/plans/ninh-student-exam-flow/quality/phase-06-speaking-media-upload-quality-report.json\")",
+      "Bash(python \"d:/FPT-FALL2026/Capstore/pte-api/.claude/skills/ck-quality/scripts/receipt.py\" issue \"d:/FPT-FALL2026/Capstore/pte-app/plans/ninh-student-exam-flow/quality/phase-07-submission-resilience-hardening-quality-report.json\")",
+      "Bash(python \".claude/skills/ck-quality/scripts/receipt.py\" issue \"d:/FPT-FALL2026/Capstore/pte-app/plans/ninh-student-exam-flow/quality/phase-08-reporting-results-quality-report.json\")",
+      "Bash(python \"d:/FPT-FALL2026/Capstore/pte-api/.claude/skills/ck-quality/scripts/receipt.py\" issue \"plans/ninh-student-exam-flow/quality/phase-08-reporting-results-quality-report.json\")",
+      "Bash(docker compose *)",
+      "Bash(docker exec *)",
+      "Bash(mvn -q -pl services/iam spring-boot:run)",
+      "Bash(flutter devices *)",
+      "Bash(flutter doctor *)",
+      "Bash(python \"d:/FPT-FALL2026/Capstore/pte-api/.claude/skills/ck-quality/scripts/receipt.py\" issue \"d:/FPT-FALL2026/Capstore/pte-app/plans/ninh-student-exam-flow/quality/phase-09-qa-gate-quality-report.json\")",
+      "Bash(git -C /d/FPT-FALL2026/Capstore/pte-app diff --stat main...HEAD)",
+      "Bash(git -C /d/FPT-FALL2026/Capstore/pte-app diff main...HEAD -- '*.dart' ':!*_test.dart')",
+      "Bash(git -C /d/FPT-FALL2026/Capstore/pte-app log --oneline -5)",
+      "Bash(git -C /d/FPT-FALL2026/Capstore/pte-app branch -a)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/session_init.py"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/subagent_init.py"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/session_start_context.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/dev_rules_reminder.py",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/caveman_watch.py",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/pre_srs.py",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read|Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/privacy_block.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|Bash|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/suggest_compact.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/level_gate.py",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/pre_write_validator.py",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/plan_validator.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/quality_receipt_gate.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/build_check.py",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/simplify_gate.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Grep|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/artifact_fold.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/post_srs.py",
+            "timeout": 25
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/flag_aggregator.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/compact_90_guard.js",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/session_end.py",
+            "timeout": 10,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/run.js .claude/hooks/session_end.py",
+            "timeout": 10,
+            "async": true
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node .claude/hooks/compact_90_guard.js --track",
+    "padding": 0,
+    "refreshInterval": 5
+  },
+  "ignorePatterns": [
+    "**/bin/**",
+    "**/obj/**",
+    "**/.vs/**",
+    "**/.git/**",
+    "**/Migrations/**",
+    "**/TestResults/**",
+    "**/coverage/**",
+    "**/.claude/session-data/**",
+    "**/*.suo",
+    "**/*.user",
+    "**/*.lock.json",
+    "**/node_modules/**"
+  ]
+}
