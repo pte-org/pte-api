@@ -183,7 +183,7 @@ services:
     restart: "no"
 
   jaeger:
-    image: jaegertracing/all-in-one:1.62
+    image: jaegertracing/all-in-one:1.62.0
     container_name: pte-jaeger
     restart: unless-stopped
     ports:
