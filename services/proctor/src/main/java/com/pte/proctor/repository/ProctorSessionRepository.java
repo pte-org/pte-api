@@ -13,4 +13,10 @@ public interface ProctorSessionRepository extends JpaRepository<ProctorSession, 
             UUID sessionPublicId, UUID proctorPublicId, UUID tenantId, ProctorSessionStatus status);
 
     Optional<ProctorSession> findByPublicIdAndProctorPublicIdAndTenantId(UUID publicId, UUID proctorPublicId, UUID tenantId);
+
+    boolean existsBySessionPublicIdAndProctorPublicIdAndTenantIdAndStatus(
+            UUID sessionPublicId, UUID proctorPublicId, UUID tenantId, ProctorSessionStatus status);
+
+    boolean existsBySessionPublicIdAndTenantIdAndStatus(
+            UUID sessionPublicId, UUID tenantId, ProctorSessionStatus status);
 }

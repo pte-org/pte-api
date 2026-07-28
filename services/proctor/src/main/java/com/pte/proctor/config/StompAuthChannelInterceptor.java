@@ -2,12 +2,16 @@ package com.pte.proctor.config;
 
 import com.pte.common.security.CurrentUser;
 import com.pte.common.security.SecurityClaims;
+import com.pte.proctor.domain.exception.StompCommandForbiddenException;
+import com.pte.proctor.domain.exception.StompSubscriptionForbiddenException;
 import com.pte.proctor.security.StompPrincipal;
+import com.pte.proctor.service.StompDestinationAuthorizationService;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
@@ -31,9 +35,13 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtDecoder jwtDecoder;
+    private final StompDestinationAuthorizationService authorizationService;
 
-    public StompAuthChannelInterceptor(JwtDecoder jwtDecoder) {
+    public StompAuthChannelInterceptor(
+            JwtDecoder jwtDecoder,
+            StompDestinationAuthorizationService authorizationService) {
         this.jwtDecoder = jwtDecoder;
+        this.authorizationService = authorizationService;
     }
 
     @Override
@@ -42,8 +50,30 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         if (StompCommand.CONNECT.equals(accessor.getCommand())) {
             CurrentUser currentUser = authenticate(accessor.getFirstNativeHeader("Authorization"));
             accessor.setUser(new StompPrincipal(currentUser));
+        } else if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
+            authorizationService.authorizeSubscribe(
+                    currentUser(accessor, true),
+                    accessor.getDestination());
+        } else if (StompCommand.SEND.equals(accessor.getCommand())) {
+            authorizationService.authorizeSend(
+                    currentUser(accessor, false),
+                    accessor.getDestination());
         }
-        return message;
+        return MessageBuilder.createMessage(
+                message.getPayload(),
+                accessor.getMessageHeaders());
+    }
+
+    private CurrentUser currentUser(
+            StompHeaderAccessor accessor,
+            boolean subscription) {
+        if (accessor.getUser() instanceof StompPrincipal principal) {
+            return principal.currentUser();
+        }
+        if (subscription) {
+            throw new StompSubscriptionForbiddenException();
+        }
+        throw new StompCommandForbiddenException();
     }
 
     private CurrentUser authenticate(String authHeader) {

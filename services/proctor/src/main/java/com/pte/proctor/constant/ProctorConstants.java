@@ -18,6 +18,8 @@ public final class ProctorConstants {
 
     // STOMP
     public static final String TOPIC_PREFIX = "/topic/proctor-sessions/";
+    public static final String STOMP_SUBSCRIPTION_FORBIDDEN = "STOMP_SUBSCRIPTION_FORBIDDEN";
+    public static final String STOMP_COMMAND_FORBIDDEN = "STOMP_COMMAND_FORBIDDEN";
 
     private ProctorConstants() {
     }
