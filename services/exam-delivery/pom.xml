@@ -45,10 +45,15 @@
 			<artifactId>resilience4j-spring-boot3</artifactId>
 			<version>2.3.0</version>
 		</dependency>
-		<!-- Kafka consumer for proctor's ProctorCommand event (Phase 10) — exam-delivery's first consumer. -->
+		<!-- RabbitMQ: exam-delivery's own outbox relay (producer) + proctor commands consumer (rabbitmq-outbox-migration Phase 5). -->
 		<dependency>
-			<groupId>org.springframework.kafka</groupId>
-			<artifactId>spring-kafka</artifactId>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-amqp</artifactId>
+		</dependency>
+		<!-- Retry interceptor for the proctor commands queue (same pattern as notification's EMAIL_QUEUE). -->
+		<dependency>
+			<groupId>org.springframework.retry</groupId>
+			<artifactId>spring-retry</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>com.fasterxml.jackson.core</groupId>

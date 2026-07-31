@@ -34,10 +34,6 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-mail</artifactId>
 		</dependency>
-		<dependency>
-			<groupId>org.springframework.kafka</groupId>
-			<artifactId>spring-kafka</artifactId>
-		</dependency>
 		<!-- Email send work queue: retry/backoff/DLQ for slow, unreliable SMTP (same pattern as scoring's Phase 9 AI vendor queue). -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

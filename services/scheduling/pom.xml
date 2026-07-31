@@ -45,10 +45,15 @@
 			<groupId>com.fasterxml.jackson.core</groupId>
 			<artifactId>jackson-databind</artifactId>
 		</dependency>
-		<!-- Kafka consumer for authoring's ExamSnapshotPublished (Phase 6 event backbone). -->
+		<!-- RabbitMQ: scheduling's own outbox relay (producer) + snapshot events consumer (rabbitmq-outbox-migration Phase 4). -->
 		<dependency>
-			<groupId>org.springframework.kafka</groupId>
-			<artifactId>spring-kafka</artifactId>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-amqp</artifactId>
+		</dependency>
+		<!-- Retry interceptor for the snapshot events queue (same pattern as notification's EMAIL_QUEUE). -->
+		<dependency>
+			<groupId>org.springframework.retry</groupId>
+			<artifactId>spring-retry</artifactId>
 		</dependency>
 		<!-- Distributed tracing (Phase 6): Micrometer Tracing -> OTLP -> Jaeger. -->
 		<dependency>

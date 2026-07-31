@@ -9,9 +9,9 @@ import com.pte.iam.domain.event.TenantOnboardedEvent;
 import com.pte.iam.domain.event.TenantSuspendedEvent;
 import com.pte.iam.repository.ProcessedEventRepository;
 import com.pte.iam.repository.TenantRegistryRepository;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.common.header.Header;
-import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,12 +20,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
- * Closes the ADR-001 "tenant registry lives in iam" gap (Phase 6): consumes
- * admin's {@code TenantOnboarded}/{@code TenantSuspended} via Debezium's outbox
- * router and projects them into iam's own {@link TenantRegistry}. Idempotent
- * by design (ADR-002 — Kafka is at-least-once): every event is checked against
- * {@link ProcessedEvent} BEFORE being applied, using the producer's outbox row
- * id (Debezium's {@code id} header), never trusting delivery count alone.
+ * Closes the ADR-001 "tenant registry lives in iam" gap: consumes admin's
+ * {@code TenantOnboarded}/{@code TenantSuspended} via the polling outbox
+ * relay + RabbitMQ (rabbitmq-outbox-migration Phase 3, superseding Debezium's
+ * outbox router) and projects them into iam's own {@link TenantRegistry}.
+ * Idempotent by design (ADR-002 — RabbitMQ is at-least-once): every event is
+ * checked against {@link ProcessedEvent} BEFORE being applied, using the
+ * producer's outbox row id (delivered as the AMQP {@code messageId}), never
+ * trusting delivery count alone.
  */
 @Component
 public class TenantEventConsumer {
@@ -41,21 +43,23 @@ public class TenantEventConsumer {
         this.objectMapper = objectMapper;
     }
 
-    @KafkaListener(topics = IamConstants.TOPIC_TENANT_EVENTS, groupId = "iam-tenant-registry")
+    @RabbitListener(queues = IamConstants.QUEUE_TENANT_EVENTS)
     @Transactional
-    public void onTenantEvent(ConsumerRecord<String, String> record) throws IOException {
-        UUID eventId = UUID.fromString(headerValue(record, "id"));
+    public void onTenantEvent(Message message) throws IOException {
+        MessageProperties properties = message.getMessageProperties();
+        UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
             return;
         }
 
-        String eventType = headerValue(record, IamConstants.KAFKA_HEADER_EVENT_TYPE);
+        String eventType = headerValue(properties, IamConstants.EVENT_TYPE_HEADER);
+        String payload = new String(message.getBody(), StandardCharsets.UTF_8);
         if (IamConstants.INCOMING_EVENT_TENANT_ONBOARDED.equals(eventType)) {
-            applyOnboarded(record.value());
+            applyOnboarded(payload);
         } else if (IamConstants.INCOMING_EVENT_TENANT_SUSPENDED.equals(eventType)) {
-            applySuspended(record.value());
+            applySuspended(payload);
         }
-        // Unrecognized event type on this topic: ignore, don't fail the consumer —
+        // Unrecognized event type on this queue: ignore, don't fail the consumer —
         // forward-compatible with future event types this consumer doesn't need yet.
 
         ProcessedEvent processed = new ProcessedEvent();
@@ -81,11 +85,11 @@ public class TenantEventConsumer {
                 });
     }
 
-    private String headerValue(ConsumerRecord<String, String> record, String key) {
-        Header header = record.headers().lastHeader(key);
-        if (header == null) {
-            throw new IllegalStateException("Missing Kafka header '" + key + "' on tenant event");
+    private String headerValue(MessageProperties properties, String key) {
+        Object value = properties.getHeaders().get(key);
+        if (value == null) {
+            throw new IllegalStateException("Missing AMQP header '" + key + "' on tenant event");
         }
-        return new String(header.value(), StandardCharsets.UTF_8);
+        return value.toString();
     }
 }

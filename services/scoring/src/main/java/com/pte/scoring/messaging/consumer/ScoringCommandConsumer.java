@@ -13,12 +13,14 @@ import com.pte.scoring.repository.ScoringAnswerRepository;
 import com.pte.scoring.service.AiScoringDispatcher;
 import com.pte.scoring.service.AttemptCompletionService;
 import com.pte.scoring.service.ObjectiveScoringService;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -31,7 +33,9 @@ import java.util.UUID;
  * synchronously; {@link AiScoringDispatcher}-supported types (phase-09: Read
  * Aloud, Write Essay) get queued to RabbitMQ instead; any other type stays
  * {@code PENDING} — honest completion, not a fake "skipped" status.
- * Idempotent (ADR-002): dedups by the producer's outbox row id.
+ * Idempotent (ADR-002): dedups by the producer's outbox row id (delivered as
+ * the AMQP {@code messageId}, via the polling outbox relay + RabbitMQ,
+ * superseding Debezium's outbox router).
  */
 @Component
 public class ScoringCommandConsumer {
@@ -59,19 +63,20 @@ public class ScoringCommandConsumer {
         this.objectMapper = objectMapper;
     }
 
-    @KafkaListener(topics = ScoringConstants.TOPIC_SESSION_EVENTS, groupId = "scoring-command")
+    @RabbitListener(queues = ScoringConstants.QUEUE_SCORING_COMMAND, containerFactory = "scoringCommandListenerContainerFactory")
     @Transactional
-    public void onSessionEvent(ConsumerRecord<String, String> record) throws IOException {
-        UUID eventId = KafkaHeaders.require(record, "id");
+    public void onSessionEvent(Message message) throws IOException {
+        MessageProperties properties = message.getMessageProperties();
+        UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
             return;
         }
 
-        String eventType = KafkaHeaders.requireString(record, ScoringConstants.KAFKA_HEADER_EVENT_TYPE);
+        String eventType = headerValue(properties, ScoringConstants.EVENT_TYPE_HEADER);
         if (ScoringConstants.INCOMING_EVENT_SCORING_REQUESTED.equals(eventType)) {
-            handleScoringRequested(record.value());
+            handleScoringRequested(new String(message.getBody(), StandardCharsets.UTF_8));
         }
-        // PublishRequested and any future event type on this topic: not scoring's concern, ignored.
+        // PublishRequested and any future event type on this queue: not scoring's concern, ignored.
 
         ProcessedEvent processed = new ProcessedEvent();
         processed.setEventId(eventId);
@@ -111,5 +116,13 @@ public class ScoringCommandConsumer {
                 new AnswerScoredEvent(answer.getAttemptPublicId(), answer.getAnswerPublicId(),
                         answer.getTenantId(), rawScore),
                 answer.getTenantId());
+    }
+
+    private String headerValue(MessageProperties properties, String key) {
+        Object value = properties.getHeaders().get(key);
+        if (value == null) {
+            throw new IllegalStateException("Missing AMQP header '" + key + "' on session event");
+        }
+        return value.toString();
     }
 }
