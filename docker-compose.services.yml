@@ -1,0 +1,273 @@
+# Full-stack local compose: gateway + all 10 backend microservices, built from
+# source via the shared root Dockerfile. Always run alongside the infra-only
+# docker-compose.yml (which owns the pte-network definition + postgres/redis/
+# rabbitmq/minio/mailpit/jaeger):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.services.yml up --build
+#
+# No service here maps a host port except gateway (see docker-compose.services.yml
+# gateway block, added alongside these) — every backend service is reached only
+# through the gateway or, for the handful of direct service-to-service calls
+# documented below, via the internal pte-network.
+
+services:
+  iam:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_MODULE: services/iam
+    environment:
+      IAM_DB_URL: jdbc:postgresql://postgres:5432/iam
+      RABBITMQ_HOST: rabbitmq
+      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8081/api/iam/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [pte-network]
+
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_MODULE: services/admin
+    environment:
+      ADMIN_DB_URL: jdbc:postgresql://postgres:5432/admin
+      RABBITMQ_HOST: rabbitmq
+      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8082/api/admin/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [pte-network]
+
+  authoring:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_MODULE: services/authoring
+    environment:
+      AUTHORING_DB_URL: jdbc:postgresql://postgres:5432/authoring
+      RABBITMQ_HOST: rabbitmq
+      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8083/api/authoring/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [pte-network]
+
+  scheduling:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_MODULE: services/scheduling
+    environment:
+      SCHEDULING_DB_URL: jdbc:postgresql://postgres:5432/scheduling
+      RABBITMQ_HOST: rabbitmq
+      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
+      # Direct inter-service call, bypasses the gateway (see spec Assumptions).
+      AUTHORING_URL: http://authoring:8083/api/authoring
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8084/api/scheduling/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [pte-network]
+
+  exam-delivery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_MODULE: services/exam-delivery
+    environment:
+      # Note: db name is "exam_delivery" (underscore); module dir is "exam-delivery" (hyphen).
+      EXAM_DELIVERY_DB_URL: jdbc:postgresql://postgres:5432/exam_delivery
+      RABBITMQ_HOST: rabbitmq
+      REDIS_HOST: redis
+      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
+      # Direct inter-service calls, bypass the gateway (see spec Assumptions).
+      AUTHORING_URL: http://authoring:8083/api/authoring
+      SCHEDULING_URL: http://scheduling:8084/api/scheduling
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8085/api/exam-delivery/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [pte-network]
+
+  proctor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_MODULE: services/proctor
+    environment:
+      PROCTOR_DB_URL: jdbc:postgresql://postgres:5432/proctor
+      RABBITMQ_HOST: rabbitmq
+      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
+      # Direct inter-service call, bypasses the gateway (see spec Assumptions).
+      SCHEDULING_URL: http://scheduling:8084/api/scheduling
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8086/api/proctor/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [pte-network]
+
+  scoring:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_MODULE: services/scoring
+    environment:
+      SCORING_DB_URL: jdbc:postgresql://postgres:5432/scoring
+      RABBITMQ_HOST: rabbitmq
+      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8087/api/scoring/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [pte-network]
+
+  reporting:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_MODULE: services/reporting
+    environment:
+      REPORTING_DB_URL: jdbc:postgresql://postgres:5432/reporting
+      RABBITMQ_HOST: rabbitmq
+      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
+      # Direct inter-service calls, bypass the gateway (see spec Assumptions).
+      EXAM_DELIVERY_URL: http://exam-delivery:8085/api/exam-delivery
+      SCORING_URL: http://scoring:8087/api/scoring
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8088/api/reporting/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [pte-network]
+
+  notification:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_MODULE: services/notification
+    environment:
+      NOTIFICATION_DB_URL: jdbc:postgresql://postgres:5432/notification
+      RABBITMQ_HOST: rabbitmq
+      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8089/api/notification/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [pte-network]
+
+  # media has no RabbitMQ configuration at all (verified against its application.yml) —
+  # deliberately excluded from RABBITMQ_HOST / the rabbitmq depends_on gate.
+  media:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_MODULE: services/media
+    environment:
+      MEDIA_DB_URL: jdbc:postgresql://postgres:5432/media
+      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pte-minio-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-pte-minio-dev-pw}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8090/api/media/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [pte-network]
