@@ -1,6 +1,5 @@
 package com.pte.examdelivery.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.examdelivery.constant.ExamDeliveryConstants;
 import com.pte.examdelivery.domain.ProcessedEvent;
 import com.pte.examdelivery.messaging.consumer.dto.ProctorCommandEvent;
@@ -10,8 +9,8 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -31,25 +30,25 @@ public class ProctorCommandConsumer {
 
     private final ProcessedEventRepository processedEventRepository;
     private final ProctorCommandService proctorCommandService;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public ProctorCommandConsumer(ProcessedEventRepository processedEventRepository,
-                                  ProctorCommandService proctorCommandService, ObjectMapper objectMapper) {
+                                  ProctorCommandService proctorCommandService, JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
         this.proctorCommandService = proctorCommandService;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     @RabbitListener(queues = ExamDeliveryConstants.QUEUE_PROCTOR_COMMANDS)
     @Transactional
-    public void onProctorCommand(Message message) throws IOException {
+    public void onProctorCommand(Message message) {
         UUID eventId = UUID.fromString(message.getMessageProperties().getMessageId());
         if (processedEventRepository.existsById(eventId)) {
             return;
         }
 
         String payload = new String(message.getBody(), StandardCharsets.UTF_8);
-        ProctorCommandEvent event = objectMapper.readValue(payload, ProctorCommandEvent.class);
+        ProctorCommandEvent event = jsonMapper.readValue(payload, ProctorCommandEvent.class);
         applyCommand(event);
 
         ProcessedEvent processed = new ProcessedEvent();

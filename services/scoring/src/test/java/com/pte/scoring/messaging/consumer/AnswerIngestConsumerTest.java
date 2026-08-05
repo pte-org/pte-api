@@ -1,6 +1,5 @@
 package com.pte.scoring.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.scoring.constant.ScoringConstants;
 import com.pte.scoring.domain.ProcessedEvent;
 import com.pte.scoring.domain.ScoringAnswer;
@@ -19,6 +18,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -49,7 +49,7 @@ class AnswerIngestConsumerTest {
     @Mock
     private ScoringAnswerRepository scoringAnswerRepository;
     @Mock
-    private ObjectMapper objectMapper;
+    private JsonMapper jsonMapper;
 
     private AnswerIngestConsumer consumer;
 
@@ -61,7 +61,7 @@ class AnswerIngestConsumerTest {
         PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
         TransactionStatus status = mock(TransactionStatus.class);
         lenient().when(transactionManager.getTransaction(any(TransactionDefinition.class))).thenReturn(status);
-        consumer = new AnswerIngestConsumer(processedEventRepository, scoringAnswerRepository, objectMapper,
+        consumer = new AnswerIngestConsumer(processedEventRepository, scoringAnswerRepository, jsonMapper,
                 transactionManager);
     }
 
@@ -85,7 +85,7 @@ class AnswerIngestConsumerTest {
         UUID eventId = UUID.randomUUID();
         AnswerSubmittedEvent event = sampleEvent();
         when(processedEventRepository.existsById(eventId)).thenReturn(false);
-        when(objectMapper.readValue(anyString(), eq(AnswerSubmittedEvent.class))).thenReturn(event);
+        when(jsonMapper.readValue(anyString(), eq(AnswerSubmittedEvent.class))).thenReturn(event);
 
         consumer.onAttemptEvent(message(eventId, ScoringConstants.INCOMING_EVENT_ANSWER_SUBMITTED));
 
@@ -108,7 +108,7 @@ class AnswerIngestConsumerTest {
         consumer.onAttemptEvent(message(eventId, ScoringConstants.INCOMING_EVENT_ANSWER_SUBMITTED));
 
         verifyNoInteractions(scoringAnswerRepository);
-        verifyNoInteractions(objectMapper);
+        verifyNoInteractions(jsonMapper);
         verify(processedEventRepository, times(1)).existsById(eventId);
         verify(processedEventRepository, never()).save(any());
     }
@@ -121,7 +121,7 @@ class AnswerIngestConsumerTest {
         consumer.onAttemptEvent(message(eventId, "AttemptSubmitted"));
 
         verifyNoInteractions(scoringAnswerRepository);
-        verifyNoInteractions(objectMapper);
+        verifyNoInteractions(jsonMapper);
         verify(processedEventRepository).save(any(ProcessedEvent.class));
     }
 
@@ -140,7 +140,7 @@ class AnswerIngestConsumerTest {
         UUID eventId = UUID.randomUUID();
         AnswerSubmittedEvent event = sampleEvent();
         when(processedEventRepository.existsById(eventId)).thenReturn(false);
-        when(objectMapper.readValue(anyString(), eq(AnswerSubmittedEvent.class))).thenReturn(event);
+        when(jsonMapper.readValue(anyString(), eq(AnswerSubmittedEvent.class))).thenReturn(event);
         when(scoringAnswerRepository.save(any(ScoringAnswer.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate answer_public_id"));
 

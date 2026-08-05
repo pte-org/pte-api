@@ -1,6 +1,5 @@
 package com.pte.scheduling.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.scheduling.constant.SchedulingConstants;
 import com.pte.scheduling.domain.ProcessedEvent;
 import com.pte.scheduling.domain.event.ExamSnapshotPublishedEvent;
@@ -12,8 +11,8 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -31,18 +30,18 @@ public class SnapshotEventConsumer {
 
     private final ProcessedEventRepository processedEventRepository;
     private final SnapshotRefService snapshotRefService;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public SnapshotEventConsumer(ProcessedEventRepository processedEventRepository,
-                                 SnapshotRefService snapshotRefService, ObjectMapper objectMapper) {
+                                 SnapshotRefService snapshotRefService, JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
         this.snapshotRefService = snapshotRefService;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     @RabbitListener(queues = SchedulingConstants.QUEUE_SNAPSHOT_EVENTS)
     @Transactional
-    public void onSnapshotEvent(Message message) throws IOException {
+    public void onSnapshotEvent(Message message) {
         MessageProperties properties = message.getMessageProperties();
         UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
@@ -59,8 +58,8 @@ public class SnapshotEventConsumer {
         processedEventRepository.save(processed);
     }
 
-    private void applyPublished(String payload) throws IOException {
-        ExamSnapshotPublishedEvent event = objectMapper.readValue(payload, ExamSnapshotPublishedEvent.class);
+    private void applyPublished(String payload) {
+        ExamSnapshotPublishedEvent event = jsonMapper.readValue(payload, ExamSnapshotPublishedEvent.class);
         var items = event.items().stream()
                 .map(item -> new SnapshotItemSpec(item.orderIndex(), item.taskType(), item.section()))
                 .toList();

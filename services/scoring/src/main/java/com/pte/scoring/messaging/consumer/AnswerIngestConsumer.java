@@ -1,6 +1,5 @@
 package com.pte.scoring.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.scoring.constant.ScoringConstants;
 import com.pte.scoring.domain.ProcessedEvent;
 import com.pte.scoring.domain.ScoringAnswer;
@@ -17,8 +16,8 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.DefaultTransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -46,15 +45,15 @@ public class AnswerIngestConsumer {
 
     private final ProcessedEventRepository processedEventRepository;
     private final ScoringAnswerRepository scoringAnswerRepository;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
     private final TransactionTemplate requiresNewTransactionTemplate;
 
     public AnswerIngestConsumer(ProcessedEventRepository processedEventRepository,
-                                ScoringAnswerRepository scoringAnswerRepository, ObjectMapper objectMapper,
+                                ScoringAnswerRepository scoringAnswerRepository, JsonMapper jsonMapper,
                                 PlatformTransactionManager transactionManager) {
         this.processedEventRepository = processedEventRepository;
         this.scoringAnswerRepository = scoringAnswerRepository;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
         DefaultTransactionDefinition definition = new DefaultTransactionDefinition();
         definition.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager, definition);
@@ -62,7 +61,7 @@ public class AnswerIngestConsumer {
 
     @RabbitListener(queues = ScoringConstants.QUEUE_ANSWER_INGEST, containerFactory = "answerIngestListenerContainerFactory")
     @Transactional
-    public void onAttemptEvent(Message message) throws IOException {
+    public void onAttemptEvent(Message message) {
         MessageProperties properties = message.getMessageProperties();
         UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
@@ -80,8 +79,8 @@ public class AnswerIngestConsumer {
         processedEventRepository.save(processed);
     }
 
-    private void ingest(String payload) throws IOException {
-        AnswerSubmittedEvent event = objectMapper.readValue(payload, AnswerSubmittedEvent.class);
+    private void ingest(String payload) {
+        AnswerSubmittedEvent event = jsonMapper.readValue(payload, AnswerSubmittedEvent.class);
         ScoringAnswer answer = new ScoringAnswer();
         answer.setAnswerPublicId(event.answerPublicId());
         answer.setAttemptPublicId(event.attemptPublicId());

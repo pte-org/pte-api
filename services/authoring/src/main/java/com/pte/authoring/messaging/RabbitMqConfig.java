@@ -2,10 +2,11 @@ package com.pte.authoring.messaging;
 
 import com.pte.authoring.constant.AuthoringConstants;
 import org.springframework.amqp.core.TopicExchange;
-import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Producer-side RabbitMQ config for authoring's outbox relay (rabbitmq-outbox-migration
@@ -24,7 +25,11 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    public MessageConverter jsonMessageConverter() {
-        return new Jackson2JsonMessageConverter();
+    public MessageConverter jsonMessageConverter(JsonMapper jsonMapper) {
+        JacksonJsonMessageConverter converter = new JacksonJsonMessageConverter(jsonMapper);
+        // See admin's RabbitMqConfig for why: default-rejects typed POJO @RabbitListener
+        // params otherwise. Set uniformly across all 9 RabbitMqConfig beans.
+        converter.setAlwaysConvertToInferredType(true);
+        return converter;
     }
 }

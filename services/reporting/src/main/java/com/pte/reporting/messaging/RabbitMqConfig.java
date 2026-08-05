@@ -10,13 +10,14 @@ import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
-import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.retry.interceptor.MethodInvocationRecoverer;
 import org.springframework.retry.interceptor.RetryInterceptorBuilder;
 import org.springframework.retry.interceptor.RetryOperationsInterceptor;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * RabbitMQ config for reporting (rabbitmq-outbox-migration Phase 7): producer
@@ -164,8 +165,12 @@ public class RabbitMqConfig {
     // --- Shared consumer plumbing (none of the three queues is ordering-sensitive). ---
 
     @Bean
-    public MessageConverter jsonMessageConverter() {
-        return new Jackson2JsonMessageConverter();
+    public MessageConverter jsonMessageConverter(JsonMapper jsonMapper) {
+        JacksonJsonMessageConverter converter = new JacksonJsonMessageConverter(jsonMapper);
+        // See admin's RabbitMqConfig for why: default-rejects typed POJO @RabbitListener
+        // params otherwise. Set uniformly across all 9 RabbitMqConfig beans.
+        converter.setAlwaysConvertToInferredType(true);
+        return converter;
     }
 
     @Bean

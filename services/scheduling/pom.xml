@@ -41,10 +41,6 @@
 			<artifactId>resilience4j-spring-boot3</artifactId>
 			<version>2.3.0</version>
 		</dependency>
-		<dependency>
-			<groupId>com.fasterxml.jackson.core</groupId>
-			<artifactId>jackson-databind</artifactId>
-		</dependency>
 		<!-- RabbitMQ: scheduling's own outbox relay (producer) + snapshot events consumer (rabbitmq-outbox-migration Phase 4). -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

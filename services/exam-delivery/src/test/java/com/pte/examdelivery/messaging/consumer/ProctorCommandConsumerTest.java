@@ -1,6 +1,5 @@
 package com.pte.examdelivery.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.examdelivery.constant.ExamDeliveryConstants;
 import com.pte.examdelivery.domain.ProcessedEvent;
 import com.pte.examdelivery.messaging.consumer.dto.ProctorCommandEvent;
@@ -14,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -41,13 +41,13 @@ class ProctorCommandConsumerTest {
     @Mock
     private ProctorCommandService proctorCommandService;
     @Mock
-    private ObjectMapper objectMapper;
+    private JsonMapper jsonMapper;
 
     private ProctorCommandConsumer consumer;
 
     @BeforeEach
     void setUp() {
-        consumer = new ProctorCommandConsumer(processedEventRepository, proctorCommandService, objectMapper);
+        consumer = new ProctorCommandConsumer(processedEventRepository, proctorCommandService, jsonMapper);
     }
 
     private Message message(UUID eventId) {
@@ -64,7 +64,7 @@ class ProctorCommandConsumerTest {
         ProctorCommandEvent event = new ProctorCommandEvent(attemptPublicId, UUID.randomUUID(),
                 ExamDeliveryConstants.COMMAND_TYPE_FORCE_SUBMIT, null, tenantId);
         when(processedEventRepository.existsById(eventId)).thenReturn(false);
-        when(objectMapper.readValue(anyString(), eq(ProctorCommandEvent.class))).thenReturn(event);
+        when(jsonMapper.readValue(anyString(), eq(ProctorCommandEvent.class))).thenReturn(event);
 
         consumer.onProctorCommand(message(eventId));
 
@@ -83,7 +83,7 @@ class ProctorCommandConsumerTest {
         ProctorCommandEvent event = new ProctorCommandEvent(attemptPublicId, UUID.randomUUID(),
                 ExamDeliveryConstants.COMMAND_TYPE_EXTEND_TIME, 300, tenantId);
         when(processedEventRepository.existsById(eventId)).thenReturn(false);
-        when(objectMapper.readValue(anyString(), eq(ProctorCommandEvent.class))).thenReturn(event);
+        when(jsonMapper.readValue(anyString(), eq(ProctorCommandEvent.class))).thenReturn(event);
 
         consumer.onProctorCommand(message(eventId));
 
@@ -98,7 +98,7 @@ class ProctorCommandConsumerTest {
         ProctorCommandEvent event = new ProctorCommandEvent(UUID.randomUUID(), UUID.randomUUID(),
                 ExamDeliveryConstants.COMMAND_TYPE_EXTEND_TIME, null, UUID.randomUUID());
         when(processedEventRepository.existsById(eventId)).thenReturn(false);
-        when(objectMapper.readValue(anyString(), eq(ProctorCommandEvent.class))).thenReturn(event);
+        when(jsonMapper.readValue(anyString(), eq(ProctorCommandEvent.class))).thenReturn(event);
 
         consumer.onProctorCommand(message(eventId));
 
@@ -112,7 +112,7 @@ class ProctorCommandConsumerTest {
         ProctorCommandEvent event = new ProctorCommandEvent(UUID.randomUUID(), UUID.randomUUID(),
                 "SOME_FUTURE_COMMAND", null, UUID.randomUUID());
         when(processedEventRepository.existsById(eventId)).thenReturn(false);
-        when(objectMapper.readValue(anyString(), eq(ProctorCommandEvent.class))).thenReturn(event);
+        when(jsonMapper.readValue(anyString(), eq(ProctorCommandEvent.class))).thenReturn(event);
 
         consumer.onProctorCommand(message(eventId));
 
@@ -128,7 +128,7 @@ class ProctorCommandConsumerTest {
         consumer.onProctorCommand(message(eventId));
 
         verifyNoInteractions(proctorCommandService);
-        verifyNoInteractions(objectMapper);
+        verifyNoInteractions(jsonMapper);
         verify(processedEventRepository, times(1)).existsById(eventId);
         verify(processedEventRepository, never()).save(any());
     }

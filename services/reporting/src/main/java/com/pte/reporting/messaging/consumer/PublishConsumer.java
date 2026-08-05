@@ -1,6 +1,5 @@
 package com.pte.reporting.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.reporting.constant.ReportingConstants;
 import com.pte.reporting.domain.AttemptReport;
 import com.pte.reporting.domain.ProcessedEvent;
@@ -14,8 +13,8 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
@@ -36,20 +35,20 @@ public class PublishConsumer {
     private final ProcessedEventRepository processedEventRepository;
     private final AttemptReportRepository attemptReportRepository;
     private final OutboxWriter outboxWriter;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public PublishConsumer(ProcessedEventRepository processedEventRepository,
                            AttemptReportRepository attemptReportRepository, OutboxWriter outboxWriter,
-                           ObjectMapper objectMapper) {
+                           JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
         this.attemptReportRepository = attemptReportRepository;
         this.outboxWriter = outboxWriter;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     @RabbitListener(queues = ReportingConstants.QUEUE_PUBLISH)
     @Transactional
-    public void onSessionEvent(Message message) throws IOException {
+    public void onSessionEvent(Message message) {
         MessageProperties properties = message.getMessageProperties();
         UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
@@ -67,8 +66,8 @@ public class PublishConsumer {
         processedEventRepository.save(processed);
     }
 
-    private void publishSession(String payload) throws IOException {
-        PublishRequestedEvent event = objectMapper.readValue(payload, PublishRequestedEvent.class);
+    private void publishSession(String payload) {
+        PublishRequestedEvent event = jsonMapper.readValue(payload, PublishRequestedEvent.class);
         List<AttemptReport> reports = attemptReportRepository.findBySessionPublicId(event.sessionPublicId());
         for (AttemptReport report : reports) {
             if (report.isPublished()) {

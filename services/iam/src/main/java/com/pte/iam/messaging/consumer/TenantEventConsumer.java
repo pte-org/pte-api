@@ -1,6 +1,5 @@
 package com.pte.iam.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.iam.constant.IamConstants;
 import com.pte.iam.domain.ProcessedEvent;
 import com.pte.iam.domain.TenantRegistry;
@@ -14,8 +13,8 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -34,18 +33,18 @@ public class TenantEventConsumer {
 
     private final ProcessedEventRepository processedEventRepository;
     private final TenantRegistryRepository tenantRegistryRepository;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public TenantEventConsumer(ProcessedEventRepository processedEventRepository,
-                               TenantRegistryRepository tenantRegistryRepository, ObjectMapper objectMapper) {
+                               TenantRegistryRepository tenantRegistryRepository, JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
         this.tenantRegistryRepository = tenantRegistryRepository;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     @RabbitListener(queues = IamConstants.QUEUE_TENANT_EVENTS)
     @Transactional
-    public void onTenantEvent(Message message) throws IOException {
+    public void onTenantEvent(Message message) {
         MessageProperties properties = message.getMessageProperties();
         UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
@@ -67,8 +66,8 @@ public class TenantEventConsumer {
         processedEventRepository.save(processed);
     }
 
-    private void applyOnboarded(String payload) throws IOException {
-        TenantOnboardedEvent event = objectMapper.readValue(payload, TenantOnboardedEvent.class);
+    private void applyOnboarded(String payload) {
+        TenantOnboardedEvent event = jsonMapper.readValue(payload, TenantOnboardedEvent.class);
         TenantRegistry registry = tenantRegistryRepository.findByTenantPublicId(event.tenantPublicId())
                 .orElseGet(TenantRegistry::new);
         registry.setTenantPublicId(event.tenantPublicId());
@@ -76,8 +75,8 @@ public class TenantEventConsumer {
         tenantRegistryRepository.save(registry);
     }
 
-    private void applySuspended(String payload) throws IOException {
-        TenantSuspendedEvent event = objectMapper.readValue(payload, TenantSuspendedEvent.class);
+    private void applySuspended(String payload) {
+        TenantSuspendedEvent event = jsonMapper.readValue(payload, TenantSuspendedEvent.class);
         tenantRegistryRepository.findByTenantPublicId(event.tenantPublicId())
                 .ifPresent(registry -> {
                     registry.setStatus(TenantRegistryStatus.SUSPENDED);

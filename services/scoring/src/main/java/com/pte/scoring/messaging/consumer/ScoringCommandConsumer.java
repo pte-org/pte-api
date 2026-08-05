@@ -1,6 +1,5 @@
 package com.pte.scoring.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.scoring.constant.ScoringConstants;
 import com.pte.scoring.domain.ProcessedEvent;
 import com.pte.scoring.domain.ScoringAnswer;
@@ -18,8 +17,8 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
@@ -46,26 +45,26 @@ public class ScoringCommandConsumer {
     private final AiScoringDispatcher aiScoringDispatcher;
     private final AttemptCompletionService attemptCompletionService;
     private final OutboxWriter outboxWriter;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public ScoringCommandConsumer(ProcessedEventRepository processedEventRepository,
                                   ScoringAnswerRepository scoringAnswerRepository,
                                   ObjectiveScoringService objectiveScoringService,
                                   AiScoringDispatcher aiScoringDispatcher,
                                   AttemptCompletionService attemptCompletionService, OutboxWriter outboxWriter,
-                                  ObjectMapper objectMapper) {
+                                  JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.objectiveScoringService = objectiveScoringService;
         this.aiScoringDispatcher = aiScoringDispatcher;
         this.attemptCompletionService = attemptCompletionService;
         this.outboxWriter = outboxWriter;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     @RabbitListener(queues = ScoringConstants.QUEUE_SCORING_COMMAND, containerFactory = "scoringCommandListenerContainerFactory")
     @Transactional
-    public void onSessionEvent(Message message) throws IOException {
+    public void onSessionEvent(Message message) {
         MessageProperties properties = message.getMessageProperties();
         UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
@@ -83,8 +82,8 @@ public class ScoringCommandConsumer {
         processedEventRepository.save(processed);
     }
 
-    private void handleScoringRequested(String payload) throws IOException {
-        ScoringRequestedEvent event = objectMapper.readValue(payload, ScoringRequestedEvent.class);
+    private void handleScoringRequested(String payload) {
+        ScoringRequestedEvent event = jsonMapper.readValue(payload, ScoringRequestedEvent.class);
         List<ScoringAnswer> pending = scoringAnswerRepository
                 .findBySessionPublicIdAndStatus(event.sessionPublicId(), ScoringAnswerStatus.PENDING);
 

@@ -1,6 +1,5 @@
 package com.pte.notification.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.notification.constant.NotificationConstants;
 import com.pte.notification.domain.ProcessedEvent;
 import com.pte.notification.domain.UserDirectoryEntry;
@@ -14,8 +13,8 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -34,20 +33,20 @@ public class ViolationNotificationConsumer {
     private final ProcessedEventRepository processedEventRepository;
     private final UserDirectoryRepository userDirectoryRepository;
     private final NotificationDispatchService dispatchService;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public ViolationNotificationConsumer(ProcessedEventRepository processedEventRepository,
                                          UserDirectoryRepository userDirectoryRepository,
-                                         NotificationDispatchService dispatchService, ObjectMapper objectMapper) {
+                                         NotificationDispatchService dispatchService, JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
         this.userDirectoryRepository = userDirectoryRepository;
         this.dispatchService = dispatchService;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     @RabbitListener(queues = NotificationConstants.QUEUE_VIOLATION_EVENTS, containerFactory = "eventBackboneListenerContainerFactory")
     @Transactional
-    public void onViolationEvent(Message message) throws IOException {
+    public void onViolationEvent(Message message) {
         MessageProperties properties = message.getMessageProperties();
         UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
@@ -64,8 +63,8 @@ public class ViolationNotificationConsumer {
         processedEventRepository.save(processed);
     }
 
-    private void notifyHostAdmins(String payload) throws IOException {
-        ViolationDetectedEvent event = objectMapper.readValue(payload, ViolationDetectedEvent.class);
+    private void notifyHostAdmins(String payload) {
+        ViolationDetectedEvent event = jsonMapper.readValue(payload, ViolationDetectedEvent.class);
         String subject = "Violation flagged: " + event.violationType();
         String body = "A proctor flagged attempt " + event.attemptPublicId() + " in session " + event.sessionPublicId()
                 + " for " + event.violationType() + (event.detail() == null ? "" : (" — " + event.detail())) + ".";

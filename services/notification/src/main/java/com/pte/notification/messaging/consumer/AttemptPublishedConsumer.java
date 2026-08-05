@@ -1,6 +1,5 @@
 package com.pte.notification.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.notification.constant.NotificationConstants;
 import com.pte.notification.domain.ProcessedEvent;
 import com.pte.notification.domain.enums.NotificationType;
@@ -12,8 +11,8 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -28,18 +27,18 @@ public class AttemptPublishedConsumer {
 
     private final ProcessedEventRepository processedEventRepository;
     private final NotificationDispatchService dispatchService;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public AttemptPublishedConsumer(ProcessedEventRepository processedEventRepository,
-                                    NotificationDispatchService dispatchService, ObjectMapper objectMapper) {
+                                    NotificationDispatchService dispatchService, JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
         this.dispatchService = dispatchService;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     @RabbitListener(queues = NotificationConstants.QUEUE_ATTEMPT_REPORT_EVENTS, containerFactory = "eventBackboneListenerContainerFactory")
     @Transactional
-    public void onAttemptReportEvent(Message message) throws IOException {
+    public void onAttemptReportEvent(Message message) {
         MessageProperties properties = message.getMessageProperties();
         UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
@@ -56,8 +55,8 @@ public class AttemptPublishedConsumer {
         processedEventRepository.save(processed);
     }
 
-    private void notifyStudent(String payload) throws IOException {
-        AttemptPublishedEvent event = objectMapper.readValue(payload, AttemptPublishedEvent.class);
+    private void notifyStudent(String payload) {
+        AttemptPublishedEvent event = jsonMapper.readValue(payload, AttemptPublishedEvent.class);
         dispatchService.dispatch(NotificationType.ATTEMPT_PUBLISHED, event.studentPublicId(), event.tenantId(),
                 "Your exam report is ready",
                 "Your report for attempt " + event.attemptPublicId() + " is now available. Log in to view your score.");

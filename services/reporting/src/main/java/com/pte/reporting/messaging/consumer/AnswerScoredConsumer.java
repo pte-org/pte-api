@@ -1,6 +1,5 @@
 package com.pte.reporting.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.reporting.constant.ReportingConstants;
 import com.pte.reporting.domain.AnswerProjection;
 import com.pte.reporting.domain.ProcessedEvent;
@@ -12,8 +11,8 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -34,18 +33,18 @@ public class AnswerScoredConsumer {
 
     private final ProcessedEventRepository processedEventRepository;
     private final AnswerScoreService answerScoreService;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public AnswerScoredConsumer(ProcessedEventRepository processedEventRepository,
-                                AnswerScoreService answerScoreService, ObjectMapper objectMapper) {
+                                AnswerScoreService answerScoreService, JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
         this.answerScoreService = answerScoreService;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     @RabbitListener(queues = ReportingConstants.QUEUE_ANSWER_SCORED)
     @Transactional
-    public void onScoringAnswerEvent(Message message) throws IOException {
+    public void onScoringAnswerEvent(Message message) {
         MessageProperties properties = message.getMessageProperties();
         UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
@@ -62,8 +61,8 @@ public class AnswerScoredConsumer {
         processedEventRepository.save(processed);
     }
 
-    private void applyScore(String payload) throws IOException {
-        answerScoreService.applyScore(objectMapper.readValue(payload, AnswerScoredEvent.class));
+    private void applyScore(String payload) {
+        answerScoreService.applyScore(jsonMapper.readValue(payload, AnswerScoredEvent.class));
     }
 
     private String headerValue(MessageProperties properties, String key) {

@@ -1,6 +1,5 @@
 package com.pte.notification.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.notification.constant.NotificationConstants;
 import com.pte.notification.domain.ProcessedEvent;
 import com.pte.notification.domain.UserDirectoryEntry;
@@ -12,8 +11,8 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.UUID;
@@ -31,18 +30,18 @@ public class UserDirectoryConsumer {
 
     private final ProcessedEventRepository processedEventRepository;
     private final UserDirectoryRepository userDirectoryRepository;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public UserDirectoryConsumer(ProcessedEventRepository processedEventRepository,
-                                 UserDirectoryRepository userDirectoryRepository, ObjectMapper objectMapper) {
+                                 UserDirectoryRepository userDirectoryRepository, JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
         this.userDirectoryRepository = userDirectoryRepository;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     @RabbitListener(queues = NotificationConstants.QUEUE_USER_EVENTS, containerFactory = "eventBackboneListenerContainerFactory")
     @Transactional
-    public void onUserEvent(Message message) throws IOException {
+    public void onUserEvent(Message message) {
         MessageProperties properties = message.getMessageProperties();
         UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
@@ -60,8 +59,8 @@ public class UserDirectoryConsumer {
         processedEventRepository.save(processed);
     }
 
-    private void upsertDirectoryEntry(String payload) throws IOException {
-        UserCreatedEvent event = objectMapper.readValue(payload, UserCreatedEvent.class);
+    private void upsertDirectoryEntry(String payload) {
+        UserCreatedEvent event = jsonMapper.readValue(payload, UserCreatedEvent.class);
         UserDirectoryEntry entry = userDirectoryRepository.findByUserPublicId(event.userPublicId())
                 .orElseGet(UserDirectoryEntry::new);
         entry.setUserPublicId(event.userPublicId());

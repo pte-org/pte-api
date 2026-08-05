@@ -1,6 +1,5 @@
 package com.pte.notification.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.notification.constant.NotificationConstants;
 import com.pte.notification.domain.ProcessedEvent;
 import com.pte.notification.domain.enums.NotificationType;
@@ -12,8 +11,8 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -31,18 +30,18 @@ public class EnrollmentNotificationConsumer {
 
     private final ProcessedEventRepository processedEventRepository;
     private final NotificationDispatchService dispatchService;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public EnrollmentNotificationConsumer(ProcessedEventRepository processedEventRepository,
-                                          NotificationDispatchService dispatchService, ObjectMapper objectMapper) {
+                                          NotificationDispatchService dispatchService, JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
         this.dispatchService = dispatchService;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     @RabbitListener(queues = NotificationConstants.QUEUE_SESSION_EVENTS, containerFactory = "eventBackboneListenerContainerFactory")
     @Transactional
-    public void onSessionEvent(Message message) throws IOException {
+    public void onSessionEvent(Message message) {
         MessageProperties properties = message.getMessageProperties();
         UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
@@ -60,8 +59,8 @@ public class EnrollmentNotificationConsumer {
         processedEventRepository.save(processed);
     }
 
-    private void notifyStudent(String payload) throws IOException {
-        StudentEnrolledEvent event = objectMapper.readValue(payload, StudentEnrolledEvent.class);
+    private void notifyStudent(String payload) {
+        StudentEnrolledEvent event = jsonMapper.readValue(payload, StudentEnrolledEvent.class);
         dispatchService.dispatch(NotificationType.STUDENT_ENROLLED, event.studentPublicId(), event.tenantId(),
                 "You've been enrolled in an exam session",
                 "You've been enrolled in exam session " + event.sessionPublicId() + ". Log in to view your schedule.");
