@@ -1,8 +1,30 @@
 # pte-api
 
+## Timezone (UTC, fleet-wide)
+
+As of 2026-08-05, every service forces its JVM default timezone to UTC as
+the first line of `main()` (`TimeZone.setDefault(TimeZone.getTimeZone
+("UTC"))`), independent of the host OS's configured timezone — this is
+what makes `postgres:17`'s `TimeZone` connection parameter always resolve
+correctly, regardless of which timezone your dev machine is set to (e.g.
+avoids the `Asia/Saigon` IANA alias that `postgres:17`'s tzdata doesn't
+recognize; only the canonical `Asia/Ho_Chi_Minh` name is present there).
+
+This is already handled in code — you don't need to do anything to get it.
+As a redundant belt-and-suspenders safety net (not required, the code-level
+fix above already covers correctness), you may optionally also pass
+`-Duser.timezone=UTC` when launching a service jar directly:
+
+```
+java -Duser.timezone=UTC -jar services/<service>/target/<service>-0.0.1-SNAPSHOT.jar
+```
+
+See `plans/postgres-utc-timestamptz-migration/spec.md` for the full
+rationale.
+
 ## Database schema management (dev phase)
 
-As of 2026-08-04, all 9 services (admin, authoring, exam-delivery, iam,
+As of 2026-08-04, all 10 services (admin, authoring, exam-delivery, iam,
 media, notification, proctor, reporting, scheduling, scoring) run without
 Flyway. Schema is managed entirely by Hibernate via
 `spring.jpa.hibernate.ddl-auto=update` — there are no SQL migration files
@@ -22,6 +44,19 @@ If your local Postgres database(s) were previously managed by Flyway,
 drop the `flyway_schema_history` table (or drop/recreate the affected
 database) once before starting a service. This is a manual, per-developer
 step — it is not scripted or automated.
+
+### One-time local DB reset after pulling the UTC/`timestamptz` change
+
+As of 2026-08-05 (`plans/postgres-utc-timestamptz-migration`), every
+timestamp column is expected to be `timestamp with time zone`. Hibernate's
+`ddl-auto=update` does **not** retroactively change an existing column's
+type — if your local database(s) were created before this change, their
+timestamp columns are still `timestamp without time zone` even after
+pulling. Drop and recreate the affected database(s) once (same manual,
+per-developer step as the Flyway-removal reset above) so a fresh
+`ddl-auto=update` run materializes `timestamptz` columns from the (already
+`Instant`-typed) entity fields. No SQL migration is written for this —
+consistent with this project's dev-only `ddl-auto=update` approach.
 
 ### `ddl-auto=update` is dev-only
 

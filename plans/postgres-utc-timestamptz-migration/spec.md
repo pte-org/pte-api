@@ -118,3 +118,42 @@ chỉ vá triệu chứng cho 1 máy dev.
   mỗi `main()`, cả 9 file) — chọn vì độc lập với cách dev chạy jar (không phụ
   thuộc launch script/env var có đúng discipline hay không), tự chứa và dễ
   audit qua code review.
+
+---
+
+## Addendum (2026-08-05, sau khi lập plan + cook) — đính chính số liệu cũ
+
+Các số liệu sau trong spec này (viết lúc brainstorm, trước khi re-verify grep
+lúc lập plan chi tiết) đã sai, giữ nguyên phần trên để làm lịch sử nhưng đính
+chính ở đây:
+
+- **"9 service" → thực tế 10 service** (`admin`, `authoring`, `exam-delivery`,
+  `iam`, `media`, `notification`, `proctor`, `reporting`, `scheduling`,
+  `scoring`). Con số "9" là carry-over lỗi từ plan `remove-flyway-hibernate
+  -only` trước đó — `pte-api/pom.xml` liệt kê rõ 10 module `services/*`.
+- **"12 entity đã đổi" → thực tế 0 entity cần convert.** Grep lại lúc lập
+  plan (`grep -r "LocalDateTime\|OffsetDateTime"` toàn bộ `pte-api/**/*.java`)
+  trả về **0 kết quả** — cả 51 `@Entity` class đã dùng `Instant` từ trước
+  (qua `BaseEntity.createdAt/updatedAt` hoặc field riêng). Con số "12" trong
+  brainstorm ban đầu là do pattern grep khi đó vô tình khớp nhầm file đã
+  đúng kiểu `Instant` (`private Instant` cũng khớp cùng pattern), không phải
+  file dùng `LocalDateTime`/`OffsetDateTime` thật. Đã re-verify lại lần nữa ở
+  Phase 3 cook — vẫn 0 kết quả.
+- **"13 module" → thực tế 12 module** (`pte-common`, `gateway`, 10 service —
+  không tính `pte-api-parent` aggregator).
+
+## Success Criteria (verified — cook 2026-08-05)
+
+- [x] Chạy `java -jar` cho cả **10** service trên máy dev thật (OS timezone
+      `Asia/Ho_Chi_Minh`) — **không truyền `-Duser.timezone`** — tất cả
+      connect Postgres thành công, 0 lỗi `invalid value for parameter
+      "TimeZone"`. Verify 2 lần độc lập (Phase 1 và Phase 3), cả 2 lần sạch.
+- [x] `psql information_schema.columns` trên **toàn bộ** 96 cột timestamp
+      của cả 10 database (không phải mẫu) — 100% `timestamp with time zone`,
+      0 cột `timestamp without time zone`. Round-trip spot-check (ghi
+      instant `10:30:00 UTC`, đọc lại ở session `Asia/Ho_Chi_Minh`) xác nhận
+      đúng `17:30+07`, không lệch giờ.
+- [x] `mvn clean install` build xanh toàn bộ 12 module (+ parent aggregator),
+      full test suite pass.
+- [x] 0 tham chiếu `LocalDateTime`/`OffsetDateTime` nào trong toàn bộ
+      `pte-api/**/*.java` (grep re-verify 2 lần, Phase 2 và Phase 3).

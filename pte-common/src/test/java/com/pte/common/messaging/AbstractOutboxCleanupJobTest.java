@@ -1,8 +1,10 @@
 package com.pte.common.messaging;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
@@ -66,6 +68,20 @@ class AbstractOutboxCleanupJobTest {
         job.cleanup();
 
         verify(repository).deletePublishedBefore(any(Instant.class));
+    }
+
+    @Test
+    void cleanup_scheduledAnnotation_pinsCronToUtcZone() throws NoSuchMethodException {
+        // postgres-utc-timestamptz-migration Phase 1: once the JVM default timezone is
+        // forced to UTC, an unpinned cron expression would silently shift its real-world
+        // fire time (was ~3am Vietnam-local, would become 3am UTC = 10am Vietnam without
+        // this). Verifies the annotation is pinned, not the scheduler's actual trigger
+        // behavior (which needs a running scheduler, out of scope for a unit test).
+        Method cleanupMethod = AbstractOutboxCleanupJob.class.getDeclaredMethod("cleanup");
+        Scheduled scheduled = cleanupMethod.getAnnotation(Scheduled.class);
+
+        assertThat(scheduled).isNotNull();
+        assertThat(scheduled.zone()).isEqualTo("UTC");
     }
 
     @Test

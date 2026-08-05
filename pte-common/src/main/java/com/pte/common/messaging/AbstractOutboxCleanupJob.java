@@ -27,7 +27,12 @@ public abstract class AbstractOutboxCleanupJob<T extends AbstractOutboxEntry> {
         this.repository = repository;
     }
 
-    @Scheduled(cron = "${pte.outbox.cleanup-cron:0 0 3 * * *}")
+    // postgres-utc-timestamptz-migration Phase 1: zone="UTC" is a deliberate real-world
+    // behavior change, not a no-op. Before the fleet's JVM default timezone was forced to
+    // UTC, this unpinned cron fired at ~3am Vietnam-local. Pinning it to UTC keeps the
+    // expression's meaning explicit, but the job's new effective local time is 10am
+    // Vietnam (3am UTC), not 3am — recorded here so the shift isn't a mystery later.
+    @Scheduled(cron = "${pte.outbox.cleanup-cron:0 0 3 * * *}", zone = "UTC")
     @Transactional
     public void cleanup() {
         Instant cutoff = cutoff();

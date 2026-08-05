@@ -1,5 +1,5 @@
 # Plan: Postgres/JVM UTC Standardization (`timestamptz` migration)
-Status: 🟡 In Progress
+Status: ✅ Complete — implementation, test, code-review PASSED
 Date: 2026-08-05
 Mode: Hard
 
@@ -11,15 +11,15 @@ local Postgres container, and every entity's timestamp column type — so the
 worked around for one machine, per `spec.md`.
 
 ## Phases
-- [ ] Phase 1: JVM & Infra UTC Enforcement — `TimeZone.setDefault(UTC)` in
+- [x] Phase 1: JVM & Infra UTC Enforcement — `TimeZone.setDefault(UTC)` in
       all 10 service `main()` classes, `TZ: UTC` on the `docker-compose.yml`
       `postgres` service, and an explicit `zone = "UTC"` audit/fix for the
       cron-based `@Scheduled` job in `pte-common`.
-- [ ] Phase 2: Entity Timestamp Verification & Local DB Reset — re-verify no
+- [x] Phase 2: Entity Timestamp Verification & Local DB Reset — re-verify no
       entity still uses `LocalDateTime`/`OffsetDateTime`, convert any found,
       then drop/recreate each dev's local Postgres DB so `ddl-auto=update`
       materializes fresh `timestamptz` columns from `Instant` fields.
-- [ ] Phase 3: JSON Compatibility Audit & Fleet-Wide Verification — audit
+- [x] Phase 3: JSON Compatibility Audit & Fleet-Wide Verification — audit
       RabbitMQ/API consumers for hardcoded no-offset date parsing, then
       `mvn clean install` + live startup of all services to confirm zero
       `TimeZone` connection errors.
@@ -144,3 +144,89 @@ worth flagging explicitly:
 
 ## Session Notes
 <!-- Updated by cook automatically — do not edit manually -->
+
+**Last active:** 2026-08-05 18:30
+**Phase in progress:** none — all 3 phases complete, moving to code review
+(cook Step 4)
+**Status:** Implementation complete. All 3 phases done, full-repo build
+green, all 10 services verified starting live twice independently (Phase 1
+and Phase 3), zero `TimeZone`/bean/Jackson errors, 100% of 96 timestamp
+columns confirmed `timestamptz`. Awaiting mandatory code review (--hard
+mode, no auto-approve).
+
+### Decisions made this session
+- TDD: added `cleanup_scheduledAnnotation_pinsCronToUtcZone` to the existing
+  `AbstractOutboxCleanupJobTest` (reflection on the `@Scheduled` annotation's
+  `zone` attribute) — confirmed RED (`zone()` returned `""`) before adding
+  `zone = "UTC"`, GREEN after. Did not write a bespoke unit test for the 10
+  `main()` edits themselves (JVM bootstrap ordering isn't meaningfully
+  unit-testable — `TimeZone.setDefault()` only proves itself by the actual
+  runtime effect); relied on step 7's grep-completeness sweep + step 6's
+  live standalone-startup verification instead, consistent with how
+  `jackson3-objectmapper-migration`'s mechanical per-file edits were handled.
+- Live verification recreated `pte-postgres` with `docker compose up -d
+  --force-recreate postgres` (not just restart) since `TZ` is an env var
+  baked in at container creation — confirmed `SHOW timezone;` reports
+  `Etc/UTC` before starting any service.
+- Started all 10 services in 3 batches (4+4+2) rather than all at once,
+  after `jackson3-objectmapper-migration`'s Phase 4 verification hit a local
+  machine OOM (paging file exhausted) running 10 JVMs simultaneously — same
+  known local-resource constraint, not a code issue, worked around the same
+  way.
+- Critically, this run used **no** `-Duser.timezone` JVM flag at all (unlike
+  every prior verification run in this repo, which used
+  `-Duser.timezone=Asia/Ho_Chi_Minh` as a workaround) — all 10 services
+  connected cleanly on the first try, confirming the code-level fix alone is
+  sufficient without the flag, exactly as FR-01 requires.
+- Added a "Timezone (UTC, fleet-wide)" section to `pte-api/README.md`
+  documenting the code-level fix and the optional `-Duser.timezone=UTC`
+  belt-and-suspenders launch flag (step 5), placed before the existing
+  "Database schema management" section.
+
+- Phase 2: re-verified zero `LocalDateTime`/`OffsetDateTime` matches
+  repo-wide (confirmed, no conversion needed — matches planning-time
+  finding). Dropped + recreated all 10 service databases (terminated a
+  handful of leaked Hikari connections on `admin`/`reporting` first —
+  leftover from earlier verification runs, not new). Started all 10
+  services once each (3 batches of 4/4/2, same OOM-avoidance pattern as
+  Phase 1/jackson3-objectmapper-migration) to let `ddl-auto=update`
+  materialize fresh schema. Queried `information_schema.columns` across
+  all 10 databases (96 timestamp columns total, not a spot sample) —
+  **100% `timestamp with time zone`, zero `timestamp without time zone`**.
+  Round-trip spot-check: inserted a known instant via `psql` in a UTC
+  session, read it back in an `Asia/Ho_Chi_Minh` session — displayed as
+  `17:30+07` with `AT TIME ZONE 'UTC'` confirming the exact same
+  `10:30:00` instant, zero drift; test row deleted after.
+  Documented the one-time local DB reset in `pte-api/README.md`, mirroring
+  the existing Flyway-removal reset section's style.
+- **Process-management finding (this session, not a code defect):** on this
+  Windows/git-bash environment, `pkill -f "<jarname>.jar"` between batches
+  does NOT reliably terminate the background Java processes (confirmed via
+  `tasklist`/`netstat` — 13 orphaned `java.exe` processes and 3 ports still
+  listening after a `pkill` that reported success). Switched to
+  `taskkill //F //IM java.exe` (scoped to exclude 2 pre-existing unrelated
+  java processes found listening on no service port) between batches for
+  the rest of this phase — worked reliably. Worth remembering for any
+  future live-verification session on this machine.
+
+- Phase 3: confirmed `jackson3-objectmapper-migration` is
+  `✅ Complete` — audited against its live pinned ISO-8601 format, not a
+  caveat. Repo-wide grep for hardcoded `DateTimeFormatter`/manual date
+  parsing across all `@RabbitListener` consumers and DTOs: 0 matches.
+  Repo-wide `LocalDateTime`/`OffsetDateTime` re-check (2nd time this plan,
+  including DTOs not just entities): still 0 matches. `mvn clean install`
+  from repo root: BUILD SUCCESS, all 12 modules, full test suite green.
+  Live startup of all 10 services a second time (3 batches, same
+  taskkill-between-batches approach from Phase 2): all 10 `Started
+  <X>Application`, 0 `TimeZone`/`NoSuchBeanDefinitionException`/Jackson
+  errors — this is the first live confirmation of `jackson3-objectmapper
+  -migration` and this plan's changes running together. Corrected `spec.md`'s
+  stale "9 service/12 entity/13 module" figures with a dated addendum (step
+  7) before checking off Success Criteria (step 8), per the plan's own
+  explicit instruction not to mark a wrong number "done".
+
+### Next immediate action
+All 3 implementation phases complete. Next: mandatory code review
+(cook Step 4, `--hard` mode — no auto-approve), then finalize (project-manager
+/ docs-manager, cook Step 5; git-manager skipped per user's stated preference
+to commit manually, same as `jackson3-objectmapper-migration`'s cook run).
