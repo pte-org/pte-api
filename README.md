@@ -1,5 +1,33 @@
 # pte-api
 
+## Running services locally with Docker Compose
+
+Two deployment options for local development:
+
+**Option 1: Infrastructure only**
+
+Run just the database, cache, and message broker (useful when running services from your IDE):
+
+```bash
+docker compose -f docker-compose.yml up
+```
+
+**Option 2: Full stack with services**
+
+Run the API gateway and all 10 backend services alongside infrastructure:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.services.yml up --build
+```
+
+Services are built automatically from the shared `Dockerfile`. The API gateway is accessible on `http://localhost:8080`:
+
+```bash
+curl http://localhost:8080/actuator/health
+```
+
+Backend services (admin, authoring, exam-delivery, iam, media, notification, proctor, reporting, scheduling, scoring) communicate via the internal Docker network and are not exposed on host ports.
+
 ## Timezone (UTC, fleet-wide)
 
 As of 2026-08-05, every service forces its JVM default timezone to UTC as

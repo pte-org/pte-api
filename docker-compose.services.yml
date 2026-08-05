@@ -10,11 +10,24 @@
 # through the gateway or, for the handful of direct service-to-service calls
 # documented below, via the internal pte-network.
 
+x-build-defaults: &build-defaults
+  context: .
+  dockerfile: Dockerfile
+
+# Every app container shares the same shape: curl its own actuator health
+# endpoint. Only `test` (the URL/context-path) differs per service — merge
+# this in and override just that key, so tuning start_period/retries fleet-wide
+# is a one-line change instead of 11 hand-edits drifting out of sync.
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 40s
+
 services:
   iam:
     build:
-      context: .
-      dockerfile: Dockerfile
+      <<: *build-defaults
       args:
         SERVICE_MODULE: services/iam
     environment:
@@ -27,17 +40,13 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "-sf", "http://localhost:8081/api/iam/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 40s
     networks: [pte-network]
 
   admin:
     build:
-      context: .
-      dockerfile: Dockerfile
+      <<: *build-defaults
       args:
         SERVICE_MODULE: services/admin
     environment:
@@ -51,17 +60,13 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "-sf", "http://localhost:8082/api/admin/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 40s
     networks: [pte-network]
 
   authoring:
     build:
-      context: .
-      dockerfile: Dockerfile
+      <<: *build-defaults
       args:
         SERVICE_MODULE: services/authoring
     environment:
@@ -75,17 +80,13 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "-sf", "http://localhost:8083/api/authoring/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 40s
     networks: [pte-network]
 
   scheduling:
     build:
-      context: .
-      dockerfile: Dockerfile
+      <<: *build-defaults
       args:
         SERVICE_MODULE: services/scheduling
     environment:
@@ -101,17 +102,13 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "-sf", "http://localhost:8084/api/scheduling/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 40s
     networks: [pte-network]
 
   exam-delivery:
     build:
-      context: .
-      dockerfile: Dockerfile
+      <<: *build-defaults
       args:
         SERVICE_MODULE: services/exam-delivery
     environment:
@@ -132,17 +129,13 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "-sf", "http://localhost:8085/api/exam-delivery/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 40s
     networks: [pte-network]
 
   proctor:
     build:
-      context: .
-      dockerfile: Dockerfile
+      <<: *build-defaults
       args:
         SERVICE_MODULE: services/proctor
     environment:
@@ -158,17 +151,13 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "-sf", "http://localhost:8086/api/proctor/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 40s
     networks: [pte-network]
 
   scoring:
     build:
-      context: .
-      dockerfile: Dockerfile
+      <<: *build-defaults
       args:
         SERVICE_MODULE: services/scoring
     environment:
@@ -182,17 +171,13 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "-sf", "http://localhost:8087/api/scoring/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 40s
     networks: [pte-network]
 
   reporting:
     build:
-      context: .
-      dockerfile: Dockerfile
+      <<: *build-defaults
       args:
         SERVICE_MODULE: services/reporting
     environment:
@@ -209,17 +194,13 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "-sf", "http://localhost:8088/api/reporting/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 40s
     networks: [pte-network]
 
   notification:
     build:
-      context: .
-      dockerfile: Dockerfile
+      <<: *build-defaults
       args:
         SERVICE_MODULE: services/notification
     environment:
@@ -237,19 +218,52 @@ services:
       mailpit:
         condition: service_healthy
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "-sf", "http://localhost:8089/api/notification/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 40s
+    networks: [pte-network]
+
+  # Sole service exposed to the host — every backend service above is reached
+  # only through this gateway (or, for the handful of direct service-to-service
+  # calls documented above, via pte-network). No hard depends_on/healthy gate on
+  # the 10 backend services: JWT-consuming routes accept a first-boot retry
+  # window rather than blocking gateway startup (spec decision). redis IS
+  # hard-gated since the rate limiter needs it synchronously per request.
+  gateway:
+    build:
+      <<: *build-defaults
+      args:
+        SERVICE_MODULE: gateway
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    environment:
+      REDIS_HOST: redis
+      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
+      IAM_URI: http://iam:8081
+      ADMIN_URI: http://admin:8082
+      AUTHORING_URI: http://authoring:8083
+      SCHEDULING_URI: http://scheduling:8084
+      EXAM_DELIVERY_URI: http://exam-delivery:8085
+      # More specific than PROCTOR_URI — must keep the ws:// scheme.
+      PROCTOR_WS_URI: ws://proctor:8086
+      PROCTOR_URI: http://proctor:8086
+      SCORING_URI: http://scoring:8087
+      REPORTING_URI: http://reporting:8088
+      NOTIFICATION_URI: http://notification:8089
+      MEDIA_URI: http://media:8090
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
     networks: [pte-network]
 
   # media has no RabbitMQ configuration at all (verified against its application.yml) —
   # deliberately excluded from RABBITMQ_HOST / the rabbitmq depends_on gate.
   media:
     build:
-      context: .
-      dockerfile: Dockerfile
+      <<: *build-defaults
       args:
         SERVICE_MODULE: services/media
     environment:
@@ -265,9 +279,6 @@ services:
       minio:
         condition: service_healthy
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "-sf", "http://localhost:8090/api/media/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 40s
     networks: [pte-network]
