@@ -10,6 +10,8 @@ spring:
     url: ${AUTHORING_DB_URL:jdbc:postgresql://localhost:5432/authoring}
     username: ${AUTHORING_DB_USER:authoring_svc}
     password: ${AUTHORING_DB_PASSWORD:authoring_dev_pw}
+    hikari:
+      maximum-pool-size: ${AUTHORING_DB_POOL_SIZE:5}
   jpa:
     hibernate:
       ddl-auto: update

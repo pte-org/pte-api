@@ -10,6 +10,8 @@ spring:
     url: ${PROCTOR_DB_URL:jdbc:postgresql://localhost:5432/proctor}
     username: ${PROCTOR_DB_USER:proctor_svc}
     password: ${PROCTOR_DB_PASSWORD:proctor_dev_pw}
+    hikari:
+      maximum-pool-size: ${PROCTOR_DB_POOL_SIZE:5}
   jpa:
     hibernate:
       ddl-auto: update

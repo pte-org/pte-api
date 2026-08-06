@@ -10,6 +10,8 @@ spring:
     url: ${REPORTING_DB_URL:jdbc:postgresql://localhost:5432/reporting}
     username: ${REPORTING_DB_USER:reporting_svc}
     password: ${REPORTING_DB_PASSWORD:reporting_dev_pw}
+    hikari:
+      maximum-pool-size: ${REPORTING_DB_POOL_SIZE:5}
   jpa:
     hibernate:
       ddl-auto: update

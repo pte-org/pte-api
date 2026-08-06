@@ -10,6 +10,8 @@ spring:
     url: ${NOTIFICATION_DB_URL:jdbc:postgresql://localhost:5432/notification}
     username: ${NOTIFICATION_DB_USER:notification_svc}
     password: ${NOTIFICATION_DB_PASSWORD:notification_dev_pw}
+    hikari:
+      maximum-pool-size: ${NOTIFICATION_DB_POOL_SIZE:5}
   jpa:
     hibernate:
       ddl-auto: update

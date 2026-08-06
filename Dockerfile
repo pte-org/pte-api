@@ -8,8 +8,12 @@ FROM maven:3.9-eclipse-temurin-21 AS build
 ARG SERVICE_MODULE
 WORKDIR /workspace
 COPY . .
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn -q -pl ${SERVICE_MODULE} -am package -DskipTests
+RUN --mount=type=cache,target=/root/.m2,sharing=locked \
+    mvn -q -pl ${SERVICE_MODULE} -am package -DskipTests \
+    -Dmaven.wagon.http.retryHandler.count=5 \
+    -Daether.connector.http.retryHandler.count=5 \
+    -Daether.connector.connectTimeout=30000 \
+    -Daether.connector.requestTimeout=60000
 
 FROM eclipse-temurin:21-jre AS runtime
 ARG SERVICE_MODULE

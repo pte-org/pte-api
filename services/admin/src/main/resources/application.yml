@@ -10,6 +10,8 @@ spring:
     url: ${ADMIN_DB_URL:jdbc:postgresql://localhost:5432/admin}
     username: ${ADMIN_DB_USER:admin_svc}
     password: ${ADMIN_DB_PASSWORD:admin_dev_pw}
+    hikari:
+      maximum-pool-size: ${ADMIN_DB_POOL_SIZE:5}
   jpa:
     hibernate:
       ddl-auto: update

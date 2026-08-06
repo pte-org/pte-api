@@ -33,6 +33,8 @@ services:
     environment:
       IAM_DB_URL: jdbc:postgresql://postgres:5432/iam
       RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
     depends_on:
       postgres:
@@ -52,6 +54,8 @@ services:
     environment:
       ADMIN_DB_URL: jdbc:postgresql://postgres:5432/admin
       RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
     depends_on:
@@ -72,6 +76,8 @@ services:
     environment:
       AUTHORING_DB_URL: jdbc:postgresql://postgres:5432/authoring
       RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
     depends_on:
@@ -92,6 +98,8 @@ services:
     environment:
       SCHEDULING_DB_URL: jdbc:postgresql://postgres:5432/scheduling
       RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
       # Direct inter-service call, bypasses the gateway (see spec Assumptions).
@@ -115,6 +123,8 @@ services:
       # Note: db name is "exam_delivery" (underscore); module dir is "exam-delivery" (hyphen).
       EXAM_DELIVERY_DB_URL: jdbc:postgresql://postgres:5432/exam_delivery
       RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
       REDIS_HOST: redis
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
@@ -141,6 +151,8 @@ services:
     environment:
       PROCTOR_DB_URL: jdbc:postgresql://postgres:5432/proctor
       RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
       # Direct inter-service call, bypasses the gateway (see spec Assumptions).
@@ -163,6 +175,8 @@ services:
     environment:
       SCORING_DB_URL: jdbc:postgresql://postgres:5432/scoring
       RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
     depends_on:
@@ -183,6 +197,8 @@ services:
     environment:
       REPORTING_DB_URL: jdbc:postgresql://postgres:5432/reporting
       RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
       # Direct inter-service calls, bypass the gateway (see spec Assumptions).
@@ -206,6 +222,8 @@ services:
     environment:
       NOTIFICATION_DB_URL: jdbc:postgresql://postgres:5432/notification
       RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
       MAIL_HOST: mailpit
