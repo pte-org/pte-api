@@ -5,22 +5,46 @@ public final class ReportingConstants {
 
     public static final String REPORT_NOT_FOUND = "REPORT_NOT_FOUND";
 
-    // Incoming: exam-delivery's outbox.event.ExamAttempt topic
-    public static final String TOPIC_ATTEMPT_EVENTS = "outbox.event.ExamAttempt";
+    // Incoming: exam-delivery's outbox exchange (rabbitmq-outbox-migration Phase 7,
+    // previously Kafka topic outbox.event.ExamAttempt). Not ordering-sensitive
+    // (upserts idempotently by attemptPublicId/answerPublicId) — normal concurrency.
+    public static final String EXAMDELIVERY_OUTBOX_EXCHANGE = "outbox.examdelivery.exchange";
+    public static final String QUEUE_ATTEMPT_INGEST = "reporting.attempt-ingest";
+    public static final String QUEUE_ATTEMPT_INGEST_DLQ = "reporting.attempt-ingest.dlq";
+    public static final String ATTEMPT_INGEST_ROUTING_PATTERN = "ExamAttempt.*";
+    public static final String ATTEMPT_INGEST_DEAD_LETTER_ROUTING_KEY = "attempt-ingest";
     public static final String INCOMING_EVENT_ATTEMPT_SUBMITTED = "AttemptSubmitted";
     public static final String INCOMING_EVENT_ANSWER_SUBMITTED = "AnswerSubmitted";
 
-    // Incoming: scoring's outbox.event.ScoringAnswer topic
-    public static final String TOPIC_SCORING_ANSWER_EVENTS = "outbox.event.ScoringAnswer";
+    // Incoming: scoring's outbox exchange (rabbitmq-outbox-migration Phase 7,
+    // previously Kafka topic outbox.event.ScoringAnswer). Not ordering-sensitive
+    // (updates an existing projection row by id) — normal concurrency.
+    public static final String SCORING_OUTBOX_EXCHANGE = "outbox.scoring.exchange";
+    public static final String QUEUE_ANSWER_SCORED = "reporting.answer-scored";
+    public static final String QUEUE_ANSWER_SCORED_DLQ = "reporting.answer-scored.dlq";
+    public static final String ANSWER_SCORED_ROUTING_PATTERN = "ScoringAnswer.*";
+    public static final String ANSWER_SCORED_DEAD_LETTER_ROUTING_KEY = "answer-scored";
     public static final String INCOMING_EVENT_ANSWER_SCORED = "AnswerScored";
 
-    // Incoming: scheduling's outbox.event.ExamSession topic
-    public static final String TOPIC_SESSION_EVENTS = "outbox.event.ExamSession";
+    // Incoming: scheduling's outbox exchange (rabbitmq-outbox-migration Phase 7,
+    // previously Kafka topic outbox.event.ExamSession). Not ordering-sensitive
+    // (acts on a session-level command) — normal concurrency.
+    public static final String SCHEDULING_OUTBOX_EXCHANGE = "outbox.scheduling.exchange";
+    public static final String QUEUE_PUBLISH = "reporting.publish";
+    public static final String QUEUE_PUBLISH_DLQ = "reporting.publish.dlq";
+    public static final String PUBLISH_ROUTING_PATTERN = "ExamSession.*";
+    public static final String PUBLISH_DEAD_LETTER_ROUTING_KEY = "publish";
     public static final String INCOMING_EVENT_PUBLISH_REQUESTED = "PublishRequested";
 
-    public static final String KAFKA_HEADER_EVENT_TYPE = "eventType";
+    // AMQP replacement for the old Kafka record header of the same purpose —
+    // set by AbstractOutboxRelay#publishAndConfirm when publishing, read via
+    // Message.getMessageProperties().getHeaders() here.
+    public static final String EVENT_TYPE_HEADER = "eventType";
 
-    // Outgoing (reporting's own outbox)
+    // Outgoing (reporting's own outbox). RabbitMQ outbox relay (rabbitmq-outbox-migration
+    // Phase 7): downstream consumers bind their own queue to this exchange with
+    // routing key "{aggregateType}.{eventType}".
+    public static final String OUTBOX_EXCHANGE = "outbox.reporting.exchange";
     public static final String AGGREGATE_ATTEMPT_REPORT = "AttemptReport";
     public static final String EVENT_ATTEMPT_PUBLISHED = "AttemptPublished";
 

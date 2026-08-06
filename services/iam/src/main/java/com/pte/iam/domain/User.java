@@ -10,6 +10,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 import lombok.Getter;
@@ -28,7 +29,9 @@ import java.util.UUID;
  * (YAGNI); roles are held here as a set scoped to this user's tenant.
  */
 @Entity
-@Table(name = "users")
+@Table(name = "users", indexes = {
+        @Index(name = "idx_users_tenant", columnList = "tenant_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

@@ -8,6 +8,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -25,7 +26,9 @@ import java.util.UUID;
  * service; exam-delivery strips them before serving to a student.
  */
 @Entity
-@Table(name = "snapshot_items")
+@Table(name = "snapshot_items", indexes = {
+        @Index(name = "idx_snapshot_items_snapshot", columnList = "snapshot_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

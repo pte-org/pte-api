@@ -1,10 +1,11 @@
 package com.pte.examdelivery.config;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.examdelivery.domain.exception.TaskTimingNotConfiguredException;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,8 +27,8 @@ public class TaskTimingConfig {
 
     private final Map<String, Timing> timings = new HashMap<>();
 
-    public TaskTimingConfig(ObjectMapper objectMapper) {
-        load(objectMapper);
+    public TaskTimingConfig(JsonMapper jsonMapper) {
+        load(jsonMapper);
     }
 
     public Timing timingFor(String taskType) {
@@ -38,14 +39,14 @@ public class TaskTimingConfig {
         return timing;
     }
 
-    private void load(ObjectMapper objectMapper) {
+    private void load(JsonMapper jsonMapper) {
         try (InputStream in = new ClassPathResource(RESOURCE).getInputStream()) {
-            JsonNode root = objectMapper.readTree(in).path("timings");
-            root.fieldNames().forEachRemaining(taskType -> {
+            JsonNode root = jsonMapper.readTree(in).path("timings");
+            root.propertyNames().forEach(taskType -> {
                 JsonNode node = root.get(taskType);
                 timings.put(taskType, new Timing(node.path("prepSeconds").asInt(), node.path("responseSeconds").asInt()));
             });
-        } catch (IOException ex) {
+        } catch (IOException | JacksonException ex) {
             throw new IllegalStateException("Failed to load task timing from " + RESOURCE, ex);
         }
     }
