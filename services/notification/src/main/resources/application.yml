@@ -10,23 +10,15 @@ spring:
     url: ${NOTIFICATION_DB_URL:jdbc:postgresql://localhost:5432/notification}
     username: ${NOTIFICATION_DB_USER:notification_svc}
     password: ${NOTIFICATION_DB_PASSWORD:notification_dev_pw}
+    hikari:
+      maximum-pool-size: ${NOTIFICATION_DB_POOL_SIZE:5}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     open-in-view: false
     properties:
       hibernate:
         format_sql: true
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    consumer:
-      group-id: notification
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}

@@ -9,13 +9,14 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
-import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.retry.interceptor.MethodInvocationRecoverer;
 import org.springframework.retry.interceptor.RetryOperationsInterceptor;
 import org.springframework.retry.interceptor.RetryInterceptorBuilder;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * AI scoring work queue (Phase 9 activates what Phase 7 deliberately deferred
@@ -76,8 +77,15 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    public MessageConverter jsonMessageConverter() {
-        return new Jackson2JsonMessageConverter();
+    public MessageConverter jsonMessageConverter(JsonMapper jsonMapper) {
+        JacksonJsonMessageConverter converter = new JacksonJsonMessageConverter(jsonMapper);
+        // Required: AiScoringWorker.onAiScoringJob/onDeadLettered take AiScoringJob as a typed
+        // @RabbitListener parameter. By default this converter only trusts java.util/java.lang
+        // in the embedded type-id header, even when the listener's own declared parameter type
+        // is already known — pre-existing gap with Jackson2JsonMessageConverter too (same
+        // default), confirmed via a real round-trip unit test, not new to this migration.
+        converter.setAlwaysConvertToInferredType(true);
+        return converter;
     }
 
     @Bean

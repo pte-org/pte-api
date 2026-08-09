@@ -1,11 +1,11 @@
 package com.pte.scoring.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.scoring.constant.ScoringConstants;
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.exception.UnsupportedTaskTypeException;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
 import java.util.Set;
@@ -22,10 +22,10 @@ public class ObjectiveScoringService {
 
     private static final Set<String> SUPPORTED_TASK_TYPES = Set.of(ScoringConstants.TASK_TYPE_MC_READING_SINGLE);
 
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
-    public ObjectiveScoringService(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+    public ObjectiveScoringService(JsonMapper jsonMapper) {
+        this.jsonMapper = jsonMapper;
     }
 
     public boolean supports(String taskType) {
@@ -58,7 +58,7 @@ public class ObjectiveScoringService {
             return null;
         }
         try {
-            List<FrozenOption> options = objectMapper.readValue(optionsJson, new TypeReference<List<FrozenOption>>() {
+            List<FrozenOption> options = jsonMapper.readValue(optionsJson, new TypeReference<List<FrozenOption>>() {
             });
             return options.stream().filter(FrozenOption::correct).map(FrozenOption::orderIndex).findFirst().orElse(null);
         } catch (Exception ex) {

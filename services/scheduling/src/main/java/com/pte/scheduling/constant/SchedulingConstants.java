@@ -22,10 +22,23 @@ public final class SchedulingConstants {
     public static final String EVENT_SCORING_REQUESTED = "ScoringRequested";
     public static final String EVENT_PUBLISH_REQUESTED = "PublishRequested";
 
-    // Incoming event consumed from authoring's outbox.event.ExamSnapshot topic (Phase 6).
+    // RabbitMQ outbox relay (rabbitmq-outbox-migration Phase 4). Downstream
+    // consumers bind their own queue to this exchange with routing key
+    // "{aggregateType}.{eventType}".
+    public static final String OUTBOX_EXCHANGE = "outbox.scheduling.exchange";
+
+    // Incoming event consumed from authoring's outbox exchange (rabbitmq-outbox-migration
+    // Phase 4, previously Kafka topic outbox.event.ExamSnapshot).
     public static final String INCOMING_EVENT_SNAPSHOT_PUBLISHED = "ExamSnapshotPublished";
-    public static final String TOPIC_SNAPSHOT_EVENTS = "outbox.event.ExamSnapshot";
-    public static final String KAFKA_HEADER_EVENT_TYPE = "eventType";
+    public static final String AUTHORING_OUTBOX_EXCHANGE = "outbox.authoring.exchange";
+    public static final String QUEUE_SNAPSHOT_EVENTS = "scheduling.snapshot-events";
+    public static final String QUEUE_SNAPSHOT_EVENTS_DLQ = "scheduling.snapshot-events.dlq";
+    public static final String SNAPSHOT_EVENTS_ROUTING_PATTERN = "ExamSnapshot.*";
+    public static final String SNAPSHOT_EVENTS_DEAD_LETTER_ROUTING_KEY = "snapshot-events";
+    // AMQP replacement for the old Kafka record header of the same purpose —
+    // set by AbstractOutboxRelay#publishAndConfirm when publishing, read via
+    // Message.getMessageProperties().getHeaders() here.
+    public static final String EVENT_TYPE_HEADER = "eventType";
 
     private SchedulingConstants() {
     }

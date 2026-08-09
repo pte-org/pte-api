@@ -1,0 +1,12 @@
+**/target/
+.git/
+.idea/
+*.iml
+.vscode/
+**/*.log
+plans/
+# Real secrets live here locally (per .env.example) — never let them into a
+# build-stage image layer, even though the final runtime stage never COPYs it.
+.env
+.env.*
+!.env.example
