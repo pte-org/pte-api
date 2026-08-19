@@ -4,6 +4,7 @@ import com.pte.common.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -18,6 +19,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "proctor_assignments", uniqueConstraints = {
         @UniqueConstraint(columnNames = {"session_id", "proctor_public_id"})
+}, indexes = {
+        @Index(name = "idx_proctor_assignments_session", columnList = "session_id")
 })
 @Getter
 @Setter

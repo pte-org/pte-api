@@ -8,6 +8,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
@@ -27,7 +28,9 @@ import java.util.UUID;
  * actually delivered (full mock = all; practice = a host-chosen subset).
  */
 @Entity
-@Table(name = "exam_sessions")
+@Table(name = "exam_sessions", indexes = {
+        @Index(name = "idx_sessions_tenant", columnList = "tenant_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

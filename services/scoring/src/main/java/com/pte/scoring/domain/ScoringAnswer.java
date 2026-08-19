@@ -6,6 +6,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -21,7 +22,11 @@ import java.util.UUID;
  * a read-optimized copy scoped to what grading needs.
  */
 @Entity
-@Table(name = "scoring_answers")
+@Table(name = "scoring_answers", indexes = {
+        @Index(name = "idx_scoring_answers_session", columnList = "session_public_id"),
+        @Index(name = "idx_scoring_answers_attempt", columnList = "attempt_public_id"),
+        @Index(name = "idx_scoring_answers_status", columnList = "status")
+})
 @Getter
 @Setter
 @NoArgsConstructor

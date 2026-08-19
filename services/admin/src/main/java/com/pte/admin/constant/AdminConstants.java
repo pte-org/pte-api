@@ -10,6 +10,11 @@ public final class AdminConstants {
     public static final String EVENT_TENANT_ONBOARDED = "TenantOnboarded";
     public static final String EVENT_TENANT_SUSPENDED = "TenantSuspended";
 
+    // RabbitMQ outbox relay (rabbitmq-outbox-migration Phase 2). Downstream
+    // consumers (e.g. iam's TenantEventConsumer, Phase 3) bind their own
+    // queue to this exchange with routing key "{aggregateType}.{eventType}".
+    public static final String OUTBOX_EXCHANGE = "outbox.admin.exchange";
+
     private AdminConstants() {
     }
 }

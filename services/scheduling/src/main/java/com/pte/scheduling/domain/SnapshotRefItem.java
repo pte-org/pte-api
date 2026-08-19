@@ -4,6 +4,7 @@ import com.pte.common.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -18,7 +19,9 @@ import lombok.Setter;
  * {@code PteTaskType}/{@code PteSection} names.
  */
 @Entity
-@Table(name = "snapshot_ref_items")
+@Table(name = "snapshot_ref_items", indexes = {
+        @Index(name = "idx_snapshot_ref_items_ref", columnList = "snapshot_ref_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

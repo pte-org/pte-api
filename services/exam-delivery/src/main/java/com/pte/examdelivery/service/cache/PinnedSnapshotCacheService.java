@@ -1,12 +1,12 @@
 package com.pte.examdelivery.service.cache;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.examdelivery.constant.ExamDeliveryConstants;
 import com.pte.examdelivery.domain.PinnedItem;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
 import java.util.List;
@@ -30,11 +30,11 @@ public class PinnedSnapshotCacheService {
     private static final long WAIT_RETRY_MS = 100;
 
     private final StringRedisTemplate redisTemplate;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
-    public PinnedSnapshotCacheService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    public PinnedSnapshotCacheService(StringRedisTemplate redisTemplate, JsonMapper jsonMapper) {
         this.redisTemplate = redisTemplate;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     /** Called right after pinning, so the very first read is already a cache hit. */
@@ -94,18 +94,18 @@ public class PinnedSnapshotCacheService {
             return Optional.empty();
         }
         try {
-            return Optional.of(objectMapper.readValue(json, new TypeReference<List<PinnedItemView>>() {
+            return Optional.of(jsonMapper.readValue(json, new TypeReference<List<PinnedItemView>>() {
             }));
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             return Optional.empty();
         }
     }
 
     private void write(UUID pinnedSnapshotPublicId, List<PinnedItemView> items) {
         try {
-            String json = objectMapper.writeValueAsString(items);
+            String json = jsonMapper.writeValueAsString(items);
             redisTemplate.opsForValue().set(ExamDeliveryConstants.CACHE_KEY_PREFIX + pinnedSnapshotPublicId, json, CACHE_TTL);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new IllegalStateException("Failed to serialize pinned snapshot cache entry", ex);
         }
     }

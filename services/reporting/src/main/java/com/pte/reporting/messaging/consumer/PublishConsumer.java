@@ -1,6 +1,5 @@
 package com.pte.reporting.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.reporting.constant.ReportingConstants;
 import com.pte.reporting.domain.AttemptReport;
 import com.pte.reporting.domain.ProcessedEvent;
@@ -9,12 +8,14 @@ import com.pte.reporting.messaging.consumer.dto.PublishRequestedEvent;
 import com.pte.reporting.messaging.outbox.OutboxWriter;
 import com.pte.reporting.repository.AttemptReportRepository;
 import com.pte.reporting.repository.ProcessedEventRepository;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,7 +25,9 @@ import java.util.UUID;
  * this IS the visibility gate (phase-08 design constraint: publish is a gate,
  * not a data freeze; the report keeps reflecting live projection state after
  * publish). Emits {@code AttemptPublished} per attempt for future consumers.
- * Idempotent (ADR-002): dedups by the producer's outbox row id.
+ * Idempotent (ADR-002): dedups by the producer's outbox row id (delivered as
+ * the AMQP {@code messageId}, via the polling outbox relay + RabbitMQ,
+ * superseding Debezium's outbox router).
  */
 @Component
 public class PublishConsumer {
@@ -32,38 +35,39 @@ public class PublishConsumer {
     private final ProcessedEventRepository processedEventRepository;
     private final AttemptReportRepository attemptReportRepository;
     private final OutboxWriter outboxWriter;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public PublishConsumer(ProcessedEventRepository processedEventRepository,
                            AttemptReportRepository attemptReportRepository, OutboxWriter outboxWriter,
-                           ObjectMapper objectMapper) {
+                           JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
         this.attemptReportRepository = attemptReportRepository;
         this.outboxWriter = outboxWriter;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
-    @KafkaListener(topics = ReportingConstants.TOPIC_SESSION_EVENTS, groupId = "reporting-publish")
+    @RabbitListener(queues = ReportingConstants.QUEUE_PUBLISH)
     @Transactional
-    public void onSessionEvent(ConsumerRecord<String, String> record) throws IOException {
-        UUID eventId = KafkaHeaders.require(record, "id");
+    public void onSessionEvent(Message message) {
+        MessageProperties properties = message.getMessageProperties();
+        UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
             return;
         }
 
-        String eventType = KafkaHeaders.requireString(record, ReportingConstants.KAFKA_HEADER_EVENT_TYPE);
+        String eventType = headerValue(properties, ReportingConstants.EVENT_TYPE_HEADER);
         if (ReportingConstants.INCOMING_EVENT_PUBLISH_REQUESTED.equals(eventType)) {
-            publishSession(record.value());
+            publishSession(new String(message.getBody(), StandardCharsets.UTF_8));
         }
-        // ScoringRequested and any future event type on this topic: not reporting's concern, ignored.
+        // ScoringRequested and any future event type on this queue: not reporting's concern, ignored.
 
         ProcessedEvent processed = new ProcessedEvent();
         processed.setEventId(eventId);
         processedEventRepository.save(processed);
     }
 
-    private void publishSession(String payload) throws IOException {
-        PublishRequestedEvent event = objectMapper.readValue(payload, PublishRequestedEvent.class);
+    private void publishSession(String payload) {
+        PublishRequestedEvent event = jsonMapper.readValue(payload, PublishRequestedEvent.class);
         List<AttemptReport> reports = attemptReportRepository.findBySessionPublicId(event.sessionPublicId());
         for (AttemptReport report : reports) {
             if (report.isPublished()) {
@@ -77,5 +81,13 @@ public class PublishConsumer {
                             report.getStudentPublicId(), report.getTenantId()),
                     report.getTenantId());
         }
+    }
+
+    private String headerValue(MessageProperties properties, String key) {
+        Object value = properties.getHeaders().get(key);
+        if (value == null) {
+            throw new IllegalStateException("Missing AMQP header '" + key + "' on session event");
+        }
+        return value.toString();
     }
 }

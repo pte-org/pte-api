@@ -7,6 +7,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -17,7 +18,9 @@ import java.util.UUID;
 
 /** One outbound notification attempt. Terminal states are {@code SENT}/{@code FAILED} — {@code EmailWorker} owns the transition. */
 @Entity
-@Table(name = "notification_logs")
+@Table(name = "notification_logs", indexes = {
+        @Index(name = "idx_notification_logs_tenant", columnList = "tenant_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

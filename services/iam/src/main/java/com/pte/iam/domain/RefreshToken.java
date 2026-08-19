@@ -3,6 +3,7 @@ package com.pte.iam.domain;
 import com.pte.common.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -16,7 +17,9 @@ import java.time.Instant;
  * new one.
  */
 @Entity
-@Table(name = "refresh_tokens")
+@Table(name = "refresh_tokens", indexes = {
+        @Index(name = "idx_refresh_user", columnList = "user_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

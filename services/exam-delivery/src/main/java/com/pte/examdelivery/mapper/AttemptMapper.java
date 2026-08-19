@@ -1,8 +1,5 @@
 package com.pte.examdelivery.mapper;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.examdelivery.domain.ExamAttempt;
 import com.pte.examdelivery.domain.TimerState;
 import com.pte.examdelivery.dto.response.AttemptTaskResponse;
@@ -11,6 +8,9 @@ import com.pte.examdelivery.dto.response.TaskView;
 import com.pte.examdelivery.dto.response.TimerStateResponse;
 import com.pte.examdelivery.service.cache.PinnedItemView;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.util.List;
@@ -24,10 +24,10 @@ import java.util.List;
 @Component
 public class AttemptMapper {
 
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
-    public AttemptMapper(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+    public AttemptMapper(JsonMapper jsonMapper) {
+        this.jsonMapper = jsonMapper;
     }
 
     public AttemptTaskResponse toTaskResponse(ExamAttempt attempt, PinnedItemView item, TimerState timer, int totalTasks) {
@@ -53,10 +53,10 @@ public class AttemptMapper {
             return List.of();
         }
         try {
-            List<FrozenOption> parsed = objectMapper.readValue(optionsJson, new TypeReference<List<FrozenOption>>() {
+            List<FrozenOption> parsed = jsonMapper.readValue(optionsJson, new TypeReference<List<FrozenOption>>() {
             });
             return parsed.stream().map(o -> new OptionView(o.text(), o.orderIndex())).toList();
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new IllegalStateException("Failed to parse pinned item optionsJson", ex);
         }
     }
