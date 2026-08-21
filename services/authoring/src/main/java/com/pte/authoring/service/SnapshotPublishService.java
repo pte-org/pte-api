@@ -126,7 +126,7 @@ public class SnapshotPublishService {
 
     private String serializeOptions(Question question) {
         List<FrozenOption> options = question.getOptions().stream()
-                .map(o -> new FrozenOption(o.getText(), o.isCorrect(), o.getOrderIndex()))
+                .map(o -> new FrozenOption(o.getText(), o.isCorrect(), o.getOrderIndex(), o.getBlankIndex()))
                 .toList();
         try {
             return objectMapper.writeValueAsString(options);
@@ -145,7 +145,14 @@ public class SnapshotPublishService {
                 AuthoringConstants.EVENT_SNAPSHOT_PUBLISHED, event, snapshot.getTenantId());
     }
 
-    /** Frozen option shape stored in {@code SnapshotItem.optionsJson}. */
-    private record FrozenOption(String text, boolean correct, int orderIndex) {
+    /**
+     * Frozen option shape stored in {@code SnapshotItem.optionsJson}.
+     * {@code blankIndex} is null except for {@code FILL_BLANKS_READING_WRITING}
+     * options, where it groups options under their owning blank — see
+     * {@code QuestionOption}'s doc comment. Must stay structurally identical to
+     * exam-delivery's {@code AttemptMapper.FrozenOption}, which reads this same
+     * JSON shape back.
+     */
+    private record FrozenOption(String text, boolean correct, int orderIndex, Integer blankIndex) {
     }
 }
