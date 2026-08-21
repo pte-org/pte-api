@@ -43,4 +43,19 @@ public class QuestionOption extends BaseEntity {
 
     @Column
     private Integer blankIndex;
+
+    /**
+     * Scoring-only: for a {@code FILL_BLANKS_READING} (shared word-bank)
+     * correct option, the gap index this word is correct for. Null for
+     * every distractor option and for every other task type — {@code
+     * FILL_BLANKS_READING_WRITING} doesn't need this since {@link
+     * #blankIndex} already disambiguates which group a correct option
+     * belongs to. Deliberately distinct from {@link #blankIndex}: setting
+     * both on the same option would make exam-delivery's {@code
+     * AttemptMapper} treat a shared-word-bank task as blank-grouped
+     * (delivery-shape routing depends only on {@code blankIndex}), so this
+     * field must never be set alongside a non-null {@code blankIndex}.
+     */
+    @Column
+    private Integer correctGapIndex;
 }

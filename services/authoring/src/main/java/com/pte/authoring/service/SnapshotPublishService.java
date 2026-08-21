@@ -10,6 +10,7 @@ import com.pte.authoring.domain.Question;
 import com.pte.authoring.domain.QuestionOption;
 import com.pte.authoring.domain.SnapshotItem;
 import com.pte.authoring.domain.enums.BlueprintStatus;
+import com.pte.authoring.domain.enums.PteTaskType;
 import com.pte.authoring.domain.event.ExamSnapshotPublishedEvent;
 import com.pte.authoring.domain.exception.BlueprintNotFoundException;
 import com.pte.authoring.domain.exception.EmptyBlueprintException;
@@ -25,6 +26,8 @@ import com.pte.common.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -125,14 +128,40 @@ public class SnapshotPublishService {
     }
 
     private String serializeOptions(Question question) {
-        List<FrozenOption> options = question.getOptions().stream()
-                .map(o -> new FrozenOption(o.getText(), o.isCorrect(), o.getOrderIndex(), o.getBlankIndex()))
+        List<FrozenOption> options = deliveryOrder(question).stream()
+                .map(o -> new FrozenOption(o.getText(), o.isCorrect(), o.getOrderIndex(), o.getBlankIndex(), o.getCorrectGapIndex()))
                 .toList();
         try {
             return objectMapper.writeValueAsString(options);
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Failed to serialize snapshot options", ex);
         }
+    }
+
+    /**
+     * {@code Question.options} is JPA-mapped {@code @OrderBy("orderIndex ASC")},
+     * so {@code question.getOptions()} always returns options already sorted by
+     * their {@code orderIndex} identity — correct for every options-based type
+     * where {@code orderIndex} only needs to be a stable choice identity (MC
+     * types, the shared fill-blanks word bank). But {@code RE_ORDER_PARAGRAPHS}
+     * specifically needs {@code orderIndex} to also be the CORRECT final
+     * position, with students shown a shuffled arrangement to rearrange back —
+     * serving the natural (already-ascending) order would deliver every
+     * paragraph already correctly placed, making the task trivially solved
+     * without any rearranging. A fixed single-position rotation (guaranteed to
+     * move every option to a different array index whenever there are 2+
+     * options) breaks that alignment deterministically; this is a minimal
+     * correctness fix, not a randomization/authoring-UX feature — a real
+     * per-question shuffle strategy is a future authoring concern.
+     */
+    List<QuestionOption> deliveryOrder(Question question) {
+        List<QuestionOption> natural = question.getOptions();
+        if (question.getPteTaskType() != PteTaskType.RE_ORDER_PARAGRAPHS || natural.size() < 2) {
+            return natural;
+        }
+        List<QuestionOption> rotated = new ArrayList<>(natural);
+        Collections.rotate(rotated, 1);
+        return rotated;
     }
 
     private void emitPublished(ExamSnapshot snapshot) {
@@ -148,11 +177,17 @@ public class SnapshotPublishService {
     /**
      * Frozen option shape stored in {@code SnapshotItem.optionsJson}.
      * {@code blankIndex} is null except for {@code FILL_BLANKS_READING_WRITING}
-     * options, where it groups options under their owning blank — see
-     * {@code QuestionOption}'s doc comment. Must stay structurally identical to
-     * exam-delivery's {@code AttemptMapper.FrozenOption}, which reads this same
-     * JSON shape back.
+     * options, where it groups options under their owning blank; {@code
+     * correctGapIndex} is scoring-only, set only for {@code
+     * FILL_BLANKS_READING} correct options — see {@code QuestionOption}'s doc
+     * comment for both. exam-delivery's {@code AttemptMapper.FrozenOption}
+     * reads this same JSON but only needs {@code text}/{@code orderIndex}/
+     * {@code blankIndex} (unknown fields deserialize as ignored by default),
+     * so the two records are not required to stay field-for-field identical
+     * — only {@code scoring}'s own local {@code FrozenOption} (which reads
+     * {@code correct}/{@code correctGapIndex} for grading) must match this
+     * shape exactly.
      */
-    private record FrozenOption(String text, boolean correct, int orderIndex, Integer blankIndex) {
+    private record FrozenOption(String text, boolean correct, int orderIndex, Integer blankIndex, Integer correctGapIndex) {
     }
 }
