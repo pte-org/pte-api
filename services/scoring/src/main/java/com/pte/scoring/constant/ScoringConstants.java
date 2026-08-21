@@ -3,17 +3,38 @@ package com.pte.scoring.constant;
 /** Centralized codes/labels for scoring. */
 public final class ScoringConstants {
 
-    // Incoming: exam-delivery's outbox.event.ExamAttempt topic
-    public static final String TOPIC_ATTEMPT_EVENTS = "outbox.event.ExamAttempt";
+    // Incoming: exam-delivery's outbox exchange (rabbitmq-outbox-migration
+    // Phase 6, previously Kafka topic outbox.event.ExamAttempt). Ordering-sensitive:
+    // routed through a SINGLE durable queue with listener concurrency pinned to
+    // 1, so RabbitMQ's per-queue FIFO preserves per-attempt answer-ingestion
+    // order (plan.md, CONFIRMED — depends on exam-delivery's own relay also
+    // staying single-instance, see ExamDeliveryOutboxRelay in Phase 5).
+    public static final String EXAMDELIVERY_OUTBOX_EXCHANGE = "outbox.examdelivery.exchange";
+    public static final String QUEUE_ANSWER_INGEST = "scoring.answer-ingest";
+    public static final String QUEUE_ANSWER_INGEST_DLQ = "scoring.answer-ingest.dlq";
+    public static final String ANSWER_INGEST_ROUTING_PATTERN = "ExamAttempt.*";
+    public static final String ANSWER_INGEST_DEAD_LETTER_ROUTING_KEY = "answer-ingest";
     public static final String INCOMING_EVENT_ANSWER_SUBMITTED = "AnswerSubmitted";
 
-    // Incoming: scheduling's outbox.event.ExamSession topic
-    public static final String TOPIC_SESSION_EVENTS = "outbox.event.ExamSession";
+    // Incoming: scheduling's outbox exchange (rabbitmq-outbox-migration Phase 6,
+    // previously Kafka topic outbox.event.ExamSession). Not ordering-sensitive —
+    // host commands, one-shot, normal listener concurrency.
+    public static final String SCHEDULING_OUTBOX_EXCHANGE = "outbox.scheduling.exchange";
+    public static final String QUEUE_SCORING_COMMAND = "scoring.scoring-command";
+    public static final String QUEUE_SCORING_COMMAND_DLQ = "scoring.scoring-command.dlq";
+    public static final String SCORING_COMMAND_ROUTING_PATTERN = "ExamSession.*";
+    public static final String SCORING_COMMAND_DEAD_LETTER_ROUTING_KEY = "scoring-command";
     public static final String INCOMING_EVENT_SCORING_REQUESTED = "ScoringRequested";
 
-    public static final String KAFKA_HEADER_EVENT_TYPE = "eventType";
+    // AMQP replacement for the old Kafka record header of the same purpose —
+    // set by AbstractOutboxRelay#publishAndConfirm when publishing, read via
+    // Message.getMessageProperties().getHeaders() here.
+    public static final String EVENT_TYPE_HEADER = "eventType";
 
-    // Outgoing (scoring's own outbox)
+    // Outgoing (scoring's own outbox). RabbitMQ outbox relay (rabbitmq-outbox-migration
+    // Phase 6): downstream consumers (e.g. reporting's AnswerScoredConsumer, Phase 7)
+    // bind their own queue to this exchange with routing key "{aggregateType}.{eventType}".
+    public static final String OUTBOX_EXCHANGE = "outbox.scoring.exchange";
     public static final String AGGREGATE_ANSWER = "ScoringAnswer";
     public static final String AGGREGATE_ATTEMPT = "ScoringAttempt";
     public static final String EVENT_ANSWER_SCORED = "AnswerScored";

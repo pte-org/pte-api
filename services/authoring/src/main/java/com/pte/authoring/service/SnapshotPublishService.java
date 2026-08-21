@@ -1,7 +1,5 @@
 package com.pte.authoring.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.authoring.constant.AuthoringConstants;
 import com.pte.authoring.domain.BlueprintItem;
 import com.pte.authoring.domain.ExamBlueprint;
@@ -25,6 +23,8 @@ import com.pte.authoring.repository.QuestionRepository;
 import com.pte.common.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -45,17 +45,17 @@ public class SnapshotPublishService {
     private final ExamSnapshotRepository snapshotRepository;
     private final AuthoringAccessPolicy accessPolicy;
     private final OutboxWriter outboxWriter;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, QuestionRepository questionRepository,
                                   ExamSnapshotRepository snapshotRepository, AuthoringAccessPolicy accessPolicy,
-                                  OutboxWriter outboxWriter, ObjectMapper objectMapper) {
+                                  OutboxWriter outboxWriter, JsonMapper jsonMapper) {
         this.blueprintRepository = blueprintRepository;
         this.questionRepository = questionRepository;
         this.snapshotRepository = snapshotRepository;
         this.accessPolicy = accessPolicy;
         this.outboxWriter = outboxWriter;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     @Transactional
@@ -132,8 +132,8 @@ public class SnapshotPublishService {
                 .map(o -> new FrozenOption(o.getText(), o.isCorrect(), o.getOrderIndex(), o.getBlankIndex(), o.getCorrectGapIndex()))
                 .toList();
         try {
-            return objectMapper.writeValueAsString(options);
-        } catch (JsonProcessingException ex) {
+            return jsonMapper.writeValueAsString(options);
+        } catch (JacksonException ex) {
             throw new IllegalStateException("Failed to serialize snapshot options", ex);
         }
     }

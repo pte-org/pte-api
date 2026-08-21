@@ -1,9 +1,9 @@
 package com.pte.scoring.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.scoring.constant.ScoringConstants;
 import com.pte.scoring.domain.ScoringAnswer;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ObjectiveScoringServiceTest {
 
-    private final ObjectiveScoringService service = new ObjectiveScoringService(new ObjectMapper());
+    private final ObjectiveScoringService service = new ObjectiveScoringService(JsonMapper.builder().build());
 
     private ScoringAnswer answer(String taskType, String optionsJson, String payload) {
         ScoringAnswer answer = new ScoringAnswer();

@@ -16,6 +16,11 @@ public final class ProctorConstants {
     public static final String AGGREGATE_VIOLATION_EVENT = "ViolationEvent";
     public static final String EVENT_VIOLATION_DETECTED = "ViolationDetected";
 
+    // RabbitMQ outbox relay (rabbitmq-outbox-migration Phase 2). Downstream
+    // consumers (e.g. exam-delivery's ProctorCommandConsumer, Phase 5) bind
+    // their own queue to this exchange with routing key "{aggregateType}.{eventType}".
+    public static final String OUTBOX_EXCHANGE = "outbox.proctor.exchange";
+
     // STOMP
     public static final String TOPIC_PREFIX = "/topic/proctor-sessions/";
 

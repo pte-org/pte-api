@@ -4,6 +4,7 @@ import com.pte.common.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -20,7 +21,9 @@ import java.util.UUID;
  * before returning a task to the client (see {@code AttemptMapper}).
  */
 @Entity
-@Table(name = "pinned_items")
+@Table(name = "pinned_items", indexes = {
+        @Index(name = "idx_pinned_items_snapshot", columnList = "pinned_snapshot_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

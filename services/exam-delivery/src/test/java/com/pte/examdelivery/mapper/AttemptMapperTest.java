@@ -1,6 +1,5 @@
 package com.pte.examdelivery.mapper;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.examdelivery.domain.ExamAttempt;
 import com.pte.examdelivery.domain.TimerState;
 import com.pte.examdelivery.domain.enums.AttemptStatus;
@@ -11,6 +10,7 @@ import com.pte.examdelivery.dto.response.OptionView;
 import com.pte.examdelivery.dto.response.TaskView;
 import com.pte.examdelivery.service.cache.PinnedItemView;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.util.List;
@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class AttemptMapperTest {
 
-    private final AttemptMapper mapper = new AttemptMapper(new ObjectMapper());
+    private final AttemptMapper mapper = new AttemptMapper(JsonMapper.builder().build());
     private final UUID pinnedItemPublicId = UUID.randomUUID();
 
     @Test

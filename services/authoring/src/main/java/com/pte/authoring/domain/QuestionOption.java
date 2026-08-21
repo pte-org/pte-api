@@ -4,6 +4,7 @@ import com.pte.common.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -22,7 +23,9 @@ import lombok.Setter;
  * {@code FILL_BLANKS_READING}).
  */
 @Entity
-@Table(name = "question_options")
+@Table(name = "question_options", indexes = {
+        @Index(name = "idx_options_question", columnList = "question_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

@@ -17,7 +17,11 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 public class SecurityConfig {
 
     private static final String[] PUBLIC_PATHS = {
-            "/actuator/health", "/actuator/health/**", "/actuator/info"
+            "/actuator/health", "/actuator/health/**", "/actuator/info",
+            // Auth bootstrap: a client has no JWT yet when calling these, and jwks is what
+            // lets anyone (this gateway included) verify a JWT's signature in the first place.
+            // Refresh/logout authenticate via the refresh token in the body, not a bearer JWT.
+            "/api/iam/auth/login", "/api/iam/auth/refresh", "/api/iam/auth/logout", "/api/iam/auth/jwks"
     };
 
     @Bean
