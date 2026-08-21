@@ -1,0 +1,54 @@
+{
+  "mode": "gate",
+  "target": "phase-01-backend-data-contracts",
+  "verdict": "APPROVED",
+  "reviewed_at": "2026-08-21T13:20:00Z",
+  "reviewed_files": [
+    "services/authoring/src/main/resources/db/migration/V2__add_blank_index_to_question_options.sql",
+    "services/authoring/src/main/java/com/pte/authoring/domain/QuestionOption.java",
+    "services/authoring/src/main/java/com/pte/authoring/service/SnapshotPublishService.java",
+    "services/exam-delivery/src/main/java/com/pte/examdelivery/dto/response/OptionView.java",
+    "services/exam-delivery/src/main/java/com/pte/examdelivery/dto/response/BlankGroupView.java",
+    "services/exam-delivery/src/main/java/com/pte/examdelivery/dto/response/TaskView.java",
+    "services/exam-delivery/src/main/java/com/pte/examdelivery/mapper/AttemptMapper.java",
+    "services/exam-delivery/src/test/java/com/pte/examdelivery/mapper/AttemptMapperTest.java"
+  ],
+  "summary": {
+    "blocker": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "noted": 2
+  },
+  "findings": [
+    {
+      "id": "QUAL-101",
+      "severity": "NOTED",
+      "rule": "DOC_INTENTIONAL_LIMIT_IS_A_NON_GOAL",
+      "status": "OPEN",
+      "introduced_by_current_change": true,
+      "applicable": true,
+      "confidence": "high",
+      "location": "services/authoring/src/main/java/com/pte/authoring/domain/QuestionOption.java:24-32 (blankIndex field)",
+      "evidence": "QuestionOption.blankIndex is now readable/writable at the entity layer and flows correctly through SnapshotPublishService.serializeOptions and AttemptMapper's grouping logic. However, no reachable write path exists anywhere in authoring's public API (OptionRequest DTO, QuestionService.addOptions, QuestionValidationHelper) to ever set blankIndex from a real authoring request today. The read/delivery pipeline this phase built is correct and complete, but nothing in the current authoring surface can populate it in production yet.",
+      "why_it_matters": "Not a defect in this phase's own scope — plan.md's Phase 8 (Seed Data) is expected to populate blankIndex directly via seed Question/QuestionOption rows, and a real authoring-tool write path is out of scope for this plan entirely (flagged in plan.md's Open Questions). Worth keeping visible so a future authoring-tooling phase doesn't rediscover this gap from scratch.",
+      "required_action": "None for this phase. Track as a known follow-up: authoring's question-content API needs a way to author blankIndex-grouped options before FILL_BLANKS_READING_WRITING questions can be created outside of direct seed data.",
+      "owner": "cook"
+    },
+    {
+      "id": "QUAL-102",
+      "severity": "NOTED",
+      "rule": "DOM_SINGLE_SOURCE",
+      "status": "OPEN",
+      "introduced_by_current_change": false,
+      "applicable": true,
+      "confidence": "high",
+      "location": "services/authoring/.../SnapshotPublishService.java (FrozenOption) and services/exam-delivery/.../AttemptMapper.java (FrozenOption)",
+      "evidence": "The two FrozenOption records (one per service, no shared type across the service boundary per this codebase's microservice conventions) must stay structurally identical since they are each other's implicit write/read contract via optionsJson's JSON shape. This phase added a 4th field (blankIndex) to both in lockstep, but there is no contract test enforcing they never drift apart.",
+      "why_it_matters": "Pre-existing pattern (the 3-field version had the same property before this phase), not introduced by this change. A future field addition to only one side would silently break JSON round-tripping without a compile error, since Jackson deserialization of an unknown/missing field is lenient by default.",
+      "required_action": "None required now. Consider a shared contract test (or a documented convention note on both records) in a future hardening pass, not blocking for this plan.",
+      "owner": "cook"
+    }
+  ],
+  "report_path": "plans/ninh-pte-reading-task-types/quality/phase-01-backend-data-contracts-quality-report.json"
+}
