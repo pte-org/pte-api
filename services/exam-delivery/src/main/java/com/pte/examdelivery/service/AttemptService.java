@@ -154,8 +154,15 @@ public class AttemptService {
         attempt.begin();
         attempt = attemptRepository.save(attempt);
 
-        List<PinnedItemView> views = pinned.getItems().stream().map(PinnedSnapshotCacheService::toView).toList();
-        cacheService.warm(pinned.getPublicId(), views);
+        // attempt already has an id at this point (saved above), so this
+        // save() cascades via merge(), not persist() — merge() returns a
+        // NEW managed copy of the graph and never assigns generated ids
+        // (publicId included) onto the original `pinned`/`PinnedItem`
+        // instances we built. Re-read the saved copy off the returned
+        // `attempt` instead of the stale local `pinned` reference.
+        PinnedExamSnapshot savedPinned = attempt.getPinnedSnapshot();
+        List<PinnedItemView> views = savedPinned.getItems().stream().map(PinnedSnapshotCacheService::toView).toList();
+        cacheService.warm(savedPinned.getPublicId(), views);
 
         PinnedItemView first = views.get(0);
         TimerState timer = timerService.startTaskTimer(attempt, first);
