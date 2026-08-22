@@ -38,6 +38,13 @@
 			<scope>provided</scope>
 		</dependency>
 
+		<!-- Jackson 2 ObjectMapper for JacksonCompatAutoConfiguration; present at runtime only in non-reactive (MVC) services via spring-boot-starter-web. -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<scope>provided</scope>
+		</dependency>
+
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
