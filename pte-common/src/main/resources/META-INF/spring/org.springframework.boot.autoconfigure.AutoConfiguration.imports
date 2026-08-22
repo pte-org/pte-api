@@ -1,1 +1,2 @@
+com.pte.common.config.JacksonCompatAutoConfiguration
 com.pte.common.messaging.PteJacksonConfig
