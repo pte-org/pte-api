@@ -42,6 +42,10 @@ public final class ScoringConstants {
 
     // Objective task types (Phase 7): rule-based, synchronous, no vendor call.
     public static final String TASK_TYPE_MC_READING_SINGLE = "MC_READING_SINGLE";
+    public static final String TASK_TYPE_MC_READING_MULTIPLE = "MC_READING_MULTIPLE";
+    public static final String TASK_TYPE_RE_ORDER_PARAGRAPHS = "RE_ORDER_PARAGRAPHS";
+    public static final String TASK_TYPE_FILL_BLANKS_READING = "FILL_BLANKS_READING";
+    public static final String TASK_TYPE_FILL_BLANKS_READING_WRITING = "FILL_BLANKS_READING_WRITING";
 
     // AI-scorable task types (Phase 9): routed to the RabbitMQ vendor work queue.
     public static final String TASK_TYPE_READ_ALOUD = "READ_ALOUD";

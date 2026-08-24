@@ -1,0 +1,14 @@
+{
+  "target": "phase-08-backend-seed-data",
+  "verdict": "APPROVED",
+  "policy_version": "1.0.0",
+  "report_path": "plans/ninh-pte-reading-task-types/quality/phase-08-backend-seed-data-quality-report.json",
+  "reviewed_files": [
+    "services/authoring/src/main/java/com/pte/authoring/seed/ReadingTaskSeedRunner.java",
+    "services/authoring/src/main/java/com/pte/authoring/service/SnapshotPublishService.java",
+    "services/authoring/src/test/java/com/pte/authoring/service/SnapshotPublishServiceTest.java"
+  ],
+  "source_fingerprint": "sha256:53946d123462299b4960f8fd43fdeed50bd4500afda9fcfae85a45c4487b7b17",
+  "reviewed_at": "2026-08-21T14:45:00Z",
+  "open_blocking_findings": 0
+}

@@ -1,0 +1,33 @@
+{
+  "mode": "gate",
+  "target": "phase-07-backend-scoring-engine",
+  "verdict": "APPROVED",
+  "reviewed_at": "2026-08-21T14:35:00Z",
+  "reviewed_files": [
+    "services/authoring/src/main/resources/db/migration/V3__add_correct_gap_index_to_question_options.sql",
+    "services/authoring/src/main/java/com/pte/authoring/domain/QuestionOption.java",
+    "services/authoring/src/main/java/com/pte/authoring/service/SnapshotPublishService.java",
+    "services/scoring/src/main/java/com/pte/scoring/constant/ScoringConstants.java",
+    "services/scoring/src/main/java/com/pte/scoring/service/ObjectiveScoringService.java",
+    "services/exam-delivery/src/main/java/com/pte/examdelivery/dto/request/SubmitAnswerRequest.java",
+    "services/scoring/src/test/java/com/pte/scoring/service/ObjectiveScoringServiceTest.java"
+  ],
+  "summary": { "blocker": 0, "high": 0, "medium": 0, "low": 0, "noted": 1 },
+  "findings": [
+    {
+      "id": "QUAL-701",
+      "severity": "NOTED",
+      "rule": "DOC_SCHEMA_DECISION_DISCLOSED",
+      "status": "RESOLVED",
+      "introduced_by_current_change": true,
+      "applicable": true,
+      "confidence": "high",
+      "location": "services/authoring/src/main/java/com/pte/authoring/domain/QuestionOption.java (correctGapIndex)",
+      "evidence": "This phase's original file (written before Preflight) did not anticipate needing a new QuestionOption field — it assumed the existing correct/orderIndex/blankIndex shape was sufficient. Preflight investigation found FILL_BLANKS_READING's shared word bank has no way to express per-gap correctness without either reusing blankIndex (which would conflict with Phase 1's requireHomogeneousBlankIndex delivery-routing guard) or adding a new field. The chosen fix (a new nullable, scoring-only correctGapIndex field, never read by exam-delivery's AttemptMapper) is minimal and decoupled from the delivery path — confirmed by Phase 1's AttemptMapperTest suite still passing unchanged after this phase's authoring-side additions.",
+      "why_it_matters": "Not a defect — a genuine scope discovery made during Preflight (exactly when the process intends such gaps to surface), disclosed transparently in the phase file and plan.md rather than silently worked around or left unaddressed.",
+      "required_action": "None — already implemented, tested, and disclosed.",
+      "owner": "cook"
+    }
+  ],
+  "report_path": "plans/ninh-pte-reading-task-types/quality/phase-07-backend-scoring-engine-quality-report.json"
+}

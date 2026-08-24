@@ -1,0 +1,43 @@
+{
+  "mode": "gate",
+  "target": "phase-08-backend-seed-data",
+  "verdict": "APPROVED",
+  "reviewed_at": "2026-08-21T14:45:00Z",
+  "reviewed_files": [
+    "services/authoring/src/main/java/com/pte/authoring/seed/ReadingTaskSeedRunner.java",
+    "services/authoring/src/main/java/com/pte/authoring/service/SnapshotPublishService.java",
+    "services/authoring/src/test/java/com/pte/authoring/service/SnapshotPublishServiceTest.java"
+  ],
+  "summary": { "blocker": 0, "high": 0, "medium": 0, "low": 0, "noted": 2 },
+  "findings": [
+    {
+      "id": "QUAL-801",
+      "severity": "NOTED",
+      "rule": "CORR_DEFINED_BRANCH_BEHAVIOR",
+      "status": "RESOLVED",
+      "introduced_by_current_change": true,
+      "applicable": true,
+      "confidence": "high",
+      "location": "services/authoring/src/main/java/com/pte/authoring/service/SnapshotPublishService.java (deliveryOrder)",
+      "evidence": "Attempting to write a genuinely non-trivial RE_ORDER_PARAGRAPHS seed row surfaced that Question.options' JPA @OrderBy(\"orderIndex ASC\") mapping means SnapshotPublishService.serializeOptions always serves options pre-sorted ascending by orderIndex — for RE_ORDER_PARAGRAPHS, where orderIndex doubles as the correct final position, this delivered every paragraph already correctly placed, making the reorder task trivially solved on arrival. Fixed with a package-private deliveryOrder(Question) method that rotates the served array by one position specifically for RE_ORDER_PARAGRAPHS (guaranteed to move every option to a different index when there are 2+ options), leaving every other task type's natural order untouched. Covered by 4 new unit tests verifying the rotation, non-drop, single-option no-op, and non-reorder-type-untouched properties.",
+      "why_it_matters": "This was a genuine functional bug that would have made the shipped RE_ORDER_PARAGRAPHS feature non-functional as an exam task (nothing to actually reorder) — not merely a seed-data cosmetic concern. Caught specifically because Phase 8 required constructing a real, non-trivial seed example rather than a hand-waved placeholder.",
+      "required_action": "None — already fixed and tested.",
+      "owner": "cook"
+    },
+    {
+      "id": "QUAL-802",
+      "severity": "NOTED",
+      "rule": "TEST_COVERAGE_GAP_DISCLOSED",
+      "status": "OPEN",
+      "introduced_by_current_change": true,
+      "applicable": true,
+      "confidence": "high",
+      "location": "services/authoring/src/main/java/com/pte/authoring/seed/ReadingTaskSeedRunner.java",
+      "evidence": "This phase's own Success Criteria (Step 4/5) call for confirming seeded content is retrievable via a running exam-delivery instance and spot-checking the raw JSON response shape. Docker Desktop was not running in this environment; starting it would very likely reproduce the native-Windows-PostgreSQL-vs.-Docker-port-5432 conflict already root-caused in this repo's ninh-student-exam-flow Phase 9 session history. The individual code paths (ReadingTaskSeedRunner construction, deliveryOrder, serializeOptions, AttemptMapper grouping) are each unit-tested, but the full live round trip was not exercised together.",
+      "why_it_matters": "A genuine, disclosed residual verification gap rather than a silently-skipped or falsely-claimed one — flagged in the phase file's Quality and Testing State and Risks sections with a concrete recommended follow-up command once Docker/Postgres access is available.",
+      "required_action": "Follow-up (not blocking this phase): once a non-conflicting local Postgres or CI environment is available, run the seed profile against a live exam-delivery instance and spot-check each of the 4 new task types' JSON response shape, per this phase's original Step 4.",
+      "owner": "cook"
+    }
+  ],
+  "report_path": "plans/ninh-pte-reading-task-types/quality/phase-08-backend-seed-data-quality-report.json"
+}

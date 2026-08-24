@@ -1,0 +1,18 @@
+{
+  "target": "phase-07-backend-scoring-engine",
+  "verdict": "APPROVED",
+  "policy_version": "1.0.0",
+  "report_path": "plans/ninh-pte-reading-task-types/quality/phase-07-backend-scoring-engine-quality-report.json",
+  "reviewed_files": [
+    "services/authoring/src/main/java/com/pte/authoring/domain/QuestionOption.java",
+    "services/authoring/src/main/java/com/pte/authoring/service/SnapshotPublishService.java",
+    "services/authoring/src/main/resources/db/migration/V3__add_correct_gap_index_to_question_options.sql",
+    "services/exam-delivery/src/main/java/com/pte/examdelivery/dto/request/SubmitAnswerRequest.java",
+    "services/scoring/src/main/java/com/pte/scoring/constant/ScoringConstants.java",
+    "services/scoring/src/main/java/com/pte/scoring/service/ObjectiveScoringService.java",
+    "services/scoring/src/test/java/com/pte/scoring/service/ObjectiveScoringServiceTest.java"
+  ],
+  "source_fingerprint": "sha256:ebfb5b3997385a04edf536b14eb9c6dbabba59d245f783d99149de12665d7cac",
+  "reviewed_at": "2026-08-21T14:35:00Z",
+  "open_blocking_findings": 0
+}
