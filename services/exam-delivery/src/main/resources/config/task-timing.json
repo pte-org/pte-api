@@ -3,6 +3,10 @@
   "version": 1,
   "timings": {
     "MC_READING_SINGLE": { "prepSeconds": 0, "responseSeconds": 60 },
+    "MC_READING_MULTIPLE": { "prepSeconds": 0, "responseSeconds": 90 },
+    "RE_ORDER_PARAGRAPHS": { "prepSeconds": 0, "responseSeconds": 75 },
+    "FILL_BLANKS_READING": { "prepSeconds": 0, "responseSeconds": 90 },
+    "FILL_BLANKS_READING_WRITING": { "prepSeconds": 0, "responseSeconds": 90 },
     "READ_ALOUD": { "prepSeconds": 35, "responseSeconds": 40 },
     "WRITE_ESSAY": { "prepSeconds": 0, "responseSeconds": 1200 }
   }
