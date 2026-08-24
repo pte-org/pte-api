@@ -23,15 +23,18 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Dev/local-only seed data for the 4 new PTE Reading task types
+ * Dev/local-only seed data for all 5 PTE Reading task types
  * (ninh-pte-reading-task-types Phase 8) — inserts {@link Question}/{@link
  * QuestionOption} rows through the normal repository layer (not a
  * hand-crafted {@code optionsJson} blob) and publishes them through the real
  * {@link SnapshotPublishService#publish} path, so a local `exam-delivery`
  * serves genuine, structurally-correct content — critically including a
  * populated {@code blankGroups} example for {@code FILL_BLANKS_READING_WRITING}.
- * Active only under the {@code seed-reading-tasks} profile — never runs by
- * default, and idempotent (skips if the seed blueprint already exists).
+ * Blueprint item order matches the real PTE Reading section order (R&W Fill
+ * in the Blanks → MCQ Multiple → Re-order Paragraphs → Reading Fill in the
+ * Blanks → MCQ Single), not insertion order. Active only under the
+ * {@code seed-reading-tasks} profile — never runs by default, and idempotent
+ * (skips if the seed blueprint already exists).
  */
 @Component
 @Profile("seed-reading-tasks")
@@ -60,19 +63,24 @@ public class ReadingTaskSeedRunner implements CommandLineRunner {
             return;
         }
 
+        Question fillBlanksDropdown = questionRepository.save(buildFillBlanksReadingWriting());
         Question mcMultiple = questionRepository.save(buildMcReadingMultiple());
         Question reorder = questionRepository.save(buildReOrderParagraphs());
         Question fillBlanksDragDrop = questionRepository.save(buildFillBlanksReading());
-        Question fillBlanksDropdown = questionRepository.save(buildFillBlanksReadingWriting());
+        Question mcSingle = questionRepository.save(buildMcReadingSingle());
 
+        // Real PTE Reading section order: R&W Fill in the Blanks (dropdown) →
+        // MCQ Multiple → Re-order Paragraphs → Reading Fill in the Blanks
+        // (drag & drop) → MCQ Single.
         ExamBlueprint blueprint = new ExamBlueprint();
         blueprint.setName(SEED_BLUEPRINT_NAME);
         blueprint.setTenantId(null);
         blueprint.setStatus(BlueprintStatus.DRAFT);
-        blueprint.addItem(itemFor(mcMultiple, 0));
-        blueprint.addItem(itemFor(reorder, 1));
-        blueprint.addItem(itemFor(fillBlanksDragDrop, 2));
-        blueprint.addItem(itemFor(fillBlanksDropdown, 3));
+        blueprint.addItem(itemFor(fillBlanksDropdown, 0));
+        blueprint.addItem(itemFor(mcMultiple, 1));
+        blueprint.addItem(itemFor(reorder, 2));
+        blueprint.addItem(itemFor(fillBlanksDragDrop, 3));
+        blueprint.addItem(itemFor(mcSingle, 4));
         ExamBlueprint savedBlueprint = blueprintRepository.save(blueprint);
 
         CurrentUser systemSeedCaller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"));
@@ -149,6 +157,18 @@ public class ReadingTaskSeedRunner implements CommandLineRunner {
         question.addOption(option("using", 0, true, 1, null));
         question.addOption(option("needing", 1, false, 1, null));
         question.addOption(option("building", 2, false, 1, null));
+        return question;
+    }
+
+    private Question buildMcReadingSingle() {
+        Question question = newSharedQuestion(PteTaskType.MC_READING_SINGLE, "Capital cities — single answer");
+        question.setPromptText(
+                "Paris has served as the capital of France for most of its history, tracing back to the 4th century. "
+                        + "It sits on the Seine river in the north of the country. Which city is the capital of France?");
+        question.addOption(option("London", 0, false, null, null));
+        question.addOption(option("Paris", 1, true, null, null));
+        question.addOption(option("Berlin", 2, false, null, null));
+        question.addOption(option("Madrid", 3, false, null, null));
         return question;
     }
 

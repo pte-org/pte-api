@@ -47,6 +47,16 @@ public class TimerState extends BaseEntity {
     @Column(nullable = false)
     private Instant responseDeadline;
 
+    /**
+     * Section currently governing {@code prepDeadline}/{@code responseDeadline}
+     * for a section-scoped section (e.g. READING) — null for task-scoped
+     * sections. Lets {@link com.pte.examdelivery.service.TimerService} tell
+     * "still inside the same section, reuse its shared deadline" apart from
+     * "just entered a new section, compute a fresh one."
+     */
+    @Column(nullable = true)
+    private String activeSection;
+
     public boolean isResponseWindowExpired(Instant now) {
         return now.isAfter(responseDeadline);
     }

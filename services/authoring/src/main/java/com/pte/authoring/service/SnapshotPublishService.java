@@ -97,6 +97,22 @@ public class SnapshotPublishService {
         return SnapshotMapper.toContentResponse(snapshot);
     }
 
+    /**
+     * Answer-stripped summary for the internal service-to-service surface
+     * (called by scheduling at session-creation time as a fallback when the
+     * {@code ExamSnapshotPublished} event hasn't been consumed yet). Same
+     * shape as {@link #get}, but no {@link CurrentUser}/tenant-visibility
+     * check — the caller is {@code ROLE_INTERNAL_SERVICE}, not a human, and
+     * a session's composition is validated against scheduling's own
+     * entitlement rules, not authoring's per-tenant visibility.
+     */
+    @Transactional(readOnly = true)
+    public SnapshotResponse getSummary(UUID publicId) {
+        ExamSnapshot snapshot = snapshotRepository.findWithItemsByPublicId(publicId)
+                .orElseThrow(BlueprintNotFoundException::new);
+        return SnapshotMapper.toResponse(snapshot);
+    }
+
     @Transactional(readOnly = true)
     public SnapshotResponse get(UUID publicId, CurrentUser caller) {
         ExamSnapshot snapshot = snapshotRepository.findWithItemsByPublicId(publicId)

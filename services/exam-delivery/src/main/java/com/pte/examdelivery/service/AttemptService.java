@@ -165,13 +165,14 @@ public class AttemptService {
         cacheService.warm(savedPinned.getPublicId(), views);
 
         PinnedItemView first = views.get(0);
-        TimerState timer = timerService.startTaskTimer(attempt, first);
+        TimerState timer = timerService.startTaskTimer(attempt, first, views);
         return attemptMapper.toTaskResponse(attempt, first, timer, views.size());
     }
 
     private AttemptTaskResponse advanceUntilLiveOrComplete(ExamAttempt attempt) {
         TimerState timer = timerService.getState(attempt.getId());
         long totalItems = pinnedItemRepository.countByPinnedSnapshotId(attempt.getPinnedSnapshot().getId());
+        List<PinnedItemView> allItems = allItemViews(attempt);
 
         while (timerService.isResponseWindowExpired(timer)) {
             PinnedItem currentItem = currentItem(attempt, timer);
@@ -183,7 +184,7 @@ public class AttemptService {
                 return attemptMapper.toCompletedResponse(attempt);
             }
             PinnedItem nextItem = itemAt(attempt, nextIndex);
-            timer = timerService.startTaskTimer(attempt, PinnedSnapshotCacheService.toView(nextItem));
+            timer = timerService.startTaskTimer(attempt, PinnedSnapshotCacheService.toView(nextItem), allItems);
         }
 
         PinnedItem current = currentItem(attempt, timer);
@@ -198,8 +199,12 @@ public class AttemptService {
             return attemptMapper.toCompletedResponse(attempt);
         }
         PinnedItem nextItem = itemAt(attempt, nextIndex);
-        TimerState nextTimer = timerService.startTaskTimer(attempt, PinnedSnapshotCacheService.toView(nextItem));
+        TimerState nextTimer = timerService.startTaskTimer(attempt, PinnedSnapshotCacheService.toView(nextItem), allItemViews(attempt));
         return attemptMapper.toTaskResponse(attempt, PinnedSnapshotCacheService.toView(nextItem), nextTimer, (int) totalItems);
+    }
+
+    private List<PinnedItemView> allItemViews(ExamAttempt attempt) {
+        return attempt.getPinnedSnapshot().getItems().stream().map(PinnedSnapshotCacheService::toView).toList();
     }
 
     private void expireIfUnanswered(ExamAttempt attempt, PinnedItem item) {
