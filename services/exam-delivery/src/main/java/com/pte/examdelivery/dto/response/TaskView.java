@@ -31,5 +31,6 @@ public record TaskView(
         int responseSeconds,
         Instant prepDeadline,
         Instant responseDeadline,
-        Instant serverNow) {
+        Instant serverNow,
+        Instant examEndTime) {
 }
