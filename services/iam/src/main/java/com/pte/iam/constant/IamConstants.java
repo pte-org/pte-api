@@ -31,6 +31,7 @@ public final class IamConstants {
     // AdminConstants values by wire contract, not by code coupling.
     public static final String INCOMING_EVENT_TENANT_ONBOARDED = "TenantOnboarded";
     public static final String INCOMING_EVENT_TENANT_SUSPENDED = "TenantSuspended";
+    public static final String INCOMING_EVENT_TENANT_REACTIVATED = "TenantReactivated";
     public static final String ADMIN_OUTBOX_EXCHANGE = "outbox.admin.exchange";
     public static final String QUEUE_TENANT_EVENTS = "iam.tenant-events";
     public static final String QUEUE_TENANT_EVENTS_DLQ = "iam.tenant-events.dlq";
