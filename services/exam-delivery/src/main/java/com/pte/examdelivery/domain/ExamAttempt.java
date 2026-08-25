@@ -62,6 +62,17 @@ public class ExamAttempt extends BaseEntity {
     @Column
     private Instant submittedAt;
 
+    /**
+     * {@code startedAt} plus the sum of every pinned item's own
+     * {@code prepSeconds + responseSeconds} — the whole-attempt deadline shown
+     * as a countdown in the client's app bar (distinct from
+     * {@link TimerState}'s per-task/section deadlines). Computed once, right
+     * after {@link #begin()}, from the pinned snapshot that exists by then;
+     * never recomputed afterward even if a later task is auto-expired.
+     */
+    @Column
+    private Instant examEndTime;
+
     @OneToOne(mappedBy = "attempt", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private PinnedExamSnapshot pinnedSnapshot;
 

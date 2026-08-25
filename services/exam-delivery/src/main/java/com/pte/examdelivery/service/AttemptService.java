@@ -125,7 +125,7 @@ public class AttemptService {
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
             throw new AttemptAlreadyCompleteException();
         }
-        return attemptMapper.toTimerResponse(timerService.getState(attempt.getId()));
+        return attemptMapper.toTimerResponse(attempt, timerService.getState(attempt.getId()));
     }
 
     private AttemptTaskResponse resumeOrReject(ExamAttempt existing) {
@@ -152,6 +152,10 @@ public class AttemptService {
         }
         attempt.setPinnedSnapshot(pinned);
         attempt.begin();
+        long totalExamSeconds = pinned.getItems().stream()
+                .mapToLong(item -> (long) item.getPrepSeconds() + item.getResponseSeconds())
+                .sum();
+        attempt.setExamEndTime(attempt.getStartedAt().plusSeconds(totalExamSeconds));
         attempt = attemptRepository.save(attempt);
 
         // attempt already has an id at this point (saved above), so this

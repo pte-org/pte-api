@@ -41,7 +41,8 @@ public class AttemptMapper {
                 item.publicId(), item.orderIndex(), totalTasks, item.section(), item.taskType(), item.title(),
                 item.promptText(), item.audioPromptRef(), item.imagePromptRef(), item.minWordCount(),
                 item.maxWordCount(), toFlatOptions(parsedOptions), toBlankGroups(parsedOptions), item.prepSeconds(),
-                item.responseSeconds(), timer.getPrepDeadline(), timer.getResponseDeadline(), Instant.now());
+                item.responseSeconds(), timer.getPrepDeadline(), timer.getResponseDeadline(), Instant.now(),
+                attempt.getExamEndTime());
         return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task);
     }
 
@@ -49,9 +50,9 @@ public class AttemptMapper {
         return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), true, null);
     }
 
-    public TimerStateResponse toTimerResponse(TimerState timer) {
+    public TimerStateResponse toTimerResponse(ExamAttempt attempt, TimerState timer) {
         return new TimerStateResponse(timer.getCurrentOrderIndex(), timer.getPhase().name(),
-                timer.getPrepDeadline(), timer.getResponseDeadline(), Instant.now());
+                timer.getPrepDeadline(), timer.getResponseDeadline(), Instant.now(), attempt.getExamEndTime());
     }
 
     private List<FrozenOption> parseFrozenOptions(String optionsJson) {

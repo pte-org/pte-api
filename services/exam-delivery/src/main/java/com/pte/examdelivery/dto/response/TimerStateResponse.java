@@ -4,5 +4,6 @@ import java.time.Instant;
 
 /** Lightweight poll target for the client's countdown UI (client timer is UX only). */
 public record TimerStateResponse(
-        int currentOrderIndex, String phase, Instant prepDeadline, Instant responseDeadline, Instant serverNow) {
+        int currentOrderIndex, String phase, Instant prepDeadline, Instant responseDeadline, Instant serverNow,
+        Instant examEndTime) {
 }
