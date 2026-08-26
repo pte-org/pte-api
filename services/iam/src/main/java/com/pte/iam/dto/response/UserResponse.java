@@ -1,5 +1,6 @@
 package com.pte.iam.dto.response;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -10,5 +11,9 @@ public record UserResponse(
         String fullName,
         UUID tenantId,
         String status,
-        List<String> roles) {
+        List<String> roles,
+        String studentCode,
+        String className,
+        String phone,
+        LocalDate dateOfBirth) {
 }
