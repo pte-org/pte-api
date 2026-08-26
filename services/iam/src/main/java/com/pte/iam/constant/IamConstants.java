@@ -19,6 +19,7 @@ public final class IamConstants {
     public static final String AGGREGATE_USER = "User";
     public static final String EVENT_USER_CREATED = "UserCreated";
     public static final String EVENT_USER_SUSPENDED = "UserSuspended";
+    public static final String EVENT_USER_PASSWORD_RESET = "UserPasswordReset";
 
     // RabbitMQ outbox relay (rabbitmq-outbox-migration Phase 3). Downstream
     // consumers bind their own queue to this exchange with routing key

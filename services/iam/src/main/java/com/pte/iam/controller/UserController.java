@@ -4,6 +4,7 @@ import com.pte.common.security.CurrentUser;
 import com.pte.common.security.CurrentUserContext;
 import com.pte.common.web.ApiResponse;
 import com.pte.iam.dto.request.CreateUserRequest;
+import com.pte.iam.dto.request.ResetPasswordRequest;
 import com.pte.iam.dto.response.UserResponse;
 import com.pte.iam.service.UserService;
 import jakarta.validation.Valid;
@@ -51,6 +52,25 @@ public class UserController {
     @PostMapping("/{publicId}/suspend")
     public ApiResponse<UserResponse> suspend(@PathVariable UUID publicId) {
         return ApiResponse.success(userService.suspend(publicId, currentUser()));
+    }
+
+    // Platform-admin-only, narrower than the class-level hasAnyRole above — a
+    // HOST_ADMIN caller does not get this power, including over its own tenant's
+    // users (this is the admin-rescues-a-locked-out-Host path, not self-service).
+    @PostMapping("/{publicId}/reset-password")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    public ApiResponse<UserResponse> resetPassword(@PathVariable UUID publicId,
+                                                    @Valid @RequestBody ResetPasswordRequest request) {
+        return ApiResponse.success(userService.resetPassword(publicId, request, currentUser()));
+    }
+
+    // Separate from GET /users (which is caller-tenant-scoped) so a platform admin
+    // can look up an arbitrary tenant's users without overloading that endpoint's
+    // existing semantics.
+    @GetMapping("/by-tenant/{tenantId}")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    public ApiResponse<List<UserResponse>> listByTenant(@PathVariable UUID tenantId) {
+        return ApiResponse.success(userService.listForTenant(tenantId));
     }
 
     private CurrentUser currentUser() {
