@@ -81,6 +81,13 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
+    public UserResponse me(CurrentUser caller) {
+        User user = userRepository.findByPublicId(caller.userId())
+                .orElseThrow(UserNotFoundException::new);
+        return UserMapper.toResponse(user);
+    }
+
+    @Transactional(readOnly = true)
     public List<UserResponse> listByTenant(CurrentUser caller) {
         UUID tenantId = caller.tenantId();
         if (tenantId == null) {
