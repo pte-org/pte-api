@@ -19,6 +19,7 @@ public final class IamConstants {
     public static final String AGGREGATE_USER = "User";
     public static final String EVENT_USER_CREATED = "UserCreated";
     public static final String EVENT_USER_SUSPENDED = "UserSuspended";
+    public static final String EVENT_USER_PASSWORD_RESET = "UserPasswordReset";
 
     // RabbitMQ outbox relay (rabbitmq-outbox-migration Phase 3). Downstream
     // consumers bind their own queue to this exchange with routing key
@@ -31,6 +32,7 @@ public final class IamConstants {
     // AdminConstants values by wire contract, not by code coupling.
     public static final String INCOMING_EVENT_TENANT_ONBOARDED = "TenantOnboarded";
     public static final String INCOMING_EVENT_TENANT_SUSPENDED = "TenantSuspended";
+    public static final String INCOMING_EVENT_TENANT_REACTIVATED = "TenantReactivated";
     public static final String ADMIN_OUTBOX_EXCHANGE = "outbox.admin.exchange";
     public static final String QUEUE_TENANT_EVENTS = "iam.tenant-events";
     public static final String QUEUE_TENANT_EVENTS_DLQ = "iam.tenant-events.dlq";

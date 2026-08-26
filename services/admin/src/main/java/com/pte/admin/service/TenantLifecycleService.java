@@ -2,11 +2,15 @@ package com.pte.admin.service;
 
 import com.pte.admin.constant.AdminConstants;
 import com.pte.admin.domain.Tenant;
+import com.pte.admin.domain.enums.TenantStatus;
+import com.pte.admin.domain.event.TenantBrandingUpdatedEvent;
 import com.pte.admin.domain.event.TenantOnboardedEvent;
+import com.pte.admin.domain.event.TenantReactivatedEvent;
 import com.pte.admin.domain.event.TenantSuspendedEvent;
 import com.pte.admin.domain.exception.TenantNameAlreadyUsedException;
 import com.pte.admin.domain.exception.TenantNotFoundException;
 import com.pte.admin.dto.request.OnboardTenantRequest;
+import com.pte.admin.dto.request.UpdateBrandingRequest;
 import com.pte.admin.dto.response.TenantResponse;
 import com.pte.admin.mapper.TenantMapper;
 import com.pte.admin.messaging.outbox.OutboxWriter;
@@ -56,10 +60,39 @@ public class TenantLifecycleService {
     public TenantResponse suspend(UUID publicId) {
         Tenant tenant = tenantRepository.findByPublicId(publicId)
                 .orElseThrow(TenantNotFoundException::new);
+        if (tenant.getStatus() == TenantStatus.SUSPENDED) {
+            return TenantMapper.toResponse(tenant);
+        }
         tenant.suspend();
         outboxWriter.write(AdminConstants.AGGREGATE_TENANT, tenant.getPublicId().toString(),
                 AdminConstants.EVENT_TENANT_SUSPENDED,
                 new TenantSuspendedEvent(tenant.getPublicId()), tenant.getPublicId());
+        return TenantMapper.toResponse(tenant);
+    }
+
+    @Transactional
+    public TenantResponse reactivate(UUID publicId) {
+        Tenant tenant = tenantRepository.findByPublicId(publicId)
+                .orElseThrow(TenantNotFoundException::new);
+        if (tenant.getStatus() == TenantStatus.ACTIVE) {
+            return TenantMapper.toResponse(tenant);
+        }
+        tenant.reactivate();
+        outboxWriter.write(AdminConstants.AGGREGATE_TENANT, tenant.getPublicId().toString(),
+                AdminConstants.EVENT_TENANT_REACTIVATED,
+                new TenantReactivatedEvent(tenant.getPublicId()), tenant.getPublicId());
+        return TenantMapper.toResponse(tenant);
+    }
+
+    @Transactional
+    public TenantResponse updateBranding(UUID publicId, UpdateBrandingRequest request) {
+        Tenant tenant = tenantRepository.findByPublicId(publicId)
+                .orElseThrow(TenantNotFoundException::new);
+        tenant.updateBranding(request.logoUrl(), request.primaryColor());
+        outboxWriter.write(AdminConstants.AGGREGATE_TENANT, tenant.getPublicId().toString(),
+                AdminConstants.EVENT_TENANT_BRANDING_UPDATED,
+                new TenantBrandingUpdatedEvent(tenant.getPublicId(), tenant.getLogoUrl(), tenant.getPrimaryColor()),
+                tenant.getPublicId());
         return TenantMapper.toResponse(tenant);
     }
 

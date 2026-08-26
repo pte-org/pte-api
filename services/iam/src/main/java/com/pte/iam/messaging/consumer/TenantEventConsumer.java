@@ -5,6 +5,7 @@ import com.pte.iam.domain.ProcessedEvent;
 import com.pte.iam.domain.TenantRegistry;
 import com.pte.iam.domain.enums.TenantRegistryStatus;
 import com.pte.iam.domain.event.TenantOnboardedEvent;
+import com.pte.iam.domain.event.TenantReactivatedEvent;
 import com.pte.iam.domain.event.TenantSuspendedEvent;
 import com.pte.iam.repository.ProcessedEventRepository;
 import com.pte.iam.repository.TenantRegistryRepository;
@@ -57,6 +58,8 @@ public class TenantEventConsumer {
             applyOnboarded(payload);
         } else if (IamConstants.INCOMING_EVENT_TENANT_SUSPENDED.equals(eventType)) {
             applySuspended(payload);
+        } else if (IamConstants.INCOMING_EVENT_TENANT_REACTIVATED.equals(eventType)) {
+            applyReactivated(payload);
         }
         // Unrecognized event type on this queue: ignore, don't fail the consumer —
         // forward-compatible with future event types this consumer doesn't need yet.
@@ -80,6 +83,15 @@ public class TenantEventConsumer {
         tenantRegistryRepository.findByTenantPublicId(event.tenantPublicId())
                 .ifPresent(registry -> {
                     registry.setStatus(TenantRegistryStatus.SUSPENDED);
+                    tenantRegistryRepository.save(registry);
+                });
+    }
+
+    private void applyReactivated(String payload) {
+        TenantReactivatedEvent event = jsonMapper.readValue(payload, TenantReactivatedEvent.class);
+        tenantRegistryRepository.findByTenantPublicId(event.tenantPublicId())
+                .ifPresent(registry -> {
+                    registry.setStatus(TenantRegistryStatus.ACTIVE);
                     tenantRegistryRepository.save(registry);
                 });
     }
