@@ -1,5 +1,6 @@
 package com.pte.gateway.config;
 
+import com.pte.gateway.constant.GatewayConstants;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -30,7 +31,7 @@ public class SecurityConfig {
             "/api/iam/auth/login", "/api/iam/auth/refresh", "/api/iam/auth/logout", "/api/iam/auth/jwks"
     };
 
-    @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:3001}")
+    @Value("${app.cors.allowed-origins:" + GatewayConstants.DEFAULT_ALLOWED_ORIGINS + "}")
     private List<String> allowedOrigins;
 
     @Bean
