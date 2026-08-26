@@ -17,6 +17,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -55,6 +56,23 @@ public class User extends BaseEntity {
     @Column(name = "role", nullable = false)
     @Enumerated(EnumType.STRING)
     private Set<Role> roles = new HashSet<>();
+
+    /**
+     * Profile-only fields (not used for auth), primarily populated for STUDENT
+     * accounts created via the Host roster (single or bulk import), but not
+     * restricted to that role — nullable/optional for every role.
+     */
+    @Column
+    private String studentCode;
+
+    @Column
+    private String className;
+
+    @Column
+    private String phone;
+
+    @Column
+    private LocalDate dateOfBirth;
 
     public boolean isSuspended() {
         return status == UserStatus.SUSPENDED;
