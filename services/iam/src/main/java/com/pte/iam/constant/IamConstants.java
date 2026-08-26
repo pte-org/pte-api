@@ -14,6 +14,8 @@ public final class IamConstants {
     public static final String INVALID_REFRESH_TOKEN = "INVALID_REFRESH_TOKEN";
     public static final String USER_SUSPENDED = "USER_SUSPENDED";
     public static final String FORBIDDEN_ROLE_ASSIGNMENT = "FORBIDDEN_ROLE_ASSIGNMENT";
+    public static final String FORBIDDEN_PASSWORD_RESET = "FORBIDDEN_PASSWORD_RESET";
+    public static final String DUPLICATE_EMAIL_IN_BATCH = "DUPLICATE_EMAIL_IN_BATCH";
 
     // Outbox aggregate + event types (produced by iam)
     public static final String AGGREGATE_USER = "User";

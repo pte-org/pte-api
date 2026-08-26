@@ -3,8 +3,10 @@ package com.pte.iam.controller;
 import com.pte.common.security.CurrentUser;
 import com.pte.common.security.CurrentUserContext;
 import com.pte.common.web.ApiResponse;
+import com.pte.iam.dto.request.BulkCreateUsersRequest;
 import com.pte.iam.dto.request.CreateUserRequest;
 import com.pte.iam.dto.request.ResetPasswordRequest;
+import com.pte.iam.dto.response.BulkCreateUsersResponse;
 import com.pte.iam.dto.response.UserResponse;
 import com.pte.iam.service.UserService;
 import jakarta.validation.Valid;
@@ -39,6 +41,11 @@ public class UserController {
         return ApiResponse.success(userService.create(request, currentUser()));
     }
 
+    @PostMapping("/bulk")
+    public ApiResponse<BulkCreateUsersResponse> createBulk(@Valid @RequestBody BulkCreateUsersRequest request) {
+        return ApiResponse.success(userService.createBulk(request, currentUser()));
+    }
+
     @GetMapping("/{publicId}")
     public ApiResponse<UserResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(userService.get(publicId, currentUser()));
@@ -54,11 +61,14 @@ public class UserController {
         return ApiResponse.success(userService.suspend(publicId, currentUser()));
     }
 
-    // Platform-admin-only, narrower than the class-level hasAnyRole above — a
-    // HOST_ADMIN caller does not get this power, including over its own tenant's
-    // users (this is the admin-rescues-a-locked-out-Host path, not self-service).
+    // Class-level hasAnyRole applies (no method-level override, like suspend
+    // above): a PLATFORM_ADMIN can rescue any locked-out user in any tenant; a
+    // HOST_ADMIN can rescue a locked-out STUDENT/PROCTOR within its own tenant
+    // ONLY — UserService#resetPassword enforces both the tenant scope (via
+    // findScoped) and the role restriction (a HOST_ADMIN cannot reset a fellow
+    // HOST_ADMIN/HOST_AUTHOR's password — that would be peer account takeover,
+    // not rescue).
     @PostMapping("/{publicId}/reset-password")
-    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<UserResponse> resetPassword(@PathVariable UUID publicId,
                                                     @Valid @RequestBody ResetPasswordRequest request) {
         return ApiResponse.success(userService.resetPassword(publicId, request, currentUser()));
