@@ -12,12 +12,16 @@ import com.pte.examdelivery.domain.exception.AlreadyAttemptedException;
 import com.pte.examdelivery.domain.exception.AttemptAlreadyCompleteException;
 import com.pte.examdelivery.domain.exception.AttemptNotFoundException;
 import com.pte.examdelivery.domain.exception.AttemptNotInProgressException;
+import com.pte.examdelivery.domain.exception.AudioUrlExpiredException;
+import com.pte.examdelivery.domain.exception.DeviceCheckRequiredException;
 import com.pte.examdelivery.domain.exception.NotCurrentTaskException;
 import com.pte.examdelivery.domain.exception.PinnedSnapshotEmptyException;
+import com.pte.examdelivery.domain.exception.ReplayLimitExceededException;
 import com.pte.examdelivery.domain.exception.ResponseWindowExpiredException;
 import com.pte.examdelivery.dto.request.StartAttemptRequest;
 import com.pte.examdelivery.dto.request.SubmitAnswerRequest;
 import com.pte.examdelivery.dto.response.AttemptTaskResponse;
+import com.pte.examdelivery.dto.response.AudioPlayResponse;
 import com.pte.examdelivery.dto.response.TimerStateResponse;
 import com.pte.examdelivery.mapper.AttemptMapper;
 import com.pte.examdelivery.messaging.outbox.OutboxWriter;
@@ -30,6 +34,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -76,7 +81,7 @@ public class AttemptService {
         if (existing.isPresent()) {
             return resumeOrReject(existing.get());
         }
-        return createAndPin(request.sessionPublicId(), studentPublicId, caller.tenantId());
+        return createAndPin(request.sessionPublicId(), studentPublicId, caller.tenantId(), request.deviceCheckConfirmed());
     }
 
     @Transactional
@@ -118,6 +123,61 @@ public class AttemptService {
         return attemptMapper.toCompletedResponse(attempt);
     }
 
+    /**
+     * Idempotent per {@code playRequestId} (client-generated UUID per user-initiated
+     * play tap): a repeated request with the same key replays the prior outcome
+     * instead of re-incrementing {@code playCount}. The pessimistic lock on
+     * {@code TimerState} serializes concurrent plays for the same attempt so two
+     * requests can never both observe the same pre-increment {@code playCount}.
+     */
+    @Transactional
+    public AudioPlayResponse playAudio(UUID attemptPublicId, UUID pinnedItemPublicId, String playRequestId,
+                                       CurrentUser caller) {
+        ExamAttempt attempt = findOwned(attemptPublicId, caller.userId());
+        if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
+            throw new AttemptAlreadyCompleteException();
+        }
+        TimerState timer = timerService.getStateWithLock(attempt.getId());
+        PinnedItem currentItem = currentItem(attempt, timer);
+        if (!currentItem.getPublicId().equals(pinnedItemPublicId)) {
+            throw new NotCurrentTaskException();
+        }
+
+        if (playRequestId.equals(timer.getLastPlayRequestId())) {
+            if (Boolean.TRUE.equals(timer.getLastPlayAllowed())) {
+                return new AudioPlayResponse(currentItem.getAudioUrl());
+            }
+            throw new ReplayLimitExceededException();
+        }
+
+        if (currentItem.getAudioUrlExpiresAt() == null || Instant.now().isAfter(currentItem.getAudioUrlExpiresAt())) {
+            throw new AudioUrlExpiredException();
+        }
+
+        int limit = resolvePlayLimit(currentItem, attempt.getPinnedSnapshot());
+        boolean allowed = limit < 0 || timer.getPlayCount() < limit;
+        timer.setLastPlayRequestId(playRequestId);
+        timer.setLastPlayAllowed(allowed);
+        if (!allowed) {
+            timerService.save(timer);
+            throw new ReplayLimitExceededException();
+        }
+        timer.setPlayCount(timer.getPlayCount() + 1);
+        timerService.save(timer);
+        return new AudioPlayResponse(currentItem.getAudioUrl());
+    }
+
+    /** Item override wins when present; UNLIMITED session policy (and no override) never rejects (limit &lt; 0 sentinel). */
+    private int resolvePlayLimit(PinnedItem item, PinnedExamSnapshot snapshot) {
+        if (item.getMaxPlayCountOverride() != null) {
+            return item.getMaxPlayCountOverride();
+        }
+        if ("UNLIMITED".equals(snapshot.getReplayPolicyType())) {
+            return -1;
+        }
+        return snapshot.getReplayPolicyLimit();
+    }
+
     /** Lightweight poll target for the client's countdown UI — no task content, just deadlines. */
     @Transactional(readOnly = true)
     public TimerStateResponse getTimerState(UUID attemptPublicId, CurrentUser caller) {
@@ -135,7 +195,8 @@ public class AttemptService {
         return advanceUntilLiveOrComplete(existing);
     }
 
-    private AttemptTaskResponse createAndPin(UUID sessionPublicId, UUID studentPublicId, UUID tenantId) {
+    private AttemptTaskResponse createAndPin(UUID sessionPublicId, UUID studentPublicId, UUID tenantId,
+                                             boolean deviceCheckConfirmed) {
         ExamAttempt attempt = new ExamAttempt();
         attempt.setSessionPublicId(sessionPublicId);
         attempt.setStudentPublicId(studentPublicId);
@@ -150,7 +211,11 @@ public class AttemptService {
         if (pinned.getItems().isEmpty()) {
             throw new PinnedSnapshotEmptyException();
         }
+        if (pinned.isDeviceCheckRequired() && !deviceCheckConfirmed) {
+            throw new DeviceCheckRequiredException();
+        }
         attempt.setPinnedSnapshot(pinned);
+        attempt.setDeviceCheckPassedAt(Instant.now());
         attempt.begin();
         long totalExamSeconds = pinned.getItems().stream()
                 .mapToLong(item -> (long) item.getPrepSeconds() + item.getResponseSeconds())

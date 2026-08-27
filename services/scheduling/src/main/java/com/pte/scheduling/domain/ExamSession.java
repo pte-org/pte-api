@@ -4,6 +4,7 @@ import com.pte.common.domain.BaseEntity;
 import com.pte.scheduling.domain.enums.SessionStatus;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -54,6 +55,9 @@ public class ExamSession extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private SessionStatus status = SessionStatus.SCHEDULED;
+
+    @Embedded
+    private ExamPolicy policy = ExamPolicy.mockTestDefault();
 
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("orderIndex ASC")

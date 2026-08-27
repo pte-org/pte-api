@@ -61,6 +61,7 @@ public class CompositionService {
         item.setSection(request.section());
         item.setOrderIndex(request.orderIndex());
         item.setTimingOverrideSeconds(request.timingOverrideSeconds());
+        item.setMaxPlayCount(request.maxPlayCount());
         return item;
     }
 }

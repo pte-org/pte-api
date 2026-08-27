@@ -1,17 +1,23 @@
 package com.pte.examdelivery.service;
 
 import com.pte.examdelivery.client.AuthoringClient;
+import com.pte.examdelivery.client.MediaClient;
 import com.pte.examdelivery.client.SchedulingClient;
 import com.pte.examdelivery.client.dto.AuthoringSnapshotContentResponse;
+import com.pte.examdelivery.client.dto.MediaPresignedDownloadResponse;
 import com.pte.examdelivery.client.dto.SchedulingEntitlementResponse;
 import com.pte.examdelivery.config.TaskTimingConfig;
 import com.pte.examdelivery.domain.ExamAttempt;
 import com.pte.examdelivery.domain.PinnedExamSnapshot;
 import com.pte.examdelivery.domain.PinnedItem;
+import com.pte.examdelivery.domain.exception.AudioResolutionFailedException;
 import com.pte.examdelivery.domain.exception.EntitlementCheckFailedException;
+import com.pte.examdelivery.domain.exception.MissingAudioPromptException;
 import com.pte.examdelivery.domain.exception.SnapshotContentFetchFailedException;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.Set;
@@ -33,20 +39,26 @@ import java.util.stream.Collectors;
 @Service
 public class SnapshotPinService {
 
+    private static final String LISTENING_SECTION = "LISTENING";
+    private static final long AUDIO_URL_GRACE_SECONDS = 60;
+
     private final SchedulingClient schedulingClient;
     private final AuthoringClient authoringClient;
+    private final MediaClient mediaClient;
     private final TaskTimingConfig taskTimingConfig;
 
     public SnapshotPinService(SchedulingClient schedulingClient, AuthoringClient authoringClient,
-                              TaskTimingConfig taskTimingConfig) {
+                              MediaClient mediaClient, TaskTimingConfig taskTimingConfig) {
         this.schedulingClient = schedulingClient;
         this.authoringClient = authoringClient;
+        this.mediaClient = mediaClient;
         this.taskTimingConfig = taskTimingConfig;
     }
 
     public PinnedExamSnapshot pin(ExamAttempt attempt, UUID sessionPublicId, UUID studentPublicId) {
         SchedulingEntitlementResponse entitlement = schedulingClient.checkEntitlement(sessionPublicId, studentPublicId);
-        if (entitlement == null) {
+        if (entitlement == null || entitlement.policy() == null || entitlement.policy().replayPolicyType() == null
+                || entitlement.policy().answerIntegrityLevel() == null) {
             throw new EntitlementCheckFailedException();
         }
         AuthoringSnapshotContentResponse content = authoringClient.fetchContent(entitlement.snapshotPublicId());
@@ -58,6 +70,10 @@ public class SnapshotPinService {
                 .filter(item -> item.timingOverrideSeconds() != null)
                 .collect(Collectors.toMap(SchedulingEntitlementResponse.CompositionItem::taskType,
                         SchedulingEntitlementResponse.CompositionItem::timingOverrideSeconds, (a, b) -> a));
+        Map<String, Integer> maxPlayCountByTaskType = entitlement.composition().stream()
+                .filter(item -> item.maxPlayCount() != null)
+                .collect(Collectors.toMap(SchedulingEntitlementResponse.CompositionItem::taskType,
+                        SchedulingEntitlementResponse.CompositionItem::maxPlayCount, (a, b) -> a));
         Set<String> includedTaskTypes = entitlement.composition().stream()
                 .map(SchedulingEntitlementResponse.CompositionItem::taskType)
                 .collect(Collectors.toSet());
@@ -67,17 +83,28 @@ public class SnapshotPinService {
         pinned.setSourceSnapshotPublicId(content.publicId());
         pinned.setSourceSessionPublicId(sessionPublicId);
         pinned.setTenantId(entitlement.tenantId());
+        pinned.setReplayPolicyType(entitlement.policy().replayPolicyType());
+        pinned.setReplayPolicyLimit(entitlement.policy().replayPolicyLimit());
+        pinned.setDeviceCheckRequired(Boolean.TRUE.equals(entitlement.policy().deviceCheckRequired()));
+        pinned.setProctorRequired(Boolean.TRUE.equals(entitlement.policy().proctorRequired()));
+        pinned.setAnswerIntegrityLevel(entitlement.policy().answerIntegrityLevel());
+
+        long audioUrlTtlSeconds = Duration.between(entitlement.opensAt(), entitlement.closesAt()).getSeconds()
+                + AUDIO_URL_GRACE_SECONDS;
 
         content.items().stream()
                 .filter(item -> includedTaskTypes.contains(item.taskType()))
                 .sorted(Comparator.comparingInt(AuthoringSnapshotContentResponse.Item::orderIndex))
-                .forEach(item -> pinned.addItem(toPinnedItem(item, responseOverrideByTaskType)));
+                .forEach(item -> pinned.addItem(toPinnedItem(item, responseOverrideByTaskType, maxPlayCountByTaskType,
+                        audioUrlTtlSeconds, entitlement.tenantId())));
 
         return pinned;
     }
 
     private PinnedItem toPinnedItem(AuthoringSnapshotContentResponse.Item source,
-                                    Map<String, Integer> responseOverrideByTaskType) {
+                                    Map<String, Integer> responseOverrideByTaskType,
+                                    Map<String, Integer> maxPlayCountByTaskType,
+                                    long audioUrlTtlSeconds, UUID tenantId) {
         TaskTimingConfig.Timing timing = taskTimingConfig.timingFor(source.taskType());
         int responseSeconds = responseOverrideByTaskType.getOrDefault(source.taskType(), timing.responseSeconds());
 
@@ -96,6 +123,19 @@ public class SnapshotPinService {
         item.setOptionsJson(source.optionsJson());
         item.setPrepSeconds(timing.prepSeconds());
         item.setResponseSeconds(responseSeconds);
+        item.setMaxPlayCountOverride(maxPlayCountByTaskType.get(source.taskType()));
+
+        if (LISTENING_SECTION.equals(source.section())) {
+            if (source.audioPromptRef() == null) {
+                throw new MissingAudioPromptException();
+            }
+            MediaPresignedDownloadResponse presigned = mediaClient.presignGet(source.audioPromptRef(), audioUrlTtlSeconds, tenantId);
+            if (presigned == null) {
+                throw new AudioResolutionFailedException();
+            }
+            item.setAudioUrl(presigned.url());
+            item.setAudioUrlExpiresAt(Instant.now().plusSeconds(presigned.expiresInSeconds()));
+        }
         return item;
     }
 }

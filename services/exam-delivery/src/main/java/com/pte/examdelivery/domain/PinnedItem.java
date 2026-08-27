@@ -12,6 +12,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -74,4 +75,15 @@ public class PinnedItem extends BaseEntity {
 
     @Column(nullable = false)
     private int responseSeconds;
+
+    /** Null = inherit the pinned session-level replay policy; non-null always wins (Phase 3/6 precedence rule). */
+    @Column
+    private Integer maxPlayCountOverride;
+
+    /** Resolved once from `media` at StartAttempt pin time; LISTENING-section items only. Never re-fetched. */
+    @Column(columnDefinition = "text")
+    private String audioUrl;
+
+    @Column
+    private Instant audioUrlExpiresAt;
 }

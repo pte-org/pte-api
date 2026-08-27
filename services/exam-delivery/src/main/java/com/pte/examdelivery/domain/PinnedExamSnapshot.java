@@ -43,6 +43,28 @@ public class PinnedExamSnapshot extends BaseEntity {
     @Column(nullable = false)
     private UUID tenantId;
 
+    /**
+     * Session-level {@code ExamPolicy}, copied once at pin time — never
+     * re-fetched from scheduling for this attempt's lifetime (ADR invariant:
+     * runtime dependencies only flow INTO exam-delivery via event, never out).
+     * String/Integer fields, not exam-delivery-local enums, matching the
+     * cross-service value convention already used for {@code taskType}/{@code section}.
+     */
+    @Column(nullable = false)
+    private String replayPolicyType;
+
+    @Column
+    private Integer replayPolicyLimit;
+
+    @Column(nullable = false)
+    private boolean deviceCheckRequired;
+
+    @Column(nullable = false)
+    private boolean proctorRequired;
+
+    @Column(nullable = false)
+    private String answerIntegrityLevel;
+
     @OneToMany(mappedBy = "pinnedSnapshot", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("orderIndex ASC")
     private List<PinnedItem> items = new ArrayList<>();

@@ -32,6 +32,12 @@ media:
     secret-key: ${MINIO_ROOT_PASSWORD:pte-minio-dev-pw}
     bucket: ${MEDIA_BUCKET:pte-media}
 
+# Shared secret for the /internal/** service-to-service surface (ADR-003 mTLS
+# placeholder) — MUST match the same env var on every service that calls or
+# exposes /internal/**. Dev default only.
+internal:
+  service-key: ${INTERNAL_SERVICE_KEY:dev-internal-service-key-change-me}
+
 management:
   endpoints:
     web:

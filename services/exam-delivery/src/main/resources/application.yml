@@ -42,6 +42,8 @@ authoring:
   base-url: ${AUTHORING_URL:http://localhost:8083/api/authoring}
 scheduling:
   base-url: ${SCHEDULING_URL:http://localhost:8084/api/scheduling}
+media:
+  base-url: ${MEDIA_URL:http://localhost:8090/api/media}
 
 # Shared secret for calling authoring/scheduling's /internal/** surface, and
 # for validating incoming calls to exam-delivery's own /internal/** endpoints
@@ -71,6 +73,11 @@ resilience4j:
         ignore-exceptions:
           - com.pte.examdelivery.domain.exception.NotEntitledException
       authoring:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+      media:
         sliding-window-size: 10
         failure-rate-threshold: 50
         wait-duration-in-open-state: 10s

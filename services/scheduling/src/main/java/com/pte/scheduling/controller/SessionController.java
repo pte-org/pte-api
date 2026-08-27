@@ -4,7 +4,9 @@ import com.pte.common.security.CurrentUser;
 import com.pte.common.security.CurrentUserContext;
 import com.pte.common.web.ApiResponse;
 import com.pte.scheduling.dto.request.CreateSessionRequest;
+import com.pte.scheduling.dto.request.PatchExamPolicyRequest;
 import com.pte.scheduling.dto.request.SetCompositionRequest;
+import com.pte.scheduling.dto.response.ExamPolicyResponse;
 import com.pte.scheduling.dto.response.SessionResponse;
 import com.pte.scheduling.service.CompositionService;
 import com.pte.scheduling.service.HostCommandService;
@@ -12,6 +14,7 @@ import com.pte.scheduling.service.SessionService;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -57,6 +60,13 @@ public class SessionController {
     public ApiResponse<SessionResponse> setComposition(@PathVariable UUID publicId,
                                                         @Valid @RequestBody SetCompositionRequest request) {
         return ApiResponse.success(compositionService.setComposition(publicId, request, currentUser()));
+    }
+
+    /** Partial ExamPolicy override — rejected once the session is past pre-open, regardless of attempt count. */
+    @PatchMapping("/{publicId}/policy")
+    public ApiResponse<ExamPolicyResponse> patchPolicy(@PathVariable UUID publicId,
+                                                        @Valid @RequestBody PatchExamPolicyRequest request) {
+        return ApiResponse.success(sessionService.patchPolicy(publicId, request, currentUser()));
     }
 
     @PostMapping("/{publicId}/open")
