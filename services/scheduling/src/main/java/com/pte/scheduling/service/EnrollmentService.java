@@ -93,8 +93,9 @@ public class EnrollmentService {
         Set<UUID> alreadyEnrolled = new HashSet<>(existing);
 
         List<Enrollment> toCreate = new ArrayList<>();
+        Set<UUID> seenInBatch = new HashSet<>();
         for (UUID studentPublicId : request.studentPublicIds()) {
-            if (alreadyEnrolled.contains(studentPublicId)) {
+            if (alreadyEnrolled.contains(studentPublicId) || !seenInBatch.add(studentPublicId)) {
                 continue;
             }
             Enrollment enrollment = new Enrollment();
