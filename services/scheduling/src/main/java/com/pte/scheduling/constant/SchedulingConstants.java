@@ -23,6 +23,7 @@ public final class SchedulingConstants {
     public static final String EVENT_STUDENT_UNENROLLED = "StudentUnenrolled";
     public static final String EVENT_PROCTOR_ASSIGNED = "ProctorAssigned";
     public static final String EVENT_PROCTOR_UNASSIGNED = "ProctorUnassigned";
+    public static final String EVENT_PROCTOR_ROLE_UPDATED = "ProctorRoleUpdated";
     public static final String EVENT_SCORING_REQUESTED = "ScoringRequested";
     public static final String EVENT_PUBLISH_REQUESTED = "PublishRequested";
 

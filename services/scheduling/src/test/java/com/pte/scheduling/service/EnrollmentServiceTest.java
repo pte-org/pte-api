@@ -4,12 +4,14 @@ import com.pte.common.security.CurrentUser;
 import com.pte.scheduling.domain.Enrollment;
 import com.pte.scheduling.domain.ExamSession;
 import com.pte.scheduling.domain.ProctorAssignment;
+import com.pte.scheduling.domain.enums.ProctorRole;
 import com.pte.scheduling.domain.exception.AlreadyEnrolledException;
 import com.pte.scheduling.domain.exception.EnrollmentNotFoundException;
 import com.pte.scheduling.domain.exception.ProctorAssignmentNotFoundException;
 import com.pte.scheduling.dto.request.AssignProctorRequest;
 import com.pte.scheduling.dto.request.BulkEnrollRequest;
 import com.pte.scheduling.dto.request.EnrollStudentRequest;
+import com.pte.scheduling.dto.request.UpdateProctorRoleRequest;
 import com.pte.scheduling.dto.response.BulkEnrollResponse;
 import com.pte.scheduling.dto.response.EnrollmentResponse;
 import com.pte.scheduling.dto.response.ProctorAssignmentResponse;
@@ -242,9 +244,10 @@ class EnrollmentServiceTest {
         });
 
         ProctorAssignmentResponse response = enrollmentService.assignProctor(sessionPublicId,
-                new AssignProctorRequest(proctorPublicId), caller);
+                new AssignProctorRequest(proctorPublicId, null), caller);
 
         assertThat(response.proctorPublicId()).isEqualTo(proctorPublicId);
+        assertThat(response.role()).isEqualTo(ProctorRole.ASSISTANT_PROCTOR);
         verify(outboxWriter).write(anyString(), anyString(), anyString(), any(), any());
     }
 
@@ -327,5 +330,55 @@ class EnrollmentServiceTest {
 
         assertThatThrownBy(() -> enrollmentService.unassignProctor(sessionPublicId, assignmentPublicId, caller))
                 .isInstanceOf(ProctorAssignmentNotFoundException.class);
+    }
+
+    @Test
+    void updateProctorRole_updatesAndWritesOutbox() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID assignmentPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        CurrentUser caller = hostAdmin(tenantId);
+
+        ProctorAssignment assignment = new ProctorAssignment();
+        assignment.setPublicId(assignmentPublicId);
+        assignment.setSession(session);
+        assignment.setProctorPublicId(UUID.randomUUID());
+
+        when(sessionService.findOwned(sessionPublicId, caller)).thenReturn(session);
+        when(proctorAssignmentRepository.findByPublicId(assignmentPublicId)).thenReturn(Optional.of(assignment));
+        when(proctorAssignmentRepository.save(assignment)).thenReturn(assignment);
+
+        ProctorAssignmentResponse response = enrollmentService.updateProctorRole(sessionPublicId, assignmentPublicId,
+                new UpdateProctorRoleRequest(ProctorRole.LEAD_PROCTOR), caller);
+
+        assertThat(response.role()).isEqualTo(ProctorRole.LEAD_PROCTOR);
+        assertThat(assignment.getRole()).isEqualTo(ProctorRole.LEAD_PROCTOR);
+        verify(outboxWriter).write(anyString(), anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void updateProctorRole_fromDifferentSession_throwsNotFound_doesNotSave() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID assignmentPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        ExamSession otherSession = session(2L, UUID.randomUUID(), tenantId);
+        CurrentUser caller = hostAdmin(tenantId);
+
+        ProctorAssignment assignment = new ProctorAssignment();
+        assignment.setPublicId(assignmentPublicId);
+        assignment.setSession(otherSession);
+        assignment.setProctorPublicId(UUID.randomUUID());
+
+        when(sessionService.findOwned(sessionPublicId, caller)).thenReturn(session);
+        when(proctorAssignmentRepository.findByPublicId(assignmentPublicId)).thenReturn(Optional.of(assignment));
+
+        assertThatThrownBy(() -> enrollmentService.updateProctorRole(sessionPublicId, assignmentPublicId,
+                new UpdateProctorRoleRequest(ProctorRole.LEAD_PROCTOR), caller))
+                .isInstanceOf(ProctorAssignmentNotFoundException.class);
+
+        verify(proctorAssignmentRepository, never()).save(any());
+        verify(outboxWriter, never()).write(anyString(), anyString(), anyString(), any(), any());
     }
 }
