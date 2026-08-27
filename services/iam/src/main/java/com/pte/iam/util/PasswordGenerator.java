@@ -3,12 +3,9 @@ package com.pte.iam.util;
 import java.security.SecureRandom;
 
 /**
- * Generates a temporary password for bulk-created accounts, in a fixed,
- * printable/typeable shape: 8 characters grouped {@code XXXX-XXXX}, drawn from
- * an unambiguous alphanumeric charset (excludes {@code 0/O} and {@code 1/l/I},
- * which are commonly confused on a printed credentials handout). The shape is
- * standardized; every character is still independently random via
- * {@link SecureRandom} — never derived from the account's own data.
+ * Generates a temporary password in a fixed, typeable shape ({@code XXXX-XXXX})
+ * from an unambiguous charset (no {@code 0/O}, {@code 1/l/I}) — every character
+ * is still independently drawn via {@link SecureRandom}.
  */
 public final class PasswordGenerator {
 

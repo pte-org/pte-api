@@ -70,18 +70,13 @@ public class EnrollmentService {
     }
 
     /**
-     * Bulk-enrolls students not already on this session's roster; ids already
-     * enrolled are reported (not re-inserted, not an error). The `saveAll` is
-     * still wrapped in a defensive catch for the rare true concurrent-double-
-     * enroll race (two callers bulk-enrolling the same student into the same
-     * session at nearly the same instant) — same guard rationale as
-     * {@link #enrollStudent}'s single-row path, extended to batch level: if it
-     * fires, the whole batch 409s and the caller retries. This catch's
-     * soundness depends on {@code Enrollment} (via {@code BaseEntity}) using
-     * {@code GenerationType.IDENTITY}, which forces Hibernate to flush each
-     * row synchronously inside {@code saveAll} rather than deferring to
-     * commit — if that id strategy ever changes, re-verify this guard still
-     * actually observes the constraint violation here.
+     * Bulk-enrolls students not already on the roster (already-enrolled ids
+     * are reported, not errors); intra-request duplicate ids are also
+     * deduped. The {@code saveAll} catch guards the rare true concurrent-
+     * double-enroll race, same rationale as {@link #enrollStudent}. It
+     * depends on {@code Enrollment} using {@code GenerationType.IDENTITY}
+     * (forces a synchronous flush inside {@code saveAll}) — re-verify this
+     * guard if that id strategy ever changes.
      */
     @Transactional
     public BulkEnrollResponse bulkEnroll(UUID sessionPublicId, BulkEnrollRequest request, CurrentUser caller) {

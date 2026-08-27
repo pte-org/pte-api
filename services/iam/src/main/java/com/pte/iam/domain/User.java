@@ -57,11 +57,7 @@ public class User extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private Set<Role> roles = new HashSet<>();
 
-    /**
-     * Profile-only fields (not used for auth), primarily populated for STUDENT
-     * accounts created via the Host roster (single or bulk import), but not
-     * restricted to that role — nullable/optional for every role.
-     */
+    /** Profile-only fields (not used for auth) — mainly populated for STUDENT via Host roster import, optional for any role. */
     @Column
     private String studentCode;
 

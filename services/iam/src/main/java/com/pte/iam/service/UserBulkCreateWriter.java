@@ -21,15 +21,11 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Creates one bulk-import row in its OWN transaction ({@code REQUIRES_NEW}), a
- * separate bean so Spring's proxy honors that boundary (self-invocation from
- * {@link UserService} would not). This is the concurrency fallback for
- * {@code UserService#createBulk}'s pre-checked-but-still-racy existing-email
- * check: if a genuine concurrent duplicate slips past the pre-check and hits
- * the DB's unique constraint, only THIS row's transaction rolls back — the
- * rest of the batch, each in its own transaction, is unaffected. Mirrors the
- * isolated-writer-bean pattern used by questionbank's bulk import
- * (QuestionImportWriter, quang-exam-session-ops phase-03).
+ * Creates one bulk-import row in its OWN transaction ({@code REQUIRES_NEW}) —
+ * a separate bean since self-invocation from {@link UserService} wouldn't let
+ * Spring's proxy honor that boundary. Isolates a rare concurrent-duplicate-
+ * email race to just this row instead of the whole batch, mirroring
+ * questionbank's {@code QuestionImportWriter} pattern.
  */
 @Service
 public class UserBulkCreateWriter {

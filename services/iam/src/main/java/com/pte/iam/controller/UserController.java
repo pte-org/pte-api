@@ -61,13 +61,8 @@ public class UserController {
         return ApiResponse.success(userService.suspend(publicId, currentUser()));
     }
 
-    // Class-level hasAnyRole applies (no method-level override, like suspend
-    // above): a PLATFORM_ADMIN can rescue any locked-out user in any tenant; a
-    // HOST_ADMIN can rescue a locked-out STUDENT/PROCTOR within its own tenant
-    // ONLY — UserService#resetPassword enforces both the tenant scope (via
-    // findScoped) and the role restriction (a HOST_ADMIN cannot reset a fellow
-    // HOST_ADMIN/HOST_AUTHOR's password — that would be peer account takeover,
-    // not rescue).
+    // No method-level @PreAuthorize override needed: tenant scope and the
+    // STUDENT/PROCTOR-only role restriction are enforced in UserService#resetPassword.
     @PostMapping("/{publicId}/reset-password")
     public ApiResponse<UserResponse> resetPassword(@PathVariable UUID publicId,
                                                     @Valid @RequestBody ResetPasswordRequest request) {

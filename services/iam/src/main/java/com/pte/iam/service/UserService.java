@@ -96,13 +96,11 @@ public class UserService {
     }
 
     /**
-     * Bulk-creates an Excel roster as STUDENT accounts, all-or-nothing on
-     * validation (a within-batch duplicate email rejects the whole request,
-     * nothing written) but per-row-tolerant on conflicts with an EXISTING
-     * user (that row is skipped and reported, the rest still commits). Each
-     * row is written in its own transaction via {@link UserBulkCreateWriter}
-     * (REQUIRES_NEW) so a rare concurrent duplicate-email race only loses
-     * that one row, never the whole batch.
+     * A within-batch duplicate email rejects the whole request (nothing
+     * written); a conflict with an EXISTING user just skips that row and
+     * reports it. Each row runs in its own {@link UserBulkCreateWriter}
+     * (REQUIRES_NEW) transaction, so a rare concurrent-duplicate race only
+     * loses that one row.
      */
     public BulkCreateUsersResponse createBulk(BulkCreateUsersRequest request, CurrentUser caller) {
         UUID tenantId = provisioningHelper.resolveTargetTenant(caller, request.tenantId());
