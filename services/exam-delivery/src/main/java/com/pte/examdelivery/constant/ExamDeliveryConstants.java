@@ -17,6 +17,8 @@ public final class ExamDeliveryConstants {
     public static final String AUDIO_RESOLUTION_FAILED = "AUDIO_RESOLUTION_FAILED";
     public static final String REPLAY_LIMIT_EXCEEDED = "REPLAY_LIMIT_EXCEEDED";
     public static final String AUDIO_URL_EXPIRED = "AUDIO_URL_EXPIRED";
+    public static final String SUBMISSION_DECRYPTION_FAILED = "SUBMISSION_DECRYPTION_FAILED";
+    public static final String ANSWER_INTEGRITY_LEVEL_MISMATCH = "ANSWER_INTEGRITY_LEVEL_MISMATCH";
 
     public static final String AGGREGATE_ATTEMPT = "ExamAttempt";
     public static final String EVENT_ANSWER_SUBMITTED = "AnswerSubmitted";

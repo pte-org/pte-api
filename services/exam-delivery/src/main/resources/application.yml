@@ -49,6 +49,17 @@ media:
 # for validating incoming calls to exam-delivery's own /internal/** endpoints
 # (rabbitmq-outbox-migration Phase 9's attempt/answer export) — ADR-003 mTLS
 # placeholder. Must match the value configured on every service in the mesh.
+# RSA keypair for answer-submission encryption (task 20, STRICT answerIntegrityLevel
+# attempts only). exam-delivery holds its own keypair — never iam's RsaKeyProvider —
+# so no synchronous cross-service call is needed for key material at submission time.
+# Outside dev/local profiles, EncryptionKeyProvider fails fast at startup if either
+# value is unset, rather than silently generating an ephemeral keypair that would
+# invalidate every STRICT-pinned attempt's public key on the next restart.
+exam-delivery:
+  encryption:
+    private-key-pem: ${EXAM_DELIVERY_ENCRYPTION_PRIVATE_KEY_PEM:}
+    public-key-pem: ${EXAM_DELIVERY_ENCRYPTION_PUBLIC_KEY_PEM:}
+
 internal:
   service-key: ${INTERNAL_SERVICE_KEY:dev-internal-service-key-change-me}
   # Second credential (Phase 9): required, IN ADDITION TO service-key, to reach

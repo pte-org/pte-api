@@ -3,6 +3,7 @@ package com.pte.examdelivery.controller;
 import com.pte.common.security.CurrentUser;
 import com.pte.common.security.CurrentUserContext;
 import com.pte.common.web.ApiResponse;
+import com.pte.examdelivery.dto.request.EncryptedSubmissionRequest;
 import com.pte.examdelivery.dto.request.StartAttemptRequest;
 import com.pte.examdelivery.dto.request.SubmitAnswerRequest;
 import com.pte.examdelivery.dto.response.AttemptTaskResponse;
@@ -45,10 +46,18 @@ public class AttemptController {
         return ApiResponse.success(attemptService.getNextTask(publicId, currentUser()));
     }
 
+    /** STANDARD-pinned attempts only — server rejects if the attempt is pinned STRICT. */
     @PostMapping("/{publicId}/answers")
     public ApiResponse<AttemptTaskResponse> submitAnswer(@PathVariable UUID publicId,
                                                           @Valid @RequestBody SubmitAnswerRequest request) {
         return ApiResponse.success(attemptService.submitAnswer(publicId, request, currentUser()));
+    }
+
+    /** STRICT-pinned attempts only — server rejects if the attempt is pinned STANDARD. */
+    @PostMapping("/{publicId}/answers/encrypted")
+    public ApiResponse<AttemptTaskResponse> submitEncryptedAnswer(@PathVariable UUID publicId,
+                                                                   @Valid @RequestBody EncryptedSubmissionRequest request) {
+        return ApiResponse.success(attemptService.submitEncryptedAnswer(publicId, request, currentUser()));
     }
 
     @PostMapping("/{publicId}/submit")

@@ -1,6 +1,7 @@
 package com.pte.examdelivery.service;
 
 import com.pte.common.security.CurrentUser;
+import com.pte.examdelivery.config.EncryptionKeyProvider;
 import com.pte.examdelivery.constant.ExamDeliveryConstants;
 import com.pte.examdelivery.domain.ExamAttempt;
 import com.pte.examdelivery.domain.PinnedExamSnapshot;
@@ -9,6 +10,7 @@ import com.pte.examdelivery.domain.TimerState;
 import com.pte.examdelivery.domain.enums.AttemptStatus;
 import com.pte.examdelivery.domain.event.AttemptSubmittedEvent;
 import com.pte.examdelivery.domain.exception.AlreadyAttemptedException;
+import com.pte.examdelivery.domain.exception.AnswerIntegrityLevelMismatchException;
 import com.pte.examdelivery.domain.exception.AttemptAlreadyCompleteException;
 import com.pte.examdelivery.domain.exception.AttemptNotFoundException;
 import com.pte.examdelivery.domain.exception.AttemptNotInProgressException;
@@ -18,6 +20,7 @@ import com.pte.examdelivery.domain.exception.NotCurrentTaskException;
 import com.pte.examdelivery.domain.exception.PinnedSnapshotEmptyException;
 import com.pte.examdelivery.domain.exception.ReplayLimitExceededException;
 import com.pte.examdelivery.domain.exception.ResponseWindowExpiredException;
+import com.pte.examdelivery.dto.request.EncryptedSubmissionRequest;
 import com.pte.examdelivery.dto.request.StartAttemptRequest;
 import com.pte.examdelivery.dto.request.SubmitAnswerRequest;
 import com.pte.examdelivery.dto.response.AttemptTaskResponse;
@@ -57,12 +60,15 @@ public class AttemptService {
     private final AnswerSubmitService answerSubmitService;
     private final AttemptMapper attemptMapper;
     private final OutboxWriter outboxWriter;
+    private final EncryptionKeyProvider encryptionKeyProvider;
+    private final SubmissionDecryptionService submissionDecryptionService;
 
     public AttemptService(ExamAttemptRepository attemptRepository, PinnedItemRepository pinnedItemRepository,
                           AttemptAnswerRepository attemptAnswerRepository, SnapshotPinService snapshotPinService,
                           PinnedSnapshotCacheService cacheService, TimerService timerService,
                           AnswerSubmitService answerSubmitService, AttemptMapper attemptMapper,
-                          OutboxWriter outboxWriter) {
+                          OutboxWriter outboxWriter, EncryptionKeyProvider encryptionKeyProvider,
+                          SubmissionDecryptionService submissionDecryptionService) {
         this.attemptRepository = attemptRepository;
         this.pinnedItemRepository = pinnedItemRepository;
         this.attemptAnswerRepository = attemptAnswerRepository;
@@ -72,6 +78,8 @@ public class AttemptService {
         this.answerSubmitService = answerSubmitService;
         this.attemptMapper = attemptMapper;
         this.outboxWriter = outboxWriter;
+        this.encryptionKeyProvider = encryptionKeyProvider;
+        this.submissionDecryptionService = submissionDecryptionService;
     }
 
     @Transactional
@@ -93,15 +101,44 @@ public class AttemptService {
         return advanceUntilLiveOrComplete(attempt);
     }
 
+    /** STANDARD-pinned attempts only — a STRICT-pinned attempt must use {@link #submitEncryptedAnswer}. */
     @Transactional
     public AttemptTaskResponse submitAnswer(UUID attemptPublicId, SubmitAnswerRequest request, CurrentUser caller) {
         ExamAttempt attempt = findOwned(attemptPublicId, caller.userId());
+        requireIntegrityLevel(attempt, "STANDARD");
+        return processAnswer(attempt, request.pinnedItemPublicId(), request.payload());
+    }
+
+    /**
+     * STRICT-pinned attempts only — decrypts the per-submission AES-wrapped payload
+     * with this service's own private key before funneling the plaintext through the
+     * same {@link #processAnswer} path a STANDARD submission uses. The decrypted
+     * plaintext is indistinguishable from a plain submission once past this point:
+     * unchanged storage format, unchanged {@code AnswerSubmitted} event contract.
+     */
+    @Transactional
+    public AttemptTaskResponse submitEncryptedAnswer(UUID attemptPublicId, EncryptedSubmissionRequest request,
+                                                      CurrentUser caller) {
+        ExamAttempt attempt = findOwned(attemptPublicId, caller.userId());
+        requireIntegrityLevel(attempt, "STRICT");
+        String payload = submissionDecryptionService.decrypt(request, encryptionKeyProvider.getPrivateKey());
+        return processAnswer(attempt, request.pinnedItemPublicId(), payload);
+    }
+
+    /** Request shape (plain vs. encrypted) is server-decided by the pinned level, never client-chosen (FR-03). */
+    private void requireIntegrityLevel(ExamAttempt attempt, String expectedLevel) {
+        if (!expectedLevel.equals(attempt.getPinnedSnapshot().getAnswerIntegrityLevel())) {
+            throw new AnswerIntegrityLevelMismatchException();
+        }
+    }
+
+    private AttemptTaskResponse processAnswer(ExamAttempt attempt, UUID pinnedItemPublicId, String payload) {
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
             throw new AttemptAlreadyCompleteException();
         }
         TimerState timer = timerService.getState(attempt.getId());
         PinnedItem currentItem = currentItem(attempt, timer);
-        if (!currentItem.getPublicId().equals(request.pinnedItemPublicId())) {
+        if (!currentItem.getPublicId().equals(pinnedItemPublicId)) {
             throw new NotCurrentTaskException();
         }
         if (timerService.isResponseWindowExpired(timer)) {
@@ -109,7 +146,7 @@ public class AttemptService {
             throw new ResponseWindowExpiredException();
         }
 
-        answerSubmitService.submit(attempt, currentItem, request.payload());
+        answerSubmitService.submit(attempt, currentItem, payload);
         return advanceAfterCurrent(attempt, timer);
     }
 
@@ -221,6 +258,9 @@ public class AttemptService {
                 .mapToLong(item -> (long) item.getPrepSeconds() + item.getResponseSeconds())
                 .sum();
         attempt.setExamEndTime(attempt.getStartedAt().plusSeconds(totalExamSeconds));
+        String encryptionPublicKey = "STRICT".equals(pinned.getAnswerIntegrityLevel())
+                ? encryptionKeyProvider.getPublicKeyBase64()
+                : null;
         attempt = attemptRepository.save(attempt);
 
         // attempt already has an id at this point (saved above), so this
@@ -235,7 +275,7 @@ public class AttemptService {
 
         PinnedItemView first = views.get(0);
         TimerState timer = timerService.startTaskTimer(attempt, first, views);
-        return attemptMapper.toTaskResponse(attempt, first, timer, views.size());
+        return attemptMapper.toTaskResponse(attempt, first, timer, views.size(), encryptionPublicKey);
     }
 
     private AttemptTaskResponse advanceUntilLiveOrComplete(ExamAttempt attempt) {
