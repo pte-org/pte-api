@@ -27,7 +27,26 @@ spring:
 
 media:
   storage:
+    # Used for this service's own server-to-server calls to MinIO (bucket
+    # bootstrap, etc.) — must be reachable from inside this service's own
+    # network (the docker-compose internal hostname in local/dev).
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    # Used ONLY to sign presigned upload/download URLs handed back to an
+    # external caller (a student's pte-app instance) — must be reachable
+    # from THAT caller's network, which is not the same reachability as
+    # `endpoint` above whenever MinIO sits behind a docker-compose-internal
+    # hostname (`minio`) that only resolves inside the compose network, not
+    # on the host machine a desktop/mobile client runs on. Defaults to the
+    # same value as `endpoint` (correct for a real deployment where MinIO/S3
+    # already has one publicly-routable address); override separately only
+    # when the two genuinely differ, as they do in this local compose setup.
+    public-endpoint: ${MINIO_PUBLIC_ENDPOINT:${media.storage.endpoint}}
+    # Only used by the presign-only MinioClient (MinioConfig.presignMinioClient)
+    # to avoid a real GetBucketLocation network call it can't make from
+    # inside this container — see that bean's own doc comment. MinIO itself
+    # mostly ignores region; a real S3-compatible provider outside a
+    # genuine "us-east-1" would need this overridden.
+    region: ${MINIO_REGION:us-east-1}
     access-key: ${MINIO_ROOT_USER:pte-minio-admin}
     secret-key: ${MINIO_ROOT_PASSWORD:pte-minio-dev-pw}
     bucket: ${MEDIA_BUCKET:pte-media}

@@ -17,6 +17,7 @@ import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
 import io.minio.errors.MinioException;
 import io.minio.http.Method;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,13 +43,18 @@ public class PresignService {
     private static final long MAX_DOWNLOAD_URL_TTL_SECONDS = 24 * 60 * 60;
 
     private final MediaObjectRepository mediaObjectRepository;
-    private final MinioClient minioClient;
+    // Presigning only — never used for a real network call (see
+    // MinioConfig.presignMinioClient's doc comment for why this must be a
+    // separate, externally-reachable-endpoint client from the one used for
+    // this service's own server-to-server MinIO calls elsewhere).
+    private final MinioClient presignMinioClient;
     private final String bucket;
 
-    public PresignService(MediaObjectRepository mediaObjectRepository, MinioClient minioClient,
+    public PresignService(MediaObjectRepository mediaObjectRepository,
+                          @Qualifier("presignMinioClient") MinioClient presignMinioClient,
                           @Value("${media.storage.bucket}") String bucket) {
         this.mediaObjectRepository = mediaObjectRepository;
-        this.minioClient = minioClient;
+        this.presignMinioClient = presignMinioClient;
         this.bucket = bucket;
     }
 
@@ -108,7 +114,7 @@ public class PresignService {
 
     private String presignPut(String storageKey) {
         try {
-            return minioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
+            return presignMinioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
                     .method(Method.PUT)
                     .bucket(bucket)
                     .object(storageKey)
@@ -121,7 +127,7 @@ public class PresignService {
 
     private String presignGetUrl(String storageKey, long ttlSeconds) {
         try {
-            return minioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
+            return presignMinioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
                     .method(Method.GET)
                     .bucket(bucket)
                     .object(storageKey)

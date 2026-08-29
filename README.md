@@ -28,6 +28,46 @@ curl http://localhost:8080/actuator/health
 
 Backend services (admin, authoring, exam-delivery, iam, media, notification, proctor, reporting, scheduling, scoring) communicate via the internal Docker network and are not exposed on host ports.
 
+### Populating test data for end-to-end testing
+
+After bringing up the full stack (Option 2), seed test data using `scripts/seed-e2e.ps1`:
+
+**Prerequisites (one-time setup):**
+
+Before running the seed script, bootstrap a `PLATFORM_ADMIN` account directly via SQL — pte-api has no self-registration endpoint. This requires:
+
+1. Generate a BCrypt hash for your bootstrap password using Docker (easiest — `htpasswd` is not bundled with all Git Bash installs):
+
+```powershell
+docker run --rm httpd:2.4-alpine htpasswd -nbBC 10 "" 'Password123!'
+# Output: :$2a$10$... (copy the hash part after the colon)
+```
+
+2. Connect to the `iam` database and run this SQL once:
+
+```sql
+INSERT INTO users (public_id, email, full_name, tenant_id, status, deleted, created_at, updated_at)
+VALUES (gen_random_uuid(), 'admin@test.local', 'Bootstrap Admin', NULL, 'ACTIVE', false, now(), now())
+RETURNING id;
+-- Capture the printed id value, use it as <USER_ID> in the next two statements
+
+INSERT INTO user_roles (user_id, role) VALUES (<USER_ID>, 'PLATFORM_ADMIN');
+
+INSERT INTO login_hashes (public_id, user_id, hash, deleted, created_at, updated_at)
+VALUES (gen_random_uuid(), <USER_ID>, '<BCRYPT_HASH>', false, now(), now());
+```
+
+**Running the seed script:**
+
+```powershell
+# From the pte-api directory, with the stack running:
+.\scripts\seed-e2e.ps1
+# or with custom credentials:
+.\scripts\seed-e2e.ps1 -BootstrapAdminEmail admin@example.com -BootstrapAdminPassword YourPassword123!
+```
+
+The script is idempotent — rerun it any time to recreate the test tenant, host, student, and seeded exam session. It talks only to the public gateway API (the same path a real client uses), so it is safe to run repeatedly.
+
 ## Timezone (UTC, fleet-wide)
 
 As of 2026-08-05, every service forces its JVM default timezone to UTC as

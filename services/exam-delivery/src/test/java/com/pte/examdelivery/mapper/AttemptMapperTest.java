@@ -8,6 +8,7 @@ import com.pte.examdelivery.dto.response.AttemptTaskResponse;
 import com.pte.examdelivery.dto.response.BlankGroupView;
 import com.pte.examdelivery.dto.response.OptionView;
 import com.pte.examdelivery.dto.response.TaskView;
+import com.pte.examdelivery.dto.response.TimerStateResponse;
 import com.pte.examdelivery.service.cache.PinnedItemView;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -121,6 +122,75 @@ class AttemptMapperTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(pinnedItemPublicId.toString())
                 .hasMessageContaining("mix of blank-grouped and ungrouped");
+    }
+
+    /**
+     * Regression test for a real bug found + fixed via a live end-to-end
+     * walkthrough (plans/phat-speaking-api-e2e-verify Phase 3): {@code
+     * TimerState.phase} is write-once (set at task start, never revisited),
+     * so a stale stored {@code PREP} value would be returned forever past
+     * {@code prepDeadline} unless {@code toTimerResponse} recomputes it —
+     * the client trusts the server's reported phase exclusively and never
+     * advances it locally, so this genuinely stranded students past prep
+     * time with no way to ever reach the recording/response phase.
+     */
+    @Test
+    void toTimerResponse_prepDeadlinePassed_reportsResponseNotStalePrep() {
+        ExamAttempt attempt = new ExamAttempt();
+        attempt.setPublicId(UUID.randomUUID());
+        attempt.setStatus(AttemptStatus.IN_PROGRESS);
+        attempt.setExamEndTime(Instant.now().plusSeconds(3600));
+
+        Instant now = Instant.now();
+        TimerState timer = new TimerState();
+        timer.setCurrentOrderIndex(0);
+        timer.setPhase(TimerPhase.PREP);
+        timer.setPrepDeadline(now.minusSeconds(5)); // already past
+        timer.setResponseDeadline(now.plusSeconds(40));
+
+        TimerStateResponse response = mapper.toTimerResponse(attempt, timer);
+
+        assertThat(response.phase()).isEqualTo("RESPONSE");
+    }
+
+    @Test
+    void toTimerResponse_prepDeadlineNotYetReached_stillReportsPrep() {
+        ExamAttempt attempt = new ExamAttempt();
+        attempt.setPublicId(UUID.randomUUID());
+        attempt.setStatus(AttemptStatus.IN_PROGRESS);
+        attempt.setExamEndTime(Instant.now().plusSeconds(3600));
+
+        Instant now = Instant.now();
+        TimerState timer = new TimerState();
+        timer.setCurrentOrderIndex(0);
+        timer.setPhase(TimerPhase.PREP);
+        timer.setPrepDeadline(now.plusSeconds(30)); // not yet reached
+        timer.setResponseDeadline(now.plusSeconds(70));
+
+        TimerStateResponse response = mapper.toTimerResponse(attempt, timer);
+
+        assertThat(response.phase()).isEqualTo("PREP");
+    }
+
+    @Test
+    void toTimerResponse_alreadyResponsePhase_staysResponseRegardlessOfDeadline() {
+        // Section-scoped sections (READING) set phase=RESPONSE at task start
+        // and never have a PREP phase at all — must never get flipped back.
+        ExamAttempt attempt = new ExamAttempt();
+        attempt.setPublicId(UUID.randomUUID());
+        attempt.setStatus(AttemptStatus.IN_PROGRESS);
+        attempt.setExamEndTime(Instant.now().plusSeconds(3600));
+
+        Instant now = Instant.now();
+        TimerState timer = new TimerState();
+        timer.setCurrentOrderIndex(0);
+        timer.setPhase(TimerPhase.RESPONSE);
+        timer.setPrepDeadline(now.minusSeconds(120));
+        timer.setResponseDeadline(now.plusSeconds(60));
+
+        TimerStateResponse response = mapper.toTimerResponse(attempt, timer);
+
+        assertThat(response.phase()).isEqualTo("RESPONSE");
     }
 
     private TaskView toTask(String optionsJson) {

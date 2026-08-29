@@ -2,6 +2,7 @@ package com.pte.examdelivery.mapper;
 
 import com.pte.examdelivery.domain.ExamAttempt;
 import com.pte.examdelivery.domain.TimerState;
+import com.pte.examdelivery.domain.enums.TimerPhase;
 import com.pte.examdelivery.dto.response.AttemptTaskResponse;
 import com.pte.examdelivery.dto.response.BlankGroupView;
 import com.pte.examdelivery.dto.response.OptionView;
@@ -56,9 +57,23 @@ public class AttemptMapper {
         return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), true, null, null);
     }
 
+    /**
+     * {@code timer.getPhase()} is write-once — set at {@code startTaskTimer}
+     * and never revisited afterward, so it stays {@code PREP} forever past
+     * {@code prepDeadline} unless recomputed here. The client deliberately
+     * never advances phase on its own (trusts the server's reported phase
+     * exclusively, by design), so without this recomputation a task never
+     * reaches {@code RESPONSE} once prep time runs out — found + fixed via
+     * plans/phat-speaking-api-e2e-verify Phase 3, exercising a real timer
+     * poll against a real attempt for the first time.
+     */
     public TimerStateResponse toTimerResponse(ExamAttempt attempt, TimerState timer) {
-        return new TimerStateResponse(timer.getCurrentOrderIndex(), timer.getPhase().name(),
-                timer.getPrepDeadline(), timer.getResponseDeadline(), Instant.now(), attempt.getExamEndTime());
+        Instant now = Instant.now();
+        TimerPhase phase = timer.getPhase() == TimerPhase.PREP && !now.isBefore(timer.getPrepDeadline())
+                ? TimerPhase.RESPONSE
+                : timer.getPhase();
+        return new TimerStateResponse(timer.getCurrentOrderIndex(), phase.name(),
+                timer.getPrepDeadline(), timer.getResponseDeadline(), now, attempt.getExamEndTime());
     }
 
     private List<FrozenOption> parseFrozenOptions(String optionsJson) {

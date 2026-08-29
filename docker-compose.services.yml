@@ -131,6 +131,14 @@ services:
       # Direct inter-service calls, bypass the gateway (see spec Assumptions).
       AUTHORING_URL: http://authoring:8083/api/authoring
       SCHEDULING_URL: http://scheduling:8084/api/scheduling
+      # Without this, EncryptionKeyProvider's own default (`prod`) refuses to
+      # start without a real EXAM_DELIVERY_ENCRYPTION_PRIVATE_KEY_PEM/PUBLIC_KEY_PEM
+      # pair configured — fails fast by design rather than silently generating
+      # an ephemeral keypair in a real deployment (see EncryptionKeyProvider's
+      # own doc comment). `dev`/`local` are the two profiles it allows to
+      # fall back to a generated ephemeral keypair instead, which is fine for
+      # this local compose stack (found + fixed via plans/phat-speaking-api-e2e-verify).
+      SPRING_PROFILES_ACTIVE: dev
     depends_on:
       postgres:
         condition: service_healthy
@@ -289,6 +297,13 @@ services:
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
       MINIO_ENDPOINT: http://minio:9000
+      # Presigned URLs are handed to an external caller (a student's pte-app
+      # instance on the host machine, not another container) — `minio` only
+      # resolves inside this compose network. `localhost:9000` is what the
+      # host machine actually reaches, since minio's docker-compose.yml maps
+      # container port 9000 to the same host port (found + fixed via
+      # plans/phat-speaking-api-e2e-verify Phase 3).
+      MINIO_PUBLIC_ENDPOINT: http://localhost:9000
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pte-minio-admin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-pte-minio-dev-pw}
     depends_on:
