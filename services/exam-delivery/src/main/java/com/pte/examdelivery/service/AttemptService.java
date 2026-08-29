@@ -1,6 +1,7 @@
 package com.pte.examdelivery.service;
 
 import com.pte.common.security.CurrentUser;
+import com.pte.examdelivery.config.EncryptionKeyProvider;
 import com.pte.examdelivery.constant.ExamDeliveryConstants;
 import com.pte.examdelivery.domain.ExamAttempt;
 import com.pte.examdelivery.domain.PinnedExamSnapshot;
@@ -9,15 +10,21 @@ import com.pte.examdelivery.domain.TimerState;
 import com.pte.examdelivery.domain.enums.AttemptStatus;
 import com.pte.examdelivery.domain.event.AttemptSubmittedEvent;
 import com.pte.examdelivery.domain.exception.AlreadyAttemptedException;
+import com.pte.examdelivery.domain.exception.AnswerIntegrityLevelMismatchException;
 import com.pte.examdelivery.domain.exception.AttemptAlreadyCompleteException;
 import com.pte.examdelivery.domain.exception.AttemptNotFoundException;
 import com.pte.examdelivery.domain.exception.AttemptNotInProgressException;
+import com.pte.examdelivery.domain.exception.AudioUrlExpiredException;
+import com.pte.examdelivery.domain.exception.DeviceCheckRequiredException;
 import com.pte.examdelivery.domain.exception.NotCurrentTaskException;
 import com.pte.examdelivery.domain.exception.PinnedSnapshotEmptyException;
+import com.pte.examdelivery.domain.exception.ReplayLimitExceededException;
 import com.pte.examdelivery.domain.exception.ResponseWindowExpiredException;
+import com.pte.examdelivery.dto.request.EncryptedSubmissionRequest;
 import com.pte.examdelivery.dto.request.StartAttemptRequest;
 import com.pte.examdelivery.dto.request.SubmitAnswerRequest;
 import com.pte.examdelivery.dto.response.AttemptTaskResponse;
+import com.pte.examdelivery.dto.response.AudioPlayResponse;
 import com.pte.examdelivery.dto.response.TimerStateResponse;
 import com.pte.examdelivery.mapper.AttemptMapper;
 import com.pte.examdelivery.messaging.outbox.OutboxWriter;
@@ -30,6 +37,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -52,12 +60,15 @@ public class AttemptService {
     private final AnswerSubmitService answerSubmitService;
     private final AttemptMapper attemptMapper;
     private final OutboxWriter outboxWriter;
+    private final EncryptionKeyProvider encryptionKeyProvider;
+    private final SubmissionDecryptionService submissionDecryptionService;
 
     public AttemptService(ExamAttemptRepository attemptRepository, PinnedItemRepository pinnedItemRepository,
                           AttemptAnswerRepository attemptAnswerRepository, SnapshotPinService snapshotPinService,
                           PinnedSnapshotCacheService cacheService, TimerService timerService,
                           AnswerSubmitService answerSubmitService, AttemptMapper attemptMapper,
-                          OutboxWriter outboxWriter) {
+                          OutboxWriter outboxWriter, EncryptionKeyProvider encryptionKeyProvider,
+                          SubmissionDecryptionService submissionDecryptionService) {
         this.attemptRepository = attemptRepository;
         this.pinnedItemRepository = pinnedItemRepository;
         this.attemptAnswerRepository = attemptAnswerRepository;
@@ -67,6 +78,8 @@ public class AttemptService {
         this.answerSubmitService = answerSubmitService;
         this.attemptMapper = attemptMapper;
         this.outboxWriter = outboxWriter;
+        this.encryptionKeyProvider = encryptionKeyProvider;
+        this.submissionDecryptionService = submissionDecryptionService;
     }
 
     @Transactional
@@ -76,7 +89,7 @@ public class AttemptService {
         if (existing.isPresent()) {
             return resumeOrReject(existing.get());
         }
-        return createAndPin(request.sessionPublicId(), studentPublicId, caller.tenantId());
+        return createAndPin(request.sessionPublicId(), studentPublicId, caller.tenantId(), request.deviceCheckConfirmed());
     }
 
     @Transactional
@@ -88,15 +101,44 @@ public class AttemptService {
         return advanceUntilLiveOrComplete(attempt);
     }
 
+    /** STANDARD-pinned attempts only — a STRICT-pinned attempt must use {@link #submitEncryptedAnswer}. */
     @Transactional
     public AttemptTaskResponse submitAnswer(UUID attemptPublicId, SubmitAnswerRequest request, CurrentUser caller) {
         ExamAttempt attempt = findOwned(attemptPublicId, caller.userId());
+        requireIntegrityLevel(attempt, "STANDARD");
+        return processAnswer(attempt, request.pinnedItemPublicId(), request.payload());
+    }
+
+    /**
+     * STRICT-pinned attempts only — decrypts the per-submission AES-wrapped payload
+     * with this service's own private key before funneling the plaintext through the
+     * same {@link #processAnswer} path a STANDARD submission uses. The decrypted
+     * plaintext is indistinguishable from a plain submission once past this point:
+     * unchanged storage format, unchanged {@code AnswerSubmitted} event contract.
+     */
+    @Transactional
+    public AttemptTaskResponse submitEncryptedAnswer(UUID attemptPublicId, EncryptedSubmissionRequest request,
+                                                      CurrentUser caller) {
+        ExamAttempt attempt = findOwned(attemptPublicId, caller.userId());
+        requireIntegrityLevel(attempt, "STRICT");
+        String payload = submissionDecryptionService.decrypt(request, encryptionKeyProvider.getPrivateKey());
+        return processAnswer(attempt, request.pinnedItemPublicId(), payload);
+    }
+
+    /** Request shape (plain vs. encrypted) is server-decided by the pinned level, never client-chosen (FR-03). */
+    private void requireIntegrityLevel(ExamAttempt attempt, String expectedLevel) {
+        if (!expectedLevel.equals(attempt.getPinnedSnapshot().getAnswerIntegrityLevel())) {
+            throw new AnswerIntegrityLevelMismatchException();
+        }
+    }
+
+    private AttemptTaskResponse processAnswer(ExamAttempt attempt, UUID pinnedItemPublicId, String payload) {
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
             throw new AttemptAlreadyCompleteException();
         }
         TimerState timer = timerService.getState(attempt.getId());
         PinnedItem currentItem = currentItem(attempt, timer);
-        if (!currentItem.getPublicId().equals(request.pinnedItemPublicId())) {
+        if (!currentItem.getPublicId().equals(pinnedItemPublicId)) {
             throw new NotCurrentTaskException();
         }
         if (timerService.isResponseWindowExpired(timer)) {
@@ -104,7 +146,7 @@ public class AttemptService {
             throw new ResponseWindowExpiredException();
         }
 
-        answerSubmitService.submit(attempt, currentItem, request.payload());
+        answerSubmitService.submit(attempt, currentItem, payload);
         return advanceAfterCurrent(attempt, timer);
     }
 
@@ -116,6 +158,61 @@ public class AttemptService {
         }
         completeAttempt(attempt);
         return attemptMapper.toCompletedResponse(attempt);
+    }
+
+    /**
+     * Idempotent per {@code playRequestId} (client-generated UUID per user-initiated
+     * play tap): a repeated request with the same key replays the prior outcome
+     * instead of re-incrementing {@code playCount}. The pessimistic lock on
+     * {@code TimerState} serializes concurrent plays for the same attempt so two
+     * requests can never both observe the same pre-increment {@code playCount}.
+     */
+    @Transactional
+    public AudioPlayResponse playAudio(UUID attemptPublicId, UUID pinnedItemPublicId, String playRequestId,
+                                       CurrentUser caller) {
+        ExamAttempt attempt = findOwned(attemptPublicId, caller.userId());
+        if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
+            throw new AttemptAlreadyCompleteException();
+        }
+        TimerState timer = timerService.getStateWithLock(attempt.getId());
+        PinnedItem currentItem = currentItem(attempt, timer);
+        if (!currentItem.getPublicId().equals(pinnedItemPublicId)) {
+            throw new NotCurrentTaskException();
+        }
+
+        if (playRequestId.equals(timer.getLastPlayRequestId())) {
+            if (Boolean.TRUE.equals(timer.getLastPlayAllowed())) {
+                return new AudioPlayResponse(currentItem.getAudioUrl());
+            }
+            throw new ReplayLimitExceededException();
+        }
+
+        if (currentItem.getAudioUrlExpiresAt() == null || Instant.now().isAfter(currentItem.getAudioUrlExpiresAt())) {
+            throw new AudioUrlExpiredException();
+        }
+
+        int limit = resolvePlayLimit(currentItem, attempt.getPinnedSnapshot());
+        boolean allowed = limit < 0 || timer.getPlayCount() < limit;
+        timer.setLastPlayRequestId(playRequestId);
+        timer.setLastPlayAllowed(allowed);
+        if (!allowed) {
+            timerService.save(timer);
+            throw new ReplayLimitExceededException();
+        }
+        timer.setPlayCount(timer.getPlayCount() + 1);
+        timerService.save(timer);
+        return new AudioPlayResponse(currentItem.getAudioUrl());
+    }
+
+    /** Item override wins when present; UNLIMITED session policy (and no override) never rejects (limit &lt; 0 sentinel). */
+    private int resolvePlayLimit(PinnedItem item, PinnedExamSnapshot snapshot) {
+        if (item.getMaxPlayCountOverride() != null) {
+            return item.getMaxPlayCountOverride();
+        }
+        if ("UNLIMITED".equals(snapshot.getReplayPolicyType())) {
+            return -1;
+        }
+        return snapshot.getReplayPolicyLimit();
     }
 
     /** Lightweight poll target for the client's countdown UI — no task content, just deadlines. */
@@ -135,7 +232,8 @@ public class AttemptService {
         return advanceUntilLiveOrComplete(existing);
     }
 
-    private AttemptTaskResponse createAndPin(UUID sessionPublicId, UUID studentPublicId, UUID tenantId) {
+    private AttemptTaskResponse createAndPin(UUID sessionPublicId, UUID studentPublicId, UUID tenantId,
+                                             boolean deviceCheckConfirmed) {
         ExamAttempt attempt = new ExamAttempt();
         attempt.setSessionPublicId(sessionPublicId);
         attempt.setStudentPublicId(studentPublicId);
@@ -150,12 +248,19 @@ public class AttemptService {
         if (pinned.getItems().isEmpty()) {
             throw new PinnedSnapshotEmptyException();
         }
+        if (pinned.isDeviceCheckRequired() && !deviceCheckConfirmed) {
+            throw new DeviceCheckRequiredException();
+        }
         attempt.setPinnedSnapshot(pinned);
+        attempt.setDeviceCheckPassedAt(Instant.now());
         attempt.begin();
         long totalExamSeconds = pinned.getItems().stream()
                 .mapToLong(item -> (long) item.getPrepSeconds() + item.getResponseSeconds())
                 .sum();
         attempt.setExamEndTime(attempt.getStartedAt().plusSeconds(totalExamSeconds));
+        String encryptionPublicKey = "STRICT".equals(pinned.getAnswerIntegrityLevel())
+                ? encryptionKeyProvider.getPublicKeyBase64()
+                : null;
         attempt = attemptRepository.save(attempt);
 
         // attempt already has an id at this point (saved above), so this
@@ -170,7 +275,7 @@ public class AttemptService {
 
         PinnedItemView first = views.get(0);
         TimerState timer = timerService.startTaskTimer(attempt, first, views);
-        return attemptMapper.toTaskResponse(attempt, first, timer, views.size());
+        return attemptMapper.toTaskResponse(attempt, first, timer, views.size(), encryptionPublicKey);
     }
 
     private AttemptTaskResponse advanceUntilLiveOrComplete(ExamAttempt attempt) {

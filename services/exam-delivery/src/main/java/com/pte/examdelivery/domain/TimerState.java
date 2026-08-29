@@ -57,6 +57,21 @@ public class TimerState extends BaseEntity {
     @Column(nullable = true)
     private String activeSection;
 
+    /** Task-local — reset to 0 whenever {@link com.pte.examdelivery.service.TimerService#startTaskTimer} starts a (new or resumed) task. */
+    @Column(nullable = false)
+    private int playCount;
+
+    /**
+     * Idempotency for the audio-play endpoint, scoped to the current task only
+     * (reset alongside {@link #playCount}). A repeated request with the same
+     * key replays {@link #lastPlayAllowed} instead of incrementing again.
+     */
+    @Column
+    private String lastPlayRequestId;
+
+    @Column
+    private Boolean lastPlayAllowed;
+
     public boolean isResponseWindowExpired(Instant now) {
         return now.isAfter(responseDeadline);
     }

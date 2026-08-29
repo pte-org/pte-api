@@ -34,6 +34,13 @@ public class InternalClientConfig {
         return buildClient(baseUrl, serviceKey);
     }
 
+    @Bean
+    public RestClient mediaInternalRestClient(
+            @Value("${media.base-url:http://localhost:8090/api/media}") String baseUrl,
+            @Value("${internal.service-key}") String serviceKey) {
+        return buildClient(baseUrl, serviceKey);
+    }
+
     private RestClient buildClient(String baseUrl, String serviceKey) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(CONNECT_TIMEOUT_MS);

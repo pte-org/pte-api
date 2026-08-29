@@ -5,10 +5,12 @@ import com.pte.media.constant.MediaConstants;
 import com.pte.media.domain.MediaObject;
 import com.pte.media.domain.exception.MediaAlreadyUploadedException;
 import com.pte.media.domain.exception.MediaNotFoundException;
+import com.pte.media.domain.exception.MediaNotYetUploadedException;
 import com.pte.media.domain.exception.PresignFailedException;
 import com.pte.media.domain.exception.UnsupportedContentTypeException;
 import com.pte.media.domain.enums.MediaStatus;
 import com.pte.media.dto.request.RequestUploadRequest;
+import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.media.dto.response.RequestUploadResponse;
 import com.pte.media.repository.MediaObjectRepository;
 import io.minio.GetPresignedObjectUrlArgs;
@@ -36,6 +38,8 @@ public class PresignService {
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
             MediaConstants.AUDIO_MPEG, MediaConstants.AUDIO_WAV, MediaConstants.AUDIO_WEBM);
     private static final int UPLOAD_URL_TTL_SECONDS = 15 * 60;
+    /** Caps a caller-requested download TTL regardless of what it asks for — no indefinitely-valid presigned URL. */
+    private static final long MAX_DOWNLOAD_URL_TTL_SECONDS = 24 * 60 * 60;
 
     private final MediaObjectRepository mediaObjectRepository;
     private final MinioClient minioClient;
@@ -66,6 +70,25 @@ public class PresignService {
         return new RequestUploadResponse(saved.getPublicId(), uploadUrl, UPLOAD_URL_TTL_SECONDS);
     }
 
+    /**
+     * Internal service-to-service surface only (see {@code InternalMediaController}).
+     * Tenant-scoped at the database layer (not just trusted from the caller) —
+     * the calling service's own entitlement check is a separate, upper-layer
+     * guard; this lookup must not rely on it alone (defense in depth, red-team
+     * finding from Phase 6 quality gate).
+     */
+    @Transactional(readOnly = true)
+    public PresignedDownloadResponse presignGet(UUID mediaPublicId, long requestedTtlSeconds, UUID tenantId) {
+        MediaObject media = mediaObjectRepository.findByPublicIdAndTenantId(mediaPublicId, tenantId)
+                .orElseThrow(MediaNotFoundException::new);
+        if (media.getStatus() != MediaStatus.UPLOADED) {
+            throw new MediaNotYetUploadedException();
+        }
+        long ttlSeconds = Math.min(requestedTtlSeconds, MAX_DOWNLOAD_URL_TTL_SECONDS);
+        String url = presignGetUrl(media.getStorageKey(), ttlSeconds);
+        return new PresignedDownloadResponse(url, ttlSeconds);
+    }
+
     @Transactional
     public void completeUpload(UUID mediaPublicId, CurrentUser caller) {
         MediaObject media = mediaObjectRepository.findByPublicIdAndTenantId(mediaPublicId, caller.tenantId())
@@ -90,6 +113,19 @@ public class PresignService {
                     .bucket(bucket)
                     .object(storageKey)
                     .expiry(UPLOAD_URL_TTL_SECONDS, TimeUnit.SECONDS)
+                    .build());
+        } catch (MinioException | GeneralSecurityException | IOException ex) {
+            throw new PresignFailedException();
+        }
+    }
+
+    private String presignGetUrl(String storageKey, long ttlSeconds) {
+        try {
+            return minioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
+                    .method(Method.GET)
+                    .bucket(bucket)
+                    .object(storageKey)
+                    .expiry((int) ttlSeconds, TimeUnit.SECONDS)
                     .build());
         } catch (MinioException | GeneralSecurityException | IOException ex) {
             throw new PresignFailedException();

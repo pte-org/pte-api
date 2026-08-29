@@ -35,6 +35,12 @@ public class AttemptMapper {
     }
 
     public AttemptTaskResponse toTaskResponse(ExamAttempt attempt, PinnedItemView item, TimerState timer, int totalTasks) {
+        return toTaskResponse(attempt, item, timer, totalTasks, null);
+    }
+
+    /** {@code encryptionPublicKey} is non-null only from the {@code startAttempt}/{@code createAndPin} call site. */
+    public AttemptTaskResponse toTaskResponse(ExamAttempt attempt, PinnedItemView item, TimerState timer, int totalTasks,
+            String encryptionPublicKey) {
         List<FrozenOption> parsedOptions = parseFrozenOptions(item.optionsJson());
         requireHomogeneousBlankIndex(item.publicId(), parsedOptions);
         TaskView task = new TaskView(
@@ -43,11 +49,11 @@ public class AttemptMapper {
                 item.maxWordCount(), toFlatOptions(parsedOptions), toBlankGroups(parsedOptions), item.prepSeconds(),
                 item.responseSeconds(), timer.getPrepDeadline(), timer.getResponseDeadline(), Instant.now(),
                 attempt.getExamEndTime());
-        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task);
+        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey);
     }
 
     public AttemptTaskResponse toCompletedResponse(ExamAttempt attempt) {
-        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), true, null);
+        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), true, null, null);
     }
 
     public TimerStateResponse toTimerResponse(ExamAttempt attempt, TimerState timer) {
