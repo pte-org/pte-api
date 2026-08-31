@@ -1,12 +1,15 @@
 <#
 .SYNOPSIS
   Idempotent end-to-end seed script for pte-api local dev/testing
-  (plans/phat-speaking-api-e2e-verify).
+  (plans/phat-speaking-api-e2e-verify, extended by plans/phat-speaking-audio-
+  prompt-e2e Phase 3 for Repeat Sentence).
 
   Seeds, via the gateway's real public REST API only (never in-process, never
   direct DB access beyond the one bootstrap step below): one tenant, one
   HOST_ADMIN, one STUDENT, one published READ_ALOUD question/blueprint/
-  snapshot, and one OPEN scheduling session with the student enrolled.
+  snapshot, one published REPEAT_SENTENCE question/blueprint/snapshot (with
+  a real uploaded audio file as its audioPromptRef), and one OPEN scheduling
+  session per question with the student enrolled in both.
 
 .DESCRIPTION
   Talks ONLY to the gateway (http://localhost:8080 by default) — the exact
@@ -56,16 +59,26 @@
 
   KNOWN LIMITATION (see plans/phat-speaking-api-e2e-verify Phase 2 Risks):
   every resource this script creates is re-discoverable via a real GET/list
-  call EXCEPT the published snapshot — SnapshotPublishService.publish() has
-  no server-side idempotency guard (every call mints a new version) and
-  there is no "get snapshot by blueprint" lookup endpoint anywhere in
-  authoring. So the snapshot's publicId is recorded in a local state file
-  (seed-e2e.state.json, git-ignored, next to this script) the moment it's
-  created, and THAT is the only way to recover it on a later run once the
-  blueprint is already published. If this state file is deleted or drifts
-  out of sync with the actual database (e.g. after `docker compose down
-  -v` without deleting the state file too), this script cannot reconcile
-  the two — delete both together and re-run from scratch.
+  call EXCEPT the published snapshot(s) and the Repeat Sentence audio media
+  object — SnapshotPublishService.publish() has no server-side idempotency
+  guard (every call mints a new version) and there is no "get snapshot by
+  blueprint" lookup endpoint anywhere in authoring; MediaController likewise
+  exposes no GET-by-id lookup at all. So each of these publicIds is recorded
+  in a local state file (seed-e2e.state.json, git-ignored, next to this
+  script) the moment it's created, and THAT is the only way to recover them
+  on a later run. If this state file is deleted or drifts out of sync with
+  the actual database (e.g. after `docker compose down -v` without deleting
+  the state file too), this script cannot reconcile the two — delete both
+  together and re-run from scratch.
+
+  The Repeat Sentence audio fixture itself (fixtures/repeat_sentence_sample.wav,
+  committed to this repo) is a short synthesized tone, not a real spoken
+  sentence — genuinely audible (unlike pte-app's own silent
+  assets/audio/*.wav mock fixtures, per plans/phat-windows-audio-playback-fix),
+  which is all Phase 4's manual walkthrough needs to confirm the app plays
+  real server-resolved audio rather than silence. Swap in an actual
+  recording via -RepeatSentenceAudioFixturePath if you want to verify
+  intelligible speech specifically.
 
 .NOTES
   Hardcoded to localhost by default and refuses to run against anything
@@ -85,13 +98,31 @@ param(
     [string]$StudentPassword = 'Password123!',
     [string]$QuestionTitle = 'E2E Seed - Read Aloud',
     [string]$BlueprintName = 'E2E Seed Blueprint - Read Aloud',
-    [string]$SessionName = 'E2E Seed Session - Read Aloud'
+    [string]$SessionName = 'E2E Seed Session - Read Aloud',
+    # Repeat Sentence gets its own question/blueprint/session, parallel to
+    # (not merged into) Read Aloud's above — keeps the already-verified Read
+    # Aloud flow's composition/ordering untouched (plans/phat-speaking-audio-
+    # prompt-e2e Phase 3).
+    [string]$RepeatSentenceQuestionTitle = 'E2E Seed - Repeat Sentence',
+    [string]$RepeatSentenceBlueprintName = 'E2E Seed Blueprint - Repeat Sentence',
+    [string]$RepeatSentenceSessionName = 'E2E Seed Session - Repeat Sentence',
+    # Defaults to the committed fixture (fixtures/repeat_sentence_sample.wav
+    # — a short, genuinely audible synthesized tone, not one of the silent
+    # assets/audio/*.wav fixtures pte-app already has) if left blank; see
+    # this file's default-resolution below (needs $PSScriptRoot, which is
+    # more reliably read after the param block than inside its default
+    # expression across PowerShell versions).
+    [string]$RepeatSentenceAudioFixturePath = ''
 )
 
 $ErrorActionPreference = 'Stop'
 
 if ($GatewayBaseUrl -notmatch 'localhost|127\.0\.0\.1') {
     throw "Refusing to run against a non-local gateway URL: $GatewayBaseUrl (this script is dev/local-only)"
+}
+
+if ([string]::IsNullOrWhiteSpace($RepeatSentenceAudioFixturePath)) {
+    $RepeatSentenceAudioFixturePath = Join-Path $PSScriptRoot 'fixtures/repeat_sentence_sample.wav'
 }
 
 # ---------------------------------------------------------------------------
@@ -104,14 +135,25 @@ $StateFilePath = Join-Path $PSScriptRoot 'seed-e2e.state.json'
 if (Test-Path $StateFilePath) {
     $State = Get-Content -Path $StateFilePath -Raw | ConvertFrom-Json
 } else {
-    $State = [PSCustomObject]@{
-        tenantPublicId    = $null
-        hostPublicId      = $null
-        studentPublicId   = $null
-        questionPublicId  = $null
-        blueprintPublicId = $null
-        snapshotPublicId  = $null
-        sessionPublicId   = $null
+    $State = [PSCustomObject]@{}
+}
+
+# Backfill any property this script's current schema expects but an older
+# state file (from before that property existed — e.g. one saved by
+# phat-speaking-api-e2e-verify's original Read Aloud-only version) doesn't
+# have. Setting a property PowerShell doesn't already know about on a
+# PSCustomObject throws ("cannot be found on this object") rather than
+# silently creating it, unlike a Hashtable — so every property this script
+# might ever set must be guaranteed to exist here first, once, regardless
+# of which version of the file was loaded.
+foreach ($prop in @(
+    'tenantPublicId', 'hostPublicId', 'studentPublicId', 'questionPublicId', 'blueprintPublicId',
+    'snapshotPublicId', 'sessionPublicId',
+    'repeatSentenceAudioMediaPublicId', 'repeatSentenceQuestionPublicId', 'repeatSentenceBlueprintPublicId',
+    'repeatSentenceSnapshotPublicId', 'repeatSentenceSessionPublicId'
+)) {
+    if (-not (Get-Member -InputObject $State -Name $prop -MemberType NoteProperty)) {
+        $State | Add-Member -NotePropertyName $prop -NotePropertyValue $null
     }
 }
 
@@ -432,12 +474,208 @@ if ($null -eq $enrollment) {
     Write-Ok "Student already enrolled."
 }
 
+# ---------------------------------------------------------------------------
+# 12. Repeat Sentence audio media — uploaded via the same 3-step presigned
+#     flow pte-app's own MediaUploadCoordinator uses for a student's
+#     recorded answer (POST /objects -> PUT the bytes directly to MinIO ->
+#     POST .../complete), just authenticated as the host instead of a
+#     student. Like the published snapshot below, MediaController exposes
+#     no GET-by-id lookup at all, so an already-uploaded media's publicId is
+#     NOT re-derivable via any API call once uploaded — the state file is
+#     the only recovery path, same limitation and same mitigation as the
+#     snapshot (see header comment and step 7).
+# ---------------------------------------------------------------------------
+if (-not (Test-Path $RepeatSentenceAudioFixturePath)) {
+    throw "Repeat Sentence audio fixture not found: $RepeatSentenceAudioFixturePath " +
+          "(expected fixtures/repeat_sentence_sample.wav next to this script, or pass -RepeatSentenceAudioFixturePath)"
+}
+
+Write-Step "Resolving Repeat Sentence audio media..."
+if ($State.repeatSentenceAudioMediaPublicId) {
+    Write-Ok "Using previously-uploaded media $($State.repeatSentenceAudioMediaPublicId) from state file."
+} else {
+    Write-Step "No prior upload recorded - uploading $RepeatSentenceAudioFixturePath..."
+    $requestUploadResp = Invoke-Api -Method Post -Path '/api/media/objects' -Token $hostToken -Body @{
+        contentType = 'audio/wav'
+    }
+    $mediaPublicId = $requestUploadResp.data.mediaPublicId
+    $uploadUrl = $requestUploadResp.data.uploadUrl
+
+    try {
+        # -UseBasicParsing: Invoke-WebRequest otherwise instantiates IE's
+        # HTML parsing engine even for a plain PUT with no HTML response to
+        # parse, which throws "NonInteractive mode" here since nothing runs
+        # IE's one-time first-launch config in this shell.
+        Invoke-WebRequest -Method Put -Uri $uploadUrl -InFile $RepeatSentenceAudioFixturePath `
+            -ContentType 'audio/wav' -UseBasicParsing | Out-Null
+    } catch {
+        Write-Host "[seed-e2e] FAILED: PUT $uploadUrl -> $($_.Exception.Message)" -ForegroundColor Red
+        if ($_.ErrorDetails -and $_.ErrorDetails.Message) {
+            Write-Host $_.ErrorDetails.Message -ForegroundColor Red
+        }
+        throw
+    }
+
+    Invoke-Api -Method Post -Path "/api/media/objects/$mediaPublicId/complete" -Token $hostToken | Out-Null
+    $State.repeatSentenceAudioMediaPublicId = $mediaPublicId
+    Save-State
+    Write-Ok "Uploaded and completed media $mediaPublicId"
+}
+$repeatSentenceAudioMediaPublicId = $State.repeatSentenceAudioMediaPublicId
+
+# ---------------------------------------------------------------------------
+# 13. Repeat Sentence question — audioPromptRef is the only required field
+#     beyond the generic ones (REPEAT_SENTENCE's PteTaskType flags: no
+#     promptText/options/correctAnswer/wordCount required).
+# ---------------------------------------------------------------------------
+Write-Step "Resolving question '$RepeatSentenceQuestionTitle'..."
+$rsQuestionsResp = Invoke-Api -Method Get -Path '/api/authoring/questions' -Token $hostToken
+$repeatSentenceQuestion = Find-First -Items $rsQuestionsResp.data -Property 'title' -Value $RepeatSentenceQuestionTitle
+if ($null -eq $repeatSentenceQuestion) {
+    Write-Step "Question not found - creating..."
+    $createRsQuestionResp = Invoke-Api -Method Post -Path '/api/authoring/questions' -Token $hostToken -Body @{
+        pteTaskType    = 'REPEAT_SENTENCE'
+        visibility     = 'PRIVATE'
+        title          = $RepeatSentenceQuestionTitle
+        audioPromptRef = $repeatSentenceAudioMediaPublicId
+    }
+    $repeatSentenceQuestion = $createRsQuestionResp.data
+    Write-Ok "Created question $($repeatSentenceQuestion.publicId)"
+} else {
+    Write-Ok "Found existing question $($repeatSentenceQuestion.publicId)"
+}
+$State.repeatSentenceQuestionPublicId = $repeatSentenceQuestion.publicId
+Save-State
+
+# ---------------------------------------------------------------------------
+# 14. Blueprint containing that question
+# ---------------------------------------------------------------------------
+Write-Step "Resolving blueprint '$RepeatSentenceBlueprintName'..."
+$rsBlueprintsResp = Invoke-Api -Method Get -Path '/api/authoring/blueprints' -Token $hostToken
+$repeatSentenceBlueprint = Find-First -Items $rsBlueprintsResp.data -Property 'name' -Value $RepeatSentenceBlueprintName
+if ($null -eq $repeatSentenceBlueprint) {
+    Write-Step "Blueprint not found - creating..."
+    $createRsBlueprintResp = Invoke-Api -Method Post -Path '/api/authoring/blueprints' -Token $hostToken -Body @{
+        name  = $RepeatSentenceBlueprintName
+        items = @(
+            @{ questionPublicId = $repeatSentenceQuestion.publicId; section = 'SPEAKING'; orderIndex = 0 }
+        )
+    }
+    $repeatSentenceBlueprint = $createRsBlueprintResp.data
+    Write-Ok "Created blueprint $($repeatSentenceBlueprint.publicId)"
+} else {
+    Write-Ok "Found existing blueprint $($repeatSentenceBlueprint.publicId) (status: $($repeatSentenceBlueprint.status))"
+}
+$State.repeatSentenceBlueprintPublicId = $repeatSentenceBlueprint.publicId
+Save-State
+
+# ---------------------------------------------------------------------------
+# 15. Published snapshot — same not-re-derivable-via-API limitation as step 7.
+# ---------------------------------------------------------------------------
+Write-Step "Resolving published snapshot for blueprint $($repeatSentenceBlueprint.publicId)..."
+if ($repeatSentenceBlueprint.status -eq 'PUBLISHED') {
+    if ($State.repeatSentenceSnapshotPublicId) {
+        Write-Ok "Blueprint already published; using snapshot $($State.repeatSentenceSnapshotPublicId) from state file."
+    } else {
+        throw "Blueprint $($repeatSentenceBlueprint.publicId) is already PUBLISHED but this script's state file has " +
+              "no record of its snapshot publicId. Delete seed-e2e.state.json AND reset the pte-api database " +
+              "together, then re-run from scratch."
+    }
+} else {
+    Write-Step "Blueprint not yet published - publishing..."
+    $rsPublishResp = Invoke-Api -Method Post -Path "/api/authoring/blueprints/$($repeatSentenceBlueprint.publicId)/publish" -Token $hostToken
+    $State.repeatSentenceSnapshotPublicId = $rsPublishResp.data.publicId
+    Save-State
+    Write-Ok "Published snapshot $($State.repeatSentenceSnapshotPublicId)"
+}
+$repeatSentenceSnapshotPublicId = $State.repeatSentenceSnapshotPublicId
+
+# ---------------------------------------------------------------------------
+# 16. Scheduling session
+# ---------------------------------------------------------------------------
+Write-Step "Resolving session '$RepeatSentenceSessionName'..."
+$rsSessionsResp = Invoke-Api -Method Get -Path '/api/scheduling/sessions' -Token $hostToken
+$repeatSentenceSession = Find-First -Items $rsSessionsResp.data -Property 'name' -Value $RepeatSentenceSessionName
+if ($null -eq $repeatSentenceSession) {
+    Write-Step "Session not found - creating..."
+    $rsOpensAt = (Get-Date).ToUniversalTime().AddMinutes(5)
+    $rsClosesAt = $rsOpensAt.AddHours(2)
+    $createRsSessionResp = Invoke-Api -Method Post -Path '/api/scheduling/sessions' -Token $hostToken -Body @{
+        name             = $RepeatSentenceSessionName
+        snapshotPublicId = $repeatSentenceSnapshotPublicId
+        opensAt          = $rsOpensAt.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+        closesAt         = $rsClosesAt.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+        # PRACTICE for the same reason as the Read Aloud session (step 8) —
+        # no real device-check flow wired into pte-app's pre-exam path yet.
+        examMode         = 'PRACTICE'
+    }
+    $repeatSentenceSession = $createRsSessionResp.data
+    Write-Ok "Created session $($repeatSentenceSession.publicId) (opens $($rsOpensAt.ToString('u')))"
+} else {
+    Write-Ok "Found existing session $($repeatSentenceSession.publicId) (status: $($repeatSentenceSession.status))"
+}
+$State.repeatSentenceSessionPublicId = $repeatSentenceSession.publicId
+Save-State
+
+# ---------------------------------------------------------------------------
+# 17. Composition
+# ---------------------------------------------------------------------------
+$hasRepeatSentenceComposition = $false
+if ($repeatSentenceSession.composition) {
+    foreach ($item in $repeatSentenceSession.composition) {
+        if ($item.taskType -eq 'REPEAT_SENTENCE') { $hasRepeatSentenceComposition = $true }
+    }
+}
+if ($hasRepeatSentenceComposition) {
+    Write-Ok "Composition already includes REPEAT_SENTENCE."
+} else {
+    Write-Step "Setting composition (REPEAT_SENTENCE)..."
+    Invoke-Api -Method Put -Path "/api/scheduling/sessions/$($repeatSentenceSession.publicId)/composition" -Token $hostToken -Body @{
+        items = @(
+            # No override — real production default (prepSeconds 10 /
+            # responseSeconds 15, per task-timing.json, added this same
+            # plan's Phase 1 alongside the audio-presign fix).
+            @{ taskType = 'REPEAT_SENTENCE'; section = 'SPEAKING'; orderIndex = 0; timingOverrideSeconds = $null; maxPlayCount = $null }
+        )
+    } | Out-Null
+    Write-Ok "Composition set."
+}
+
+# ---------------------------------------------------------------------------
+# 18. Open
+# ---------------------------------------------------------------------------
+if ($repeatSentenceSession.status -eq 'OPEN') {
+    Write-Ok "Session already OPEN."
+} else {
+    Write-Step "Opening session..."
+    Invoke-Api -Method Post -Path "/api/scheduling/sessions/$($repeatSentenceSession.publicId)/open" -Token $hostToken | Out-Null
+    Write-Ok "Session opened."
+}
+
+# ---------------------------------------------------------------------------
+# 19. Enrollment
+# ---------------------------------------------------------------------------
+Write-Step "Resolving enrollment for student $($studentUser.publicId)..."
+$rsEnrollmentsResp = Invoke-Api -Method Get -Path "/api/scheduling/sessions/$($repeatSentenceSession.publicId)/enrollments" -Token $hostToken
+$rsEnrollment = Find-First -Items $rsEnrollmentsResp.data -Property 'studentPublicId' -Value $studentUser.publicId
+if ($null -eq $rsEnrollment) {
+    Write-Step "Student not enrolled - enrolling..."
+    Invoke-Api -Method Post -Path "/api/scheduling/sessions/$($repeatSentenceSession.publicId)/enrollments" -Token $hostToken -Body @{
+        studentPublicId = $studentUser.publicId
+    } | Out-Null
+    Write-Ok "Enrolled student."
+} else {
+    Write-Ok "Student already enrolled."
+}
+
 Write-Host ''
 Write-Ok '================================================================'
 Write-Ok 'Seed complete.'
 Write-Ok "  Tenant:           $($tenant.publicId) ($TenantName)"
 Write-Ok "  Host admin:       $($hostUser.publicId) ($HostEmail / $HostPassword)"
 Write-Ok "  Student:          $($studentUser.publicId) ($StudentEmail / $StudentPassword)"
-Write-Ok "  Session:          $($session.publicId) ($SessionName)"
-Write-Ok "  sessionPublicId for pte-app's SessionEntryPage: $($session.publicId)"
+Write-Ok "  Read Aloud session:      $($session.publicId) ($SessionName)"
+Write-Ok "  Repeat Sentence session: $($repeatSentenceSession.publicId) ($RepeatSentenceSessionName)"
+Write-Ok "  sessionPublicId for pte-app's SessionEntryPage (Read Aloud):      $($session.publicId)"
+Write-Ok "  sessionPublicId for pte-app's SessionEntryPage (Repeat Sentence): $($repeatSentenceSession.publicId)"
 Write-Ok '================================================================'

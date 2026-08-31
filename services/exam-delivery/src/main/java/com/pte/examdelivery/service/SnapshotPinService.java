@@ -126,16 +126,29 @@ public class SnapshotPinService {
         item.setMaxPlayCountOverride(maxPlayCountByTaskType.get(source.taskType()));
 
         if (LISTENING_SECTION.equals(source.section())) {
+            // LISTENING's audioPromptRef is mandatory — a listening item with none is an
+            // authoring data problem, not a client error, and must keep failing loudly.
             if (source.audioPromptRef() == null) {
                 throw new MissingAudioPromptException();
             }
-            MediaPresignedDownloadResponse presigned = mediaClient.presignGet(source.audioPromptRef(), audioUrlTtlSeconds, tenantId);
-            if (presigned == null) {
-                throw new AudioResolutionFailedException();
-            }
-            item.setAudioUrl(presigned.url());
-            item.setAudioUrlExpiresAt(Instant.now().plusSeconds(presigned.expiresInSeconds()));
+            resolveAudioUrl(item, source.audioPromptRef(), audioUrlTtlSeconds, tenantId);
+        } else if (source.audioPromptRef() != null) {
+            // Every other section's audioPromptRef is optional (only some Speaking task
+            // types carry one) — presign when present, skip silently when absent. This
+            // powers the same on-demand `/audio` endpoint LISTENING already uses
+            // (AttemptService.playAudio reads PinnedItem.audioUrl regardless of section),
+            // just for Speaking items too (plans/phat-speaking-audio-prompt-e2e).
+            resolveAudioUrl(item, source.audioPromptRef(), audioUrlTtlSeconds, tenantId);
         }
         return item;
+    }
+
+    private void resolveAudioUrl(PinnedItem item, UUID audioPromptRef, long audioUrlTtlSeconds, UUID tenantId) {
+        MediaPresignedDownloadResponse presigned = mediaClient.presignGet(audioPromptRef, audioUrlTtlSeconds, tenantId);
+        if (presigned == null) {
+            throw new AudioResolutionFailedException();
+        }
+        item.setAudioUrl(presigned.url());
+        item.setAudioUrlExpiresAt(Instant.now().plusSeconds(presigned.expiresInSeconds()));
     }
 }

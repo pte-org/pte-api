@@ -8,6 +8,11 @@
     "FILL_BLANKS_READING": { "prepSeconds": 0, "responseSeconds": 90 },
     "FILL_BLANKS_READING_WRITING": { "prepSeconds": 0, "responseSeconds": 90 },
     "READ_ALOUD": { "prepSeconds": 35, "responseSeconds": 40 },
-    "WRITE_ESSAY": { "prepSeconds": 0, "responseSeconds": 1200 }
+    "WRITE_ESSAY": { "prepSeconds": 0, "responseSeconds": 1200 },
+    "REPEAT_SENTENCE": { "prepSeconds": 10, "responseSeconds": 15 },
+    "RE_TELL_LECTURE": { "prepSeconds": 70, "responseSeconds": 40 },
+    "ANSWER_SHORT_QUESTION": { "prepSeconds": 14, "responseSeconds": 10 },
+    "RESPOND_TO_A_SITUATION": { "prepSeconds": 40, "responseSeconds": 40 },
+    "SUMMARIZE_GROUP_DISCUSSION": { "prepSeconds": 200, "responseSeconds": 120 }
   }
 }

@@ -66,7 +66,9 @@ VALUES (gen_random_uuid(), <USER_ID>, '<BCRYPT_HASH>', false, now(), now());
 .\scripts\seed-e2e.ps1 -BootstrapAdminEmail admin@example.com -BootstrapAdminPassword YourPassword123!
 ```
 
-The script is idempotent — rerun it any time to recreate the test tenant, host, student, and seeded exam session. It talks only to the public gateway API (the same path a real client uses), so it is safe to run repeatedly.
+The script is idempotent — rerun it any time to recreate the test tenant, host, student, and seeded exam sessions. It talks only to the public gateway API (the same path a real client uses), so it is safe to run repeatedly.
+
+It seeds two published questions, each in its own session: a `READ_ALOUD` question (text-only) and a `REPEAT_SENTENCE` question (with a real uploaded audio file as its prompt — see `scripts/fixtures/repeat_sentence_sample.wav`; pass `-RepeatSentenceAudioFixturePath` to use a different file). `ExamAttempt`s are one-shot per (student, session) — once a session's attempt is submitted/completed, that student can't restart it; re-run the script with a different `-SessionName`/`-RepeatSentenceSessionName` to seed a fresh session instead.
 
 ## Timezone (UTC, fleet-wide)
 
