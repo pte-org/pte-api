@@ -11,6 +11,7 @@ import com.pte.examdelivery.domain.ExamAttempt;
 import com.pte.examdelivery.domain.PinnedExamSnapshot;
 import com.pte.examdelivery.domain.PinnedItem;
 import com.pte.examdelivery.domain.exception.AudioResolutionFailedException;
+import com.pte.examdelivery.domain.exception.MissingAudioDurationException;
 import com.pte.examdelivery.domain.exception.MissingAudioPromptException;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +30,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -66,7 +69,10 @@ class SnapshotPinServiceTest {
         // Real task-timing.json coverage is irrelevant to this presign-branch
         // test — stub a fixed Timing for whatever taskType is requested so
         // this test isn't coupled to (or blocked by) unrelated config gaps.
-        when(taskTimingConfig.timingFor(any())).thenReturn(new TaskTimingConfig.Timing(10, 10));
+        // preListenSeconds/preRecordSeconds null here keeps every case in
+        // this file on the static-prep branch (dynamic-prep-timing has its
+        // own dedicated tests below, per plans/phat-speaking-dynamic-prep-timing).
+        when(taskTimingConfig.timingFor(any())).thenReturn(new TaskTimingConfig.Timing(10, 10, null, null));
         service = new SnapshotPinService(schedulingClient, authoringClient, mediaClient, taskTimingConfig);
     }
 
@@ -132,6 +138,97 @@ class SnapshotPinServiceTest {
                 .isInstanceOf(AudioResolutionFailedException.class);
     }
 
+    // ------------------------------------------------------------------
+    // Dynamic prep timing (plans/phat-speaking-dynamic-prep-timing) — a
+    // per-test taskTimingConfig.timingFor(...) stub with non-null
+    // preListenSeconds/preRecordSeconds overrides the class-level any()
+    // stub above (Mockito matches the most specific/most-recent stub),
+    // switching that one task type onto the dynamic branch.
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("REPEAT_SENTENCE computes prepSeconds dynamically as preListen + real audio duration + preRecord")
+    void repeatSentence_dynamicPrepTiming() {
+        when(taskTimingConfig.timingFor("REPEAT_SENTENCE")).thenReturn(new TaskTimingConfig.Timing(10, 15, 3, 3));
+        stubEntitlement("REPEAT_SENTENCE");
+        stubContent(item("SPEAKING", "REPEAT_SENTENCE", AUDIO_REF));
+        when(mediaClient.presignGet(eq(AUDIO_REF), anyLong(), any())).thenReturn(presignedWithDuration(6));
+
+        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
+
+        PinnedItem pinnedItem = pinned.getItems().get(0);
+        assertThat(pinnedItem.getPreListenSeconds()).isEqualTo(3);
+        assertThat(pinnedItem.getPreRecordSeconds()).isEqualTo(3);
+        // 3 (preListen) + 6 (real audio) + 3 (preRecord) = 12, not the static 10.
+        assertThat(pinnedItem.getPrepSeconds()).isEqualTo(12);
+        // Same call resolves both the URL and the duration — no second media call.
+        verify(mediaClient, times(1)).presignGet(eq(AUDIO_REF), anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("RESPOND_TO_A_SITUATION preserves its existing combined 20s pre-listen value exactly")
+    void respondToASituation_preservesPreListenValue() {
+        when(taskTimingConfig.timingFor("RESPOND_TO_A_SITUATION")).thenReturn(new TaskTimingConfig.Timing(40, 40, 20, 10));
+        stubEntitlement("RESPOND_TO_A_SITUATION");
+        stubContent(item("SPEAKING", "RESPOND_TO_A_SITUATION", AUDIO_REF));
+        when(mediaClient.presignGet(eq(AUDIO_REF), anyLong(), any())).thenReturn(presignedWithDuration(10));
+
+        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
+
+        PinnedItem pinnedItem = pinned.getItems().get(0);
+        assertThat(pinnedItem.getPreListenSeconds()).isEqualTo(20);
+        assertThat(pinnedItem.getPreRecordSeconds()).isEqualTo(10);
+        assertThat(pinnedItem.getPrepSeconds()).isEqualTo(40);
+    }
+
+    @Test
+    @DisplayName("RE_TELL_LECTURE, ANSWER_SHORT_QUESTION, SUMMARIZE_GROUP_DISCUSSION all compute dynamic prepSeconds too")
+    void remainingAudioPromptTypes_dynamicPrepTiming() {
+        when(taskTimingConfig.timingFor("RE_TELL_LECTURE")).thenReturn(new TaskTimingConfig.Timing(70, 40, 3, 10));
+        when(taskTimingConfig.timingFor("ANSWER_SHORT_QUESTION")).thenReturn(new TaskTimingConfig.Timing(14, 10, 3, 3));
+        when(taskTimingConfig.timingFor("SUMMARIZE_GROUP_DISCUSSION")).thenReturn(new TaskTimingConfig.Timing(200, 120, 5, 10));
+        when(mediaClient.presignGet(eq(AUDIO_REF), anyLong(), any())).thenReturn(presignedWithDuration(20));
+
+        stubEntitlement("RE_TELL_LECTURE");
+        stubContent(item("SPEAKING", "RE_TELL_LECTURE", AUDIO_REF));
+        assertThat(service.pin(attempt(), SESSION_ID, STUDENT_ID).getItems().get(0).getPrepSeconds()).isEqualTo(3 + 20 + 10);
+
+        stubEntitlement("ANSWER_SHORT_QUESTION");
+        stubContent(item("SPEAKING", "ANSWER_SHORT_QUESTION", AUDIO_REF));
+        assertThat(service.pin(attempt(), SESSION_ID, STUDENT_ID).getItems().get(0).getPrepSeconds()).isEqualTo(3 + 20 + 3);
+
+        stubEntitlement("SUMMARIZE_GROUP_DISCUSSION");
+        stubContent(item("SPEAKING", "SUMMARIZE_GROUP_DISCUSSION", AUDIO_REF));
+        assertThat(service.pin(attempt(), SESSION_ID, STUDENT_ID).getItems().get(0).getPrepSeconds()).isEqualTo(5 + 20 + 10);
+    }
+
+    @Test
+    @DisplayName("Read Aloud (non-audio-prompt type) keeps its static prepSeconds and never populates preListen/preRecord")
+    void readAloud_staticPrepTiming_noRegression() {
+        when(taskTimingConfig.timingFor("READ_ALOUD")).thenReturn(new TaskTimingConfig.Timing(35, 40, null, null));
+        stubEntitlement("READ_ALOUD");
+        stubContent(item("SPEAKING", "READ_ALOUD", null));
+
+        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
+
+        PinnedItem pinnedItem = pinned.getItems().get(0);
+        assertThat(pinnedItem.getPrepSeconds()).isEqualTo(35);
+        assertThat(pinnedItem.getPreListenSeconds()).isNull();
+        assertThat(pinnedItem.getPreRecordSeconds()).isNull();
+    }
+
+    @Test
+    @DisplayName("An audio-prompt type whose resolved media response carries no duration fails with MissingAudioDurationException")
+    void audioPromptType_missingDuration_throws() {
+        when(taskTimingConfig.timingFor("ANSWER_SHORT_QUESTION")).thenReturn(new TaskTimingConfig.Timing(14, 10, 3, 3));
+        stubEntitlement("ANSWER_SHORT_QUESTION");
+        stubContent(item("SPEAKING", "ANSWER_SHORT_QUESTION", AUDIO_REF));
+        when(mediaClient.presignGet(eq(AUDIO_REF), anyLong(), any())).thenReturn(presignedWithDuration(null));
+
+        assertThatThrownBy(() -> service.pin(attempt(), SESSION_ID, STUDENT_ID))
+                .isInstanceOf(MissingAudioDurationException.class);
+    }
+
     private void stubEntitlement(String taskType) {
         SchedulingEntitlementResponse.Policy policy =
                 new SchedulingEntitlementResponse.Policy("UNLIMITED", null, false, false, "STANDARD");
@@ -155,7 +252,14 @@ class SnapshotPinServiceTest {
     }
 
     private MediaPresignedDownloadResponse presigned() {
-        return new MediaPresignedDownloadResponse("https://minio.local/signed", 3600L);
+        // durationSeconds (3rd arg) is null here — this test suite predates
+        // plans/phat-speaking-dynamic-prep-timing and isn't exercising
+        // duration-dependent behavior; that phase's own tests cover it.
+        return new MediaPresignedDownloadResponse("https://minio.local/signed", 3600L, null);
+    }
+
+    private MediaPresignedDownloadResponse presignedWithDuration(Integer durationSeconds) {
+        return new MediaPresignedDownloadResponse("https://minio.local/signed", 3600L, durationSeconds);
     }
 
     private ExamAttempt attempt() {

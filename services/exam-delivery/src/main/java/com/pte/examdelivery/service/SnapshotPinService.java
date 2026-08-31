@@ -12,6 +12,7 @@ import com.pte.examdelivery.domain.PinnedExamSnapshot;
 import com.pte.examdelivery.domain.PinnedItem;
 import com.pte.examdelivery.domain.exception.AudioResolutionFailedException;
 import com.pte.examdelivery.domain.exception.EntitlementCheckFailedException;
+import com.pte.examdelivery.domain.exception.MissingAudioDurationException;
 import com.pte.examdelivery.domain.exception.MissingAudioPromptException;
 import com.pte.examdelivery.domain.exception.SnapshotContentFetchFailedException;
 import org.springframework.stereotype.Service;
@@ -121,34 +122,54 @@ public class SnapshotPinService {
         item.setMinWordCount(source.minWordCount());
         item.setMaxWordCount(source.maxWordCount());
         item.setOptionsJson(source.optionsJson());
-        item.setPrepSeconds(timing.prepSeconds());
         item.setResponseSeconds(responseSeconds);
         item.setMaxPlayCountOverride(maxPlayCountByTaskType.get(source.taskType()));
 
+        Integer audioDurationSeconds = null;
         if (LISTENING_SECTION.equals(source.section())) {
             // LISTENING's audioPromptRef is mandatory — a listening item with none is an
             // authoring data problem, not a client error, and must keep failing loudly.
             if (source.audioPromptRef() == null) {
                 throw new MissingAudioPromptException();
             }
-            resolveAudioUrl(item, source.audioPromptRef(), audioUrlTtlSeconds, tenantId);
+            audioDurationSeconds = resolveAudioUrl(item, source.audioPromptRef(), audioUrlTtlSeconds, tenantId);
         } else if (source.audioPromptRef() != null) {
             // Every other section's audioPromptRef is optional (only some Speaking task
             // types carry one) — presign when present, skip silently when absent. This
             // powers the same on-demand `/audio` endpoint LISTENING already uses
             // (AttemptService.playAudio reads PinnedItem.audioUrl regardless of section),
-            // just for Speaking items too (plans/phat-speaking-audio-prompt-e2e).
-            resolveAudioUrl(item, source.audioPromptRef(), audioUrlTtlSeconds, tenantId);
+            // just for Speaking items too (plans/phat-speaking-audio-prompt-e2e). The
+            // returned duration also feeds the dynamic-prep-timing branch below, for
+            // whichever of the 5 audio-prompt types this item happens to be
+            // (plans/phat-speaking-dynamic-prep-timing) — one call serves both needs.
+            audioDurationSeconds = resolveAudioUrl(item, source.audioPromptRef(), audioUrlTtlSeconds, tenantId);
+        }
+
+        // `timing.preListenSeconds()` (and preRecordSeconds, always set together —
+        // see TaskTimingConfig.Timing's own doc comment) being non-null IS the
+        // signal that this task type computes prep dynamically from real audio
+        // duration instead of the static timing.prepSeconds() fallback — config
+        // presence drives the branch, not a second, hardcoded task-type list.
+        if (timing.preListenSeconds() != null) {
+            if (audioDurationSeconds == null) {
+                throw new MissingAudioDurationException();
+            }
+            item.setPreListenSeconds(timing.preListenSeconds());
+            item.setPreRecordSeconds(timing.preRecordSeconds());
+            item.setPrepSeconds(timing.preListenSeconds() + audioDurationSeconds + timing.preRecordSeconds());
+        } else {
+            item.setPrepSeconds(timing.prepSeconds());
         }
         return item;
     }
 
-    private void resolveAudioUrl(PinnedItem item, UUID audioPromptRef, long audioUrlTtlSeconds, UUID tenantId) {
+    private Integer resolveAudioUrl(PinnedItem item, UUID audioPromptRef, long audioUrlTtlSeconds, UUID tenantId) {
         MediaPresignedDownloadResponse presigned = mediaClient.presignGet(audioPromptRef, audioUrlTtlSeconds, tenantId);
         if (presigned == null) {
             throw new AudioResolutionFailedException();
         }
         item.setAudioUrl(presigned.url());
         item.setAudioUrlExpiresAt(Instant.now().plusSeconds(presigned.expiresInSeconds()));
+        return presigned.durationSeconds();
     }
 }

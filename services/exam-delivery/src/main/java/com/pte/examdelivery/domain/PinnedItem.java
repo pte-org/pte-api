@@ -86,4 +86,18 @@ public class PinnedItem extends BaseEntity {
 
     @Column
     private Instant audioUrlExpiresAt;
+
+    /**
+     * Non-null only for the 5 audio-prompt Speaking task types — the
+     * client-facing sub-stage split lengths that {@code AudioListeningPrepCard}/
+     * {@code RecordedAnswerPrepCard} used to hardcode locally, now server-owned
+     * so a dynamic {@link #prepSeconds} (preListenSeconds + real audio duration
+     * + preRecordSeconds) is possible. Every other task type leaves both null
+     * (plans/phat-speaking-dynamic-prep-timing).
+     */
+    @Column
+    private Integer preListenSeconds;
+
+    @Column
+    private Integer preRecordSeconds;
 }

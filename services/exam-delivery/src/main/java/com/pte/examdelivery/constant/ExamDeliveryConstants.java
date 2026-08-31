@@ -15,6 +15,7 @@ public final class ExamDeliveryConstants {
     public static final String DEVICE_CHECK_REQUIRED = "DEVICE_CHECK_REQUIRED";
     public static final String MISSING_AUDIO_PROMPT = "MISSING_AUDIO_PROMPT";
     public static final String AUDIO_RESOLUTION_FAILED = "AUDIO_RESOLUTION_FAILED";
+    public static final String MISSING_AUDIO_DURATION = "MISSING_AUDIO_DURATION";
     public static final String REPLAY_LIMIT_EXCEEDED = "REPLAY_LIMIT_EXCEEDED";
     public static final String AUDIO_URL_EXPIRED = "AUDIO_URL_EXPIRED";
     public static final String SUBMISSION_DECRYPTION_FAILED = "SUBMISSION_DECRYPTION_FAILED";

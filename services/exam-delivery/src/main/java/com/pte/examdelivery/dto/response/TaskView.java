@@ -32,5 +32,11 @@ public record TaskView(
         Instant prepDeadline,
         Instant responseDeadline,
         Instant serverNow,
-        Instant examEndTime) {
+        Instant examEndTime,
+        /**
+         * Non-null only for the 5 audio-prompt Speaking task types — every
+         * other task type omits both (plans/phat-speaking-dynamic-prep-timing).
+         */
+        Integer preListenSeconds,
+        Integer preRecordSeconds) {
 }

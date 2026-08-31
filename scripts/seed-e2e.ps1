@@ -497,6 +497,11 @@ if ($State.repeatSentenceAudioMediaPublicId) {
     Write-Step "No prior upload recorded - uploading $RepeatSentenceAudioFixturePath..."
     $requestUploadResp = Invoke-Api -Method Post -Path '/api/media/objects' -Token $hostToken -Body @{
         contentType = 'audio/wav'
+        # Opts into WAV-only validation + WAV-header duration extraction at
+        # complete-upload time (plans/phat-speaking-dynamic-prep-timing) —
+        # without this, the upload succeeds but PinnedItem.prepSeconds can
+        # never be computed dynamically for the resulting question.
+        audioPrompt = $true
     }
     $mediaPublicId = $requestUploadResp.data.mediaPublicId
     $uploadUrl = $requestUploadResp.data.uploadUrl

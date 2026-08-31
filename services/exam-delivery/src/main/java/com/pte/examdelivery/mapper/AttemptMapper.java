@@ -49,7 +49,7 @@ public class AttemptMapper {
                 item.promptText(), item.audioPromptRef(), item.imagePromptRef(), item.minWordCount(),
                 item.maxWordCount(), toFlatOptions(parsedOptions), toBlankGroups(parsedOptions), item.prepSeconds(),
                 item.responseSeconds(), timer.getPrepDeadline(), timer.getResponseDeadline(), Instant.now(),
-                attempt.getExamEndTime());
+                attempt.getExamEndTime(), item.preListenSeconds(), item.preRecordSeconds());
         return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey);
     }
 

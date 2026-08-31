@@ -10,6 +10,7 @@ import com.pte.examdelivery.dto.response.OptionView;
 import com.pte.examdelivery.dto.response.TaskView;
 import com.pte.examdelivery.dto.response.TimerStateResponse;
 import com.pte.examdelivery.service.cache.PinnedItemView;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -193,10 +194,32 @@ class AttemptMapperTest {
         assertThat(response.phase()).isEqualTo("RESPONSE");
     }
 
+    @Test
+    @DisplayName("preListenSeconds/preRecordSeconds flow through from PinnedItemView to TaskView unchanged")
+    void preListenPreRecord_flowThroughToTaskView() {
+        TaskView task = toTask("[]", 3, 3);
+
+        assertThat(task.preListenSeconds()).isEqualTo(3);
+        assertThat(task.preRecordSeconds()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("a non-audio-prompt task type's TaskView has null preListenSeconds/preRecordSeconds")
+    void preListenPreRecord_nullForNonAudioPromptType() {
+        TaskView task = toTask("[]", null, null);
+
+        assertThat(task.preListenSeconds()).isNull();
+        assertThat(task.preRecordSeconds()).isNull();
+    }
+
     private TaskView toTask(String optionsJson) {
+        return toTask(optionsJson, null, null);
+    }
+
+    private TaskView toTask(String optionsJson, Integer preListenSeconds, Integer preRecordSeconds) {
         PinnedItemView item = new PinnedItemView(
                 pinnedItemPublicId, 0, "READING", "MC_READING_SINGLE", "Sample title", "Sample prompt",
-                null, null, null, null, null, null, optionsJson, 30, 60);
+                null, null, null, null, null, null, optionsJson, 30, 60, preListenSeconds, preRecordSeconds);
 
         ExamAttempt attempt = new ExamAttempt();
         attempt.setPublicId(UUID.randomUUID());

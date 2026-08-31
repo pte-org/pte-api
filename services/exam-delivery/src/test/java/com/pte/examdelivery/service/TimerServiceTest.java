@@ -44,13 +44,13 @@ class TimerServiceTest {
 
     private PinnedItemView readingItem(int orderIndex, int responseSeconds) {
         return new PinnedItemView(UUID.randomUUID(), orderIndex, "READING", "MC_READING_SINGLE", "title", "prompt",
-                null, null, null, null, null, null, "[]", 0, responseSeconds);
+                null, null, null, null, null, null, "[]", 0, responseSeconds, null, null);
     }
 
     private PinnedItemView taskScopedItem(int orderIndex, String section, String taskType, int prepSeconds,
                                            int responseSeconds) {
         return new PinnedItemView(UUID.randomUUID(), orderIndex, section, taskType, "title", "prompt", null, null,
-                null, null, null, null, "[]", prepSeconds, responseSeconds);
+                null, null, null, null, "[]", prepSeconds, responseSeconds, null, null);
     }
 
     @Test
