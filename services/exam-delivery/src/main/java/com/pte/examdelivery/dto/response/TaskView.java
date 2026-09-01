@@ -38,5 +38,14 @@ public record TaskView(
          * other task type omits both (plans/phat-speaking-dynamic-prep-timing).
          */
         Integer preListenSeconds,
-        Integer preRecordSeconds) {
+        Integer preRecordSeconds,
+        /**
+         * Resolved, directly-fetchable presigned URL — non-null whenever
+         * {@link #imagePromptRef} resolved successfully (mandatory for
+         * DESCRIBE_IMAGE, optional/absent elsewhere). Unlike audio, there is
+         * no separate on-demand endpoint for images (no replay-limit concern
+         * for a static image), so this is embedded directly here
+         * (plans/phat-describe-image-e2e).
+         */
+        String imageUrl) {
 }

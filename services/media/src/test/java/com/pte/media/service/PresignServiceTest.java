@@ -127,6 +127,38 @@ class PresignServiceTest {
         verify(mediaObjectRepository).save(any());
     }
 
+    @Test
+    @DisplayName("image/png is accepted for a Describe Image prompt upload (plans/phat-describe-image-e2e — "
+            + "found missing from the general allow-list during that plan's own manual walkthrough)")
+    void requestUpload_imagePng_accepted() throws Exception {
+        when(mediaObjectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(presignMinioClient.getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class))).thenReturn("https://minio.local/put");
+
+        service.requestUpload(new RequestUploadRequest("image/png", null), caller);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(MediaObject.class);
+        verify(mediaObjectRepository).save(captor.capture());
+        assertThat(captor.getValue().isAudioPrompt()).isFalse();
+    }
+
+    @Test
+    @DisplayName("image/jpeg is accepted too — same general allow-list, not narrowed to a single image format")
+    void requestUpload_imageJpeg_accepted() throws Exception {
+        when(mediaObjectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(presignMinioClient.getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class))).thenReturn("https://minio.local/put");
+
+        service.requestUpload(new RequestUploadRequest("image/jpeg", null), caller);
+
+        verify(mediaObjectRepository).save(any());
+    }
+
+    @Test
+    @DisplayName("an unrelated content type (e.g. application/pdf) is still rejected — the allow-list is not wide open")
+    void requestUpload_unrelatedContentType_stillRejected() {
+        assertThatThrownBy(() -> service.requestUpload(new RequestUploadRequest("application/pdf", null), caller))
+                .isInstanceOf(UnsupportedContentTypeException.class);
+    }
+
     // ------------------------------------------------------------------
     // completeUpload — orchestration (extraction stubbed via spy)
     // ------------------------------------------------------------------

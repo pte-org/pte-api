@@ -100,4 +100,20 @@ public class PinnedItem extends BaseEntity {
 
     @Column
     private Integer preRecordSeconds;
+
+    /**
+     * Resolved once from `media` at StartAttempt pin time, exactly like
+     * {@link #audioUrl} — but unlike audio (served via a separate on-demand
+     * `/audio` endpoint that reads this entity directly, never reaching the
+     * cache/response layer), {@code imageUrl} is threaded all the way into
+     * the student-facing {@code TaskView} response, since a static image has
+     * no replay-limit/idempotency concern to gate behind an endpoint
+     * (plans/phat-describe-image-e2e). Non-null only when {@link #imagePromptRef}
+     * is non-null (mandatory for DESCRIBE_IMAGE, optional/absent elsewhere).
+     */
+    @Column(columnDefinition = "text")
+    private String imageUrl;
+
+    @Column
+    private Instant imageUrlExpiresAt;
 }

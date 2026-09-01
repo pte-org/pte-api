@@ -12,6 +12,8 @@ public final class MediaConstants {
     public static final String AUDIO_MPEG = "audio/mpeg";
     public static final String AUDIO_WAV = "audio/wav";
     public static final String AUDIO_WEBM = "audio/webm";
+    public static final String IMAGE_PNG = "image/png";
+    public static final String IMAGE_JPEG = "image/jpeg";
 
     private MediaConstants() {
     }

@@ -12,8 +12,10 @@ import com.pte.examdelivery.domain.PinnedExamSnapshot;
 import com.pte.examdelivery.domain.PinnedItem;
 import com.pte.examdelivery.domain.exception.AudioResolutionFailedException;
 import com.pte.examdelivery.domain.exception.EntitlementCheckFailedException;
+import com.pte.examdelivery.domain.exception.ImageResolutionFailedException;
 import com.pte.examdelivery.domain.exception.MissingAudioDurationException;
 import com.pte.examdelivery.domain.exception.MissingAudioPromptException;
+import com.pte.examdelivery.domain.exception.MissingImagePromptException;
 import com.pte.examdelivery.domain.exception.SnapshotContentFetchFailedException;
 import org.springframework.stereotype.Service;
 
@@ -41,6 +43,7 @@ import java.util.stream.Collectors;
 public class SnapshotPinService {
 
     private static final String LISTENING_SECTION = "LISTENING";
+    private static final String DESCRIBE_IMAGE_TASK_TYPE = "DESCRIBE_IMAGE";
     private static final long AUDIO_URL_GRACE_SECONDS = 60;
 
     private final SchedulingClient schedulingClient;
@@ -145,6 +148,22 @@ public class SnapshotPinService {
             audioDurationSeconds = resolveAudioUrl(item, source.audioPromptRef(), audioUrlTtlSeconds, tenantId);
         }
 
+        if (DESCRIBE_IMAGE_TASK_TYPE.equals(source.taskType())) {
+            // DESCRIBE_IMAGE's imagePromptRef is mandatory — same fail-loud rationale
+            // as LISTENING's audioPromptRef above (an authoring data problem, not a
+            // client error).
+            if (source.imagePromptRef() == null) {
+                throw new MissingImagePromptException();
+            }
+            resolveImageUrl(item, source.imagePromptRef(), audioUrlTtlSeconds, tenantId);
+        } else if (source.imagePromptRef() != null) {
+            // Every other task type's imagePromptRef is optional/unused today —
+            // presign when present anyway (mirrors audioPromptRef's own
+            // optional-elsewhere branch), skip silently when absent
+            // (plans/phat-describe-image-e2e).
+            resolveImageUrl(item, source.imagePromptRef(), audioUrlTtlSeconds, tenantId);
+        }
+
         // `timing.preListenSeconds()` (and preRecordSeconds, always set together —
         // see TaskTimingConfig.Timing's own doc comment) being non-null IS the
         // signal that this task type computes prep dynamically from real audio
@@ -171,5 +190,23 @@ public class SnapshotPinService {
         item.setAudioUrl(presigned.url());
         item.setAudioUrlExpiresAt(Instant.now().plusSeconds(presigned.expiresInSeconds()));
         return presigned.durationSeconds();
+    }
+
+    /**
+     * Mirrors {@link #resolveAudioUrl} but simpler: no duration to extract (a
+     * static image has none), so returns {@code void}. {@code imageUrlTtlSeconds}
+     * reuses the same {@code audioUrlTtlSeconds} value the caller already computed
+     * from the session window — deliberately media-type-agnostic (just a
+     * session-scoped TTL passed straight through to {@code MediaClient.presignGet},
+     * which itself has no audio-specific semantics), not a copy-paste oversight
+     * (plans/phat-describe-image-e2e).
+     */
+    private void resolveImageUrl(PinnedItem item, UUID imagePromptRef, long imageUrlTtlSeconds, UUID tenantId) {
+        MediaPresignedDownloadResponse presigned = mediaClient.presignGet(imagePromptRef, imageUrlTtlSeconds, tenantId);
+        if (presigned == null) {
+            throw new ImageResolutionFailedException();
+        }
+        item.setImageUrl(presigned.url());
+        item.setImageUrlExpiresAt(Instant.now().plusSeconds(presigned.expiresInSeconds()));
     }
 }

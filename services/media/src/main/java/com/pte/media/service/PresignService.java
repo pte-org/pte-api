@@ -46,7 +46,12 @@ import java.util.concurrent.TimeUnit;
 public class PresignService {
 
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
-            MediaConstants.AUDIO_MPEG, MediaConstants.AUDIO_WAV, MediaConstants.AUDIO_WEBM);
+            MediaConstants.AUDIO_MPEG, MediaConstants.AUDIO_WAV, MediaConstants.AUDIO_WEBM,
+            // Speaking's DESCRIBE_IMAGE prompt images — discovered missing during
+            // plans/phat-describe-image-e2e's own manual walkthrough (this generic
+            // allow-list previously had no image type at all, so no DESCRIBE_IMAGE
+            // question's image could ever be uploaded through this endpoint).
+            MediaConstants.IMAGE_PNG, MediaConstants.IMAGE_JPEG);
     private static final int UPLOAD_URL_TTL_SECONDS = 15 * 60;
     /** Caps a caller-requested download TTL regardless of what it asks for — no indefinitely-valid presigned URL. */
     private static final long MAX_DOWNLOAD_URL_TTL_SECONDS = 24 * 60 * 60;

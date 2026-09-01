@@ -20,6 +20,8 @@ public final class ExamDeliveryConstants {
     public static final String AUDIO_URL_EXPIRED = "AUDIO_URL_EXPIRED";
     public static final String SUBMISSION_DECRYPTION_FAILED = "SUBMISSION_DECRYPTION_FAILED";
     public static final String ANSWER_INTEGRITY_LEVEL_MISMATCH = "ANSWER_INTEGRITY_LEVEL_MISMATCH";
+    public static final String MISSING_IMAGE_PROMPT = "MISSING_IMAGE_PROMPT";
+    public static final String IMAGE_RESOLUTION_FAILED = "IMAGE_RESOLUTION_FAILED";
 
     public static final String AGGREGATE_ATTEMPT = "ExamAttempt";
     public static final String EVENT_ANSWER_SUBMITTED = "AnswerSubmitted";

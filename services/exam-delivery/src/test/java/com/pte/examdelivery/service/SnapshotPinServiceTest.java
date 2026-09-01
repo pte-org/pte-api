@@ -11,8 +11,10 @@ import com.pte.examdelivery.domain.ExamAttempt;
 import com.pte.examdelivery.domain.PinnedExamSnapshot;
 import com.pte.examdelivery.domain.PinnedItem;
 import com.pte.examdelivery.domain.exception.AudioResolutionFailedException;
+import com.pte.examdelivery.domain.exception.ImageResolutionFailedException;
 import com.pte.examdelivery.domain.exception.MissingAudioDurationException;
 import com.pte.examdelivery.domain.exception.MissingAudioPromptException;
+import com.pte.examdelivery.domain.exception.MissingImagePromptException;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -49,6 +51,7 @@ class SnapshotPinServiceTest {
     private static final UUID SNAPSHOT_ID = UUID.randomUUID();
     private static final UUID TENANT_ID = UUID.randomUUID();
     private static final UUID AUDIO_REF = UUID.randomUUID();
+    private static final UUID IMAGE_REF = UUID.randomUUID();
 
     @Mock
     private SchedulingClient schedulingClient;
@@ -136,6 +139,62 @@ class SnapshotPinServiceTest {
 
         assertThatThrownBy(() -> service.pin(attempt(), SESSION_ID, STUDENT_ID))
                 .isInstanceOf(AudioResolutionFailedException.class);
+    }
+
+    // ------------------------------------------------------------------
+    // Image-URL resolution (plans/phat-describe-image-e2e) — mirrors the 4
+    // audio-resolution patterns directly above, for imagePromptRef instead
+    // of audioPromptRef.
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("DESCRIBE_IMAGE item with null imagePromptRef throws MissingImagePromptException")
+    void describeImageItem_nullImagePromptRef_throwsMissingImagePrompt() {
+        stubEntitlement("DESCRIBE_IMAGE");
+        stubContent(item("SPEAKING", "DESCRIBE_IMAGE", null, null));
+
+        assertThatThrownBy(() -> service.pin(attempt(), SESSION_ID, STUDENT_ID))
+                .isInstanceOf(MissingImagePromptException.class);
+    }
+
+    @Test
+    @DisplayName("Non-DESCRIBE_IMAGE item with null imagePromptRef pins with no exception and no imageUrl")
+    void nonDescribeImageItem_nullImagePromptRef_pinsSilently() {
+        stubEntitlement("READ_ALOUD");
+        stubContent(item("SPEAKING", "READ_ALOUD", null, null));
+
+        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
+
+        PinnedItem pinnedItem = pinned.getItems().get(0);
+        assertThat(pinnedItem.getImageUrl()).isNull();
+        assertThat(pinnedItem.getImageUrlExpiresAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("DESCRIBE_IMAGE item with non-null imagePromptRef presigns successfully")
+    void describeImageItem_withImagePromptRef_presignsSuccessfully() {
+        stubEntitlement("DESCRIBE_IMAGE");
+        stubContent(item("SPEAKING", "DESCRIBE_IMAGE", null, IMAGE_REF));
+        when(mediaClient.presignGet(eq(IMAGE_REF), anyLong(), any())).thenReturn(presigned());
+
+        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
+
+        PinnedItem pinnedItem = pinned.getItems().get(0);
+        assertThat(pinnedItem.getImageUrl()).isEqualTo("https://minio.local/signed");
+        assertThat(pinnedItem.getImageUrlExpiresAt()).isNotNull();
+        // Distinct from audioUrl — this item has no audioPromptRef at all.
+        assertThat(pinnedItem.getAudioUrl()).isNull();
+    }
+
+    @Test
+    @DisplayName("Presign failure on a non-null imagePromptRef surfaces ImageResolutionFailedException")
+    void describeImageItem_presignFailure_surfacesImageResolutionFailed() {
+        stubEntitlement("DESCRIBE_IMAGE");
+        stubContent(item("SPEAKING", "DESCRIBE_IMAGE", null, IMAGE_REF));
+        when(mediaClient.presignGet(eq(IMAGE_REF), anyLong(), any())).thenReturn(null);
+
+        assertThatThrownBy(() -> service.pin(attempt(), SESSION_ID, STUDENT_ID))
+                .isInstanceOf(ImageResolutionFailedException.class);
     }
 
     // ------------------------------------------------------------------
@@ -247,8 +306,13 @@ class SnapshotPinServiceTest {
     }
 
     private AuthoringSnapshotContentResponse.Item item(String section, String taskType, UUID audioPromptRef) {
+        return item(section, taskType, audioPromptRef, null);
+    }
+
+    private AuthoringSnapshotContentResponse.Item item(String section, String taskType, UUID audioPromptRef,
+                                                        UUID imagePromptRef) {
         return new AuthoringSnapshotContentResponse.Item(0, section, taskType, "title", "prompt", audioPromptRef,
-                null, null, null, null, null, null);
+                imagePromptRef, null, null, null, null, null);
     }
 
     private MediaPresignedDownloadResponse presigned() {

@@ -212,14 +212,34 @@ class AttemptMapperTest {
         assertThat(task.preRecordSeconds()).isNull();
     }
 
+    @Test
+    @DisplayName("imageUrl flows through from PinnedItemView to TaskView unchanged (plans/phat-describe-image-e2e)")
+    void imageUrl_flowsThroughToTaskView() {
+        TaskView task = toTask("[]", null, null, "https://minio.local/signed-image");
+
+        assertThat(task.imageUrl()).isEqualTo("https://minio.local/signed-image");
+    }
+
+    @Test
+    @DisplayName("a null imageUrl (any non-image task type) stays null on TaskView")
+    void imageUrl_nullForNonImageType() {
+        TaskView task = toTask("[]", null, null, null);
+
+        assertThat(task.imageUrl()).isNull();
+    }
+
     private TaskView toTask(String optionsJson) {
         return toTask(optionsJson, null, null);
     }
 
     private TaskView toTask(String optionsJson, Integer preListenSeconds, Integer preRecordSeconds) {
+        return toTask(optionsJson, preListenSeconds, preRecordSeconds, null);
+    }
+
+    private TaskView toTask(String optionsJson, Integer preListenSeconds, Integer preRecordSeconds, String imageUrl) {
         PinnedItemView item = new PinnedItemView(
                 pinnedItemPublicId, 0, "READING", "MC_READING_SINGLE", "Sample title", "Sample prompt",
-                null, null, null, null, null, null, optionsJson, 30, 60, preListenSeconds, preRecordSeconds);
+                null, null, null, null, null, null, optionsJson, 30, 60, preListenSeconds, preRecordSeconds, imageUrl);
 
         ExamAttempt attempt = new ExamAttempt();
         attempt.setPublicId(UUID.randomUUID());
