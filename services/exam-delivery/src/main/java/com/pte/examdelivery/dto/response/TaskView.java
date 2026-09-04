@@ -32,5 +32,20 @@ public record TaskView(
         Instant prepDeadline,
         Instant responseDeadline,
         Instant serverNow,
-        Instant examEndTime) {
+        Instant examEndTime,
+        /**
+         * Non-null only for the 5 audio-prompt Speaking task types — every
+         * other task type omits both (plans/phat-speaking-dynamic-prep-timing).
+         */
+        Integer preListenSeconds,
+        Integer preRecordSeconds,
+        /**
+         * Resolved, directly-fetchable presigned URL — non-null whenever
+         * {@link #imagePromptRef} resolved successfully (mandatory for
+         * DESCRIBE_IMAGE, optional/absent elsewhere). Unlike audio, there is
+         * no separate on-demand endpoint for images (no replay-limit concern
+         * for a static image), so this is embedded directly here
+         * (plans/phat-describe-image-e2e).
+         */
+        String imageUrl) {
 }

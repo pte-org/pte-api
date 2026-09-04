@@ -1,5 +1,5 @@
 {
-  "_comment": "Per-task-type prep/response seconds. Config-driven (not hardcoded), matching authoring's task-skill-mapping.json pattern. Only Milestone-1's 3 delivered task types are configured — TimerService fails fast on any other type rather than silently defaulting. VALUES ARE APPROXIMATE PLACEHOLDERS pending official Pearson candidate-handbook sourcing (tracked risk in plan.md); verify before release.",
+  "_comment": "Per-task-type prep/response seconds. Config-driven (not hardcoded), matching authoring's task-skill-mapping.json pattern. Only the task types actually delivered so far are configured — TaskTimingConfig.timingFor() fails fast (TaskTimingNotConfiguredException) on any other type rather than silently defaulting; all 8 Speaking types are now covered as of plans/phat-describe-image-e2e (DESCRIBE_IMAGE/PERSONAL_INTRODUCTION were the last 2 gaps). VALUES ARE APPROXIMATE PLACEHOLDERS pending official Pearson candidate-handbook sourcing (tracked risk in plan.md); verify before release. The 5 audio-prompt Speaking types below additionally carry preListenSeconds/preRecordSeconds (plans/phat-speaking-dynamic-prep-timing) — their own prepSeconds value stops being consulted once a real audioPromptRef is present (SnapshotPinService computes prepSeconds dynamically as preListenSeconds + real audio duration + preRecordSeconds instead), kept here only as an inert fallback rather than removed.",
   "version": 1,
   "timings": {
     "MC_READING_SINGLE": { "prepSeconds": 0, "responseSeconds": 60 },
@@ -8,6 +8,13 @@
     "FILL_BLANKS_READING": { "prepSeconds": 0, "responseSeconds": 90 },
     "FILL_BLANKS_READING_WRITING": { "prepSeconds": 0, "responseSeconds": 90 },
     "READ_ALOUD": { "prepSeconds": 35, "responseSeconds": 40 },
-    "WRITE_ESSAY": { "prepSeconds": 0, "responseSeconds": 1200 }
+    "WRITE_ESSAY": { "prepSeconds": 0, "responseSeconds": 1200 },
+    "REPEAT_SENTENCE": { "prepSeconds": 10, "responseSeconds": 15, "preListenSeconds": 3, "preRecordSeconds": 3 },
+    "RE_TELL_LECTURE": { "prepSeconds": 70, "responseSeconds": 40, "preListenSeconds": 3, "preRecordSeconds": 10 },
+    "ANSWER_SHORT_QUESTION": { "prepSeconds": 14, "responseSeconds": 10, "preListenSeconds": 3, "preRecordSeconds": 3 },
+    "RESPOND_TO_A_SITUATION": { "prepSeconds": 40, "responseSeconds": 40, "preListenSeconds": 20, "preRecordSeconds": 10 },
+    "SUMMARIZE_GROUP_DISCUSSION": { "prepSeconds": 200, "responseSeconds": 120, "preListenSeconds": 5, "preRecordSeconds": 10 },
+    "DESCRIBE_IMAGE": { "prepSeconds": 25, "responseSeconds": 40 },
+    "PERSONAL_INTRODUCTION": { "prepSeconds": 25, "responseSeconds": 30 }
   }
 }

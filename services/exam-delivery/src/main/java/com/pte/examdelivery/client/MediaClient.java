@@ -10,9 +10,11 @@ import org.springframework.web.client.RestClient;
 import java.util.UUID;
 
 /**
- * Resolves a listening item's audio URL — part of the ONE guarded attempt-create
- * pull (StartAttempt only). Never called during a live attempt; the resolved
- * URL is pinned onto {@code PinnedItem} and reused for the attempt's lifetime.
+ * Resolves an item's audio URL (LISTENING, always; other sections when the
+ * item carries an {@code audioPromptRef} — plans/phat-speaking-audio-prompt-e2e)
+ * — part of the ONE guarded attempt-create pull (StartAttempt only). Never
+ * called during a live attempt; the resolved URL is pinned onto
+ * {@code PinnedItem} and reused for the attempt's lifetime.
  */
 @Component
 public class MediaClient {

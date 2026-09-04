@@ -72,7 +72,23 @@ public class TimerState extends BaseEntity {
     @Column
     private Boolean lastPlayAllowed;
 
+    /**
+     * A grace window past {@code responseDeadline} before the window is
+     * truly considered expired — the client stops recording/interacting
+     * exactly at the deadline (by design, matching the time it was told),
+     * but the actual submission (upload + complete + answer POST) is real
+     * network round-trip work that unavoidably lands after that instant.
+     * With zero grace, a recording-based answer could never successfully
+     * submit at all — found via a real end-to-end walkthrough
+     * (plans/phat-speaking-api-e2e-verify Phase 3): a genuine, on-time
+     * recording was rejected every time despite uploading successfully.
+     * Applied uniformly to every task type (not just audio-recording ones)
+     * for consistency — every answer path shares the same network-latency
+     * reality, just to a smaller degree for typed/selected answers.
+     */
+    private static final long RESPONSE_WINDOW_GRACE_SECONDS = 15;
+
     public boolean isResponseWindowExpired(Instant now) {
-        return now.isAfter(responseDeadline);
+        return now.isAfter(responseDeadline.plusSeconds(RESPONSE_WINDOW_GRACE_SECONDS));
     }
 }

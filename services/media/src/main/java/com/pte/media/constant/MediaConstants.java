@@ -7,10 +7,13 @@ public final class MediaConstants {
     public static final String UNSUPPORTED_CONTENT_TYPE = "UNSUPPORTED_CONTENT_TYPE";
     public static final String PRESIGN_FAILED = "PRESIGN_FAILED";
     public static final String MEDIA_NOT_YET_UPLOADED = "MEDIA_NOT_YET_UPLOADED";
+    public static final String INVALID_WAV_FILE = "INVALID_WAV_FILE";
 
     public static final String AUDIO_MPEG = "audio/mpeg";
     public static final String AUDIO_WAV = "audio/wav";
     public static final String AUDIO_WEBM = "audio/webm";
+    public static final String IMAGE_PNG = "image/png";
+    public static final String IMAGE_JPEG = "image/jpeg";
 
     private MediaConstants() {
     }

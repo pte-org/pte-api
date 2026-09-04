@@ -8,7 +8,9 @@ import com.pte.examdelivery.dto.response.AttemptTaskResponse;
 import com.pte.examdelivery.dto.response.BlankGroupView;
 import com.pte.examdelivery.dto.response.OptionView;
 import com.pte.examdelivery.dto.response.TaskView;
+import com.pte.examdelivery.dto.response.TimerStateResponse;
 import com.pte.examdelivery.service.cache.PinnedItemView;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -123,10 +125,121 @@ class AttemptMapperTest {
                 .hasMessageContaining("mix of blank-grouped and ungrouped");
     }
 
+    /**
+     * Regression test for a real bug found + fixed via a live end-to-end
+     * walkthrough (plans/phat-speaking-api-e2e-verify Phase 3): {@code
+     * TimerState.phase} is write-once (set at task start, never revisited),
+     * so a stale stored {@code PREP} value would be returned forever past
+     * {@code prepDeadline} unless {@code toTimerResponse} recomputes it —
+     * the client trusts the server's reported phase exclusively and never
+     * advances it locally, so this genuinely stranded students past prep
+     * time with no way to ever reach the recording/response phase.
+     */
+    @Test
+    void toTimerResponse_prepDeadlinePassed_reportsResponseNotStalePrep() {
+        ExamAttempt attempt = new ExamAttempt();
+        attempt.setPublicId(UUID.randomUUID());
+        attempt.setStatus(AttemptStatus.IN_PROGRESS);
+        attempt.setExamEndTime(Instant.now().plusSeconds(3600));
+
+        Instant now = Instant.now();
+        TimerState timer = new TimerState();
+        timer.setCurrentOrderIndex(0);
+        timer.setPhase(TimerPhase.PREP);
+        timer.setPrepDeadline(now.minusSeconds(5)); // already past
+        timer.setResponseDeadline(now.plusSeconds(40));
+
+        TimerStateResponse response = mapper.toTimerResponse(attempt, timer);
+
+        assertThat(response.phase()).isEqualTo("RESPONSE");
+    }
+
+    @Test
+    void toTimerResponse_prepDeadlineNotYetReached_stillReportsPrep() {
+        ExamAttempt attempt = new ExamAttempt();
+        attempt.setPublicId(UUID.randomUUID());
+        attempt.setStatus(AttemptStatus.IN_PROGRESS);
+        attempt.setExamEndTime(Instant.now().plusSeconds(3600));
+
+        Instant now = Instant.now();
+        TimerState timer = new TimerState();
+        timer.setCurrentOrderIndex(0);
+        timer.setPhase(TimerPhase.PREP);
+        timer.setPrepDeadline(now.plusSeconds(30)); // not yet reached
+        timer.setResponseDeadline(now.plusSeconds(70));
+
+        TimerStateResponse response = mapper.toTimerResponse(attempt, timer);
+
+        assertThat(response.phase()).isEqualTo("PREP");
+    }
+
+    @Test
+    void toTimerResponse_alreadyResponsePhase_staysResponseRegardlessOfDeadline() {
+        // Section-scoped sections (READING) set phase=RESPONSE at task start
+        // and never have a PREP phase at all — must never get flipped back.
+        ExamAttempt attempt = new ExamAttempt();
+        attempt.setPublicId(UUID.randomUUID());
+        attempt.setStatus(AttemptStatus.IN_PROGRESS);
+        attempt.setExamEndTime(Instant.now().plusSeconds(3600));
+
+        Instant now = Instant.now();
+        TimerState timer = new TimerState();
+        timer.setCurrentOrderIndex(0);
+        timer.setPhase(TimerPhase.RESPONSE);
+        timer.setPrepDeadline(now.minusSeconds(120));
+        timer.setResponseDeadline(now.plusSeconds(60));
+
+        TimerStateResponse response = mapper.toTimerResponse(attempt, timer);
+
+        assertThat(response.phase()).isEqualTo("RESPONSE");
+    }
+
+    @Test
+    @DisplayName("preListenSeconds/preRecordSeconds flow through from PinnedItemView to TaskView unchanged")
+    void preListenPreRecord_flowThroughToTaskView() {
+        TaskView task = toTask("[]", 3, 3);
+
+        assertThat(task.preListenSeconds()).isEqualTo(3);
+        assertThat(task.preRecordSeconds()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("a non-audio-prompt task type's TaskView has null preListenSeconds/preRecordSeconds")
+    void preListenPreRecord_nullForNonAudioPromptType() {
+        TaskView task = toTask("[]", null, null);
+
+        assertThat(task.preListenSeconds()).isNull();
+        assertThat(task.preRecordSeconds()).isNull();
+    }
+
+    @Test
+    @DisplayName("imageUrl flows through from PinnedItemView to TaskView unchanged (plans/phat-describe-image-e2e)")
+    void imageUrl_flowsThroughToTaskView() {
+        TaskView task = toTask("[]", null, null, "https://minio.local/signed-image");
+
+        assertThat(task.imageUrl()).isEqualTo("https://minio.local/signed-image");
+    }
+
+    @Test
+    @DisplayName("a null imageUrl (any non-image task type) stays null on TaskView")
+    void imageUrl_nullForNonImageType() {
+        TaskView task = toTask("[]", null, null, null);
+
+        assertThat(task.imageUrl()).isNull();
+    }
+
     private TaskView toTask(String optionsJson) {
+        return toTask(optionsJson, null, null);
+    }
+
+    private TaskView toTask(String optionsJson, Integer preListenSeconds, Integer preRecordSeconds) {
+        return toTask(optionsJson, preListenSeconds, preRecordSeconds, null);
+    }
+
+    private TaskView toTask(String optionsJson, Integer preListenSeconds, Integer preRecordSeconds, String imageUrl) {
         PinnedItemView item = new PinnedItemView(
                 pinnedItemPublicId, 0, "READING", "MC_READING_SINGLE", "Sample title", "Sample prompt",
-                null, null, null, null, null, null, optionsJson, 30, 60);
+                null, null, null, null, null, null, optionsJson, 30, 60, preListenSeconds, preRecordSeconds, imageUrl);
 
         ExamAttempt attempt = new ExamAttempt();
         attempt.setPublicId(UUID.randomUUID());
