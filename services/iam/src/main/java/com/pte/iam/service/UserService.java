@@ -8,10 +8,17 @@ import com.pte.iam.domain.enums.Role;
 import com.pte.iam.domain.event.UserCreatedEvent;
 import com.pte.iam.domain.event.UserPasswordResetEvent;
 import com.pte.iam.domain.event.UserSuspendedEvent;
+import com.pte.iam.domain.exception.DuplicateEmailInBatchException;
 import com.pte.iam.domain.exception.EmailAlreadyUsedException;
+import com.pte.iam.domain.exception.ForbiddenPasswordResetException;
 import com.pte.iam.domain.exception.UserNotFoundException;
+import com.pte.iam.dto.request.BulkCreateUserRow;
+import com.pte.iam.dto.request.BulkCreateUsersRequest;
 import com.pte.iam.dto.request.CreateUserRequest;
 import com.pte.iam.dto.request.ResetPasswordRequest;
+import com.pte.iam.dto.response.BulkCreateUsersResponse;
+import com.pte.iam.dto.response.BulkCreateUsersResponse.CreatedUser;
+import com.pte.iam.dto.response.BulkCreateUsersResponse.RowError;
 import com.pte.iam.dto.response.UserResponse;
 import com.pte.iam.mapper.UserMapper;
 import com.pte.iam.messaging.outbox.OutboxWriter;
@@ -21,6 +28,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -33,20 +42,25 @@ import java.util.UUID;
 @Service
 public class UserService {
 
+    /** Roles a tenant-scoped caller (HOST_ADMIN) may reset — rescuing a locked-out Student/Proctor, not a peer admin. */
+    private static final Set<Role> HOST_RESETTABLE_ROLES = Set.of(Role.STUDENT, Role.PROCTOR);
+
     private final UserRepository userRepository;
     private final LoginHashRepository loginHashRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserProvisioningHelper provisioningHelper;
     private final OutboxWriter outboxWriter;
+    private final UserBulkCreateWriter bulkCreateWriter;
 
     public UserService(UserRepository userRepository, LoginHashRepository loginHashRepository,
                        PasswordEncoder passwordEncoder, UserProvisioningHelper provisioningHelper,
-                       OutboxWriter outboxWriter) {
+                       OutboxWriter outboxWriter, UserBulkCreateWriter bulkCreateWriter) {
         this.userRepository = userRepository;
         this.loginHashRepository = loginHashRepository;
         this.passwordEncoder = passwordEncoder;
         this.provisioningHelper = provisioningHelper;
         this.outboxWriter = outboxWriter;
+        this.bulkCreateWriter = bulkCreateWriter;
     }
 
     @Transactional
@@ -62,6 +76,10 @@ public class UserService {
         user.setFullName(request.fullName());
         user.setTenantId(tenantId);
         user.setRoles(roles);
+        user.setStudentCode(request.studentCode());
+        user.setClassName(request.className());
+        user.setPhone(request.phone());
+        user.setDateOfBirth(request.dateOfBirth());
         User saved = userRepository.save(user);
 
         LoginHash loginHash = new LoginHash();
@@ -75,6 +93,52 @@ public class UserService {
                 tenantId);
 
         return UserMapper.toResponse(saved);
+    }
+
+    /**
+     * A within-batch duplicate email rejects the whole request (nothing
+     * written); a conflict with an EXISTING user just skips that row and
+     * reports it. Each row runs in its own {@link UserBulkCreateWriter}
+     * (REQUIRES_NEW) transaction, so a rare concurrent-duplicate race only
+     * loses that one row.
+     */
+    public BulkCreateUsersResponse createBulk(BulkCreateUsersRequest request, CurrentUser caller) {
+        UUID tenantId = provisioningHelper.resolveTargetTenant(caller, request.tenantId());
+
+        Set<String> seenInBatch = new HashSet<>();
+        for (BulkCreateUserRow row : request.rows()) {
+            if (!seenInBatch.add(row.email())) {
+                throw new DuplicateEmailInBatchException();
+            }
+        }
+
+        List<String> emails = request.rows().stream().map(BulkCreateUserRow::email).toList();
+        Set<String> existingEmails = new HashSet<>(
+                userRepository.findByEmailIn(emails).stream().map(User::getEmail).toList());
+
+        List<CreatedUser> created = new ArrayList<>();
+        List<RowError> skipped = new ArrayList<>();
+
+        List<BulkCreateUserRow> rows = request.rows();
+        for (int i = 0; i < rows.size(); i++) {
+            BulkCreateUserRow row = rows.get(i);
+            int rowIndex = i;
+            if (existingEmails.contains(row.email())) {
+                skipped.add(new RowError(rowIndex, row.email(), IamConstants.EMAIL_ALREADY_USED));
+                continue;
+            }
+            UserBulkCreateWriter.Row writerRow = new UserBulkCreateWriter.Row(
+                    row.email(), row.fullName(), row.studentCode(), row.className(),
+                    row.phone(), row.dateOfBirth());
+            bulkCreateWriter.createOne(writerRow, tenantId)
+                    .ifPresentOrElse(
+                            result -> created.add(new CreatedUser(result.user().getPublicId(),
+                                    result.user().getEmail(), result.user().getFullName(),
+                                    result.generatedPassword())),
+                            () -> skipped.add(new RowError(rowIndex, row.email(), IamConstants.EMAIL_ALREADY_USED)));
+        }
+
+        return new BulkCreateUsersResponse(created, skipped);
     }
 
     @Transactional(readOnly = true)
@@ -110,7 +174,10 @@ public class UserService {
 
     @Transactional
     public UserResponse resetPassword(UUID publicId, ResetPasswordRequest request, CurrentUser caller) {
-        User user = userRepository.findByPublicId(publicId).orElseThrow(UserNotFoundException::new);
+        User user = findScoped(publicId, caller);
+        if (!caller.isPlatformUser() && !HOST_RESETTABLE_ROLES.containsAll(user.getRoles())) {
+            throw new ForbiddenPasswordResetException();
+        }
         LoginHash loginHash = loginHashRepository.findByUserId(user.getId())
                 .orElseThrow(UserNotFoundException::new);
         loginHash.setHash(passwordEncoder.encode(request.newPassword()));

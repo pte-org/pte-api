@@ -57,7 +57,38 @@ public class TimerState extends BaseEntity {
     @Column(nullable = true)
     private String activeSection;
 
+    /** Task-local — reset to 0 whenever {@link com.pte.examdelivery.service.TimerService#startTaskTimer} starts a (new or resumed) task. */
+    @Column(nullable = false)
+    private int playCount;
+
+    /**
+     * Idempotency for the audio-play endpoint, scoped to the current task only
+     * (reset alongside {@link #playCount}). A repeated request with the same
+     * key replays {@link #lastPlayAllowed} instead of incrementing again.
+     */
+    @Column
+    private String lastPlayRequestId;
+
+    @Column
+    private Boolean lastPlayAllowed;
+
+    /**
+     * A grace window past {@code responseDeadline} before the window is
+     * truly considered expired — the client stops recording/interacting
+     * exactly at the deadline (by design, matching the time it was told),
+     * but the actual submission (upload + complete + answer POST) is real
+     * network round-trip work that unavoidably lands after that instant.
+     * With zero grace, a recording-based answer could never successfully
+     * submit at all — found via a real end-to-end walkthrough
+     * (plans/phat-speaking-api-e2e-verify Phase 3): a genuine, on-time
+     * recording was rejected every time despite uploading successfully.
+     * Applied uniformly to every task type (not just audio-recording ones)
+     * for consistency — every answer path shares the same network-latency
+     * reality, just to a smaller degree for typed/selected answers.
+     */
+    private static final long RESPONSE_WINDOW_GRACE_SECONDS = 15;
+
     public boolean isResponseWindowExpired(Instant now) {
-        return now.isAfter(responseDeadline);
+        return now.isAfter(responseDeadline.plusSeconds(RESPONSE_WINDOW_GRACE_SECONDS));
     }
 }

@@ -20,6 +20,10 @@ public final class UserMapper {
                 user.getFullName(),
                 user.getTenantId(),
                 user.getStatus().name(),
-                roles);
+                roles,
+                user.getStudentCode(),
+                user.getClassName(),
+                user.getPhone(),
+                user.getDateOfBirth());
     }
 }

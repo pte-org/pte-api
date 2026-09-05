@@ -1,13 +1,13 @@
 package com.pte.scheduling.service;
 
 import com.pte.scheduling.domain.ExamSession;
-import com.pte.scheduling.domain.SessionComposition;
 import com.pte.scheduling.domain.enums.SessionStatus;
 import com.pte.scheduling.domain.exception.NotEntitledException;
 import com.pte.scheduling.domain.exception.ProctorNotAssignedException;
 import com.pte.scheduling.dto.response.CompositionItemResponse;
 import com.pte.scheduling.dto.response.EntitlementResponse;
 import com.pte.scheduling.dto.response.ProctorAssignmentCheckResponse;
+import com.pte.scheduling.mapper.SessionMapper;
 import com.pte.scheduling.repository.EnrollmentRepository;
 import com.pte.scheduling.repository.ExamSessionRepository;
 import com.pte.scheduling.repository.ProctorAssignmentRepository;
@@ -49,9 +49,9 @@ public class EntitlementService {
             throw new NotEntitledException();
         }
         List<CompositionItemResponse> composition = session.getComposition().stream()
-                .map(this::toItem).toList();
+                .map(SessionMapper::toItem).toList();
         return new EntitlementResponse(session.getPublicId(), session.getSnapshotPublicId(), session.getTenantId(),
-                session.getOpensAt(), session.getClosesAt(), composition);
+                session.getOpensAt(), session.getClosesAt(), SessionMapper.toPolicy(session.getPolicy()), composition);
     }
 
     @Transactional(readOnly = true)
@@ -62,10 +62,5 @@ public class EntitlementService {
             throw new ProctorNotAssignedException();
         }
         return new ProctorAssignmentCheckResponse(session.getPublicId(), session.getTenantId());
-    }
-
-    private CompositionItemResponse toItem(SessionComposition item) {
-        return new CompositionItemResponse(item.getTaskType(), item.getSection(), item.getOrderIndex(),
-                item.getTimingOverrideSeconds());
     }
 }

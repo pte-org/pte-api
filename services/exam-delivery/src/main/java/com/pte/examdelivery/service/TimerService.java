@@ -48,6 +48,9 @@ public class TimerService {
         Instant now = Instant.now();
         state.setAttempt(attempt);
         state.setCurrentOrderIndex(item.orderIndex());
+        state.setPlayCount(0);
+        state.setLastPlayRequestId(null);
+        state.setLastPlayAllowed(null);
 
         if (SECTION_SCOPED_SECTIONS.contains(item.section())) {
             if (item.section().equals(state.getActiveSection())) {
@@ -93,5 +96,15 @@ public class TimerService {
     public TimerState getState(Long attemptId) {
         return timerStateRepository.findByAttemptId(attemptId)
                 .orElseThrow(() -> new IllegalStateException("No timer state for attempt " + attemptId));
+    }
+
+    /** Pessimistic write lock — for the audio-play endpoint's check-and-increment (Phase 6 concurrency requirement). */
+    public TimerState getStateWithLock(Long attemptId) {
+        return timerStateRepository.findWithLockByAttemptId(attemptId)
+                .orElseThrow(() -> new IllegalStateException("No timer state for attempt " + attemptId));
+    }
+
+    public void save(TimerState state) {
+        timerStateRepository.save(state);
     }
 }

@@ -73,6 +73,10 @@ public class ExamAttempt extends BaseEntity {
     @Column
     private Instant examEndTime;
 
+    /** Audit fact only — set once at creation from the accepted {@code deviceCheckConfirmed} flag, never re-checked. */
+    @Column
+    private Instant deviceCheckPassedAt;
+
     @OneToOne(mappedBy = "attempt", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private PinnedExamSnapshot pinnedSnapshot;
 

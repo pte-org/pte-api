@@ -15,5 +15,6 @@ public record EntitlementResponse(
         UUID tenantId,
         Instant opensAt,
         Instant closesAt,
+        ExamPolicyResponse policy,
         List<CompositionItemResponse> composition) {
 }

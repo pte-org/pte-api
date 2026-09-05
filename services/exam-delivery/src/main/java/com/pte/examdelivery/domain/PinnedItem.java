@@ -12,6 +12,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -74,4 +75,45 @@ public class PinnedItem extends BaseEntity {
 
     @Column(nullable = false)
     private int responseSeconds;
+
+    /** Null = inherit the pinned session-level replay policy; non-null always wins (Phase 3/6 precedence rule). */
+    @Column
+    private Integer maxPlayCountOverride;
+
+    /** Resolved once from `media` at StartAttempt pin time; LISTENING-section items only. Never re-fetched. */
+    @Column(columnDefinition = "text")
+    private String audioUrl;
+
+    @Column
+    private Instant audioUrlExpiresAt;
+
+    /**
+     * Non-null only for the 5 audio-prompt Speaking task types — the
+     * client-facing sub-stage split lengths that {@code AudioListeningPrepCard}/
+     * {@code RecordedAnswerPrepCard} used to hardcode locally, now server-owned
+     * so a dynamic {@link #prepSeconds} (preListenSeconds + real audio duration
+     * + preRecordSeconds) is possible. Every other task type leaves both null
+     * (plans/phat-speaking-dynamic-prep-timing).
+     */
+    @Column
+    private Integer preListenSeconds;
+
+    @Column
+    private Integer preRecordSeconds;
+
+    /**
+     * Resolved once from `media` at StartAttempt pin time, exactly like
+     * {@link #audioUrl} — but unlike audio (served via a separate on-demand
+     * `/audio` endpoint that reads this entity directly, never reaching the
+     * cache/response layer), {@code imageUrl} is threaded all the way into
+     * the student-facing {@code TaskView} response, since a static image has
+     * no replay-limit/idempotency concern to gate behind an endpoint
+     * (plans/phat-describe-image-e2e). Non-null only when {@link #imagePromptRef}
+     * is non-null (mandatory for DESCRIBE_IMAGE, optional/absent elsewhere).
+     */
+    @Column(columnDefinition = "text")
+    private String imageUrl;
+
+    @Column
+    private Instant imageUrlExpiresAt;
 }

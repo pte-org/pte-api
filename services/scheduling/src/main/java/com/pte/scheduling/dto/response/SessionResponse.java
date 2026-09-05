@@ -12,5 +12,6 @@ public record SessionResponse(
         Instant opensAt,
         Instant closesAt,
         String status,
+        ExamPolicyResponse policy,
         List<CompositionItemResponse> composition) {
 }

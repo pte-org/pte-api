@@ -44,4 +44,8 @@ public class SessionComposition extends BaseEntity {
 
     @Column
     private Integer timingOverrideSeconds;
+
+    /** Null = inherit the session's {@code ExamPolicy.replayPolicy}; non-null always wins over it (never "ignored" even if the session policy is UNLIMITED). */
+    @Column
+    private Integer maxPlayCount;
 }
