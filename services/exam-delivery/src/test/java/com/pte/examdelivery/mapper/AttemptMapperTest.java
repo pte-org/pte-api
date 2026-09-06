@@ -125,6 +125,43 @@ class AttemptMapperTest {
                 .hasMessageContaining("mix of blank-grouped and ungrouped");
     }
 
+    @Test
+    void writingTask_summarizeWrittenText_carriesWordCountsAndTiming() {
+        PinnedItemView item = writingItem("SUMMARIZE_WRITTEN_TEXT", 5, 75, 0, 600);
+        TaskView task = toTaskFromItem(item);
+
+        assertThat(task.taskType()).isEqualTo("SUMMARIZE_WRITTEN_TEXT");
+        assertThat(task.minWordCount()).isEqualTo(5);
+        assertThat(task.maxWordCount()).isEqualTo(75);
+        assertThat(task.prepSeconds()).isEqualTo(0);
+        assertThat(task.responseSeconds()).isEqualTo(600);
+        assertThat(task.options()).isNull();
+        assertThat(task.blankGroups()).isNull();
+    }
+
+    @Test
+    void writingTask_writeEssay_carriesWordCountsAndTiming() {
+        PinnedItemView item = writingItem("WRITE_ESSAY", 200, 300, 0, 1200);
+        TaskView task = toTaskFromItem(item);
+
+        assertThat(task.taskType()).isEqualTo("WRITE_ESSAY");
+        assertThat(task.minWordCount()).isEqualTo(200);
+        assertThat(task.maxWordCount()).isEqualTo(300);
+        assertThat(task.prepSeconds()).isEqualTo(0);
+        assertThat(task.responseSeconds()).isEqualTo(1200);
+        assertThat(task.options()).isNull();
+        assertThat(task.blankGroups()).isNull();
+    }
+
+    @Test
+    void writingTask_nullOptionsJson_producesNullOptionsAndBlankGroups() {
+        PinnedItemView item = writingItem("WRITE_ESSAY", 200, 300, 0, 1200);
+        TaskView task = toTaskFromItem(item);
+
+        assertThat(task.options()).isNull();
+        assertThat(task.blankGroups()).isNull();
+    }
+
     /**
      * Regression test for a real bug found + fixed via a live end-to-end
      * walkthrough (plans/phat-speaking-api-e2e-verify Phase 3): {@code
@@ -146,7 +183,7 @@ class AttemptMapperTest {
         TimerState timer = new TimerState();
         timer.setCurrentOrderIndex(0);
         timer.setPhase(TimerPhase.PREP);
-        timer.setPrepDeadline(now.minusSeconds(5)); // already past
+        timer.setPrepDeadline(now.minusSeconds(5));
         timer.setResponseDeadline(now.plusSeconds(40));
 
         TimerStateResponse response = mapper.toTimerResponse(attempt, timer);
@@ -165,7 +202,7 @@ class AttemptMapperTest {
         TimerState timer = new TimerState();
         timer.setCurrentOrderIndex(0);
         timer.setPhase(TimerPhase.PREP);
-        timer.setPrepDeadline(now.plusSeconds(30)); // not yet reached
+        timer.setPrepDeadline(now.plusSeconds(30));
         timer.setResponseDeadline(now.plusSeconds(70));
 
         TimerStateResponse response = mapper.toTimerResponse(attempt, timer);
@@ -175,8 +212,6 @@ class AttemptMapperTest {
 
     @Test
     void toTimerResponse_alreadyResponsePhase_staysResponseRegardlessOfDeadline() {
-        // Section-scoped sections (READING) set phase=RESPONSE at task start
-        // and never have a PREP phase at all — must never get flipped back.
         ExamAttempt attempt = new ExamAttempt();
         attempt.setPublicId(UUID.randomUUID());
         attempt.setStatus(AttemptStatus.IN_PROGRESS);
@@ -250,6 +285,28 @@ class AttemptMapperTest {
         timer.setPhase(TimerPhase.RESPONSE);
         timer.setPrepDeadline(now);
         timer.setResponseDeadline(now.plusSeconds(60));
+
+        AttemptTaskResponse response = mapper.toTaskResponse(attempt, item, timer, 5);
+        return response.task();
+    }
+
+    private PinnedItemView writingItem(String taskType, int minWords, int maxWords, int prep, int response) {
+        return new PinnedItemView(
+                UUID.randomUUID(), 0, "WRITING", taskType, "Writing title", "Writing prompt",
+                null, null, null, null, minWords, maxWords, null, prep, response,
+                null, null, null);
+    }
+
+    private TaskView toTaskFromItem(PinnedItemView item) {
+        ExamAttempt attempt = new ExamAttempt();
+        attempt.setPublicId(UUID.randomUUID());
+        attempt.setStatus(AttemptStatus.IN_PROGRESS);
+
+        Instant now = Instant.now();
+        TimerState timer = new TimerState();
+        timer.setPhase(TimerPhase.RESPONSE);
+        timer.setPrepDeadline(now);
+        timer.setResponseDeadline(now.plusSeconds(item.responseSeconds()));
 
         AttemptTaskResponse response = mapper.toTaskResponse(attempt, item, timer, 5);
         return response.task();
