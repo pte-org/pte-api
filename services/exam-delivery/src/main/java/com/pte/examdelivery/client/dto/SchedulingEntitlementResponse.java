@@ -26,6 +26,6 @@ public record SchedulingEntitlementResponse(
     }
 
     public record Policy(String replayPolicyType, Integer replayPolicyLimit, Boolean deviceCheckRequired,
-            Boolean proctorRequired, String answerIntegrityLevel) {
+            Boolean proctorRequired, String answerIntegrityLevel, String lockdownMode) {
     }
 }

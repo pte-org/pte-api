@@ -50,11 +50,11 @@ public class AttemptMapper {
                 item.maxWordCount(), toFlatOptions(parsedOptions), toBlankGroups(parsedOptions), item.prepSeconds(),
                 item.responseSeconds(), timer.getPrepDeadline(), timer.getResponseDeadline(), Instant.now(),
                 attempt.getExamEndTime(), item.preListenSeconds(), item.preRecordSeconds(), item.imageUrl());
-        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey);
+        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey, attempt.getSnapshot().getLockdownMode());
     }
 
     public AttemptTaskResponse toCompletedResponse(ExamAttempt attempt) {
-        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), true, null, null);
+        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), true, null, null, null);
     }
 
     /**
