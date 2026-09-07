@@ -126,6 +126,9 @@ public class SessionService {
         if (request.answerIntegrityLevel() != null) {
             policy.setAnswerIntegrityLevel(request.answerIntegrityLevel());
         }
+        if (request.lockdownMode() != null) {
+            policy.setLockdownMode(request.lockdownMode());
+        }
         return SessionMapper.toPolicy(policy);
     }
 
