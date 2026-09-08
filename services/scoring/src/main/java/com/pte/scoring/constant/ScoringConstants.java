@@ -51,6 +51,19 @@ public final class ScoringConstants {
     public static final String TASK_TYPE_READ_ALOUD = "READ_ALOUD";
     public static final String TASK_TYPE_WRITE_ESSAY = "WRITE_ESSAY";
 
+    // Remaining 7 Speaking task types (quang-host-answer-review Phase 2) — not yet
+    // routed through AI scoring, but their answer payload is a recorded-audio
+    // media publicId same as READ_ALOUD, needed by AnswerPayloadDecoder to tell an
+    // audio answer apart from a text/selection one. Cross-checked against
+    // authoring's PteTaskType.java (all 8 Speaking types).
+    public static final String TASK_TYPE_PERSONAL_INTRODUCTION = "PERSONAL_INTRODUCTION";
+    public static final String TASK_TYPE_REPEAT_SENTENCE = "REPEAT_SENTENCE";
+    public static final String TASK_TYPE_DESCRIBE_IMAGE = "DESCRIBE_IMAGE";
+    public static final String TASK_TYPE_RE_TELL_LECTURE = "RE_TELL_LECTURE";
+    public static final String TASK_TYPE_ANSWER_SHORT_QUESTION = "ANSWER_SHORT_QUESTION";
+    public static final String TASK_TYPE_RESPOND_TO_A_SITUATION = "RESPOND_TO_A_SITUATION";
+    public static final String TASK_TYPE_SUMMARIZE_GROUP_DISCUSSION = "SUMMARIZE_GROUP_DISCUSSION";
+
     // RabbitMQ (Phase 9 — activates what Phase 7 deferred: slow/unreliable vendor calls need a queue, objective scoring didn't).
     public static final String AI_SCORING_EXCHANGE = "scoring.ai-scoring";
     public static final String AI_SCORING_QUEUE = "scoring.ai-scoring-jobs";

@@ -25,7 +25,11 @@ import java.util.UUID;
 @Table(name = "scoring_answers", indexes = {
         @Index(name = "idx_scoring_answers_session", columnList = "session_public_id"),
         @Index(name = "idx_scoring_answers_attempt", columnList = "attempt_public_id"),
-        @Index(name = "idx_scoring_answers_status", columnList = "status")
+        @Index(name = "idx_scoring_answers_status", columnList = "status"),
+        // Host review list (quang-host-answer-review Phase 3) — every review query
+        // filters by tenant first, optionally narrows by session/status, ordered
+        // newest-first; covers that access path without a full-table scan.
+        @Index(name = "idx_scoring_answers_tenant_review", columnList = "tenant_id, session_public_id, status, created_at")
 })
 @Getter
 @Setter
