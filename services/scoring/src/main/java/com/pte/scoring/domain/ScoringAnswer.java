@@ -76,6 +76,19 @@ public class ScoringAnswer extends BaseEntity {
     @Column
     private Instant scoredAt;
 
+    /**
+     * A host's own independent score (quang-host-answer-review Phase 5) —
+     * parallel to {@link #rawScore}, never derived from it and never gating
+     * it. Settable at any {@link #status}, for future AI-vs-teacher
+     * comparison statistics; which of the two counts as "official" for
+     * student-facing reports is explicitly undecided (out of scope here).
+     */
+    @Column
+    private Integer teacherScore;
+
+    @Column
+    private Instant teacherScoredAt;
+
     public void markScored(int rawScore) {
         this.status = ScoringAnswerStatus.SCORED;
         this.rawScore = rawScore;

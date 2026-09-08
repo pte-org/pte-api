@@ -13,17 +13,17 @@ import java.util.UUID;
 /**
  * Shared "is this attempt fully scored?" check (phase-09) — called from every
  * place an answer can reach a terminal state: {@code ScoringCommandConsumer}
- * (objective + AI dispatch), {@code AiScoringWorker} (Read Aloud, no review
- * needed), {@code ScoringReviewService} (Write Essay, after host approval).
- * "Fully scored" = zero rows left in a non-terminal status — honest completion
- * (Phase 7): an unsupported task type stuck in PENDING still blocks this
- * forever, same as before.
+ * (objective + AI dispatch), {@code AiScoringWorker} (every AI-scorable type,
+ * including Write Essay as of quang-host-answer-review Phase 5 — no host
+ * approval gate anymore). "Fully scored" = zero rows left in a non-terminal
+ * status — honest completion (Phase 7): an unsupported task type stuck in
+ * PENDING still blocks this forever, same as before.
  */
 @Service
 public class AttemptCompletionService {
 
     private static final List<ScoringAnswerStatus> NON_TERMINAL = List.of(
-            ScoringAnswerStatus.PENDING, ScoringAnswerStatus.AI_SCORING, ScoringAnswerStatus.AI_SCORED_PENDING_REVIEW);
+            ScoringAnswerStatus.PENDING, ScoringAnswerStatus.AI_SCORING);
 
     private final ScoringAnswerRepository scoringAnswerRepository;
     private final OutboxWriter outboxWriter;

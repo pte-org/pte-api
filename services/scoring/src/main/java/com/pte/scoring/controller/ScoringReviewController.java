@@ -3,16 +3,19 @@ package com.pte.scoring.controller;
 import com.pte.common.security.CurrentUser;
 import com.pte.common.security.CurrentUserContext;
 import com.pte.common.web.ApiResponse;
+import com.pte.scoring.dto.request.SubmitTeacherScoreRequest;
 import com.pte.scoring.dto.response.AnswerListResponse;
 import com.pte.scoring.dto.response.AnswerReviewDetailResponse;
 import com.pte.scoring.dto.response.ScoringAnswerResponse;
 import com.pte.scoring.service.ScoringReviewService;
+import jakarta.validation.Valid;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -21,9 +24,11 @@ import java.util.UUID;
 
 /**
  * scoring's human-facing review endpoints (phase-09 + quang-host-answer-review):
- * a host lists and inspects a tenant's submitted answers. {@code approve} is
- * being removed in quang-host-answer-review Phase 5 — kept for now until that
- * phase runs.
+ * a host lists and inspects a tenant's submitted answers, and records their
+ * own independent score. No approval gate — Phase 5 removed the prior
+ * {@code POST /answers/{id}/review} approve action entirely (user decision:
+ * AI scores always finalize on their own; a host's score is parallel data,
+ * never a gate).
  */
 @RestController
 @RequestMapping("/answers")
@@ -55,9 +60,11 @@ public class ScoringReviewController {
         return ApiResponse.success(scoringReviewService.getAnswerForReview(answerPublicId, currentUser()));
     }
 
-    @PostMapping("/{answerPublicId}/review")
-    public ApiResponse<ScoringAnswerResponse> approve(@PathVariable UUID answerPublicId) {
-        return ApiResponse.success(scoringReviewService.approve(answerPublicId, currentUser()));
+    @PostMapping("/{answerPublicId}/teacher-score")
+    public ApiResponse<ScoringAnswerResponse> submitTeacherScore(@PathVariable UUID answerPublicId,
+            @Valid @RequestBody SubmitTeacherScoreRequest request) {
+        return ApiResponse.success(
+                scoringReviewService.submitTeacherScore(answerPublicId, request.score(), currentUser()));
     }
 
     private int boundedPage(Integer requested) {

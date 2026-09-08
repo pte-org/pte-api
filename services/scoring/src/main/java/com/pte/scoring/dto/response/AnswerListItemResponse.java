@@ -10,5 +10,6 @@ import java.util.UUID;
  * host is just scanning to pick which answer to open).
  */
 public record AnswerListItemResponse(UUID answerPublicId, UUID attemptPublicId, UUID sessionPublicId,
-                                      String taskType, String status, Integer rawScore, Instant createdAt) {
+                                      String taskType, String status, Integer rawScore, Integer teacherScore,
+                                      Instant createdAt) {
 }

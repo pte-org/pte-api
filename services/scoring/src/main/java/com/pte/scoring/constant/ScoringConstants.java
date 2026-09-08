@@ -70,8 +70,6 @@ public final class ScoringConstants {
     public static final String AI_SCORING_DLQ = "scoring.ai-scoring-jobs.dlq";
     public static final String AI_SCORING_ROUTING_KEY = "ai-scoring-job";
 
-    public static final String REVIEW_NOT_PENDING = "REVIEW_NOT_PENDING";
-
     private ScoringConstants() {
     }
 }
