@@ -102,14 +102,14 @@ public class ClassService {
     @Transactional(readOnly = true)
     public ClassResponse get(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
             CurrentUser caller) {
-        StudentClass studentClass = loadClassOwned(organizationPublicId, programPublicId, classPublicId, caller);
+        StudentClass studentClass = findOwned(organizationPublicId, programPublicId, classPublicId, caller);
         return StudentClassMapper.toResponse(studentClass, programPublicId);
     }
 
     @Transactional
     public ClassResponse update(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
             UpdateClassRequest request, CurrentUser caller) {
-        StudentClass studentClass = loadClassOwned(organizationPublicId, programPublicId, classPublicId, caller);
+        StudentClass studentClass = findOwned(organizationPublicId, programPublicId, classPublicId, caller);
         if (!studentClass.getName().equalsIgnoreCase(request.name())
                 && studentClassRepository.existsByProgram_PublicIdAndNameIgnoreCaseAndDeletedFalse(
                         programPublicId, request.name())) {
@@ -139,7 +139,7 @@ public class ClassService {
     @Transactional
     public ClassResponse deactivate(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
             CurrentUser caller) {
-        StudentClass studentClass = loadClassOwned(organizationPublicId, programPublicId, classPublicId, caller);
+        StudentClass studentClass = findOwned(organizationPublicId, programPublicId, classPublicId, caller);
         if (studentClass.getStatus() == ClassStatus.INACTIVE) {
             return StudentClassMapper.toResponse(studentClass, programPublicId);
         }
@@ -164,7 +164,7 @@ public class ClassService {
     @Transactional
     public ClassResponse archive(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
             CurrentUser caller) {
-        StudentClass studentClass = loadClassOwned(organizationPublicId, programPublicId, classPublicId, caller);
+        StudentClass studentClass = findOwned(organizationPublicId, programPublicId, classPublicId, caller);
         if (studentClass.isDeleted()) {
             return StudentClassMapper.toResponse(studentClass, programPublicId);
         }
@@ -187,7 +187,7 @@ public class ClassService {
     @Transactional
     public ClassMembershipResponse assign(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
             AssignStudentRequest request, CurrentUser caller) {
-        StudentClass studentClass = loadClassOwned(organizationPublicId, programPublicId, classPublicId, caller);
+        StudentClass studentClass = findOwned(organizationPublicId, programPublicId, classPublicId, caller);
         if (classMembershipRepository.existsByStudentPublicId(request.studentPublicId())) {
             throw new StudentAlreadyInClassException();
         }
@@ -222,7 +222,7 @@ public class ClassService {
     @Transactional
     public BulkAssignStudentsResponse bulkAssign(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
             BulkAssignStudentsRequest request, CurrentUser caller) {
-        StudentClass studentClass = loadClassOwned(organizationPublicId, programPublicId, classPublicId, caller);
+        StudentClass studentClass = findOwned(organizationPublicId, programPublicId, classPublicId, caller);
 
         List<UUID> existing = classMembershipRepository.findByStudentPublicIdIn(request.studentPublicIds())
                 .stream().map(ClassMembership::getStudentPublicId).toList();
@@ -263,7 +263,7 @@ public class ClassService {
     @Transactional
     public void unassign(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
             UUID membershipPublicId, CurrentUser caller) {
-        loadClassOwned(organizationPublicId, programPublicId, classPublicId, caller);
+        findOwned(organizationPublicId, programPublicId, classPublicId, caller);
         ClassMembership membership = loadMembershipOwned(classPublicId, membershipPublicId);
         classMembershipRepository.delete(membership);
 
@@ -286,7 +286,7 @@ public class ClassService {
     @Transactional
     public ClassMembershipResponse transfer(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
             UUID membershipPublicId, TransferStudentRequest request, CurrentUser caller) {
-        loadClassOwned(organizationPublicId, programPublicId, classPublicId, caller);
+        findOwned(organizationPublicId, programPublicId, classPublicId, caller);
         ClassMembership membership = loadMembershipOwned(classPublicId, membershipPublicId);
         StudentClass targetClass = loadClassForTenant(request.targetClassPublicId(), caller.tenantId());
 
@@ -320,7 +320,7 @@ public class ClassService {
 
     private ClassResponse changeStatus(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
             CurrentUser caller, ClassStatus target) {
-        StudentClass studentClass = loadClassOwned(organizationPublicId, programPublicId, classPublicId, caller);
+        StudentClass studentClass = findOwned(organizationPublicId, programPublicId, classPublicId, caller);
         if (studentClass.getStatus() == target) {
             return StudentClassMapper.toResponse(studentClass, programPublicId);
         }
@@ -336,7 +336,7 @@ public class ClassService {
     /**
      * Loads a Program strictly by (organizationPublicId, programPublicId,
      * caller's tenant) — same "wrong scope looks like not-found" pattern as
-     * {@code ProgramService.loadOwned}.
+     * {@code ProgramService.findOwned}.
      */
     private Program loadProgramOwned(UUID organizationPublicId, UUID programPublicId, CurrentUser caller) {
         Program program = programRepository.findByPublicId(programPublicId)
@@ -355,7 +355,7 @@ public class ClassService {
      * different Program/Organization/tenant than requested is treated as
      * not-found, never silently served.
      */
-    private StudentClass loadClassOwned(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
+    StudentClass findOwned(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
             CurrentUser caller) {
         StudentClass studentClass = studentClassRepository.findByPublicId(classPublicId)
                 .orElseThrow(StudentClassNotFoundException::new);

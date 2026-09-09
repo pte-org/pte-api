@@ -85,14 +85,14 @@ public class ProgramService {
 
     @Transactional(readOnly = true)
     public ProgramResponse get(UUID organizationPublicId, UUID programPublicId, CurrentUser caller) {
-        Program program = loadOwned(organizationPublicId, programPublicId, caller);
+        Program program = findOwned(organizationPublicId, programPublicId, caller);
         return ProgramMapper.toResponse(program, organizationPublicId);
     }
 
     @Transactional
     public ProgramResponse update(UUID organizationPublicId, UUID programPublicId, UpdateProgramRequest request,
             CurrentUser caller) {
-        Program program = loadOwned(organizationPublicId, programPublicId, caller);
+        Program program = findOwned(organizationPublicId, programPublicId, caller);
         if (!program.getName().equalsIgnoreCase(request.name())
                 && programRepository.existsByOrganization_PublicIdAndNameIgnoreCaseAndDeletedFalse(
                         organizationPublicId, request.name())) {
@@ -133,7 +133,7 @@ public class ProgramService {
      */
     @Transactional
     public ProgramResponse archive(UUID organizationPublicId, UUID programPublicId, CurrentUser caller) {
-        Program program = loadOwned(organizationPublicId, programPublicId, caller);
+        Program program = findOwned(organizationPublicId, programPublicId, caller);
         if (program.isDeleted()) {
             return ProgramMapper.toResponse(program, organizationPublicId);
         }
@@ -150,7 +150,7 @@ public class ProgramService {
 
     private ProgramResponse changeStatus(UUID organizationPublicId, UUID programPublicId, CurrentUser caller,
             ProgramStatus target) {
-        Program program = loadOwned(organizationPublicId, programPublicId, caller);
+        Program program = findOwned(organizationPublicId, programPublicId, caller);
         if (program.getStatus() == target) {
             return ProgramMapper.toResponse(program, organizationPublicId);
         }
@@ -179,7 +179,7 @@ public class ProgramService {
      * silently served (same "wrong scope looks like not-found" pattern as
      * {@code OrganizationService.loadUnderTenant}).
      */
-    private Program loadOwned(UUID organizationPublicId, UUID programPublicId, CurrentUser caller) {
+    Program findOwned(UUID organizationPublicId, UUID programPublicId, CurrentUser caller) {
         Program program = programRepository.findByPublicId(programPublicId)
                 .orElseThrow(ProgramNotFoundException::new);
         Organization organization = program.getOrganization();
