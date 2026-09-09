@@ -240,4 +240,34 @@ class OrganizationServiceTest {
         assertThat(response.status()).isEqualTo("ACTIVE");
         verify(outboxWriter, never()).write(any(), any(), any(), any(), any());
     }
+
+    @Test
+    void listForCaller_scopesToCallersOwnTenant() {
+        UUID tenantPublicId = UUID.randomUUID();
+        Tenant tenant = tenantWithPublicId(tenantPublicId);
+        Organization organization = activeOrganization(UUID.randomUUID(), tenant);
+        CurrentUser hostCaller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
+        when(tenantRepository.existsByPublicId(tenantPublicId)).thenReturn(true);
+        when(organizationRepository.findByTenant_PublicIdOrderByCreatedAtAsc(tenantPublicId))
+                .thenReturn(List.of(organization));
+
+        List<OrganizationResponse> responses = service.listForCaller(hostCaller);
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).tenantPublicId()).isEqualTo(tenantPublicId);
+    }
+
+    @Test
+    void getForCaller_organizationBelongsToDifferentTenant_throwsNotFound() {
+        UUID callerTenantId = UUID.randomUUID();
+        UUID otherTenantId = UUID.randomUUID();
+        Tenant otherTenant = tenantWithPublicId(otherTenantId);
+        UUID orgPublicId = UUID.randomUUID();
+        Organization organization = activeOrganization(orgPublicId, otherTenant);
+        CurrentUser hostCaller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
+        when(organizationRepository.findByPublicId(orgPublicId)).thenReturn(Optional.of(organization));
+
+        assertThatThrownBy(() -> service.getForCaller(orgPublicId, hostCaller))
+                .isInstanceOf(OrganizationNotFoundException.class);
+    }
 }
