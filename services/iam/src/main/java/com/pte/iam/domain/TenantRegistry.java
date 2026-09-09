@@ -34,4 +34,8 @@ public class TenantRegistry extends BaseEntity {
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     private TenantRegistryStatus status = TenantRegistryStatus.ACTIVE;
+
+    /** Nullable — tenants onboarded before this field existed have no value and no backfill (no event replay in this repo). */
+    @Column
+    private String organizationType;
 }

@@ -15,5 +15,6 @@ public record UserResponse(
         String studentCode,
         String className,
         String phone,
-        LocalDate dateOfBirth) {
+        LocalDate dateOfBirth,
+        String organizationType) {
 }
