@@ -9,7 +9,6 @@ public final class ExamDeliveryConstants {
     public static final String ENTITLEMENT_CHECK_FAILED = "ENTITLEMENT_CHECK_FAILED";
     public static final String SNAPSHOT_CONTENT_FETCH_FAILED = "SNAPSHOT_CONTENT_FETCH_FAILED";
     public static final String TASK_TIMING_NOT_CONFIGURED = "TASK_TIMING_NOT_CONFIGURED";
-    public static final String RESPONSE_WINDOW_EXPIRED = "RESPONSE_WINDOW_EXPIRED";
     public static final String NOT_CURRENT_TASK = "NOT_CURRENT_TASK";
     public static final String ATTEMPT_ALREADY_COMPLETE = "ATTEMPT_ALREADY_COMPLETE";
     public static final String DEVICE_CHECK_REQUIRED = "DEVICE_CHECK_REQUIRED";
@@ -47,7 +46,6 @@ public final class ExamDeliveryConstants {
     public static final String PROCTOR_COMMANDS_ROUTING_PATTERN = "ProctorCommand.*";
     public static final String PROCTOR_COMMANDS_DEAD_LETTER_ROUTING_KEY = "proctor-commands";
     public static final String COMMAND_TYPE_FORCE_SUBMIT = "FORCE_SUBMIT";
-    public static final String COMMAND_TYPE_EXTEND_TIME = "EXTEND_TIME";
 
     public static final String CACHE_KEY_PREFIX = "exam-delivery:pinned-snapshot:";
     public static final String LOCK_KEY_PREFIX = "exam-delivery:lock:pinned-snapshot:";

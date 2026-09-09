@@ -6,29 +6,24 @@ import com.pte.examdelivery.constant.ExamDeliveryConstants;
 import com.pte.examdelivery.domain.ExamAttempt;
 import com.pte.examdelivery.domain.PinnedExamSnapshot;
 import com.pte.examdelivery.domain.PinnedItem;
-import com.pte.examdelivery.domain.TimerState;
 import com.pte.examdelivery.domain.enums.AttemptStatus;
 import com.pte.examdelivery.domain.event.AttemptSubmittedEvent;
 import com.pte.examdelivery.domain.exception.AlreadyAttemptedException;
 import com.pte.examdelivery.domain.exception.AnswerIntegrityLevelMismatchException;
 import com.pte.examdelivery.domain.exception.AttemptAlreadyCompleteException;
 import com.pte.examdelivery.domain.exception.AttemptNotFoundException;
-import com.pte.examdelivery.domain.exception.AttemptNotInProgressException;
 import com.pte.examdelivery.domain.exception.AudioUrlExpiredException;
 import com.pte.examdelivery.domain.exception.DeviceCheckRequiredException;
 import com.pte.examdelivery.domain.exception.NotCurrentTaskException;
 import com.pte.examdelivery.domain.exception.PinnedSnapshotEmptyException;
 import com.pte.examdelivery.domain.exception.ReplayLimitExceededException;
-import com.pte.examdelivery.domain.exception.ResponseWindowExpiredException;
 import com.pte.examdelivery.dto.request.EncryptedSubmissionRequest;
 import com.pte.examdelivery.dto.request.StartAttemptRequest;
 import com.pte.examdelivery.dto.request.SubmitAnswerRequest;
 import com.pte.examdelivery.dto.response.AttemptTaskResponse;
 import com.pte.examdelivery.dto.response.AudioPlayResponse;
-import com.pte.examdelivery.dto.response.TimerStateResponse;
 import com.pte.examdelivery.mapper.AttemptMapper;
 import com.pte.examdelivery.messaging.outbox.OutboxWriter;
-import com.pte.examdelivery.repository.AttemptAnswerRepository;
 import com.pte.examdelivery.repository.ExamAttemptRepository;
 import com.pte.examdelivery.repository.PinnedItemRepository;
 import com.pte.examdelivery.service.cache.PinnedItemView;
@@ -53,7 +48,6 @@ public class AttemptService {
 
     private final ExamAttemptRepository attemptRepository;
     private final PinnedItemRepository pinnedItemRepository;
-    private final AttemptAnswerRepository attemptAnswerRepository;
     private final SnapshotPinService snapshotPinService;
     private final PinnedSnapshotCacheService cacheService;
     private final TimerService timerService;
@@ -62,16 +56,21 @@ public class AttemptService {
     private final OutboxWriter outboxWriter;
     private final EncryptionKeyProvider encryptionKeyProvider;
     private final SubmissionDecryptionService submissionDecryptionService;
+    private final HeartbeatService heartbeatService;
 
+    /**
+     * No longer takes an {@code AttemptAnswerRepository} — its only caller,
+     * {@code expireIfUnanswered}, was deleted along with the deadline-based
+     * catch-up loop it served (client-side-exam-timer Phase 5, FR-08).
+     */
     public AttemptService(ExamAttemptRepository attemptRepository, PinnedItemRepository pinnedItemRepository,
-                          AttemptAnswerRepository attemptAnswerRepository, SnapshotPinService snapshotPinService,
+                          SnapshotPinService snapshotPinService,
                           PinnedSnapshotCacheService cacheService, TimerService timerService,
                           AnswerSubmitService answerSubmitService, AttemptMapper attemptMapper,
                           OutboxWriter outboxWriter, EncryptionKeyProvider encryptionKeyProvider,
-                          SubmissionDecryptionService submissionDecryptionService) {
+                          SubmissionDecryptionService submissionDecryptionService, HeartbeatService heartbeatService) {
         this.attemptRepository = attemptRepository;
         this.pinnedItemRepository = pinnedItemRepository;
-        this.attemptAnswerRepository = attemptAnswerRepository;
         this.snapshotPinService = snapshotPinService;
         this.cacheService = cacheService;
         this.timerService = timerService;
@@ -80,6 +79,23 @@ public class AttemptService {
         this.outboxWriter = outboxWriter;
         this.encryptionKeyProvider = encryptionKeyProvider;
         this.submissionDecryptionService = submissionDecryptionService;
+        this.heartbeatService = heartbeatService;
+    }
+
+    /**
+     * Ownership + status check only, no task content — deliberately lighter than
+     * every other method here (client-side-exam-timer Phase 2, FR-04). Independent
+     * of {@code TimerService}/{@code TimerState}: recording presence must survive
+     * Phase 5 deleting deadline enforcement entirely, unchanged.
+     */
+    @Transactional
+    public void recordHeartbeat(UUID attemptPublicId, CurrentUser caller) {
+        ExamAttempt attempt = attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, caller.userId())
+                .orElseThrow(AttemptNotFoundException::new);
+        if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
+            throw new AttemptAlreadyCompleteException();
+        }
+        heartbeatService.recordHeartbeat(attempt);
     }
 
     @Transactional
@@ -136,18 +152,23 @@ public class AttemptService {
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
             throw new AttemptAlreadyCompleteException();
         }
-        TimerState timer = timerService.getState(attempt.getId());
-        PinnedItem currentItem = currentItem(attempt, timer);
+        // Same lock as playAudio (code-reviewer HIGH finding, client-side-exam-timer
+        // Phase 1): currentOrderIndex/playCount now live on the same @Version-guarded
+        // ExamAttempt row playAudio locks. Without also locking here, a concurrent
+        // playAudio commit between this method's unlocked read and its eventual flush
+        // bumps `version` out from under this transaction, and Hibernate's dirty-check
+        // UPDATE (WHERE id=? AND version=<stale>) matches zero rows ->
+        // ObjectOptimisticLockingFailureException, uncaught, surfaces as a bare 500.
+        // Locking here too means this transaction only ever reads the version as of
+        // its own lock acquisition, never a stale one.
+        attempt = lockAttempt(attempt);
+        PinnedItem currentItem = currentItem(attempt);
         if (!currentItem.getPublicId().equals(pinnedItemPublicId)) {
             throw new NotCurrentTaskException();
         }
-        if (timerService.isResponseWindowExpired(timer)) {
-            expireIfUnanswered(attempt, currentItem);
-            throw new ResponseWindowExpiredException();
-        }
 
         answerSubmitService.submit(attempt, currentItem, payload);
-        return advanceAfterCurrent(attempt, timer);
+        return advanceAfterCurrent(attempt);
     }
 
     @Transactional
@@ -163,9 +184,19 @@ public class AttemptService {
     /**
      * Idempotent per {@code playRequestId} (client-generated UUID per user-initiated
      * play tap): a repeated request with the same key replays the prior outcome
-     * instead of re-incrementing {@code playCount}. The pessimistic lock on
-     * {@code TimerState} serializes concurrent plays for the same attempt so two
-     * requests can never both observe the same pre-increment {@code playCount}.
+     * instead of re-incrementing {@code playCount}. The pessimistic lock — taken on
+     * {@code ExamAttempt} (relocated from {@code TimerState} — client-side-exam-timer
+     * Phase 1, via {@link #lockAttempt}) — serializes concurrent plays for the same
+     * attempt so two requests can never both observe the same pre-increment
+     * {@code playCount}. {@code processAnswer}'s advance step and
+     * {@code advanceUntilLiveOrComplete} (used by {@code getNextTask}/resume) take the
+     * SAME lock before touching {@code currentOrderIndex} (code-reviewer HIGH finding,
+     * fixed): {@code ExamAttempt} carries {@code @Version}, unlike the old
+     * {@code TimerState} row these fields used to live on — an unlocked writer racing
+     * this method's locked commit would otherwise read a since-stale version and fail
+     * every such race with an uncaught {@code ObjectOptimisticLockingFailureException}.
+     * Locking consistently everywhere these fields are mutated means every writer only
+     * ever observes the version as of its own lock acquisition, never a stale one.
      */
     @Transactional
     public AudioPlayResponse playAudio(UUID attemptPublicId, UUID pinnedItemPublicId, String playRequestId,
@@ -174,14 +205,14 @@ public class AttemptService {
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
             throw new AttemptAlreadyCompleteException();
         }
-        TimerState timer = timerService.getStateWithLock(attempt.getId());
-        PinnedItem currentItem = currentItem(attempt, timer);
+        attempt = lockAttempt(attempt);
+        PinnedItem currentItem = currentItem(attempt);
         if (!currentItem.getPublicId().equals(pinnedItemPublicId)) {
             throw new NotCurrentTaskException();
         }
 
-        if (playRequestId.equals(timer.getLastPlayRequestId())) {
-            if (Boolean.TRUE.equals(timer.getLastPlayAllowed())) {
+        if (playRequestId.equals(attempt.getLastPlayRequestId())) {
+            if (Boolean.TRUE.equals(attempt.getLastPlayAllowed())) {
                 return new AudioPlayResponse(currentItem.getAudioUrl());
             }
             throw new ReplayLimitExceededException();
@@ -192,15 +223,15 @@ public class AttemptService {
         }
 
         int limit = resolvePlayLimit(currentItem, attempt.getPinnedSnapshot());
-        boolean allowed = limit < 0 || timer.getPlayCount() < limit;
-        timer.setLastPlayRequestId(playRequestId);
-        timer.setLastPlayAllowed(allowed);
+        boolean allowed = limit < 0 || attempt.getPlayCount() < limit;
+        attempt.setLastPlayRequestId(playRequestId);
+        attempt.setLastPlayAllowed(allowed);
         if (!allowed) {
-            timerService.save(timer);
+            attemptRepository.save(attempt);
             throw new ReplayLimitExceededException();
         }
-        timer.setPlayCount(timer.getPlayCount() + 1);
-        timerService.save(timer);
+        attempt.setPlayCount(attempt.getPlayCount() + 1);
+        attemptRepository.save(attempt);
         return new AudioPlayResponse(currentItem.getAudioUrl());
     }
 
@@ -213,16 +244,6 @@ public class AttemptService {
             return -1;
         }
         return snapshot.getReplayPolicyLimit();
-    }
-
-    /** Lightweight poll target for the client's countdown UI — no task content, just deadlines. */
-    @Transactional(readOnly = true)
-    public TimerStateResponse getTimerState(UUID attemptPublicId, CurrentUser caller) {
-        ExamAttempt attempt = findOwned(attemptPublicId, caller.userId());
-        if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
-            throw new AttemptAlreadyCompleteException();
-        }
-        return attemptMapper.toTimerResponse(attempt, timerService.getState(attempt.getId()));
     }
 
     private AttemptTaskResponse resumeOrReject(ExamAttempt existing) {
@@ -274,57 +295,59 @@ public class AttemptService {
         cacheService.warm(savedPinned.getPublicId(), views);
 
         PinnedItemView first = views.get(0);
-        TimerState timer = timerService.startTaskTimer(attempt, first, views);
-        return attemptMapper.toTaskResponse(attempt, first, timer, views.size(), encryptionPublicKey);
+        timerService.startTask(attempt, first, views);
+        int effectivePrep = timerService.resolveEffectivePrepSeconds(first);
+        int effectiveResponse = timerService.resolveEffectiveResponseSeconds(attempt, first, views);
+        return attemptMapper.toTaskResponse(attempt, first, effectivePrep, effectiveResponse, views.size(), encryptionPublicKey);
     }
 
+    /**
+     * No expiry sweep (client-side-exam-timer Phase 5) — {@code currentOrderIndex}
+     * is already correct as maintained by whichever call last advanced it
+     * ({@link #createAndPin}/{@link #advanceAfterCurrent}), so this is a pure read,
+     * needing no lock (nothing here mutates {@code attempt}). Deleting the former
+     * deadline-based catch-up loop removes the "forgiveness" it gave a
+     * currentOrderIndex that had drifted out of sync for an unrelated reason — any
+     * remaining drift now surfaces directly as a data-integrity bug at its source,
+     * rather than being silently patched over here (Phase 5 plan, accepted MEDIUM risk).
+     */
     private AttemptTaskResponse advanceUntilLiveOrComplete(ExamAttempt attempt) {
-        TimerState timer = timerService.getState(attempt.getId());
         long totalItems = pinnedItemRepository.countByPinnedSnapshotId(attempt.getPinnedSnapshot().getId());
         List<PinnedItemView> allItems = allItemViews(attempt);
-
-        while (timerService.isResponseWindowExpired(timer)) {
-            PinnedItem currentItem = currentItem(attempt, timer);
-            expireIfUnanswered(attempt, currentItem);
-
-            int nextIndex = timer.getCurrentOrderIndex() + 1;
-            if (nextIndex >= totalItems) {
-                completeAttempt(attempt);
-                return attemptMapper.toCompletedResponse(attempt);
-            }
-            PinnedItem nextItem = itemAt(attempt, nextIndex);
-            timer = timerService.startTaskTimer(attempt, PinnedSnapshotCacheService.toView(nextItem), allItems);
-        }
-
-        PinnedItem current = currentItem(attempt, timer);
-        return attemptMapper.toTaskResponse(attempt, PinnedSnapshotCacheService.toView(current), timer, (int) totalItems);
+        PinnedItemView currentView = PinnedSnapshotCacheService.toView(currentItem(attempt));
+        int effectivePrep = timerService.resolveEffectivePrepSeconds(currentView);
+        int effectiveResponse = timerService.resolveEffectiveResponseSeconds(attempt, currentView, allItems);
+        return attemptMapper.toTaskResponse(attempt, currentView, effectivePrep, effectiveResponse, (int) totalItems);
     }
 
-    private AttemptTaskResponse advanceAfterCurrent(ExamAttempt attempt, TimerState timer) {
+    private AttemptTaskResponse advanceAfterCurrent(ExamAttempt attempt) {
         long totalItems = pinnedItemRepository.countByPinnedSnapshotId(attempt.getPinnedSnapshot().getId());
-        int nextIndex = timer.getCurrentOrderIndex() + 1;
+        int nextIndex = attempt.getCurrentOrderIndex() + 1;
         if (nextIndex >= totalItems) {
             completeAttempt(attempt);
             return attemptMapper.toCompletedResponse(attempt);
         }
-        PinnedItem nextItem = itemAt(attempt, nextIndex);
-        TimerState nextTimer = timerService.startTaskTimer(attempt, PinnedSnapshotCacheService.toView(nextItem), allItemViews(attempt));
-        return attemptMapper.toTaskResponse(attempt, PinnedSnapshotCacheService.toView(nextItem), nextTimer, (int) totalItems);
+        List<PinnedItemView> allItems = allItemViews(attempt);
+        PinnedItemView nextView = PinnedSnapshotCacheService.toView(itemAt(attempt, nextIndex));
+        timerService.startTask(attempt, nextView, allItems);
+        int effectivePrep = timerService.resolveEffectivePrepSeconds(nextView);
+        int effectiveResponse = timerService.resolveEffectiveResponseSeconds(attempt, nextView, allItems);
+        return attemptMapper.toTaskResponse(attempt, nextView, effectivePrep, effectiveResponse, (int) totalItems);
     }
 
     private List<PinnedItemView> allItemViews(ExamAttempt attempt) {
         return attempt.getPinnedSnapshot().getItems().stream().map(PinnedSnapshotCacheService::toView).toList();
     }
 
-    private void expireIfUnanswered(ExamAttempt attempt, PinnedItem item) {
-        boolean alreadyAnswered = attemptAnswerRepository
-                .findByAttemptIdAndPinnedItemId(attempt.getId(), item.getId()).isPresent();
-        if (!alreadyAnswered) {
-            answerSubmitService.autoExpire(attempt, item);
-        }
-    }
-
     private void completeAttempt(ExamAttempt attempt) {
+        // Locked here (not just at each caller) so every path to completing an
+        // attempt — including submitAttempt, which had no other lock on this
+        // @Version-guarded row — is covered by a single choke point (code-reviewer
+        // 2nd-pass HIGH finding). Callers that already locked earlier in the same
+        // transaction (advanceUntilLiveOrComplete, processAnswer's advanceAfterCurrent)
+        // just re-acquire their own already-held lock — a cheap, harmless no-op, not
+        // a double-lock hazard (same transaction, same row).
+        lockAttempt(attempt);
         attempt.submit();
         attemptRepository.save(attempt);
         outboxWriter.write(ExamDeliveryConstants.AGGREGATE_ATTEMPT, attempt.getPublicId().toString(),
@@ -334,8 +357,8 @@ public class AttemptService {
                 attempt.getTenantId());
     }
 
-    private PinnedItem currentItem(ExamAttempt attempt, TimerState timer) {
-        return itemAt(attempt, timer.getCurrentOrderIndex());
+    private PinnedItem currentItem(ExamAttempt attempt) {
+        return itemAt(attempt, attempt.getCurrentOrderIndex());
     }
 
     private PinnedItem itemAt(ExamAttempt attempt, int orderIndex) {
@@ -346,5 +369,19 @@ public class AttemptService {
     ExamAttempt findOwned(UUID publicId, UUID studentPublicId) {
         return attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(publicId, studentPublicId)
                 .orElseThrow(AttemptNotFoundException::new);
+    }
+
+    /**
+     * Re-fetches {@code attempt} under a pessimistic write lock, by id, within the
+     * same persistence context — returns the SAME managed instance (JPA identity map),
+     * so already-loaded lazy associations (e.g. {@code pinnedSnapshot}) stay populated.
+     * Every mutator of the relocated {@code currentOrderIndex}/{@code playCount}/
+     * {@code lastPlayRequestId}/{@code lastPlayAllowed} fields must call this first
+     * (client-side-exam-timer Phase 1 — see {@link #playAudio}'s doc comment for why).
+     */
+    private ExamAttempt lockAttempt(ExamAttempt attempt) {
+        Long attemptId = attempt.getId();
+        return attemptRepository.findWithLockById(attemptId)
+                .orElseThrow(() -> new IllegalStateException("Attempt disappeared mid-transaction: " + attemptId));
     }
 }

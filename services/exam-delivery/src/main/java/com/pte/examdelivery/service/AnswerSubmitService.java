@@ -30,24 +30,25 @@ public class AnswerSubmitService {
         this.outboxWriter = outboxWriter;
     }
 
+    /**
+     * {@code payload} may be null/blank — a client-side-timeout empty-answer
+     * resubmission (client-side-exam-timer Phase 4, FR-07) reuses this exact
+     * path rather than a separate auto-expire one, so a task that timed out
+     * locally is indistinguishable here from one the student genuinely
+     * submitted blank. The former server-side deadline auto-expiry this
+     * service used to also support ({@code autoExpire}, setting
+     * {@code AttemptAnswer.expired = true}) was deleted along with the
+     * catch-up loop that was its only caller (Phase 5, FR-08) — {@code expired}
+     * now always persists {@code false} for every path reaching this method.
+     */
     @Transactional
     public AttemptAnswer submit(ExamAttempt attempt, PinnedItem item, String payload) {
-        return persist(attempt, item, payload, false);
-    }
-
-    /** Auto-finalizes the current task as an empty answer when its response window elapsed unanswered. */
-    @Transactional
-    public AttemptAnswer autoExpire(ExamAttempt attempt, PinnedItem item) {
-        return persist(attempt, item, null, true);
-    }
-
-    private AttemptAnswer persist(ExamAttempt attempt, PinnedItem item, String payload, boolean expired) {
         AttemptAnswer answer = new AttemptAnswer();
         answer.setAttempt(attempt);
         answer.setPinnedItem(item);
         answer.setPayload(payload);
         answer.setStatus(AnswerStatus.SUBMITTED);
-        answer.setExpired(expired);
+        answer.setExpired(false);
         AttemptAnswer saved;
         try {
             saved = attemptAnswerRepository.save(answer);
@@ -58,7 +59,7 @@ public class AnswerSubmitService {
         outboxWriter.write(ExamDeliveryConstants.AGGREGATE_ATTEMPT, attempt.getPublicId().toString(),
                 ExamDeliveryConstants.EVENT_ANSWER_SUBMITTED,
                 new AnswerSubmittedEvent(attempt.getPublicId(), saved.getPublicId(), item.getPublicId(),
-                        attempt.getSessionPublicId(), attempt.getTenantId(), expired,
+                        attempt.getSessionPublicId(), attempt.getTenantId(), false,
                         item.getTaskType(), payload, item.getCorrectAnswerText(), item.getOptionsJson()),
                 attempt.getTenantId());
         return saved;

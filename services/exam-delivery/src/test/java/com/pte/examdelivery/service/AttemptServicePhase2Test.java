@@ -5,14 +5,12 @@ import com.pte.examdelivery.config.EncryptionKeyProvider;
 import com.pte.examdelivery.domain.ExamAttempt;
 import com.pte.examdelivery.domain.PinnedExamSnapshot;
 import com.pte.examdelivery.domain.PinnedItem;
-import com.pte.examdelivery.domain.TimerState;
 import com.pte.examdelivery.domain.exception.AnswerIntegrityLevelMismatchException;
 import com.pte.examdelivery.dto.request.EncryptedSubmissionRequest;
 import com.pte.examdelivery.dto.request.SubmitAnswerRequest;
 import com.pte.examdelivery.dto.response.AttemptTaskResponse;
 import com.pte.examdelivery.mapper.AttemptMapper;
 import com.pte.examdelivery.messaging.outbox.OutboxWriter;
-import com.pte.examdelivery.repository.AttemptAnswerRepository;
 import com.pte.examdelivery.repository.ExamAttemptRepository;
 import com.pte.examdelivery.repository.PinnedItemRepository;
 import com.pte.examdelivery.service.cache.PinnedSnapshotCacheService;
@@ -26,7 +24,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.security.PrivateKey;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -59,9 +56,6 @@ class AttemptServicePhase2Test {
     private PinnedItemRepository pinnedItemRepository;
 
     @Mock
-    private AttemptAnswerRepository attemptAnswerRepository;
-
-    @Mock
     private SnapshotPinService snapshotPinService;
 
     @Mock
@@ -82,6 +76,9 @@ class AttemptServicePhase2Test {
     @Mock
     private SubmissionDecryptionService submissionDecryptionService;
 
+    @Mock
+    private HeartbeatService heartbeatService;
+
     private AttemptService attemptService;
     private AttemptMapper attemptMapper;
 
@@ -96,7 +93,6 @@ class AttemptServicePhase2Test {
         attemptService = new AttemptService(
             attemptRepository,
             pinnedItemRepository,
-            attemptAnswerRepository,
             snapshotPinService,
             cacheService,
             timerService,
@@ -104,7 +100,8 @@ class AttemptServicePhase2Test {
             attemptMapper,
             outboxWriter,
             encryptionKeyProvider,
-            submissionDecryptionService
+            submissionDecryptionService,
+            heartbeatService
         );
 
         studentPublicId = UUID.randomUUID();
@@ -154,15 +151,15 @@ class AttemptServicePhase2Test {
 
         ExamAttempt attempt = createInProgressAttempt(attemptPublicId, "STRICT");
         PinnedItem item = createPinnedItem(pinnedItemPublicId, attempt.getPinnedSnapshot());
-        TimerState timer = createTimerState(0);
         PrivateKey privateKey = mock(PrivateKey.class);
 
         when(attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
             .thenReturn(Optional.of(attempt));
-        when(timerService.getState(attempt.getId())).thenReturn(timer);
+        // processAnswer now locks the attempt before reading/advancing currentOrderIndex
+        // (client-side-exam-timer Phase 1 — see AttemptService.playAudio's doc comment).
+        when(attemptRepository.findWithLockById(attempt.getId())).thenReturn(Optional.of(attempt));
         when(pinnedItemRepository.findByPinnedSnapshotIdAndOrderIndex(attempt.getPinnedSnapshot().getId(), 0))
             .thenReturn(Optional.of(item));
-        when(timerService.isResponseWindowExpired(timer)).thenReturn(false);
         when(encryptionKeyProvider.getPrivateKey()).thenReturn(privateKey);
 
         EncryptedSubmissionRequest request = new EncryptedSubmissionRequest(
@@ -189,15 +186,15 @@ class AttemptServicePhase2Test {
 
         ExamAttempt attempt = createInProgressAttempt(attemptPublicId, "STRICT");
         PinnedItem item = createPinnedItem(pinnedItemPublicId, attempt.getPinnedSnapshot());
-        TimerState timer = createTimerState(0);
         PrivateKey privateKey = mock(PrivateKey.class);
 
         when(attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
             .thenReturn(Optional.of(attempt));
-        when(timerService.getState(attempt.getId())).thenReturn(timer);
+        // processAnswer now locks the attempt before reading/advancing currentOrderIndex
+        // (client-side-exam-timer Phase 1 — see AttemptService.playAudio's doc comment).
+        when(attemptRepository.findWithLockById(attempt.getId())).thenReturn(Optional.of(attempt));
         when(pinnedItemRepository.findByPinnedSnapshotIdAndOrderIndex(attempt.getPinnedSnapshot().getId(), 0))
             .thenReturn(Optional.of(item));
-        when(timerService.isResponseWindowExpired(timer)).thenReturn(false);
         when(encryptionKeyProvider.getPrivateKey()).thenReturn(privateKey);
         when(pinnedItemRepository.countByPinnedSnapshotId(attempt.getPinnedSnapshot().getId())).thenReturn(1L);
         when(attemptRepository.save(any(ExamAttempt.class))).thenReturn(attempt);
@@ -220,6 +217,7 @@ class AttemptServicePhase2Test {
         attempt.setStudentPublicId(studentPublicId);
         attempt.setTenantId(tenantId);
         attempt.begin();
+        attempt.setCurrentOrderIndex(0); // relocated off TimerState (client-side-exam-timer Phase 1)
 
         PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
         snapshot.setId(1L);
@@ -243,14 +241,5 @@ class AttemptServicePhase2Test {
         item.setResponseSeconds(60);
         item.setPinnedSnapshot(snapshot);
         return item;
-    }
-
-    private TimerState createTimerState(int orderIndex) {
-        TimerState timer = new TimerState();
-        timer.setId(1L);
-        timer.setCurrentOrderIndex(orderIndex);
-        timer.setPrepDeadline(Instant.now());
-        timer.setResponseDeadline(Instant.now().plusSeconds(60));
-        return timer;
     }
 }

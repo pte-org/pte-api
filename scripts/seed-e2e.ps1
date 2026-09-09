@@ -432,14 +432,16 @@ if ($hasReadAloudComposition) {
     Write-Step "Setting composition (READ_ALOUD)..."
     Invoke-Api -Method Put -Path "/api/scheduling/sessions/$($session.publicId)/composition" -Token $hostToken -Body @{
         items = @(
-            # No override — real production default (40s). The actual root
-            # cause of ResponseWindowExpiredException rejecting genuine
-            # on-time submissions was a zero-grace deadline check server-side
-            # (TimerState.isResponseWindowExpired), now fixed with a 15s
-            # grace window — the real upload+complete+submit round-trip
-            # measured well under 1s on localhost, so 15s is ample margin.
-            # Testing with the real default timing (not an inflated
-            # override) is the correct final verification.
+            # No override — real production default (40s). Historical note: this
+            # composition used to trip a bug where genuine on-time submissions were
+            # rejected by a zero-grace server-side deadline check (TimerState's
+            # isResponseWindowExpired, fixed with a 15s grace window at the time).
+            # Server-side deadline enforcement — TimerState included — was deleted
+            # entirely in the client-side-exam-timer refactor (Phase 5); this comment
+            # is kept only as the historical reason this test composition exists,
+            # not because the check it describes still runs. Testing with the real
+            # default timing (not an inflated override) is still the correct
+            # verification either way.
             @{ taskType = 'READ_ALOUD'; section = 'SPEAKING'; orderIndex = 0; timingOverrideSeconds = $null; maxPlayCount = $null }
         )
     } | Out-Null
