@@ -20,7 +20,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -62,47 +61,37 @@ class ProctorCommandConsumerTest {
         UUID attemptPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         ProctorCommandEvent event = new ProctorCommandEvent(attemptPublicId, UUID.randomUUID(),
-                ExamDeliveryConstants.COMMAND_TYPE_FORCE_SUBMIT, null, tenantId);
+                ExamDeliveryConstants.COMMAND_TYPE_FORCE_SUBMIT, tenantId);
         when(processedEventRepository.existsById(eventId)).thenReturn(false);
         when(jsonMapper.readValue(anyString(), eq(ProctorCommandEvent.class))).thenReturn(event);
 
         consumer.onProctorCommand(message(eventId));
 
         verify(proctorCommandService).forceSubmit(attemptPublicId, tenantId);
-        verify(proctorCommandService, never()).extendResponseTime(any(), any(), anyInt());
         ArgumentCaptor<ProcessedEvent> captor = ArgumentCaptor.forClass(ProcessedEvent.class);
         verify(processedEventRepository).save(captor.capture());
         assertThat(captor.getValue().getEventId()).isEqualTo(eventId);
     }
 
+    /**
+     * EXTEND_TIME itself was removed (client-side-exam-timer Phase 5 — see
+     * {@code ProctorCommandEvent}'s doc comment), so a lingering "EXTEND_TIME"
+     * string is now indistinguishable from any other unrecognized commandType:
+     * an in-flight message from a not-yet-upgraded proctor instance during a
+     * rolling deploy must be ignored, not an error, same as
+     * {@code unknownCommandType_isIgnored_butStillMarksProcessed} below.
+     */
     @Test
-    void extendTimeCommand_withExtraSeconds_appliesExtension() throws Exception {
-        UUID eventId = UUID.randomUUID();
-        UUID attemptPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-        ProctorCommandEvent event = new ProctorCommandEvent(attemptPublicId, UUID.randomUUID(),
-                ExamDeliveryConstants.COMMAND_TYPE_EXTEND_TIME, 300, tenantId);
-        when(processedEventRepository.existsById(eventId)).thenReturn(false);
-        when(jsonMapper.readValue(anyString(), eq(ProctorCommandEvent.class))).thenReturn(event);
-
-        consumer.onProctorCommand(message(eventId));
-
-        verify(proctorCommandService).extendResponseTime(attemptPublicId, tenantId, 300);
-        verify(proctorCommandService, never()).forceSubmit(any(), any());
-        verify(processedEventRepository).save(any(ProcessedEvent.class));
-    }
-
-    @Test
-    void extendTimeCommand_withNullExtraSeconds_appliesNothing_butStillMarksProcessed() throws Exception {
+    void formerExtendTimeCommand_isIgnored_butStillMarksProcessed() throws Exception {
         UUID eventId = UUID.randomUUID();
         ProctorCommandEvent event = new ProctorCommandEvent(UUID.randomUUID(), UUID.randomUUID(),
-                ExamDeliveryConstants.COMMAND_TYPE_EXTEND_TIME, null, UUID.randomUUID());
+                "EXTEND_TIME", UUID.randomUUID());
         when(processedEventRepository.existsById(eventId)).thenReturn(false);
         when(jsonMapper.readValue(anyString(), eq(ProctorCommandEvent.class))).thenReturn(event);
 
         consumer.onProctorCommand(message(eventId));
 
-        verify(proctorCommandService, never()).extendResponseTime(any(), any(), anyInt());
+        verifyNoInteractions(proctorCommandService);
         verify(processedEventRepository).save(any(ProcessedEvent.class));
     }
 
@@ -110,7 +99,7 @@ class ProctorCommandConsumerTest {
     void unknownCommandType_isIgnored_butStillMarksProcessed() throws Exception {
         UUID eventId = UUID.randomUUID();
         ProctorCommandEvent event = new ProctorCommandEvent(UUID.randomUUID(), UUID.randomUUID(),
-                "SOME_FUTURE_COMMAND", null, UUID.randomUUID());
+                "SOME_FUTURE_COMMAND", UUID.randomUUID());
         when(processedEventRepository.existsById(eventId)).thenReturn(false);
         when(jsonMapper.readValue(anyString(), eq(ProctorCommandEvent.class))).thenReturn(event);
 

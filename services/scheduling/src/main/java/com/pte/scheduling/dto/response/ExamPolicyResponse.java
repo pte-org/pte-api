@@ -5,5 +5,6 @@ public record ExamPolicyResponse(
         Integer replayPolicyLimit,
         Boolean deviceCheckRequired,
         Boolean proctorRequired,
-        String answerIntegrityLevel) {
+        String answerIntegrityLevel,
+        String lockdownMode) {
 }

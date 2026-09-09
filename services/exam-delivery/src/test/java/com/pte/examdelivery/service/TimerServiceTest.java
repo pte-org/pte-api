@@ -1,45 +1,30 @@
 package com.pte.examdelivery.service;
 
 import com.pte.examdelivery.domain.ExamAttempt;
-import com.pte.examdelivery.domain.TimerState;
-import com.pte.examdelivery.domain.enums.TimerPhase;
-import com.pte.examdelivery.repository.TimerStateRepository;
 import com.pte.examdelivery.service.cache.PinnedItemView;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 
 /**
- * Covers the section-scoped vs task-scoped timer split: READING shares one
- * deadline across every task in the section (summed from all its items),
- * everything else keeps the original per-task deadline.
+ * Covers the section-scoped vs task-scoped budget split (READING shares one
+ * budget across every task in the section, summed from all its items;
+ * everything else keeps the original per-task values) — client-side-exam-timer
+ * Phase 5 rewrite: no deadlines, no {@code TimerState}, no repository at all.
  */
-@ExtendWith(MockitoExtension.class)
 class TimerServiceTest {
 
-    @Mock
-    private TimerStateRepository timerStateRepository;
-
-    private TimerService timerService;
+    private final TimerService timerService = new TimerService();
     private ExamAttempt attempt;
 
     @BeforeEach
     void setUp() {
-        timerService = new TimerService(timerStateRepository);
         attempt = new ExamAttempt();
-        when(timerStateRepository.save(any(TimerState.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     private PinnedItemView readingItem(int orderIndex, int responseSeconds) {
@@ -54,93 +39,146 @@ class TimerServiceTest {
     }
 
     @Test
-    void firstReadingTask_deadlineEqualsSumOfAllReadingItems() {
+    void startTask_setsCurrentOrderIndex_andResetsReplayCounters() {
+        PinnedItemView item = taskScopedItem(2, "SPEAKING", "READ_ALOUD", 35, 40);
+        attempt.setPlayCount(3);
+        attempt.setLastPlayRequestId("stale-request-id");
+        attempt.setLastPlayAllowed(false);
+
+        timerService.startTask(attempt, item, List.of(item));
+
+        assertThat(attempt.getCurrentOrderIndex()).isEqualTo(2);
+        assertThat(attempt.getPlayCount()).isZero();
+        assertThat(attempt.getLastPlayRequestId()).isNull();
+        assertThat(attempt.getLastPlayAllowed()).isNull();
+    }
+
+    @Test
+    void startTask_taskScopedItem_clearsActiveSectionAndSectionStartedAt() {
+        PinnedItemView item = taskScopedItem(0, "SPEAKING", "READ_ALOUD", 35, 40);
+        attempt.setActiveSection("READING");
+        attempt.setSectionStartedAt(Instant.now().minusSeconds(30));
+
+        timerService.startTask(attempt, item, List.of(item));
+
+        assertThat(attempt.getActiveSection()).isNull();
+        assertThat(attempt.getSectionStartedAt()).isNull();
+    }
+
+    @Test
+    void startTask_firstReadingItem_setsActiveSectionAndStartsSectionClock() {
         List<PinnedItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
-        when(timerStateRepository.findByAttemptId(any())).thenReturn(Optional.empty());
 
         Instant before = Instant.now();
-        TimerState state = timerService.startTaskTimer(attempt, items.get(0), items);
+        timerService.startTask(attempt, items.get(0), items);
         Instant after = Instant.now();
 
-        long totalSeconds = 60 + 90 + 75;
-        assertThat(state.getPhase()).isEqualTo(TimerPhase.RESPONSE);
-        assertThat(state.getActiveSection()).isEqualTo("READING");
-        assertThat(state.getResponseDeadline())
-                .isAfterOrEqualTo(before.plusSeconds(totalSeconds))
-                .isBeforeOrEqualTo(after.plusSeconds(totalSeconds));
+        assertThat(attempt.getActiveSection()).isEqualTo("READING");
+        assertThat(attempt.getSectionStartedAt()).isBetween(before, after);
     }
 
     @Test
-    void secondReadingTask_reusesSameDeadlineAsFirst() {
+    void startTask_secondReadingItem_reusesExistingSectionStartedAt_doesNotReset() {
         List<PinnedItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
-        when(timerStateRepository.findByAttemptId(any())).thenReturn(Optional.empty());
+        timerService.startTask(attempt, items.get(0), items);
+        Instant firstSectionStart = attempt.getSectionStartedAt();
 
-        TimerState firstState = timerService.startTaskTimer(attempt, items.get(0), items);
-        when(timerStateRepository.findByAttemptId(any())).thenReturn(Optional.of(firstState));
+        timerService.startTask(attempt, items.get(1), items);
 
-        TimerState secondState = timerService.startTaskTimer(attempt, items.get(1), items);
-
-        assertThat(secondState.getResponseDeadline()).isEqualTo(firstState.getResponseDeadline());
-        assertThat(secondState.getPrepDeadline()).isEqualTo(firstState.getPrepDeadline());
-        assertThat(secondState.getCurrentOrderIndex()).isEqualTo(1);
-        assertThat(secondState.getActiveSection()).isEqualTo("READING");
+        assertThat(attempt.getActiveSection()).isEqualTo("READING");
+        assertThat(attempt.getSectionStartedAt()).isEqualTo(firstSectionStart);
+        assertThat(attempt.getCurrentOrderIndex()).isEqualTo(1);
     }
 
     @Test
-    void readAloud_taskScoped_getsFreshPerTaskDeadline_unaffectedBySectionScopedSections() {
-        PinnedItemView first = taskScopedItem(0, "SPEAKING", "READ_ALOUD", 35, 40);
-        PinnedItemView second = taskScopedItem(1, "SPEAKING", "READ_ALOUD", 35, 40);
-        List<PinnedItemView> items = List.of(first, second);
-        when(timerStateRepository.findByAttemptId(any())).thenReturn(Optional.empty());
-
-        TimerState firstState = timerService.startTaskTimer(attempt, first, items);
-        when(timerStateRepository.findByAttemptId(any())).thenReturn(Optional.of(firstState));
-
-        Instant before = Instant.now();
-        TimerState secondState = timerService.startTaskTimer(attempt, second, items);
-        Instant after = Instant.now();
-
-        // Task-scoped (not in SECTION_SCOPED_SECTIONS): each task gets its own
-        // fresh prep/response deadline computed from its own start time, not the
-        // previous task's deadline reused verbatim.
-        assertThat(secondState.getActiveSection()).isNull();
-        assertThat(secondState.getPrepDeadline()).isAfterOrEqualTo(before.plusSeconds(35)).isBeforeOrEqualTo(after.plusSeconds(35));
-        assertThat(secondState.getResponseDeadline())
-                .isAfterOrEqualTo(before.plusSeconds(75))
-                .isBeforeOrEqualTo(after.plusSeconds(75));
-    }
-
-    @Test
-    void enteringReadingAfterAnotherSection_computesFreshSectionDeadline() {
+    void startTask_enteringReadingAfterAnotherSection_startsFreshSectionClock() {
         PinnedItemView speaking = taskScopedItem(0, "SPEAKING", "READ_ALOUD", 35, 40);
         PinnedItemView firstReading = readingItem(1, 60);
-        PinnedItemView secondReading = readingItem(2, 90);
-        List<PinnedItemView> items = List.of(speaking, firstReading, secondReading);
-        when(timerStateRepository.findByAttemptId(any())).thenReturn(Optional.empty());
-
-        TimerState speakingState = timerService.startTaskTimer(attempt, speaking, items);
-        when(timerStateRepository.findByAttemptId(any())).thenReturn(Optional.of(speakingState));
+        List<PinnedItemView> items = List.of(speaking, firstReading);
+        timerService.startTask(attempt, speaking, items);
 
         Instant before = Instant.now();
-        TimerState readingState = timerService.startTaskTimer(attempt, firstReading, items);
+        timerService.startTask(attempt, firstReading, items);
         Instant after = Instant.now();
 
-        long readingTotalSeconds = 60 + 90;
-        assertThat(readingState.getActiveSection()).isEqualTo("READING");
-        assertThat(readingState.getResponseDeadline())
-                .isAfterOrEqualTo(before.plusSeconds(readingTotalSeconds))
-                .isBeforeOrEqualTo(after.plusSeconds(readingTotalSeconds));
+        assertThat(attempt.getActiveSection()).isEqualTo("READING");
+        assertThat(attempt.getSectionStartedAt()).isBetween(before, after);
     }
 
     @Test
-    void save_isCalledWithPersistedState() {
+    void resolveEffective_taskScopedItem_returnsItemsOwnValuesUnchanged() {
+        PinnedItemView item = taskScopedItem(0, "SPEAKING", "READ_ALOUD", 35, 40);
+        List<PinnedItemView> items = List.of(item);
+        timerService.startTask(attempt, item, items);
+
+        assertThat(timerService.resolveEffectivePrepSeconds(item)).isEqualTo(35);
+        assertThat(timerService.resolveEffectiveResponseSeconds(attempt, item, items)).isEqualTo(40);
+    }
+
+    @Test
+    void resolveEffective_firstReadingItem_prepIsZero_responseIsFullSectionBudget() {
+        List<PinnedItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
+        timerService.startTask(attempt, items.get(0), items);
+
+        assertThat(timerService.resolveEffectivePrepSeconds(items.get(0))).isZero();
+        assertThat(timerService.resolveEffectiveResponseSeconds(attempt, items.get(0), items)).isEqualTo(60 + 90 + 75);
+    }
+
+    @Test
+    void resolveEffective_secondReadingItem_deductsElapsedTimeSinceSectionStart() {
+        List<PinnedItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
+        timerService.startTask(attempt, items.get(0), items);
+        // Simulate 20 elapsed seconds since the section actually started, without a real sleep.
+        attempt.setSectionStartedAt(attempt.getSectionStartedAt().minusSeconds(20));
+
+        // Must reuse the SAME (already activeSection="READING") sectionStartedAt, not reset it —
+        // otherwise startTask would take the "new section" branch.
+        timerService.startTask(attempt, items.get(1), items);
+
+        int effectiveResponse = timerService.resolveEffectiveResponseSeconds(attempt, items.get(1), items);
+        // 225s total budget minus ~20s elapsed — allow a small tolerance for real test execution time.
+        assertThat(effectiveResponse).isBetween(203, 205);
+        assertThat(timerService.resolveEffectivePrepSeconds(items.get(1))).isZero();
+    }
+
+    @Test
+    void resolveEffective_elapsedExceedsBudget_clampsToZero_neverNegative() {
         List<PinnedItemView> items = List.of(readingItem(0, 60));
-        when(timerStateRepository.findByAttemptId(any())).thenReturn(Optional.empty());
+        timerService.startTask(attempt, items.get(0), items);
+        // Section budget is only 60s — simulate far more elapsed than that.
+        attempt.setSectionStartedAt(attempt.getSectionStartedAt().minusSeconds(9999));
 
-        timerService.startTaskTimer(attempt, items.get(0), items);
+        assertThat(timerService.resolveEffectiveResponseSeconds(attempt, items.get(0), items)).isZero();
+    }
 
-        ArgumentCaptor<TimerState> captor = ArgumentCaptor.forClass(TimerState.class);
-        org.mockito.Mockito.verify(timerStateRepository).save(captor.capture());
-        assertThat(captor.getValue().getAttempt()).isSameAs(attempt);
+    /**
+     * Regression test (client-side-exam-timer Phase 1, plan Step 7 — preserved
+     * through the Phase 5 rewrite): confirms the pointer (currentOrderIndex) and
+     * the shared-budget clock (sectionStartedAt) stay consistent across all
+     * three items of a Reading section.
+     */
+    @Test
+    void multiItemReadingSection_currentPointerAndSharedBudgetStayConsistentAcrossAllThreeItems() {
+        List<PinnedItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
+
+        timerService.startTask(attempt, items.get(0), items);
+        assertThat(attempt.getCurrentOrderIndex()).isEqualTo(0);
+        assertThat(attempt.getActiveSection()).isEqualTo("READING");
+        Instant sectionStart = attempt.getSectionStartedAt();
+
+        timerService.startTask(attempt, items.get(1), items);
+        assertThat(attempt.getCurrentOrderIndex()).isEqualTo(1);
+        assertThat(attempt.getActiveSection()).isEqualTo("READING");
+        assertThat(attempt.getSectionStartedAt()).isEqualTo(sectionStart);
+
+        timerService.startTask(attempt, items.get(2), items);
+        assertThat(attempt.getCurrentOrderIndex()).isEqualTo(2);
+        assertThat(attempt.getActiveSection()).isEqualTo("READING");
+        assertThat(attempt.getSectionStartedAt()).isEqualTo(sectionStart);
+
+        // Every startTask call also resets the (relocated) replay counters.
+        assertThat(attempt.getPlayCount()).isZero();
+        assertThat(attempt.getLastPlayRequestId()).isNull();
+        assertThat(attempt.getLastPlayAllowed()).isNull();
     }
 }
