@@ -16,6 +16,10 @@ public final class AdminConstants {
     public static final String CLASS_HAS_ACTIVE_MEMBERS = "CLASS_HAS_ACTIVE_MEMBERS";
     public static final String STUDENT_ALREADY_IN_CLASS = "STUDENT_ALREADY_IN_CLASS";
     public static final String CLASS_MEMBERSHIP_NOT_FOUND = "CLASS_MEMBERSHIP_NOT_FOUND";
+    public static final String LECTURER_ALREADY_ASSIGNED = "LECTURER_ALREADY_ASSIGNED";
+    public static final String LECTURER_ASSIGNMENT_NOT_FOUND = "LECTURER_ASSIGNMENT_NOT_FOUND";
+    public static final String COORDINATOR_ALREADY_ASSIGNED = "COORDINATOR_ALREADY_ASSIGNED";
+    public static final String COORDINATOR_ASSIGNMENT_NOT_FOUND = "COORDINATOR_ASSIGNMENT_NOT_FOUND";
 
     public static final String AGGREGATE_TENANT = "Tenant";
     public static final String EVENT_TENANT_ONBOARDED = "TenantOnboarded";
@@ -45,6 +49,10 @@ public final class AdminConstants {
     public static final String EVENT_STUDENT_ASSIGNED_TO_CLASS = "StudentAssignedToClass";
     public static final String EVENT_STUDENT_UNASSIGNED_FROM_CLASS = "StudentUnassignedFromClass";
     public static final String EVENT_STUDENT_TRANSFERRED_CLASS = "StudentTransferredClass";
+    public static final String EVENT_LECTURER_ASSIGNED = "LecturerAssigned";
+    public static final String EVENT_LECTURER_UNASSIGNED = "LecturerUnassigned";
+    public static final String EVENT_COORDINATOR_ASSIGNED = "CoordinatorAssigned";
+    public static final String EVENT_COORDINATOR_UNASSIGNED = "CoordinatorUnassigned";
 
     // RabbitMQ outbox relay (rabbitmq-outbox-migration Phase 2). Downstream
     // consumers (e.g. iam's TenantEventConsumer, Phase 3) bind their own
