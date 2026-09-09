@@ -16,7 +16,6 @@ import com.pte.scheduling.repository.ExamSessionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -27,7 +26,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -77,8 +75,7 @@ class SessionServiceLockdownTest {
                         UUID.randomUUID(),
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
-                        ExamMode.PRACTICE,
-                        null),
+                        ExamMode.PRACTICE),
                 hostAdmin);
 
         assertThat(response.policy().lockdownMode()).isEqualTo("NONE");
@@ -99,8 +96,7 @@ class SessionServiceLockdownTest {
                         UUID.randomUUID(),
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
-                        ExamMode.MOCK_TEST,
-                        null),
+                        ExamMode.MOCK_TEST),
                 hostAdmin);
 
         assertThat(response.policy().lockdownMode()).isEqualTo("STANDARD");
@@ -121,8 +117,7 @@ class SessionServiceLockdownTest {
                         UUID.randomUUID(),
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
-                        ExamMode.REAL_EXAM,
-                        null),
+                        ExamMode.REAL_EXAM),
                 hostAdmin);
 
         assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
