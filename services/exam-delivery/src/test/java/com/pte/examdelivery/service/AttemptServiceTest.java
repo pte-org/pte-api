@@ -5,13 +5,11 @@ import com.pte.examdelivery.config.EncryptionKeyProvider;
 import com.pte.examdelivery.domain.ExamAttempt;
 import com.pte.examdelivery.domain.PinnedExamSnapshot;
 import com.pte.examdelivery.domain.PinnedItem;
-import com.pte.examdelivery.domain.TimerState;
 import com.pte.examdelivery.domain.enums.AttemptStatus;
 import com.pte.examdelivery.dto.request.StartAttemptRequest;
 import com.pte.examdelivery.dto.response.AttemptTaskResponse;
 import com.pte.examdelivery.mapper.AttemptMapper;
 import com.pte.examdelivery.messaging.outbox.OutboxWriter;
-import com.pte.examdelivery.repository.AttemptAnswerRepository;
 import com.pte.examdelivery.repository.ExamAttemptRepository;
 import com.pte.examdelivery.repository.PinnedItemRepository;
 import com.pte.examdelivery.service.cache.PinnedSnapshotCacheService;
@@ -24,7 +22,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -53,9 +50,6 @@ class AttemptServiceTest {
     private PinnedItemRepository pinnedItemRepository;
 
     @Mock
-    private AttemptAnswerRepository attemptAnswerRepository;
-
-    @Mock
     private SnapshotPinService snapshotPinService;
 
     @Mock
@@ -76,6 +70,9 @@ class AttemptServiceTest {
     @Mock
     private SubmissionDecryptionService submissionDecryptionService;
 
+    @Mock
+    private HeartbeatService heartbeatService;
+
     private AttemptService attemptService;
     private AttemptMapper attemptMapper;
 
@@ -94,7 +91,6 @@ class AttemptServiceTest {
         attemptService = new AttemptService(
             attemptRepository,
             pinnedItemRepository,
-            attemptAnswerRepository,
             snapshotPinService,
             cacheService,
             timerService,
@@ -102,7 +98,8 @@ class AttemptServiceTest {
             attemptMapper,
             outboxWriter,
             encryptionKeyProvider,
-            submissionDecryptionService
+            submissionDecryptionService,
+            heartbeatService
         );
 
         // Set up standard mock responses
@@ -142,8 +139,6 @@ class AttemptServiceTest {
         PinnedItem firstItem = pinnedSnapshot.getItems().get(0);
 
         when(snapshotPinService.pin(any(), any(), any())).thenReturn(pinnedSnapshot);
-        when(timerService.startTaskTimer(any(), any(), any()))
-            .thenReturn(createTimerState(0));
         when(encryptionKeyProvider.getPublicKeyBase64()).thenReturn(TEST_PUBLIC_KEY_BASE64);
 
         StartAttemptRequest request = new StartAttemptRequest(sessionPublicId, true);
@@ -175,8 +170,6 @@ class AttemptServiceTest {
         PinnedExamSnapshot pinnedSnapshot = createPinnedSnapshot(tenantId, "STANDARD");
 
         when(snapshotPinService.pin(any(), any(), any())).thenReturn(pinnedSnapshot);
-        when(timerService.startTaskTimer(any(), any(), any()))
-            .thenReturn(createTimerState(0));
 
         StartAttemptRequest request = new StartAttemptRequest(sessionPublicId, true);
 
@@ -203,8 +196,6 @@ class AttemptServiceTest {
         PinnedItem firstItem = pinnedSnapshot.getItems().get(0);
 
         when(snapshotPinService.pin(any(), any(), any())).thenReturn(pinnedSnapshot);
-        when(timerService.startTaskTimer(any(), any(), any()))
-            .thenReturn(createTimerState(0));
 
         StartAttemptRequest request = new StartAttemptRequest(sessionPublicId, true);
 
@@ -235,8 +226,6 @@ class AttemptServiceTest {
         PinnedItem firstItem = pinnedSnapshot.getItems().get(0);
 
         when(snapshotPinService.pin(any(), any(), any())).thenReturn(pinnedSnapshot);
-        when(timerService.startTaskTimer(any(), any(), any()))
-            .thenReturn(createTimerState(0));
         when(encryptionKeyProvider.getPublicKeyBase64()).thenReturn(TEST_PUBLIC_KEY_BASE64);
 
         StartAttemptRequest request = new StartAttemptRequest(sessionPublicId, true);
@@ -281,14 +270,5 @@ class AttemptServiceTest {
 
         snapshot.addItem(item);
         return snapshot;
-    }
-
-    private TimerState createTimerState(int orderIndex) {
-        TimerState timer = new TimerState();
-        timer.setId(1L);
-        timer.setCurrentOrderIndex(orderIndex);
-        timer.setPrepDeadline(Instant.now());
-        timer.setResponseDeadline(Instant.now().plusSeconds(60));
-        return timer;
     }
 }

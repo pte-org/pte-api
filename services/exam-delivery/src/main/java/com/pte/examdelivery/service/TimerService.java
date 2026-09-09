@@ -1,78 +1,87 @@
 package com.pte.examdelivery.service;
 
 import com.pte.examdelivery.domain.ExamAttempt;
-import com.pte.examdelivery.domain.TimerState;
-import com.pte.examdelivery.domain.enums.TimerPhase;
-import com.pte.examdelivery.repository.TimerStateRepository;
 import com.pte.examdelivery.service.cache.PinnedItemView;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
 /**
- * Server-authoritative timing (client timer is UX only). Both prep and
- * response deadlines are computed at task-start, so enforcement never depends
- * on a client "prep done" callback — a task's response window starts exactly
- * {@code prepSeconds} after it began, whether or not the student was ready.
+ * Client-side-exam-timer Phase 5: server-side deadline enforcement (prep/response
+ * windows, the response-window-expiry check, the {@code /timer} poll endpoint) is
+ * gone entirely — the client now owns the whole-attempt countdown and auto-submit
+ * UX (see {@code research/refactor_polling.md}). What remains here has no other
+ * home: resetting per-task replay counters when a new task starts, and tracking
+ * the section-scoped shared-budget window (currently only READING) so
+ * {@link #resolveEffectiveResponseSeconds} can hand the client a correct live
+ * value on every per-task fetch — no absolute deadline, no polling required.
  *
- * <p>Sections in {@link #SECTION_SCOPED_SECTIONS} (currently only READING,
- * matching the real PTE exam) share a single deadline across every task in
- * the section instead of getting a fresh per-task deadline — computed once,
+ * <p>Sections in {@link #SECTION_SCOPED_SECTIONS} share a single budget across
+ * every task in the section instead of each task getting its own — computed once,
  * when the first task of the section starts, as the sum of every task's own
- * {@code prepSeconds + responseSeconds} in that section's contiguous run.
- * Every other task in the section then reuses that same deadline unchanged.
- * All other sections (SPEAKING, WRITING, LISTENING) keep the original
- * per-task behavior.
+ * {@code prepSeconds + responseSeconds} in that section's contiguous run. All
+ * other sections (SPEAKING, WRITING, LISTENING) keep the original per-task values.
  */
 @Service
 public class TimerService {
 
     private static final Set<String> SECTION_SCOPED_SECTIONS = Set.of("READING");
 
-    private final TimerStateRepository timerStateRepository;
-
-    public TimerService(TimerStateRepository timerStateRepository) {
-        this.timerStateRepository = timerStateRepository;
-    }
-
     /**
+     * Resets the per-task bookkeeping {@code startTask} owns (replay counters,
+     * section-scoped tracking) — called whenever {@code attempt}'s current task
+     * changes, so this must run BEFORE {@link #resolveEffectivePrepSeconds}/
+     * {@link #resolveEffectiveResponseSeconds} are read for {@code item}.
+     *
      * @param allItems every item of the attempt's pinned snapshot, in
      *                  {@code orderIndex} order — only scanned when {@code item}
      *                  is the first task of a new section-scoped section, to sum
-     *                  that section's total budget.
+     *                  that section's total budget (via
+     *                  {@link #resolveEffectiveResponseSeconds}, not here).
      */
-    public TimerState startTaskTimer(ExamAttempt attempt, PinnedItemView item, List<PinnedItemView> allItems) {
-        TimerState state = timerStateRepository.findByAttemptId(attempt.getId()).orElseGet(TimerState::new);
-        Instant now = Instant.now();
-        state.setAttempt(attempt);
-        state.setCurrentOrderIndex(item.orderIndex());
-        state.setPlayCount(0);
-        state.setLastPlayRequestId(null);
-        state.setLastPlayAllowed(null);
+    public void startTask(ExamAttempt attempt, PinnedItemView item, List<PinnedItemView> allItems) {
+        attempt.setCurrentOrderIndex(item.orderIndex());
+        attempt.setPlayCount(0);
+        attempt.setLastPlayRequestId(null);
+        attempt.setLastPlayAllowed(null);
 
         if (SECTION_SCOPED_SECTIONS.contains(item.section())) {
-            if (item.section().equals(state.getActiveSection())) {
-                // Still inside the same section-scoped section — reuse the
-                // deadline already in place rather than resetting it.
-                state.setPhase(TimerPhase.RESPONSE);
-            } else {
-                state.setActiveSection(item.section());
-                state.setPhase(TimerPhase.RESPONSE);
-                state.setTaskStartedAt(now);
-                state.setPrepDeadline(now);
-                state.setResponseDeadline(now.plusSeconds(sectionBudgetSeconds(item, allItems)));
+            if (!item.section().equals(attempt.getActiveSection())) {
+                // Just entered this section-scoped section — the budget's clock
+                // starts now. Reuse the existing sectionStartedAt when merely
+                // moving between items already inside the same section.
+                attempt.setSectionStartedAt(Instant.now());
             }
+            attempt.setActiveSection(item.section());
         } else {
-            state.setActiveSection(null);
-            state.setPhase(item.prepSeconds() > 0 ? TimerPhase.PREP : TimerPhase.RESPONSE);
-            state.setTaskStartedAt(now);
-            state.setPrepDeadline(now.plusSeconds(item.prepSeconds()));
-            state.setResponseDeadline(now.plusSeconds((long) item.prepSeconds() + item.responseSeconds()));
+            attempt.setActiveSection(null);
+            attempt.setSectionStartedAt(null);
         }
+    }
 
-        return timerStateRepository.save(state);
+    /**
+     * The prep/response seconds the CLIENT should actually count down from for
+     * {@code item} (client-side-exam-timer Phase 2 addendum, FR-01/FR-06). For a
+     * task-scoped item this is just the item's own static values, unchanged. For a
+     * section-scoped item (READING), the item's own {@code prepSeconds}/{@code responseSeconds}
+     * are just that item's individual slice — the value the client needs is the
+     * *live remaining shared budget*, computed fresh here from
+     * {@link ExamAttempt#getSectionStartedAt()}. Must be called AFTER
+     * {@link #startTask}, which is what sets/maintains that attempt field.
+     */
+    public int resolveEffectivePrepSeconds(PinnedItemView item) {
+        return SECTION_SCOPED_SECTIONS.contains(item.section()) ? 0 : item.prepSeconds();
+    }
+
+    public int resolveEffectiveResponseSeconds(ExamAttempt attempt, PinnedItemView item, List<PinnedItemView> allItems) {
+        if (!SECTION_SCOPED_SECTIONS.contains(item.section())) {
+            return item.responseSeconds();
+        }
+        long elapsedSeconds = Duration.between(attempt.getSectionStartedAt(), Instant.now()).getSeconds();
+        return (int) Math.max(0, sectionBudgetSeconds(item, allItems) - elapsedSeconds);
     }
 
     /**
@@ -87,24 +96,5 @@ public class TimerService {
                 .filter(candidate -> item.section().equals(candidate.section()))
                 .mapToLong(candidate -> (long) candidate.prepSeconds() + candidate.responseSeconds())
                 .sum();
-    }
-
-    public boolean isResponseWindowExpired(TimerState state) {
-        return state.isResponseWindowExpired(Instant.now());
-    }
-
-    public TimerState getState(Long attemptId) {
-        return timerStateRepository.findByAttemptId(attemptId)
-                .orElseThrow(() -> new IllegalStateException("No timer state for attempt " + attemptId));
-    }
-
-    /** Pessimistic write lock — for the audio-play endpoint's check-and-increment (Phase 6 concurrency requirement). */
-    public TimerState getStateWithLock(Long attemptId) {
-        return timerStateRepository.findWithLockByAttemptId(attemptId)
-                .orElseThrow(() -> new IllegalStateException("No timer state for attempt " + attemptId));
-    }
-
-    public void save(TimerState state) {
-        timerStateRepository.save(state);
     }
 }

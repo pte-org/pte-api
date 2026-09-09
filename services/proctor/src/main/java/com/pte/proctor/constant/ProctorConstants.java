@@ -7,7 +7,6 @@ public final class ProctorConstants {
     public static final String PROCTOR_SESSION_NOT_ACTIVE = "PROCTOR_SESSION_NOT_ACTIVE";
     public static final String PROCTOR_ASSIGNMENT_CHECK_FAILED = "PROCTOR_ASSIGNMENT_CHECK_FAILED";
     public static final String NOT_ASSIGNED_TO_SESSION = "NOT_ASSIGNED_TO_SESSION";
-    public static final String EXTRA_SECONDS_REQUIRED = "EXTRA_SECONDS_REQUIRED";
     public static final String PROCTOR_ROLE_REQUIRED = "PROCTOR_ROLE_REQUIRED";
 
     // Outgoing (proctor's own outbox)

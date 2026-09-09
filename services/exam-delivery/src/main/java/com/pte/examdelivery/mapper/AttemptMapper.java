@@ -1,20 +1,16 @@
 package com.pte.examdelivery.mapper;
 
 import com.pte.examdelivery.domain.ExamAttempt;
-import com.pte.examdelivery.domain.TimerState;
-import com.pte.examdelivery.domain.enums.TimerPhase;
 import com.pte.examdelivery.dto.response.AttemptTaskResponse;
 import com.pte.examdelivery.dto.response.BlankGroupView;
 import com.pte.examdelivery.dto.response.OptionView;
 import com.pte.examdelivery.dto.response.TaskView;
-import com.pte.examdelivery.dto.response.TimerStateResponse;
 import com.pte.examdelivery.service.cache.PinnedItemView;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -35,45 +31,40 @@ public class AttemptMapper {
         this.jsonMapper = jsonMapper;
     }
 
-    public AttemptTaskResponse toTaskResponse(ExamAttempt attempt, PinnedItemView item, TimerState timer, int totalTasks) {
-        return toTaskResponse(attempt, item, timer, totalTasks, null);
+    public AttemptTaskResponse toTaskResponse(ExamAttempt attempt, PinnedItemView item, int effectivePrepSeconds,
+            int effectiveResponseSeconds, int totalTasks) {
+        return toTaskResponse(attempt, item, effectivePrepSeconds, effectiveResponseSeconds, totalTasks, null);
     }
 
-    /** {@code encryptionPublicKey} is non-null only from the {@code startAttempt}/{@code createAndPin} call site. */
-    public AttemptTaskResponse toTaskResponse(ExamAttempt attempt, PinnedItemView item, TimerState timer, int totalTasks,
-            String encryptionPublicKey) {
+    /**
+     * {@code encryptionPublicKey} is non-null only from the {@code startAttempt}/{@code createAndPin} call site.
+     *
+     * <p>{@code effectivePrepSeconds}/{@code effectiveResponseSeconds} (client-side-exam-timer
+     * Phase 2 addendum, FR-01/FR-06) — NOT {@code item.prepSeconds()}/{@code item.responseSeconds()}
+     * directly: for a section-scoped item (READING) these differ, reflecting the live remaining
+     * shared-section budget rather than just this one item's own slice. See
+     * {@link com.pte.examdelivery.service.TimerService#resolveEffectivePrepSeconds}/
+     * {@code resolveEffectiveResponseSeconds}, which every caller here must go through instead
+     * of reading the item's raw values. This is now the ONLY timing info the client receives per
+     * task — no more {@code prepDeadline}/{@code responseDeadline}/{@code serverNow}, since the
+     * client computes its own local countdown entirely from these two ints (FR-01).
+     */
+    public AttemptTaskResponse toTaskResponse(ExamAttempt attempt, PinnedItemView item, int effectivePrepSeconds,
+            int effectiveResponseSeconds, int totalTasks, String encryptionPublicKey) {
         List<FrozenOption> parsedOptions = parseFrozenOptions(item.optionsJson());
         requireHomogeneousBlankIndex(item.publicId(), parsedOptions);
         TaskView task = new TaskView(
                 item.publicId(), item.orderIndex(), totalTasks, item.section(), item.taskType(), item.title(),
                 item.promptText(), item.audioPromptRef(), item.imagePromptRef(), item.minWordCount(),
-                item.maxWordCount(), toFlatOptions(parsedOptions), toBlankGroups(parsedOptions), item.prepSeconds(),
-                item.responseSeconds(), timer.getPrepDeadline(), timer.getResponseDeadline(), Instant.now(),
-                attempt.getExamEndTime(), item.preListenSeconds(), item.preRecordSeconds(), item.imageUrl());
-        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey, attempt.getPinnedSnapshot().getLockdownMode());
+                item.maxWordCount(), toFlatOptions(parsedOptions), toBlankGroups(parsedOptions), effectivePrepSeconds,
+                effectiveResponseSeconds, attempt.getExamEndTime(), item.preListenSeconds(), item.preRecordSeconds(),
+                item.imageUrl());
+        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey,
+                attempt.getPinnedSnapshot().getLockdownMode());
     }
 
     public AttemptTaskResponse toCompletedResponse(ExamAttempt attempt) {
         return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), true, null, null, null);
-    }
-
-    /**
-     * {@code timer.getPhase()} is write-once — set at {@code startTaskTimer}
-     * and never revisited afterward, so it stays {@code PREP} forever past
-     * {@code prepDeadline} unless recomputed here. The client deliberately
-     * never advances phase on its own (trusts the server's reported phase
-     * exclusively, by design), so without this recomputation a task never
-     * reaches {@code RESPONSE} once prep time runs out — found + fixed via
-     * plans/phat-speaking-api-e2e-verify Phase 3, exercising a real timer
-     * poll against a real attempt for the first time.
-     */
-    public TimerStateResponse toTimerResponse(ExamAttempt attempt, TimerState timer) {
-        Instant now = Instant.now();
-        TimerPhase phase = timer.getPhase() == TimerPhase.PREP && !now.isBefore(timer.getPrepDeadline())
-                ? TimerPhase.RESPONSE
-                : timer.getPhase();
-        return new TimerStateResponse(timer.getCurrentOrderIndex(), phase.name(),
-                timer.getPrepDeadline(), timer.getResponseDeadline(), now, attempt.getExamEndTime());
     }
 
     private List<FrozenOption> parseFrozenOptions(String optionsJson) {

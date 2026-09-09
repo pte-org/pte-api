@@ -1,6 +1,5 @@
 package com.pte.examdelivery.dto.request;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.UUID;
@@ -36,5 +35,12 @@ import java.util.UUID;
  */
 public record SubmitAnswerRequest(
         @NotNull(message = "Task reference is required") UUID pinnedItemPublicId,
-        @NotBlank(message = "Answer payload is required") String payload) {
+        /**
+         * Blank/null is a legitimate submission (client-side-exam-timer Phase 2,
+         * FR-07): resubmitted when the client's local countdown hits zero with
+         * nothing answered, replacing the removed server-side auto-expire. Not
+         * {@code @NotBlank} — the answer-processing path already treats a blank
+         * payload as a normal (if content-less) answer end-to-end.
+         */
+        String payload) {
 }

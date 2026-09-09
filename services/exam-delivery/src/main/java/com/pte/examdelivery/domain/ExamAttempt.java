@@ -65,10 +65,11 @@ public class ExamAttempt extends BaseEntity {
     /**
      * {@code startedAt} plus the sum of every pinned item's own
      * {@code prepSeconds + responseSeconds} — the whole-attempt deadline shown
-     * as a countdown in the client's app bar (distinct from
-     * {@link TimerState}'s per-task/section deadlines). Computed once, right
-     * after {@link #begin()}, from the pinned snapshot that exists by then;
-     * never recomputed afterward even if a later task is auto-expired.
+     * as a countdown in the client's app bar. Computed once, right after
+     * {@link #begin()}, from the pinned snapshot that exists by then; never
+     * recomputed afterward. The client (client-side-exam-timer Phase 3/4) is now
+     * the only thing that ever acts on this value — no server-side enforcement
+     * reads it (Phase 5 deleted the last of that).
      */
     @Column
     private Instant examEndTime;
@@ -76,6 +77,54 @@ public class ExamAttempt extends BaseEntity {
     /** Audit fact only — set once at creation from the accepted {@code deviceCheckConfirmed} flag, never re-checked. */
     @Column
     private Instant deviceCheckPassedAt;
+
+    /**
+     * Current pinned-item pointer — relocated off the now-deleted {@code TimerState}
+     * (client-side-exam-timer refactor, Phase 1) so "which task is current" outlives
+     * whatever happens to per-task timing state. Explicit {@code columnDefinition}
+     * default so {@code ddl-auto: update}'s {@code ALTER TABLE ... ADD COLUMN ... NOT NULL}
+     * succeeds against an already-seeded database (precedent: {@code MediaObject.audioPrompt}).
+     */
+    @Column(nullable = false, columnDefinition = "integer not null default 0")
+    private int currentOrderIndex;
+
+    /**
+     * Task-local audio-replay counters — relocated off the now-deleted
+     * {@code TimerState} (Phase 1); reset to 0/null whenever
+     * {@link com.pte.examdelivery.service.TimerService#startTask} starts a
+     * (new or resumed) task.
+     */
+    @Column(nullable = false, columnDefinition = "integer not null default 0")
+    private int playCount;
+
+    /**
+     * Idempotency for the audio-play endpoint, scoped to the current task only
+     * (reset alongside {@link #playCount}). A repeated request with the same
+     * key replays {@link #lastPlayAllowed} instead of incrementing again.
+     */
+    @Column
+    private String lastPlayRequestId;
+
+    @Column
+    private Boolean lastPlayAllowed;
+
+    /**
+     * Section-scoped shared-budget tracking (client-side-exam-timer Phase 2 addendum) —
+     * relocated off the now-deleted {@code TimerState} for the same reason as the fields
+     * above, but for a different consumer:
+     * {@link com.pte.examdelivery.service.TimerService#resolveEffectiveResponseSeconds}
+     * uses these to compute how much of a section's shared time budget (currently only
+     * READING) remains, so the client can keep receiving a correct, live "remaining seconds"
+     * value in {@code TaskView.responseSeconds} purely from a per-task-fetch response —
+     * without the client ever needing an absolute deadline timestamp or a repeated poll to
+     * stay in sync, and without the client ever seeing more than one task at a time. Null
+     * for a task-scoped section (the common case).
+     */
+    @Column
+    private String activeSection;
+
+    @Column
+    private Instant sectionStartedAt;
 
     @OneToOne(mappedBy = "attempt", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private PinnedExamSnapshot pinnedSnapshot;

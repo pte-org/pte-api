@@ -27,11 +27,15 @@ public record TaskView(
         Integer maxWordCount,
         List<OptionView> options,
         List<BlankGroupView> blankGroups,
+        /**
+         * The client-side-exam-timer refactor's ONLY timing signal per task (FR-01) —
+         * for a section-scoped item (READING) this is the live remaining shared-section
+         * budget, not just this item's own static slice (see {@code AttemptMapper.toTaskResponse}'s
+         * doc comment). No more {@code prepDeadline}/{@code responseDeadline}/{@code serverNow} —
+         * the client computes its own local countdown entirely from these two ints.
+         */
         int prepSeconds,
         int responseSeconds,
-        Instant prepDeadline,
-        Instant responseDeadline,
-        Instant serverNow,
         Instant examEndTime,
         /**
          * Non-null only for the 5 audio-prompt Speaking task types — every
