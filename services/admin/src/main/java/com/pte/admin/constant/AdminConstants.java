@@ -8,6 +8,8 @@ public final class AdminConstants {
     public static final String ORGANIZATION_NOT_FOUND = "ORGANIZATION_NOT_FOUND";
     public static final String ORGANIZATION_NAME_ALREADY_USED = "ORGANIZATION_NAME_ALREADY_USED";
     public static final String QUOTA_CONFLICT = "QUOTA_CONFLICT";
+    public static final String PROGRAM_NOT_FOUND = "PROGRAM_NOT_FOUND";
+    public static final String PROGRAM_NAME_ALREADY_USED = "PROGRAM_NAME_ALREADY_USED";
 
     public static final String AGGREGATE_TENANT = "Tenant";
     public static final String EVENT_TENANT_ONBOARDED = "TenantOnboarded";
@@ -22,6 +24,12 @@ public final class AdminConstants {
 
     public static final String AGGREGATE_QUOTA_TRANSACTION = "QuotaTransaction";
     public static final String EVENT_QUOTA_GRANTED = "QuotaGranted";
+
+    public static final String AGGREGATE_PROGRAM = "Program";
+    public static final String EVENT_PROGRAM_CREATED = "ProgramCreated";
+    public static final String EVENT_PROGRAM_UPDATED = "ProgramUpdated";
+    public static final String EVENT_PROGRAM_STATUS_CHANGED = "ProgramStatusChanged";
+    public static final String EVENT_PROGRAM_ARCHIVED = "ProgramArchived";
 
     // RabbitMQ outbox relay (rabbitmq-outbox-migration Phase 2). Downstream
     // consumers (e.g. iam's TenantEventConsumer, Phase 3) bind their own
