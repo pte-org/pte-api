@@ -15,11 +15,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
- * exam-delivery's first consumer: applies proctor's FORCE_SUBMIT/EXTEND_TIME
- * commands via the polling outbox relay + RabbitMQ (rabbitmq-outbox-migration
- * Phase 5, superseding Debezium's outbox router). Idempotent, same dedup
- * pattern as every other consumer in this codebase (ADR-002) — checked before
- * apply, saved after, inside one transaction.
+ * exam-delivery's first consumer: applies proctor's FORCE_SUBMIT command via
+ * the polling outbox relay + RabbitMQ (rabbitmq-outbox-migration Phase 5,
+ * superseding Debezium's outbox router). Idempotent, same dedup pattern as
+ * every other consumer in this codebase (ADR-002) — checked before apply,
+ * saved after, inside one transaction.
+ *
+ * <p>EXTEND_TIME removed (client-side-exam-timer Phase 5) — accepted
+ * capability loss, see {@code ProctorCommandEvent}'s doc comment.
  *
  * <p>Ordering-sensitive: bound to a SINGLE queue consumed with concurrency=1
  * ({@link com.pte.examdelivery.messaging.RabbitMqConfig}), so two commands
@@ -59,11 +62,8 @@ public class ProctorCommandConsumer {
     private void applyCommand(ProctorCommandEvent event) {
         if (ExamDeliveryConstants.COMMAND_TYPE_FORCE_SUBMIT.equals(event.commandType())) {
             proctorCommandService.forceSubmit(event.attemptPublicId(), event.tenantId());
-        } else if (ExamDeliveryConstants.COMMAND_TYPE_EXTEND_TIME.equals(event.commandType())) {
-            if (event.extraSeconds() != null) {
-                proctorCommandService.extendResponseTime(event.attemptPublicId(), event.tenantId(), event.extraSeconds());
-            }
         }
-        // Any other/unknown commandType: ignored, not an error (forward-compat with future command types).
+        // Any other/unknown commandType (including a stray EXTEND_TIME from an in-flight message —
+        // see ProctorCommandEvent's doc comment): ignored, not an error.
     }
 }

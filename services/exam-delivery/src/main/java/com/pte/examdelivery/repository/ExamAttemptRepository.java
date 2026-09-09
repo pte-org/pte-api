@@ -1,9 +1,11 @@
 package com.pte.examdelivery.repository;
 
 import com.pte.examdelivery.domain.ExamAttempt;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -18,6 +20,23 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long> 
 
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
     Optional<ExamAttempt> findWithPinnedByPublicIdAndStudentPublicId(UUID publicId, UUID studentPublicId);
+
+    /**
+     * No {@code pinnedSnapshot} eager-fetch — deliberately lighter than
+     * {@link #findWithPinnedByPublicIdAndStudentPublicId} for the heartbeat endpoint
+     * (client-side-exam-timer Phase 2, FR-04: "tối giản"), which only needs ownership
+     * + status, never task content.
+     */
+    Optional<ExamAttempt> findByPublicIdAndStudentPublicId(UUID publicId, UUID studentPublicId);
+
+    /**
+     * Serializes concurrent audio-play requests for the same attempt (relocated from
+     * {@code TimerStateRepository.findWithLockByAttemptId} — client-side-exam-timer Phase 1,
+     * since {@code playCount}/{@code lastPlayRequestId}/{@code lastPlayAllowed} now live here).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM ExamAttempt a WHERE a.id = :id")
+    Optional<ExamAttempt> findWithLockById(@Param("id") Long id);
 
     /** Tenant-scoped, not student-owned — used by {@code ProctorCommandConsumer} (phase-10), where the actor is a verified proctor command, not the student. */
     Optional<ExamAttempt> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);

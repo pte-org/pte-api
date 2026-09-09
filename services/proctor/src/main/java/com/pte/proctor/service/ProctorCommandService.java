@@ -3,9 +3,7 @@ package com.pte.proctor.service;
 import com.pte.common.security.CurrentUser;
 import com.pte.proctor.constant.ProctorConstants;
 import com.pte.proctor.domain.ProctorSession;
-import com.pte.proctor.domain.enums.ProctorCommandType;
 import com.pte.proctor.domain.event.ProctorCommandPublished;
-import com.pte.proctor.domain.exception.ExtraSecondsRequiredException;
 import com.pte.proctor.domain.exception.ProctorSessionNotActiveException;
 import com.pte.proctor.dto.request.IssueCommandRequest;
 import com.pte.proctor.messaging.outbox.OutboxWriter;
@@ -41,15 +39,11 @@ public class ProctorCommandService {
         if (!session.isActive()) {
             throw new ProctorSessionNotActiveException();
         }
-        if (request.commandType() == ProctorCommandType.EXTEND_TIME
-                && (request.extraSeconds() == null || request.extraSeconds() <= 0)) {
-            throw new ExtraSecondsRequiredException();
-        }
 
         outboxWriter.write(ProctorConstants.AGGREGATE_PROCTOR_COMMAND, request.attemptPublicId().toString(),
                 ProctorConstants.EVENT_PROCTOR_COMMAND,
                 new ProctorCommandPublished(request.attemptPublicId(), session.getSessionPublicId(),
-                        request.commandType(), request.extraSeconds(), session.getTenantId()),
+                        request.commandType(), session.getTenantId()),
                 session.getTenantId());
 
         messagingTemplate.convertAndSend(ProctorConstants.TOPIC_PREFIX + session.getSessionPublicId(), request);
