@@ -9,6 +9,7 @@ import com.pte.admin.domain.event.ProgramCreatedEvent;
 import com.pte.admin.domain.event.ProgramStatusChangedEvent;
 import com.pte.admin.domain.event.ProgramUpdatedEvent;
 import com.pte.admin.domain.exception.OrganizationNotFoundException;
+import com.pte.admin.domain.exception.ProgramHasActiveClassesException;
 import com.pte.admin.domain.exception.ProgramNameAlreadyUsedException;
 import com.pte.admin.domain.exception.ProgramNotFoundException;
 import com.pte.admin.dto.request.CreateProgramRequest;
@@ -18,6 +19,7 @@ import com.pte.admin.mapper.ProgramMapper;
 import com.pte.admin.messaging.outbox.OutboxWriter;
 import com.pte.admin.repository.OrganizationRepository;
 import com.pte.admin.repository.ProgramRepository;
+import com.pte.admin.repository.StudentClassRepository;
 import com.pte.common.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,12 +40,14 @@ public class ProgramService {
 
     private final ProgramRepository programRepository;
     private final OrganizationRepository organizationRepository;
+    private final StudentClassRepository studentClassRepository;
     private final OutboxWriter outboxWriter;
 
     public ProgramService(ProgramRepository programRepository, OrganizationRepository organizationRepository,
-            OutboxWriter outboxWriter) {
+            StudentClassRepository studentClassRepository, OutboxWriter outboxWriter) {
         this.programRepository = programRepository;
         this.organizationRepository = organizationRepository;
+        this.studentClassRepository = studentClassRepository;
         this.outboxWriter = outboxWriter;
     }
 
@@ -123,8 +127,9 @@ public class ProgramService {
     /**
      * Visibility/lifecycle flag via the inherited {@code deleted} column, NOT a
      * hard delete — archived Programs stay fetchable by {@link #get} but drop
-     * out of {@link #list}. No active-children check yet: {@code StudentClass}
-     * doesn't exist until Phase 3, which retrofits the guard directly here.
+     * out of {@link #list}. Rejects if any non-deleted {@code StudentClass}
+     * still exists under this Program — the Host must archive/move the Classes
+     * first (Phase 3 retrofit).
      */
     @Transactional
     public ProgramResponse archive(UUID organizationPublicId, UUID programPublicId, CurrentUser caller) {
@@ -132,7 +137,9 @@ public class ProgramService {
         if (program.isDeleted()) {
             return ProgramMapper.toResponse(program, organizationPublicId);
         }
-        // Phase 3 retrofits an active-children guard here (reject if any non-deleted StudentClass exists under this Program).
+        if (studentClassRepository.existsByProgram_PublicIdAndDeletedFalse(programPublicId)) {
+            throw new ProgramHasActiveClassesException();
+        }
         program.setDeleted(true);
 
         outboxWriter.write(AdminConstants.AGGREGATE_PROGRAM, programPublicId.toString(),
