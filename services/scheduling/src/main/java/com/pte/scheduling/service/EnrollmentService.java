@@ -15,6 +15,7 @@ import com.pte.scheduling.domain.exception.AlreadyAssignedException;
 import com.pte.scheduling.domain.exception.AlreadyEnrolledException;
 import com.pte.scheduling.domain.exception.EnrollmentNotFoundException;
 import com.pte.scheduling.domain.exception.ProctorAssignmentNotFoundException;
+import com.pte.scheduling.domain.exception.SessionCapacityExceededException;
 import com.pte.scheduling.dto.request.AssignProctorRequest;
 import com.pte.scheduling.dto.request.BulkEnrollRequest;
 import com.pte.scheduling.dto.request.EnrollStudentRequest;
@@ -81,10 +82,16 @@ public class EnrollmentService {
      * depends on {@code Enrollment} using {@code GenerationType.IDENTITY}
      * (forces a synchronous flush inside {@code saveAll}) — re-verify this
      * guard if that id strategy ever changes.
+     * <p>
+     * Fetches the session under a pessimistic write lock (Phase 11) — held
+     * for this whole method — so the capacity check-then-insert below can't
+     * race a concurrent {@code bulkEnroll} call against the same session
+     * (both would otherwise read the same pre-write count and both commit,
+     * overshooting {@code capacity}).
      */
     @Transactional
     public BulkEnrollResponse bulkEnroll(UUID sessionPublicId, BulkEnrollRequest request, CurrentUser caller) {
-        ExamSession session = sessionService.findOwned(sessionPublicId, caller);
+        ExamSession session = sessionService.findOwnedWithLock(sessionPublicId, caller);
 
         List<UUID> existing = enrollmentRepository
                 .findBySessionIdAndStudentPublicIdIn(session.getId(), request.studentPublicIds())
@@ -102,6 +109,16 @@ public class EnrollmentService {
             enrollment.setStudentPublicId(studentPublicId);
             enrollment.setTenantId(session.getTenantId());
             toCreate.add(enrollment);
+        }
+
+        // Fail closed, before any write — a partial silent enroll would be
+        // worse than a clear rejection the FE can react to with another
+        // batch/session.
+        if (session.getCapacity() != null) {
+            long existingCount = enrollmentRepository.countBySessionId(session.getId());
+            if (existingCount + toCreate.size() > session.getCapacity()) {
+                throw new SessionCapacityExceededException();
+            }
         }
 
         List<Enrollment> saved;

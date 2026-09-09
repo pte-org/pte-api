@@ -13,6 +13,9 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
     List<Enrollment> findBySessionId(Long sessionId);
 
+    /** Backs Phase 11's capacity check — total enrollments already on the session, independent of any particular batch's student ids. */
+    long countBySessionId(Long sessionId);
+
     boolean existsBySessionIdAndStudentPublicId(Long sessionId, UUID studentPublicId);
 
     Optional<Enrollment> findByPublicId(UUID publicId);
