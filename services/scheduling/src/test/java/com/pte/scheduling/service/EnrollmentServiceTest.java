@@ -5,6 +5,7 @@ import com.pte.scheduling.domain.Enrollment;
 import com.pte.scheduling.domain.ExamSession;
 import com.pte.scheduling.domain.ProctorAssignment;
 import com.pte.scheduling.domain.enums.ProctorRole;
+import com.pte.scheduling.domain.enums.SessionStatus;
 import com.pte.scheduling.domain.exception.AlreadyEnrolledException;
 import com.pte.scheduling.domain.exception.EnrollmentNotFoundException;
 import com.pte.scheduling.domain.exception.ProctorAssignmentNotFoundException;
@@ -15,6 +16,7 @@ import com.pte.scheduling.dto.request.UpdateProctorRoleRequest;
 import com.pte.scheduling.dto.response.BulkEnrollResponse;
 import com.pte.scheduling.dto.response.EnrollmentResponse;
 import com.pte.scheduling.dto.response.ProctorAssignmentResponse;
+import com.pte.scheduling.dto.response.StudentEnrollmentResponse;
 import com.pte.scheduling.messaging.outbox.OutboxWriter;
 import com.pte.scheduling.repository.EnrollmentRepository;
 import com.pte.scheduling.repository.ProctorAssignmentRepository;
@@ -25,6 +27,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -355,6 +358,43 @@ class EnrollmentServiceTest {
         assertThat(response.role()).isEqualTo(ProctorRole.LEAD_PROCTOR);
         assertThat(assignment.getRole()).isEqualTo(ProctorRole.LEAD_PROCTOR);
         verify(outboxWriter).write(anyString(), anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void listForStudent_joinFetchesSessionDetailsInOneQuery() {
+        UUID tenantId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        UUID enrollmentPublicId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        Instant opensAt = Instant.parse("2026-10-01T00:00:00Z");
+        Instant closesAt = Instant.parse("2026-10-01T02:00:00Z");
+        CurrentUser caller = hostAdmin(tenantId);
+
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        session.setName("PTE Mock Test - Oct Batch");
+        session.setStatus(SessionStatus.SCHEDULED);
+        session.setOpensAt(opensAt);
+        session.setClosesAt(closesAt);
+
+        Enrollment enrollment = new Enrollment();
+        enrollment.setPublicId(enrollmentPublicId);
+        enrollment.setSession(session);
+        enrollment.setStudentPublicId(studentPublicId);
+        enrollment.setTenantId(tenantId);
+
+        when(enrollmentRepository.findByStudentPublicIdAndTenantId(studentPublicId, tenantId))
+                .thenReturn(List.of(enrollment));
+
+        List<StudentEnrollmentResponse> result = enrollmentService.listForStudent(studentPublicId, caller);
+
+        assertThat(result).hasSize(1);
+        StudentEnrollmentResponse response = result.get(0);
+        assertThat(response.enrollmentPublicId()).isEqualTo(enrollmentPublicId);
+        assertThat(response.sessionPublicId()).isEqualTo(sessionPublicId);
+        assertThat(response.sessionName()).isEqualTo("PTE Mock Test - Oct Batch");
+        assertThat(response.status()).isEqualTo("SCHEDULED");
+        assertThat(response.opensAt()).isEqualTo(opensAt);
+        assertThat(response.closesAt()).isEqualTo(closesAt);
     }
 
     @Test

@@ -22,6 +22,7 @@ import com.pte.scheduling.dto.request.UpdateProctorRoleRequest;
 import com.pte.scheduling.dto.response.BulkEnrollResponse;
 import com.pte.scheduling.dto.response.EnrollmentResponse;
 import com.pte.scheduling.dto.response.ProctorAssignmentResponse;
+import com.pte.scheduling.dto.response.StudentEnrollmentResponse;
 import com.pte.scheduling.messaging.outbox.OutboxWriter;
 import com.pte.scheduling.repository.EnrollmentRepository;
 import com.pte.scheduling.repository.ProctorAssignmentRepository;
@@ -143,6 +144,20 @@ public class EnrollmentService {
                 SchedulingConstants.EVENT_STUDENT_UNENROLLED,
                 new StudentUnenrolledEvent(session.getPublicId(), enrollment.getStudentPublicId(), session.getTenantId()),
                 session.getTenantId());
+    }
+
+    /** Backs {@code admin}'s pending-exam-request transfer warning — one join-fetch query, no per-enrollment session lookup. */
+    @Transactional(readOnly = true)
+    public List<StudentEnrollmentResponse> listForStudent(UUID studentPublicId, CurrentUser caller) {
+        return enrollmentRepository.findByStudentPublicIdAndTenantId(studentPublicId, caller.tenantId()).stream()
+                .map(enrollment -> new StudentEnrollmentResponse(
+                        enrollment.getPublicId(),
+                        enrollment.getSession().getPublicId(),
+                        enrollment.getSession().getName(),
+                        enrollment.getSession().getStatus().name(),
+                        enrollment.getSession().getOpensAt(),
+                        enrollment.getSession().getClosesAt()))
+                .toList();
     }
 
     @Transactional
