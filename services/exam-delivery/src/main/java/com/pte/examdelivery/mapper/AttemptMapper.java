@@ -59,11 +59,12 @@ public class AttemptMapper {
                 item.maxWordCount(), toFlatOptions(parsedOptions), toBlankGroups(parsedOptions), effectivePrepSeconds,
                 effectiveResponseSeconds, attempt.getExamEndTime(), item.preListenSeconds(), item.preRecordSeconds(),
                 item.imageUrl());
-        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey);
+        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey,
+                attempt.getPinnedSnapshot().getLockdownMode());
     }
 
     public AttemptTaskResponse toCompletedResponse(ExamAttempt attempt) {
-        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), true, null, null);
+        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), true, null, null, null);
     }
 
     private List<FrozenOption> parseFrozenOptions(String optionsJson) {
