@@ -75,6 +75,7 @@ public class TenantEventConsumer {
                 .orElseGet(TenantRegistry::new);
         registry.setTenantPublicId(event.tenantPublicId());
         registry.setStatus(TenantRegistryStatus.ACTIVE);
+        registry.setOrganizationType(event.organizationType());
         tenantRegistryRepository.save(registry);
     }
 
