@@ -49,6 +49,8 @@ public final class AdminConstants {
     public static final String EVENT_STUDENT_ASSIGNED_TO_CLASS = "StudentAssignedToClass";
     public static final String EVENT_STUDENT_UNASSIGNED_FROM_CLASS = "StudentUnassignedFromClass";
     public static final String EVENT_STUDENT_TRANSFERRED_CLASS = "StudentTransferredClass";
+    public static final String EVENT_CLASSES_MERGED = "ClassesMerged";
+    public static final String EVENT_CLASS_SPLIT = "ClassSplit";
     public static final String EVENT_LECTURER_ASSIGNED = "LecturerAssigned";
     public static final String EVENT_LECTURER_UNASSIGNED = "LecturerUnassigned";
     public static final String EVENT_COORDINATOR_ASSIGNED = "CoordinatorAssigned";

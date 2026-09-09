@@ -3,11 +3,15 @@ package com.pte.admin.controller;
 import com.pte.admin.dto.request.AssignStudentRequest;
 import com.pte.admin.dto.request.BulkAssignStudentsRequest;
 import com.pte.admin.dto.request.CreateClassRequest;
+import com.pte.admin.dto.request.MergeClassesRequest;
+import com.pte.admin.dto.request.SplitClassRequest;
 import com.pte.admin.dto.request.TransferStudentRequest;
 import com.pte.admin.dto.request.UpdateClassRequest;
 import com.pte.admin.dto.response.BulkAssignStudentsResponse;
 import com.pte.admin.dto.response.ClassMembershipResponse;
 import com.pte.admin.dto.response.ClassResponse;
+import com.pte.admin.dto.response.MergeClassesResponse;
+import com.pte.admin.dto.response.SplitClassResponse;
 import com.pte.admin.service.ClassService;
 import com.pte.common.security.CurrentUser;
 import com.pte.common.security.CurrentUserContext;
@@ -121,6 +125,22 @@ public class ClassController {
             @PathVariable UUID membershipPublicId, @Valid @RequestBody TransferStudentRequest request) {
         return ApiResponse.success(classService.transfer(organizationPublicId, programPublicId, classPublicId,
                 membershipPublicId, request, currentUser()));
+    }
+
+    @PostMapping("/{classPublicId}/merge")
+    public ApiResponse<MergeClassesResponse> merge(@PathVariable UUID organizationPublicId,
+            @PathVariable UUID programPublicId, @PathVariable UUID classPublicId,
+            @Valid @RequestBody MergeClassesRequest request) {
+        return ApiResponse.success(
+                classService.mergeClasses(organizationPublicId, programPublicId, classPublicId, request, currentUser()));
+    }
+
+    @PostMapping("/{classPublicId}/split")
+    public ApiResponse<SplitClassResponse> split(@PathVariable UUID organizationPublicId,
+            @PathVariable UUID programPublicId, @PathVariable UUID classPublicId,
+            @Valid @RequestBody SplitClassRequest request) {
+        return ApiResponse.success(
+                classService.splitClass(organizationPublicId, programPublicId, classPublicId, request, currentUser()));
     }
 
     private CurrentUser currentUser() {
