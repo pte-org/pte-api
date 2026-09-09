@@ -9,6 +9,7 @@ import com.pte.scheduling.domain.enums.SessionStatus;
 import com.pte.scheduling.domain.exception.AlreadyEnrolledException;
 import com.pte.scheduling.domain.exception.EnrollmentNotFoundException;
 import com.pte.scheduling.domain.exception.ProctorAssignmentNotFoundException;
+import com.pte.scheduling.domain.exception.SessionCapacityExceededException;
 import com.pte.scheduling.dto.request.AssignProctorRequest;
 import com.pte.scheduling.dto.request.BulkEnrollRequest;
 import com.pte.scheduling.dto.request.EnrollStudentRequest;
@@ -35,6 +36,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -113,7 +115,7 @@ class EnrollmentServiceTest {
         Enrollment existingEnrollment = new Enrollment();
         existingEnrollment.setStudentPublicId(alreadyEnrolledId);
 
-        when(sessionService.findOwned(sessionPublicId, caller)).thenReturn(session);
+        when(sessionService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
         when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any()))
                 .thenReturn(List.of(existingEnrollment));
         when(enrollmentRepository.saveAll(any())).thenAnswer(invocation -> {
@@ -128,6 +130,10 @@ class EnrollmentServiceTest {
         assertThat(response.enrolled()).containsExactlyInAnyOrder(newId1, newId2);
         assertThat(response.alreadyEnrolled()).containsExactly(alreadyEnrolledId);
         verify(outboxWriter, times(2)).write(anyString(), anyString(), anyString(), any(), any());
+        // Regression: capacity == null (unset here) must behave exactly as
+        // before Phase 11 — the capacity check is skipped entirely, not just
+        // "passes" with a 0/default count.
+        verify(enrollmentRepository, never()).countBySessionId(anyLong());
     }
 
     @Test
@@ -138,7 +144,7 @@ class EnrollmentServiceTest {
         CurrentUser caller = hostAdmin(tenantId);
         UUID studentPublicId = UUID.randomUUID();
 
-        when(sessionService.findOwned(sessionPublicId, caller)).thenReturn(session);
+        when(sessionService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
         when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
         when(enrollmentRepository.saveAll(any()))
                 .thenThrow(new DataIntegrityViolationException("unique violation"));
@@ -148,6 +154,135 @@ class EnrollmentServiceTest {
                 .isInstanceOf(AlreadyEnrolledException.class);
 
         verify(outboxWriter, never()).write(anyString(), anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void bulkEnroll_withCapacity_exactFit_succeeds() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        session.setCapacity(5);
+        CurrentUser caller = hostAdmin(tenantId);
+        UUID newId1 = UUID.randomUUID();
+        UUID newId2 = UUID.randomUUID();
+
+        when(sessionService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
+        when(enrollmentRepository.countBySessionId(1L)).thenReturn(3L);
+        when(enrollmentRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<Enrollment> toSave = invocation.getArgument(0);
+            toSave.forEach(e -> e.setPublicId(UUID.randomUUID()));
+            return toSave;
+        });
+
+        BulkEnrollResponse response = enrollmentService.bulkEnroll(sessionPublicId,
+                new BulkEnrollRequest(List.of(newId1, newId2)), caller);
+
+        assertThat(response.enrolled()).containsExactlyInAnyOrder(newId1, newId2);
+        verify(enrollmentRepository).saveAll(any());
+    }
+
+    @Test
+    void bulkEnroll_withCapacity_underCapacity_succeeds() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        session.setCapacity(10);
+        CurrentUser caller = hostAdmin(tenantId);
+        UUID newId = UUID.randomUUID();
+
+        when(sessionService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
+        when(enrollmentRepository.countBySessionId(1L)).thenReturn(2L);
+        when(enrollmentRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<Enrollment> toSave = invocation.getArgument(0);
+            toSave.forEach(e -> e.setPublicId(UUID.randomUUID()));
+            return toSave;
+        });
+
+        BulkEnrollResponse response = enrollmentService.bulkEnroll(sessionPublicId,
+                new BulkEnrollRequest(List.of(newId)), caller);
+
+        assertThat(response.enrolled()).containsExactly(newId);
+    }
+
+    @Test
+    void bulkEnroll_withCapacity_overflow_rejectedWithNoPartialCommit() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        session.setCapacity(5);
+        CurrentUser caller = hostAdmin(tenantId);
+        UUID newId1 = UUID.randomUUID();
+        UUID newId2 = UUID.randomUUID();
+
+        when(sessionService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
+        // 4 already enrolled + 2 new = 6 > capacity 5.
+        when(enrollmentRepository.countBySessionId(1L)).thenReturn(4L);
+
+        assertThatThrownBy(() -> enrollmentService.bulkEnroll(sessionPublicId,
+                new BulkEnrollRequest(List.of(newId1, newId2)), caller))
+                .isInstanceOf(SessionCapacityExceededException.class);
+
+        verify(enrollmentRepository, never()).saveAll(any());
+        verify(outboxWriter, never()).write(anyString(), anyString(), anyString(), any(), any());
+    }
+
+    /**
+     * Simulates what the pessimistic write lock guarantees at the DB layer:
+     * a second {@code bulkEnroll} call against the same near-capacity
+     * session only ever sees the FIRST call's already-committed count, never
+     * a stale pre-write one — never both calls succeeding and jointly
+     * overshooting capacity. This repo has no integration-test
+     * infrastructure (no Testcontainers/H2 — `scheduling`'s only runtime DB
+     * driver is PostgreSQL, and its test suite is Mockito-only, per the
+     * existing {@code bulkEnroll_concurrentRaceOnSave_...} precedent above,
+     * which itself simulates a race's OUTCOME via a mocked
+     * `DataIntegrityViolationException` rather than real threads). A true
+     * multi-threaded proof of the `@Lock(PESSIMISTIC_WRITE)` row-locking
+     * behavior itself would require a real Postgres instance and is out of
+     * this unit-test's reach; this test instead proves the SERVICE-LEVEL
+     * invariant the lock exists to protect — that two back-to-back calls
+     * with correctly-serialized (non-stale) reads never let the combined
+     * committed total exceed capacity — which is exactly the guarantee a
+     * real pessimistic lock provides by forcing serialization.
+     */
+    @Test
+    void bulkEnroll_twoSequentialCallsNearCapacity_secondSeesFirstsCommittedCountAndIsRejected() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        session.setCapacity(10);
+        CurrentUser caller = hostAdmin(tenantId);
+        UUID firstBatchId1 = UUID.randomUUID();
+        UUID firstBatchId2 = UUID.randomUUID();
+        UUID secondBatchId = UUID.randomUUID();
+
+        when(sessionService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
+        when(enrollmentRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<Enrollment> toSave = invocation.getArgument(0);
+            toSave.forEach(e -> e.setPublicId(UUID.randomUUID()));
+            return toSave;
+        });
+        // First call: 8 already committed, +2 = 10 == capacity -> succeeds.
+        // Second call (the lock guarantees it only ever observes the first
+        // call's post-commit count, never the pre-write 8): 10 already
+        // committed, +1 = 11 > capacity -> rejected.
+        when(enrollmentRepository.countBySessionId(1L)).thenReturn(8L, 10L);
+
+        BulkEnrollResponse first = enrollmentService.bulkEnroll(sessionPublicId,
+                new BulkEnrollRequest(List.of(firstBatchId1, firstBatchId2)), caller);
+        assertThat(first.enrolled()).containsExactlyInAnyOrder(firstBatchId1, firstBatchId2);
+
+        assertThatThrownBy(() -> enrollmentService.bulkEnroll(sessionPublicId,
+                new BulkEnrollRequest(List.of(secondBatchId)), caller))
+                .isInstanceOf(SessionCapacityExceededException.class);
+
+        // Combined committed total across both calls never exceeds capacity:
+        // only the first call's saveAll ever ran.
+        verify(enrollmentRepository, times(1)).saveAll(any());
     }
 
     @Test

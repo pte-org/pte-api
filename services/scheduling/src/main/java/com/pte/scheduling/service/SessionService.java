@@ -63,6 +63,7 @@ public class SessionService {
         session.setClosesAt(request.closesAt());
         ExamMode mode = request.examMode() != null ? request.examMode() : ExamMode.MOCK_TEST;
         session.setPolicy(ExamPolicy.forMode(mode));
+        session.setCapacity(request.capacity());
         ExamSession saved = sessionRepository.save(session);
 
         outboxWriter.write(SchedulingConstants.AGGREGATE_SESSION, saved.getPublicId().toString(),
@@ -138,6 +139,19 @@ public class SessionService {
 
     ExamSession findOwned(UUID publicId, CurrentUser caller) {
         return sessionRepository.findWithCompositionByPublicIdAndTenantId(publicId, requireTenant(caller))
+                .orElseThrow(SessionNotFoundException::new);
+    }
+
+    /**
+     * Same pessimistic row lock as {@link #open}/{@link #patchPolicy}, exposed
+     * for {@link EnrollmentService#bulkEnroll}'s capacity check-then-insert
+     * (Phase 11) so a concurrent second {@code bulkEnroll} call against the
+     * same session blocks until the first one's transaction commits or rolls
+     * back, instead of both reading the same stale enrollment count — mirrors
+     * this class's own existing lock usage rather than a new primitive.
+     */
+    ExamSession findOwnedWithLock(UUID publicId, CurrentUser caller) {
+        return sessionRepository.findWithLockByPublicIdAndTenantId(publicId, requireTenant(caller))
                 .orElseThrow(SessionNotFoundException::new);
     }
 
