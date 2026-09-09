@@ -4,6 +4,7 @@ import com.pte.scheduling.domain.enums.ExamMode;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -14,5 +15,7 @@ public record CreateSessionRequest(
         @NotNull(message = "Open time is required") @Future(message = "Open time must be in the future") Instant opensAt,
         @NotNull(message = "Close time is required") Instant closesAt,
         /** Null defaults to {@link ExamMode#MOCK_TEST} — the safe middle ground, not the permissive PRACTICE default. */
-        ExamMode examMode) {
+        ExamMode examMode,
+        /** Null = unlimited, matching {@link com.pte.scheduling.domain.ExamSession#getCapacity()}. */
+        @Positive(message = "Capacity must be positive") Integer capacity) {
 }

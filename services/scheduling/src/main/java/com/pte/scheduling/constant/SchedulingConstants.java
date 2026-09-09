@@ -18,6 +18,7 @@ public final class SchedulingConstants {
     public static final String PROCTOR_NOT_ASSIGNED = "PROCTOR_NOT_ASSIGNED";
     public static final String POLICY_LOCKED = "POLICY_LOCKED";
     public static final String INVALID_POLICY_PATCH = "INVALID_POLICY_PATCH";
+    public static final String SESSION_CAPACITY_EXCEEDED = "SESSION_CAPACITY_EXCEEDED";
 
     public static final String AGGREGATE_SESSION = "ExamSession";
     public static final String EVENT_SESSION_SCHEDULED = "SessionScheduled";
