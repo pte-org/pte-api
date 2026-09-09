@@ -21,6 +21,9 @@ public interface ClassMembershipRepository extends JpaRepository<ClassMembership
 
     List<ClassMembership> findByStudentClass_PublicId(UUID classPublicId);
 
+    /** Backs Phase 12's split — resolves only the Host-selected subset that's actually in the source Class, ignoring any stray/foreign id. */
+    List<ClassMembership> findByStudentClass_PublicIdAndStudentPublicIdIn(UUID classPublicId, List<UUID> studentPublicIds);
+
     /**
      * Tenant-wide roster, unfiltered — the shared data source Phase 7 (search),
      * Phase 10 (bulk exam-session roster resolution) and Phase 13 (dashboard)

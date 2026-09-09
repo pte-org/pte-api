@@ -10,7 +10,9 @@ import com.pte.admin.domain.enums.ClassStatus;
 import com.pte.admin.domain.enums.FacilityType;
 import com.pte.admin.domain.event.ClassArchivedEvent;
 import com.pte.admin.domain.event.ClassCreatedEvent;
+import com.pte.admin.domain.event.ClassSplitEvent;
 import com.pte.admin.domain.event.ClassStatusChangedEvent;
+import com.pte.admin.domain.event.ClassesMergedEvent;
 import com.pte.admin.domain.event.StudentAssignedToClassEvent;
 import com.pte.admin.domain.event.StudentTransferredClassEvent;
 import com.pte.admin.domain.event.StudentUnassignedFromClassEvent;
@@ -23,11 +25,15 @@ import com.pte.admin.domain.exception.StudentClassNotFoundException;
 import com.pte.admin.dto.request.AssignStudentRequest;
 import com.pte.admin.dto.request.BulkAssignStudentsRequest;
 import com.pte.admin.dto.request.CreateClassRequest;
+import com.pte.admin.dto.request.MergeClassesRequest;
+import com.pte.admin.dto.request.SplitClassRequest;
 import com.pte.admin.dto.request.TransferStudentRequest;
 import com.pte.admin.dto.request.UpdateClassRequest;
 import com.pte.admin.dto.response.BulkAssignStudentsResponse;
 import com.pte.admin.dto.response.ClassMembershipResponse;
 import com.pte.admin.dto.response.ClassResponse;
+import com.pte.admin.dto.response.MergeClassesResponse;
+import com.pte.admin.dto.response.SplitClassResponse;
 import com.pte.admin.messaging.outbox.OutboxWriter;
 import com.pte.admin.repository.ClassMembershipRepository;
 import com.pte.admin.repository.ProgramRepository;
@@ -601,6 +607,209 @@ class ClassServiceTest {
 
         assertThat(response.programPublicId()).isEqualTo(targetProgramPublicId);
         assertThat(response.classPublicId()).isEqualTo(targetClassPublicId);
+    }
+
+    // --- mergeClasses ---
+
+    @Test
+    void mergeClasses_movesEveryStudentFromSourcesToTarget_writesOutboxPerStudentPlusSummary() {
+        UUID tenantPublicId = UUID.randomUUID();
+        UUID organizationPublicId = UUID.randomUUID();
+        UUID programPublicId = UUID.randomUUID();
+        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
+        UUID targetClassPublicId = UUID.randomUUID();
+        StudentClass targetClass = classOf(targetClassPublicId, program);
+        UUID sourceClassAPublicId = UUID.randomUUID();
+        StudentClass sourceClassA = classOf(sourceClassAPublicId, program);
+        UUID sourceClassBPublicId = UUID.randomUUID();
+        StudentClass sourceClassB = classOf(sourceClassBPublicId, program);
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
+
+        UUID studentA1 = UUID.randomUUID();
+        UUID studentA2 = UUID.randomUUID();
+        UUID studentB1 = UUID.randomUUID();
+        ClassMembership membershipA1 = membershipOf(UUID.randomUUID(), sourceClassA, studentA1);
+        ClassMembership membershipA2 = membershipOf(UUID.randomUUID(), sourceClassA, studentA2);
+        ClassMembership membershipB1 = membershipOf(UUID.randomUUID(), sourceClassB, studentB1);
+
+        when(studentClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
+        when(studentClassRepository.findByPublicId(sourceClassAPublicId)).thenReturn(Optional.of(sourceClassA));
+        when(studentClassRepository.findByPublicId(sourceClassBPublicId)).thenReturn(Optional.of(sourceClassB));
+        when(classMembershipRepository.findByStudentClass_PublicId(sourceClassAPublicId))
+                .thenReturn(List.of(membershipA1, membershipA2));
+        when(classMembershipRepository.findByStudentClass_PublicId(sourceClassBPublicId))
+                .thenReturn(List.of(membershipB1));
+        when(classMembershipRepository.save(any(ClassMembership.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        MergeClassesResponse response = service.mergeClasses(organizationPublicId, programPublicId, targetClassPublicId,
+                new MergeClassesRequest(List.of(sourceClassAPublicId, sourceClassBPublicId)), caller);
+
+        assertThat(response.targetClassPublicId()).isEqualTo(targetClassPublicId);
+        assertThat(response.movedStudentPublicIds()).containsExactlyInAnyOrder(studentA1, studentA2, studentB1);
+        assertThat(membershipA1.getStudentClass()).isEqualTo(targetClass);
+        assertThat(membershipA2.getStudentClass()).isEqualTo(targetClass);
+        assertThat(membershipB1.getStudentClass()).isEqualTo(targetClass);
+        verify(outboxWriter, times(3)).write(any(), any(), eq(AdminConstants.EVENT_STUDENT_TRANSFERRED_CLASS),
+                any(StudentTransferredClassEvent.class), any());
+        verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_CLASS), eq(targetClassPublicId.toString()),
+                eq(AdminConstants.EVENT_CLASSES_MERGED), any(ClassesMergedEvent.class), eq(tenantPublicId));
+    }
+
+    @Test
+    void mergeClasses_sourceBelongsToDifferentTenant_throwsWithoutMovingAnyMembership() {
+        UUID callerTenantId = UUID.randomUUID();
+        UUID otherTenantId = UUID.randomUUID();
+        UUID organizationPublicId = UUID.randomUUID();
+        UUID programPublicId = UUID.randomUUID();
+        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(callerTenantId)));
+        UUID targetClassPublicId = UUID.randomUUID();
+        StudentClass targetClass = classOf(targetClassPublicId, program);
+        UUID sourceClassPublicId = UUID.randomUUID();
+        Program otherTenantProgram = programOf(UUID.randomUUID(),
+                organizationOf(UUID.randomUUID(), tenantWithPublicId(otherTenantId)));
+        StudentClass sourceClass = classOf(sourceClassPublicId, otherTenantProgram);
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
+
+        when(studentClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
+        when(studentClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
+
+        assertThatThrownBy(() -> service.mergeClasses(organizationPublicId, programPublicId, targetClassPublicId,
+                new MergeClassesRequest(List.of(sourceClassPublicId)), caller))
+                .isInstanceOf(StudentClassNotFoundException.class);
+
+        verify(classMembershipRepository, never()).findByStudentClass_PublicId(any());
+        verify(classMembershipRepository, never()).save(any());
+        verify(outboxWriter, never()).write(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void mergeClasses_targetBelongsToDifferentTenant_throwsWithoutMoving() {
+        UUID callerTenantId = UUID.randomUUID();
+        UUID otherTenantId = UUID.randomUUID();
+        UUID organizationPublicId = UUID.randomUUID();
+        UUID programPublicId = UUID.randomUUID();
+        Program otherTenantProgram = programOf(programPublicId,
+                organizationOf(organizationPublicId, tenantWithPublicId(otherTenantId)));
+        UUID targetClassPublicId = UUID.randomUUID();
+        StudentClass targetClass = classOf(targetClassPublicId, otherTenantProgram);
+        UUID sourceClassPublicId = UUID.randomUUID();
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
+
+        when(studentClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
+
+        assertThatThrownBy(() -> service.mergeClasses(organizationPublicId, programPublicId, targetClassPublicId,
+                new MergeClassesRequest(List.of(sourceClassPublicId)), caller))
+                .isInstanceOf(StudentClassNotFoundException.class);
+
+        verify(classMembershipRepository, never()).save(any());
+    }
+
+    @Test
+    void mergeClasses_sourceEqualsTarget_skippedAsNoOp() {
+        UUID tenantPublicId = UUID.randomUUID();
+        UUID organizationPublicId = UUID.randomUUID();
+        UUID programPublicId = UUID.randomUUID();
+        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
+        UUID targetClassPublicId = UUID.randomUUID();
+        StudentClass targetClass = classOf(targetClassPublicId, program);
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
+
+        when(studentClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
+
+        MergeClassesResponse response = service.mergeClasses(organizationPublicId, programPublicId, targetClassPublicId,
+                new MergeClassesRequest(List.of(targetClassPublicId)), caller);
+
+        assertThat(response.movedStudentPublicIds()).isEmpty();
+        verify(classMembershipRepository, never()).findByStudentClass_PublicId(any());
+        verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_CLASS), eq(targetClassPublicId.toString()),
+                eq(AdminConstants.EVENT_CLASSES_MERGED), any(ClassesMergedEvent.class), eq(tenantPublicId));
+    }
+
+    // --- splitClass ---
+
+    @Test
+    void splitClass_createsNewClassAndMovesOnlySelectedSubset() {
+        UUID tenantPublicId = UUID.randomUUID();
+        UUID organizationPublicId = UUID.randomUUID();
+        UUID programPublicId = UUID.randomUUID();
+        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
+        UUID sourceClassPublicId = UUID.randomUUID();
+        StudentClass sourceClass = classOf(sourceClassPublicId, program);
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
+
+        UUID studentToMove1 = UUID.randomUUID();
+        UUID studentToMove2 = UUID.randomUUID();
+        ClassMembership membershipToMove1 = membershipOf(UUID.randomUUID(), sourceClass, studentToMove1);
+        ClassMembership membershipToMove2 = membershipOf(UUID.randomUUID(), sourceClass, studentToMove2);
+
+        when(studentClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
+        when(studentClassRepository.existsByProgram_PublicIdAndNameIgnoreCaseAndDeletedFalse(programPublicId, "12A2"))
+                .thenReturn(false);
+        when(studentClassRepository.save(any(StudentClass.class))).thenAnswer(invocation -> {
+            StudentClass saved = invocation.getArgument(0);
+            saved.setPublicId(UUID.randomUUID());
+            return saved;
+        });
+        when(classMembershipRepository.findByStudentClass_PublicIdAndStudentPublicIdIn(
+                eq(sourceClassPublicId), eq(List.of(studentToMove1, studentToMove2))))
+                .thenReturn(List.of(membershipToMove1, membershipToMove2));
+        when(classMembershipRepository.save(any(ClassMembership.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        SplitClassResponse response = service.splitClass(organizationPublicId, programPublicId, sourceClassPublicId,
+                new SplitClassRequest("12A2", List.of(studentToMove1, studentToMove2)), caller);
+
+        assertThat(response.newClass().name()).isEqualTo("12A2");
+        assertThat(response.newClass().programPublicId()).isEqualTo(programPublicId);
+        assertThat(response.movedStudentPublicIds()).containsExactlyInAnyOrder(studentToMove1, studentToMove2);
+        assertThat(membershipToMove1.getStudentClass().getName()).isEqualTo("12A2");
+        assertThat(membershipToMove2.getStudentClass().getName()).isEqualTo("12A2");
+        verify(outboxWriter).write(any(), any(), eq(AdminConstants.EVENT_CLASS_CREATED), any(ClassCreatedEvent.class), any());
+        verify(outboxWriter, times(2)).write(any(), any(), eq(AdminConstants.EVENT_STUDENT_TRANSFERRED_CLASS),
+                any(StudentTransferredClassEvent.class), any());
+        verify(outboxWriter).write(any(), any(), eq(AdminConstants.EVENT_CLASS_SPLIT), any(ClassSplitEvent.class), any());
+    }
+
+    @Test
+    void splitClass_duplicateNameInProgram_throwsWithoutCreatingOrMoving() {
+        UUID tenantPublicId = UUID.randomUUID();
+        UUID organizationPublicId = UUID.randomUUID();
+        UUID programPublicId = UUID.randomUUID();
+        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
+        UUID sourceClassPublicId = UUID.randomUUID();
+        StudentClass sourceClass = classOf(sourceClassPublicId, program);
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
+
+        when(studentClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
+        when(studentClassRepository.existsByProgram_PublicIdAndNameIgnoreCaseAndDeletedFalse(programPublicId, "12A1"))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> service.splitClass(organizationPublicId, programPublicId, sourceClassPublicId,
+                new SplitClassRequest("12A1", List.of(UUID.randomUUID())), caller))
+                .isInstanceOf(StudentClassNameAlreadyUsedException.class);
+
+        verify(studentClassRepository, never()).save(any());
+        verify(classMembershipRepository, never()).findByStudentClass_PublicIdAndStudentPublicIdIn(any(), any());
+        verify(outboxWriter, never()).write(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void splitClass_sourceBelongsToDifferentTenant_throwsWithoutCreating() {
+        UUID callerTenantId = UUID.randomUUID();
+        UUID otherTenantId = UUID.randomUUID();
+        UUID organizationPublicId = UUID.randomUUID();
+        UUID programPublicId = UUID.randomUUID();
+        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(otherTenantId)));
+        UUID sourceClassPublicId = UUID.randomUUID();
+        StudentClass sourceClass = classOf(sourceClassPublicId, program);
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
+
+        when(studentClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
+
+        assertThatThrownBy(() -> service.splitClass(organizationPublicId, programPublicId, sourceClassPublicId,
+                new SplitClassRequest("12A2", List.of(UUID.randomUUID())), caller))
+                .isInstanceOf(StudentClassNotFoundException.class);
+
+        verify(studentClassRepository, never()).save(any());
     }
 
     // --- listMemberships ---

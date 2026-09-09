@@ -8,8 +8,10 @@ import com.pte.admin.domain.StudentClass;
 import com.pte.admin.domain.enums.ClassStatus;
 import com.pte.admin.domain.event.ClassArchivedEvent;
 import com.pte.admin.domain.event.ClassCreatedEvent;
+import com.pte.admin.domain.event.ClassSplitEvent;
 import com.pte.admin.domain.event.ClassStatusChangedEvent;
 import com.pte.admin.domain.event.ClassUpdatedEvent;
+import com.pte.admin.domain.event.ClassesMergedEvent;
 import com.pte.admin.domain.event.StudentAssignedToClassEvent;
 import com.pte.admin.domain.event.StudentTransferredClassEvent;
 import com.pte.admin.domain.event.StudentUnassignedFromClassEvent;
@@ -22,11 +24,15 @@ import com.pte.admin.domain.exception.StudentClassNotFoundException;
 import com.pte.admin.dto.request.AssignStudentRequest;
 import com.pte.admin.dto.request.BulkAssignStudentsRequest;
 import com.pte.admin.dto.request.CreateClassRequest;
+import com.pte.admin.dto.request.MergeClassesRequest;
+import com.pte.admin.dto.request.SplitClassRequest;
 import com.pte.admin.dto.request.TransferStudentRequest;
 import com.pte.admin.dto.request.UpdateClassRequest;
 import com.pte.admin.dto.response.BulkAssignStudentsResponse;
 import com.pte.admin.dto.response.ClassMembershipResponse;
 import com.pte.admin.dto.response.ClassResponse;
+import com.pte.admin.dto.response.MergeClassesResponse;
+import com.pte.admin.dto.response.SplitClassResponse;
 import com.pte.admin.mapper.ClassMembershipMapper;
 import com.pte.admin.mapper.StudentClassMapper;
 import com.pte.admin.messaging.outbox.OutboxWriter;
@@ -299,6 +305,107 @@ public class ClassService {
                         saved.getStudentPublicId(), caller.tenantId()),
                 caller.tenantId());
         return ClassMembershipMapper.toResponse(saved);
+    }
+
+    /**
+     * Moves every student from each source Class into the target — target and
+     * every source must belong to the same Organization/Program/tenant as the
+     * request path (enforced via {@link #findOwned}, same as every other
+     * Class-scoped method here). Does NOT archive the now-empty source
+     * Class(es) — a deliberate choice (confirmed with the user during Phase 12
+     * design): merge only moves membership rows, the Host archives a source
+     * Class separately via the existing Phase 2/7 action if desired. A source
+     * id equal to the target is silently skipped (no-op), not an error — the
+     * Host may have included it accidentally. Writes one
+     * {@code StudentTransferredClass} event per moved student (mirroring
+     * {@link #transfer}) plus a single {@code ClassesMerged} summary event.
+     */
+    @Transactional
+    public MergeClassesResponse mergeClasses(UUID organizationPublicId, UUID programPublicId,
+            UUID targetClassPublicId, MergeClassesRequest request, CurrentUser caller) {
+        StudentClass targetClass = findOwned(organizationPublicId, programPublicId, targetClassPublicId, caller);
+
+        List<UUID> movedStudentPublicIds = new ArrayList<>();
+        for (UUID sourceClassPublicId : request.sourceClassPublicIds()) {
+            if (sourceClassPublicId.equals(targetClassPublicId)) {
+                continue;
+            }
+            findOwned(organizationPublicId, programPublicId, sourceClassPublicId, caller);
+            List<ClassMembership> memberships = classMembershipRepository.findByStudentClass_PublicId(sourceClassPublicId);
+            for (ClassMembership membership : memberships) {
+                membership.setStudentClass(targetClass);
+                ClassMembership saved = classMembershipRepository.save(membership);
+                movedStudentPublicIds.add(saved.getStudentPublicId());
+
+                outboxWriter.write(AdminConstants.AGGREGATE_CLASS, targetClassPublicId.toString(),
+                        AdminConstants.EVENT_STUDENT_TRANSFERRED_CLASS,
+                        new StudentTransferredClassEvent(saved.getPublicId(), sourceClassPublicId,
+                                targetClassPublicId, saved.getStudentPublicId(), caller.tenantId()),
+                        caller.tenantId());
+            }
+        }
+
+        outboxWriter.write(AdminConstants.AGGREGATE_CLASS, targetClassPublicId.toString(),
+                AdminConstants.EVENT_CLASSES_MERGED,
+                new ClassesMergedEvent(targetClassPublicId, request.sourceClassPublicIds(), movedStudentPublicIds,
+                        caller.tenantId()),
+                caller.tenantId());
+        return new MergeClassesResponse(targetClassPublicId, request.sourceClassPublicIds(), movedStudentPublicIds);
+    }
+
+    /**
+     * Creates a new {@code StudentClass} under the SAME Program as the source
+     * (never a different one — splitting shouldn't relocate a cohort across
+     * the academic hierarchy), then moves the given subset of the source's
+     * students into it. Any {@code studentPublicId} in the request that isn't
+     * actually a member of the source Class is silently ignored (the
+     * repository query only ever returns real matches) rather than erroring —
+     * mirrors {@link #bulkAssign}'s forgiving-subset style. Writes one
+     * {@code StudentTransferredClass} event per moved student plus a single
+     * {@code ClassSplit} summary event.
+     */
+    @Transactional
+    public SplitClassResponse splitClass(UUID organizationPublicId, UUID programPublicId, UUID sourceClassPublicId,
+            SplitClassRequest request, CurrentUser caller) {
+        StudentClass sourceClass = findOwned(organizationPublicId, programPublicId, sourceClassPublicId, caller);
+        if (studentClassRepository.existsByProgram_PublicIdAndNameIgnoreCaseAndDeletedFalse(
+                programPublicId, request.newClassName())) {
+            throw new StudentClassNameAlreadyUsedException();
+        }
+
+        StudentClass newClass = new StudentClass();
+        newClass.setProgram(sourceClass.getProgram());
+        newClass.setName(request.newClassName());
+        StudentClass savedNewClass = studentClassRepository.save(newClass);
+
+        outboxWriter.write(AdminConstants.AGGREGATE_CLASS, savedNewClass.getPublicId().toString(),
+                AdminConstants.EVENT_CLASS_CREATED,
+                new ClassCreatedEvent(savedNewClass.getPublicId(), programPublicId, caller.tenantId(),
+                        savedNewClass.getName()),
+                caller.tenantId());
+
+        List<ClassMembership> membershipsToMove = classMembershipRepository
+                .findByStudentClass_PublicIdAndStudentPublicIdIn(sourceClassPublicId, request.studentPublicIds());
+        List<UUID> movedStudentPublicIds = new ArrayList<>();
+        for (ClassMembership membership : membershipsToMove) {
+            membership.setStudentClass(savedNewClass);
+            ClassMembership saved = classMembershipRepository.save(membership);
+            movedStudentPublicIds.add(saved.getStudentPublicId());
+
+            outboxWriter.write(AdminConstants.AGGREGATE_CLASS, savedNewClass.getPublicId().toString(),
+                    AdminConstants.EVENT_STUDENT_TRANSFERRED_CLASS,
+                    new StudentTransferredClassEvent(saved.getPublicId(), sourceClassPublicId,
+                            savedNewClass.getPublicId(), saved.getStudentPublicId(), caller.tenantId()),
+                    caller.tenantId());
+        }
+
+        outboxWriter.write(AdminConstants.AGGREGATE_CLASS, savedNewClass.getPublicId().toString(),
+                AdminConstants.EVENT_CLASS_SPLIT,
+                new ClassSplitEvent(sourceClassPublicId, savedNewClass.getPublicId(), movedStudentPublicIds,
+                        caller.tenantId()),
+                caller.tenantId());
+        return new SplitClassResponse(StudentClassMapper.toResponse(savedNewClass, programPublicId),
+                movedStudentPublicIds);
     }
 
     /**
