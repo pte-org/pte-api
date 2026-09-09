@@ -25,7 +25,11 @@ import java.util.UUID;
 @Table(name = "scoring_answers", indexes = {
         @Index(name = "idx_scoring_answers_session", columnList = "session_public_id"),
         @Index(name = "idx_scoring_answers_attempt", columnList = "attempt_public_id"),
-        @Index(name = "idx_scoring_answers_status", columnList = "status")
+        @Index(name = "idx_scoring_answers_status", columnList = "status"),
+        // Host review list (quang-host-answer-review Phase 3) — every review query
+        // filters by tenant first, optionally narrows by session/status, ordered
+        // newest-first; covers that access path without a full-table scan.
+        @Index(name = "idx_scoring_answers_tenant_review", columnList = "tenant_id, session_public_id, status, created_at")
 })
 @Getter
 @Setter
@@ -71,6 +75,19 @@ public class ScoringAnswer extends BaseEntity {
 
     @Column
     private Instant scoredAt;
+
+    /**
+     * A host's own independent score (quang-host-answer-review Phase 5) —
+     * parallel to {@link #rawScore}, never derived from it and never gating
+     * it. Settable at any {@link #status}, for future AI-vs-teacher
+     * comparison statistics; which of the two counts as "official" for
+     * student-facing reports is explicitly undecided (out of scope here).
+     */
+    @Column
+    private Integer teacherScore;
+
+    @Column
+    private Instant teacherScoredAt;
 
     public void markScored(int rawScore) {
         this.status = ScoringAnswerStatus.SCORED;

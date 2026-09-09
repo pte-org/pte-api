@@ -2,6 +2,7 @@ package com.pte.scoring.repository;
 
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -20,7 +21,7 @@ public interface ScoringAnswerRepository extends JpaRepository<ScoringAnswer, Lo
 
     long countByAttemptPublicIdAndStatus(UUID attemptPublicId, ScoringAnswerStatus status);
 
-    /** True while any row is still in a non-terminal state (PENDING/AI_SCORING/AI_SCORED_PENDING_REVIEW). */
+    /** True while any row is still in a non-terminal state (PENDING/AI_SCORING). */
     boolean existsByAttemptPublicIdAndStatusIn(UUID attemptPublicId, List<ScoringAnswerStatus> statuses);
 
     /**
@@ -36,4 +37,18 @@ public interface ScoringAnswerRepository extends JpaRepository<ScoringAnswer, Lo
             + "ORDER BY s.updatedAt ASC, s.publicId ASC")
     List<ScoringAnswer> findScoredForExport(@Param("tenantId") UUID tenantId,
             @Param("cursorTime") Instant cursorTime, @Param("cursorId") UUID cursorId, Pageable pageable);
+
+    /**
+     * Host review list (quang-host-answer-review Phase 3) — tenantId is always
+     * required (a host is always tenant-scoped; unlike {@link #findScoredForExport},
+     * there is no cross-tenant caller for this query). sessionPublicId/status are
+     * optional narrowing filters.
+     */
+    @Query("SELECT s FROM ScoringAnswer s WHERE s.tenantId = :tenantId "
+            + "AND (:sessionPublicId IS NULL OR s.sessionPublicId = :sessionPublicId) "
+            + "AND (:status IS NULL OR s.status = :status) "
+            + "ORDER BY s.createdAt DESC")
+    Page<ScoringAnswer> findForReview(@Param("tenantId") UUID tenantId,
+            @Param("sessionPublicId") UUID sessionPublicId, @Param("status") ScoringAnswerStatus status,
+            Pageable pageable);
 }

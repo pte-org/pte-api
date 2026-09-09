@@ -16,14 +16,15 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * Consumes {@link AiScoringJob} from the RabbitMQ work queue. Dispatches by
  * task type to the vendor client (stub this phase — see phase-09 Design
- * Constraints). {@code WRITE_ESSAY} (one of Pearson's 7 human-review-required
- * types) lands in {@code AI_SCORED_PENDING_REVIEW}; {@code READ_ALOUD} (not
- * one of the 7) goes straight to {@code SCORED} + emits {@code AnswerScored}.
+ * Constraints). Every AI-scored task type — {@code WRITE_ESSAY} included as
+ * of quang-host-answer-review Phase 5 — goes straight to {@code SCORED} +
+ * emits {@code AnswerScored}; there is no host-approval hold anymore. A host's
+ * own independent score, if any, is recorded separately via {@code
+ * ScoringReviewService.submitTeacherScore} and never gates this.
  *
  * <p>Any exception here propagates to the container's retry advice
  * ({@code RabbitMqConfig}) — bounded retry with backoff, then dead-lettered;
@@ -32,8 +33,6 @@ import java.util.Set;
  */
 @Component
 public class AiScoringWorker {
-
-    private static final Set<String> REVIEW_REQUIRED_TASK_TYPES = Set.of(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
 
     private final ScoringAnswerRepository scoringAnswerRepository;
     private final SpeechScoringClient speechScoringClient;
@@ -60,28 +59,20 @@ public class AiScoringWorker {
         }
         ScoringAnswer answer = maybeAnswer.get();
         if (answer.getStatus() == ScoringAnswerStatus.SCORED
-                || answer.getStatus() == ScoringAnswerStatus.SCORING_FAILED
-                || answer.getStatus() == ScoringAnswerStatus.AI_SCORED_PENDING_REVIEW) {
-            return; // Already terminal, or already awaiting host review — redelivery no-op, do not re-call the vendor.
+                || answer.getStatus() == ScoringAnswerStatus.SCORING_FAILED) {
+            return; // Already terminal — redelivery no-op, do not re-call the vendor.
         }
 
         AiScoreResult result = callVendor(job);
 
-        if (REVIEW_REQUIRED_TASK_TYPES.contains(job.taskType())) {
-            answer.setStatus(ScoringAnswerStatus.AI_SCORED_PENDING_REVIEW);
-            answer.setRawScore(result.rawScore());
-            scoringAnswerRepository.save(answer);
-            // No AnswerScored yet — waits for ScoringReviewService's host approval.
-        } else {
-            answer.markScored(result.rawScore());
-            scoringAnswerRepository.save(answer);
-            outboxWriter.write(ScoringConstants.AGGREGATE_ANSWER, answer.getAnswerPublicId().toString(),
-                    ScoringConstants.EVENT_ANSWER_SCORED,
-                    new AnswerScoredEvent(answer.getAttemptPublicId(), answer.getAnswerPublicId(),
-                            answer.getTenantId(), result.rawScore()),
-                    answer.getTenantId());
-            attemptCompletionService.checkAndEmitIfComplete(answer.getAttemptPublicId(), job.sessionPublicId(), answer.getTenantId());
-        }
+        answer.markScored(result.rawScore());
+        scoringAnswerRepository.save(answer);
+        outboxWriter.write(ScoringConstants.AGGREGATE_ANSWER, answer.getAnswerPublicId().toString(),
+                ScoringConstants.EVENT_ANSWER_SCORED,
+                new AnswerScoredEvent(answer.getAttemptPublicId(), answer.getAnswerPublicId(),
+                        answer.getTenantId(), result.rawScore()),
+                answer.getTenantId());
+        attemptCompletionService.checkAndEmitIfComplete(answer.getAttemptPublicId(), job.sessionPublicId(), answer.getTenantId());
     }
 
     @RabbitListener(queues = ScoringConstants.AI_SCORING_DLQ, containerFactory = "rabbitListenerContainerFactory")

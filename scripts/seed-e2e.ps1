@@ -112,7 +112,18 @@ param(
     # this file's default-resolution below (needs $PSScriptRoot, which is
     # more reliably read after the param block than inside its default
     # expression across PowerShell versions).
-    [string]$RepeatSentenceAudioFixturePath = ''
+    [string]$RepeatSentenceAudioFixturePath = '',
+    # First Listening e2e verification (MC_LISTENING_SINGLE) — the other 7
+    # Listening task types have no task-timing.json entry yet and will still
+    # fail fast at attempt-pin time (TaskTimingNotConfiguredException).
+    [string]$ListeningQuestionTitle = 'E2E Seed - MC Listening Single',
+    [string]$ListeningBlueprintName = 'E2E Seed Blueprint - MC Listening Single',
+    [string]$ListeningSessionName = 'E2E Seed Session - MC Listening Single',
+    # Real spoken English (Windows System.Speech TTS), not a synthesized tone
+    # — see scripts/fixtures/README or the generation one-liner in this
+    # plan's notes. ~33s narration on renewable energy, paired with a single-
+    # answer MC question below.
+    [string]$ListeningAudioFixturePath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -123,6 +134,9 @@ if ($GatewayBaseUrl -notmatch 'localhost|127\.0\.0\.1') {
 
 if ([string]::IsNullOrWhiteSpace($RepeatSentenceAudioFixturePath)) {
     $RepeatSentenceAudioFixturePath = Join-Path $PSScriptRoot 'fixtures/repeat_sentence_sample.wav'
+}
+if ([string]::IsNullOrWhiteSpace($ListeningAudioFixturePath)) {
+    $ListeningAudioFixturePath = Join-Path $PSScriptRoot 'fixtures/mc_listening_single_sample.wav'
 }
 
 # ---------------------------------------------------------------------------
@@ -150,7 +164,9 @@ foreach ($prop in @(
     'tenantPublicId', 'hostPublicId', 'studentPublicId', 'questionPublicId', 'blueprintPublicId',
     'snapshotPublicId', 'sessionPublicId',
     'repeatSentenceAudioMediaPublicId', 'repeatSentenceQuestionPublicId', 'repeatSentenceBlueprintPublicId',
-    'repeatSentenceSnapshotPublicId', 'repeatSentenceSessionPublicId'
+    'repeatSentenceSnapshotPublicId', 'repeatSentenceSessionPublicId',
+    'listeningAudioMediaPublicId', 'listeningQuestionPublicId', 'listeningBlueprintPublicId',
+    'listeningSnapshotPublicId', 'listeningSessionPublicId'
 )) {
     if (-not (Get-Member -InputObject $State -Name $prop -MemberType NoteProperty)) {
         $State | Add-Member -NotePropertyName $prop -NotePropertyValue $null
@@ -673,6 +689,196 @@ if ($null -eq $rsEnrollment) {
     Write-Ok "Student already enrolled."
 }
 
+# ---------------------------------------------------------------------------
+# 20. MC Listening Single audio media — same 3-step presigned flow as the
+#     Repeat Sentence upload (step 12), just with real spoken English (TTS)
+#     instead of a synthesized tone, since Listening audio must be
+#     intelligible to actually verify comprehension-style content.
+# ---------------------------------------------------------------------------
+if (-not (Test-Path $ListeningAudioFixturePath)) {
+    throw "Listening audio fixture not found: $ListeningAudioFixturePath " +
+          "(expected fixtures/mc_listening_single_sample.wav next to this script, or pass -ListeningAudioFixturePath)"
+}
+
+Write-Step "Resolving MC Listening Single audio media..."
+if ($State.listeningAudioMediaPublicId) {
+    Write-Ok "Using previously-uploaded media $($State.listeningAudioMediaPublicId) from state file."
+} else {
+    Write-Step "No prior upload recorded - uploading $ListeningAudioFixturePath..."
+    $listeningUploadResp = Invoke-Api -Method Post -Path '/api/media/objects' -Token $hostToken -Body @{
+        contentType = 'audio/wav'
+        audioPrompt = $true
+    }
+    $listeningMediaPublicId = $listeningUploadResp.data.mediaPublicId
+    $listeningUploadUrl = $listeningUploadResp.data.uploadUrl
+
+    try {
+        Invoke-WebRequest -Method Put -Uri $listeningUploadUrl -InFile $ListeningAudioFixturePath `
+            -ContentType 'audio/wav' -UseBasicParsing | Out-Null
+    } catch {
+        Write-Host "[seed-e2e] FAILED: PUT $listeningUploadUrl -> $($_.Exception.Message)" -ForegroundColor Red
+        if ($_.ErrorDetails -and $_.ErrorDetails.Message) {
+            Write-Host $_.ErrorDetails.Message -ForegroundColor Red
+        }
+        throw
+    }
+
+    Invoke-Api -Method Post -Path "/api/media/objects/$listeningMediaPublicId/complete" -Token $hostToken | Out-Null
+    $State.listeningAudioMediaPublicId = $listeningMediaPublicId
+    Save-State
+    Write-Ok "Uploaded and completed media $listeningMediaPublicId"
+}
+$listeningAudioMediaPublicId = $State.listeningAudioMediaPublicId
+
+# ---------------------------------------------------------------------------
+# 21. MC_LISTENING_SINGLE question — audioPromptRef + 4 options, exactly one
+#     marked correct (QuestionValidationHelper requires >=1 correct option
+#     when requiresCorrectAnswer + requiresOptions are both true). No
+#     promptText: PteTaskType.MC_LISTENING_SINGLE doesn't require it — the
+#     "listen and choose the best response" instruction is a static UI
+#     string in the client, not per-question authoring content.
+# ---------------------------------------------------------------------------
+Write-Step "Resolving question '$ListeningQuestionTitle'..."
+$listeningQuestionsResp = Invoke-Api -Method Get -Path '/api/authoring/questions' -Token $hostToken
+$listeningQuestion = Find-First -Items $listeningQuestionsResp.data -Property 'title' -Value $ListeningQuestionTitle
+if ($null -eq $listeningQuestion) {
+    Write-Step "Question not found - creating..."
+    $createListeningQuestionResp = Invoke-Api -Method Post -Path '/api/authoring/questions' -Token $hostToken -Body @{
+        pteTaskType    = 'MC_LISTENING_SINGLE'
+        visibility     = 'PRIVATE'
+        title          = $ListeningQuestionTitle
+        audioPromptRef = $listeningAudioMediaPublicId
+        options        = @(
+            @{ text = 'Lack of government funding for research'; correct = $false; orderIndex = 0 }
+            @{ text = 'The need for improved energy storage solutions'; correct = $true; orderIndex = 1 }
+            @{ text = 'Public opposition to wind farms'; correct = $false; orderIndex = 2 }
+            @{ text = 'The high cost of solar panels alone'; correct = $false; orderIndex = 3 }
+        )
+    }
+    $listeningQuestion = $createListeningQuestionResp.data
+    Write-Ok "Created question $($listeningQuestion.publicId)"
+} else {
+    Write-Ok "Found existing question $($listeningQuestion.publicId)"
+}
+$State.listeningQuestionPublicId = $listeningQuestion.publicId
+Save-State
+
+# ---------------------------------------------------------------------------
+# 22. Blueprint containing that question
+# ---------------------------------------------------------------------------
+Write-Step "Resolving blueprint '$ListeningBlueprintName'..."
+$listeningBlueprintsResp = Invoke-Api -Method Get -Path '/api/authoring/blueprints' -Token $hostToken
+$listeningBlueprint = Find-First -Items $listeningBlueprintsResp.data -Property 'name' -Value $ListeningBlueprintName
+if ($null -eq $listeningBlueprint) {
+    Write-Step "Blueprint not found - creating..."
+    $createListeningBlueprintResp = Invoke-Api -Method Post -Path '/api/authoring/blueprints' -Token $hostToken -Body @{
+        name  = $ListeningBlueprintName
+        items = @(
+            @{ questionPublicId = $listeningQuestion.publicId; section = 'LISTENING'; orderIndex = 0 }
+        )
+    }
+    $listeningBlueprint = $createListeningBlueprintResp.data
+    Write-Ok "Created blueprint $($listeningBlueprint.publicId)"
+} else {
+    Write-Ok "Found existing blueprint $($listeningBlueprint.publicId) (status: $($listeningBlueprint.status))"
+}
+$State.listeningBlueprintPublicId = $listeningBlueprint.publicId
+Save-State
+
+# ---------------------------------------------------------------------------
+# 23. Published snapshot — same not-re-derivable-via-API limitation as step 7.
+# ---------------------------------------------------------------------------
+Write-Step "Resolving published snapshot for blueprint $($listeningBlueprint.publicId)..."
+if ($listeningBlueprint.status -eq 'PUBLISHED') {
+    if ($State.listeningSnapshotPublicId) {
+        Write-Ok "Blueprint already published; using snapshot $($State.listeningSnapshotPublicId) from state file."
+    } else {
+        throw "Blueprint $($listeningBlueprint.publicId) is already PUBLISHED but this script's state file has " +
+              "no record of its snapshot publicId. Delete seed-e2e.state.json AND reset the pte-api database " +
+              "together, then re-run from scratch."
+    }
+} else {
+    Write-Step "Blueprint not yet published - publishing..."
+    $listeningPublishResp = Invoke-Api -Method Post -Path "/api/authoring/blueprints/$($listeningBlueprint.publicId)/publish" -Token $hostToken
+    $State.listeningSnapshotPublicId = $listeningPublishResp.data.publicId
+    Save-State
+    Write-Ok "Published snapshot $($State.listeningSnapshotPublicId)"
+}
+$listeningSnapshotPublicId = $State.listeningSnapshotPublicId
+
+# ---------------------------------------------------------------------------
+# 24. Scheduling session
+# ---------------------------------------------------------------------------
+Write-Step "Resolving session '$ListeningSessionName'..."
+$listeningSessionsResp = Invoke-Api -Method Get -Path '/api/scheduling/sessions' -Token $hostToken
+$listeningSession = Find-First -Items $listeningSessionsResp.data -Property 'name' -Value $ListeningSessionName
+if ($null -eq $listeningSession) {
+    Write-Step "Session not found - creating..."
+    $listeningOpensAt = (Get-Date).ToUniversalTime().AddMinutes(5)
+    $listeningClosesAt = $listeningOpensAt.AddHours(2)
+    $createListeningSessionResp = Invoke-Api -Method Post -Path '/api/scheduling/sessions' -Token $hostToken -Body @{
+        name             = $ListeningSessionName
+        snapshotPublicId = $listeningSnapshotPublicId
+        opensAt          = $listeningOpensAt.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+        closesAt         = $listeningClosesAt.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+        examMode         = 'PRACTICE'
+    }
+    $listeningSession = $createListeningSessionResp.data
+    Write-Ok "Created session $($listeningSession.publicId) (opens $($listeningOpensAt.ToString('u')))"
+} else {
+    Write-Ok "Found existing session $($listeningSession.publicId) (status: $($listeningSession.status))"
+}
+$State.listeningSessionPublicId = $listeningSession.publicId
+Save-State
+
+# ---------------------------------------------------------------------------
+# 25. Composition
+# ---------------------------------------------------------------------------
+$hasListeningComposition = $false
+if ($listeningSession.composition) {
+    foreach ($item in $listeningSession.composition) {
+        if ($item.taskType -eq 'MC_LISTENING_SINGLE') { $hasListeningComposition = $true }
+    }
+}
+if ($hasListeningComposition) {
+    Write-Ok "Composition already includes MC_LISTENING_SINGLE."
+} else {
+    Write-Step "Setting composition (MC_LISTENING_SINGLE)..."
+    Invoke-Api -Method Put -Path "/api/scheduling/sessions/$($listeningSession.publicId)/composition" -Token $hostToken -Body @{
+        items = @(
+            @{ taskType = 'MC_LISTENING_SINGLE'; section = 'LISTENING'; orderIndex = 0; timingOverrideSeconds = $null; maxPlayCount = $null }
+        )
+    } | Out-Null
+    Write-Ok "Composition set."
+}
+
+# ---------------------------------------------------------------------------
+# 26. Open
+# ---------------------------------------------------------------------------
+if ($listeningSession.status -eq 'OPEN') {
+    Write-Ok "Session already OPEN."
+} else {
+    Write-Step "Opening session..."
+    Invoke-Api -Method Post -Path "/api/scheduling/sessions/$($listeningSession.publicId)/open" -Token $hostToken | Out-Null
+    Write-Ok "Session opened."
+}
+
+# ---------------------------------------------------------------------------
+# 27. Enrollment
+# ---------------------------------------------------------------------------
+Write-Step "Resolving enrollment for student $($studentUser.publicId)..."
+$listeningEnrollmentsResp = Invoke-Api -Method Get -Path "/api/scheduling/sessions/$($listeningSession.publicId)/enrollments" -Token $hostToken
+$listeningEnrollment = Find-First -Items $listeningEnrollmentsResp.data -Property 'studentPublicId' -Value $studentUser.publicId
+if ($null -eq $listeningEnrollment) {
+    Write-Step "Student not enrolled - enrolling..."
+    Invoke-Api -Method Post -Path "/api/scheduling/sessions/$($listeningSession.publicId)/enrollments" -Token $hostToken -Body @{
+        studentPublicId = $studentUser.publicId
+    } | Out-Null
+    Write-Ok "Enrolled student."
+} else {
+    Write-Ok "Student already enrolled."
+}
+
 Write-Host ''
 Write-Ok '================================================================'
 Write-Ok 'Seed complete.'
@@ -681,6 +887,8 @@ Write-Ok "  Host admin:       $($hostUser.publicId) ($HostEmail / $HostPassword)
 Write-Ok "  Student:          $($studentUser.publicId) ($StudentEmail / $StudentPassword)"
 Write-Ok "  Read Aloud session:      $($session.publicId) ($SessionName)"
 Write-Ok "  Repeat Sentence session: $($repeatSentenceSession.publicId) ($RepeatSentenceSessionName)"
-Write-Ok "  sessionPublicId for pte-app's SessionEntryPage (Read Aloud):      $($session.publicId)"
-Write-Ok "  sessionPublicId for pte-app's SessionEntryPage (Repeat Sentence): $($repeatSentenceSession.publicId)"
+Write-Ok "  MC Listening Single session: $($listeningSession.publicId) ($ListeningSessionName)"
+Write-Ok "  sessionPublicId for pte-app's SessionEntryPage (Read Aloud):        $($session.publicId)"
+Write-Ok "  sessionPublicId for pte-app's SessionEntryPage (Repeat Sentence):   $($repeatSentenceSession.publicId)"
+Write-Ok "  sessionPublicId for pte-app's SessionEntryPage (MC Listening Single): $($listeningSession.publicId)"
 Write-Ok '================================================================'
