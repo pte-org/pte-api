@@ -7,7 +7,9 @@ spring:
   application:
     name: exam-delivery
   datasource:
-    url: ${EXAM_DELIVERY_DB_URL:jdbc:postgresql://localhost:5432/exam_delivery}
+    # Port 5433 = pg-exam (CELL EXAM), not the 5432 shared by CELL CORE's seven
+    # services — see docker-compose.yml for the cell/port map.
+    url: ${EXAM_DELIVERY_DB_URL:jdbc:postgresql://localhost:5433/exam_delivery}
     username: ${EXAM_DELIVERY_DB_USER:exam_delivery_svc}
     password: ${EXAM_DELIVERY_DB_PASSWORD:exam_delivery_dev_pw}
     hikari:

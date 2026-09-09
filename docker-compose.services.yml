@@ -1,7 +1,8 @@
 # Full-stack local compose: gateway + all 10 backend microservices, built from
 # source via the shared root Dockerfile. Always run alongside the infra-only
-# docker-compose.yml (which owns the pte-network definition + postgres/redis/
-# rabbitmq/minio/mailpit/jaeger):
+# docker-compose.yml (which owns the pte-network definition + the four per-cell
+# Postgres instances pg-core/pg-exam/pg-live/pg-async + redis/rabbitmq/minio/
+# mailpit/jaeger):
 #
 #   docker compose -f docker-compose.yml -f docker-compose.services.yml up --build
 #
@@ -31,13 +32,13 @@ services:
       args:
         SERVICE_MODULE: services/iam
     environment:
-      IAM_DB_URL: jdbc:postgresql://postgres:5432/iam
+      IAM_DB_URL: jdbc:postgresql://pg-core:5432/iam
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER:-pte}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
     depends_on:
-      postgres:
+      pg-core:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -52,14 +53,14 @@ services:
       args:
         SERVICE_MODULE: services/admin
     environment:
-      ADMIN_DB_URL: jdbc:postgresql://postgres:5432/admin
+      ADMIN_DB_URL: jdbc:postgresql://pg-core:5432/admin
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER:-pte}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
     depends_on:
-      postgres:
+      pg-core:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -74,14 +75,14 @@ services:
       args:
         SERVICE_MODULE: services/authoring
     environment:
-      AUTHORING_DB_URL: jdbc:postgresql://postgres:5432/authoring
+      AUTHORING_DB_URL: jdbc:postgresql://pg-core:5432/authoring
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER:-pte}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
     depends_on:
-      postgres:
+      pg-core:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -96,7 +97,7 @@ services:
       args:
         SERVICE_MODULE: services/scheduling
     environment:
-      SCHEDULING_DB_URL: jdbc:postgresql://postgres:5432/scheduling
+      SCHEDULING_DB_URL: jdbc:postgresql://pg-core:5432/scheduling
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER:-pte}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
@@ -105,7 +106,7 @@ services:
       # Direct inter-service call, bypasses the gateway (see spec Assumptions).
       AUTHORING_URL: http://authoring:8083/api/authoring
     depends_on:
-      postgres:
+      pg-core:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -121,7 +122,7 @@ services:
         SERVICE_MODULE: services/exam-delivery
     environment:
       # Note: db name is "exam_delivery" (underscore); module dir is "exam-delivery" (hyphen).
-      EXAM_DELIVERY_DB_URL: jdbc:postgresql://postgres:5432/exam_delivery
+      EXAM_DELIVERY_DB_URL: jdbc:postgresql://pg-exam:5432/exam_delivery
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER:-pte}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
@@ -150,7 +151,7 @@ services:
       # this local compose stack (found + fixed via plans/phat-speaking-api-e2e-verify).
       SPRING_PROFILES_ACTIVE: dev
     depends_on:
-      postgres:
+      pg-exam:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -167,7 +168,7 @@ services:
       args:
         SERVICE_MODULE: services/proctor
     environment:
-      PROCTOR_DB_URL: jdbc:postgresql://postgres:5432/proctor
+      PROCTOR_DB_URL: jdbc:postgresql://pg-live:5432/proctor
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER:-pte}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
@@ -176,7 +177,7 @@ services:
       # Direct inter-service call, bypasses the gateway (see spec Assumptions).
       SCHEDULING_URL: http://scheduling:8084/api/scheduling
     depends_on:
-      postgres:
+      pg-live:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -191,7 +192,7 @@ services:
       args:
         SERVICE_MODULE: services/scoring
     environment:
-      SCORING_DB_URL: jdbc:postgresql://postgres:5432/scoring
+      SCORING_DB_URL: jdbc:postgresql://pg-async:5432/scoring
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER:-pte}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
@@ -200,7 +201,7 @@ services:
       # Host answer review (quang-host-answer-review Phase 1) - presign audio/image URLs.
       MEDIA_URL: http://media:8090/api/media
     depends_on:
-      postgres:
+      pg-async:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -215,7 +216,7 @@ services:
       args:
         SERVICE_MODULE: services/reporting
     environment:
-      REPORTING_DB_URL: jdbc:postgresql://postgres:5432/reporting
+      REPORTING_DB_URL: jdbc:postgresql://pg-core:5432/reporting
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER:-pte}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
@@ -225,7 +226,7 @@ services:
       EXAM_DELIVERY_URL: http://exam-delivery:8085/api/exam-delivery
       SCORING_URL: http://scoring:8087/api/scoring
     depends_on:
-      postgres:
+      pg-core:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -240,7 +241,7 @@ services:
       args:
         SERVICE_MODULE: services/notification
     environment:
-      NOTIFICATION_DB_URL: jdbc:postgresql://postgres:5432/notification
+      NOTIFICATION_DB_URL: jdbc:postgresql://pg-core:5432/notification
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER:-pte}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
@@ -249,7 +250,7 @@ services:
       MAIL_HOST: mailpit
       MAIL_PORT: 1025
     depends_on:
-      postgres:
+      pg-core:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -305,7 +306,7 @@ services:
       args:
         SERVICE_MODULE: services/media
     environment:
-      MEDIA_DB_URL: jdbc:postgresql://postgres:5432/media
+      MEDIA_DB_URL: jdbc:postgresql://pg-core:5432/media
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
       MINIO_ENDPOINT: http://minio:9000
@@ -319,7 +320,7 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pte-minio-admin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-pte-minio-dev-pw}
     depends_on:
-      postgres:
+      pg-core:
         condition: service_healthy
       minio:
         condition: service_healthy
