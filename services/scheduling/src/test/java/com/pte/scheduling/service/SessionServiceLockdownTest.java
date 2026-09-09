@@ -75,7 +75,8 @@ class SessionServiceLockdownTest {
                         UUID.randomUUID(),
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
-                        ExamMode.PRACTICE),
+                        ExamMode.PRACTICE,
+                        null),  // null = use default (NONE)
                 hostAdmin);
 
         assertThat(response.policy().lockdownMode()).isEqualTo("NONE");
@@ -96,7 +97,8 @@ class SessionServiceLockdownTest {
                         UUID.randomUUID(),
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
-                        ExamMode.MOCK_TEST),
+                        ExamMode.MOCK_TEST,
+                        null),  // null = use default (STANDARD)
                 hostAdmin);
 
         assertThat(response.policy().lockdownMode()).isEqualTo("STANDARD");
@@ -117,10 +119,78 @@ class SessionServiceLockdownTest {
                         UUID.randomUUID(),
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
-                        ExamMode.REAL_EXAM),
+                        ExamMode.REAL_EXAM,
+                        null),  // null = use default (STRICT)
                 hostAdmin);
 
         assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
+    }
+
+    // --- Teacher override tests ---
+
+    @Test
+    void create_withTeacherOverride_lockdownModeOverridesDefault() {
+        // PRACTICE normally defaults to NONE; teacher overrides to STANDARD.
+        when(snapshotRefService.resolve(any())).thenReturn(snapshotRef());
+        when(sessionRepository.save(any())).thenAnswer(invocation -> {
+            ExamSession s = invocation.getArgument(0);
+            s.setPublicId(UUID.randomUUID());
+            return s;
+        });
+
+        SessionResponse response = sessionService.create(
+                new CreateSessionRequest(
+                        "Override Test",
+                        UUID.randomUUID(),
+                        Instant.now().plusSeconds(3600),
+                        Instant.now().plusSeconds(7200),
+                        ExamMode.PRACTICE,
+                        LockdownMode.STANDARD),  // override NONE → STANDARD
+                hostAdmin);
+
+        assertThat(response.policy().lockdownMode()).isEqualTo("STANDARD");
+    }
+
+    @Test
+    void create_withTeacherOverride_strictOnRealExam_usesStrict() {
+        // REAL_EXAM defaults to STRICT; teacher confirms with explicit STRICT.
+        when(snapshotRefService.resolve(any())).thenReturn(snapshotRef());
+        when(sessionRepository.save(any())).thenAnswer(invocation -> {
+            ExamSession s = invocation.getArgument(0);
+            s.setPublicId(UUID.randomUUID());
+            return s;
+        });
+
+        SessionResponse response = sessionService.create(
+                new CreateSessionRequest(
+                        "Explicit Strict",
+                        UUID.randomUUID(),
+                        Instant.now().plusSeconds(3600),
+                        Instant.now().plusSeconds(7200),
+                        ExamMode.REAL_EXAM,
+                        LockdownMode.STRICT),
+                hostAdmin);
+
+        assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
+    }
+
+    @Test
+    void create_withTeacherOverride_strictOnPractice_rejected() {
+        // STRICT + PRACTICE is invalid — validation throws after snapshot resolve.
+        when(snapshotRefService.resolve(any())).thenReturn(snapshotRef());
+
+        assertThatThrownBy(() -> sessionService.create(
+                new CreateSessionRequest(
+                        "Invalid Combo",
+                        UUID.randomUUID(),
+                        Instant.now().plusSeconds(3600),
+                        Instant.now().plusSeconds(7200),
+                        ExamMode.PRACTICE,
+                        LockdownMode.STRICT),
+                hostAdmin))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("STRICT")
+                .hasMessageContaining("PRACTICE");
     }
 
     // --- SessionService.patchPolicy() lockdown mode ---
