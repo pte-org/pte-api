@@ -197,6 +197,8 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
+      # Host answer review (quang-host-answer-review Phase 1) - presign audio/image URLs.
+      MEDIA_URL: http://media:8090/api/media
     depends_on:
       postgres:
         condition: service_healthy

@@ -47,6 +47,20 @@ internal:
   # data, not just internal-service access). Pre-production checklist item.
   bootstrap-key: ${INTERNAL_BOOTSTRAP_KEY:dev-internal-bootstrap-key-change-me}
 
+# Guarded sync call to media (host answer review, quang-host-answer-review Phase 1) -
+# presign-GET only, mirrors exam-delivery's InternalClientConfig pattern.
+media:
+  base-url: ${MEDIA_URL:http://localhost:8090/api/media}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      media:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+
 management:
   endpoints:
     web:

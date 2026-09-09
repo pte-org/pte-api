@@ -61,6 +61,12 @@
 			<groupId>com.pte</groupId>
 			<artifactId>pte-common</artifactId>
 		</dependency>
+		<!-- Guarded sync client to media for presigning answer audio/image URLs (host review). -->
+		<dependency>
+			<groupId>io.github.resilience4j</groupId>
+			<artifactId>resilience4j-spring-boot3</artifactId>
+			<version>2.3.0</version>
+		</dependency>
 
 		<dependency>
 			<groupId>org.postgresql</groupId>
