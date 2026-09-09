@@ -50,7 +50,7 @@ public class AttemptMapper {
                 item.maxWordCount(), toFlatOptions(parsedOptions), toBlankGroups(parsedOptions), item.prepSeconds(),
                 item.responseSeconds(), timer.getPrepDeadline(), timer.getResponseDeadline(), Instant.now(),
                 attempt.getExamEndTime(), item.preListenSeconds(), item.preRecordSeconds(), item.imageUrl());
-        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey, attempt.getSnapshot().getLockdownMode());
+        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey, attempt.getPinnedSnapshot().getLockdownMode());
     }
 
     public AttemptTaskResponse toCompletedResponse(ExamAttempt attempt) {
