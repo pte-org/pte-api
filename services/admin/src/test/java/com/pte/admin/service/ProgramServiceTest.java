@@ -11,6 +11,7 @@ import com.pte.admin.domain.event.ProgramCreatedEvent;
 import com.pte.admin.domain.event.ProgramStatusChangedEvent;
 import com.pte.admin.domain.event.ProgramUpdatedEvent;
 import com.pte.admin.domain.exception.OrganizationNotFoundException;
+import com.pte.admin.domain.exception.ProgramHasActiveClassesException;
 import com.pte.admin.domain.exception.ProgramNameAlreadyUsedException;
 import com.pte.admin.domain.exception.ProgramNotFoundException;
 import com.pte.admin.dto.request.CreateProgramRequest;
@@ -19,6 +20,7 @@ import com.pte.admin.dto.response.ProgramResponse;
 import com.pte.admin.messaging.outbox.OutboxWriter;
 import com.pte.admin.repository.OrganizationRepository;
 import com.pte.admin.repository.ProgramRepository;
+import com.pte.admin.repository.StudentClassRepository;
 import com.pte.common.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,13 +51,16 @@ class ProgramServiceTest {
     private OrganizationRepository organizationRepository;
 
     @Mock
+    private StudentClassRepository studentClassRepository;
+
+    @Mock
     private OutboxWriter outboxWriter;
 
     private ProgramService service;
 
     @BeforeEach
     void setUp() {
-        service = new ProgramService(programRepository, organizationRepository, outboxWriter);
+        service = new ProgramService(programRepository, organizationRepository, studentClassRepository, outboxWriter);
     }
 
     private Tenant tenantWithPublicId(UUID publicId) {
@@ -348,6 +353,25 @@ class ProgramServiceTest {
 
         service.archive(organizationPublicId, programPublicId, caller);
 
+        verify(outboxWriter, never()).write(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void archive_hasActiveClasses_throwsWithoutArchiving() {
+        UUID tenantPublicId = UUID.randomUUID();
+        UUID organizationPublicId = UUID.randomUUID();
+        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId));
+        UUID programPublicId = UUID.randomUUID();
+        Program program = programOf(programPublicId, organization);
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
+
+        when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
+        when(studentClassRepository.existsByProgram_PublicIdAndDeletedFalse(programPublicId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.archive(organizationPublicId, programPublicId, caller))
+                .isInstanceOf(ProgramHasActiveClassesException.class);
+
+        assertThat(program.isDeleted()).isFalse();
         verify(outboxWriter, never()).write(any(), any(), any(), any(), any());
     }
 }
