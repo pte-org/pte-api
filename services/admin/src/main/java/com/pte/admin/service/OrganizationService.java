@@ -87,6 +87,18 @@ public class OrganizationService {
         return OrganizationMapper.toResponse(organization, tenantPublicId);
     }
 
+    /** Host self-service: same as {@link #list}, scoped by the caller's own tenant instead of a path param. */
+    @Transactional(readOnly = true)
+    public List<OrganizationResponse> listForCaller(CurrentUser caller) {
+        return list(caller.tenantId(), caller);
+    }
+
+    /** Host self-service: same as {@link #get}, scoped by the caller's own tenant instead of a path param. */
+    @Transactional(readOnly = true)
+    public OrganizationResponse getForCaller(UUID organizationPublicId, CurrentUser caller) {
+        return get(caller.tenantId(), organizationPublicId, caller);
+    }
+
     @Transactional
     public OrganizationResponse suspend(UUID tenantPublicId, UUID organizationPublicId, CurrentUser caller) {
         Organization organization = loadUnderTenant(tenantPublicId, organizationPublicId);

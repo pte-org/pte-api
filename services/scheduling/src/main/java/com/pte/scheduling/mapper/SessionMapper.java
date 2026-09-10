@@ -27,7 +27,8 @@ public final class SessionMapper {
                 session.getClosesAt(),
                 session.getStatus().name(),
                 toPolicy(session.getPolicy()),
-                composition);
+                composition,
+                session.getCapacity());
     }
 
     /**

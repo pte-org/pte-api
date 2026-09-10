@@ -1,6 +1,7 @@
 package com.pte.examdelivery.mapper;
 
 import com.pte.examdelivery.domain.ExamAttempt;
+import com.pte.examdelivery.domain.PinnedExamSnapshot;
 import com.pte.examdelivery.dto.response.AttemptTaskResponse;
 import com.pte.examdelivery.dto.response.BlankGroupView;
 import com.pte.examdelivery.dto.response.OptionView;
@@ -59,8 +60,11 @@ public class AttemptMapper {
                 item.maxWordCount(), toFlatOptions(parsedOptions), toBlankGroups(parsedOptions), effectivePrepSeconds,
                 effectiveResponseSeconds, attempt.getExamEndTime(), item.preListenSeconds(), item.preRecordSeconds(),
                 item.imageUrl());
+        // pinnedSnapshot is an optional lazy @OneToOne — null for an attempt whose pin row is
+        // absent. Null lockdownMode is the client's "no lockdown" contract, same as toCompletedResponse.
+        PinnedExamSnapshot pinned = attempt.getPinnedSnapshot();
         return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey,
-                attempt.getPinnedSnapshot().getLockdownMode());
+                pinned != null ? pinned.getLockdownMode() : null);
     }
 
     public AttemptTaskResponse toCompletedResponse(ExamAttempt attempt) {

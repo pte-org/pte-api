@@ -56,6 +56,9 @@ public class ExamSession extends BaseEntity {
     @Column(nullable = false)
     private SessionStatus status = SessionStatus.SCHEDULED;
 
+    /** Null = unlimited (every session created before Phase 11). Enforced in {@code EnrollmentService.bulkEnroll}. */
+    private Integer capacity;
+
     @Embedded
     private ExamPolicy policy = ExamPolicy.mockTestDefault();
 

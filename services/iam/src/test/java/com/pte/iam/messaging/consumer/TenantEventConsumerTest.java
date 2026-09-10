@@ -67,6 +67,25 @@ class TenantEventConsumerTest {
     }
 
     @Test
+    void onboarded_persistsOrganizationType() {
+        UUID tenantPublicId = UUID.randomUUID();
+        when(processedEventRepository.existsById(any())).thenReturn(false);
+        when(tenantRegistryRepository.findByTenantPublicId(tenantPublicId)).thenReturn(Optional.empty());
+
+        MessageProperties properties = new MessageProperties();
+        properties.setMessageId(UUID.randomUUID().toString());
+        properties.getHeaders().put(IamConstants.EVENT_TYPE_HEADER, IamConstants.INCOMING_EVENT_TENANT_ONBOARDED);
+        String payload = "{\"tenantPublicId\":\"" + tenantPublicId + "\",\"organizationType\":\"TRAINING_CENTER\"}";
+        Message message = new Message(payload.getBytes(StandardCharsets.UTF_8), properties);
+
+        consumer.onTenantEvent(message);
+
+        ArgumentCaptor<TenantRegistry> captor = ArgumentCaptor.forClass(TenantRegistry.class);
+        verify(tenantRegistryRepository).save(captor.capture());
+        assertThat(captor.getValue().getOrganizationType()).isEqualTo("TRAINING_CENTER");
+    }
+
+    @Test
     void suspended_setsRegistryStatusSuspended() {
         UUID tenantPublicId = UUID.randomUUID();
         TenantRegistry registry = new TenantRegistry();

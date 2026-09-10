@@ -13,5 +13,7 @@ public record SessionResponse(
         Instant closesAt,
         String status,
         ExamPolicyResponse policy,
-        List<CompositionItemResponse> composition) {
+        List<CompositionItemResponse> composition,
+        /** Null = unlimited. */
+        Integer capacity) {
 }

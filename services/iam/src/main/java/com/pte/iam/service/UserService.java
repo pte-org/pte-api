@@ -3,6 +3,7 @@ package com.pte.iam.service;
 import com.pte.common.security.CurrentUser;
 import com.pte.iam.constant.IamConstants;
 import com.pte.iam.domain.LoginHash;
+import com.pte.iam.domain.TenantRegistry;
 import com.pte.iam.domain.User;
 import com.pte.iam.domain.enums.Role;
 import com.pte.iam.domain.event.UserCreatedEvent;
@@ -23,6 +24,7 @@ import com.pte.iam.dto.response.UserResponse;
 import com.pte.iam.mapper.UserMapper;
 import com.pte.iam.messaging.outbox.OutboxWriter;
 import com.pte.iam.repository.LoginHashRepository;
+import com.pte.iam.repository.TenantRegistryRepository;
 import com.pte.iam.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -51,16 +53,19 @@ public class UserService {
     private final UserProvisioningHelper provisioningHelper;
     private final OutboxWriter outboxWriter;
     private final UserBulkCreateWriter bulkCreateWriter;
+    private final TenantRegistryRepository tenantRegistryRepository;
 
     public UserService(UserRepository userRepository, LoginHashRepository loginHashRepository,
                        PasswordEncoder passwordEncoder, UserProvisioningHelper provisioningHelper,
-                       OutboxWriter outboxWriter, UserBulkCreateWriter bulkCreateWriter) {
+                       OutboxWriter outboxWriter, UserBulkCreateWriter bulkCreateWriter,
+                       TenantRegistryRepository tenantRegistryRepository) {
         this.userRepository = userRepository;
         this.loginHashRepository = loginHashRepository;
         this.passwordEncoder = passwordEncoder;
         this.provisioningHelper = provisioningHelper;
         this.outboxWriter = outboxWriter;
         this.bulkCreateWriter = bulkCreateWriter;
+        this.tenantRegistryRepository = tenantRegistryRepository;
     }
 
     @Transactional
@@ -150,7 +155,11 @@ public class UserService {
     public UserResponse me(CurrentUser caller) {
         User user = userRepository.findByPublicId(caller.userId())
                 .orElseThrow(UserNotFoundException::new);
-        return UserMapper.toResponse(user);
+        String organizationType = caller.tenantId() == null ? null
+                : tenantRegistryRepository.findByTenantPublicId(caller.tenantId())
+                        .map(TenantRegistry::getOrganizationType)
+                        .orElse(null);
+        return UserMapper.toResponse(user, organizationType);
     }
 
     @Transactional(readOnly = true)

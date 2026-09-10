@@ -15,6 +15,7 @@ import com.pte.scheduling.domain.exception.AlreadyAssignedException;
 import com.pte.scheduling.domain.exception.AlreadyEnrolledException;
 import com.pte.scheduling.domain.exception.EnrollmentNotFoundException;
 import com.pte.scheduling.domain.exception.ProctorAssignmentNotFoundException;
+import com.pte.scheduling.domain.exception.SessionCapacityExceededException;
 import com.pte.scheduling.dto.request.AssignProctorRequest;
 import com.pte.scheduling.dto.request.BulkEnrollRequest;
 import com.pte.scheduling.dto.request.EnrollStudentRequest;
@@ -22,6 +23,7 @@ import com.pte.scheduling.dto.request.UpdateProctorRoleRequest;
 import com.pte.scheduling.dto.response.BulkEnrollResponse;
 import com.pte.scheduling.dto.response.EnrollmentResponse;
 import com.pte.scheduling.dto.response.ProctorAssignmentResponse;
+import com.pte.scheduling.dto.response.StudentEnrollmentResponse;
 import com.pte.scheduling.messaging.outbox.OutboxWriter;
 import com.pte.scheduling.repository.EnrollmentRepository;
 import com.pte.scheduling.repository.ProctorAssignmentRepository;
@@ -80,10 +82,16 @@ public class EnrollmentService {
      * depends on {@code Enrollment} using {@code GenerationType.IDENTITY}
      * (forces a synchronous flush inside {@code saveAll}) — re-verify this
      * guard if that id strategy ever changes.
+     * <p>
+     * Fetches the session under a pessimistic write lock (Phase 11) — held
+     * for this whole method — so the capacity check-then-insert below can't
+     * race a concurrent {@code bulkEnroll} call against the same session
+     * (both would otherwise read the same pre-write count and both commit,
+     * overshooting {@code capacity}).
      */
     @Transactional
     public BulkEnrollResponse bulkEnroll(UUID sessionPublicId, BulkEnrollRequest request, CurrentUser caller) {
-        ExamSession session = sessionService.findOwned(sessionPublicId, caller);
+        ExamSession session = sessionService.findOwnedWithLock(sessionPublicId, caller);
 
         List<UUID> existing = enrollmentRepository
                 .findBySessionIdAndStudentPublicIdIn(session.getId(), request.studentPublicIds())
@@ -101,6 +109,16 @@ public class EnrollmentService {
             enrollment.setStudentPublicId(studentPublicId);
             enrollment.setTenantId(session.getTenantId());
             toCreate.add(enrollment);
+        }
+
+        // Fail closed, before any write — a partial silent enroll would be
+        // worse than a clear rejection the FE can react to with another
+        // batch/session.
+        if (session.getCapacity() != null) {
+            long existingCount = enrollmentRepository.countBySessionId(session.getId());
+            if (existingCount + toCreate.size() > session.getCapacity()) {
+                throw new SessionCapacityExceededException();
+            }
         }
 
         List<Enrollment> saved;
@@ -143,6 +161,20 @@ public class EnrollmentService {
                 SchedulingConstants.EVENT_STUDENT_UNENROLLED,
                 new StudentUnenrolledEvent(session.getPublicId(), enrollment.getStudentPublicId(), session.getTenantId()),
                 session.getTenantId());
+    }
+
+    /** Backs {@code admin}'s pending-exam-request transfer warning — one join-fetch query, no per-enrollment session lookup. */
+    @Transactional(readOnly = true)
+    public List<StudentEnrollmentResponse> listForStudent(UUID studentPublicId, CurrentUser caller) {
+        return enrollmentRepository.findByStudentPublicIdAndTenantId(studentPublicId, caller.tenantId()).stream()
+                .map(enrollment -> new StudentEnrollmentResponse(
+                        enrollment.getPublicId(),
+                        enrollment.getSession().getPublicId(),
+                        enrollment.getSession().getName(),
+                        enrollment.getSession().getStatus().name(),
+                        enrollment.getSession().getOpensAt(),
+                        enrollment.getSession().getClosesAt()))
+                .toList();
     }
 
     @Transactional

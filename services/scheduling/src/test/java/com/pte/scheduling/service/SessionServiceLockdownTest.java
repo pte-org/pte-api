@@ -76,7 +76,8 @@ class SessionServiceLockdownTest {
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
                         ExamMode.PRACTICE,
-                        null),  // null = use default (NONE)
+                        null,  // null = use default (NONE)
+                        null),
                 hostAdmin);
 
         assertThat(response.policy().lockdownMode()).isEqualTo("NONE");
@@ -98,7 +99,8 @@ class SessionServiceLockdownTest {
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
                         ExamMode.MOCK_TEST,
-                        null),  // null = use default (STANDARD)
+                        null,  // null = use default (STANDARD)
+                        null),
                 hostAdmin);
 
         assertThat(response.policy().lockdownMode()).isEqualTo("STANDARD");
@@ -120,7 +122,8 @@ class SessionServiceLockdownTest {
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
                         ExamMode.REAL_EXAM,
-                        null),  // null = use default (STRICT)
+                        null,  // null = use default (STRICT)
+                        null),
                 hostAdmin);
 
         assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
@@ -145,7 +148,8 @@ class SessionServiceLockdownTest {
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
                         ExamMode.PRACTICE,
-                        LockdownMode.STANDARD),  // override NONE → STANDARD
+                        LockdownMode.STANDARD,  // override NONE → STANDARD
+                        null),
                 hostAdmin);
 
         assertThat(response.policy().lockdownMode()).isEqualTo("STANDARD");
@@ -168,7 +172,8 @@ class SessionServiceLockdownTest {
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
                         ExamMode.REAL_EXAM,
-                        LockdownMode.STRICT),
+                        LockdownMode.STRICT,
+                        null),
                 hostAdmin);
 
         assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
@@ -186,7 +191,8 @@ class SessionServiceLockdownTest {
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
                         ExamMode.PRACTICE,
-                        LockdownMode.STRICT),
+                        LockdownMode.STRICT,
+                        null),
                 hostAdmin))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("STRICT")

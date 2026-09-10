@@ -5,6 +5,7 @@ import com.pte.scheduling.domain.enums.LockdownMode;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -18,5 +19,7 @@ public record CreateSessionRequest(
         ExamMode examMode,
         /** Optional teacher override — null means use ExamMode default.
          *  Validation: STRICT is not allowed when examMode is PRACTICE. */
-        LockdownMode lockdownMode) {
+        LockdownMode lockdownMode,
+        /** Null = unlimited, matching {@link com.pte.scheduling.domain.ExamSession#getCapacity()}. */
+        @Positive(message = "Capacity must be positive") Integer capacity) {
 }

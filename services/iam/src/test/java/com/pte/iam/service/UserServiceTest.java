@@ -2,6 +2,7 @@ package com.pte.iam.service;
 
 import com.pte.common.security.CurrentUser;
 import com.pte.iam.domain.LoginHash;
+import com.pte.iam.domain.TenantRegistry;
 import com.pte.iam.domain.User;
 import com.pte.iam.domain.enums.Role;
 import com.pte.iam.domain.enums.UserStatus;
@@ -16,6 +17,7 @@ import com.pte.iam.dto.response.BulkCreateUsersResponse;
 import com.pte.iam.dto.response.UserResponse;
 import com.pte.iam.messaging.outbox.OutboxWriter;
 import com.pte.iam.repository.LoginHashRepository;
+import com.pte.iam.repository.TenantRegistryRepository;
 import com.pte.iam.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,13 +61,16 @@ class UserServiceTest {
     @Mock
     private UserBulkCreateWriter bulkCreateWriter;
 
+    @Mock
+    private TenantRegistryRepository tenantRegistryRepository;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private UserService userService;
 
     @BeforeEach
     void setUp() {
         userService = new UserService(userRepository, loginHashRepository, passwordEncoder,
-                provisioningHelper, outboxWriter, bulkCreateWriter);
+                provisioningHelper, outboxWriter, bulkCreateWriter, tenantRegistryRepository);
     }
 
     private User userWithId(Long id, UUID publicId, UUID tenantId) {
@@ -78,6 +83,53 @@ class UserServiceTest {
         user.setStatus(UserStatus.ACTIVE);
         user.setRoles(Set.of(Role.HOST_ADMIN));
         return user;
+    }
+
+    @Test
+    void me_returnsTenantsOrganizationType() {
+        UUID userPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        User user = userWithId(1L, userPublicId, tenantId);
+        TenantRegistry registry = new TenantRegistry();
+        registry.setTenantPublicId(tenantId);
+        registry.setOrganizationType("TRAINING_CENTER");
+
+        when(userRepository.findByPublicId(userPublicId)).thenReturn(Optional.of(user));
+        when(tenantRegistryRepository.findByTenantPublicId(tenantId)).thenReturn(Optional.of(registry));
+
+        CurrentUser caller = new CurrentUser(userPublicId, tenantId, List.of("HOST_ADMIN"));
+        UserResponse response = userService.me(caller);
+
+        assertThat(response.organizationType()).isEqualTo("TRAINING_CENTER");
+    }
+
+    @Test
+    void me_platformUser_returnsNullOrganizationTypeWithoutRegistryLookup() {
+        UUID userPublicId = UUID.randomUUID();
+        User user = userWithId(1L, userPublicId, null);
+
+        when(userRepository.findByPublicId(userPublicId)).thenReturn(Optional.of(user));
+
+        CurrentUser caller = new CurrentUser(userPublicId, null, List.of("PLATFORM_ADMIN"));
+        UserResponse response = userService.me(caller);
+
+        assertThat(response.organizationType()).isNull();
+        verify(tenantRegistryRepository, never()).findByTenantPublicId(any());
+    }
+
+    @Test
+    void me_noRegistryRowYet_returnsNullWithoutThrowing() {
+        UUID userPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        User user = userWithId(1L, userPublicId, tenantId);
+
+        when(userRepository.findByPublicId(userPublicId)).thenReturn(Optional.of(user));
+        when(tenantRegistryRepository.findByTenantPublicId(tenantId)).thenReturn(Optional.empty());
+
+        CurrentUser caller = new CurrentUser(userPublicId, tenantId, List.of("HOST_ADMIN"));
+        UserResponse response = userService.me(caller);
+
+        assertThat(response.organizationType()).isNull();
     }
 
     @Test

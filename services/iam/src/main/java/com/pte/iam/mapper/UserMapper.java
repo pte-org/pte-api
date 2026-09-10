@@ -13,6 +13,10 @@ public final class UserMapper {
     }
 
     public static UserResponse toResponse(User user) {
+        return toResponse(user, null);
+    }
+
+    public static UserResponse toResponse(User user, String organizationType) {
         List<String> roles = user.getRoles().stream().map(Role::name).toList();
         return new UserResponse(
                 user.getPublicId(),
@@ -24,6 +28,7 @@ public final class UserMapper {
                 user.getStudentCode(),
                 user.getClassName(),
                 user.getPhone(),
-                user.getDateOfBirth());
+                user.getDateOfBirth(),
+                organizationType);
     }
 }
