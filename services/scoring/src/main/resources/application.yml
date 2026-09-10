@@ -7,9 +7,7 @@ spring:
   application:
     name: scoring
   datasource:
-    # Port 5435 = pg-async (CELL ASYNC), not the 5432 shared by CELL CORE's seven
-    # services — see docker-compose.yml for the cell/port map.
-    url: ${SCORING_DB_URL:jdbc:postgresql://localhost:5435/scoring}
+    url: ${SCORING_DB_URL:jdbc:postgresql://localhost:5432/scoring}
     username: ${SCORING_DB_USER:scoring_svc}
     password: ${SCORING_DB_PASSWORD:scoring_dev_pw}
     hikari:

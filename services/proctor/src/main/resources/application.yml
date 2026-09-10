@@ -7,9 +7,7 @@ spring:
   application:
     name: proctor
   datasource:
-    # Port 5434 = pg-live (CELL LIVE), not the 5432 shared by CELL CORE's seven
-    # services — see docker-compose.yml for the cell/port map.
-    url: ${PROCTOR_DB_URL:jdbc:postgresql://localhost:5434/proctor}
+    url: ${PROCTOR_DB_URL:jdbc:postgresql://localhost:5432/proctor}
     username: ${PROCTOR_DB_USER:proctor_svc}
     password: ${PROCTOR_DB_PASSWORD:proctor_dev_pw}
     hikari:
