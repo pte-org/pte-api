@@ -2,6 +2,7 @@ package com.pte.admin.controller;
 
 import com.pte.admin.dto.request.CreateProgramRequest;
 import com.pte.admin.dto.request.UpdateProgramRequest;
+import com.pte.admin.dto.response.ProgramDashboardResponse;
 import com.pte.admin.dto.response.ProgramResponse;
 import com.pte.admin.service.ProgramService;
 import com.pte.common.security.CurrentUser;
@@ -76,6 +77,12 @@ public class ProgramController {
     public ApiResponse<ProgramResponse> archive(@PathVariable UUID organizationPublicId,
             @PathVariable UUID publicId) {
         return ApiResponse.success(programService.archive(organizationPublicId, publicId, currentUser()));
+    }
+
+    @GetMapping("/{publicId}/dashboard")
+    public ApiResponse<ProgramDashboardResponse> dashboard(@PathVariable UUID organizationPublicId,
+            @PathVariable UUID publicId) {
+        return ApiResponse.success(programService.getDashboard(organizationPublicId, publicId, currentUser()));
     }
 
     private CurrentUser currentUser() {
