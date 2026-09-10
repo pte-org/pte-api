@@ -45,15 +45,18 @@ public class AssignmentService {
     private final LecturerAssignmentRepository lecturerAssignmentRepository;
     private final ProgramCoordinatorAssignmentRepository coordinatorAssignmentRepository;
     private final OutboxWriter outboxWriter;
+    private final AuditLogService auditLogService;
 
     public AssignmentService(ClassService classService, ProgramService programService,
             LecturerAssignmentRepository lecturerAssignmentRepository,
-            ProgramCoordinatorAssignmentRepository coordinatorAssignmentRepository, OutboxWriter outboxWriter) {
+            ProgramCoordinatorAssignmentRepository coordinatorAssignmentRepository, OutboxWriter outboxWriter,
+            AuditLogService auditLogService) {
         this.classService = classService;
         this.programService = programService;
         this.lecturerAssignmentRepository = lecturerAssignmentRepository;
         this.coordinatorAssignmentRepository = coordinatorAssignmentRepository;
         this.outboxWriter = outboxWriter;
+        this.auditLogService = auditLogService;
     }
 
     /**
@@ -85,6 +88,8 @@ public class AssignmentService {
                 new LecturerAssignedEvent(saved.getPublicId(), classPublicId, saved.getAssigneePublicId(),
                         caller.tenantId()),
                 caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_CLASS, classPublicId.toString(),
+                AdminConstants.EVENT_LECTURER_ASSIGNED, "Assigned Lecturer " + saved.getAssigneePublicId() + " to Class");
         return toLecturerResponse(saved, classPublicId);
     }
 
@@ -113,6 +118,9 @@ public class AssignmentService {
                 new LecturerUnassignedEvent(assignmentPublicId, classPublicId, assignment.getAssigneePublicId(),
                         caller.tenantId()),
                 caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_CLASS, classPublicId.toString(),
+                AdminConstants.EVENT_LECTURER_UNASSIGNED,
+                "Unassigned Lecturer " + assignment.getAssigneePublicId() + " from Class");
     }
 
     @Transactional
@@ -137,6 +145,9 @@ public class AssignmentService {
                 new CoordinatorAssignedEvent(saved.getPublicId(), programPublicId, saved.getAssigneePublicId(),
                         caller.tenantId()),
                 caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_PROGRAM, programPublicId.toString(),
+                AdminConstants.EVENT_COORDINATOR_ASSIGNED,
+                "Assigned Coordinator " + saved.getAssigneePublicId() + " to Program \"" + program.getName() + "\"");
         return toCoordinatorResponse(saved, programPublicId);
     }
 
@@ -165,6 +176,9 @@ public class AssignmentService {
                 new CoordinatorUnassignedEvent(assignmentPublicId, programPublicId, assignment.getAssigneePublicId(),
                         caller.tenantId()),
                 caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_PROGRAM, programPublicId.toString(),
+                AdminConstants.EVENT_COORDINATOR_UNASSIGNED,
+                "Unassigned Coordinator " + assignment.getAssigneePublicId() + " from Program");
     }
 
     private LecturerAssignmentResponse toLecturerResponse(LecturerAssignment assignment, UUID classPublicId) {
