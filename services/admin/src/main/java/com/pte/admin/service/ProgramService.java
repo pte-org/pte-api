@@ -14,6 +14,8 @@ import com.pte.admin.domain.exception.ProgramNameAlreadyUsedException;
 import com.pte.admin.domain.exception.ProgramNotFoundException;
 import com.pte.admin.dto.request.CreateProgramRequest;
 import com.pte.admin.dto.request.UpdateProgramRequest;
+import com.pte.admin.dto.response.ClassStudentCountResponse;
+import com.pte.admin.dto.response.ProgramDashboardResponse;
 import com.pte.admin.dto.response.ProgramResponse;
 import com.pte.admin.mapper.ProgramMapper;
 import com.pte.admin.messaging.outbox.OutboxWriter;
@@ -42,13 +44,16 @@ public class ProgramService {
     private final OrganizationRepository organizationRepository;
     private final StudentClassRepository studentClassRepository;
     private final OutboxWriter outboxWriter;
+    private final AuditLogService auditLogService;
 
     public ProgramService(ProgramRepository programRepository, OrganizationRepository organizationRepository,
-            StudentClassRepository studentClassRepository, OutboxWriter outboxWriter) {
+            StudentClassRepository studentClassRepository, OutboxWriter outboxWriter,
+            AuditLogService auditLogService) {
         this.programRepository = programRepository;
         this.organizationRepository = organizationRepository;
         this.studentClassRepository = studentClassRepository;
         this.outboxWriter = outboxWriter;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -71,6 +76,8 @@ public class ProgramService {
                 AdminConstants.EVENT_PROGRAM_CREATED,
                 new ProgramCreatedEvent(saved.getPublicId(), organizationPublicId, caller.tenantId(), saved.getName()),
                 caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_PROGRAM, saved.getPublicId().toString(),
+                AdminConstants.EVENT_PROGRAM_CREATED, "Created Program \"" + saved.getName() + "\"");
         return ProgramMapper.toResponse(saved, organizationPublicId);
     }
 
@@ -106,6 +113,8 @@ public class ProgramService {
         outboxWriter.write(AdminConstants.AGGREGATE_PROGRAM, programPublicId.toString(),
                 AdminConstants.EVENT_PROGRAM_UPDATED,
                 new ProgramUpdatedEvent(programPublicId, organizationPublicId, caller.tenantId()), caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_PROGRAM, programPublicId.toString(),
+                AdminConstants.EVENT_PROGRAM_UPDATED, "Updated Program \"" + program.getName() + "\"");
         return ProgramMapper.toResponse(program, organizationPublicId);
     }
 
@@ -145,6 +154,8 @@ public class ProgramService {
         outboxWriter.write(AdminConstants.AGGREGATE_PROGRAM, programPublicId.toString(),
                 AdminConstants.EVENT_PROGRAM_ARCHIVED,
                 new ProgramArchivedEvent(programPublicId, organizationPublicId, caller.tenantId()), caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_PROGRAM, programPublicId.toString(),
+                AdminConstants.EVENT_PROGRAM_ARCHIVED, "Archived Program \"" + program.getName() + "\"");
         return ProgramMapper.toResponse(program, organizationPublicId);
     }
 
@@ -160,7 +171,22 @@ public class ProgramService {
                 AdminConstants.EVENT_PROGRAM_STATUS_CHANGED,
                 new ProgramStatusChangedEvent(programPublicId, organizationPublicId, caller.tenantId(), target.name()),
                 caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_PROGRAM, programPublicId.toString(),
+                AdminConstants.EVENT_PROGRAM_STATUS_CHANGED, "Changed Program status to " + target.name());
         return ProgramMapper.toResponse(program, organizationPublicId);
+    }
+
+    /**
+     * One grouped query (see {@code StudentClassRepository.countStudentsByClassForProgram})
+     * for class/student counts under this Program — never client-side
+     * aggregation over a potentially large membership list, and never N+1.
+     */
+    @Transactional(readOnly = true)
+    public ProgramDashboardResponse getDashboard(UUID organizationPublicId, UUID programPublicId, CurrentUser caller) {
+        findOwned(organizationPublicId, programPublicId, caller);
+        List<ClassStudentCountResponse> classes = studentClassRepository.countStudentsByClassForProgram(programPublicId);
+        long studentCount = classes.stream().mapToLong(ClassStudentCountResponse::studentCount).sum();
+        return new ProgramDashboardResponse(programPublicId, classes.size(), studentCount, classes);
     }
 
     private Organization loadOrganizationOwned(UUID organizationPublicId, CurrentUser caller) {

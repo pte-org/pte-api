@@ -65,14 +65,16 @@ public class ClassService {
     private final ClassMembershipRepository classMembershipRepository;
     private final ProgramRepository programRepository;
     private final OutboxWriter outboxWriter;
+    private final AuditLogService auditLogService;
 
     public ClassService(StudentClassRepository studentClassRepository,
             ClassMembershipRepository classMembershipRepository, ProgramRepository programRepository,
-            OutboxWriter outboxWriter) {
+            OutboxWriter outboxWriter, AuditLogService auditLogService) {
         this.studentClassRepository = studentClassRepository;
         this.classMembershipRepository = classMembershipRepository;
         this.programRepository = programRepository;
         this.outboxWriter = outboxWriter;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -93,6 +95,8 @@ public class ClassService {
                 AdminConstants.EVENT_CLASS_CREATED,
                 new ClassCreatedEvent(saved.getPublicId(), programPublicId, caller.tenantId(), saved.getName()),
                 caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_CLASS, saved.getPublicId().toString(),
+                AdminConstants.EVENT_CLASS_CREATED, "Created Class \"" + saved.getName() + "\"");
         return StudentClassMapper.toResponse(saved, programPublicId);
     }
 
@@ -126,6 +130,8 @@ public class ClassService {
         outboxWriter.write(AdminConstants.AGGREGATE_CLASS, classPublicId.toString(),
                 AdminConstants.EVENT_CLASS_UPDATED,
                 new ClassUpdatedEvent(classPublicId, programPublicId, caller.tenantId()), caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_CLASS, classPublicId.toString(),
+                AdminConstants.EVENT_CLASS_UPDATED, "Renamed Class to \"" + studentClass.getName() + "\"");
         return StudentClassMapper.toResponse(studentClass, programPublicId);
     }
 
@@ -158,6 +164,8 @@ public class ClassService {
                 AdminConstants.EVENT_CLASS_STATUS_CHANGED,
                 new ClassStatusChangedEvent(classPublicId, programPublicId, caller.tenantId(), ClassStatus.INACTIVE.name()),
                 caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_CLASS, classPublicId.toString(),
+                AdminConstants.EVENT_CLASS_STATUS_CHANGED, "Changed Class status to " + ClassStatus.INACTIVE.name());
         return StudentClassMapper.toResponse(studentClass, programPublicId);
     }
 
@@ -182,6 +190,8 @@ public class ClassService {
         outboxWriter.write(AdminConstants.AGGREGATE_CLASS, classPublicId.toString(),
                 AdminConstants.EVENT_CLASS_ARCHIVED,
                 new ClassArchivedEvent(classPublicId, programPublicId, caller.tenantId()), caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_CLASS, classPublicId.toString(),
+                AdminConstants.EVENT_CLASS_ARCHIVED, "Archived Class \"" + studentClass.getName() + "\"");
         return StudentClassMapper.toResponse(studentClass, programPublicId);
     }
 
@@ -215,6 +225,9 @@ public class ClassService {
                 new StudentAssignedToClassEvent(saved.getPublicId(), classPublicId, saved.getStudentPublicId(),
                         caller.tenantId()),
                 caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_CLASS, classPublicId.toString(),
+                AdminConstants.EVENT_STUDENT_ASSIGNED_TO_CLASS,
+                "Assigned student " + saved.getStudentPublicId() + " to Class \"" + studentClass.getName() + "\"");
         return ClassMembershipMapper.toResponse(saved);
     }
 
@@ -263,6 +276,12 @@ public class ClassService {
         }
 
         List<UUID> assigned = saved.stream().map(ClassMembership::getStudentPublicId).toList();
+        if (!assigned.isEmpty()) {
+            auditLogService.record(caller, AdminConstants.AGGREGATE_CLASS, classPublicId.toString(),
+                    AdminConstants.EVENT_STUDENT_ASSIGNED_TO_CLASS,
+                    "Bulk-assigned " + assigned.size() + " student(s) to Class \"" + studentClass.getName()
+                            + "\" (" + alreadyInClass.size() + " already assigned)");
+        }
         return new BulkAssignStudentsResponse(assigned, List.copyOf(alreadyInClass));
     }
 
@@ -278,6 +297,9 @@ public class ClassService {
                 new StudentUnassignedFromClassEvent(membershipPublicId, classPublicId,
                         membership.getStudentPublicId(), caller.tenantId()),
                 caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_CLASS, classPublicId.toString(),
+                AdminConstants.EVENT_STUDENT_UNASSIGNED_FROM_CLASS,
+                "Unassigned student " + membership.getStudentPublicId() + " from Class");
     }
 
     /**
@@ -304,6 +326,9 @@ public class ClassService {
                 new StudentTransferredClassEvent(saved.getPublicId(), classPublicId, targetClass.getPublicId(),
                         saved.getStudentPublicId(), caller.tenantId()),
                 caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_CLASS, targetClass.getPublicId().toString(),
+                AdminConstants.EVENT_STUDENT_TRANSFERRED_CLASS,
+                "Transferred student " + saved.getStudentPublicId() + " to Class \"" + targetClass.getName() + "\"");
         return ClassMembershipMapper.toResponse(saved);
     }
 
@@ -350,6 +375,12 @@ public class ClassService {
                 new ClassesMergedEvent(targetClassPublicId, request.sourceClassPublicIds(), movedStudentPublicIds,
                         caller.tenantId()),
                 caller.tenantId());
+        if (!movedStudentPublicIds.isEmpty()) {
+            auditLogService.record(caller, AdminConstants.AGGREGATE_CLASS, targetClassPublicId.toString(),
+                    AdminConstants.EVENT_CLASSES_MERGED,
+                    "Merged " + request.sourceClassPublicIds().size() + " Class(es) into \"" + targetClass.getName()
+                            + "\" (" + movedStudentPublicIds.size() + " student(s) moved)");
+        }
         return new MergeClassesResponse(targetClassPublicId, request.sourceClassPublicIds(), movedStudentPublicIds);
     }
 
@@ -404,6 +435,10 @@ public class ClassService {
                 new ClassSplitEvent(sourceClassPublicId, savedNewClass.getPublicId(), movedStudentPublicIds,
                         caller.tenantId()),
                 caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_CLASS, savedNewClass.getPublicId().toString(),
+                AdminConstants.EVENT_CLASS_SPLIT,
+                "Split Class into new Class \"" + savedNewClass.getName() + "\" (" + movedStudentPublicIds.size()
+                        + " student(s) moved)");
         return new SplitClassResponse(StudentClassMapper.toResponse(savedNewClass, programPublicId),
                 movedStudentPublicIds);
     }
@@ -437,6 +472,8 @@ public class ClassService {
                 AdminConstants.EVENT_CLASS_STATUS_CHANGED,
                 new ClassStatusChangedEvent(classPublicId, programPublicId, caller.tenantId(), target.name()),
                 caller.tenantId());
+        auditLogService.record(caller, AdminConstants.AGGREGATE_CLASS, classPublicId.toString(),
+                AdminConstants.EVENT_CLASS_STATUS_CHANGED, "Changed Class status to " + target.name());
         return StudentClassMapper.toResponse(studentClass, programPublicId);
     }
 

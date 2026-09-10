@@ -65,17 +65,24 @@ class AssignmentServiceTest {
     @Mock
     private OutboxWriter outboxWriter;
 
+    @Mock
+    private AuditLogService auditLogService;
+
     private AssignmentService service;
 
     @BeforeEach
     void setUp() {
         // ClassService/ProgramService are the real classes (not mocked) so findOwned's actual
         // tenant-check logic is exercised, not just a mocked pass-through — this is exactly the
-        // reuse-not-duplicate discipline this phase's Design Constraints call for.
-        ClassService classService = new ClassService(studentClassRepository, null, programRepository, null);
-        ProgramService programService = new ProgramService(programRepository, null, null, null);
+        // reuse-not-duplicate discipline this phase's Design Constraints call for. Their own
+        // AuditLogService dependency is passed as null (not this test's `auditLogService` mock) —
+        // AssignmentServiceTest never calls a ClassService/ProgramService write method (only the
+        // package-private findOwned via AssignmentService), so it's never invoked; the mock
+        // verified below is AssignmentService's own, separate injected instance.
+        ClassService classService = new ClassService(studentClassRepository, null, programRepository, null, null);
+        ProgramService programService = new ProgramService(programRepository, null, null, null, null);
         service = new AssignmentService(classService, programService, lecturerAssignmentRepository,
-                coordinatorAssignmentRepository, outboxWriter);
+                coordinatorAssignmentRepository, outboxWriter, auditLogService);
     }
 
     private Tenant tenantWithPublicId(UUID publicId) {
@@ -137,6 +144,8 @@ class AssignmentServiceTest {
         assertThat(response.assigneePublicId()).isEqualTo(assigneePublicId);
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
                 eq(AdminConstants.EVENT_LECTURER_ASSIGNED), any(LecturerAssignedEvent.class), eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
+                eq(AdminConstants.EVENT_LECTURER_ASSIGNED), any());
     }
 
     @Test
@@ -229,6 +238,8 @@ class AssignmentServiceTest {
         verify(lecturerAssignmentRepository).delete(assignment);
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
                 eq(AdminConstants.EVENT_LECTURER_UNASSIGNED), any(LecturerUnassignedEvent.class), eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
+                eq(AdminConstants.EVENT_LECTURER_UNASSIGNED), any());
     }
 
     @Test
@@ -311,6 +322,8 @@ class AssignmentServiceTest {
         assertThat(response.assigneePublicId()).isEqualTo(assigneePublicId);
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_PROGRAM), eq(programPublicId.toString()),
                 eq(AdminConstants.EVENT_COORDINATOR_ASSIGNED), any(CoordinatorAssignedEvent.class), eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_PROGRAM), eq(programPublicId.toString()),
+                eq(AdminConstants.EVENT_COORDINATOR_ASSIGNED), any());
     }
 
     @Test
@@ -395,6 +408,8 @@ class AssignmentServiceTest {
         verify(coordinatorAssignmentRepository).delete(assignment);
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_PROGRAM), eq(programPublicId.toString()),
                 eq(AdminConstants.EVENT_COORDINATOR_UNASSIGNED), any(CoordinatorUnassignedEvent.class), eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_PROGRAM), eq(programPublicId.toString()),
+                eq(AdminConstants.EVENT_COORDINATOR_UNASSIGNED), any());
     }
 
     @Test
