@@ -2,6 +2,7 @@ package com.pte.scheduling.domain;
 
 import com.pte.scheduling.domain.enums.AnswerIntegrityLevel;
 import com.pte.scheduling.domain.enums.ExamMode;
+import com.pte.scheduling.domain.enums.LockdownMode;
 import com.pte.scheduling.domain.enums.ReplayPolicyType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
@@ -49,6 +50,10 @@ public class ExamPolicy {
     @Column(name = "answer_integrity_level")
     private AnswerIntegrityLevel answerIntegrityLevel;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "lockdown_mode")
+    private LockdownMode lockdownMode;
+
     public ReplayPolicy getReplayPolicy() {
         return ReplayPolicy.of(replayPolicyType, replayPolicyLimit);
     }
@@ -68,19 +73,20 @@ public class ExamPolicy {
             this.deviceCheckRequired = fallback.deviceCheckRequired;
             this.proctorRequired = fallback.proctorRequired;
             this.answerIntegrityLevel = fallback.answerIntegrityLevel;
+            this.lockdownMode = fallback.lockdownMode;
         }
     }
 
     public static ExamPolicy practiceDefault() {
-        return build(ReplayPolicy.unlimited(), false, false, AnswerIntegrityLevel.STANDARD);
+        return build(ReplayPolicy.unlimited(), false, false, AnswerIntegrityLevel.STANDARD, LockdownMode.NONE);
     }
 
     public static ExamPolicy mockTestDefault() {
-        return build(ReplayPolicy.limited(3), true, false, AnswerIntegrityLevel.STANDARD);
+        return build(ReplayPolicy.limited(3), true, false, AnswerIntegrityLevel.STANDARD, LockdownMode.STANDARD);
     }
 
     public static ExamPolicy realExamDefault() {
-        return build(ReplayPolicy.limited(1), true, true, AnswerIntegrityLevel.STRICT);
+        return build(ReplayPolicy.limited(1), true, true, AnswerIntegrityLevel.STRICT, LockdownMode.STRICT);
     }
 
     /** Pure mapping, resolved exactly once at {@code SessionService.create()} time. */
@@ -93,12 +99,14 @@ public class ExamPolicy {
     }
 
     private static ExamPolicy build(ReplayPolicy replayPolicy, boolean deviceCheckRequired,
-                                     boolean proctorRequired, AnswerIntegrityLevel answerIntegrityLevel) {
+                                     boolean proctorRequired, AnswerIntegrityLevel answerIntegrityLevel,
+                                     LockdownMode lockdownMode) {
         ExamPolicy policy = new ExamPolicy();
         policy.setReplayPolicy(replayPolicy);
         policy.setDeviceCheckRequired(deviceCheckRequired);
         policy.setProctorRequired(proctorRequired);
         policy.setAnswerIntegrityLevel(answerIntegrityLevel);
+        policy.setLockdownMode(lockdownMode);
         return policy;
     }
 }

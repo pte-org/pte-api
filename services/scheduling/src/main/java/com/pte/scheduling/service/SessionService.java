@@ -7,6 +7,7 @@ import com.pte.scheduling.domain.ExamSession;
 import com.pte.scheduling.domain.ReplayPolicy;
 import com.pte.scheduling.domain.SnapshotRef;
 import com.pte.scheduling.domain.enums.ExamMode;
+import com.pte.scheduling.domain.enums.LockdownMode;
 import com.pte.scheduling.domain.enums.ReplayPolicyType;
 import com.pte.scheduling.domain.enums.SessionStatus;
 import com.pte.scheduling.domain.event.SessionScheduledEvent;
@@ -62,7 +63,19 @@ public class SessionService {
         session.setOpensAt(request.opensAt());
         session.setClosesAt(request.closesAt());
         ExamMode mode = request.examMode() != null ? request.examMode() : ExamMode.MOCK_TEST;
-        session.setPolicy(ExamPolicy.forMode(mode));
+        ExamPolicy policy = ExamPolicy.forMode(mode);
+
+        // Teacher override: lockdownMode takes precedence if set
+        if (request.lockdownMode() != null) {
+            // Validate: STRICT not allowed with PRACTICE
+            if (mode == ExamMode.PRACTICE && request.lockdownMode() == LockdownMode.STRICT) {
+                throw new IllegalArgumentException(
+                        "LockdownMode.STRICT is not allowed for PRACTICE exams");
+            }
+            policy.setLockdownMode(request.lockdownMode());
+        }
+
+        session.setPolicy(policy);
         session.setCapacity(request.capacity());
         ExamSession saved = sessionRepository.save(session);
 
@@ -126,6 +139,9 @@ public class SessionService {
         }
         if (request.answerIntegrityLevel() != null) {
             policy.setAnswerIntegrityLevel(request.answerIntegrityLevel());
+        }
+        if (request.lockdownMode() != null) {
+            policy.setLockdownMode(request.lockdownMode());
         }
         return SessionMapper.toPolicy(policy);
     }

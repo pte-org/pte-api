@@ -65,6 +65,9 @@ public class PinnedExamSnapshot extends BaseEntity {
     @Column(nullable = false)
     private String answerIntegrityLevel;
 
+    @Column(length = 20)
+    private String lockdownMode;
+
     @OneToMany(mappedBy = "pinnedSnapshot", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("orderIndex ASC")
     private List<PinnedItem> items = new ArrayList<>();

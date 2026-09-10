@@ -49,7 +49,8 @@ public final class SessionMapper {
                 policy.getReplayPolicy().limit(),
                 policy.getDeviceCheckRequired(),
                 policy.getProctorRequired(),
-                policy.getAnswerIntegrityLevel().name());
+                policy.getAnswerIntegrityLevel().name(),
+                policy.getLockdownMode() != null ? policy.getLockdownMode().name() : null);
     }
 
     public static CompositionItemResponse toItem(SessionComposition item) {

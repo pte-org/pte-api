@@ -1,6 +1,7 @@
 package com.pte.scheduling.dto.request;
 
 import com.pte.scheduling.domain.enums.ExamMode;
+import com.pte.scheduling.domain.enums.LockdownMode;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -16,6 +17,9 @@ public record CreateSessionRequest(
         @NotNull(message = "Close time is required") Instant closesAt,
         /** Null defaults to {@link ExamMode#MOCK_TEST} — the safe middle ground, not the permissive PRACTICE default. */
         ExamMode examMode,
+        /** Optional teacher override — null means use ExamMode default.
+         *  Validation: STRICT is not allowed when examMode is PRACTICE. */
+        LockdownMode lockdownMode,
         /** Null = unlimited, matching {@link com.pte.scheduling.domain.ExamSession#getCapacity()}. */
         @Positive(message = "Capacity must be positive") Integer capacity) {
 }

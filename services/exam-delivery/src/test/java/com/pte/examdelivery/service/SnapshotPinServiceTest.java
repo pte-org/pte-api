@@ -290,7 +290,7 @@ class SnapshotPinServiceTest {
 
     private void stubEntitlement(String taskType) {
         SchedulingEntitlementResponse.Policy policy =
-                new SchedulingEntitlementResponse.Policy("UNLIMITED", null, false, false, "STANDARD");
+                new SchedulingEntitlementResponse.Policy("UNLIMITED", null, false, false, "STANDARD", "NONE");
         SchedulingEntitlementResponse.CompositionItem composition =
                 new SchedulingEntitlementResponse.CompositionItem(taskType, "SPEAKING", 0, null, null);
         SchedulingEntitlementResponse entitlement = new SchedulingEntitlementResponse(
