@@ -74,11 +74,15 @@ class ClassServiceTest {
     @Mock
     private OutboxWriter outboxWriter;
 
+    @Mock
+    private AuditLogService auditLogService;
+
     private ClassService service;
 
     @BeforeEach
     void setUp() {
-        service = new ClassService(studentClassRepository, classMembershipRepository, programRepository, outboxWriter);
+        service = new ClassService(studentClassRepository, classMembershipRepository, programRepository, outboxWriter,
+                auditLogService);
     }
 
     private Tenant tenantWithPublicId(UUID publicId) {
@@ -150,6 +154,8 @@ class ClassServiceTest {
         assertThat(response.status()).isEqualTo("ACTIVE");
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_CLASS), any(), eq(AdminConstants.EVENT_CLASS_CREATED),
                 any(ClassCreatedEvent.class), eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_CLASS), any(),
+                eq(AdminConstants.EVENT_CLASS_CREATED), any());
     }
 
     @Test
@@ -244,6 +250,8 @@ class ClassServiceTest {
         assertThat(response.name()).isEqualTo("12A2");
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
                 eq(AdminConstants.EVENT_CLASS_UPDATED), any(), eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
+                eq(AdminConstants.EVENT_CLASS_UPDATED), any());
     }
 
     // --- status/archive ---
@@ -265,6 +273,8 @@ class ClassServiceTest {
         assertThat(response.status()).isEqualTo("SUSPENDED");
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
                 eq(AdminConstants.EVENT_CLASS_STATUS_CHANGED), any(ClassStatusChangedEvent.class), eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
+                eq(AdminConstants.EVENT_CLASS_STATUS_CHANGED), any());
     }
 
     @Test
@@ -286,6 +296,8 @@ class ClassServiceTest {
         assertThat(response.publicId()).isEqualTo(classPublicId);
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
                 eq(AdminConstants.EVENT_CLASS_ARCHIVED), any(ClassArchivedEvent.class), eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
+                eq(AdminConstants.EVENT_CLASS_ARCHIVED), any());
 
         ClassResponse getResponse = service.get(organizationPublicId, programPublicId, classPublicId, caller);
         assertThat(getResponse.publicId()).isEqualTo(classPublicId);
@@ -359,6 +371,8 @@ class ClassServiceTest {
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
                 eq(AdminConstants.EVENT_STUDENT_ASSIGNED_TO_CLASS), any(StudentAssignedToClassEvent.class),
                 eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
+                eq(AdminConstants.EVENT_STUDENT_ASSIGNED_TO_CLASS), any());
     }
 
     @Test
@@ -439,6 +453,8 @@ class ClassServiceTest {
         assertThat(response.assigned()).containsExactlyInAnyOrder(newId1, newId2);
         assertThat(response.alreadyInClass()).containsExactly(alreadyInClassId);
         verify(outboxWriter, times(2)).write(any(), any(), any(), any(), any());
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
+                eq(AdminConstants.EVENT_STUDENT_ASSIGNED_TO_CLASS), any());
     }
 
     @Test
@@ -487,6 +503,8 @@ class ClassServiceTest {
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
                 eq(AdminConstants.EVENT_STUDENT_UNASSIGNED_FROM_CLASS), any(StudentUnassignedFromClassEvent.class),
                 eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
+                eq(AdminConstants.EVENT_STUDENT_UNASSIGNED_FROM_CLASS), any());
     }
 
     @Test
@@ -547,6 +565,8 @@ class ClassServiceTest {
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_CLASS), eq(targetClassPublicId.toString()),
                 eq(AdminConstants.EVENT_STUDENT_TRANSFERRED_CLASS), any(StudentTransferredClassEvent.class),
                 eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_CLASS), eq(targetClassPublicId.toString()),
+                eq(AdminConstants.EVENT_STUDENT_TRANSFERRED_CLASS), any());
     }
 
     @Test
@@ -653,6 +673,8 @@ class ClassServiceTest {
                 any(StudentTransferredClassEvent.class), any());
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_CLASS), eq(targetClassPublicId.toString()),
                 eq(AdminConstants.EVENT_CLASSES_MERGED), any(ClassesMergedEvent.class), eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_CLASS), eq(targetClassPublicId.toString()),
+                eq(AdminConstants.EVENT_CLASSES_MERGED), any());
     }
 
     @Test
@@ -723,6 +745,9 @@ class ClassServiceTest {
         verify(classMembershipRepository, never()).findByStudentClass_PublicId(any());
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_CLASS), eq(targetClassPublicId.toString()),
                 eq(AdminConstants.EVENT_CLASSES_MERGED), any(ClassesMergedEvent.class), eq(tenantPublicId));
+        // Outbox summary event still fires unconditionally (existing Phase 12 behavior), but the
+        // audit log skips a "0 student(s) moved" row for a true no-op — same discipline as bulkAssign.
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any());
     }
 
     // --- splitClass ---
@@ -767,6 +792,8 @@ class ClassServiceTest {
         verify(outboxWriter, times(2)).write(any(), any(), eq(AdminConstants.EVENT_STUDENT_TRANSFERRED_CLASS),
                 any(StudentTransferredClassEvent.class), any());
         verify(outboxWriter).write(any(), any(), eq(AdminConstants.EVENT_CLASS_SPLIT), any(ClassSplitEvent.class), any());
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_CLASS), any(),
+                eq(AdminConstants.EVENT_CLASS_SPLIT), any());
     }
 
     @Test

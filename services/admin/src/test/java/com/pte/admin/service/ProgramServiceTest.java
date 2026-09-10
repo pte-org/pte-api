@@ -16,6 +16,8 @@ import com.pte.admin.domain.exception.ProgramNameAlreadyUsedException;
 import com.pte.admin.domain.exception.ProgramNotFoundException;
 import com.pte.admin.dto.request.CreateProgramRequest;
 import com.pte.admin.dto.request.UpdateProgramRequest;
+import com.pte.admin.dto.response.ClassStudentCountResponse;
+import com.pte.admin.dto.response.ProgramDashboardResponse;
 import com.pte.admin.dto.response.ProgramResponse;
 import com.pte.admin.messaging.outbox.OutboxWriter;
 import com.pte.admin.repository.OrganizationRepository;
@@ -56,11 +58,15 @@ class ProgramServiceTest {
     @Mock
     private OutboxWriter outboxWriter;
 
+    @Mock
+    private AuditLogService auditLogService;
+
     private ProgramService service;
 
     @BeforeEach
     void setUp() {
-        service = new ProgramService(programRepository, organizationRepository, studentClassRepository, outboxWriter);
+        service = new ProgramService(programRepository, organizationRepository, studentClassRepository, outboxWriter,
+                auditLogService);
     }
 
     private Tenant tenantWithPublicId(UUID publicId) {
@@ -114,6 +120,8 @@ class ProgramServiceTest {
         assertThat(response.status()).isEqualTo("ACTIVE");
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_PROGRAM), any(), eq(AdminConstants.EVENT_PROGRAM_CREATED),
                 any(ProgramCreatedEvent.class), eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_PROGRAM), any(),
+                eq(AdminConstants.EVENT_PROGRAM_CREATED), any());
     }
 
     @Test
@@ -245,6 +253,8 @@ class ProgramServiceTest {
         assertThat(response.description()).isEqualTo("Updated");
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_PROGRAM), eq(programPublicId.toString()),
                 eq(AdminConstants.EVENT_PROGRAM_UPDATED), any(ProgramUpdatedEvent.class), eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_PROGRAM), eq(programPublicId.toString()),
+                eq(AdminConstants.EVENT_PROGRAM_UPDATED), any());
     }
 
     @Test
@@ -263,6 +273,8 @@ class ProgramServiceTest {
         assertThat(response.status()).isEqualTo("SUSPENDED");
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_PROGRAM), eq(programPublicId.toString()),
                 eq(AdminConstants.EVENT_PROGRAM_STATUS_CHANGED), any(ProgramStatusChangedEvent.class), eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_PROGRAM), eq(programPublicId.toString()),
+                eq(AdminConstants.EVENT_PROGRAM_STATUS_CHANGED), any());
     }
 
     @Test
@@ -281,6 +293,7 @@ class ProgramServiceTest {
 
         assertThat(response.status()).isEqualTo("SUSPENDED");
         verify(outboxWriter, never()).write(any(), any(), any(), any(), any());
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -333,6 +346,8 @@ class ProgramServiceTest {
         assertThat(response.publicId()).isEqualTo(programPublicId);
         verify(outboxWriter).write(eq(AdminConstants.AGGREGATE_PROGRAM), eq(programPublicId.toString()),
                 eq(AdminConstants.EVENT_PROGRAM_ARCHIVED), any(ProgramArchivedEvent.class), eq(tenantPublicId));
+        verify(auditLogService).record(eq(caller), eq(AdminConstants.AGGREGATE_PROGRAM), eq(programPublicId.toString()),
+                eq(AdminConstants.EVENT_PROGRAM_ARCHIVED), any());
 
         // Get-by-id still works after archive — archive is a visibility flag on `list`, not a hard delete.
         ProgramResponse getResponse = service.get(organizationPublicId, programPublicId, caller);
@@ -354,6 +369,7 @@ class ProgramServiceTest {
         service.archive(organizationPublicId, programPublicId, caller);
 
         verify(outboxWriter, never()).write(any(), any(), any(), any(), any());
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -373,5 +389,48 @@ class ProgramServiceTest {
 
         assertThat(program.isDeleted()).isFalse();
         verify(outboxWriter, never()).write(any(), any(), any(), any(), any());
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void getDashboard_returnsClassAndStudentCountsFromOneGroupedQuery() {
+        UUID tenantPublicId = UUID.randomUUID();
+        UUID organizationPublicId = UUID.randomUUID();
+        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId));
+        UUID programPublicId = UUID.randomUUID();
+        Program program = programOf(programPublicId, organization);
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
+
+        List<ClassStudentCountResponse> rows = List.of(
+                new ClassStudentCountResponse(UUID.randomUUID(), "12A1", 20L),
+                new ClassStudentCountResponse(UUID.randomUUID(), "12A2", 15L),
+                new ClassStudentCountResponse(UUID.randomUUID(), "12A3", 0L));
+
+        when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
+        when(studentClassRepository.countStudentsByClassForProgram(programPublicId)).thenReturn(rows);
+
+        ProgramDashboardResponse response = service.getDashboard(organizationPublicId, programPublicId, caller);
+
+        assertThat(response.programPublicId()).isEqualTo(programPublicId);
+        assertThat(response.classCount()).isEqualTo(3);
+        assertThat(response.studentCount()).isEqualTo(35L);
+        assertThat(response.classes()).isEqualTo(rows);
+    }
+
+    @Test
+    void getDashboard_programBelongsToDifferentTenant_throwsNotFound() {
+        UUID callerTenantId = UUID.randomUUID();
+        UUID otherTenantId = UUID.randomUUID();
+        UUID organizationPublicId = UUID.randomUUID();
+        UUID programPublicId = UUID.randomUUID();
+        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(otherTenantId));
+        Program program = programOf(programPublicId, organization);
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
+
+        when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
+
+        assertThatThrownBy(() -> service.getDashboard(organizationPublicId, programPublicId, caller))
+                .isInstanceOf(ProgramNotFoundException.class);
+        verify(studentClassRepository, never()).countStudentsByClassForProgram(any());
     }
 }
