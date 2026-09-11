@@ -1,8 +1,14 @@
 package com.pte.admin.controller;
 
+import com.pte.admin.dto.request.GrantQuotaRequest;
 import com.pte.admin.dto.request.OnboardTenantRequest;
+import com.pte.admin.dto.request.UpdateBrandingRequest;
+import com.pte.admin.dto.response.QuotaTransactionResponse;
 import com.pte.admin.dto.response.TenantResponse;
+import com.pte.admin.service.QuotaTransactionService;
 import com.pte.admin.service.TenantLifecycleService;
+import com.pte.common.security.CurrentUser;
+import com.pte.common.security.CurrentUserContext;
 import com.pte.common.web.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -26,9 +32,12 @@ import java.util.UUID;
 public class TenantController {
 
     private final TenantLifecycleService tenantLifecycleService;
+    private final QuotaTransactionService quotaTransactionService;
 
-    public TenantController(TenantLifecycleService tenantLifecycleService) {
+    public TenantController(TenantLifecycleService tenantLifecycleService,
+            QuotaTransactionService quotaTransactionService) {
         this.tenantLifecycleService = tenantLifecycleService;
+        this.quotaTransactionService = quotaTransactionService;
     }
 
     @PostMapping
@@ -41,6 +50,17 @@ public class TenantController {
         return ApiResponse.success(tenantLifecycleService.suspend(publicId));
     }
 
+    @PostMapping("/{publicId}/reactivate")
+    public ApiResponse<TenantResponse> reactivate(@PathVariable UUID publicId) {
+        return ApiResponse.success(tenantLifecycleService.reactivate(publicId));
+    }
+
+    @PostMapping("/{publicId}/branding")
+    public ApiResponse<TenantResponse> updateBranding(@PathVariable UUID publicId,
+            @Valid @RequestBody UpdateBrandingRequest request) {
+        return ApiResponse.success(tenantLifecycleService.updateBranding(publicId, request));
+    }
+
     @GetMapping("/{publicId}")
     public ApiResponse<TenantResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(tenantLifecycleService.get(publicId));
@@ -49,5 +69,21 @@ public class TenantController {
     @GetMapping
     public ApiResponse<List<TenantResponse>> list() {
         return ApiResponse.success(tenantLifecycleService.list());
+    }
+
+    @PostMapping("/{publicId}/quota-transactions")
+    public ApiResponse<QuotaTransactionResponse> grantQuota(@PathVariable UUID publicId,
+            @Valid @RequestBody GrantQuotaRequest request) {
+        return ApiResponse.success(quotaTransactionService.grant(publicId, request, currentUser()));
+    }
+
+    @GetMapping("/{publicId}/quota-transactions")
+    public ApiResponse<List<QuotaTransactionResponse>> quotaHistory(@PathVariable UUID publicId) {
+        return ApiResponse.success(quotaTransactionService.history(publicId, currentUser()));
+    }
+
+    private CurrentUser currentUser() {
+        return CurrentUserContext.current()
+                .orElseThrow(() -> new IllegalStateException("No authenticated principal"));
     }
 }

@@ -17,6 +17,19 @@ public final class InternalServiceAuth {
     public static final String AUTHORITY_INTERNAL_SERVICE = "ROLE_" + ROLE_INTERNAL_SERVICE;
     public static final String INTERNAL_PATH_PREFIX = "/internal/**";
 
+    /**
+     * Second, separate credential (rabbitmq-outbox-migration Phase 9) authorizing
+     * the "export ALL tenants" mode on a {@code /internal/**\/export} endpoint —
+     * used only by reporting's brand-new-instance full-bootstrap rebuild, never
+     * by the normal per-tenant-JWT-forwarding internal calls. Checked by {@link
+     * InternalBootstrapKeyFilter}, which runs AFTER {@link InternalApiKeyFilter}
+     * and requires the base {@link #HEADER} key to ALSO be valid — this key
+     * alone is never sufficient (defense in depth).
+     */
+    public static final String BOOTSTRAP_HEADER = "X-Internal-Bootstrap-Key";
+    public static final String ROLE_INTERNAL_SERVICE_BOOTSTRAP = "INTERNAL_SERVICE_BOOTSTRAP";
+    public static final String AUTHORITY_INTERNAL_SERVICE_BOOTSTRAP = "ROLE_" + ROLE_INTERNAL_SERVICE_BOOTSTRAP;
+
     private InternalServiceAuth() {
     }
 }

@@ -1,48 +1,57 @@
 package com.pte.examdelivery.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.examdelivery.constant.ExamDeliveryConstants;
 import com.pte.examdelivery.domain.ProcessedEvent;
 import com.pte.examdelivery.messaging.consumer.dto.ProctorCommandEvent;
 import com.pte.examdelivery.repository.ProcessedEventRepository;
 import com.pte.examdelivery.service.ProctorCommandService;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
- * exam-delivery's first Kafka consumer (phase-10): applies proctor's
- * FORCE_SUBMIT/EXTEND_TIME commands. Idempotent, same dedup pattern as every
- * other consumer in this codebase (ADR-002) — checked before apply, saved
- * after, inside one transaction.
+ * exam-delivery's first consumer: applies proctor's FORCE_SUBMIT command via
+ * the polling outbox relay + RabbitMQ (rabbitmq-outbox-migration Phase 5,
+ * superseding Debezium's outbox router). Idempotent, same dedup pattern as
+ * every other consumer in this codebase (ADR-002) — checked before apply,
+ * saved after, inside one transaction.
+ *
+ * <p>EXTEND_TIME removed (client-side-exam-timer Phase 5) — accepted
+ * capability loss, see {@code ProctorCommandEvent}'s doc comment.
+ *
+ * <p>Ordering-sensitive: bound to a SINGLE queue consumed with concurrency=1
+ * ({@link com.pte.examdelivery.messaging.RabbitMqConfig}), so two commands
+ * for the same attempt apply in the order proctor issued them.
  */
 @Component
 public class ProctorCommandConsumer {
 
     private final ProcessedEventRepository processedEventRepository;
     private final ProctorCommandService proctorCommandService;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public ProctorCommandConsumer(ProcessedEventRepository processedEventRepository,
-                                  ProctorCommandService proctorCommandService, ObjectMapper objectMapper) {
+                                  ProctorCommandService proctorCommandService, JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
         this.proctorCommandService = proctorCommandService;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
-    @KafkaListener(topics = ExamDeliveryConstants.TOPIC_PROCTOR_COMMAND_EVENTS, groupId = "exam-delivery-proctor-command")
+    @RabbitListener(queues = ExamDeliveryConstants.QUEUE_PROCTOR_COMMANDS)
     @Transactional
-    public void onProctorCommand(ConsumerRecord<String, String> record) throws IOException {
-        UUID eventId = KafkaHeaders.require(record, "id");
+    public void onProctorCommand(Message message) {
+        UUID eventId = UUID.fromString(message.getMessageProperties().getMessageId());
         if (processedEventRepository.existsById(eventId)) {
             return;
         }
 
-        ProctorCommandEvent event = objectMapper.readValue(record.value(), ProctorCommandEvent.class);
+        String payload = new String(message.getBody(), StandardCharsets.UTF_8);
+        ProctorCommandEvent event = jsonMapper.readValue(payload, ProctorCommandEvent.class);
         applyCommand(event);
 
         ProcessedEvent processed = new ProcessedEvent();
@@ -53,11 +62,8 @@ public class ProctorCommandConsumer {
     private void applyCommand(ProctorCommandEvent event) {
         if (ExamDeliveryConstants.COMMAND_TYPE_FORCE_SUBMIT.equals(event.commandType())) {
             proctorCommandService.forceSubmit(event.attemptPublicId(), event.tenantId());
-        } else if (ExamDeliveryConstants.COMMAND_TYPE_EXTEND_TIME.equals(event.commandType())) {
-            if (event.extraSeconds() != null) {
-                proctorCommandService.extendResponseTime(event.attemptPublicId(), event.tenantId(), event.extraSeconds());
-            }
         }
-        // Any other/unknown commandType: ignored, not an error (forward-compat with future command types).
+        // Any other/unknown commandType (including a stray EXTEND_TIME from an in-flight message —
+        // see ProctorCommandEvent's doc comment): ignored, not an error.
     }
 }

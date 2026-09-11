@@ -1,6 +1,7 @@
 package com.pte.authoring.controller;
 
 import com.pte.authoring.dto.response.SnapshotContentResponse;
+import com.pte.authoring.dto.response.SnapshotResponse;
 import com.pte.authoring.service.SnapshotPublishService;
 import com.pte.common.web.ApiResponse;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -13,8 +14,10 @@ import java.util.UUID;
 
 /**
  * Service-to-service only (ROLE_INTERNAL_SERVICE, see {@code InternalSecurityConfig}).
- * Returns full snapshot content INCLUDING correct answers — never call this from
- * a human-facing flow.
+ * {@link #getContent} returns full snapshot content INCLUDING correct answers —
+ * never call that from a human-facing flow. {@link #getSummary} is the
+ * answer-stripped counterpart, for callers (scheduling) that only need
+ * composition metadata.
  */
 @RestController
 @RequestMapping("/internal/snapshots")
@@ -30,5 +33,10 @@ public class InternalSnapshotController {
     @GetMapping("/{publicId}")
     public ApiResponse<SnapshotContentResponse> getContent(@PathVariable UUID publicId) {
         return ApiResponse.success(snapshotPublishService.getContent(publicId));
+    }
+
+    @GetMapping("/{publicId}/summary")
+    public ApiResponse<SnapshotResponse> getSummary(@PathVariable UUID publicId) {
+        return ApiResponse.success(snapshotPublishService.getSummary(publicId));
     }
 }

@@ -10,23 +10,24 @@ spring:
     url: ${SCHEDULING_DB_URL:jdbc:postgresql://localhost:5432/scheduling}
     username: ${SCHEDULING_DB_USER:scheduling_svc}
     password: ${SCHEDULING_DB_PASSWORD:scheduling_dev_pw}
+    hikari:
+      maximum-pool-size: ${SCHEDULING_DB_POOL_SIZE:5}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     open-in-view: false
     properties:
       hibernate:
         format_sql: true
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    consumer:
-      group-id: scheduling-snapshot-ref
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:pte}
+    password: ${RABBITMQ_PASSWORD:pte}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
   security:
     oauth2:
       resourceserver:
@@ -64,4 +65,13 @@ management:
   otlp:
     tracing:
       endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+# Outbox polling relay (rabbitmq-outbox-migration Phase 4) — defaults live in
+# AbstractOutboxRelay/AbstractOutboxCleanupJob; override here only if tuning is needed.
+pte:
+  outbox:
+    poll-interval-ms: 2000
+    batch-size: 100
+    max-publish-attempts: 10
+    cleanup-retention-days: 7
 

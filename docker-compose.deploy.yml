@@ -1,0 +1,184 @@
+# Hosted-demo overlay. Always third in the chain, never on its own:
+#
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.services.yml \
+#                  -f docker-compose.deploy.yml up -d
+#
+# Expects the two repos cloned as siblings, because web.Dockerfile builds pnpm
+# workspace members and needs the pte-web root as its context:
+#
+#   ~/pte-org/pte-api   <- this file
+#   ~/pte-org/pte-web
+#
+# What this overlay changes, and why:
+#   1. Caps every JVM. Without a limit each container sees the host's full RAM
+#      and sizes its heap from that, so 11 services would each claim a multi-GB
+#      max heap on a shared box.
+#   2. Stretches healthcheck start_period. Eleven Spring Boot apps booting at
+#      once on 4 ARM cores do not answer /actuator/health inside the 40s the
+#      base file allows, and compose would keep marking them unhealthy.
+#   3. Points media's presign host at a public origin. The base value
+#      (http://localhost:9000) is correct for a laptop and wrong everywhere
+#      else — the URL is handed to a browser, not to another container.
+#   4. Adds Caddy + the two Next.js apps.
+#
+# Not changed: the published host ports on pg-*/redis/rabbitmq/minio. The VCN
+# Security List is the actual boundary and only admits 22/80/443, so those ports
+# are reachable over SSH tunnel and nothing else. Keeping them makes debugging a
+# one-liner instead of a compose edit.
+
+x-jvm-env: &jvm-env
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70"
+
+# The /internal/** surface authenticates with a shared key whose default lives in
+# every service's application.yml as `dev-internal-service-key-change-me` — a
+# literal committed to this repo. Those endpoints sit under the /api/{service}
+# context path, so the gateway routes them straight off the public internet;
+# shipping the default would let anyone who read the repo call them.
+#
+# The base compose files never pass these through, so `dev` is exactly what a
+# hosted stack would run with. `:?` (not `:-`) so compose refuses to start rather
+# than silently substituting an empty key.
+x-internal-env: &internal-env
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70"
+  INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in .env}
+
+# exam-delivery, scoring and reporting additionally expose a tenant-wide
+# bootstrap surface behind a second key.
+x-internal-bootstrap-env: &internal-bootstrap-env
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70"
+  INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in .env}
+  INTERNAL_BOOTSTRAP_KEY: ${INTERNAL_BOOTSTRAP_KEY:?set INTERNAL_BOOTSTRAP_KEY in .env}
+
+x-slow-start: &slow-start
+  start_period: 120s
+
+x-limits: &limits
+  mem_limit: 512m
+  restart: unless-stopped
+  healthcheck: *slow-start
+
+services:
+  iam:
+    <<: *limits
+    environment: *jvm-env
+
+  admin:
+    <<: *limits
+    environment: *jvm-env
+
+  notification:
+    <<: *limits
+    environment: *jvm-env
+
+  authoring:
+    <<: *limits
+    environment: *internal-env
+
+  scheduling:
+    <<: *limits
+    environment: *internal-env
+
+  proctor:
+    <<: *limits
+    environment: *internal-env
+
+  exam-delivery:
+    <<: *limits
+    environment: *internal-bootstrap-env
+
+  scoring:
+    <<: *limits
+    environment: *internal-bootstrap-env
+
+  reporting:
+    <<: *limits
+    environment: *internal-bootstrap-env
+
+  media:
+    <<: *limits
+    environment:
+      <<: *internal-env
+      # Signed with this host, so it must be the origin the browser will hit.
+      MINIO_PUBLIC_ENDPOINT: https://${MEDIA_DOMAIN}
+
+  gateway:
+    <<: *limits
+    environment:
+      <<: *jvm-env
+      # Same-origin routing in the Caddyfile means the browser never sends a
+      # cross-origin request; this stays set as the fallback for any client
+      # that is not served from these two hosts (the Flutter app, curl, Postman).
+      CORS_ALLOWED_ORIGINS: https://${TENANT_DOMAIN},https://${ADMIN_DOMAIN}
+
+  pg-core:
+    mem_limit: 1g
+
+  pg-exam:
+    mem_limit: 512m
+
+  pg-live:
+    mem_limit: 512m
+
+  pg-async:
+    mem_limit: 512m
+
+  rabbitmq:
+    mem_limit: 512m
+
+  redis:
+    mem_limit: 256m
+
+  minio:
+    mem_limit: 512m
+
+  jaeger:
+    mem_limit: 512m
+
+  web-tenant:
+    build:
+      context: ../pte-web
+      dockerfile: ../pte-api/deploy/web.Dockerfile
+      args:
+        APP: tenant-web
+        NEXT_PUBLIC_API_BASE_URL: https://${TENANT_DOMAIN}
+    mem_limit: 512m
+    restart: unless-stopped
+    networks: [pte-network]
+
+  web-vendor:
+    build:
+      context: ../pte-web
+      dockerfile: ../pte-api/deploy/web.Dockerfile
+      args:
+        APP: vendor-web
+        NEXT_PUBLIC_API_BASE_URL: https://${ADMIN_DOMAIN}
+    mem_limit: 512m
+    restart: unless-stopped
+    networks: [pte-network]
+
+  caddy:
+    image: caddy:2
+    container_name: pte-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      TENANT_DOMAIN: ${TENANT_DOMAIN}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN}
+      MEDIA_DOMAIN: ${MEDIA_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Named volume, not a bind or anonymous mount: the Let's Encrypt account
+      # key and issued certificates live here. Lose it and every restart
+      # re-issues, which hits the 5-certificates-per-domain-per-week rate limit
+      # and locks the demo out of HTTPS for days.
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [pte-network]
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -16,6 +16,8 @@ public final class TenantMapper {
                 tenant.getOrganizationType(),
                 tenant.getStatus().name(),
                 tenant.getPackageName(),
-                tenant.getStudentLimit());
+                tenant.getStudentLimit(),
+                tenant.getLogoUrl(),
+                tenant.getPrimaryColor());
     }
 }

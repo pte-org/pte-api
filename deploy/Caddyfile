@@ -1,0 +1,53 @@
+# TLS termination + same-origin routing for the hosted demo.
+#
+# Each app gets one origin serving both the UI and the API, so the browser never
+# makes a cross-origin request: no CORS preflight, no mixed content, and the
+# proctor STOMP socket rides the same host as wss://. The gateway's own
+# CORS_ALLOWED_ORIGINS stays configured anyway — it is the fallback if anything
+# ever calls the API from a different origin.
+#
+# Domains come from .env so moving off DuckDNS to a real domain is a config
+# change, not an edit here.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$TENANT_DOMAIN} {
+	encode gzip
+
+	# Covers /api/proctor/ws/** too — Caddy proxies the WebSocket upgrade
+	# transparently, no extra Upgrade/Connection header handling needed.
+	handle /api/* {
+		reverse_proxy gateway:8080
+	}
+
+	handle /actuator/* {
+		reverse_proxy gateway:8080
+	}
+
+	handle {
+		reverse_proxy web-tenant:3000
+	}
+}
+
+{$ADMIN_DOMAIN} {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy gateway:8080
+	}
+
+	handle {
+		reverse_proxy web-vendor:3000
+	}
+}
+
+# MinIO needs its own origin, not a path prefix on the two above: a presigned
+# URL's SigV4 signature covers the Host header and the object path, so any
+# rewrite invalidates it. Caddy forwards Host unchanged by default, which is
+# exactly what MinIO needs to validate the signature it issued.
+# No `encode` here — the payloads are already-compressed audio.
+{$MEDIA_DOMAIN} {
+	reverse_proxy minio:9000
+}

@@ -8,6 +8,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
@@ -24,7 +25,9 @@ import java.util.UUID;
  * host's own PRIVATE). Publishing freezes it into an immutable {@link ExamSnapshot}.
  */
 @Entity
-@Table(name = "exam_blueprints")
+@Table(name = "exam_blueprints", indexes = {
+        @Index(name = "idx_blueprints_tenant", columnList = "tenant_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

@@ -10,23 +10,24 @@ spring:
     url: ${IAM_DB_URL:jdbc:postgresql://localhost:5432/iam}
     username: ${IAM_DB_USER:iam_svc}
     password: ${IAM_DB_PASSWORD:iam_dev_pw}
+    hikari:
+      maximum-pool-size: ${IAM_DB_POOL_SIZE:5}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     open-in-view: false
     properties:
       hibernate:
         format_sql: true
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    consumer:
-      group-id: iam-tenant-registry
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:pte}
+    password: ${RABBITMQ_PASSWORD:pte}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
 
 management:
   endpoints:
@@ -39,4 +40,13 @@ management:
   otlp:
     tracing:
       endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+# Outbox polling relay (rabbitmq-outbox-migration Phase 3) — defaults live in
+# AbstractOutboxRelay/AbstractOutboxCleanupJob; override here only if tuning is needed.
+pte:
+  outbox:
+    poll-interval-ms: 2000
+    batch-size: 100
+    max-publish-attempts: 10
+    cleanup-retention-days: 7
 

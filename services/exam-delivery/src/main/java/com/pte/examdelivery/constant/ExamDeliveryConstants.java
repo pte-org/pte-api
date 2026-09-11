@@ -9,19 +9,43 @@ public final class ExamDeliveryConstants {
     public static final String ENTITLEMENT_CHECK_FAILED = "ENTITLEMENT_CHECK_FAILED";
     public static final String SNAPSHOT_CONTENT_FETCH_FAILED = "SNAPSHOT_CONTENT_FETCH_FAILED";
     public static final String TASK_TIMING_NOT_CONFIGURED = "TASK_TIMING_NOT_CONFIGURED";
-    public static final String RESPONSE_WINDOW_EXPIRED = "RESPONSE_WINDOW_EXPIRED";
     public static final String NOT_CURRENT_TASK = "NOT_CURRENT_TASK";
     public static final String ATTEMPT_ALREADY_COMPLETE = "ATTEMPT_ALREADY_COMPLETE";
+    public static final String DEVICE_CHECK_REQUIRED = "DEVICE_CHECK_REQUIRED";
+    public static final String MISSING_AUDIO_PROMPT = "MISSING_AUDIO_PROMPT";
+    public static final String AUDIO_RESOLUTION_FAILED = "AUDIO_RESOLUTION_FAILED";
+    public static final String MISSING_AUDIO_DURATION = "MISSING_AUDIO_DURATION";
+    public static final String REPLAY_LIMIT_EXCEEDED = "REPLAY_LIMIT_EXCEEDED";
+    public static final String AUDIO_URL_EXPIRED = "AUDIO_URL_EXPIRED";
+    public static final String SUBMISSION_DECRYPTION_FAILED = "SUBMISSION_DECRYPTION_FAILED";
+    public static final String ANSWER_INTEGRITY_LEVEL_MISMATCH = "ANSWER_INTEGRITY_LEVEL_MISMATCH";
+    public static final String MISSING_IMAGE_PROMPT = "MISSING_IMAGE_PROMPT";
+    public static final String IMAGE_RESOLUTION_FAILED = "IMAGE_RESOLUTION_FAILED";
 
     public static final String AGGREGATE_ATTEMPT = "ExamAttempt";
     public static final String EVENT_ANSWER_SUBMITTED = "AnswerSubmitted";
     public static final String EVENT_ATTEMPT_SUBMITTED = "AttemptSubmitted";
 
-    // Incoming (Phase 10): proctor's outbox.event.ProctorCommand topic.
-    public static final String TOPIC_PROCTOR_COMMAND_EVENTS = "outbox.event.ProctorCommand";
-    public static final String KAFKA_HEADER_EVENT_TYPE = "eventType";
+    // RabbitMQ outbox relay (rabbitmq-outbox-migration Phase 5). Downstream
+    // consumers (e.g. scoring's AnswerIngestConsumer, Phase 6) bind their own
+    // queue to this exchange with routing key "{aggregateType}.{eventType}".
+    // IMPORTANT: this service's relay must stay single-instance — scoring's
+    // AnswerIngestConsumer (Phase 6) depends on AnswerSubmitted events
+    // arriving in the order this outbox wrote them (plan.md, CONFIRMED).
+    public static final String OUTBOX_EXCHANGE = "outbox.examdelivery.exchange";
+
+    // Incoming: proctor's outbox exchange (rabbitmq-outbox-migration Phase 5,
+    // previously Kafka topic outbox.event.ProctorCommand). Ordering-sensitive:
+    // routed through a SINGLE durable queue with listener concurrency pinned
+    // to 1, so RabbitMQ's per-queue FIFO preserves per-attempt command order
+    // (plan.md, CONFIRMED — depends on proctor's own relay also staying
+    // single-instance, see ProctorOutboxRelay in Phase 2).
+    public static final String PROCTOR_OUTBOX_EXCHANGE = "outbox.proctor.exchange";
+    public static final String QUEUE_PROCTOR_COMMANDS = "examdelivery.proctor-commands";
+    public static final String QUEUE_PROCTOR_COMMANDS_DLQ = "examdelivery.proctor-commands.dlq";
+    public static final String PROCTOR_COMMANDS_ROUTING_PATTERN = "ProctorCommand.*";
+    public static final String PROCTOR_COMMANDS_DEAD_LETTER_ROUTING_KEY = "proctor-commands";
     public static final String COMMAND_TYPE_FORCE_SUBMIT = "FORCE_SUBMIT";
-    public static final String COMMAND_TYPE_EXTEND_TIME = "EXTEND_TIME";
 
     public static final String CACHE_KEY_PREFIX = "exam-delivery:pinned-snapshot:";
     public static final String LOCK_KEY_PREFIX = "exam-delivery:lock:pinned-snapshot:";

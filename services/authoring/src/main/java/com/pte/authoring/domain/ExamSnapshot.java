@@ -5,6 +5,7 @@ import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
@@ -23,7 +24,9 @@ import java.util.UUID;
  * (ADR-002/003). Treated as write-once: no mutation after creation.
  */
 @Entity
-@Table(name = "exam_snapshots")
+@Table(name = "exam_snapshots", indexes = {
+        @Index(name = "idx_snapshots_tenant", columnList = "tenant_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

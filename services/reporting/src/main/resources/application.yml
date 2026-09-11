@@ -10,28 +10,50 @@ spring:
     url: ${REPORTING_DB_URL:jdbc:postgresql://localhost:5432/reporting}
     username: ${REPORTING_DB_USER:reporting_svc}
     password: ${REPORTING_DB_PASSWORD:reporting_dev_pw}
+    hikari:
+      maximum-pool-size: ${REPORTING_DB_POOL_SIZE:5}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     open-in-view: false
     properties:
       hibernate:
         format_sql: true
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
   security:
     oauth2:
       resourceserver:
         jwt:
           jwk-set-uri: ${IAM_JWKS_URI:http://localhost:8081/api/iam/auth/jwks}
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    consumer:
-      group-id: reporting
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:pte}
+    password: ${RABBITMQ_PASSWORD:pte}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+
+# Read-model rebuild clients (rabbitmq-outbox-migration Phase 9) — reporting's
+# first-ever synchronous outbound calls (rebuild-only, never on the steady-state path).
+exam-delivery:
+  base-url: ${EXAM_DELIVERY_URL:http://localhost:8085/api/exam-delivery}
+scoring:
+  base-url: ${SCORING_URL:http://localhost:8087/api/scoring}
+
+# Shared secret for calling exam-delivery/scoring's /internal/** export endpoints,
+# and for validating incoming calls to reporting's own /internal/** bootstrap
+# trigger (Phase 9) — ADR-003 mTLS placeholder. Must match the value configured
+# on every service in the mesh.
+internal:
+  service-key: ${INTERNAL_SERVICE_KEY:dev-internal-service-key-change-me}
+  # Second credential (Phase 9): required, IN ADDITION TO service-key, to reach
+  # the all-tenant bootstrap export/rebuild mode. Never used for normal per-tenant calls.
+  # MORE sensitive than service-key above (unlocks cross-tenant export/rebuild) —
+  # the dev-default fallback here must NEVER be left unset in any real deployment
+  # (code-review finding: a forgotten env var here silently exposes cross-tenant
+  # data, not just internal-service access). Pre-production checklist item.
+  bootstrap-key: ${INTERNAL_BOOTSTRAP_KEY:dev-internal-bootstrap-key-change-me}
 
 management:
   endpoints:
@@ -44,3 +66,12 @@ management:
   otlp:
     tracing:
       endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+# Outbox polling relay (rabbitmq-outbox-migration Phase 7) — defaults live in
+# AbstractOutboxRelay/AbstractOutboxCleanupJob; override here only if tuning is needed.
+pte:
+  outbox:
+    poll-interval-ms: 2000
+    batch-size: 100
+    max-publish-attempts: 10
+    cleanup-retention-days: 7

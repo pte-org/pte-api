@@ -4,6 +4,7 @@ import com.pte.common.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -20,7 +21,9 @@ import lombok.Setter;
  * prep/response timing, applied later by exam-delivery).
  */
 @Entity
-@Table(name = "session_compositions")
+@Table(name = "session_compositions", indexes = {
+        @Index(name = "idx_compositions_session", columnList = "session_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -41,4 +44,8 @@ public class SessionComposition extends BaseEntity {
 
     @Column
     private Integer timingOverrideSeconds;
+
+    /** Null = inherit the session's {@code ExamPolicy.replayPolicy}; non-null always wins over it (never "ignored" even if the session policy is UNLIMITED). */
+    @Column
+    private Integer maxPlayCount;
 }

@@ -10,5 +10,7 @@ public enum Role {
     HOST_ADMIN,
     HOST_AUTHOR,
     PROCTOR,
-    STUDENT
+    STUDENT,
+    LECTURER,
+    PROGRAM_COORDINATOR
 }

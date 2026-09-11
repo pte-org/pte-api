@@ -6,6 +6,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -23,7 +24,10 @@ import java.util.UUID;
  * between "read the current head" and "write the next link."
  */
 @Entity
-@Table(name = "proctor_sessions")
+@Table(name = "proctor_sessions", indexes = {
+        @Index(name = "idx_proctor_sessions_session_proctor", columnList = "session_public_id, proctor_public_id"),
+        @Index(name = "idx_proctor_sessions_tenant", columnList = "tenant_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

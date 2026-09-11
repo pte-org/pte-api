@@ -3,6 +3,7 @@ package com.pte.reporting.domain;
 import com.pte.common.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -17,7 +18,9 @@ import java.util.UUID;
  * makes a skill report "insufficient data."
  */
 @Entity
-@Table(name = "answer_projections")
+@Table(name = "answer_projections", indexes = {
+        @Index(name = "idx_answer_projections_attempt", columnList = "attempt_public_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

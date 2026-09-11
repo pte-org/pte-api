@@ -24,6 +24,11 @@ public final class AuthoringConstants {
     public static final String AGGREGATE_SNAPSHOT = "ExamSnapshot";
     public static final String EVENT_SNAPSHOT_PUBLISHED = "ExamSnapshotPublished";
 
+    // RabbitMQ outbox relay (rabbitmq-outbox-migration Phase 2). Downstream
+    // consumers (e.g. scheduling's SnapshotEventConsumer, Phase 4) bind their
+    // own queue to this exchange with routing key "{aggregateType}.{eventType}".
+    public static final String OUTBOX_EXCHANGE = "outbox.authoring.exchange";
+
     private AuthoringConstants() {
     }
 }

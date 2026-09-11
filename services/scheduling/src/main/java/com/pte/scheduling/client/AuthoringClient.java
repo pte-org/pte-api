@@ -31,7 +31,7 @@ public class AuthoringClient {
     @CircuitBreaker(name = CIRCUIT_BREAKER, fallbackMethod = "fetchSnapshotFallback")
     public AuthoringSnapshotResponse fetchSnapshot(UUID snapshotPublicId) {
         ApiResponse<AuthoringSnapshotResponse> response = authoringRestClient.get()
-                .uri("/snapshots/{publicId}", snapshotPublicId)
+                .uri("/internal/snapshots/{publicId}/summary", snapshotPublicId)
                 .retrieve()
                 .body(new ParameterizedTypeReference<ApiResponse<AuthoringSnapshotResponse>>() {
                 });

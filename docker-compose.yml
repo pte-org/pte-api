@@ -1,34 +1,102 @@
 name: pte-platform
 
-# Local infrastructure for the PTE microservice platform (Phase 0).
-# Service apps are added as they are implemented; this file is the shared
-# backbone: one Postgres instance (database-per-service), Kafka + Schema
-# Registry + Debezium (event backbone, ADR-002), Redis (cache/rate-limit/
-# single-flight, ADR-003), RabbitMQ (work queue, ADR-002).
+# Local infrastructure for the PTE microservice platform.
+# Backbone: FOUR Postgres instances (one per cell), RabbitMQ (event backbone +
+# work queue, ADR-002 superseded by rabbitmq-outbox-migration — Kafka/Schema
+# Registry/Debezium retired Phase 10), Redis (cache/rate-limit/single-flight,
+# ADR-003).
+#
+# ── Cell-based re-architecture, step 1 of 5 ──────────────────────────────────
+# Previously ONE `postgres` container held all 10 databases. Database-per-service
+# (ADR-003) was therefore logical only: a restart, a full disk, or a lock on that
+# single process took down all 10 services simultaneously — 10 services, but one
+# failure domain. The old init script said as much: "splitting to separate
+# instances later is a connection-string change, not a code change." This is that
+# change; no Java was touched, because ADR-001 already forbade cross-database
+# queries so nothing had a join to break.
+#
+# Cells are cut by RESOURCE-EXHAUSTION PROFILE, not by capability and not by
+# actor — two modules that exhaust the same resource gain nothing from being
+# split apart:
+#
+#   pg-exam  :5433  exam-delivery   latency + pool     downtime tolerance: ZERO
+#   pg-live  :5434  proctor         WS conns + FDs     degrades gracefully
+#   pg-core  :5432  7 services       ~nothing          5-10 min
+#   pg-async :5435  scoring         CPU + vendor wait  queue absorbs it
+#
+# pg-core keeps host port 5432 so the application.yml localhost defaults of its
+# seven services stay valid for non-Docker local runs; only the three relocated
+# services had their defaults updated.
+#
+# `wal_level=logical` was required for Debezium CDC, now removed
+# (rabbitmq-outbox-migration Phase 10). Left set deliberately — low-cost no-op,
+# no relay depends on it, and reverting is a Postgres restart either way.
+
+x-postgres-defaults: &postgres-defaults
+  image: postgres:17
+  restart: unless-stopped
+  environment: &postgres-env
+    POSTGRES_DB: postgres
+    POSTGRES_USER: ${POSTGRES_USER:-postgres}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    # postgres-utc-timestamptz-migration Phase 1: explicit, not relying on the base
+    # image's implicit default — survives an image change that might alter it.
+    TZ: UTC
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+    interval: 5s
+    timeout: 5s
+    retries: 10
+    start_period: 10s
+  networks: [pte-network]
 
 services:
-  postgres:
-    image: postgres:17
-    container_name: pte-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+  # CELL CORE — iam, admin, authoring, scheduling, reporting, notification, media.
+  # 7 services x default Hikari pool (10) = 70; 120 leaves headroom for a manual
+  # psql session and for the second CORE instance (admin/host split) added later.
+  pg-core:
+    <<: *postgres-defaults
+    container_name: pte-pg-core
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${PG_CORE_PORT:-5432}:5432"
     volumes:
-      - pte_postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
-    # wal_level=logical is required for Debezium CDC (outbox relay).
-    command: ["postgres", "-c", "wal_level=logical"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-    networks: [pte-network]
+      - pte_pg_core_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-core:/docker-entrypoint-initdb.d:ro
+    command: ["postgres", "-c", "max_connections=120", "-c", "wal_level=logical"]
+
+  # CELL EXAM — exam-delivery only. Sized well above its single Hikari pool: this
+  # is the one service whose connection starvation is unrecoverable for a user.
+  pg-exam:
+    <<: *postgres-defaults
+    container_name: pte-pg-exam
+    ports:
+      - "${PG_EXAM_PORT:-5433}:5432"
+    volumes:
+      - pte_pg_exam_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-exam:/docker-entrypoint-initdb.d:ro
+    command: ["postgres", "-c", "max_connections=100", "-c", "wal_level=logical"]
+
+  # CELL LIVE — proctor only.
+  pg-live:
+    <<: *postgres-defaults
+    container_name: pte-pg-live
+    ports:
+      - "${PG_LIVE_PORT:-5434}:5432"
+    volumes:
+      - pte_pg_live_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-live:/docker-entrypoint-initdb.d:ro
+    command: ["postgres", "-c", "max_connections=50", "-c", "wal_level=logical"]
+
+  # CELL ASYNC — scoring only.
+  pg-async:
+    <<: *postgres-defaults
+    container_name: pte-pg-async
+    ports:
+      - "${PG_ASYNC_PORT:-5435}:5432"
+    volumes:
+      - pte_pg_async_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-async:/docker-entrypoint-initdb.d:ro
+    command: ["postgres", "-c", "max_connections=50", "-c", "wal_level=logical"]
 
   redis:
     image: redis:7-alpine
@@ -44,7 +112,7 @@ services:
     networks: [pte-network]
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: pte-minio
     restart: unless-stopped
     environment:
@@ -65,7 +133,7 @@ services:
     networks: [pte-network]
 
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:v1.28.4
     container_name: pte-mailpit
     restart: unless-stopped
     ports:
@@ -96,94 +164,8 @@ services:
       retries: 10
     networks: [pte-network]
 
-  kafka:
-    image: confluentinc/cp-kafka:7.7.1
-    container_name: pte-kafka
-    restart: unless-stopped
-    ports:
-      - "${KAFKA_PORT:-9092}:9092"
-    environment:
-      # Single-node KRaft (no ZooKeeper).
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,EXTERNAL://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,EXTERNAL://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      CLUSTER_ID: pte-kafka-cluster-0001
-    healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
-    networks: [pte-network]
-
-  schema-registry:
-    image: confluentinc/cp-schema-registry:7.7.1
-    container_name: pte-schema-registry
-    restart: unless-stopped
-    depends_on:
-      kafka:
-        condition: service_healthy
-    ports:
-      - "${SCHEMA_REGISTRY_PORT:-8091}:8081"
-    environment:
-      SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:29092
-      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
-    networks: [pte-network]
-
-  debezium-connect:
-    image: debezium/connect:2.7.3.Final
-    container_name: pte-debezium
-    restart: unless-stopped
-    depends_on:
-      kafka:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    ports:
-      - "${DEBEZIUM_PORT:-8092}:8083"
-    environment:
-      BOOTSTRAP_SERVERS: kafka:29092
-      GROUP_ID: pte-connect
-      CONFIG_STORAGE_TOPIC: _connect_configs
-      OFFSET_STORAGE_TOPIC: _connect_offsets
-      STATUS_STORAGE_TOPIC: _connect_status
-      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors > /dev/null"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 30s
-    networks: [pte-network]
-
-  # One-shot: registers every docker/debezium/connectors/*.json outbox
-  # connector against debezium-connect once it's healthy (Phase 6). Idempotent
-  # (PUT .../config), safe to re-run via `docker compose up debezium-connectors-setup`.
-  debezium-connectors-setup:
-    image: alpine:3.20
-    container_name: pte-debezium-connectors-setup
-    depends_on:
-      debezium-connect:
-        condition: service_healthy
-    volumes:
-      - ./docker/debezium:/debezium:ro
-    entrypoint: ["sh", "-c", "apk add --no-cache curl jq >/dev/null && sh /debezium/register-connectors.sh"]
-    environment:
-      DEBEZIUM_CONNECT_URL: http://debezium-connect:8083
-    networks: [pte-network]
-    restart: "no"
-
   jaeger:
-    image: jaegertracing/all-in-one:1.62
+    image: jaegertracing/all-in-one:1.62.0
     container_name: pte-jaeger
     restart: unless-stopped
     ports:
@@ -195,8 +177,18 @@ services:
     networks: [pte-network]
 
 volumes:
-  pte_postgres_data:
-    name: pte_postgres_data
+  # One volume per cell — a corrupted/filled volume takes down exactly one cell.
+  # The old single `pte_postgres_data` is intentionally NOT reused: mounting it
+  # into pg-core would leave the other three cells' databases sitting unused
+  # inside it. Existing local data must be re-seeded (dev only).
+  pte_pg_core_data:
+    name: pte_pg_core_data
+  pte_pg_exam_data:
+    name: pte_pg_exam_data
+  pte_pg_live_data:
+    name: pte_pg_live_data
+  pte_pg_async_data:
+    name: pte_pg_async_data
   pte_minio_data:
     name: pte_minio_data
 

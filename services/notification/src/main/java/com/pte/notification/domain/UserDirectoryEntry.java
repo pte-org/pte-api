@@ -6,6 +6,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 import lombok.Getter;
@@ -24,7 +25,9 @@ import java.util.UUID;
  * "every HOST_ADMIN in this tenant" for violation fan-out, not for authz.
  */
 @Entity
-@Table(name = "user_directory_entries")
+@Table(name = "user_directory_entries", indexes = {
+        @Index(name = "idx_user_directory_tenant", columnList = "tenant_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -40,7 +43,8 @@ public class UserDirectoryEntry extends BaseEntity {
     private UUID tenantId;
 
     @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "user_directory_roles", joinColumns = @JoinColumn(name = "user_directory_entry_id"))
+    @CollectionTable(name = "user_directory_roles", joinColumns = @JoinColumn(name = "user_directory_entry_id"),
+            indexes = @Index(name = "idx_user_directory_roles_entry", columnList = "user_directory_entry_id"))
     @Column(name = "role", nullable = false)
     private Set<String> roles = new HashSet<>();
 }

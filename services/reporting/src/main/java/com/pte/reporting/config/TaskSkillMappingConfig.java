@@ -1,10 +1,11 @@
 package com.pte.reporting.config;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.reporting.domain.enums.Skill;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -25,23 +26,23 @@ public class TaskSkillMappingConfig {
 
     private final Map<String, Set<Skill>> mapping = new HashMap<>();
 
-    public TaskSkillMappingConfig(ObjectMapper objectMapper) {
-        load(objectMapper);
+    public TaskSkillMappingConfig(JsonMapper jsonMapper) {
+        load(jsonMapper);
     }
 
     public Set<Skill> skillsFor(String taskType) {
         return mapping.getOrDefault(taskType, Set.of());
     }
 
-    private void load(ObjectMapper objectMapper) {
+    private void load(JsonMapper jsonMapper) {
         try (InputStream in = new ClassPathResource(RESOURCE).getInputStream()) {
-            JsonNode mappings = objectMapper.readTree(in).path("mappings");
-            mappings.fieldNames().forEachRemaining(taskType -> {
+            JsonNode mappings = jsonMapper.readTree(in).path("mappings");
+            mappings.propertyNames().forEach(taskType -> {
                 Set<Skill> skills = new LinkedHashSet<>();
                 mappings.get(taskType).forEach(skillNode -> skills.add(Skill.valueOf(skillNode.asText())));
                 mapping.put(taskType, skills);
             });
-        } catch (IOException | IllegalArgumentException ex) {
+        } catch (IOException | JacksonException | IllegalArgumentException ex) {
             throw new IllegalStateException("Failed to load task-skill mapping from " + RESOURCE, ex);
         }
     }

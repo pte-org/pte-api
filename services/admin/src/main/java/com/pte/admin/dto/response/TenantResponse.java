@@ -8,5 +8,7 @@ public record TenantResponse(
         String organizationType,
         String status,
         String packageName,
-        int studentLimit) {
+        int studentLimit,
+        String logoUrl,
+        String primaryColor) {
 }

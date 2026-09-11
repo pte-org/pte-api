@@ -1,17 +1,26 @@
 package com.pte.examdelivery.service;
 
 import com.pte.examdelivery.client.AuthoringClient;
+import com.pte.examdelivery.client.MediaClient;
 import com.pte.examdelivery.client.SchedulingClient;
 import com.pte.examdelivery.client.dto.AuthoringSnapshotContentResponse;
+import com.pte.examdelivery.client.dto.MediaPresignedDownloadResponse;
 import com.pte.examdelivery.client.dto.SchedulingEntitlementResponse;
 import com.pte.examdelivery.config.TaskTimingConfig;
 import com.pte.examdelivery.domain.ExamAttempt;
 import com.pte.examdelivery.domain.PinnedExamSnapshot;
 import com.pte.examdelivery.domain.PinnedItem;
+import com.pte.examdelivery.domain.exception.AudioResolutionFailedException;
 import com.pte.examdelivery.domain.exception.EntitlementCheckFailedException;
+import com.pte.examdelivery.domain.exception.ImageResolutionFailedException;
+import com.pte.examdelivery.domain.exception.MissingAudioDurationException;
+import com.pte.examdelivery.domain.exception.MissingAudioPromptException;
+import com.pte.examdelivery.domain.exception.MissingImagePromptException;
 import com.pte.examdelivery.domain.exception.SnapshotContentFetchFailedException;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.Set;
@@ -33,20 +42,27 @@ import java.util.stream.Collectors;
 @Service
 public class SnapshotPinService {
 
+    private static final String LISTENING_SECTION = "LISTENING";
+    private static final String DESCRIBE_IMAGE_TASK_TYPE = "DESCRIBE_IMAGE";
+    private static final long AUDIO_URL_GRACE_SECONDS = 60;
+
     private final SchedulingClient schedulingClient;
     private final AuthoringClient authoringClient;
+    private final MediaClient mediaClient;
     private final TaskTimingConfig taskTimingConfig;
 
     public SnapshotPinService(SchedulingClient schedulingClient, AuthoringClient authoringClient,
-                              TaskTimingConfig taskTimingConfig) {
+                              MediaClient mediaClient, TaskTimingConfig taskTimingConfig) {
         this.schedulingClient = schedulingClient;
         this.authoringClient = authoringClient;
+        this.mediaClient = mediaClient;
         this.taskTimingConfig = taskTimingConfig;
     }
 
     public PinnedExamSnapshot pin(ExamAttempt attempt, UUID sessionPublicId, UUID studentPublicId) {
         SchedulingEntitlementResponse entitlement = schedulingClient.checkEntitlement(sessionPublicId, studentPublicId);
-        if (entitlement == null) {
+        if (entitlement == null || entitlement.policy() == null || entitlement.policy().replayPolicyType() == null
+                || entitlement.policy().answerIntegrityLevel() == null) {
             throw new EntitlementCheckFailedException();
         }
         AuthoringSnapshotContentResponse content = authoringClient.fetchContent(entitlement.snapshotPublicId());
@@ -58,6 +74,10 @@ public class SnapshotPinService {
                 .filter(item -> item.timingOverrideSeconds() != null)
                 .collect(Collectors.toMap(SchedulingEntitlementResponse.CompositionItem::taskType,
                         SchedulingEntitlementResponse.CompositionItem::timingOverrideSeconds, (a, b) -> a));
+        Map<String, Integer> maxPlayCountByTaskType = entitlement.composition().stream()
+                .filter(item -> item.maxPlayCount() != null)
+                .collect(Collectors.toMap(SchedulingEntitlementResponse.CompositionItem::taskType,
+                        SchedulingEntitlementResponse.CompositionItem::maxPlayCount, (a, b) -> a));
         Set<String> includedTaskTypes = entitlement.composition().stream()
                 .map(SchedulingEntitlementResponse.CompositionItem::taskType)
                 .collect(Collectors.toSet());
@@ -67,17 +87,29 @@ public class SnapshotPinService {
         pinned.setSourceSnapshotPublicId(content.publicId());
         pinned.setSourceSessionPublicId(sessionPublicId);
         pinned.setTenantId(entitlement.tenantId());
+        pinned.setReplayPolicyType(entitlement.policy().replayPolicyType());
+        pinned.setReplayPolicyLimit(entitlement.policy().replayPolicyLimit());
+        pinned.setDeviceCheckRequired(Boolean.TRUE.equals(entitlement.policy().deviceCheckRequired()));
+        pinned.setProctorRequired(Boolean.TRUE.equals(entitlement.policy().proctorRequired()));
+        pinned.setAnswerIntegrityLevel(entitlement.policy().answerIntegrityLevel());
+        pinned.setLockdownMode(entitlement.policy().lockdownMode());
+
+        long audioUrlTtlSeconds = Duration.between(entitlement.opensAt(), entitlement.closesAt()).getSeconds()
+                + AUDIO_URL_GRACE_SECONDS;
 
         content.items().stream()
                 .filter(item -> includedTaskTypes.contains(item.taskType()))
                 .sorted(Comparator.comparingInt(AuthoringSnapshotContentResponse.Item::orderIndex))
-                .forEach(item -> pinned.addItem(toPinnedItem(item, responseOverrideByTaskType)));
+                .forEach(item -> pinned.addItem(toPinnedItem(item, responseOverrideByTaskType, maxPlayCountByTaskType,
+                        audioUrlTtlSeconds, entitlement.tenantId())));
 
         return pinned;
     }
 
     private PinnedItem toPinnedItem(AuthoringSnapshotContentResponse.Item source,
-                                    Map<String, Integer> responseOverrideByTaskType) {
+                                    Map<String, Integer> responseOverrideByTaskType,
+                                    Map<String, Integer> maxPlayCountByTaskType,
+                                    long audioUrlTtlSeconds, UUID tenantId) {
         TaskTimingConfig.Timing timing = taskTimingConfig.timingFor(source.taskType());
         int responseSeconds = responseOverrideByTaskType.getOrDefault(source.taskType(), timing.responseSeconds());
 
@@ -94,8 +126,88 @@ public class SnapshotPinService {
         item.setMinWordCount(source.minWordCount());
         item.setMaxWordCount(source.maxWordCount());
         item.setOptionsJson(source.optionsJson());
-        item.setPrepSeconds(timing.prepSeconds());
         item.setResponseSeconds(responseSeconds);
+        item.setMaxPlayCountOverride(maxPlayCountByTaskType.get(source.taskType()));
+
+        Integer audioDurationSeconds = null;
+        if (LISTENING_SECTION.equals(source.section())) {
+            // LISTENING's audioPromptRef is mandatory — a listening item with none is an
+            // authoring data problem, not a client error, and must keep failing loudly.
+            if (source.audioPromptRef() == null) {
+                throw new MissingAudioPromptException();
+            }
+            audioDurationSeconds = resolveAudioUrl(item, source.audioPromptRef(), audioUrlTtlSeconds, tenantId);
+        } else if (source.audioPromptRef() != null) {
+            // Every other section's audioPromptRef is optional (only some Speaking task
+            // types carry one) — presign when present, skip silently when absent. This
+            // powers the same on-demand `/audio` endpoint LISTENING already uses
+            // (AttemptService.playAudio reads PinnedItem.audioUrl regardless of section),
+            // just for Speaking items too (plans/phat-speaking-audio-prompt-e2e). The
+            // returned duration also feeds the dynamic-prep-timing branch below, for
+            // whichever of the 5 audio-prompt types this item happens to be
+            // (plans/phat-speaking-dynamic-prep-timing) — one call serves both needs.
+            audioDurationSeconds = resolveAudioUrl(item, source.audioPromptRef(), audioUrlTtlSeconds, tenantId);
+        }
+
+        if (DESCRIBE_IMAGE_TASK_TYPE.equals(source.taskType())) {
+            // DESCRIBE_IMAGE's imagePromptRef is mandatory — same fail-loud rationale
+            // as LISTENING's audioPromptRef above (an authoring data problem, not a
+            // client error).
+            if (source.imagePromptRef() == null) {
+                throw new MissingImagePromptException();
+            }
+            resolveImageUrl(item, source.imagePromptRef(), audioUrlTtlSeconds, tenantId);
+        } else if (source.imagePromptRef() != null) {
+            // Every other task type's imagePromptRef is optional/unused today —
+            // presign when present anyway (mirrors audioPromptRef's own
+            // optional-elsewhere branch), skip silently when absent
+            // (plans/phat-describe-image-e2e).
+            resolveImageUrl(item, source.imagePromptRef(), audioUrlTtlSeconds, tenantId);
+        }
+
+        // `timing.preListenSeconds()` (and preRecordSeconds, always set together —
+        // see TaskTimingConfig.Timing's own doc comment) being non-null IS the
+        // signal that this task type computes prep dynamically from real audio
+        // duration instead of the static timing.prepSeconds() fallback — config
+        // presence drives the branch, not a second, hardcoded task-type list.
+        if (timing.preListenSeconds() != null) {
+            if (audioDurationSeconds == null) {
+                throw new MissingAudioDurationException();
+            }
+            item.setPreListenSeconds(timing.preListenSeconds());
+            item.setPreRecordSeconds(timing.preRecordSeconds());
+            item.setPrepSeconds(timing.preListenSeconds() + audioDurationSeconds + timing.preRecordSeconds());
+        } else {
+            item.setPrepSeconds(timing.prepSeconds());
+        }
         return item;
+    }
+
+    private Integer resolveAudioUrl(PinnedItem item, UUID audioPromptRef, long audioUrlTtlSeconds, UUID tenantId) {
+        MediaPresignedDownloadResponse presigned = mediaClient.presignGet(audioPromptRef, audioUrlTtlSeconds, tenantId);
+        if (presigned == null) {
+            throw new AudioResolutionFailedException();
+        }
+        item.setAudioUrl(presigned.url());
+        item.setAudioUrlExpiresAt(Instant.now().plusSeconds(presigned.expiresInSeconds()));
+        return presigned.durationSeconds();
+    }
+
+    /**
+     * Mirrors {@link #resolveAudioUrl} but simpler: no duration to extract (a
+     * static image has none), so returns {@code void}. {@code imageUrlTtlSeconds}
+     * reuses the same {@code audioUrlTtlSeconds} value the caller already computed
+     * from the session window — deliberately media-type-agnostic (just a
+     * session-scoped TTL passed straight through to {@code MediaClient.presignGet},
+     * which itself has no audio-specific semantics), not a copy-paste oversight
+     * (plans/phat-describe-image-e2e).
+     */
+    private void resolveImageUrl(PinnedItem item, UUID imagePromptRef, long imageUrlTtlSeconds, UUID tenantId) {
+        MediaPresignedDownloadResponse presigned = mediaClient.presignGet(imagePromptRef, imageUrlTtlSeconds, tenantId);
+        if (presigned == null) {
+            throw new ImageResolutionFailedException();
+        }
+        item.setImageUrl(presigned.url());
+        item.setImageUrlExpiresAt(Instant.now().plusSeconds(presigned.expiresInSeconds()));
     }
 }

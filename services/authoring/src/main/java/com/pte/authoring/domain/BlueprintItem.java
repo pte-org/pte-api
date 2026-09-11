@@ -7,6 +7,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -21,7 +22,9 @@ import java.util.UUID;
  * (not a FK — so publish can deep-copy content into an immutable snapshot).
  */
 @Entity
-@Table(name = "blueprint_items")
+@Table(name = "blueprint_items", indexes = {
+        @Index(name = "idx_blueprint_items_blueprint", columnList = "blueprint_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

@@ -3,6 +3,7 @@ package com.pte.reporting.domain;
 import com.pte.common.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -18,7 +19,9 @@ import java.util.UUID;
  * everything else is derived from consumed events.
  */
 @Entity
-@Table(name = "attempt_reports")
+@Table(name = "attempt_reports", indexes = {
+        @Index(name = "idx_attempt_reports_session", columnList = "session_public_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

@@ -10,6 +10,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
@@ -29,7 +30,11 @@ import java.util.UUID;
  * have a null {@code tenantId} (platform bank); PRIVATE items belong to one tenant.
  */
 @Entity
-@Table(name = "questions")
+@Table(name = "questions", indexes = {
+        @Index(name = "idx_questions_tenant", columnList = "tenant_id"),
+        @Index(name = "idx_questions_visibility", columnList = "visibility"),
+        @Index(name = "idx_questions_task_type", columnList = "pte_task_type")
+})
 @Getter
 @Setter
 @NoArgsConstructor

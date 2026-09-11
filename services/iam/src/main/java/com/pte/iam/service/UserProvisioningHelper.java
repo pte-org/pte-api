@@ -20,7 +20,7 @@ public class UserProvisioningHelper {
 
     /** Roles a tenant-scoped caller (HOST_ADMIN) is allowed to assign. */
     private static final Set<Role> HOST_ASSIGNABLE_ROLES =
-            EnumSet.of(Role.HOST_AUTHOR, Role.PROCTOR, Role.STUDENT);
+            EnumSet.of(Role.HOST_AUTHOR, Role.PROCTOR, Role.STUDENT, Role.LECTURER, Role.PROGRAM_COORDINATOR);
 
     /**
      * Platform caller → user goes to the requested tenant (may be null for a

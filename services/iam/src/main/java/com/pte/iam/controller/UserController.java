@@ -3,7 +3,10 @@ package com.pte.iam.controller;
 import com.pte.common.security.CurrentUser;
 import com.pte.common.security.CurrentUserContext;
 import com.pte.common.web.ApiResponse;
+import com.pte.iam.dto.request.BulkCreateUsersRequest;
 import com.pte.iam.dto.request.CreateUserRequest;
+import com.pte.iam.dto.request.ResetPasswordRequest;
+import com.pte.iam.dto.response.BulkCreateUsersResponse;
 import com.pte.iam.dto.response.UserResponse;
 import com.pte.iam.service.UserService;
 import jakarta.validation.Valid;
@@ -38,6 +41,11 @@ public class UserController {
         return ApiResponse.success(userService.create(request, currentUser()));
     }
 
+    @PostMapping("/bulk")
+    public ApiResponse<BulkCreateUsersResponse> createBulk(@Valid @RequestBody BulkCreateUsersRequest request) {
+        return ApiResponse.success(userService.createBulk(request, currentUser()));
+    }
+
     @GetMapping("/{publicId}")
     public ApiResponse<UserResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(userService.get(publicId, currentUser()));
@@ -51,6 +59,23 @@ public class UserController {
     @PostMapping("/{publicId}/suspend")
     public ApiResponse<UserResponse> suspend(@PathVariable UUID publicId) {
         return ApiResponse.success(userService.suspend(publicId, currentUser()));
+    }
+
+    // No method-level @PreAuthorize override needed: tenant scope and the
+    // STUDENT/PROCTOR-only role restriction are enforced in UserService#resetPassword.
+    @PostMapping("/{publicId}/reset-password")
+    public ApiResponse<UserResponse> resetPassword(@PathVariable UUID publicId,
+                                                    @Valid @RequestBody ResetPasswordRequest request) {
+        return ApiResponse.success(userService.resetPassword(publicId, request, currentUser()));
+    }
+
+    // Separate from GET /users (which is caller-tenant-scoped) so a platform admin
+    // can look up an arbitrary tenant's users without overloading that endpoint's
+    // existing semantics.
+    @GetMapping("/by-tenant/{tenantId}")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    public ApiResponse<List<UserResponse>> listByTenant(@PathVariable UUID tenantId) {
+        return ApiResponse.success(userService.listForTenant(tenantId));
     }
 
     private CurrentUser currentUser() {

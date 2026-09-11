@@ -10,12 +10,14 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -28,7 +30,9 @@ import java.util.UUID;
  * (YAGNI); roles are held here as a set scoped to this user's tenant.
  */
 @Entity
-@Table(name = "users")
+@Table(name = "users", indexes = {
+        @Index(name = "idx_users_tenant", columnList = "tenant_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -52,6 +56,19 @@ public class User extends BaseEntity {
     @Column(name = "role", nullable = false)
     @Enumerated(EnumType.STRING)
     private Set<Role> roles = new HashSet<>();
+
+    /** Profile-only fields (not used for auth) — mainly populated for STUDENT via Host roster import, optional for any role. */
+    @Column
+    private String studentCode;
+
+    @Column
+    private String className;
+
+    @Column
+    private String phone;
+
+    @Column
+    private LocalDate dateOfBirth;
 
     public boolean isSuspended() {
         return status == UserStatus.SUSPENDED;

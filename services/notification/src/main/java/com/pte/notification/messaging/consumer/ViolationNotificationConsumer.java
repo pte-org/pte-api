@@ -1,6 +1,5 @@
 package com.pte.notification.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.notification.constant.NotificationConstants;
 import com.pte.notification.domain.ProcessedEvent;
 import com.pte.notification.domain.UserDirectoryEntry;
@@ -9,12 +8,14 @@ import com.pte.notification.messaging.consumer.dto.ViolationDetectedEvent;
 import com.pte.notification.repository.ProcessedEventRepository;
 import com.pte.notification.repository.UserDirectoryRepository;
 import com.pte.notification.service.NotificationDispatchService;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
@@ -22,7 +23,9 @@ import java.util.UUID;
  * event only has tenantId/attemptPublicId/sessionPublicId) — fans out to
  * every {@code HOST_ADMIN} in that tenant instead of a single resolved
  * student, unlike the other two event-triggered consumers (phase-11 Design
- * Constraints).
+ * Constraints). Idempotent (ADR-002): dedups by the producer's outbox row id
+ * (delivered as the AMQP {@code messageId}, via the polling outbox relay +
+ * RabbitMQ, superseding Debezium's outbox router).
  */
 @Component
 public class ViolationNotificationConsumer {
@@ -30,28 +33,29 @@ public class ViolationNotificationConsumer {
     private final ProcessedEventRepository processedEventRepository;
     private final UserDirectoryRepository userDirectoryRepository;
     private final NotificationDispatchService dispatchService;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public ViolationNotificationConsumer(ProcessedEventRepository processedEventRepository,
                                          UserDirectoryRepository userDirectoryRepository,
-                                         NotificationDispatchService dispatchService, ObjectMapper objectMapper) {
+                                         NotificationDispatchService dispatchService, JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
         this.userDirectoryRepository = userDirectoryRepository;
         this.dispatchService = dispatchService;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
-    @KafkaListener(topics = NotificationConstants.TOPIC_VIOLATION_EVENTS, groupId = "notification-violation")
+    @RabbitListener(queues = NotificationConstants.QUEUE_VIOLATION_EVENTS, containerFactory = "eventBackboneListenerContainerFactory")
     @Transactional
-    public void onViolationEvent(ConsumerRecord<String, String> record) throws IOException {
-        UUID eventId = KafkaHeaders.require(record, "id");
+    public void onViolationEvent(Message message) {
+        MessageProperties properties = message.getMessageProperties();
+        UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
             return;
         }
 
-        String eventType = KafkaHeaders.requireString(record, NotificationConstants.KAFKA_HEADER_EVENT_TYPE);
+        String eventType = headerValue(properties, NotificationConstants.EVENT_TYPE_HEADER);
         if (NotificationConstants.INCOMING_EVENT_VIOLATION_DETECTED.equals(eventType)) {
-            notifyHostAdmins(record.value());
+            notifyHostAdmins(new String(message.getBody(), StandardCharsets.UTF_8));
         }
 
         ProcessedEvent processed = new ProcessedEvent();
@@ -59,8 +63,8 @@ public class ViolationNotificationConsumer {
         processedEventRepository.save(processed);
     }
 
-    private void notifyHostAdmins(String payload) throws IOException {
-        ViolationDetectedEvent event = objectMapper.readValue(payload, ViolationDetectedEvent.class);
+    private void notifyHostAdmins(String payload) {
+        ViolationDetectedEvent event = jsonMapper.readValue(payload, ViolationDetectedEvent.class);
         String subject = "Violation flagged: " + event.violationType();
         String body = "A proctor flagged attempt " + event.attemptPublicId() + " in session " + event.sessionPublicId()
                 + " for " + event.violationType() + (event.detail() == null ? "" : (" — " + event.detail())) + ".";
@@ -69,5 +73,13 @@ public class ViolationNotificationConsumer {
                 .findByTenantIdAndRolesContaining(event.tenantId(), NotificationConstants.ROLE_HOST_ADMIN)) {
             dispatchService.dispatchTo(NotificationType.VIOLATION_DETECTED, hostAdmin, event.tenantId(), subject, body);
         }
+    }
+
+    private String headerValue(MessageProperties properties, String key) {
+        Object value = properties.getHeaders().get(key);
+        if (value == null) {
+            throw new IllegalStateException("Missing AMQP header '" + key + "' on violation event");
+        }
+        return value.toString();
     }
 }

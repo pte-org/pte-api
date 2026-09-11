@@ -1,9 +1,7 @@
 package com.pte.authoring.repository;
 
 import com.pte.authoring.domain.OutboxEntry;
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.pte.common.messaging.OutboxJpaRepository;
 
-import java.util.UUID;
-
-public interface OutboxRepository extends JpaRepository<OutboxEntry, UUID> {
+public interface OutboxRepository extends OutboxJpaRepository<OutboxEntry> {
 }

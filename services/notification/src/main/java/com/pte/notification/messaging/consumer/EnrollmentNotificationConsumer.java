@@ -1,51 +1,56 @@
 package com.pte.notification.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.notification.constant.NotificationConstants;
 import com.pte.notification.domain.ProcessedEvent;
 import com.pte.notification.domain.enums.NotificationType;
 import com.pte.notification.messaging.consumer.dto.StudentEnrolledEvent;
 import com.pte.notification.repository.ProcessedEventRepository;
 import com.pte.notification.service.NotificationDispatchService;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
- * {@code outbox.event.ExamSession} is shared with {@code SessionScheduled}/
+ * scheduling's outbox exchange is shared with {@code SessionScheduled}/
  * {@code ScoringRequested}/{@code PublishRequested} — this consumer only acts
  * on {@code StudentEnrolled}, same filter-by-header pattern as every other
- * shared-topic consumer in this codebase (e.g. scoring's ScoringCommandConsumer).
+ * shared-exchange consumer in this codebase (e.g. scoring's ScoringCommandConsumer).
+ * Idempotent (ADR-002): dedups by the producer's outbox row id (delivered as
+ * the AMQP {@code messageId}, via the polling outbox relay + RabbitMQ,
+ * superseding Debezium's outbox router).
  */
 @Component
 public class EnrollmentNotificationConsumer {
 
     private final ProcessedEventRepository processedEventRepository;
     private final NotificationDispatchService dispatchService;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public EnrollmentNotificationConsumer(ProcessedEventRepository processedEventRepository,
-                                          NotificationDispatchService dispatchService, ObjectMapper objectMapper) {
+                                          NotificationDispatchService dispatchService, JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
         this.dispatchService = dispatchService;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
-    @KafkaListener(topics = NotificationConstants.TOPIC_SESSION_EVENTS, groupId = "notification-enrollment")
+    @RabbitListener(queues = NotificationConstants.QUEUE_SESSION_EVENTS, containerFactory = "eventBackboneListenerContainerFactory")
     @Transactional
-    public void onSessionEvent(ConsumerRecord<String, String> record) throws IOException {
-        UUID eventId = KafkaHeaders.require(record, "id");
+    public void onSessionEvent(Message message) {
+        MessageProperties properties = message.getMessageProperties();
+        UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
             return;
         }
 
-        String eventType = KafkaHeaders.requireString(record, NotificationConstants.KAFKA_HEADER_EVENT_TYPE);
+        String eventType = headerValue(properties, NotificationConstants.EVENT_TYPE_HEADER);
         if (NotificationConstants.INCOMING_EVENT_STUDENT_ENROLLED.equals(eventType)) {
-            notifyStudent(record.value());
+            notifyStudent(new String(message.getBody(), StandardCharsets.UTF_8));
         }
         // SessionScheduled/ScoringRequested/PublishRequested: not this consumer's concern, ignored.
 
@@ -54,10 +59,18 @@ public class EnrollmentNotificationConsumer {
         processedEventRepository.save(processed);
     }
 
-    private void notifyStudent(String payload) throws IOException {
-        StudentEnrolledEvent event = objectMapper.readValue(payload, StudentEnrolledEvent.class);
+    private void notifyStudent(String payload) {
+        StudentEnrolledEvent event = jsonMapper.readValue(payload, StudentEnrolledEvent.class);
         dispatchService.dispatch(NotificationType.STUDENT_ENROLLED, event.studentPublicId(), event.tenantId(),
                 "You've been enrolled in an exam session",
                 "You've been enrolled in exam session " + event.sessionPublicId() + ". Log in to view your schedule.");
+    }
+
+    private String headerValue(MessageProperties properties, String key) {
+        Object value = properties.getHeaders().get(key);
+        if (value == null) {
+            throw new IllegalStateException("Missing AMQP header '" + key + "' on session event");
+        }
+        return value.toString();
     }
 }

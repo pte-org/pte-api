@@ -7,19 +7,20 @@ spring:
   application:
     name: exam-delivery
   datasource:
-    url: ${EXAM_DELIVERY_DB_URL:jdbc:postgresql://localhost:5432/exam_delivery}
+    # Port 5433 = pg-exam (CELL EXAM), not the 5432 shared by CELL CORE's seven
+    # services — see docker-compose.yml for the cell/port map.
+    url: ${EXAM_DELIVERY_DB_URL:jdbc:postgresql://localhost:5433/exam_delivery}
     username: ${EXAM_DELIVERY_DB_USER:exam_delivery_svc}
     password: ${EXAM_DELIVERY_DB_PASSWORD:exam_delivery_dev_pw}
+    hikari:
+      maximum-pool-size: ${EXAM_DELIVERY_DB_POOL_SIZE:5}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     open-in-view: false
     properties:
       hibernate:
         format_sql: true
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
   security:
     oauth2:
       resourceserver:
@@ -29,23 +30,47 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    consumer:
-      group-id: exam-delivery
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:pte}
+    password: ${RABBITMQ_PASSWORD:pte}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
 
 authoring:
   base-url: ${AUTHORING_URL:http://localhost:8083/api/authoring}
 scheduling:
   base-url: ${SCHEDULING_URL:http://localhost:8084/api/scheduling}
+media:
+  base-url: ${MEDIA_URL:http://localhost:8090/api/media}
 
-# Shared secret for calling authoring/scheduling's /internal/** surface
-# (ADR-003 mTLS placeholder). Must match the value configured on those services.
+# Shared secret for calling authoring/scheduling's /internal/** surface, and
+# for validating incoming calls to exam-delivery's own /internal/** endpoints
+# (rabbitmq-outbox-migration Phase 9's attempt/answer export) — ADR-003 mTLS
+# placeholder. Must match the value configured on every service in the mesh.
+# RSA keypair for answer-submission encryption (task 20, STRICT answerIntegrityLevel
+# attempts only). exam-delivery holds its own keypair — never iam's RsaKeyProvider —
+# so no synchronous cross-service call is needed for key material at submission time.
+# Outside dev/local profiles, EncryptionKeyProvider fails fast at startup if either
+# value is unset, rather than silently generating an ephemeral keypair that would
+# invalidate every STRICT-pinned attempt's public key on the next restart.
+exam-delivery:
+  encryption:
+    private-key-pem: ${EXAM_DELIVERY_ENCRYPTION_PRIVATE_KEY_PEM:}
+    public-key-pem: ${EXAM_DELIVERY_ENCRYPTION_PUBLIC_KEY_PEM:}
+
 internal:
   service-key: ${INTERNAL_SERVICE_KEY:dev-internal-service-key-change-me}
+  # Second credential (Phase 9): required, IN ADDITION TO service-key, to reach
+  # the all-tenant bootstrap export mode. Never used for normal per-tenant calls.
+  # MORE sensitive than service-key above (unlocks cross-tenant export) — the
+  # dev-default fallback here must NEVER be left unset in any real deployment
+  # (code-review finding: a forgotten env var here silently exposes cross-tenant
+  # data, not just internal-service access). Pre-production checklist item.
+  bootstrap-key: ${INTERNAL_BOOTSTRAP_KEY:dev-internal-bootstrap-key-change-me}
 
 # The ONE guarded pull at attempt-create (phase-05). NotEntitledException is a
 # clean business denial, not an infra failure — excluded from the failure rate
@@ -65,6 +90,11 @@ resilience4j:
         failure-rate-threshold: 50
         wait-duration-in-open-state: 10s
         permitted-number-of-calls-in-half-open-state: 3
+      media:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
 
 management:
   endpoints:
@@ -77,4 +107,16 @@ management:
   otlp:
     tracing:
       endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+# Outbox polling relay (rabbitmq-outbox-migration Phase 5) — defaults live in
+# AbstractOutboxRelay/AbstractOutboxCleanupJob; override here only if tuning is needed.
+# Deployment note: this relay MUST stay single-instance — scoring's
+# AnswerIngestConsumer (Phase 6) depends on AnswerSubmitted arriving in the
+# order this outbox wrote them (plan.md, CONFIRMED).
+pte:
+  outbox:
+    poll-interval-ms: 2000
+    batch-size: 100
+    max-publish-attempts: 10
+    cleanup-retention-days: 7
 

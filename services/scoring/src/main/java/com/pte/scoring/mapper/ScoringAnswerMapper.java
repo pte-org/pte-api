@@ -10,6 +10,6 @@ public final class ScoringAnswerMapper {
 
     public static ScoringAnswerResponse toResponse(ScoringAnswer answer) {
         return new ScoringAnswerResponse(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
-                answer.getTaskType(), answer.getStatus().name(), answer.getRawScore());
+                answer.getTaskType(), answer.getStatus().name(), answer.getRawScore(), answer.getTeacherScore());
     }
 }

@@ -1,18 +1,19 @@
 package com.pte.reporting.messaging.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.reporting.constant.ReportingConstants;
 import com.pte.reporting.domain.AnswerProjection;
 import com.pte.reporting.domain.ProcessedEvent;
 import com.pte.reporting.messaging.consumer.dto.AnswerScoredEvent;
-import com.pte.reporting.repository.AnswerProjectionRepository;
 import com.pte.reporting.repository.ProcessedEventRepository;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
+import com.pte.reporting.service.AnswerScoreService;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
@@ -21,33 +22,38 @@ import java.util.UUID;
  * exam-delivery's {@code AnswerSubmitted}), it's a no-op — {@code AnswerSubmitted}
  * always precedes {@code AnswerScored} in practice (scoring only ingests after
  * submission), but this stays defensive rather than assuming ordering. Idempotent
- * (ADR-002): dedups by the producer's outbox row id.
+ * (ADR-002): dedups by the producer's outbox row id (delivered as the AMQP
+ * {@code messageId}, via the polling outbox relay + RabbitMQ, superseding
+ * Debezium's outbox router). Upsert logic itself lives in {@link
+ * AnswerScoreService}, shared with the read-model rebuild orchestration
+ * (rabbitmq-outbox-migration Phase 9) so both paths can never silently diverge.
  */
 @Component
 public class AnswerScoredConsumer {
 
     private final ProcessedEventRepository processedEventRepository;
-    private final AnswerProjectionRepository answerProjectionRepository;
-    private final ObjectMapper objectMapper;
+    private final AnswerScoreService answerScoreService;
+    private final JsonMapper jsonMapper;
 
     public AnswerScoredConsumer(ProcessedEventRepository processedEventRepository,
-                                AnswerProjectionRepository answerProjectionRepository, ObjectMapper objectMapper) {
+                                AnswerScoreService answerScoreService, JsonMapper jsonMapper) {
         this.processedEventRepository = processedEventRepository;
-        this.answerProjectionRepository = answerProjectionRepository;
-        this.objectMapper = objectMapper;
+        this.answerScoreService = answerScoreService;
+        this.jsonMapper = jsonMapper;
     }
 
-    @KafkaListener(topics = ReportingConstants.TOPIC_SCORING_ANSWER_EVENTS, groupId = "reporting-answer-scored")
+    @RabbitListener(queues = ReportingConstants.QUEUE_ANSWER_SCORED)
     @Transactional
-    public void onScoringAnswerEvent(ConsumerRecord<String, String> record) throws IOException {
-        UUID eventId = KafkaHeaders.require(record, "id");
+    public void onScoringAnswerEvent(Message message) {
+        MessageProperties properties = message.getMessageProperties();
+        UUID eventId = UUID.fromString(properties.getMessageId());
         if (processedEventRepository.existsById(eventId)) {
             return;
         }
 
-        String eventType = KafkaHeaders.requireString(record, ReportingConstants.KAFKA_HEADER_EVENT_TYPE);
+        String eventType = headerValue(properties, ReportingConstants.EVENT_TYPE_HEADER);
         if (ReportingConstants.INCOMING_EVENT_ANSWER_SCORED.equals(eventType)) {
-            applyScore(record.value());
+            applyScore(new String(message.getBody(), StandardCharsets.UTF_8));
         }
 
         ProcessedEvent processed = new ProcessedEvent();
@@ -55,12 +61,15 @@ public class AnswerScoredConsumer {
         processedEventRepository.save(processed);
     }
 
-    private void applyScore(String payload) throws IOException {
-        AnswerScoredEvent event = objectMapper.readValue(payload, AnswerScoredEvent.class);
-        answerProjectionRepository.findByAnswerPublicId(event.answerPublicId())
-                .ifPresent(answer -> {
-                    answer.applyScore(event.rawScore());
-                    answerProjectionRepository.save(answer);
-                });
+    private void applyScore(String payload) {
+        answerScoreService.applyScore(jsonMapper.readValue(payload, AnswerScoredEvent.class));
+    }
+
+    private String headerValue(MessageProperties properties, String key) {
+        Object value = properties.getHeaders().get(key);
+        if (value == null) {
+            throw new IllegalStateException("Missing AMQP header '" + key + "' on scoring answer event");
+        }
+        return value.toString();
     }
 }
