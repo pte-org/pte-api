@@ -32,6 +32,7 @@ build/
 ### VS Code ###
 .vscode/
 .env
+.env.local
 local-dev-vars.sh
 
 ### Local dev seed scripts ###
