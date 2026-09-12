@@ -32,6 +32,31 @@ import java.util.UUID;
  *       default {@code split(",")} silently drops it and misaligns every gap
  *       index after the first empty one.</li>
  * </ul>
+ *
+ * <p>Listening task types use the following payload encodings (Listening payload
+ * contract version 1):
+ * <ul>
+ *   <li>{@code MC_LISTENING_SINGLE}, {@code HIGHLIGHT_CORRECT_SUMMARY}, and
+ *       {@code SELECT_MISSING_WORD} — exactly one selected option's
+ *       {@code orderIndex} as a decimal string (for example {@code "2"}); the
+ *       value is not comma-joined.</li>
+ *   <li>{@code MC_LISTENING_MULTIPLE} — selected option {@code orderIndex}
+ *       values, numerically sorted ascending and comma-joined (for example
+ *       {@code "0,2,3"}), regardless of the order in which the student toggled
+ *       the options.</li>
+ *   <li>{@code FILL_BLANKS_LISTENING} — raw typed text values in gap-index
+ *       order, comma-joined. An unanswered gap is an empty entry, including a
+ *       required trailing empty entry (for example {@code "rapid,,forest,"}
+ *       represents four gaps: filled, unanswered, filled, unanswered). A comma
+ *       is reserved as the separator and is forbidden inside a v1 gap value;
+ *       no escaping or alternate encoding is defined.</li>
+ *   <li>{@code HIGHLIGHT_INCORRECT_WORDS} — selected transcript token positions,
+ *       numerically sorted ascending and comma-joined (for example
+ *       {@code "3,7,11"}). These are transcript word indices, not option
+ *       {@code orderIndex} values.</li>
+ *   <li>{@code SUMMARIZE_SPOKEN_TEXT} and {@code WRITE_FROM_DICTATION} — the
+ *       raw free-form draft text.</li>
+ * </ul>
  */
 public record SubmitAnswerRequest(
         @NotNull(message = "Task reference is required") UUID pinnedItemPublicId,

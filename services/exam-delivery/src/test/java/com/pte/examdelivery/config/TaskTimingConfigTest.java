@@ -1,18 +1,21 @@
 package com.pte.examdelivery.config;
 
 import com.pte.examdelivery.domain.exception.TaskTimingNotConfiguredException;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Loads the real {@code config/task-timing.json} from the classpath (no mocking —
  * this is exactly what would catch a typo or missing entry in the actual config
  * file). Covers the 2 gaps closed by plans/phat-describe-image-e2e:
- * DESCRIBE_IMAGE and PERSONAL_INTRODUCTION previously had no entry at all,
- * so timingFor() threw TaskTimingNotConfiguredException for both.
+ * DESCRIBE_IMAGE and PERSONAL_INTRODUCTION were historical gaps; Phase 4 adds
+ * a focused guard for the seven newly configured Listening types as well.
  */
 class TaskTimingConfigTest {
 
@@ -46,5 +49,19 @@ class TaskTimingConfigTest {
     void anUnconfiguredTaskTypeStillFailsFastRatherThanSilentlyDefaulting() {
         assertThatThrownBy(() -> config.timingFor("SOME_FUTURE_TASK_TYPE"))
                 .isInstanceOf(TaskTimingNotConfiguredException.class);
+    }
+
+    @ParameterizedTest(name = "{0} has a pinning placeholder")
+    @ValueSource(strings = {
+            "SUMMARIZE_SPOKEN_TEXT",
+            "MC_LISTENING_MULTIPLE",
+            "FILL_BLANKS_LISTENING",
+            "HIGHLIGHT_CORRECT_SUMMARY",
+            "SELECT_MISSING_WORD",
+            "HIGHLIGHT_INCORRECT_WORDS",
+            "WRITE_FROM_DICTATION"
+    })
+    void sevenListeningTypesAreConfiguredForSnapshotPinning(String taskType) {
+        assertThatCode(() -> config.timingFor(taskType)).doesNotThrowAnyException();
     }
 }

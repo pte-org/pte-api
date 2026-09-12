@@ -1,0 +1,55 @@
+{
+  "_comment": "Immutable source-of-truth for cross-repo Listening payload contract tests. Do not fork or edit a vendored copy first; update this file, bump contractVersion, then sync both repositories.",
+  "contractVersion": 1,
+  "lastUpdated": "2026-09-12",
+  "fixtures": [
+    {
+      "taskType": "SUMMARIZE_SPOKEN_TEXT",
+      "optionsJson": null,
+      "payload": "The student's summary text",
+      "description": "Free-form draftText is sent as the raw payload string."
+    },
+    {
+      "taskType": "WRITE_FROM_DICTATION",
+      "optionsJson": null,
+      "payload": "The dictated text",
+      "description": "Free-form draftText is sent as the raw payload string."
+    },
+    {
+      "taskType": "MC_LISTENING_MULTIPLE",
+      "optionsJson": "[{\"text\":\"Option A\",\"orderIndex\":0},{\"text\":\"Option B\",\"orderIndex\":1},{\"text\":\"Option C\",\"orderIndex\":2},{\"text\":\"Option D\",\"orderIndex\":3}]",
+      "payload": "0,2,3",
+      "description": "Selected option orderIndex values are numerically sorted ascending and comma-joined, regardless of toggle order."
+    },
+    {
+      "taskType": "HIGHLIGHT_CORRECT_SUMMARY",
+      "optionsJson": "[{\"text\":\"Summary A\",\"orderIndex\":0},{\"text\":\"Summary B\",\"orderIndex\":1},{\"text\":\"Summary C\",\"orderIndex\":2}]",
+      "payload": "1",
+      "description": "Exactly one selected option orderIndex is sent as a decimal string; it is not comma-joined."
+    },
+    {
+      "taskType": "SELECT_MISSING_WORD",
+      "optionsJson": "[{\"text\":\"word A\",\"orderIndex\":0},{\"text\":\"word B\",\"orderIndex\":1},{\"text\":\"word C\",\"orderIndex\":2}]",
+      "payload": "2",
+      "description": "Exactly one selected option orderIndex is sent as a decimal string; it is not comma-joined."
+    },
+    {
+      "taskType": "FILL_BLANKS_LISTENING",
+      "optionsJson": null,
+      "payload": "rapid,,forest,",
+      "description": "Typed values are comma-joined in gap-index order. Empty entries preserve unanswered gaps, including the required trailing empty entry; commas are forbidden inside a v1 gap value."
+    },
+    {
+      "taskType": "HIGHLIGHT_INCORRECT_WORDS",
+      "optionsJson": null,
+      "payload": "3,7,11",
+      "description": "Selected transcript token positions are numerically sorted ascending and comma-joined; they are transcript indices, not option orderIndex values."
+    },
+    {
+      "taskType": "MC_LISTENING_SINGLE",
+      "optionsJson": "[{\"text\":\"Option A\",\"orderIndex\":0},{\"text\":\"Option B\",\"orderIndex\":1},{\"text\":\"Option C\",\"orderIndex\":2}]",
+      "payload": "2",
+      "description": "Exactly one selected option orderIndex is sent as a decimal string; it is not comma-joined."
+    }
+  ]
+}

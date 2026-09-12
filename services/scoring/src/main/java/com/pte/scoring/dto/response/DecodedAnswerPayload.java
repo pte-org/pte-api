@@ -12,8 +12,11 @@ import java.util.UUID;
  * (only if presigning it succeeded — see {@code AnswerPayloadDecoder}'s doc,
  * presigning itself happens one layer up in the detail service, not in the
  * decoder); {@code TEXT}/{@code UNRECOGNIZED} set only {@code text};
- * {@code SELECTION} sets only {@code options}.
+ * {@code SELECTION} sets only {@code options}; {@code POSITIONAL_SELECTION}
+ * sets only {@code gapValues} (with {@code null} entries for unanswered gaps);
+ * {@code WORD_INDICES} sets only {@code wordIndices}.
  */
 public record DecodedAnswerPayload(AnswerPayloadKind kind, String text, UUID mediaPublicId,
-                                    List<AnswerOptionView> options, String mediaUrl) {
+                                    List<AnswerOptionView> options, String mediaUrl,
+                                    List<String> gapValues, List<Integer> wordIndices) {
 }

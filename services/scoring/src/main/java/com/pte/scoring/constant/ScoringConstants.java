@@ -47,6 +47,10 @@ public final class ScoringConstants {
     public static final String TASK_TYPE_FILL_BLANKS_READING = "FILL_BLANKS_READING";
     public static final String TASK_TYPE_FILL_BLANKS_READING_WRITING = "FILL_BLANKS_READING_WRITING";
 
+    // Listening payload-shape discriminators (listening-contract Phase 3).
+    public static final String TASK_TYPE_FILL_BLANKS_LISTENING = "FILL_BLANKS_LISTENING";
+    public static final String TASK_TYPE_HIGHLIGHT_INCORRECT_WORDS = "HIGHLIGHT_INCORRECT_WORDS";
+
     // AI-scorable task types (Phase 9): routed to the RabbitMQ vendor work queue.
     public static final String TASK_TYPE_READ_ALOUD = "READ_ALOUD";
     public static final String TASK_TYPE_WRITE_ESSAY = "WRITE_ESSAY";

@@ -30,12 +30,14 @@ import java.util.stream.Collectors;
  * the 8 Speaking types (answer is always a recorded-audio media publicId,
  * regardless of that type's own question-authoring {@code requiresAudioPrompt}
  * flag, which is unrelated), and whether {@code optionsJson} is populated
- * (answer is one or more option picks). Everything else is treated as free
- * text. This naturally degrades gracefully for the 7 Listening task types
- * whose payload encoding has never been implemented/verified end-to-end in
- * this backend (see plan.md Risks) — such a payload just renders as raw text
- * under {@link AnswerPayloadKind#UNRECOGNIZED} rather than crashing or
- * guessing at an unverified format.
+ * (answer is one or more option picks). The two structured Listening task
+ * types are decoded by their named sets; the five remaining types continue
+ * through the generic
+ * TEXT/SELECTION fallback. FILL_BLANKS_LISTENING and
+ * HIGHLIGHT_INCORRECT_WORDS use explicit task-type sets because their
+ * comma-separated payload shapes are ambiguous without task context;
+ * malformed or unparseable payloads use
+ * {@link AnswerPayloadKind#UNRECOGNIZED} rather than crashing.
  *
  * <p>Mirrors {@code ObjectiveScoringService}'s own option-parsing shape
  * (duplicated, not extracted — that class's {@code FrozenOption}/parsing
@@ -59,6 +61,12 @@ public class AnswerPayloadDecoder {
             ScoringConstants.TASK_TYPE_RESPOND_TO_A_SITUATION,
             ScoringConstants.TASK_TYPE_SUMMARIZE_GROUP_DISCUSSION);
 
+    private static final Set<String> FILL_BLANKS_LISTENING_TASK_TYPES = Set.of(
+            ScoringConstants.TASK_TYPE_FILL_BLANKS_LISTENING);
+
+    private static final Set<String> HIGHLIGHT_INCORRECT_WORDS_TASK_TYPES = Set.of(
+            ScoringConstants.TASK_TYPE_HIGHLIGHT_INCORRECT_WORDS);
+
     private final JsonMapper jsonMapper;
 
     public AnswerPayloadDecoder(JsonMapper jsonMapper) {
@@ -69,10 +77,20 @@ public class AnswerPayloadDecoder {
         if (answer.getTaskType() != null && AUDIO_ANSWER_TASK_TYPES.contains(answer.getTaskType())) {
             return decodeAudio(answer);
         }
+        if (answer.getTaskType() != null
+                && FILL_BLANKS_LISTENING_TASK_TYPES.contains(answer.getTaskType())
+                && answer.getOptionsJson() == null) {
+            return decodePositionalSelection(answer);
+        }
         if (answer.getOptionsJson() != null && !answer.getOptionsJson().isBlank()) {
             return decodeSelection(answer);
         }
-        return new DecodedAnswerPayload(AnswerPayloadKind.TEXT, answer.getPayload(), null, null, null);
+        if (answer.getTaskType() != null
+                && HIGHLIGHT_INCORRECT_WORDS_TASK_TYPES.contains(answer.getTaskType())
+                && answer.getOptionsJson() == null) {
+            return decodeWordIndices(answer);
+        }
+        return new DecodedAnswerPayload(AnswerPayloadKind.TEXT, answer.getPayload(), null, null, null, null, null);
     }
 
     private DecodedAnswerPayload decodeAudio(ScoringAnswer answer) {
@@ -82,7 +100,7 @@ public class AnswerPayloadDecoder {
         }
         try {
             UUID mediaPublicId = UUID.fromString(payload.trim());
-            return new DecodedAnswerPayload(AnswerPayloadKind.AUDIO, null, mediaPublicId, null, null);
+            return new DecodedAnswerPayload(AnswerPayloadKind.AUDIO, null, mediaPublicId, null, null, null, null);
         } catch (IllegalArgumentException ex) {
             return unrecognized(answer, "audio answer payload is not a UUID");
         }
@@ -100,13 +118,56 @@ public class AnswerPayloadDecoder {
                 .map(option -> new AnswerOptionView(option.orderIndex(), option.text(), option.correct(),
                         selectedOrderIndexes.contains(option.orderIndex())))
                 .toList();
-        return new DecodedAnswerPayload(AnswerPayloadKind.SELECTION, null, null, options, null);
+        return new DecodedAnswerPayload(AnswerPayloadKind.SELECTION, null, null, options, null, null, null);
+    }
+
+    private DecodedAnswerPayload decodePositionalSelection(ScoringAnswer answer) {
+        String payload = answer.getPayload();
+        if (payload == null) {
+            return unrecognized(answer, "positional selection payload is null");
+        }
+        List<String> gapValues = new ArrayList<>();
+        for (String part : payload.split(",", -1)) {
+            gapValues.add(part.isEmpty() ? null : part);
+        }
+        return new DecodedAnswerPayload(
+                AnswerPayloadKind.POSITIONAL_SELECTION, null, null, null, null, gapValues, null);
+    }
+
+    private DecodedAnswerPayload decodeWordIndices(ScoringAnswer answer) {
+        String payload = answer.getPayload();
+        if (payload == null) {
+            return unrecognized(answer, "word-index payload is null");
+        }
+        if (payload.isEmpty()) {
+            return new DecodedAnswerPayload(AnswerPayloadKind.WORD_INDICES, null, null, null, null,
+                    null, List.of());
+        }
+
+        List<Integer> wordIndices = new ArrayList<>();
+        for (String part : payload.split(",", -1)) {
+            String trimmed = part.trim();
+            if (trimmed.isEmpty()) {
+                return unrecognized(answer, "word-index payload contains an empty entry");
+            }
+            try {
+                int wordIndex = Integer.parseInt(trimmed);
+                if (wordIndex < 0) {
+                    return unrecognized(answer, "word-index payload contains a negative index");
+                }
+                wordIndices.add(wordIndex);
+            } catch (NumberFormatException ex) {
+                return unrecognized(answer, "word-index payload contains a non-integer entry");
+            }
+        }
+        return new DecodedAnswerPayload(AnswerPayloadKind.WORD_INDICES, null, null, null, null,
+                null, wordIndices);
     }
 
     private DecodedAnswerPayload unrecognized(ScoringAnswer answer, String reason) {
         log.warn("Could not decode answer payload for review (answerPublicId={}, taskType={}): {}",
                 answer.getAnswerPublicId(), answer.getTaskType(), reason);
-        return new DecodedAnswerPayload(AnswerPayloadKind.UNRECOGNIZED, answer.getPayload(), null, null, null);
+        return new DecodedAnswerPayload(AnswerPayloadKind.UNRECOGNIZED, answer.getPayload(), null, null, null, null, null);
     }
 
     private List<FrozenOption> parseOptions(String optionsJson) {

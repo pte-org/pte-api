@@ -1,5 +1,5 @@
 {
-  "_comment": "Per-task-type prep/response seconds. Config-driven (not hardcoded), matching authoring's task-skill-mapping.json pattern. Only the task types actually delivered so far are configured — TaskTimingConfig.timingFor() fails fast (TaskTimingNotConfiguredException) on any other type rather than silently defaulting; all 8 Speaking types are now covered as of plans/phat-describe-image-e2e (DESCRIBE_IMAGE/PERSONAL_INTRODUCTION were the last 2 gaps). MC_LISTENING_SINGLE added for the first Listening e2e verification — the other 7 Listening types remain unconfigured gaps. VALUES ARE APPROXIMATE PLACEHOLDERS pending official Pearson candidate-handbook sourcing (tracked risk in plan.md); verify before release. The 5 audio-prompt Speaking types below additionally carry preListenSeconds/preRecordSeconds (plans/phat-speaking-dynamic-prep-timing) — their own prepSeconds value stops being consulted once a real audioPromptRef is present (SnapshotPinService computes prepSeconds dynamically as preListenSeconds + real audio duration + preRecordSeconds instead), kept here only as an inert fallback rather than removed. LISTENING types don't use this dynamic branch (preListenSeconds/preRecordSeconds absent) — SnapshotPinService.LISTENING_SECTION handling only makes audioPromptRef mandatory and presigns the URL; prepSeconds stays this static value regardless of real audio duration.",
+  "_comment": "Per-task-type prep/response seconds. Config-driven (not hardcoded), matching authoring's task-skill-mapping.json pattern. TaskTimingConfig.timingFor() fails fast with TaskTimingNotConfiguredException when a task type is missing. All 23 current task types are listed. Existing values remain approximate placeholders pending official Pearson candidate-handbook sourcing. The 7 Listening types added in Phase 4 of plans/quang-listening-contract-and-timing on 2026-09-12 are TEMPORARY NON-PRODUCTION PLACEHOLDERS: they only prevent missing-config failures during snapshot pinning/demo and must not ship as production timing until timing semantics and values are verified. SUMMARIZE_SPOKEN_TEXT: temporary 600s response placeholder based on a secondary estimate, not an official production value. MC_LISTENING_MULTIPLE: temporary 20s response placeholder; any audio-duration range is context only. FILL_BLANKS_LISTENING: temporary 60s response placeholder; audio-duration range is context only. HIGHLIGHT_CORRECT_SUMMARY: temporary 20s response placeholder; audio-duration range is context only. SELECT_MISSING_WORD: temporary 20s response placeholder; audio-duration range is context only. HIGHLIGHT_INCORRECT_WORDS: temporary 30s response placeholder; audio-duration range is context only. WRITE_FROM_DICTATION: temporary 30s response placeholder; audio-duration range is context only. Do NOT infer a prep/response split from an audio range. The 5 audio-prompt Speaking types below additionally carry preListenSeconds/preRecordSeconds (plans/phat-speaking-dynamic-prep-timing); their own prepSeconds value stops being consulted once a real audioPromptRef is present because SnapshotPinService computes prepSeconds dynamically. Listening types do not use that dynamic branch.",
   "version": 1,
   "timings": {
     "MC_READING_SINGLE": { "prepSeconds": 0, "responseSeconds": 60 },
@@ -17,6 +17,13 @@
     "SUMMARIZE_GROUP_DISCUSSION": { "prepSeconds": 200, "responseSeconds": 120, "preListenSeconds": 5, "preRecordSeconds": 10 },
     "DESCRIBE_IMAGE": { "prepSeconds": 25, "responseSeconds": 40 },
     "PERSONAL_INTRODUCTION": { "prepSeconds": 25, "responseSeconds": 30 },
-    "MC_LISTENING_SINGLE": { "prepSeconds": 0, "responseSeconds": 20 }
+    "MC_LISTENING_SINGLE": { "prepSeconds": 0, "responseSeconds": 20 },
+    "SUMMARIZE_SPOKEN_TEXT": { "prepSeconds": 0, "responseSeconds": 600 },
+    "MC_LISTENING_MULTIPLE": { "prepSeconds": 0, "responseSeconds": 20 },
+    "FILL_BLANKS_LISTENING": { "prepSeconds": 0, "responseSeconds": 60 },
+    "HIGHLIGHT_CORRECT_SUMMARY": { "prepSeconds": 0, "responseSeconds": 20 },
+    "SELECT_MISSING_WORD": { "prepSeconds": 0, "responseSeconds": 20 },
+    "HIGHLIGHT_INCORRECT_WORDS": { "prepSeconds": 0, "responseSeconds": 30 },
+    "WRITE_FROM_DICTATION": { "prepSeconds": 0, "responseSeconds": 30 }
   }
 }
