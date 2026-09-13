@@ -8,6 +8,7 @@ import com.pte.scoring.messaging.job.AiScoringJob;
 import com.pte.scoring.messaging.outbox.OutboxWriter;
 import com.pte.scoring.repository.ScoringAnswerRepository;
 import com.pte.scoring.service.AttemptCompletionService;
+import com.pte.scoring.service.AiScoringTaskCatalog;
 import com.pte.scoring.vendor.AiScoreResult;
 import com.pte.scoring.vendor.EssayScoringClient;
 import com.pte.scoring.vendor.SpeechScoringClient;
@@ -19,8 +20,8 @@ import java.util.Optional;
 
 /**
  * Consumes {@link AiScoringJob} from the RabbitMQ work queue. Dispatches by
- * task type to the vendor client (stub this phase — see phase-09 Design
- * Constraints). Every AI-scored task type — {@code WRITE_ESSAY} included as
+ * the catalog's task modality to the vendor client (stub this phase — see
+ * phase-09 Design Constraints). Every AI-scored task type — {@code WRITE_ESSAY} included as
  * of quang-host-answer-review Phase 5 — goes straight to {@code SCORED} +
  * emits {@code AnswerScored}; there is no host-approval hold anymore. A host's
  * own independent score, if any, is recorded separately via {@code
@@ -85,9 +86,12 @@ public class AiScoringWorker {
     }
 
     private AiScoreResult callVendor(AiScoringJob job) {
-        if (ScoringConstants.TASK_TYPE_READ_ALOUD.equals(job.taskType())) {
+        if (AiScoringTaskCatalog.isSpeech(job.taskType())) {
             return speechScoringClient.score(job.payload(), job.referenceText());
         }
-        return essayScoringClient.score(job.payload(), job.referenceText());
+        if (AiScoringTaskCatalog.isText(job.taskType())) {
+            return essayScoringClient.score(job.payload(), job.referenceText());
+        }
+        throw new IllegalArgumentException("Unsupported AI task type: " + job.taskType());
     }
 }

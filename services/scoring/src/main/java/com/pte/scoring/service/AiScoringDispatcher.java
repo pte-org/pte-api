@@ -8,8 +8,6 @@ import com.pte.scoring.repository.ScoringAnswerRepository;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.Set;
-
 /**
  * Routes AI-scorable {@code PENDING} answers to the RabbitMQ work queue
  * instead of leaving them silently pending like a genuinely-unsupported type
@@ -29,9 +27,6 @@ import java.util.Set;
 @Service
 public class AiScoringDispatcher {
 
-    private static final Set<String> AI_SCORABLE_TASK_TYPES = Set.of(
-            ScoringConstants.TASK_TYPE_READ_ALOUD, ScoringConstants.TASK_TYPE_WRITE_ESSAY);
-
     private final ScoringAnswerRepository scoringAnswerRepository;
     private final RabbitTemplate rabbitTemplate;
 
@@ -41,10 +36,13 @@ public class AiScoringDispatcher {
     }
 
     public boolean supports(String taskType) {
-        return AI_SCORABLE_TASK_TYPES.contains(taskType);
+        return AiScoringTaskCatalog.supports(taskType);
     }
 
     public void dispatch(ScoringAnswer answer) {
+        if (!supports(answer.getTaskType())) {
+            throw new IllegalArgumentException("Unsupported AI task type: " + answer.getTaskType());
+        }
         answer.setStatus(ScoringAnswerStatus.AI_SCORING);
         scoringAnswerRepository.save(answer);
 
