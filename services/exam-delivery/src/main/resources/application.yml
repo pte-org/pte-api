@@ -47,6 +47,11 @@ scheduling:
 media:
   base-url: ${MEDIA_URL:http://localhost:8090/api/media}
 
+# Opt-in only: MockExamController returns two deterministic Repeat Sentence
+# items and serves local WAV files for app integration before real media exists.
+mock-exam:
+  audio-public-base-url: ${MOCK_EXAM_AUDIO_PUBLIC_BASE_URL:http://localhost:8085/api/exam-delivery/mock-attempts/media}
+
 # Shared secret for calling authoring/scheduling's /internal/** surface, and
 # for validating incoming calls to exam-delivery's own /internal/** endpoints
 # (rabbitmq-outbox-migration Phase 9's attempt/answer export) — ADR-003 mTLS
