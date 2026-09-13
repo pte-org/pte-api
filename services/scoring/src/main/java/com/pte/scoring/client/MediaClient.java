@@ -3,6 +3,7 @@ package com.pte.scoring.client;
 import com.pte.common.web.ApiResponse;
 import com.pte.scoring.client.dto.MediaPresignedDownloadResponse;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -23,7 +24,7 @@ public class MediaClient {
 
     private final RestClient mediaInternalRestClient;
 
-    public MediaClient(RestClient mediaInternalRestClient) {
+    public MediaClient(@Qualifier("mediaInternalRestClient") RestClient mediaInternalRestClient) {
         this.mediaInternalRestClient = mediaInternalRestClient;
     }
 

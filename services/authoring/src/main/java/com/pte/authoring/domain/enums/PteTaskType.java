@@ -6,8 +6,8 @@ package com.pte.authoring.domain.enums;
  * input-requirements so validation is category-driven, not 22 hand-written rules.
  *
  * <p>Constructor flags: section, scored, then which authoring fields are REQUIRED:
- * audio prompt, image prompt, prompt text, answer options, correct answer(s),
- * response word-count bounds.
+ * audio prompt, image prompt, prompt text, answer options, correct answer(s) or
+ * option positions, response word-count bounds.
  */
 public enum PteTaskType {
 
@@ -28,7 +28,8 @@ public enum PteTaskType {
     // ---- Reading ----
     MC_READING_SINGLE(PteSection.READING, true, false, false, true, true, true, false),
     MC_READING_MULTIPLE(PteSection.READING, true, false, false, true, true, true, false),
-    RE_ORDER_PARAGRAPHS(PteSection.READING, true, false, false, false, true, true, false),
+    // Correctness is encoded by each paragraph's orderIndex, not a correct flag.
+    RE_ORDER_PARAGRAPHS(PteSection.READING, true, false, false, false, true, false, false),
     FILL_BLANKS_READING(PteSection.READING, true, false, false, true, true, true, false),
     FILL_BLANKS_READING_WRITING(PteSection.READING, true, false, false, true, true, true, false),
 

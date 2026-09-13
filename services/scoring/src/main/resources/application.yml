@@ -49,6 +49,22 @@ internal:
   # data, not just internal-service access). Pre-production checklist item.
   bootstrap-key: ${INTERNAL_BOOTSTRAP_KEY:dev-internal-bootstrap-key-change-me}
 
+# Optional AI provider. Keep stub as the default for local development. Set
+# SCORING_AI_PROVIDER=openai-compatible only with deployment-owned credentials
+# and explicitly selected models; the adapter then calls /chat/completions.
+scoring:
+  ai:
+    provider: ${SCORING_AI_PROVIDER:stub}
+    base-url: ${SCORING_AI_BASE_URL:https://api.openai.com/v1}
+    api-key: ${SCORING_AI_API_KEY:}
+    essay-model: ${SCORING_AI_ESSAY_MODEL:}
+    speech-model: ${SCORING_AI_SPEECH_MODEL:}
+    audio-format: ${SCORING_AI_AUDIO_FORMAT:wav}
+    max-tokens: ${SCORING_AI_MAX_TOKENS:800}
+    media-url-ttl-seconds: ${SCORING_AI_MEDIA_URL_TTL_SECONDS:120}
+    connect-timeout-ms: ${SCORING_AI_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${SCORING_AI_READ_TIMEOUT_MS:30000}
+
 # Guarded sync call to media (host answer review, quang-host-answer-review Phase 1) -
 # presign-GET only, mirrors exam-delivery's InternalClientConfig pattern.
 media:

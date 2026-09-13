@@ -87,7 +87,7 @@ public class AiScoringWorker {
 
     private AiScoreResult callVendor(AiScoringJob job) {
         if (AiScoringTaskCatalog.isSpeech(job.taskType())) {
-            return speechScoringClient.score(job.payload(), job.referenceText());
+            return speechScoringClient.score(job.payload(), job.referenceText(), job.tenantId());
         }
         if (AiScoringTaskCatalog.isText(job.taskType())) {
             return essayScoringClient.score(job.payload(), job.referenceText());

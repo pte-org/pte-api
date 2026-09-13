@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
@@ -77,7 +78,7 @@ class AiScoringWorkerTest {
             worker.onAiScoringJob(job(answer));
 
             assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
-            verify(speechScoringClient).score(answer.getPayload(), answer.getCorrectAnswerText());
+            verify(speechScoringClient).score(answer.getPayload(), answer.getCorrectAnswerText(), answer.getTenantId());
             verifyNoInteractions(essayScoringClient);
             clearInvocations(speechScoringClient, essayScoringClient);
         }
@@ -123,7 +124,7 @@ class AiScoringWorkerTest {
 
         worker.onAiScoringJob(job(answer));
 
-        verify(speechScoringClient, never()).score(anyString(), anyString());
+        verify(speechScoringClient, never()).score(anyString(), anyString(), any(UUID.class));
         verifyNoInteractions(essayScoringClient, outboxWriter, attemptCompletionService);
     }
 
@@ -147,7 +148,7 @@ class AiScoringWorkerTest {
     }
 
     private void stubSpeechClient() {
-        when(speechScoringClient.score(anyString(), anyString()))
+        when(speechScoringClient.score(anyString(), anyString(), any(UUID.class)))
                 .thenReturn(new AiScoreResult(65, Map.of(), "speech stub"));
     }
 
