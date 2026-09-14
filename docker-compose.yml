@@ -37,13 +37,13 @@ x-postgres-defaults: &postgres-defaults
   restart: unless-stopped
   environment: &postgres-env
     POSTGRES_DB: postgres
-    POSTGRES_USER: ${POSTGRES_USER:-postgres}
-    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in the env file}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}
     # postgres-utc-timestamptz-migration Phase 1: explicit, not relying on the base
     # image's implicit default — survives an image change that might alter it.
     TZ: UTC
   healthcheck:
-    test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+    test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:?set POSTGRES_USER in the env file}"]
     interval: 5s
     timeout: 5s
     retries: 10
@@ -57,6 +57,22 @@ services:
   pg-core:
     <<: *postgres-defaults
     container_name: pte-pg-core
+    environment:
+      <<: *postgres-env
+      IAM_DB_USER: ${IAM_DB_USER:?set IAM_DB_USER in the env file}
+      IAM_DB_PASSWORD: ${IAM_DB_PASSWORD:?set IAM_DB_PASSWORD in the env file}
+      ADMIN_DB_USER: ${ADMIN_DB_USER:?set ADMIN_DB_USER in the env file}
+      ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD:?set ADMIN_DB_PASSWORD in the env file}
+      AUTHORING_DB_USER: ${AUTHORING_DB_USER:?set AUTHORING_DB_USER in the env file}
+      AUTHORING_DB_PASSWORD: ${AUTHORING_DB_PASSWORD:?set AUTHORING_DB_PASSWORD in the env file}
+      SCHEDULING_DB_USER: ${SCHEDULING_DB_USER:?set SCHEDULING_DB_USER in the env file}
+      SCHEDULING_DB_PASSWORD: ${SCHEDULING_DB_PASSWORD:?set SCHEDULING_DB_PASSWORD in the env file}
+      REPORTING_DB_USER: ${REPORTING_DB_USER:?set REPORTING_DB_USER in the env file}
+      REPORTING_DB_PASSWORD: ${REPORTING_DB_PASSWORD:?set REPORTING_DB_PASSWORD in the env file}
+      NOTIFICATION_DB_USER: ${NOTIFICATION_DB_USER:?set NOTIFICATION_DB_USER in the env file}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?set NOTIFICATION_DB_PASSWORD in the env file}
+      MEDIA_DB_USER: ${MEDIA_DB_USER:?set MEDIA_DB_USER in the env file}
+      MEDIA_DB_PASSWORD: ${MEDIA_DB_PASSWORD:?set MEDIA_DB_PASSWORD in the env file}
     ports:
       - "${PG_CORE_PORT:-5432}:5432"
     volumes:
@@ -69,6 +85,10 @@ services:
   pg-exam:
     <<: *postgres-defaults
     container_name: pte-pg-exam
+    environment:
+      <<: *postgres-env
+      EXAM_DELIVERY_DB_USER: ${EXAM_DELIVERY_DB_USER:?set EXAM_DELIVERY_DB_USER in the env file}
+      EXAM_DELIVERY_DB_PASSWORD: ${EXAM_DELIVERY_DB_PASSWORD:?set EXAM_DELIVERY_DB_PASSWORD in the env file}
     ports:
       - "${PG_EXAM_PORT:-5433}:5432"
     volumes:
@@ -80,6 +100,10 @@ services:
   pg-live:
     <<: *postgres-defaults
     container_name: pte-pg-live
+    environment:
+      <<: *postgres-env
+      PROCTOR_DB_USER: ${PROCTOR_DB_USER:?set PROCTOR_DB_USER in the env file}
+      PROCTOR_DB_PASSWORD: ${PROCTOR_DB_PASSWORD:?set PROCTOR_DB_PASSWORD in the env file}
     ports:
       - "${PG_LIVE_PORT:-5434}:5432"
     volumes:
@@ -91,6 +115,10 @@ services:
   pg-async:
     <<: *postgres-defaults
     container_name: pte-pg-async
+    environment:
+      <<: *postgres-env
+      SCORING_DB_USER: ${SCORING_DB_USER:?set SCORING_DB_USER in the env file}
+      SCORING_DB_PASSWORD: ${SCORING_DB_PASSWORD:?set SCORING_DB_PASSWORD in the env file}
     ports:
       - "${PG_ASYNC_PORT:-5435}:5432"
     volumes:
@@ -116,8 +144,8 @@ services:
     container_name: pte-minio
     restart: unless-stopped
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pte-minio-admin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-pte-minio-dev-pw}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in the env file}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in the env file}
     ports:
       - "${MINIO_API_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
@@ -152,8 +180,8 @@ services:
     container_name: pte-rabbitmq
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-pte}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-pte}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
     ports:
       - "${RABBITMQ_PORT:-5672}:5672"
       - "${RABBITMQ_MGMT_PORT:-15672}:15672"

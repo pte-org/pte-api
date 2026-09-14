@@ -29,8 +29,9 @@ import java.util.UUID;
  * Executes the host's {@code ScoringRequested} command (ADR-002 host-gated
  * model — scoring NEVER auto-triggers on submit). For every {@code PENDING}
  * answer in the session: {@link ObjectiveScoringService}-supported types score
- * synchronously; {@link AiScoringDispatcher}-supported types (phase-09: Read
- * Aloud, Write Essay) get queued to RabbitMQ instead; any other type stays
+ * synchronously; {@link AiScoringDispatcher}-supported types (all ten
+ * AI-shaped Speaking/Writing/Listening tasks) get queued to RabbitMQ instead;
+ * any other type stays
  * {@code PENDING} — honest completion, not a fake "skipped" status.
  * Idempotent (ADR-002): dedups by the producer's outbox row id (delivered as
  * the AMQP {@code messageId}, via the polling outbox relay + RabbitMQ,

@@ -47,15 +47,24 @@ public final class ScoringConstants {
     public static final String TASK_TYPE_FILL_BLANKS_READING = "FILL_BLANKS_READING";
     public static final String TASK_TYPE_FILL_BLANKS_READING_WRITING = "FILL_BLANKS_READING_WRITING";
 
+    // Listening payload-shape discriminators (listening-contract Phase 3).
+    public static final String TASK_TYPE_MC_LISTENING_SINGLE = "MC_LISTENING_SINGLE";
+    public static final String TASK_TYPE_MC_LISTENING_MULTIPLE = "MC_LISTENING_MULTIPLE";
+    public static final String TASK_TYPE_HIGHLIGHT_CORRECT_SUMMARY = "HIGHLIGHT_CORRECT_SUMMARY";
+    public static final String TASK_TYPE_SELECT_MISSING_WORD = "SELECT_MISSING_WORD";
+    public static final String TASK_TYPE_FILL_BLANKS_LISTENING = "FILL_BLANKS_LISTENING";
+    public static final String TASK_TYPE_HIGHLIGHT_INCORRECT_WORDS = "HIGHLIGHT_INCORRECT_WORDS";
+    public static final String TASK_TYPE_WRITE_FROM_DICTATION = "WRITE_FROM_DICTATION";
+
     // AI-scorable task types (Phase 9): routed to the RabbitMQ vendor work queue.
     public static final String TASK_TYPE_READ_ALOUD = "READ_ALOUD";
+    public static final String TASK_TYPE_SUMMARIZE_WRITTEN_TEXT = "SUMMARIZE_WRITTEN_TEXT";
+    public static final String TASK_TYPE_SUMMARIZE_SPOKEN_TEXT = "SUMMARIZE_SPOKEN_TEXT";
     public static final String TASK_TYPE_WRITE_ESSAY = "WRITE_ESSAY";
 
-    // Remaining 7 Speaking task types (quang-host-answer-review Phase 2) — not yet
-    // routed through AI scoring, but their answer payload is a recorded-audio
-    // media publicId same as READ_ALOUD, needed by AnswerPayloadDecoder to tell an
-    // audio answer apart from a text/selection one. Cross-checked against
-    // authoring's PteTaskType.java (all 8 Speaking types).
+    // Speaking task types. Personal Introduction is unscored and intentionally
+    // excluded from the AI route; the other seven are catalogued by
+    // AiScoringTaskCatalog. Cross-checked against authoring's PteTaskType.java.
     public static final String TASK_TYPE_PERSONAL_INTRODUCTION = "PERSONAL_INTRODUCTION";
     public static final String TASK_TYPE_REPEAT_SENTENCE = "REPEAT_SENTENCE";
     public static final String TASK_TYPE_DESCRIBE_IMAGE = "DESCRIBE_IMAGE";

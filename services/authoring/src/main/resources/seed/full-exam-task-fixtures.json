@@ -1,0 +1,195 @@
+[
+  {
+    "taskType": "PERSONAL_INTRODUCTION",
+    "title": "Dev Seed - Personal Introduction",
+    "promptText": "Introduce yourself by talking about your studies, work, or interests.",
+    "options": [
+      { "text": "Studies and current goals", "correct": false, "orderIndex": 0 },
+      { "text": "Work and future plans", "correct": false, "orderIndex": 1 }
+    ]
+  },
+  {
+    "taskType": "READ_ALOUD",
+    "title": "Dev Seed - Read Aloud",
+    "promptText": "Many cities are investing in public transport to reduce congestion and improve air quality.",
+    "referenceAnswerText": "Many cities are investing in public transport to reduce congestion and improve air quality."
+  },
+  {
+    "taskType": "REPEAT_SENTENCE",
+    "title": "Dev Seed - Repeat Sentence",
+    "audioPromptRef": "00000000-0000-0000-0000-000000000101",
+    "referenceAnswerText": "The university library closes at nine o'clock this evening."
+  },
+  {
+    "taskType": "DESCRIBE_IMAGE",
+    "title": "Dev Seed - Describe Image",
+    "imagePromptRef": "00000000-0000-0000-0000-000000000201",
+    "referenceAnswerText": "The chart compares renewable energy use across four regions and shows an overall upward trend."
+  },
+  {
+    "taskType": "RE_TELL_LECTURE",
+    "title": "Dev Seed - Retell Lecture",
+    "audioPromptRef": "00000000-0000-0000-0000-000000000102",
+    "referenceAnswerText": "The lecture explains how urban trees lower temperatures, improve air quality, and support biodiversity."
+  },
+  {
+    "taskType": "ANSWER_SHORT_QUESTION",
+    "title": "Dev Seed - Answer Short Question",
+    "audioPromptRef": "00000000-0000-0000-0000-000000000103",
+    "correctAnswerText": "photosynthesis"
+  },
+  {
+    "taskType": "SUMMARIZE_GROUP_DISCUSSION",
+    "title": "Dev Seed - Summarize Group Discussion",
+    "audioPromptRef": "00000000-0000-0000-0000-000000000104",
+    "referenceAnswerText": "The group discusses whether universities should offer more hybrid classes and agrees that flexible access needs strong student support."
+  },
+  {
+    "taskType": "RESPOND_TO_A_SITUATION",
+    "title": "Dev Seed - Respond to a Situation",
+    "audioPromptRef": "00000000-0000-0000-0000-000000000105",
+    "promptText": "Your project partner cannot attend tomorrow's meeting. Suggest another way to review the project together."
+  },
+  {
+    "taskType": "SUMMARIZE_WRITTEN_TEXT",
+    "title": "Dev Seed - Summarize Written Text",
+    "promptText": "Although remote work can reduce commuting, successful teams still need clear communication, shared documentation, and regular opportunities for informal collaboration.",
+    "referenceAnswerText": "Remote work can be successful when teams combine its commuting benefits with clear communication, documentation, and regular collaboration.",
+    "minWordCount": 5,
+    "maxWordCount": 75
+  },
+  {
+    "taskType": "WRITE_ESSAY",
+    "title": "Dev Seed - Write Essay",
+    "promptText": "Some people believe universities should focus on practical job skills, while others value broad academic education. Discuss both views and give your opinion.",
+    "referenceAnswerText": "A balanced university education should combine practical preparation with broad academic skills.",
+    "minWordCount": 200,
+    "maxWordCount": 300
+  },
+  {
+    "taskType": "MC_READING_SINGLE",
+    "title": "Dev Seed - Reading Multiple Choice Single",
+    "promptText": "A community garden gives residents access to fresh produce and creates a shared place for local activities. What is one benefit of the garden?",
+    "options": [
+      { "text": "It increases traffic in the neighborhood", "correct": false, "orderIndex": 0 },
+      { "text": "It provides fresh produce to residents", "correct": true, "orderIndex": 1 },
+      { "text": "It replaces every local business", "correct": false, "orderIndex": 2 },
+      { "text": "It prevents residents from meeting", "correct": false, "orderIndex": 3 }
+    ]
+  },
+  {
+    "taskType": "MC_READING_MULTIPLE",
+    "title": "Dev Seed - Reading Multiple Choice Multiple",
+    "promptText": "Researchers found that regular walking can support cardiovascular health and improve mood. Which benefits are mentioned?",
+    "options": [
+      { "text": "Better cardiovascular health", "correct": true, "orderIndex": 0 },
+      { "text": "Improved mood", "correct": true, "orderIndex": 1 },
+      { "text": "Guaranteed perfect sleep", "correct": false, "orderIndex": 2 },
+      { "text": "Removal of every health risk", "correct": false, "orderIndex": 3 }
+    ]
+  },
+  {
+    "taskType": "RE_ORDER_PARAGRAPHS",
+    "title": "Dev Seed - Re-order Paragraphs",
+    "options": [
+      { "text": "First, the researchers collected samples from three coastal sites.", "correct": false, "orderIndex": 0 },
+      { "text": "The samples were then analyzed over several months in the laboratory.", "correct": false, "orderIndex": 1 },
+      { "text": "Unexpected patterns emerged from the analysis.", "correct": false, "orderIndex": 2 },
+      { "text": "Finally, the team published its findings.", "correct": false, "orderIndex": 3 }
+    ]
+  },
+  {
+    "taskType": "FILL_BLANKS_READING",
+    "title": "Dev Seed - Reading Fill in the Blanks Drag and Drop",
+    "promptText": "A reliable public transport system can reduce {{0}} and make city travel more {{1}}.",
+    "options": [
+      { "text": "congestion", "correct": true, "orderIndex": 0, "correctGapIndex": 0 },
+      { "text": "pollution", "correct": false, "orderIndex": 1 },
+      { "text": "efficient", "correct": true, "orderIndex": 2, "correctGapIndex": 1 },
+      { "text": "difficult", "correct": false, "orderIndex": 3 }
+    ]
+  },
+  {
+    "taskType": "FILL_BLANKS_READING_WRITING",
+    "title": "Dev Seed - Reading and Writing Fill in the Blanks",
+    "promptText": "Good research depends on {{0}} evidence and careful {{1}} of results.",
+    "options": [
+      { "text": "reliable", "correct": true, "orderIndex": 0, "blankIndex": 0 },
+      { "text": "temporary", "correct": false, "orderIndex": 1, "blankIndex": 0 },
+      { "text": "analysis", "correct": true, "orderIndex": 0, "blankIndex": 1 },
+      { "text": "celebration", "correct": false, "orderIndex": 1, "blankIndex": 1 }
+    ]
+  },
+  {
+    "taskType": "SUMMARIZE_SPOKEN_TEXT",
+    "title": "Dev Seed - Summarize Spoken Text",
+    "audioPromptRef": "00000000-0000-0000-0000-000000000106",
+    "referenceAnswerText": "The talk explains that rooftop gardens can cool buildings, absorb rainwater, and provide habitats for insects.",
+    "minWordCount": 50,
+    "maxWordCount": 70
+  },
+  {
+    "taskType": "MC_LISTENING_SINGLE",
+    "title": "Dev Seed - Listening Multiple Choice Single",
+    "audioPromptRef": "00000000-0000-0000-0000-000000000107",
+    "options": [
+      { "text": "A shortage of library staff", "correct": false, "orderIndex": 0 },
+      { "text": "The need for improved energy storage", "correct": true, "orderIndex": 1 },
+      { "text": "A ban on public transport", "correct": false, "orderIndex": 2 },
+      { "text": "Lower demand for electricity", "correct": false, "orderIndex": 3 }
+    ]
+  },
+  {
+    "taskType": "MC_LISTENING_MULTIPLE",
+    "title": "Dev Seed - Listening Multiple Choice Multiple",
+    "audioPromptRef": "00000000-0000-0000-0000-000000000108",
+    "options": [
+      { "text": "It reduces fuel use", "correct": true, "orderIndex": 0 },
+      { "text": "It can improve air quality", "correct": true, "orderIndex": 1 },
+      { "text": "It always eliminates delays", "correct": false, "orderIndex": 2 },
+      { "text": "It requires no planning", "correct": false, "orderIndex": 3 }
+    ]
+  },
+  {
+    "taskType": "FILL_BLANKS_LISTENING",
+    "title": "Dev Seed - Listening Fill in the Blanks",
+    "audioPromptRef": "00000000-0000-0000-0000-000000000109",
+    "promptText": "The speaker says that solar power is becoming more {{0}} as battery {{1}} improves.",
+    "correctAnswerText": "[\"affordable\",\"technology\"]"
+  },
+  {
+    "taskType": "HIGHLIGHT_CORRECT_SUMMARY",
+    "title": "Dev Seed - Highlight Correct Summary",
+    "audioPromptRef": "00000000-0000-0000-0000-000000000110",
+    "options": [
+      { "text": "The talk compares two methods of language learning.", "correct": false, "orderIndex": 0 },
+      { "text": "The talk explains why regular exercise supports memory.", "correct": true, "orderIndex": 1 },
+      { "text": "The talk describes a plan to build a new stadium.", "correct": false, "orderIndex": 2 },
+      { "text": "The talk argues that sleep is unnecessary.", "correct": false, "orderIndex": 3 }
+    ]
+  },
+  {
+    "taskType": "SELECT_MISSING_WORD",
+    "title": "Dev Seed - Select Missing Word",
+    "audioPromptRef": "00000000-0000-0000-0000-000000000111",
+    "options": [
+      { "text": "carefully", "correct": false, "orderIndex": 0 },
+      { "text": "efficiently", "correct": true, "orderIndex": 1 },
+      { "text": "silently", "correct": false, "orderIndex": 2 },
+      { "text": "rarely", "correct": false, "orderIndex": 3 }
+    ]
+  },
+  {
+    "taskType": "HIGHLIGHT_INCORRECT_WORDS",
+    "title": "Dev Seed - Highlight Incorrect Words",
+    "audioPromptRef": "00000000-0000-0000-0000-000000000112",
+    "promptText": "Public libraries provide free access to books, computers, and community learning programs.",
+    "correctAnswerText": "1,5"
+  },
+  {
+    "taskType": "WRITE_FROM_DICTATION",
+    "title": "Dev Seed - Write from Dictation",
+    "audioPromptRef": "00000000-0000-0000-0000-000000000113",
+    "correctAnswerText": "The final report will be available online next Monday."
+  }
+]

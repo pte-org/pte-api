@@ -8,8 +8,8 @@ spring:
     name: scheduling
   datasource:
     url: ${SCHEDULING_DB_URL:jdbc:postgresql://localhost:5432/scheduling}
-    username: ${SCHEDULING_DB_USER:scheduling_svc}
-    password: ${SCHEDULING_DB_PASSWORD:scheduling_dev_pw}
+    username: ${SCHEDULING_DB_USER}
+    password: ${SCHEDULING_DB_PASSWORD}
     hikari:
       maximum-pool-size: ${SCHEDULING_DB_POOL_SIZE:5}
   jpa:
@@ -22,8 +22,8 @@ spring:
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USER:pte}
-    password: ${RABBITMQ_PASSWORD:pte}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASSWORD}
     publisher-confirm-type: correlated
     publisher-returns: true
     template:
@@ -39,9 +39,9 @@ authoring:
 
 # Shared secret for the /internal/** service-to-service surface (ADR-003 mTLS
 # placeholder). MUST match the same env var on every service that calls or
-# exposes /internal/**. Dev default only.
+# exposes /internal/**. Supply it through the environment or a secret manager.
 internal:
-  service-key: ${INTERNAL_SERVICE_KEY:dev-internal-service-key-change-me}
+  service-key: ${INTERNAL_SERVICE_KEY}
 
 # Guarded sync pull to authoring (phase-04 design constraint) — fail fast, don't
 # hang session creation if authoring is slow/down.

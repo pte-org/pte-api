@@ -8,8 +8,8 @@ spring:
     name: admin
   datasource:
     url: ${ADMIN_DB_URL:jdbc:postgresql://localhost:5432/admin}
-    username: ${ADMIN_DB_USER:admin_svc}
-    password: ${ADMIN_DB_PASSWORD:admin_dev_pw}
+    username: ${ADMIN_DB_USER}
+    password: ${ADMIN_DB_PASSWORD}
     hikari:
       maximum-pool-size: ${ADMIN_DB_POOL_SIZE:5}
   jpa:
@@ -22,8 +22,8 @@ spring:
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USER:pte}
-    password: ${RABBITMQ_PASSWORD:pte}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASSWORD}
     publisher-confirm-type: correlated
     publisher-returns: true
     template:

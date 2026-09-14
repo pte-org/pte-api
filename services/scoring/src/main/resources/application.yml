@@ -10,8 +10,8 @@ spring:
     # Port 5435 = pg-async (CELL ASYNC), not the 5432 shared by CELL CORE's seven
     # services — see docker-compose.yml for the cell/port map.
     url: ${SCORING_DB_URL:jdbc:postgresql://localhost:5435/scoring}
-    username: ${SCORING_DB_USER:scoring_svc}
-    password: ${SCORING_DB_PASSWORD:scoring_dev_pw}
+    username: ${SCORING_DB_USER}
+    password: ${SCORING_DB_PASSWORD}
     hikari:
       maximum-pool-size: ${SCORING_DB_POOL_SIZE:5}
   jpa:
@@ -24,8 +24,8 @@ spring:
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USER:pte}
-    password: ${RABBITMQ_PASSWORD:pte}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASSWORD}
     publisher-confirm-type: correlated
     publisher-returns: true
     template:
@@ -40,14 +40,28 @@ spring:
 # (rabbitmq-outbox-migration Phase 9's answer-scored export) — ADR-003 mTLS
 # placeholder. Must match the value configured on every service in the mesh.
 internal:
-  service-key: ${INTERNAL_SERVICE_KEY:dev-internal-service-key-change-me}
+  service-key: ${INTERNAL_SERVICE_KEY}
   # Second credential (Phase 9): required, IN ADDITION TO service-key, to reach
   # the all-tenant bootstrap export mode. Never used for normal per-tenant calls.
-  # MORE sensitive than service-key above (unlocks cross-tenant export) — the
-  # dev-default fallback here must NEVER be left unset in any real deployment
-  # (code-review finding: a forgotten env var here silently exposes cross-tenant
-  # data, not just internal-service access). Pre-production checklist item.
-  bootstrap-key: ${INTERNAL_BOOTSTRAP_KEY:dev-internal-bootstrap-key-change-me}
+  # MORE sensitive than service-key above (unlocks cross-tenant export). Supply
+  # it through the environment or a secret manager; never commit its value.
+  bootstrap-key: ${INTERNAL_BOOTSTRAP_KEY}
+
+# Optional AI provider. Keep stub as the default for local development. Set
+# SCORING_AI_PROVIDER=openai-compatible only with deployment-owned credentials
+# and explicitly selected models; the adapter then calls /chat/completions.
+scoring:
+  ai:
+    provider: ${SCORING_AI_PROVIDER:stub}
+    base-url: ${SCORING_AI_BASE_URL:https://api.openai.com/v1}
+    api-key: ${SCORING_AI_API_KEY:}
+    essay-model: ${SCORING_AI_ESSAY_MODEL:}
+    speech-model: ${SCORING_AI_SPEECH_MODEL:}
+    audio-format: ${SCORING_AI_AUDIO_FORMAT:wav}
+    max-tokens: ${SCORING_AI_MAX_TOKENS:800}
+    media-url-ttl-seconds: ${SCORING_AI_MEDIA_URL_TTL_SECONDS:120}
+    connect-timeout-ms: ${SCORING_AI_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${SCORING_AI_READ_TIMEOUT_MS:30000}
 
 # Guarded sync call to media (host answer review, quang-host-answer-review Phase 1) -
 # presign-GET only, mirrors exam-delivery's InternalClientConfig pattern.

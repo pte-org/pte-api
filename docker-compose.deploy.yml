@@ -30,15 +30,14 @@
 x-jvm-env: &jvm-env
   JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70"
 
-# The /internal/** surface authenticates with a shared key whose default lives in
-# every service's application.yml as `dev-internal-service-key-change-me` — a
-# literal committed to this repo. Those endpoints sit under the /api/{service}
-# context path, so the gateway routes them straight off the public internet;
-# shipping the default would let anyone who read the repo call them.
+# The /internal/** surface authenticates with a shared key. The key is supplied
+# only through the deployment environment/secret manager; it must never be
+# committed to this repo. Those endpoints sit under the /api/{service} context
+# path, so the gateway routes them straight off the public internet.
 #
-# The base compose files never pass these through, so `dev` is exactly what a
-# hosted stack would run with. `:?` (not `:-`) so compose refuses to start rather
-# than silently substituting an empty key.
+# The service compose file passes these values explicitly for local and hosted
+# stacks. `:?` (not `:-`) makes compose refuse to start rather than silently
+# substituting an empty key.
 x-internal-env: &internal-env
   JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70"
   INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in .env}

@@ -1,5 +1,21 @@
 # pte-api
 
+## Secrets and environment files
+
+`.env.example` is a public variable checklist and contains no usable credentials.
+Copy it to the ignored `.env.local` for development, or inject the variables from
+a secret manager in CI/CD. Compose and the Spring services intentionally fail fast
+when required database, RabbitMQ, MinIO, or service-to-service credentials are
+missing; they no longer contain public fallback passwords or keys.
+
+If a real `.env` value was ever committed, pasted into an issue/chat, or included
+in a build log, rotate that credential in the corresponding service before using
+the environment again. Editing the file alone does not revoke an exposed secret.
+Changing an environment variable also does not rewrite credentials in an already
+initialized named volume; rotate the existing Postgres/RabbitMQ/MinIO accounts
+explicitly, and do not use `docker compose down -v` unless deleting local data is
+intentional.
+
 ## Running services locally with Docker Compose
 
 Two deployment options for local development:
@@ -9,7 +25,7 @@ Two deployment options for local development:
 Run just the database, cache, and message broker (useful when running services from your IDE):
 
 ```bash
-docker compose -f docker-compose.yml up
+docker compose --env-file .env.local -f docker-compose.yml up
 ```
 
 **Option 2: Full stack with services**
@@ -17,7 +33,7 @@ docker compose -f docker-compose.yml up
 Run the API gateway and all 10 backend services alongside infrastructure:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.services.yml up --build
+docker compose --env-file .env.local -f docker-compose.yml -f docker-compose.services.yml up --build
 ```
 
 Services are built automatically from the shared `Dockerfile`. The API gateway is accessible on `http://localhost:8080`:

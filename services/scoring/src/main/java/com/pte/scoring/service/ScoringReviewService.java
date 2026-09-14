@@ -127,7 +127,7 @@ public class ScoringReviewService {
                 return decoded;
             }
             return new DecodedAnswerPayload(decoded.kind(), decoded.text(), decoded.mediaPublicId(),
-                    decoded.options(), presigned.url());
+                    decoded.options(), presigned.url(), decoded.gapValues(), decoded.wordIndices());
         } catch (Exception ex) {
             log.warn("Media presign failed for mediaPublicId={} (tenantId={}) — showing answer without a playback link",
                     decoded.mediaPublicId(), tenantId, ex);

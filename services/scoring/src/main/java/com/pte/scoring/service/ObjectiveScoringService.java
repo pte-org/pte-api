@@ -10,18 +10,21 @@ import tools.jackson.databind.json.JsonMapper;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * Rule-based scoring for objective task types: {@code MC_READING_SINGLE},
- * {@code MC_READING_MULTIPLE}, {@code RE_ORDER_PARAGRAPHS},
- * {@code FILL_BLANKS_READING}, {@code FILL_BLANKS_READING_WRITING} — the 5
- * PTE Reading types with no AI-vendor scoring need. {@link #supports} lets
- * consumers skip unsupported types WITHOUT treating it as an error (an
- * unsupported type just stays PENDING, phase-07 design constraint);
- * {@link #score} fails fast if called for a type it can't grade.
+ * Rule-based scoring for objective task types: the 5 PTE Reading types plus
+ * the four option-based Listening types ({@code MC_LISTENING_SINGLE}, {@code
+ * MC_LISTENING_MULTIPLE}, {@code HIGHLIGHT_CORRECT_SUMMARY}, and {@code
+ * SELECT_MISSING_WORD}), plus the reference-based {@code
+ * FILL_BLANKS_LISTENING}, {@code HIGHLIGHT_INCORRECT_WORDS}, and {@code
+ * WRITE_FROM_DICTATION} types. {@link #supports} lets consumers skip unsupported
+ * types WITHOUT treating it as an error (an unsupported type just stays
+ * PENDING, phase-07 design constraint); {@link #score} fails fast if called
+ * for a type it can't grade.
  */
 @Service
 public class ObjectiveScoringService {
@@ -31,7 +34,14 @@ public class ObjectiveScoringService {
             ScoringConstants.TASK_TYPE_MC_READING_MULTIPLE,
             ScoringConstants.TASK_TYPE_RE_ORDER_PARAGRAPHS,
             ScoringConstants.TASK_TYPE_FILL_BLANKS_READING,
-            ScoringConstants.TASK_TYPE_FILL_BLANKS_READING_WRITING);
+            ScoringConstants.TASK_TYPE_FILL_BLANKS_READING_WRITING,
+            ScoringConstants.TASK_TYPE_MC_LISTENING_SINGLE,
+            ScoringConstants.TASK_TYPE_MC_LISTENING_MULTIPLE,
+            ScoringConstants.TASK_TYPE_HIGHLIGHT_CORRECT_SUMMARY,
+            ScoringConstants.TASK_TYPE_SELECT_MISSING_WORD,
+            ScoringConstants.TASK_TYPE_FILL_BLANKS_LISTENING,
+            ScoringConstants.TASK_TYPE_HIGHLIGHT_INCORRECT_WORDS,
+            ScoringConstants.TASK_TYPE_WRITE_FROM_DICTATION);
 
     private final JsonMapper jsonMapper;
 
@@ -40,7 +50,7 @@ public class ObjectiveScoringService {
     }
 
     public boolean supports(String taskType) {
-        return SUPPORTED_TASK_TYPES.contains(taskType);
+        return taskType != null && SUPPORTED_TASK_TYPES.contains(taskType);
     }
 
     /**
@@ -54,9 +64,16 @@ public class ObjectiveScoringService {
         return switch (answer.getTaskType()) {
             case ScoringConstants.TASK_TYPE_MC_READING_SINGLE -> scoreSingleChoice(answer);
             case ScoringConstants.TASK_TYPE_MC_READING_MULTIPLE -> scoreMultipleChoice(answer);
+            case ScoringConstants.TASK_TYPE_MC_LISTENING_SINGLE,
+                    ScoringConstants.TASK_TYPE_HIGHLIGHT_CORRECT_SUMMARY,
+                    ScoringConstants.TASK_TYPE_SELECT_MISSING_WORD -> scoreSingleChoice(answer);
+            case ScoringConstants.TASK_TYPE_MC_LISTENING_MULTIPLE -> scoreMultipleChoice(answer);
             case ScoringConstants.TASK_TYPE_RE_ORDER_PARAGRAPHS -> scoreReorderParagraphs(answer);
             case ScoringConstants.TASK_TYPE_FILL_BLANKS_READING, ScoringConstants.TASK_TYPE_FILL_BLANKS_READING_WRITING ->
                     scoreFillBlanks(answer);
+            case ScoringConstants.TASK_TYPE_FILL_BLANKS_LISTENING -> scoreListeningFillBlanks(answer);
+            case ScoringConstants.TASK_TYPE_HIGHLIGHT_INCORRECT_WORDS -> scoreHighlightIncorrectWords(answer);
+            case ScoringConstants.TASK_TYPE_WRITE_FROM_DICTATION -> scoreWriteFromDictation(answer);
             default -> throw new UnsupportedTaskTypeException();
         };
     }
@@ -109,8 +126,12 @@ public class ObjectiveScoringService {
      */
     private int scoreReorderParagraphs(ScoringAnswer answer) {
         int totalParagraphs = parseOptions(answer.getOptionsJson()).size();
-        if (totalParagraphs <= 1) {
-            return 100;
+        if (totalParagraphs == 0) {
+            return 0;
+        }
+        if (totalParagraphs == 1) {
+            List<Integer> submitted = parsePayloadAsOrderIndexList(answer.getPayload());
+            return submitted.size() == 1 && submitted.get(0) != null ? 100 : 0;
         }
         List<Integer> submitted = parsePayloadAsOrderIndexList(answer.getPayload());
         int totalPairs = totalParagraphs - 1;
@@ -150,6 +171,158 @@ public class ObjectiveScoringService {
             }
         }
         return Math.round(100f * correctGaps / correctOrderIndexByGap.size());
+    }
+
+    /**
+     * Listening fill-blanks use a positional JSON string array in
+     * {@code correctAnswerText}; the submitted payload is the same positions
+     * joined with commas. A malformed reference is unscorable and therefore
+     * fails closed at zero instead of accidentally awarding a perfect score.
+     */
+    private int scoreListeningFillBlanks(ScoringAnswer answer) {
+        List<String> expected = parseListeningFillBlankReference(answer.getCorrectAnswerText());
+        if (expected.isEmpty()) {
+            return 0;
+        }
+        List<String> submitted = parseListeningFillBlankPayload(answer.getPayload());
+        int correctGaps = 0;
+        for (int i = 0; i < expected.size(); i++) {
+            if (i < submitted.size() && expected.get(i).equals(submitted.get(i))) {
+                correctGaps++;
+            }
+        }
+        return Math.round(100f * correctGaps / expected.size());
+    }
+
+    /**
+     * Highlight-incorrect-words uses zero-based transcript token positions.
+     * Pearson's rule is +1 for each expected selection and -1 for each
+     * unexpected selection, floored at zero for the item.
+     */
+    private int scoreHighlightIncorrectWords(ScoringAnswer answer) {
+        List<Integer> expected = parseHighlightIncorrectReference(answer.getCorrectAnswerText());
+        if (expected.isEmpty()) {
+            return 0;
+        }
+        Set<Integer> expectedIndexes = new HashSet<>(expected);
+        Set<Integer> submitted = parsePayloadAsOrderIndexSet(answer.getPayload());
+        int correctSelections = 0;
+        int incorrectSelections = 0;
+        for (Integer selected : submitted) {
+            if (expectedIndexes.contains(selected)) {
+                correctSelections++;
+            } else {
+                incorrectSelections++;
+            }
+        }
+        int points = Math.max(correctSelections - incorrectSelections, 0);
+        return Math.round(100f * points / expectedIndexes.size());
+    }
+
+    /**
+     * Write-from-dictation awards partial credit by the number of reference
+     * words preserved in order. Comparison is case-insensitive and removes
+     * punctuation at token boundaries, while the LCS prevents reordered or duplicated words from
+     * being counted as correct positions.
+     */
+    private int scoreWriteFromDictation(ScoringAnswer answer) {
+        List<String> expected = tokenizeDictation(answer.getCorrectAnswerText());
+        if (expected.isEmpty()) {
+            return 0;
+        }
+        List<String> submitted = tokenizeDictation(answer.getPayload());
+        int matchedWords = longestCommonSubsequenceLength(expected, submitted);
+        return Math.round(100f * matchedWords / expected.size());
+    }
+
+    private List<String> parseListeningFillBlankReference(String reference) {
+        if (reference == null || reference.isBlank()) {
+            return List.of();
+        }
+        try {
+            List<String> values = jsonMapper.readValue(reference, new TypeReference<List<String>>() {
+            });
+            if (values == null || values.isEmpty()) {
+                return List.of();
+            }
+            for (String value : values) {
+                if (value == null || value.isBlank() || value.contains(",")) {
+                    return List.of();
+                }
+            }
+            return List.copyOf(values);
+        } catch (Exception ex) {
+            return List.of();
+        }
+    }
+
+    private List<Integer> parseHighlightIncorrectReference(String reference) {
+        if (reference == null || reference.isBlank()) {
+            return List.of();
+        }
+        try {
+            List<Integer> values = jsonMapper.readValue(reference, new TypeReference<List<Integer>>() {
+            });
+            if (values == null || values.isEmpty()) {
+                return List.of();
+            }
+            Set<Integer> seen = new HashSet<>();
+            for (Integer value : values) {
+                if (value == null || value < 0 || !seen.add(value)) {
+                    return List.of();
+                }
+            }
+            return List.copyOf(values);
+        } catch (Exception ex) {
+            return List.of();
+        }
+    }
+
+    private List<String> parseListeningFillBlankPayload(String payload) {
+        if (payload == null || payload.isBlank()) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        for (String value : payload.split(",", -1)) {
+            result.add(normalizeGapValue(value));
+        }
+        return result;
+    }
+
+    private String normalizeGapValue(String value) {
+        return value == null
+                ? ""
+                : value.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+    }
+
+    private List<String> tokenizeDictation(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        for (String rawToken : value.toLowerCase(Locale.ROOT).split("\\s+")) {
+            String token = rawToken.replaceAll("^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$", "");
+            if (!token.isEmpty()) {
+                result.add(token);
+            }
+        }
+        return result;
+    }
+
+    private int longestCommonSubsequenceLength(List<String> expected, List<String> submitted) {
+        int[] previous = new int[submitted.size() + 1];
+        for (String expectedWord : expected) {
+            int[] current = new int[submitted.size() + 1];
+            for (int j = 1; j <= submitted.size(); j++) {
+                if (expectedWord.equals(submitted.get(j - 1))) {
+                    current[j] = previous[j - 1] + 1;
+                } else {
+                    current[j] = Math.max(previous[j], current[j - 1]);
+                }
+            }
+            previous = current;
+        }
+        return previous[submitted.size()];
     }
 
     /** gapIndex -> the correct option's orderIndex for that gap, ascending by gap. */

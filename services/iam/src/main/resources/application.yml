@@ -8,8 +8,8 @@ spring:
     name: iam
   datasource:
     url: ${IAM_DB_URL:jdbc:postgresql://localhost:5432/iam}
-    username: ${IAM_DB_USER:iam_svc}
-    password: ${IAM_DB_PASSWORD:iam_dev_pw}
+    username: ${IAM_DB_USER}
+    password: ${IAM_DB_PASSWORD}
     hikari:
       maximum-pool-size: ${IAM_DB_POOL_SIZE:5}
   jpa:
@@ -22,8 +22,8 @@ spring:
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USER:pte}
-    password: ${RABBITMQ_PASSWORD:pte}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASSWORD}
     publisher-confirm-type: correlated
     publisher-returns: true
     template:
