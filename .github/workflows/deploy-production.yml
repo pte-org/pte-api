@@ -1,0 +1,128 @@
+name: Deploy production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: pte-platform-production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Oracle VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: production
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+
+    steps:
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          : "${DEPLOY_HOST:?DEPLOY_HOST secret is required}"
+          : "${DEPLOY_USER:?DEPLOY_USER secret is required}"
+          : "${DEPLOY_SSH_PRIVATE_KEY:?DEPLOY_SSH_PRIVATE_KEY secret is required}"
+          : "${DEPLOY_KNOWN_HOSTS:?DEPLOY_KNOWN_HOSTS secret is required}"
+
+          install -m 700 -d "$HOME/.ssh"
+          install -m 600 /dev/null "$RUNNER_TEMP/pte-deploy-key"
+          install -m 644 /dev/null "$HOME/.ssh/known_hosts"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/pte-deploy-key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+
+          test -s "$RUNNER_TEMP/pte-deploy-key"
+          test -s "$HOME/.ssh/known_hosts"
+
+      - name: Deploy on VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ssh \
+            -i "$RUNNER_TEMP/pte-deploy-key" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+
+          API_DIR=/home/ubuntu/pte-org/pte-api
+          WEB_DIR=/home/ubuntu/pte-org/pte-web
+
+          test -d "$API_DIR/.git"
+          test -d "$WEB_DIR/.git"
+          test -f "$API_DIR/.env"
+          test "$(stat -c '%a' "$API_DIR/.env")" = "600"
+
+          # A push in either repository deploys the shared stack. This lock also
+          # coordinates the two repository workflows on the same VPS.
+          exec 9>/tmp/pte-platform-production-deploy.lock
+          flock -w 60 9
+
+          sync_repo() {
+            local repo_dir="$1"
+
+            test "$(git -C "$repo_dir" branch --show-current)" = "main"
+            if [ -n "$(git -C "$repo_dir" status --porcelain)" ]; then
+              echo "Deployment stopped: $repo_dir has uncommitted changes."
+              git -C "$repo_dir" status --short
+              exit 1
+            fi
+
+            git -C "$repo_dir" fetch --prune origin main
+            git -C "$repo_dir" merge --ff-only FETCH_HEAD
+          }
+
+          sync_repo "$API_DIR"
+          sync_repo "$WEB_DIR"
+
+          cd "$API_DIR"
+
+          compose() {
+            docker compose --env-file .env \
+              -f docker-compose.yml \
+              -f docker-compose.services.yml \
+              -f docker-compose.deploy.yml "$@"
+          }
+
+          compose config --quiet
+          export COMPOSE_PARALLEL_LIMIT=2
+          compose build
+          compose up -d --no-build --remove-orphans
+
+          deadline=$((SECONDS + 600))
+          while true; do
+            unhealthy="$(
+              compose ps -aq \
+                | xargs -r docker inspect --format '{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}' \
+                | awk -F'|' '$2 != "running" || ($3 != "" && $3 != "healthy")'
+            )"
+
+            if [ -z "$unhealthy" ]; then
+              break
+            fi
+
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "Deployment stopped: containers did not become healthy."
+              printf '%s\n' "$unhealthy"
+              compose ps -a
+              exit 1
+            fi
+
+            sleep 10
+          done
+
+          compose ps
+          REMOTE
