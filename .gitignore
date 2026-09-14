@@ -39,4 +39,5 @@ local-dev-vars.sh
 # Captures the one resource (published snapshot) that has no API lookup path
 # after creation — see scripts/seed-e2e.ps1's own header comment.
 scripts/seed-e2e.state.json
+*.key.*
 *.key
