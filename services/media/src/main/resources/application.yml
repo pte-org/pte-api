@@ -8,8 +8,8 @@ spring:
     name: media
   datasource:
     url: ${MEDIA_DB_URL:jdbc:postgresql://localhost:5432/media}
-    username: ${MEDIA_DB_USER:media_svc}
-    password: ${MEDIA_DB_PASSWORD:media_dev_pw}
+    username: ${MEDIA_DB_USER}
+    password: ${MEDIA_DB_PASSWORD}
     hikari:
       maximum-pool-size: ${MEDIA_DB_POOL_SIZE:5}
   jpa:
@@ -47,15 +47,15 @@ media:
     # mostly ignores region; a real S3-compatible provider outside a
     # genuine "us-east-1" would need this overridden.
     region: ${MINIO_REGION:us-east-1}
-    access-key: ${MINIO_ROOT_USER:pte-minio-admin}
-    secret-key: ${MINIO_ROOT_PASSWORD:pte-minio-dev-pw}
+    access-key: ${MINIO_ROOT_USER}
+    secret-key: ${MINIO_ROOT_PASSWORD}
     bucket: ${MEDIA_BUCKET:pte-media}
 
 # Shared secret for the /internal/** service-to-service surface (ADR-003 mTLS
 # placeholder) — MUST match the same env var on every service that calls or
-# exposes /internal/**. Dev default only.
+# exposes /internal/**. Supply it through the environment or a secret manager.
 internal:
-  service-key: ${INTERNAL_SERVICE_KEY:dev-internal-service-key-change-me}
+  service-key: ${INTERNAL_SERVICE_KEY}
 
 management:
   endpoints:

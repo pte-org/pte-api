@@ -10,8 +10,8 @@ spring:
     # Port 5433 = pg-exam (CELL EXAM), not the 5432 shared by CELL CORE's seven
     # services — see docker-compose.yml for the cell/port map.
     url: ${EXAM_DELIVERY_DB_URL:jdbc:postgresql://localhost:5433/exam_delivery}
-    username: ${EXAM_DELIVERY_DB_USER:exam_delivery_svc}
-    password: ${EXAM_DELIVERY_DB_PASSWORD:exam_delivery_dev_pw}
+    username: ${EXAM_DELIVERY_DB_USER}
+    password: ${EXAM_DELIVERY_DB_PASSWORD}
     hikari:
       maximum-pool-size: ${EXAM_DELIVERY_DB_POOL_SIZE:5}
   jpa:
@@ -33,8 +33,8 @@ spring:
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USER:pte}
-    password: ${RABBITMQ_PASSWORD:pte}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASSWORD}
     publisher-confirm-type: correlated
     publisher-returns: true
     template:
@@ -68,14 +68,12 @@ exam-delivery:
     public-key-pem: ${EXAM_DELIVERY_ENCRYPTION_PUBLIC_KEY_PEM:}
 
 internal:
-  service-key: ${INTERNAL_SERVICE_KEY:dev-internal-service-key-change-me}
+  service-key: ${INTERNAL_SERVICE_KEY}
   # Second credential (Phase 9): required, IN ADDITION TO service-key, to reach
   # the all-tenant bootstrap export mode. Never used for normal per-tenant calls.
-  # MORE sensitive than service-key above (unlocks cross-tenant export) — the
-  # dev-default fallback here must NEVER be left unset in any real deployment
-  # (code-review finding: a forgotten env var here silently exposes cross-tenant
-  # data, not just internal-service access). Pre-production checklist item.
-  bootstrap-key: ${INTERNAL_BOOTSTRAP_KEY:dev-internal-bootstrap-key-change-me}
+  # MORE sensitive than service-key above (unlocks cross-tenant export). Supply
+  # it through the environment or a secret manager; never commit its value.
+  bootstrap-key: ${INTERNAL_BOOTSTRAP_KEY}
 
 # The ONE guarded pull at attempt-create (phase-05). NotEntitledException is a
 # clean business denial, not an infra failure — excluded from the failure rate

@@ -4,7 +4,8 @@
 # Postgres instances pg-core/pg-exam/pg-live/pg-async + redis/rabbitmq/minio/
 # mailpit/jaeger):
 #
-#   docker compose -f docker-compose.yml -f docker-compose.services.yml up --build
+#   docker compose --env-file .env.local \
+#     -f docker-compose.yml -f docker-compose.services.yml up --build
 #
 # No service here maps a host port except gateway (see docker-compose.services.yml
 # gateway block, added alongside these) — every backend service is reached only
@@ -33,9 +34,11 @@ services:
         SERVICE_MODULE: services/iam
     environment:
       IAM_DB_URL: jdbc:postgresql://pg-core:5432/iam
+      IAM_DB_USER: ${IAM_DB_USER:?set IAM_DB_USER in the env file}
+      IAM_DB_PASSWORD: ${IAM_DB_PASSWORD:?set IAM_DB_PASSWORD in the env file}
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
+      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
     depends_on:
       pg-core:
@@ -54,9 +57,11 @@ services:
         SERVICE_MODULE: services/admin
     environment:
       ADMIN_DB_URL: jdbc:postgresql://pg-core:5432/admin
+      ADMIN_DB_USER: ${ADMIN_DB_USER:?set ADMIN_DB_USER in the env file}
+      ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD:?set ADMIN_DB_PASSWORD in the env file}
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
+      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
     depends_on:
@@ -76,9 +81,12 @@ services:
         SERVICE_MODULE: services/authoring
     environment:
       AUTHORING_DB_URL: jdbc:postgresql://pg-core:5432/authoring
+      AUTHORING_DB_USER: ${AUTHORING_DB_USER:?set AUTHORING_DB_USER in the env file}
+      AUTHORING_DB_PASSWORD: ${AUTHORING_DB_PASSWORD:?set AUTHORING_DB_PASSWORD in the env file}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
+      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
     depends_on:
@@ -98,9 +106,12 @@ services:
         SERVICE_MODULE: services/scheduling
     environment:
       SCHEDULING_DB_URL: jdbc:postgresql://pg-core:5432/scheduling
+      SCHEDULING_DB_USER: ${SCHEDULING_DB_USER:?set SCHEDULING_DB_USER in the env file}
+      SCHEDULING_DB_PASSWORD: ${SCHEDULING_DB_PASSWORD:?set SCHEDULING_DB_PASSWORD in the env file}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
+      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
       # Direct inter-service call, bypasses the gateway (see spec Assumptions).
@@ -123,9 +134,13 @@ services:
     environment:
       # Note: db name is "exam_delivery" (underscore); module dir is "exam-delivery" (hyphen).
       EXAM_DELIVERY_DB_URL: jdbc:postgresql://pg-exam:5432/exam_delivery
+      EXAM_DELIVERY_DB_USER: ${EXAM_DELIVERY_DB_USER:?set EXAM_DELIVERY_DB_USER in the env file}
+      EXAM_DELIVERY_DB_PASSWORD: ${EXAM_DELIVERY_DB_PASSWORD:?set EXAM_DELIVERY_DB_PASSWORD in the env file}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
+      INTERNAL_BOOTSTRAP_KEY: ${INTERNAL_BOOTSTRAP_KEY:?set INTERNAL_BOOTSTRAP_KEY in the env file}
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
+      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
       REDIS_HOST: redis
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
@@ -169,9 +184,12 @@ services:
         SERVICE_MODULE: services/proctor
     environment:
       PROCTOR_DB_URL: jdbc:postgresql://pg-live:5432/proctor
+      PROCTOR_DB_USER: ${PROCTOR_DB_USER:?set PROCTOR_DB_USER in the env file}
+      PROCTOR_DB_PASSWORD: ${PROCTOR_DB_PASSWORD:?set PROCTOR_DB_PASSWORD in the env file}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
+      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
       # Direct inter-service call, bypasses the gateway (see spec Assumptions).
@@ -193,9 +211,13 @@ services:
         SERVICE_MODULE: services/scoring
     environment:
       SCORING_DB_URL: jdbc:postgresql://pg-async:5432/scoring
+      SCORING_DB_USER: ${SCORING_DB_USER:?set SCORING_DB_USER in the env file}
+      SCORING_DB_PASSWORD: ${SCORING_DB_PASSWORD:?set SCORING_DB_PASSWORD in the env file}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
+      INTERNAL_BOOTSTRAP_KEY: ${INTERNAL_BOOTSTRAP_KEY:?set INTERNAL_BOOTSTRAP_KEY in the env file}
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
+      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
       # Host answer review (quang-host-answer-review Phase 1) - presign audio/image URLs.
@@ -217,9 +239,13 @@ services:
         SERVICE_MODULE: services/reporting
     environment:
       REPORTING_DB_URL: jdbc:postgresql://pg-core:5432/reporting
+      REPORTING_DB_USER: ${REPORTING_DB_USER:?set REPORTING_DB_USER in the env file}
+      REPORTING_DB_PASSWORD: ${REPORTING_DB_PASSWORD:?set REPORTING_DB_PASSWORD in the env file}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
+      INTERNAL_BOOTSTRAP_KEY: ${INTERNAL_BOOTSTRAP_KEY:?set INTERNAL_BOOTSTRAP_KEY in the env file}
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
+      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
       # Direct inter-service calls, bypass the gateway (see spec Assumptions).
@@ -242,9 +268,11 @@ services:
         SERVICE_MODULE: services/notification
     environment:
       NOTIFICATION_DB_URL: jdbc:postgresql://pg-core:5432/notification
+      NOTIFICATION_DB_USER: ${NOTIFICATION_DB_USER:?set NOTIFICATION_DB_USER in the env file}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?set NOTIFICATION_DB_PASSWORD in the env file}
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:-pte}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pte}
+      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
       MAIL_HOST: mailpit
@@ -307,6 +335,9 @@ services:
         SERVICE_MODULE: services/media
     environment:
       MEDIA_DB_URL: jdbc:postgresql://pg-core:5432/media
+      MEDIA_DB_USER: ${MEDIA_DB_USER:?set MEDIA_DB_USER in the env file}
+      MEDIA_DB_PASSWORD: ${MEDIA_DB_PASSWORD:?set MEDIA_DB_PASSWORD in the env file}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
       MINIO_ENDPOINT: http://minio:9000
@@ -317,8 +348,8 @@ services:
       # container port 9000 to the same host port (found + fixed via
       # plans/phat-speaking-api-e2e-verify Phase 3).
       MINIO_PUBLIC_ENDPOINT: http://localhost:9000
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pte-minio-admin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-pte-minio-dev-pw}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in the env file}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in the env file}
     depends_on:
       pg-core:
         condition: service_healthy

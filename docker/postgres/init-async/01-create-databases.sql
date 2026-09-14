@@ -5,15 +5,13 @@
 -- may still be in progress. Queue-fed and host-gated by design (a student never
 -- waits on it), so downtime here is absorbed by RabbitMQ rather than felt.
 --
--- Passwords here are LOCAL DEV ONLY — real envs inject via Vault/secret manager.
+-- Credentials are supplied by the container environment. There are deliberately
+-- no fallback values in this public init script.
+\getenv db_user SCORING_DB_USER
+\getenv db_password SCORING_DB_PASSWORD
 
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'scoring_svc') THEN
-        CREATE ROLE scoring_svc LOGIN PASSWORD 'scoring_dev_pw';
-    END IF;
-END
-$$;
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'db_user', :'db_password')
+    WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'db_user')\gexec
 
-SELECT 'CREATE DATABASE scoring OWNER scoring_svc'
+SELECT format('CREATE DATABASE %I OWNER %I', 'scoring', :'db_user')
     WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'scoring')\gexec

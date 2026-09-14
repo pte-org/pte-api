@@ -8,8 +8,8 @@ spring:
     name: notification
   datasource:
     url: ${NOTIFICATION_DB_URL:jdbc:postgresql://localhost:5432/notification}
-    username: ${NOTIFICATION_DB_USER:notification_svc}
-    password: ${NOTIFICATION_DB_PASSWORD:notification_dev_pw}
+    username: ${NOTIFICATION_DB_USER}
+    password: ${NOTIFICATION_DB_PASSWORD}
     hikari:
       maximum-pool-size: ${NOTIFICATION_DB_POOL_SIZE:5}
   jpa:
@@ -22,8 +22,8 @@ spring:
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USER:pte}
-    password: ${RABBITMQ_PASSWORD:pte}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASSWORD}
   mail:
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}

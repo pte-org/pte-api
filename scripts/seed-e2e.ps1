@@ -20,8 +20,8 @@
   PREREQUISITE (one-time, cannot be done via API — pte-api has no
   self-registration endpoint): bootstrap a PLATFORM_ADMIN account directly
   via SQL against the `iam` Postgres database
-  (localhost:5432/iam, user iam_svc / password iam_dev_pw per
-  pte-api/docker-compose.yml).
+  (localhost:5432/iam, using IAM_DB_USER and IAM_DB_PASSWORD from the ignored
+  local environment file).
 
   1. Generate a BCrypt hash for your chosen bootstrap password. `htpasswd`
      is NOT bundled with every Git Bash install (confirmed missing on at

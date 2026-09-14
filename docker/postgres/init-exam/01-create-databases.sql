@@ -6,15 +6,13 @@
 -- (an admin bulk-import, a reporting rebuild, a scoring backlog) can exhaust the
 -- connections/disk/locks this service needs while an exam is in progress.
 --
--- Passwords here are LOCAL DEV ONLY — real envs inject via Vault/secret manager.
+-- Credentials are supplied by the container environment. There are deliberately
+-- no fallback values in this public init script.
+\getenv db_user EXAM_DELIVERY_DB_USER
+\getenv db_password EXAM_DELIVERY_DB_PASSWORD
 
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'exam_delivery_svc') THEN
-        CREATE ROLE exam_delivery_svc LOGIN PASSWORD 'exam_delivery_dev_pw';
-    END IF;
-END
-$$;
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'db_user', :'db_password')
+    WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'db_user')\gexec
 
-SELECT 'CREATE DATABASE exam_delivery OWNER exam_delivery_svc'
+SELECT format('CREATE DATABASE %I OWNER %I', 'exam_delivery', :'db_user')
     WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'exam_delivery')\gexec
