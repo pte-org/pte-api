@@ -54,6 +54,9 @@ jobs:
             -i "$RUNNER_TEMP/pte-deploy-key" \
             -o BatchMode=yes \
             -o IdentitiesOnly=yes \
+            -o ConnectTimeout=30 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=8 \
             -o StrictHostKeyChecking=yes \
             "$DEPLOY_USER@$DEPLOY_HOST" 'bash -s' <<'REMOTE'
           set -Eeuo pipefail
@@ -69,7 +72,10 @@ jobs:
           # A push in either repository deploys the shared stack. This lock also
           # coordinates the two repository workflows on the same VPS.
           exec 9>/tmp/pte-platform-production-deploy.lock
-          flock -w 60 9
+          if ! flock -w 1800 9; then
+            echo "Deployment stopped: another deployment still holds the VPS lock."
+            exit 1
+          fi
 
           sync_repo() {
             local repo_dir="$1"
@@ -99,7 +105,24 @@ jobs:
 
           compose config --quiet
           export COMPOSE_PARALLEL_LIMIT=2
-          compose build
+          # Keep the SSH channel active while BuildKit is quiet on a small VPS.
+          heartbeat() {
+            while sleep 20; do
+              echo "Docker build still running..."
+            done
+          }
+          heartbeat &
+          heartbeat_pid=$!
+          if compose build; then
+            build_status=0
+          else
+            build_status=$?
+          fi
+          kill "$heartbeat_pid" 2>/dev/null || true
+          wait "$heartbeat_pid" 2>/dev/null || true
+          if [ "$build_status" -ne 0 ]; then
+            exit "$build_status"
+          fi
           compose up -d --no-build --remove-orphans
 
           deadline=$((SECONDS + 600))
