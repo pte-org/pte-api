@@ -1,9 +1,11 @@
 package com.pte.identity;
 
+import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -13,8 +15,10 @@ import java.util.UUID;
  * another module's repository is exactly the shortcut plan.md's FR-02 forbids.
  *
  * <p>Starts with just the three methods Phase 03 ({@code enrollment}) is known
- * to need. Add methods here as later phases need them; don't grow this
- * speculatively ahead of an actual caller.
+ * to need, plus {@link #findByTenantIdAndRole} added for {@code notification}
+ * (Phase 09) to fan out to every HOST_ADMIN in a tenant. Add methods here as
+ * later phases need them; don't grow this speculatively ahead of an actual
+ * caller.
  */
 @Service
 public class IdentityService {
@@ -35,5 +39,9 @@ public class IdentityService {
 
     public Optional<UUID> getTenantOf(UUID publicId) {
         return userRepository.findByPublicId(publicId).map(User::getTenantId);
+    }
+
+    public List<User> findByTenantIdAndRole(UUID tenantId, Role role) {
+        return userRepository.findByTenantIdAndRolesContaining(tenantId, role);
     }
 }

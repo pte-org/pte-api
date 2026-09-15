@@ -1,5 +1,6 @@
 package com.pte.identity.internal.security;
 
+import com.pte.identity.internal.constant.IdentityConstants;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -20,7 +21,7 @@ public class TokenHasher {
             byte[] hashed = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(hashed);
         } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("SHA-256 unavailable", ex);
+            throw new IllegalStateException(IdentityConstants.SHA256_UNAVAILABLE, ex);
         }
     }
 }

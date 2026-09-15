@@ -18,6 +18,12 @@ public final class ItembankConstants {
     public static final String CORRECT_ANSWER_REQUIRED = "CORRECT_ANSWER_REQUIRED";
     public static final String PRIVATE_REQUIRES_TENANT = "PRIVATE_REQUIRES_TENANT";
 
+    public static final String OPTION_TEXT_REQUIRED = "Option text is required";
+    public static final String TASK_TYPE_REQUIRED = "Task type is required";
+    public static final String VISIBILITY_REQUIRED = "Visibility is required";
+    public static final String TITLE_REQUIRED = "Title is required";
+    public static final String TASK_SKILL_MAPPING_LOAD_FAILED = "Failed to load task-skill mapping from %s";
+
     private ItembankConstants() {
     }
 }

@@ -2,6 +2,7 @@ package com.pte.attempt.internal.mapper;
 
 import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.domain.PinnedExamSnapshot;
+import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.dto.response.BlankGroupView;
 import com.pte.attempt.internal.dto.response.OptionView;
@@ -80,7 +81,7 @@ public class AttemptMapper {
             return jsonMapper.readValue(optionsJson, new TypeReference<List<FrozenOption>>() {
             });
         } catch (JacksonException ex) {
-            throw new IllegalStateException("Failed to parse pinned item optionsJson", ex);
+            throw new IllegalStateException(AttemptConstants.PINNED_ITEM_OPTIONS_PARSE_FAILED, ex);
         }
     }
 
@@ -98,8 +99,7 @@ public class AttemptMapper {
         boolean anyUngrouped = parsed.stream().anyMatch(o -> o.blankIndex() == null);
         if (anyGrouped && anyUngrouped) {
             throw new IllegalStateException(
-                    "Pinned item " + pinnedItemPublicId + " has a mix of blank-grouped and ungrouped options — "
-                            + "every option must either carry a blankIndex or none may.");
+                    String.format(AttemptConstants.MIXED_BLANK_INDEX_OPTIONS, pinnedItemPublicId));
         }
     }
 

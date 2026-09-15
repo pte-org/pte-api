@@ -45,6 +45,37 @@ public final class ScoringConstants {
     public static final String AI_SCORING_DLQ = "scoring.ai-scoring-jobs.dlq";
     public static final String AI_SCORING_ROUTING_KEY = "ai-scoring-job";
 
+    public static final String ANSWER_NOT_FOUND = "ANSWER_NOT_FOUND";
+    public static final String INVALID_ANSWER_STATUS = "INVALID_ANSWER_STATUS";
+    public static final String UNSUPPORTED_TASK_TYPE = "UNSUPPORTED_TASK_TYPE";
+    public static final String AI_PROVIDER_INVALID = "scoring.ai.provider must be stub or openai-compatible";
+    public static final String AI_SCORING_RETRIES_EXHAUSTED = "AI scoring retries exhausted";
+    public static final String UNSUPPORTED_AI_TASK_TYPE = "Unsupported AI task type: %s";
+    public static final String RAW_SCORE_RANGE_INVALID = "rawScore must be between 0 and 100";
+    public static final String SUBSCORE_NAME_BLANK = "subScore names must not be blank";
+    public static final String SUBSCORES_RANGE_INVALID = "subScores must be between 0 and 100";
+    public static final String AI_MODEL_NOT_CONFIGURED = "AI model is not configured";
+    public static final String AI_REQUEST_NO_MESSAGES = "AI request has no messages";
+    public static final String AI_REQUEST_SERIALIZATION_FAILED = "Could not serialize AI request";
+    public static final String AI_PROVIDER_REQUEST_FAILED = "AI provider request failed";
+    public static final String AI_EMPTY_RESPONSE = "AI provider returned an empty response";
+    public static final String AI_RESPONSE_CONTENT_NOT_TEXT = "choices[0].message.content is not text";
+    public static final String RAW_SCORE_NOT_INTEGER = "rawScore must be an integer";
+    public static final String AI_RESPONSE_PARSE_FAILED = "Could not parse AI provider response";
+    public static final String SUBSCORES_NOT_OBJECT = "subScores must be an object";
+    public static final String SUBSCORES_MUST_CONTAIN_INTEGERS = "subScores must contain integers";
+    public static final String MALFORMED_JSON_MARKDOWN_FENCE = "Malformed JSON markdown fence";
+    public static final String ESSAY_RESPONSE_EMPTY = "Essay response is empty";
+    public static final String ESSAY_PROMPT_EMPTY = "Essay prompt is empty";
+    public static final String OPENAI_SETTING_REQUIRED = "%s is required when scoring.ai.provider=openai-compatible";
+    public static final String SPEECH_MEDIA_ID_INVALID = "Speech answer does not contain a valid media ID";
+    public static final String SPEECH_TENANT_ID_MISSING = "Speech answer is missing tenant ID";
+    public static final String SPEECH_REFERENCE_TEXT_EMPTY = "Speech reference text is empty";
+    public static final String SPEECH_MEDIA_RESOLUTION_FAILED = "Speech media resolution failed";
+    public static final String SPEECH_MEDIA_UNRESOLVED = "Speech media could not be resolved";
+    public static final String SPEECH_MEDIA_DOWNLOAD_FAILED = "Speech media download failed";
+    public static final String SPEECH_MEDIA_EMPTY = "Speech media download was empty";
+
     private ScoringConstants() {
     }
 }

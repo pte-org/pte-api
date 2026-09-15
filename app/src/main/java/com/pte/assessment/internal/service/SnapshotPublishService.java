@@ -7,6 +7,7 @@ import com.pte.assessment.domain.SnapshotItem;
 import com.pte.assessment.domain.enums.BlueprintStatus;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.dto.response.SnapshotResponse;
+import com.pte.assessment.internal.constant.AssessmentConstants;
 import com.pte.assessment.internal.exception.BlueprintNotFoundException;
 import com.pte.assessment.internal.exception.EmptyBlueprintException;
 import com.pte.assessment.internal.mapper.SnapshotMapper;
@@ -140,7 +141,7 @@ public class SnapshotPublishService {
         try {
             return jsonMapper.writeValueAsString(frozen);
         } catch (JacksonException ex) {
-            throw new IllegalStateException("Failed to serialize snapshot options", ex);
+            throw new IllegalStateException(AssessmentConstants.SNAPSHOT_OPTIONS_SERIALIZATION_FAILED, ex);
         }
     }
 

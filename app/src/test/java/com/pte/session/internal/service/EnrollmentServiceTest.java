@@ -23,8 +23,10 @@ import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Instant;
@@ -59,12 +61,15 @@ class EnrollmentServiceTest {
     @Mock
     private ProctorAssignmentRepository proctorAssignmentRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private EnrollmentService enrollmentService;
 
     @BeforeEach
     void setUp() {
         enrollmentService = new EnrollmentService(sessionLifecycleService, enrollmentRepository,
-                proctorAssignmentRepository);
+                proctorAssignmentRepository, eventPublisher);
     }
 
     private ExamSession session(Long id, UUID publicId, UUID tenantId) {
@@ -363,5 +368,74 @@ class EnrollmentServiceTest {
                 .isInstanceOf(ProctorAssignmentNotFoundException.class);
 
         verify(proctorAssignmentRepository, never()).save(any());
+    }
+
+    @Test
+    void enrollStudent_publishesStudentEnrolledEvent() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        CurrentUser caller = hostAdmin(tenantId);
+
+        when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
+        when(enrollmentRepository.save(any(Enrollment.class))).thenAnswer(invocation -> {
+            Enrollment enrollment = invocation.getArgument(0);
+            enrollment.setPublicId(UUID.randomUUID());
+            return enrollment;
+        });
+
+        enrollmentService.enrollStudent(sessionPublicId, new EnrollStudentRequest(studentPublicId), caller);
+
+        var captor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        var event = captor.getValue();
+
+        // Verify it's a StudentEnrolledEvent with correct fields
+        assertThat(event).isInstanceOf(com.pte.session.dto.event.StudentEnrolledEvent.class);
+        var enrollmentEvent = (com.pte.session.dto.event.StudentEnrolledEvent) event;
+        assertThat(enrollmentEvent.studentPublicId()).isEqualTo(studentPublicId);
+        assertThat(enrollmentEvent.sessionPublicId()).isEqualTo(sessionPublicId);
+        assertThat(enrollmentEvent.tenantId()).isEqualTo(tenantId);
+    }
+
+    @Test
+    void bulkEnroll_publishesOneStudentEnrolledEventPerNewEnrollment() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        CurrentUser caller = hostAdmin(tenantId);
+
+        UUID alreadyEnrolledId = UUID.randomUUID();
+        UUID newId1 = UUID.randomUUID();
+        UUID newId2 = UUID.randomUUID();
+
+        Enrollment existingEnrollment = new Enrollment();
+        existingEnrollment.setStudentPublicId(alreadyEnrolledId);
+
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any()))
+                .thenReturn(List.of(existingEnrollment));
+        when(enrollmentRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<Enrollment> toSave = invocation.getArgument(0);
+            toSave.forEach(e -> e.setPublicId(UUID.randomUUID()));
+            return toSave;
+        });
+
+        enrollmentService.bulkEnroll(sessionPublicId, new BulkEnrollRequest(List.of(alreadyEnrolledId, newId1, newId2)), caller);
+
+        var captor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, org.mockito.Mockito.times(2)).publishEvent(captor.capture());
+        var events = captor.getAllValues();
+
+        // Verify exactly 2 StudentEnrolledEvents were published (one per newly enrolled, not for already-enrolled)
+        var enrollmentEvents = events.stream()
+                .filter(e -> e instanceof com.pte.session.dto.event.StudentEnrolledEvent)
+                .map(e -> (com.pte.session.dto.event.StudentEnrolledEvent) e)
+                .toList();
+        assertThat(enrollmentEvents).hasSize(2);
+
+        var studentIds = enrollmentEvents.stream().map(com.pte.session.dto.event.StudentEnrolledEvent::studentPublicId).toList();
+        assertThat(studentIds).containsExactlyInAnyOrder(newId1, newId2);
     }
 }

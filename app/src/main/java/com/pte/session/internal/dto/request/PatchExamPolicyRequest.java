@@ -1,5 +1,6 @@
 package com.pte.session.internal.dto.request;
 
+import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.domain.enums.AnswerIntegrityLevel;
 import com.pte.session.domain.enums.LockdownMode;
 import com.pte.session.domain.enums.ReplayPolicyType;
@@ -12,7 +13,7 @@ import jakarta.validation.constraints.Positive;
  */
 public record PatchExamPolicyRequest(
         ReplayPolicyType replayPolicyType,
-        @Positive(message = "Replay policy limit must be positive if provided") Integer replayPolicyLimit,
+        @Positive(message = SessionConstants.REPLAY_POLICY_LIMIT_POSITIVE) Integer replayPolicyLimit,
         Boolean deviceCheckRequired,
         Boolean proctorRequired,
         AnswerIntegrityLevel answerIntegrityLevel,

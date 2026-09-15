@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.exception;
 
+import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.shared.exception.DomainException;
 import org.springframework.http.HttpStatus;
 
@@ -7,6 +8,6 @@ import org.springframework.http.HttpStatus;
 public class UnsupportedTaskTypeException extends DomainException {
 
     public UnsupportedTaskTypeException() {
-        super(HttpStatus.INTERNAL_SERVER_ERROR, "UNSUPPORTED_TASK_TYPE");
+        super(HttpStatus.INTERNAL_SERVER_ERROR, ScoringConstants.UNSUPPORTED_TASK_TYPE);
     }
 }

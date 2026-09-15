@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.config;
 
+import com.pte.scoring.internal.constant.ScoringConstants;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -13,8 +14,7 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "scoring.ai")
 public class AiProviderProperties {
 
-    @Pattern(regexp = "stub|openai-compatible",
-            message = "scoring.ai.provider must be stub or openai-compatible")
+    @Pattern(regexp = "stub|openai-compatible", message = ScoringConstants.AI_PROVIDER_INVALID)
     private String provider = "stub";
     private String baseUrl = "https://api.openai.com/v1";
     private String apiKey = "";

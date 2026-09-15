@@ -9,6 +9,16 @@ public final class TenancyConstants {
     public static final String ORGANIZATION_NAME_ALREADY_USED = "ORGANIZATION_NAME_ALREADY_USED";
     public static final String QUOTA_CONFLICT = "QUOTA_CONFLICT";
 
+    public static final String ORGANIZATION_NAME_REQUIRED = "Organization name is required";
+    public static final String ORGANIZATION_TYPE_REQUIRED = "Organization type is required";
+    public static final String PACKAGE_NAME_REQUIRED = "Package name is required";
+    public static final String STUDENT_LIMIT_REQUIRED = "Student limit is required";
+    public static final String STUDENT_LIMIT_MINIMUM = "Student limit must be at least 1";
+    public static final String FACILITY_TYPE_REQUIRED = "Facility type is required";
+    public static final String AMOUNT_REQUIRED = "Amount is required";
+    public static final String AMOUNT_POSITIVE = "Amount must be positive for a grant";
+    public static final String PRIMARY_COLOR_INVALID = "Primary color must be a hex value like #1A2B3C";
+
     public static final String AGGREGATE_TENANT = "Tenant";
     public static final String EVENT_TENANT_ONBOARDED = "TenantOnboarded";
     public static final String EVENT_TENANT_SUSPENDED = "TenantSuspended";

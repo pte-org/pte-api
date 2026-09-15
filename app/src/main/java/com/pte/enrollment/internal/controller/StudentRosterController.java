@@ -36,8 +36,7 @@ public class StudentRosterController {
             @RequestParam(required = false) String assignmentStatus,
             @RequestParam(required = false) String sort,
             @RequestParam(required = false) String direction) {
-        CurrentUser caller = CurrentUserContext.current()
-                .orElseThrow(() -> new IllegalStateException("No authenticated principal"));
+        CurrentUser caller = CurrentUserContext.required();
         return ApiResponse.success(queryService.search(page, size, search, programPublicId, classPublicId,
                 assignmentStatus, sort, direction, caller));
     }

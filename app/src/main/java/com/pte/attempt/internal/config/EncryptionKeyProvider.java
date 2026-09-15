@@ -1,5 +1,6 @@
 package com.pte.attempt.internal.config;
 
+import com.pte.attempt.internal.constant.AttemptConstants;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -42,10 +43,8 @@ public class EncryptionKeyProvider {
 
         if (privateMissing || publicMissing) {
             if (!isEphemeralAllowed(activeProfile)) {
-                throw new IllegalStateException("attempt encryption keypair is not configured "
-                        + "(attempt.encryption.private-key-pem / public-key-pem) and active profile '"
-                        + activeProfile + "' is not dev/local — refusing to start with an ephemeral keypair, "
-                        + "since a restart would invalidate every STRICT-pinned attempt's public key.");
+                throw new IllegalStateException(
+                        String.format(AttemptConstants.ENCRYPTION_KEYPAIR_NOT_CONFIGURED, activeProfile));
             }
             KeyPair ephemeral = generateEphemeralKeyPair();
             this.privateKey = ephemeral.getPrivate();
@@ -79,7 +78,7 @@ public class EncryptionKeyProvider {
             generator.initialize(RSA_KEY_SIZE_BITS);
             return generator.generateKeyPair();
         } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("Failed to generate ephemeral RSA encryption keypair", ex);
+            throw new IllegalStateException(AttemptConstants.EPHEMERAL_KEYPAIR_GENERATION_FAILED, ex);
         }
     }
 
@@ -89,7 +88,7 @@ public class EncryptionKeyProvider {
             KeyFactory keyFactory = KeyFactory.getInstance("RSA");
             return keyFactory.generatePrivate(new PKCS8EncodedKeySpec(der));
         } catch (NoSuchAlgorithmException | InvalidKeySpecException ex) {
-            throw new IllegalStateException("Failed to parse attempt encryption private key PEM", ex);
+            throw new IllegalStateException(AttemptConstants.PRIVATE_KEY_PARSE_FAILED, ex);
         }
     }
 
@@ -99,7 +98,7 @@ public class EncryptionKeyProvider {
             KeyFactory keyFactory = KeyFactory.getInstance("RSA");
             return keyFactory.generatePublic(new X509EncodedKeySpec(der));
         } catch (NoSuchAlgorithmException | InvalidKeySpecException ex) {
-            throw new IllegalStateException("Failed to parse attempt encryption public key PEM", ex);
+            throw new IllegalStateException(AttemptConstants.PUBLIC_KEY_PARSE_FAILED, ex);
         }
     }
 

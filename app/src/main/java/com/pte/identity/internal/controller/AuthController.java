@@ -35,8 +35,7 @@ public class AuthController {
 
     @GetMapping("/me")
     public ApiResponse<UserResponse> me() {
-        CurrentUser caller = CurrentUserContext.current()
-                .orElseThrow(() -> new IllegalStateException("No authenticated principal"));
+        CurrentUser caller = CurrentUserContext.required();
         return ApiResponse.success(userService.me(caller));
     }
 

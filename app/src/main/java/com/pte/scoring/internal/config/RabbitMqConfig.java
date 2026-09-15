@@ -90,7 +90,7 @@ public class RabbitMqConfig {
     @Bean
     public RetryOperationsInterceptor aiScoringRetryInterceptor() {
         MethodInvocationRecoverer<Object> recoverer = (args, cause) -> {
-            throw new AmqpRejectAndDontRequeueException("AI scoring retries exhausted", cause);
+            throw new AmqpRejectAndDontRequeueException(ScoringConstants.AI_SCORING_RETRIES_EXHAUSTED, cause);
         };
         return RetryInterceptorBuilder.stateless()
                 .maxAttempts(MAX_ATTEMPTS)

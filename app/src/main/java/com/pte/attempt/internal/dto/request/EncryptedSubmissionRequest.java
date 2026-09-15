@@ -1,5 +1,6 @@
 package com.pte.attempt.internal.dto.request;
 
+import com.pte.attempt.internal.constant.AttemptConstants;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -13,8 +14,8 @@ import java.util.UUID;
  * auth tag appended. All three Base64-encoded.
  */
 public record EncryptedSubmissionRequest(
-        @NotNull(message = "Task reference is required") UUID pinnedItemPublicId,
-        @NotBlank(message = "Wrapped key is required") String wrappedKey,
-        @NotBlank(message = "Initialization vector is required") String iv,
-        @NotBlank(message = "Ciphertext is required") String ciphertext) {
+        @NotNull(message = AttemptConstants.TASK_REFERENCE_REQUIRED) UUID pinnedItemPublicId,
+        @NotBlank(message = AttemptConstants.WRAPPED_KEY_REQUIRED) String wrappedKey,
+        @NotBlank(message = AttemptConstants.INITIALIZATION_VECTOR_REQUIRED) String iv,
+        @NotBlank(message = AttemptConstants.CIPHERTEXT_REQUIRED) String ciphertext) {
 }

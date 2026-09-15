@@ -106,7 +106,7 @@ public class PinnedSnapshotCacheService {
             String json = jsonMapper.writeValueAsString(items);
             redisTemplate.opsForValue().set(AttemptConstants.CACHE_KEY_PREFIX + pinnedSnapshotPublicId, json, CACHE_TTL);
         } catch (JacksonException ex) {
-            throw new IllegalStateException("Failed to serialize pinned snapshot cache entry", ex);
+            throw new IllegalStateException(AttemptConstants.PINNED_SNAPSHOT_CACHE_SERIALIZATION_FAILED, ex);
         }
     }
 

@@ -1,13 +1,14 @@
 package com.pte.identity.internal.dto.request;
 
+import com.pte.identity.internal.constant.IdentityConstants;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
 public record LoginRequest(
-        @NotBlank(message = "Email is required")
-        @Email(message = "Email must be valid")
+        @NotBlank(message = IdentityConstants.EMAIL_REQUIRED)
+        @Email(message = IdentityConstants.EMAIL_INVALID)
         String email,
 
-        @NotBlank(message = "Password is required")
+        @NotBlank(message = IdentityConstants.PASSWORD_REQUIRED)
         String password) {
 }

@@ -39,7 +39,6 @@ public class ClassMembershipController {
     }
 
     private CurrentUser currentUser() {
-        return CurrentUserContext.current()
-                .orElseThrow(() -> new IllegalStateException("No authenticated principal"));
+        return CurrentUserContext.required();
     }
 }

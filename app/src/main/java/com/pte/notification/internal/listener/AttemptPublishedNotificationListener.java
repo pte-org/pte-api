@@ -1,0 +1,32 @@
+package com.pte.notification.internal.listener;
+
+import com.pte.identity.IdentityService;
+import com.pte.notification.domain.enums.NotificationType;
+import com.pte.notification.dto.event.AttemptPublishedEvent;
+import com.pte.notification.internal.service.NotificationDispatchService;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionalEventListener;
+
+/**
+ * Notifies a student their report is now visible. No publisher exists yet —
+ * {@code reporting} (Phase 10) is not ported — so this listener is wired and
+ * ready but unreachable in practice until then.
+ */
+@Component
+public class AttemptPublishedNotificationListener {
+
+    private final IdentityService identityService;
+    private final NotificationDispatchService dispatchService;
+
+    public AttemptPublishedNotificationListener(IdentityService identityService, NotificationDispatchService dispatchService) {
+        this.identityService = identityService;
+        this.dispatchService = dispatchService;
+    }
+
+    @TransactionalEventListener
+    public void onAttemptPublished(AttemptPublishedEvent event) {
+        dispatchService.dispatch(NotificationType.ATTEMPT_PUBLISHED, identityService.findById(event.studentPublicId()).orElse(null),
+                event.tenantId(), "Your exam report is ready",
+                "Your report for attempt " + event.attemptPublicId() + " is now available. Log in to view your score.");
+    }
+}

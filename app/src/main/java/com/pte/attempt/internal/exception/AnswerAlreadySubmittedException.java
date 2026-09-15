@@ -1,5 +1,6 @@
 package com.pte.attempt.internal.exception;
 
+import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.shared.exception.DomainException;
 import org.springframework.http.HttpStatus;
 
@@ -7,6 +8,6 @@ import org.springframework.http.HttpStatus;
 public class AnswerAlreadySubmittedException extends DomainException {
 
     public AnswerAlreadySubmittedException() {
-        super(HttpStatus.CONFLICT, "ANSWER_ALREADY_SUBMITTED");
+        super(HttpStatus.CONFLICT, AttemptConstants.ANSWER_ALREADY_SUBMITTED);
     }
 }

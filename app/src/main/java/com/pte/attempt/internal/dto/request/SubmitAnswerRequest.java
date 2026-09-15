@@ -1,5 +1,6 @@
 package com.pte.attempt.internal.dto.request;
 
+import com.pte.attempt.internal.constant.AttemptConstants;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.UUID;
@@ -13,7 +14,7 @@ import java.util.UUID;
  * already-uploaded (and completed) recording, NOT raw audio bytes.
  */
 public record SubmitAnswerRequest(
-        @NotNull(message = "Task reference is required") UUID pinnedItemPublicId,
+        @NotNull(message = AttemptConstants.TASK_REFERENCE_REQUIRED) UUID pinnedItemPublicId,
         /**
          * Blank/null is a legitimate submission: resubmitted when the client's
          * local countdown hits zero with nothing answered. The answer-processing

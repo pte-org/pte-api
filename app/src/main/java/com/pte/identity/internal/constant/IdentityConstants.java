@@ -21,6 +21,21 @@ public final class IdentityConstants {
     public static final String FORBIDDEN_PASSWORD_RESET = "FORBIDDEN_PASSWORD_RESET";
     public static final String DUPLICATE_EMAIL_IN_BATCH = "DUPLICATE_EMAIL_IN_BATCH";
 
+    public static final String EMAIL_REQUIRED = "Email is required";
+    public static final String EMAIL_INVALID = "Email must be valid";
+    public static final String FULL_NAME_REQUIRED = "Full name is required";
+    public static final String PASSWORD_REQUIRED = "Password is required";
+    public static final String PASSWORD_MIN_LENGTH = "Password must be at least 8 characters";
+    public static final String AT_LEAST_ONE_ROLE_REQUIRED = "At least one role is required";
+    public static final String AT_LEAST_ONE_ROW_REQUIRED = "At least one row is required";
+    public static final String REFRESH_TOKEN_REQUIRED = "Refresh token is required";
+
+    public static final String JWT_DECODER_BUILD_FAILED = "Failed to build JWT decoder";
+    public static final String RSA_KEY_GENERATION_FAILED = "RSA key generation failed";
+    public static final String INVALID_RSA_PRIVATE_KEY =
+            "identity.rsa-private-key-pem is set but is not a valid PKCS#8 PEM-encoded RSA private key";
+    public static final String SHA256_UNAVAILABLE = "SHA-256 unavailable";
+
     public static final String KEY_ID = "iam-rsa-key";
     public static final String TOKEN_ISSUER = "pte-iam";
     public static final long ACCESS_TOKEN_TTL_SECONDS = 900L;      // 15 minutes

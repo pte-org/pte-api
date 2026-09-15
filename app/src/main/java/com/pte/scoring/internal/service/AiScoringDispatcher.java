@@ -37,7 +37,8 @@ public class AiScoringDispatcher {
 
     public void dispatch(ScoringAnswer answer) {
         if (!supports(answer.getTaskType())) {
-            throw new IllegalArgumentException("Unsupported AI task type: " + answer.getTaskType());
+            throw new IllegalArgumentException(
+                    String.format(ScoringConstants.UNSUPPORTED_AI_TASK_TYPE, answer.getTaskType()));
         }
         answer.setStatus(ScoringAnswerStatus.AI_SCORING);
         scoringAnswerRepository.save(answer);

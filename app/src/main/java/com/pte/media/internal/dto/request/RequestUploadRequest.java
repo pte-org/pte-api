@@ -1,5 +1,6 @@
 package com.pte.media.internal.dto.request;
 
+import com.pte.media.internal.constant.MediaConstants;
 import jakarta.validation.constraints.NotBlank;
 
 /**
@@ -11,6 +12,6 @@ import jakarta.validation.constraints.NotBlank;
  * complete-upload time.
  */
 public record RequestUploadRequest(
-        @NotBlank(message = "Content type is required") String contentType,
+        @NotBlank(message = MediaConstants.CONTENT_TYPE_REQUIRED) String contentType,
         Boolean audioPrompt) {
 }

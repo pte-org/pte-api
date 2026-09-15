@@ -2,6 +2,7 @@ package com.pte.itembank.internal.config;
 
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.Skill;
+import com.pte.itembank.internal.constant.ItembankConstants;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -45,7 +46,8 @@ public class PteTaskTypeSkillMapping {
                 mapping.put(taskType, skills);
             });
         } catch (IOException | JacksonException | IllegalArgumentException ex) {
-            throw new IllegalStateException("Failed to load task-skill mapping from " + MAPPING_RESOURCE, ex);
+            throw new IllegalStateException(
+                    String.format(ItembankConstants.TASK_SKILL_MAPPING_LOAD_FAILED, MAPPING_RESOURCE), ex);
         }
     }
 }

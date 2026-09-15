@@ -1,6 +1,7 @@
 package com.pte.session.domain;
 
 import com.pte.session.domain.enums.ReplayPolicyType;
+import com.pte.session.internal.constant.SessionConstants;
 
 /**
  * Immutable replay-limit value, decoupled from its two-column {@link ExamPolicy}
@@ -22,7 +23,7 @@ public final class ReplayPolicy {
 
     public static ReplayPolicy limited(int count) {
         if (count < 1) {
-            throw new IllegalArgumentException("Limited replay count must be >= 1");
+            throw new IllegalArgumentException(SessionConstants.LIMITED_REPLAY_COUNT_INVALID);
         }
         return new ReplayPolicy(ReplayPolicyType.LIMITED, count);
     }

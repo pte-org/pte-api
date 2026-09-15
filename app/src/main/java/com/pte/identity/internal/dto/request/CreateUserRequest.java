@@ -1,5 +1,6 @@
 package com.pte.identity.internal.dto.request;
 
+import com.pte.identity.internal.constant.IdentityConstants;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -16,18 +17,18 @@ import java.util.UUID;
  * The four profile fields are optional and apply to any role, not just STUDENT.
  */
 public record CreateUserRequest(
-        @NotBlank(message = "Email is required")
-        @Email(message = "Email must be valid")
+        @NotBlank(message = IdentityConstants.EMAIL_REQUIRED)
+        @Email(message = IdentityConstants.EMAIL_INVALID)
         String email,
 
-        @NotBlank(message = "Full name is required")
+        @NotBlank(message = IdentityConstants.FULL_NAME_REQUIRED)
         String fullName,
 
-        @NotBlank(message = "Password is required")
-        @Size(min = 8, message = "Password must be at least 8 characters")
+        @NotBlank(message = IdentityConstants.PASSWORD_REQUIRED)
+        @Size(min = 8, message = IdentityConstants.PASSWORD_MIN_LENGTH)
         String password,
 
-        @NotEmpty(message = "At least one role is required")
+        @NotEmpty(message = IdentityConstants.AT_LEAST_ONE_ROLE_REQUIRED)
         List<String> roles,
 
         UUID tenantId,

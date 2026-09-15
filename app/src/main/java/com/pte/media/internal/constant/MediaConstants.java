@@ -8,6 +8,7 @@ public final class MediaConstants {
     public static final String PRESIGN_FAILED = "PRESIGN_FAILED";
     public static final String MEDIA_NOT_YET_UPLOADED = "MEDIA_NOT_YET_UPLOADED";
     public static final String INVALID_WAV_FILE = "INVALID_WAV_FILE";
+    public static final String CONTENT_TYPE_REQUIRED = "Content type is required";
 
     public static final String AUDIO_MPEG = "audio/mpeg";
     public static final String AUDIO_WAV = "audio/wav";

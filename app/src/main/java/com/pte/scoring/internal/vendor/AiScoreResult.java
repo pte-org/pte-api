@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.vendor;
 
+import com.pte.scoring.internal.constant.ScoringConstants;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -16,16 +17,16 @@ public record AiScoreResult(int rawScore, Map<String, Integer> subScores, String
 
     public AiScoreResult {
         if (rawScore < 0 || rawScore > 100) {
-            throw new IllegalArgumentException("rawScore must be between 0 and 100");
+            throw new IllegalArgumentException(ScoringConstants.RAW_SCORE_RANGE_INVALID);
         }
         Map<String, Integer> safeSubScores = new LinkedHashMap<>();
         if (subScores != null) {
             subScores.forEach((name, score) -> {
                 if (name == null || name.isBlank()) {
-                    throw new IllegalArgumentException("subScore names must not be blank");
+                    throw new IllegalArgumentException(ScoringConstants.SUBSCORE_NAME_BLANK);
                 }
                 if (score == null || score < 0 || score > 100) {
-                    throw new IllegalArgumentException("subScores must be between 0 and 100");
+                    throw new IllegalArgumentException(ScoringConstants.SUBSCORES_RANGE_INVALID);
                 }
                 safeSubScores.put(name, score);
             });

@@ -70,7 +70,7 @@ public class RsaKeyProvider {
                     .keyID(IdentityConstants.KEY_ID)
                     .build();
         } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("RSA key generation failed", ex);
+            throw new IllegalStateException(IdentityConstants.RSA_KEY_GENERATION_FAILED, ex);
         }
     }
 
@@ -92,8 +92,7 @@ public class RsaKeyProvider {
                     .keyID(IdentityConstants.KEY_ID)
                     .build();
         } catch (NoSuchAlgorithmException | InvalidKeySpecException | ClassCastException ex) {
-            throw new IllegalStateException(
-                    "identity.rsa-private-key-pem is set but is not a valid PKCS#8 PEM-encoded RSA private key", ex);
+            throw new IllegalStateException(IdentityConstants.INVALID_RSA_PRIVATE_KEY, ex);
         }
     }
 }

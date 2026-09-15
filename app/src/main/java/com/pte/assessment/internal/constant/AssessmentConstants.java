@@ -7,6 +7,12 @@ public final class AssessmentConstants {
     public static final String EMPTY_BLUEPRINT = "EMPTY_BLUEPRINT";
     public static final String INVALID_SECTION = "INVALID_SECTION";
 
+    public static final String QUESTION_REFERENCE_REQUIRED = "Question reference is required";
+    public static final String SECTION_REQUIRED = "Section is required";
+    public static final String BLUEPRINT_NAME_REQUIRED = "Blueprint name is required";
+    public static final String BLUEPRINT_ITEMS_REQUIRED = "A blueprint needs at least one item";
+    public static final String SNAPSHOT_OPTIONS_SERIALIZATION_FAILED = "Failed to serialize snapshot options";
+
     private AssessmentConstants() {
     }
 }

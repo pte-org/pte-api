@@ -1,6 +1,7 @@
 package com.pte.scoring.internal.vendor.openai;
 
 import com.pte.scoring.internal.config.AiProviderProperties;
+import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.vendor.AiProviderException;
 import com.pte.scoring.internal.vendor.AiScoreResult;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -36,10 +37,10 @@ public class OpenAiCompatibleChatClient {
 
     public AiScoreResult complete(String model, List<Map<String, Object>> messages) {
         if (model == null || model.isBlank()) {
-            throw new AiProviderException("AI model is not configured");
+            throw new AiProviderException(ScoringConstants.AI_MODEL_NOT_CONFIGURED);
         }
         if (messages == null || messages.isEmpty()) {
-            throw new AiProviderException("AI request has no messages");
+            throw new AiProviderException(ScoringConstants.AI_REQUEST_NO_MESSAGES);
         }
 
         Map<String, Object> request = new LinkedHashMap<>();
@@ -53,7 +54,7 @@ public class OpenAiCompatibleChatClient {
         try {
             requestJson = jsonMapper.writeValueAsString(request);
         } catch (RuntimeException ex) {
-            throw new AiProviderException("Could not serialize AI request", ex);
+            throw new AiProviderException(ScoringConstants.AI_REQUEST_SERIALIZATION_FAILED, ex);
         }
 
         String responseJson;
@@ -65,10 +66,10 @@ public class OpenAiCompatibleChatClient {
                     .retrieve()
                     .body(String.class);
         } catch (RestClientException ex) {
-            throw new AiProviderException("AI provider request failed", ex);
+            throw new AiProviderException(ScoringConstants.AI_PROVIDER_REQUEST_FAILED, ex);
         }
         if (responseJson == null || responseJson.isBlank()) {
-            throw new AiProviderException("AI provider returned an empty response");
+            throw new AiProviderException(ScoringConstants.AI_EMPTY_RESPONSE);
         }
         return parseScore(responseJson);
     }
@@ -78,12 +79,12 @@ public class OpenAiCompatibleChatClient {
             JsonNode root = jsonMapper.readTree(responseJson);
             JsonNode content = root.path("choices").path(0).path("message").path("content");
             if (!content.isTextual()) {
-                throw invalidResponse("choices[0].message.content is not text", null);
+                throw invalidResponse(ScoringConstants.AI_RESPONSE_CONTENT_NOT_TEXT, null);
             }
             JsonNode scoreEnvelope = jsonMapper.readTree(stripMarkdownFence(content.asText()));
             JsonNode rawScore = scoreEnvelope.path("rawScore");
             if (!rawScore.isIntegralNumber()) {
-                throw invalidResponse("rawScore must be an integer", null);
+                throw invalidResponse(ScoringConstants.RAW_SCORE_NOT_INTEGER, null);
             }
 
             Map<String, Integer> subScores = parseSubScores(scoreEnvelope.path("subScores"));
@@ -98,7 +99,7 @@ public class OpenAiCompatibleChatClient {
         } catch (AiProviderException ex) {
             throw ex;
         } catch (RuntimeException ex) {
-            throw invalidResponse("Could not parse AI provider response", ex);
+            throw invalidResponse(ScoringConstants.AI_RESPONSE_PARSE_FAILED, ex);
         }
     }
 
@@ -107,14 +108,14 @@ public class OpenAiCompatibleChatClient {
             return Map.of();
         }
         if (!node.isObject()) {
-            throw invalidResponse("subScores must be an object", null);
+            throw invalidResponse(ScoringConstants.SUBSCORES_NOT_OBJECT, null);
         }
 
         Map<String, Integer> subScores = new LinkedHashMap<>();
         node.propertyNames().forEach(name -> {
             JsonNode value = node.path(name);
             if (!value.isIntegralNumber()) {
-                throw invalidResponse("subScores must contain integers", null);
+                throw invalidResponse(ScoringConstants.SUBSCORES_MUST_CONTAIN_INTEGERS, null);
             }
             subScores.put(name, value.asInt());
         });
@@ -129,7 +130,7 @@ public class OpenAiCompatibleChatClient {
         int firstLineEnd = trimmed.indexOf('\n');
         int lastFence = trimmed.lastIndexOf("```");
         if (firstLineEnd < 0 || lastFence <= firstLineEnd) {
-            throw invalidResponse("Malformed JSON markdown fence", null);
+            throw invalidResponse(ScoringConstants.MALFORMED_JSON_MARKDOWN_FENCE, null);
         }
         return trimmed.substring(firstLineEnd + 1, lastFence).trim();
     }

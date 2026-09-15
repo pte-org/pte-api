@@ -77,6 +77,7 @@ public class AiScoringWorker {
         if (AiScoringTaskCatalog.isText(job.taskType())) {
             return essayScoringClient.score(job.payload(), job.referenceText());
         }
-        throw new IllegalArgumentException("Unsupported AI task type: " + job.taskType());
+        throw new IllegalArgumentException(
+                String.format(ScoringConstants.UNSUPPORTED_AI_TASK_TYPE, job.taskType()));
     }
 }

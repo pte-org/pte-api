@@ -1,5 +1,6 @@
 package com.pte.shared.security;
 
+import com.pte.shared.constant.SharedConstants;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -25,6 +26,10 @@ public final class CurrentUserContext {
             return Optional.empty();
         }
         return Optional.of(fromJwt(token.getToken()));
+    }
+
+    public static CurrentUser required() {
+        return current().orElseThrow(() -> new IllegalStateException(SharedConstants.NO_AUTHENTICATED_PRINCIPAL));
     }
 
     private static CurrentUser fromJwt(Jwt jwt) {

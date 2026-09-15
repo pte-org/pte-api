@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.exception;
 
+import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.shared.exception.DomainException;
 import org.springframework.http.HttpStatus;
 
@@ -7,6 +8,6 @@ import org.springframework.http.HttpStatus;
 public class AnswerNotFoundException extends DomainException {
 
     public AnswerNotFoundException() {
-        super(HttpStatus.NOT_FOUND, "ANSWER_NOT_FOUND");
+        super(HttpStatus.NOT_FOUND, ScoringConstants.ANSWER_NOT_FOUND);
     }
 }

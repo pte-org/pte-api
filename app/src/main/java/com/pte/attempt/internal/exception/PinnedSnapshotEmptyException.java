@@ -1,5 +1,6 @@
 package com.pte.attempt.internal.exception;
 
+import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.shared.exception.DomainException;
 import org.springframework.http.HttpStatus;
 
@@ -11,6 +12,6 @@ import org.springframework.http.HttpStatus;
 public class PinnedSnapshotEmptyException extends DomainException {
 
     public PinnedSnapshotEmptyException() {
-        super(HttpStatus.INTERNAL_SERVER_ERROR, "PINNED_SNAPSHOT_EMPTY");
+        super(HttpStatus.INTERNAL_SERVER_ERROR, AttemptConstants.PINNED_SNAPSHOT_EMPTY);
     }
 }

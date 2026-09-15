@@ -19,6 +19,16 @@ public final class EnrollmentConstants {
     public static final String INVALID_STUDENT_ROSTER_QUERY = "INVALID_STUDENT_ROSTER_QUERY";
     public static final String STUDENT_NOT_FOUND = "STUDENT_NOT_FOUND";
 
+    public static final String COORDINATOR_REFERENCE_REQUIRED = "Coordinator reference is required";
+    public static final String LECTURER_REFERENCE_REQUIRED = "Lecturer reference is required";
+    public static final String STUDENT_REFERENCE_REQUIRED = "Student reference is required";
+    public static final String AT_LEAST_ONE_STUDENT_REQUIRED = "At least one student is required";
+    public static final String CLASS_NAME_REQUIRED = "Class name is required";
+    public static final String PROGRAM_NAME_REQUIRED = "Program name is required";
+    public static final String SOURCE_CLASS_REQUIRED = "At least one source Class is required";
+    public static final String NEW_CLASS_NAME_REQUIRED = "New Class name is required";
+    public static final String TARGET_CLASS_REFERENCE_REQUIRED = "Target class reference is required";
+
     public static final String AGGREGATE_PROGRAM = "Program";
     public static final String EVENT_PROGRAM_CREATED = "ProgramCreated";
     public static final String EVENT_PROGRAM_UPDATED = "ProgramUpdated";

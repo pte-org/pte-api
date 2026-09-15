@@ -1,5 +1,6 @@
 package com.pte.identity.internal.repository;
 
+import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -20,4 +21,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
 
     List<User> findByEmailIn(List<String> emails);
+
+    /** Host-admin fanout for notification (Phase 09) — every user in a tenant carrying the given role. */
+    List<User> findByTenantIdAndRolesContaining(UUID tenantId, Role role);
 }

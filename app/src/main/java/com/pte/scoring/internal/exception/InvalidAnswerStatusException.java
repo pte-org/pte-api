@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.exception;
 
+import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.shared.exception.DomainException;
 import org.springframework.http.HttpStatus;
 
@@ -11,6 +12,6 @@ import org.springframework.http.HttpStatus;
 public class InvalidAnswerStatusException extends DomainException {
 
     public InvalidAnswerStatusException() {
-        super(HttpStatus.BAD_REQUEST, "INVALID_ANSWER_STATUS");
+        super(HttpStatus.BAD_REQUEST, ScoringConstants.INVALID_ANSWER_STATUS);
     }
 }

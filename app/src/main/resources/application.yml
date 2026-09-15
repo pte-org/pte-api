@@ -31,6 +31,15 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER}
     password: ${RABBITMQ_PASSWORD}
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
 
 management:
   endpoints:
@@ -74,6 +83,12 @@ attempt:
   encryption:
     private-key-pem: ${ATTEMPT_ENCRYPTION_PRIVATE_KEY_PEM:}
     public-key-pem: ${ATTEMPT_ENCRYPTION_PUBLIC_KEY_PEM:}
+
+proctor:
+  ws:
+    # STOMP endpoint allowed origins (com.pte.proctoring, Phase 09) — the proctor
+    # console is a controlled client, explicit config rather than "*".
+    allowed-origin-patterns: ${PROCTOR_WS_ALLOWED_ORIGINS:http://localhost:*}
 
 identity:
   # PKCS#8 PEM-encoded RSA private key (identity.internal.security.RsaKeyProvider).

@@ -13,6 +13,7 @@ import com.pte.session.internal.dto.request.CreateSessionRequest;
 import com.pte.session.internal.dto.request.PatchExamPolicyRequest;
 import com.pte.session.internal.dto.response.SessionResponse;
 import com.pte.session.dto.response.ExamPolicyResponse;
+import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.exception.HostContextRequiredException;
 import com.pte.session.internal.exception.InvalidPolicyPatchException;
 import com.pte.session.internal.exception.InvalidSessionWindowException;
@@ -68,8 +69,7 @@ public class SessionLifecycleService {
         if (request.lockdownMode() != null) {
             // Validate: STRICT not allowed with PRACTICE
             if (mode == ExamMode.PRACTICE && request.lockdownMode() == LockdownMode.STRICT) {
-                throw new IllegalArgumentException(
-                        "LockdownMode.STRICT is not allowed for PRACTICE exams");
+                throw new IllegalArgumentException(SessionConstants.STRICT_LOCKDOWN_NOT_ALLOWED_FOR_PRACTICE);
             }
             policy.setLockdownMode(request.lockdownMode());
         }

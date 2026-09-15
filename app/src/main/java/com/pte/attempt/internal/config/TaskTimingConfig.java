@@ -1,5 +1,6 @@
 package com.pte.attempt.internal.config;
 
+import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.attempt.internal.exception.TaskTimingNotConfiguredException;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
@@ -50,7 +51,7 @@ public class TaskTimingConfig {
                         node.has("preRecordSeconds") ? node.path("preRecordSeconds").asInt() : null));
             });
         } catch (IOException | JacksonException ex) {
-            throw new IllegalStateException("Failed to load task timing from " + RESOURCE, ex);
+            throw new IllegalStateException(String.format(AttemptConstants.TASK_TIMING_LOAD_FAILED, RESOURCE), ex);
         }
     }
 

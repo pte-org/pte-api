@@ -23,8 +23,12 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityConfig {
 
+    // "/ws/**" (com.pte.proctoring, Phase 09): the STOMP handshake itself is
+    // permitted here — authentication happens per-frame inside STOMP
+    // (StompAuthChannelInterceptor), not at the HTTP upgrade request, since
+    // browser WS clients can't reliably set custom handshake headers.
     private static final List<String> PUBLIC_PATHS = List.of(
-            "/auth/login", "/auth/refresh", "/auth/jwks", "/actuator/health", "/actuator/health/**");
+            "/auth/login", "/auth/refresh", "/auth/jwks", "/actuator/health", "/actuator/health/**", "/ws/**");
 
     @Bean
     public SecurityFilterChain jwtFilterChain(HttpSecurity http) throws Exception {

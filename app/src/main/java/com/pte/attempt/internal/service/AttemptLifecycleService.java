@@ -5,6 +5,7 @@ import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.domain.PinnedExamSnapshot;
 import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.domain.enums.AttemptStatus;
+import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.attempt.internal.exception.AlreadyAttemptedException;
 import com.pte.attempt.internal.exception.AnswerIntegrityLevelMismatchException;
 import com.pte.attempt.internal.exception.AttemptAlreadyCompleteException;
@@ -350,7 +351,8 @@ public class AttemptLifecycleService {
 
     private PinnedItem itemAt(ExamAttempt attempt, int orderIndex) {
         return pinnedItemRepository.findByPinnedSnapshotIdAndOrderIndex(attempt.getPinnedSnapshot().getId(), orderIndex)
-                .orElseThrow(() -> new IllegalStateException("Missing pinned item at index " + orderIndex));
+                .orElseThrow(() -> new IllegalStateException(
+                        String.format(AttemptConstants.MISSING_PINNED_ITEM_AT_INDEX, orderIndex)));
     }
 
     ExamAttempt findOwned(UUID publicId, UUID studentPublicId) {
@@ -368,6 +370,7 @@ public class AttemptLifecycleService {
     private ExamAttempt lockAttempt(ExamAttempt attempt) {
         Long attemptId = attempt.getId();
         return attemptRepository.findWithLockById(attemptId)
-                .orElseThrow(() -> new IllegalStateException("Attempt disappeared mid-transaction: " + attemptId));
+                .orElseThrow(() -> new IllegalStateException(
+                        String.format(AttemptConstants.ATTEMPT_DISAPPEARED_MID_TRANSACTION, attemptId)));
     }
 }

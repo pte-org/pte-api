@@ -1,6 +1,7 @@
 package com.pte.scoring.internal.vendor.openai;
 
 import com.pte.scoring.internal.config.AiProviderProperties;
+import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.vendor.AiProviderException;
 import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.EssayScoringClient;
@@ -36,10 +37,10 @@ public class OpenAiCompatibleEssayScoringClient implements EssayScoringClient {
     @Override
     public AiScoreResult score(String essayText, String promptText) {
         if (essayText == null || essayText.isBlank()) {
-            throw new AiProviderException("Essay response is empty");
+            throw new AiProviderException(ScoringConstants.ESSAY_RESPONSE_EMPTY);
         }
         if (promptText == null || promptText.isBlank()) {
-            throw new AiProviderException("Essay prompt is empty");
+            throw new AiProviderException(ScoringConstants.ESSAY_PROMPT_EMPTY);
         }
         String userPrompt = "PROMPT:\n---\n" + promptText + "\n---\nCANDIDATE RESPONSE:\n---\n"
                 + essayText + "\n---";
@@ -50,7 +51,7 @@ public class OpenAiCompatibleEssayScoringClient implements EssayScoringClient {
 
     private static void requireConfigured(String value, String setting) {
         if (value == null || value.isBlank()) {
-            throw new IllegalStateException(setting + " is required when scoring.ai.provider=openai-compatible");
+            throw new IllegalStateException(String.format(ScoringConstants.OPENAI_SETTING_REQUIRED, setting));
         }
     }
 }

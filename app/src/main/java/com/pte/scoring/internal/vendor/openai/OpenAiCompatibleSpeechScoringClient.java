@@ -3,6 +3,7 @@ package com.pte.scoring.internal.vendor.openai;
 import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.scoring.internal.config.AiProviderProperties;
+import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.vendor.AiProviderException;
 import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.SpeechScoringClient;
@@ -56,23 +57,23 @@ public class OpenAiCompatibleSpeechScoringClient implements SpeechScoringClient 
         try {
             mediaPublicId = UUID.fromString(audioMediaPublicId);
         } catch (RuntimeException ex) {
-            throw new AiProviderException("Speech answer does not contain a valid media ID", ex);
+            throw new AiProviderException(ScoringConstants.SPEECH_MEDIA_ID_INVALID, ex);
         }
         if (tenantId == null) {
-            throw new AiProviderException("Speech answer is missing tenant ID");
+            throw new AiProviderException(ScoringConstants.SPEECH_TENANT_ID_MISSING);
         }
         if (referenceText == null || referenceText.isBlank()) {
-            throw new AiProviderException("Speech reference text is empty");
+            throw new AiProviderException(ScoringConstants.SPEECH_REFERENCE_TEXT_EMPTY);
         }
 
         PresignedDownloadResponse presigned;
         try {
             presigned = mediaService.presignGet(mediaPublicId, properties.getMediaUrlTtlSeconds(), tenantId);
         } catch (RuntimeException ex) {
-            throw new AiProviderException("Speech media resolution failed", ex);
+            throw new AiProviderException(ScoringConstants.SPEECH_MEDIA_RESOLUTION_FAILED, ex);
         }
-        if (presigned == null || presigned.url() == null || presigned.url().isBlank()) {
-            throw new AiProviderException("Speech media could not be resolved");
+        if (presigned.url() == null || presigned.url().isBlank()) {
+            throw new AiProviderException(ScoringConstants.SPEECH_MEDIA_UNRESOLVED);
         }
         byte[] audio;
         try {
@@ -81,10 +82,10 @@ public class OpenAiCompatibleSpeechScoringClient implements SpeechScoringClient 
                     .retrieve()
                     .body(byte[].class);
         } catch (RestClientException ex) {
-            throw new AiProviderException("Speech media download failed", ex);
+            throw new AiProviderException(ScoringConstants.SPEECH_MEDIA_DOWNLOAD_FAILED, ex);
         }
         if (audio == null || audio.length == 0) {
-            throw new AiProviderException("Speech media download was empty");
+            throw new AiProviderException(ScoringConstants.SPEECH_MEDIA_EMPTY);
         }
 
         List<Map<String, Object>> messages = List.of(
@@ -99,7 +100,7 @@ public class OpenAiCompatibleSpeechScoringClient implements SpeechScoringClient 
 
     private static void requireConfigured(String value, String setting) {
         if (value == null || value.isBlank()) {
-            throw new IllegalStateException(setting + " is required when scoring.ai.provider=openai-compatible");
+            throw new IllegalStateException(String.format(ScoringConstants.OPENAI_SETTING_REQUIRED, setting));
         }
     }
 }

@@ -1,9 +1,10 @@
 package com.pte.itembank.dto.request;
 
+import com.pte.itembank.internal.constant.ItembankConstants;
 import jakarta.validation.constraints.NotBlank;
 
 public record OptionRequest(
-        @NotBlank(message = "Option text is required") String text,
+        @NotBlank(message = ItembankConstants.OPTION_TEXT_REQUIRED) String text,
         boolean correct,
         int orderIndex) {
 }

@@ -4,6 +4,7 @@ import com.pte.session.domain.Enrollment;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.ProctorAssignment;
 import com.pte.session.domain.enums.ProctorRole;
+import com.pte.session.dto.event.StudentEnrolledEvent;
 import com.pte.session.internal.dto.request.AssignProctorRequest;
 import com.pte.session.internal.dto.request.BulkEnrollRequest;
 import com.pte.session.internal.dto.request.EnrollStudentRequest;
@@ -20,6 +21,7 @@ import com.pte.session.internal.exception.SessionCapacityExceededException;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ProctorAssignmentRepository;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,12 +43,15 @@ public class EnrollmentService {
     private final SessionLifecycleService sessionLifecycleService;
     private final EnrollmentRepository enrollmentRepository;
     private final ProctorAssignmentRepository proctorAssignmentRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public EnrollmentService(SessionLifecycleService sessionLifecycleService, EnrollmentRepository enrollmentRepository,
-                             ProctorAssignmentRepository proctorAssignmentRepository) {
+                             ProctorAssignmentRepository proctorAssignmentRepository,
+                             ApplicationEventPublisher eventPublisher) {
         this.sessionLifecycleService = sessionLifecycleService;
         this.enrollmentRepository = enrollmentRepository;
         this.proctorAssignmentRepository = proctorAssignmentRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -58,6 +63,8 @@ public class EnrollmentService {
         enrollment.setTenantId(session.getTenantId());
 
         Enrollment saved = save(enrollment);
+        eventPublisher.publishEvent(
+                new StudentEnrolledEvent(session.getPublicId(), saved.getStudentPublicId(), session.getTenantId()));
         return new EnrollmentResponse(saved.getPublicId(), session.getPublicId(), saved.getStudentPublicId());
     }
 
@@ -113,6 +120,11 @@ public class EnrollmentService {
             saved = enrollmentRepository.saveAll(toCreate);
         } catch (DataIntegrityViolationException ex) {
             throw new AlreadyEnrolledException();
+        }
+
+        for (Enrollment enrollment : saved) {
+            eventPublisher.publishEvent(new StudentEnrolledEvent(session.getPublicId(),
+                    enrollment.getStudentPublicId(), session.getTenantId()));
         }
 
         List<UUID> enrolled = saved.stream().map(Enrollment::getStudentPublicId).toList();

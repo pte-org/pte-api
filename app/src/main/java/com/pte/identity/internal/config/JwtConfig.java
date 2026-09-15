@@ -4,6 +4,7 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.identity.internal.security.RsaKeyProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -37,7 +38,7 @@ public class JwtConfig {
             RSAPublicKey publicKey = keyProvider.rsaKey().toRSAPublicKey();
             return NimbusJwtDecoder.withPublicKey(publicKey).build();
         } catch (Exception ex) {
-            throw new IllegalStateException("Failed to build JWT decoder", ex);
+            throw new IllegalStateException(IdentityConstants.JWT_DECODER_BUILD_FAILED, ex);
         }
     }
 }

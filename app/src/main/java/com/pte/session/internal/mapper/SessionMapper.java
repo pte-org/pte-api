@@ -5,6 +5,7 @@ import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.SessionComposition;
 import com.pte.session.dto.response.CompositionItemResponse;
 import com.pte.session.dto.response.ExamPolicyResponse;
+import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.dto.response.SessionResponse;
 
 import java.util.List;
@@ -42,7 +43,7 @@ public final class SessionMapper {
      */
     public static ExamPolicyResponse toPolicy(ExamPolicy policy) {
         if (policy == null || policy.getReplayPolicyType() == null || policy.getAnswerIntegrityLevel() == null) {
-            throw new IllegalStateException("ExamPolicy is incomplete — expected all fields set together");
+            throw new IllegalStateException(SessionConstants.EXAM_POLICY_INCOMPLETE);
         }
         return new ExamPolicyResponse(
                 policy.getReplayPolicy().type().name(),
