@@ -126,6 +126,32 @@ services:
       - ./docker/postgres/init-async:/docker-entrypoint-initdb.d:ro
     command: ["postgres", "-c", "max_connections=50", "-c", "wal_level=logical"]
 
+  # MONOLITH — plans/modular-monolith. Single database `pte` for the `app`
+  # module, unrelated to the four cells above (those back services/*, which
+  # keeps running unmodified until Phase 11 cutover). One app, one database:
+  # no need for the createdb-per-service init-script indirection the cells
+  # use, so POSTGRES_DB/USER/PASSWORD point straight at APP_DB_*.
+  pg-monolith:
+    image: postgres:17
+    container_name: pte-pg-monolith
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pte
+      POSTGRES_USER: ${APP_DB_USER:?set APP_DB_USER in the env file}
+      POSTGRES_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in the env file}
+      TZ: UTC
+    ports:
+      - "${PG_MONOLITH_PORT:-5436}:5432"
+    volumes:
+      - pte_pg_monolith_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${APP_DB_USER:?set APP_DB_USER in the env file}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [pte-network]
+
   redis:
     image: redis:7-alpine
     container_name: pte-redis
@@ -217,6 +243,8 @@ volumes:
     name: pte_pg_live_data
   pte_pg_async_data:
     name: pte_pg_async_data
+  pte_pg_monolith_data:
+    name: pte_pg_monolith_data
   pte_minio_data:
     name: pte_minio_data
 

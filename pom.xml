@@ -34,6 +34,9 @@
 		<module>services/reporting</module>
 		<module>services/media</module>
 		<module>services/notification</module>
+		<!-- Modular monolith (plans/modular-monolith): grows alongside services/*
+		     one phase at a time. services/* stays until Phase 11 cutover. -->
+		<module>app</module>
 	</modules>
 
 	<dependencyManagement>

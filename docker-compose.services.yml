@@ -364,3 +364,35 @@ services:
       <<: *healthcheck-defaults
       test: ["CMD", "curl", "-sf", "http://localhost:8090/api/media/actuator/health"]
     networks: [pte-network]
+
+  # MONOLITH — plans/modular-monolith, Phase 01. Grows alongside every service
+  # above; none of them are touched or depended on. Port 8091 (first free after
+  # gateway 8080 + the 10 backend services 8081-8090). No IAM_JWKS_URI: unlike
+  # services/*, this app validates its own tokens against its own keys
+  # (plan.md Phase 02 — deliberately not wired to the old gateway/iam).
+  app:
+    build:
+      <<: *build-defaults
+      args:
+        SERVICE_MODULE: app
+    environment:
+      APP_PORT: 8091
+      APP_DB_URL: jdbc:postgresql://pg-monolith:5432/pte
+      APP_DB_USER: ${APP_DB_USER:?set APP_DB_USER in the env file}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in the env file}
+      REDIS_HOST: redis
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
+      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+    depends_on:
+      pg-monolith:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "curl", "-sf", "http://localhost:8091/actuator/health"]
+    networks: [pte-network]

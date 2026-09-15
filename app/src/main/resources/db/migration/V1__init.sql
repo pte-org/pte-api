@@ -1,0 +1,5 @@
+-- Empty baseline for the modular monolith (plans/modular-monolith, Phase 01).
+-- Flyway needs a V1 to anchor on before Phase 02 adds V2__identity.sql. This
+-- migration numbering starts fresh at V1 — it is NOT a continuation of any
+-- services/*/db/migration sequence, which belong to 4 separate databases with
+-- their own V1/V2/... history that would collide if reused here.

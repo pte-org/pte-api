@@ -1,0 +1,45 @@
+server:
+  port: ${APP_PORT:8091}
+
+spring:
+  application:
+    name: app
+  datasource:
+    url: ${APP_DB_URL:jdbc:postgresql://localhost:5432/pte}
+    username: ${APP_DB_USER}
+    password: ${APP_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: ${APP_DB_POOL_SIZE:10}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASSWORD}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}

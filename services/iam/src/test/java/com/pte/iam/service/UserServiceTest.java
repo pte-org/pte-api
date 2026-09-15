@@ -204,7 +204,10 @@ class UserServiceTest {
         when(userRepository.existsByEmail(request.email())).thenReturn(false);
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
         when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.STUDENT));
-        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+        // UserService.create() calls saveAndFlush (not save) to get Hibernate's
+        // generated createdAt before the outbox write — stubbing save() here left
+        // saveAndFlush() unstubbed, so Mockito returned null and create() NPE'd.
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> {
             User user = invocation.getArgument(0);
             user.setId(1L);
             user.setPublicId(UUID.randomUUID());
