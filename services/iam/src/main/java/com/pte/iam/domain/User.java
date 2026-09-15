@@ -77,4 +77,8 @@ public class User extends BaseEntity {
     public void suspend() {
         this.status = UserStatus.SUSPENDED;
     }
+
+    public void reactivate() {
+        this.status = UserStatus.ACTIVE;
+    }
 }

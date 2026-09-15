@@ -39,6 +39,8 @@ services:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
+      INTERNAL_BOOTSTRAP_KEY: ${INTERNAL_BOOTSTRAP_KEY:?set INTERNAL_BOOTSTRAP_KEY in the env file}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
     depends_on:
       pg-core:
@@ -62,8 +64,11 @@ services:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
+      INTERNAL_BOOTSTRAP_KEY: ${INTERNAL_BOOTSTRAP_KEY:?set INTERNAL_BOOTSTRAP_KEY in the env file}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
+      IAM_URL: http://iam:8081/api/iam
     depends_on:
       pg-core:
         condition: service_healthy

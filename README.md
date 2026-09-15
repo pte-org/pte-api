@@ -117,6 +117,16 @@ Flyway. Schema is managed entirely by Hibernate via
 to write or maintain during this dev phase. See
 `plans/remove-flyway-hibernate-only/spec.md` for the full rationale.
 
+### Admin event-consumer migration exception
+
+The tenant student-roster work explicitly introduces a versioned Admin schema
+migration for `processed_events`. Admin therefore includes Flyway and loads
+`services/admin/src/main/resources/db/migration` at startup. The migration is
+idempotent and uses `baseline-on-migrate` so an existing Admin database can
+adopt the ledger without recreating its current tables. This does not make
+Hibernate schema updates safe for production; production must still set
+`spring.jpa.hibernate.ddl-auto=validate` after applying migrations.
+
 ### Re-adding Flyway + JPA Buddy
 
 Flyway and JPA Buddy are reintroduced **only when the project owner

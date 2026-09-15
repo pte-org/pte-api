@@ -19,6 +19,7 @@ public final class AdminConstants {
     public static final String LECTURER_ALREADY_ASSIGNED = "LECTURER_ALREADY_ASSIGNED";
     public static final String LECTURER_ASSIGNMENT_NOT_FOUND = "LECTURER_ASSIGNMENT_NOT_FOUND";
     public static final String COORDINATOR_ALREADY_ASSIGNED = "COORDINATOR_ALREADY_ASSIGNED";
+    public static final String INVALID_STUDENT_ROSTER_QUERY = "INVALID_STUDENT_ROSTER_QUERY";
     public static final String COORDINATOR_ASSIGNMENT_NOT_FOUND = "COORDINATOR_ASSIGNMENT_NOT_FOUND";
 
     public static final String AGGREGATE_TENANT = "Tenant";
@@ -60,6 +61,19 @@ public final class AdminConstants {
     // consumers (e.g. iam's TenantEventConsumer, Phase 3) bind their own
     // queue to this exchange with routing key "{aggregateType}.{eventType}".
     public static final String OUTBOX_EXCHANGE = "outbox.admin.exchange";
+
+    // Incoming IAM user events for the tenant roster projection. These wire
+    // values intentionally stay local to admin; services communicate through
+    // the RabbitMQ contract, not Java-package coupling.
+    public static final String IAM_OUTBOX_EXCHANGE = "outbox.iam.exchange";
+    public static final String QUEUE_USER_EVENTS = "admin.user-events";
+    public static final String QUEUE_USER_EVENTS_DLQ = "admin.user-events.dlq";
+    public static final String USER_EVENTS_ROUTING_PATTERN = "User.*";
+    public static final String USER_EVENTS_DEAD_LETTER_ROUTING_KEY = "user-events";
+    public static final String EVENT_TYPE_HEADER = "eventType";
+    public static final String INCOMING_EVENT_USER_CREATED = "UserCreated";
+    public static final String INCOMING_EVENT_USER_SUSPENDED = "UserSuspended";
+    public static final String INCOMING_EVENT_USER_REACTIVATED = "UserReactivated";
 
     private AdminConstants() {
     }

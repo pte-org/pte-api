@@ -13,6 +13,7 @@ public final class IamConstants {
     public static final String CROSS_TENANT_ACCESS = "CROSS_TENANT_ACCESS";
     public static final String INVALID_REFRESH_TOKEN = "INVALID_REFRESH_TOKEN";
     public static final String USER_SUSPENDED = "USER_SUSPENDED";
+    public static final String USER_REACTIVATED = "USER_REACTIVATED";
     public static final String FORBIDDEN_ROLE_ASSIGNMENT = "FORBIDDEN_ROLE_ASSIGNMENT";
     public static final String FORBIDDEN_PASSWORD_RESET = "FORBIDDEN_PASSWORD_RESET";
     public static final String DUPLICATE_EMAIL_IN_BATCH = "DUPLICATE_EMAIL_IN_BATCH";
@@ -21,6 +22,7 @@ public final class IamConstants {
     public static final String AGGREGATE_USER = "User";
     public static final String EVENT_USER_CREATED = "UserCreated";
     public static final String EVENT_USER_SUSPENDED = "UserSuspended";
+    public static final String EVENT_USER_REACTIVATED = "UserReactivated";
     public static final String EVENT_USER_PASSWORD_RESET = "UserPasswordReset";
 
     // RabbitMQ outbox relay (rabbitmq-outbox-migration Phase 3). Downstream
