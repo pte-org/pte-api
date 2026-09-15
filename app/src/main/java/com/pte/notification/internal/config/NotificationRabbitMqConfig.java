@@ -9,14 +9,12 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
-import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.retry.interceptor.MethodInvocationRecoverer;
 import org.springframework.retry.interceptor.RetryInterceptorBuilder;
 import org.springframework.retry.interceptor.RetryOperationsInterceptor;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Email send work queue — same shape as scoring's AI-scoring queue. SMTP is
@@ -29,7 +27,7 @@ import tools.jackson.databind.json.JsonMapper;
  * NotificationStatus.FAILED}), never retries forever.
  */
 @Configuration
-public class RabbitMqConfig {
+public class NotificationRabbitMqConfig {
 
     private static final int MAX_ATTEMPTS = 3;
     private static final long INITIAL_INTERVAL_MS = 2_000L;
@@ -73,15 +71,6 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    public MessageConverter jsonMessageConverter(JsonMapper jsonMapper) {
-        JacksonJsonMessageConverter converter = new JacksonJsonMessageConverter(jsonMapper);
-        // Required: EmailWorker.onEmailJob/onDeadLettered take EmailJob as a typed
-        // @RabbitListener parameter — see scoring's RabbitMqConfig for the same gap.
-        converter.setAlwaysConvertToInferredType(true);
-        return converter;
-    }
-
-    @Bean
     public RetryOperationsInterceptor emailRetryInterceptor() {
         MethodInvocationRecoverer<Object> recoverer = (args, cause) -> {
             throw new AmqpRejectAndDontRequeueException(NotificationConstants.EMAIL_SEND_RETRIES_EXHAUSTED, cause);
@@ -93,8 +82,12 @@ public class RabbitMqConfig {
                 .build();
     }
 
+    // Named per-module — see ScoringRabbitMqConfig's identical note; two
+    // @Bean methods named "rabbitListenerContainerFactory" in one Spring
+    // context is a collision, not an override. MessageConverter is the one
+    // shared bean from com.pte.shared.config.RabbitMessageConverterConfig.
     @Bean
-    public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
+    public SimpleRabbitListenerContainerFactory notificationRabbitListenerContainerFactory(
             ConnectionFactory connectionFactory, MessageConverter jsonMessageConverter,
             RetryOperationsInterceptor emailRetryInterceptor) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();

@@ -18,8 +18,10 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          # iam publishes JWKS; the gateway validates every token locally against it.
-          jwk-set-uri: ${IAM_JWKS_URI:http://localhost:8081/api/iam/auth/jwks}
+          # com.pte.identity (in the app monolith since Phase 02) publishes JWKS
+          # at bare "/auth/jwks" (no context-path) — the gateway validates every
+          # token locally against it.
+          jwk-set-uri: ${IAM_JWKS_URI:http://localhost:8091/auth/jwks}
   cloud:
     compatibility-verifier:
       enabled: false
@@ -32,53 +34,81 @@ spring:
                 key-resolver: "#{@tenantKeyResolver}"
                 redis-rate-limiter.replenishRate: ${RATE_REPLENISH:20}
                 redis-rate-limiter.burstCapacity: ${RATE_BURST:40}
+          # plans/modular-monolith Phase 11 cutover: every route below points at
+          # the SAME `app` monolith now, not 9 separate services — the client-facing
+          # path contract (Path predicate) is unchanged, so no FE/mobile client
+          # needed a code change. StripPrefix=2 removes the "/api/{service}" the
+          # old per-service context-path required; app's own controllers mount at
+          # bare root (no context-path), matching what StripPrefix=2 forwards.
           routes:
             - id: iam
-              uri: ${IAM_URI:http://localhost:8081}
+              uri: ${APP_URI:http://localhost:8091}
               predicates:
                 - Path=/api/iam/**
+              filters:
+                - StripPrefix=2
             - id: admin
-              uri: ${ADMIN_URI:http://localhost:8082}
+              uri: ${APP_URI:http://localhost:8091}
               predicates:
                 - Path=/api/admin/**
+              filters:
+                - StripPrefix=2
             - id: authoring
-              uri: ${AUTHORING_URI:http://localhost:8083}
+              uri: ${APP_URI:http://localhost:8091}
               predicates:
                 - Path=/api/authoring/**
+              filters:
+                - StripPrefix=2
             - id: scheduling
-              uri: ${SCHEDULING_URI:http://localhost:8084}
+              uri: ${APP_URI:http://localhost:8091}
               predicates:
                 - Path=/api/scheduling/**
+              filters:
+                - StripPrefix=2
             - id: exam-delivery
-              uri: ${EXAM_DELIVERY_URI:http://localhost:8085}
+              uri: ${APP_URI:http://localhost:8091}
               predicates:
                 - Path=/api/exam-delivery/**
+              filters:
+                - StripPrefix=2
             # More specific than the general "proctor" route below — must be listed first so the STOMP
-            # upgrade path matches before the general HTTP route (phase-10, runtime-verification TODO).
+            # upgrade path matches before the general HTTP route.
             - id: proctor-ws
-              uri: ${PROCTOR_WS_URI:ws://localhost:8086}
+              uri: ${APP_WS_URI:ws://localhost:8091}
               predicates:
                 - Path=/api/proctor/ws/**
+              filters:
+                - StripPrefix=2
             - id: proctor
-              uri: ${PROCTOR_URI:http://localhost:8086}
+              uri: ${APP_URI:http://localhost:8091}
               predicates:
                 - Path=/api/proctor/**
+              filters:
+                - StripPrefix=2
             - id: scoring
-              uri: ${SCORING_URI:http://localhost:8087}
+              uri: ${APP_URI:http://localhost:8091}
               predicates:
                 - Path=/api/scoring/**
+              filters:
+                - StripPrefix=2
             - id: reporting
-              uri: ${REPORTING_URI:http://localhost:8088}
+              uri: ${APP_URI:http://localhost:8091}
               predicates:
                 - Path=/api/reporting/**
+              filters:
+                - StripPrefix=2
             - id: notification
-              uri: ${NOTIFICATION_URI:http://localhost:8089}
+              uri: ${APP_URI:http://localhost:8091}
               predicates:
                 - Path=/api/notification/**
+              filters:
+                - StripPrefix=2
             - id: media
-              uri: ${MEDIA_URI:http://localhost:8090}
+              uri: ${APP_URI:http://localhost:8091}
               predicates:
                 - Path=/api/media/**
+              filters:
+                - StripPrefix=2
 
 management:
   endpoints:

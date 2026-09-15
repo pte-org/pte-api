@@ -19,6 +19,10 @@ public interface ScoringAnswerRepository extends JpaRepository<ScoringAnswer, Lo
     List<ScoringAnswer> findBySessionPublicIdAndTenantIdAndStatus(UUID sessionPublicId, UUID tenantId,
             ScoringAnswerStatus status);
 
+    /** Reporting's skill-aggregation pull (Phase 10) — every scored answer for one attempt. */
+    List<ScoringAnswer> findByAttemptPublicIdAndTenantIdAndStatus(UUID attemptPublicId, UUID tenantId,
+            ScoringAnswerStatus status);
+
     /**
      * Host review list — tenantId is always required (a host is always
      * tenant-scoped). sessionPublicId/status are optional narrowing filters.

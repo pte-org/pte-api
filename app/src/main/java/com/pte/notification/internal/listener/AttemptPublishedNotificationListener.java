@@ -2,16 +2,12 @@ package com.pte.notification.internal.listener;
 
 import com.pte.identity.IdentityService;
 import com.pte.notification.domain.enums.NotificationType;
-import com.pte.notification.dto.event.AttemptPublishedEvent;
 import com.pte.notification.internal.service.NotificationDispatchService;
+import com.pte.reporting.dto.event.AttemptPublishedEvent;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-/**
- * Notifies a student their report is now visible. No publisher exists yet —
- * {@code reporting} (Phase 10) is not ported — so this listener is wired and
- * ready but unreachable in practice until then.
- */
+/** Notifies a student their report is now visible, once reporting's host-gated publish command marks it so. */
 @Component
 public class AttemptPublishedNotificationListener {
 

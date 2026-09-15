@@ -9,14 +9,12 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
-import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.retry.interceptor.MethodInvocationRecoverer;
 import org.springframework.retry.interceptor.RetryOperationsInterceptor;
 import org.springframework.retry.interceptor.RetryInterceptorBuilder;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
  * AI scoring work queue — a vendor call is slow/unreliable and needs bounded
@@ -33,7 +31,7 @@ import tools.jackson.databind.json.JsonMapper;
  * never retries forever.
  */
 @Configuration
-public class RabbitMqConfig {
+public class ScoringRabbitMqConfig {
 
     private static final int MAX_ATTEMPTS = 3;
     private static final long INITIAL_INTERVAL_MS = 2_000L;
@@ -77,17 +75,6 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    public MessageConverter jsonMessageConverter(JsonMapper jsonMapper) {
-        JacksonJsonMessageConverter converter = new JacksonJsonMessageConverter(jsonMapper);
-        // Required: AiScoringWorker.onAiScoringJob/onDeadLettered take AiScoringJob as a typed
-        // @RabbitListener parameter. By default this converter only trusts java.util/java.lang
-        // in the embedded type-id header, even when the listener's own declared parameter
-        // type is already known.
-        converter.setAlwaysConvertToInferredType(true);
-        return converter;
-    }
-
-    @Bean
     public RetryOperationsInterceptor aiScoringRetryInterceptor() {
         MethodInvocationRecoverer<Object> recoverer = (args, cause) -> {
             throw new AmqpRejectAndDontRequeueException(ScoringConstants.AI_SCORING_RETRIES_EXHAUSTED, cause);
@@ -99,8 +86,16 @@ public class RabbitMqConfig {
                 .build();
     }
 
+    // Named per-module (not the bare "rabbitListenerContainerFactory" every
+    // @RabbitListener in this codebase used to default to when it lived in its
+    // own microservice) — notification defines its own same-shaped factory,
+    // and two @Bean methods of the same name/type in one Spring context is a
+    // collision, not an override. Every @RabbitListener in this module must
+    // reference this exact factory name. MessageConverter is the one shared
+    // bean from com.pte.shared.config.RabbitMessageConverterConfig — resolved
+    // by type, unambiguous since only one MessageConverter bean exists.
     @Bean
-    public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
+    public SimpleRabbitListenerContainerFactory scoringRabbitListenerContainerFactory(
             ConnectionFactory connectionFactory, MessageConverter jsonMessageConverter,
             RetryOperationsInterceptor aiScoringRetryInterceptor) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();

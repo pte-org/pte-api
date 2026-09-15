@@ -7,7 +7,7 @@ import com.pte.proctoring.internal.dto.request.IssueCommandRequest;
 import com.pte.proctoring.internal.dto.response.ErrorResponse;
 import com.pte.proctoring.internal.dto.response.ProctorSessionResponse;
 import com.pte.proctoring.internal.security.StompPrincipal;
-import com.pte.proctoring.internal.service.ProctorCommandService;
+import com.pte.proctoring.internal.service.ProctorCommandDispatchService;
 import com.pte.proctoring.internal.service.ProctorSessionService;
 import com.pte.proctoring.internal.service.ViolationService;
 import com.pte.shared.exception.DomainException;
@@ -36,10 +36,10 @@ public class ProctorStompController {
     private static final String ROLE_PROCTOR = "PROCTOR";
 
     private final ProctorSessionService proctorSessionService;
-    private final ProctorCommandService proctorCommandService;
+    private final ProctorCommandDispatchService proctorCommandService;
     private final ViolationService violationService;
 
-    public ProctorStompController(ProctorSessionService proctorSessionService, ProctorCommandService proctorCommandService,
+    public ProctorStompController(ProctorSessionService proctorSessionService, ProctorCommandDispatchService proctorCommandService,
                                   ViolationService violationService) {
         this.proctorSessionService = proctorSessionService;
         this.proctorCommandService = proctorCommandService;

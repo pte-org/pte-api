@@ -42,7 +42,7 @@ public class AiScoringWorker {
         this.essayScoringClient = essayScoringClient;
     }
 
-    @RabbitListener(queues = ScoringConstants.AI_SCORING_QUEUE, containerFactory = "rabbitListenerContainerFactory")
+    @RabbitListener(queues = ScoringConstants.AI_SCORING_QUEUE, containerFactory = "scoringRabbitListenerContainerFactory")
     @Transactional
     public void onAiScoringJob(AiScoringJob job) {
         Optional<ScoringAnswer> maybeAnswer = scoringAnswerRepository.findByAnswerPublicId(job.answerPublicId());
@@ -61,7 +61,7 @@ public class AiScoringWorker {
         scoringAnswerRepository.save(answer);
     }
 
-    @RabbitListener(queues = ScoringConstants.AI_SCORING_DLQ, containerFactory = "rabbitListenerContainerFactory")
+    @RabbitListener(queues = ScoringConstants.AI_SCORING_DLQ, containerFactory = "scoringRabbitListenerContainerFactory")
     @Transactional
     public void onDeadLettered(AiScoringJob job) {
         scoringAnswerRepository.findByAnswerPublicId(job.answerPublicId()).ifPresent(answer -> {

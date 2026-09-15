@@ -26,7 +26,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class ProctorCommandServiceTest {
+class ProctorCommandDispatchServiceTest {
 
     @Mock
     private ProctorSessionService proctorSessionService;
@@ -37,11 +37,11 @@ class ProctorCommandServiceTest {
     @Mock
     private SimpMessagingTemplate messagingTemplate;
 
-    private ProctorCommandService service;
+    private ProctorCommandDispatchService service;
 
     @BeforeEach
     void setUp() {
-        service = new ProctorCommandService(proctorSessionService, attemptService, messagingTemplate);
+        service = new ProctorCommandDispatchService(proctorSessionService, attemptService, messagingTemplate);
     }
 
     @Test

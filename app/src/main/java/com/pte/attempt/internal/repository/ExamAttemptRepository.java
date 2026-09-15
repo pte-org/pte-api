@@ -1,6 +1,7 @@
 package com.pte.attempt.internal.repository;
 
 import com.pte.attempt.domain.ExamAttempt;
+import com.pte.attempt.domain.enums.AttemptStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -8,6 +9,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -28,4 +30,10 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long> 
 
     /** Tenant-scoped, not student-owned — used by proctoring's force-submit (Phase 09), where the actor is a verified proctor command, not the student. */
     Optional<ExamAttempt> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
+
+    /** No tenant filter: reporting (Phase 10) resolves tenant from the attempt itself, then checks it against the caller — same trusted-caller pattern as session's EntitlementService. */
+    Optional<ExamAttempt> findByPublicIdAndStatus(UUID publicId, AttemptStatus status);
+
+    /** Reporting's publish fanout (Phase 10) — every submitted attempt in a session. */
+    List<ExamAttempt> findBySessionPublicIdAndTenantIdAndStatus(UUID sessionPublicId, UUID tenantId, AttemptStatus status);
 }

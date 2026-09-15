@@ -21,21 +21,13 @@
 		<spring-cloud.version>2025.1.0</spring-cloud.version>
 	</properties>
 
+	<!-- plans/modular-monolith Phase 11 cutover: the 10 services/* modules that
+	     used to be listed here are gone — `app` replaces all of them. `gateway`
+	     stays (routes to `app` now); `pte-common` stays (gateway's own shared
+	     JWT claim-name contract dependency, unrelated to services/*'s removal). -->
 	<modules>
 		<module>pte-common</module>
 		<module>gateway</module>
-		<module>services/iam</module>
-		<module>services/admin</module>
-		<module>services/authoring</module>
-		<module>services/scheduling</module>
-		<module>services/exam-delivery</module>
-		<module>services/proctor</module>
-		<module>services/scoring</module>
-		<module>services/reporting</module>
-		<module>services/media</module>
-		<module>services/notification</module>
-		<!-- Modular monolith (plans/modular-monolith): grows alongside services/*
-		     one phase at a time. services/* stays until Phase 11 cutover. -->
 		<module>app</module>
 	</modules>
 

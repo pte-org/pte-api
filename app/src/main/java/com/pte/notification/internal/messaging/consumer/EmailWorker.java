@@ -32,7 +32,7 @@ public class EmailWorker {
         this.mailSender = mailSender;
     }
 
-    @RabbitListener(queues = NotificationConstants.EMAIL_QUEUE, containerFactory = "rabbitListenerContainerFactory")
+    @RabbitListener(queues = NotificationConstants.EMAIL_QUEUE, containerFactory = "notificationRabbitListenerContainerFactory")
     @Transactional
     public void onEmailJob(EmailJob job) {
         Optional<NotificationLog> maybeLog = notificationLogRepository.findByPublicId(job.notificationLogPublicId());
@@ -49,7 +49,7 @@ public class EmailWorker {
         notificationLogRepository.save(log);
     }
 
-    @RabbitListener(queues = NotificationConstants.EMAIL_DLQ, containerFactory = "rabbitListenerContainerFactory")
+    @RabbitListener(queues = NotificationConstants.EMAIL_DLQ, containerFactory = "notificationRabbitListenerContainerFactory")
     @Transactional
     public void onDeadLettered(EmailJob job) {
         notificationLogRepository.findByPublicId(job.notificationLogPublicId()).ifPresent(log -> {

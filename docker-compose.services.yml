@@ -1,16 +1,22 @@
-# Full-stack local compose: gateway + all 10 backend microservices, built from
-# source via the shared root Dockerfile. Always run alongside the infra-only
-# docker-compose.yml (which owns the pte-network definition + the four per-cell
-# Postgres instances pg-core/pg-exam/pg-live/pg-async + redis/rabbitmq/minio/
+# Local compose: gateway + the app monolith, built from source via the shared
+# root Dockerfile. Always run alongside the infra-only docker-compose.yml
+# (which owns the pte-network definition + pg-monolith + redis/rabbitmq/minio/
 # mailpit/jaeger):
 #
-#   docker compose --env-file .env.local \
+#   docker compose --env-file .env \
 #     -f docker-compose.yml -f docker-compose.services.yml up --build
 #
-# No service here maps a host port except gateway (see docker-compose.services.yml
-# gateway block, added alongside these) — every backend service is reached only
-# through the gateway or, for the handful of direct service-to-service calls
-# documented below, via the internal pte-network.
+# plans/modular-monolith Phase 11 cutover: the 9 microservices + media that
+# used to live in this file (iam, admin, authoring, scheduling, exam-delivery,
+# proctor, scoring, reporting, notification, media) are gone — `app` now
+# serves every one of their public API paths, fronted by `gateway`'s
+# StripPrefix=2 routes (see gateway/src/main/resources/application.yml). Only
+# `gateway` maps a host port; `app` is reached through it.
+#
+# Rollback: `git revert` the cutover commit restores this file, the gateway
+# routes, and services/* (never deleted before this phase) to their
+# pre-cutover state — rehearsed via `git stash`/`git stash pop` before this
+# commit, see plan.md's Rollback section and the Phase 11 smoke-test report.
 
 x-build-defaults: &build-defaults
   context: .
@@ -19,7 +25,7 @@ x-build-defaults: &build-defaults
 # Every app container shares the same shape: curl its own actuator health
 # endpoint. Only `test` (the URL/context-path) differs per service — merge
 # this in and override just that key, so tuning start_period/retries fleet-wide
-# is a one-line change instead of 11 hand-edits drifting out of sync.
+# is a one-line change instead of hand-edits drifting out of sync.
 x-healthcheck-defaults: &healthcheck-defaults
   interval: 10s
   timeout: 5s
@@ -27,279 +33,6 @@ x-healthcheck-defaults: &healthcheck-defaults
   start_period: 40s
 
 services:
-  iam:
-    build:
-      <<: *build-defaults
-      args:
-        SERVICE_MODULE: services/iam
-    environment:
-      IAM_DB_URL: jdbc:postgresql://pg-core:5432/iam
-      IAM_DB_USER: ${IAM_DB_USER:?set IAM_DB_USER in the env file}
-      IAM_DB_PASSWORD: ${IAM_DB_PASSWORD:?set IAM_DB_PASSWORD in the env file}
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
-      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
-      INTERNAL_BOOTSTRAP_KEY: ${INTERNAL_BOOTSTRAP_KEY:?set INTERNAL_BOOTSTRAP_KEY in the env file}
-      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
-    depends_on:
-      pg-core:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-sf", "http://localhost:8081/api/iam/actuator/health"]
-    networks: [pte-network]
-
-  admin:
-    build:
-      <<: *build-defaults
-      args:
-        SERVICE_MODULE: services/admin
-    environment:
-      ADMIN_DB_URL: jdbc:postgresql://pg-core:5432/admin
-      ADMIN_DB_USER: ${ADMIN_DB_USER:?set ADMIN_DB_USER in the env file}
-      ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD:?set ADMIN_DB_PASSWORD in the env file}
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
-      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
-      INTERNAL_BOOTSTRAP_KEY: ${INTERNAL_BOOTSTRAP_KEY:?set INTERNAL_BOOTSTRAP_KEY in the env file}
-      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
-      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
-      IAM_URL: http://iam:8081/api/iam
-    depends_on:
-      pg-core:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-sf", "http://localhost:8082/api/admin/actuator/health"]
-    networks: [pte-network]
-
-  authoring:
-    build:
-      <<: *build-defaults
-      args:
-        SERVICE_MODULE: services/authoring
-    environment:
-      AUTHORING_DB_URL: jdbc:postgresql://pg-core:5432/authoring
-      AUTHORING_DB_USER: ${AUTHORING_DB_USER:?set AUTHORING_DB_USER in the env file}
-      AUTHORING_DB_PASSWORD: ${AUTHORING_DB_PASSWORD:?set AUTHORING_DB_PASSWORD in the env file}
-      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
-      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
-      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
-    depends_on:
-      pg-core:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-sf", "http://localhost:8083/api/authoring/actuator/health"]
-    networks: [pte-network]
-
-  scheduling:
-    build:
-      <<: *build-defaults
-      args:
-        SERVICE_MODULE: services/scheduling
-    environment:
-      SCHEDULING_DB_URL: jdbc:postgresql://pg-core:5432/scheduling
-      SCHEDULING_DB_USER: ${SCHEDULING_DB_USER:?set SCHEDULING_DB_USER in the env file}
-      SCHEDULING_DB_PASSWORD: ${SCHEDULING_DB_PASSWORD:?set SCHEDULING_DB_PASSWORD in the env file}
-      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
-      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
-      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
-      # Direct inter-service call, bypasses the gateway (see spec Assumptions).
-      AUTHORING_URL: http://authoring:8083/api/authoring
-    depends_on:
-      pg-core:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-sf", "http://localhost:8084/api/scheduling/actuator/health"]
-    networks: [pte-network]
-
-  exam-delivery:
-    build:
-      <<: *build-defaults
-      args:
-        SERVICE_MODULE: services/exam-delivery
-    environment:
-      # Note: db name is "exam_delivery" (underscore); module dir is "exam-delivery" (hyphen).
-      EXAM_DELIVERY_DB_URL: jdbc:postgresql://pg-exam:5432/exam_delivery
-      EXAM_DELIVERY_DB_USER: ${EXAM_DELIVERY_DB_USER:?set EXAM_DELIVERY_DB_USER in the env file}
-      EXAM_DELIVERY_DB_PASSWORD: ${EXAM_DELIVERY_DB_PASSWORD:?set EXAM_DELIVERY_DB_PASSWORD in the env file}
-      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
-      INTERNAL_BOOTSTRAP_KEY: ${INTERNAL_BOOTSTRAP_KEY:?set INTERNAL_BOOTSTRAP_KEY in the env file}
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
-      REDIS_HOST: redis
-      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
-      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
-      # Direct inter-service calls, bypass the gateway (see spec Assumptions).
-      AUTHORING_URL: http://authoring:8083/api/authoring
-      SCHEDULING_URL: http://scheduling:8084/api/scheduling
-      # Was missing entirely — MediaClient.presignGet defaulted to
-      # localhost:8090 (unreachable from inside this container), silently
-      # failing (circuit-breaker fallback -> null -> AudioResolutionFailedException,
-      # 503 on attempt-start) for every item with an audioPromptRef. Never
-      # caught before because no task type had ever successfully exercised
-      # this presign call in a live compose run until plans/phat-speaking-
-      # audio-prompt-e2e's Phase 1 (LISTENING has no configured task-timing
-      # entry either, per that same plan's finding, so it could never reach
-      # this call in the first place).
-      MEDIA_URL: http://media:8090/api/media
-      # Without this, EncryptionKeyProvider's own default (`prod`) refuses to
-      # start without a real EXAM_DELIVERY_ENCRYPTION_PRIVATE_KEY_PEM/PUBLIC_KEY_PEM
-      # pair configured — fails fast by design rather than silently generating
-      # an ephemeral keypair in a real deployment (see EncryptionKeyProvider's
-      # own doc comment). `dev`/`local` are the two profiles it allows to
-      # fall back to a generated ephemeral keypair instead, which is fine for
-      # this local compose stack (found + fixed via plans/phat-speaking-api-e2e-verify).
-      SPRING_PROFILES_ACTIVE: dev
-    depends_on:
-      pg-exam:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-sf", "http://localhost:8085/api/exam-delivery/actuator/health"]
-    networks: [pte-network]
-
-  proctor:
-    build:
-      <<: *build-defaults
-      args:
-        SERVICE_MODULE: services/proctor
-    environment:
-      PROCTOR_DB_URL: jdbc:postgresql://pg-live:5432/proctor
-      PROCTOR_DB_USER: ${PROCTOR_DB_USER:?set PROCTOR_DB_USER in the env file}
-      PROCTOR_DB_PASSWORD: ${PROCTOR_DB_PASSWORD:?set PROCTOR_DB_PASSWORD in the env file}
-      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
-      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
-      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
-      # Direct inter-service call, bypasses the gateway (see spec Assumptions).
-      SCHEDULING_URL: http://scheduling:8084/api/scheduling
-    depends_on:
-      pg-live:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-sf", "http://localhost:8086/api/proctor/actuator/health"]
-    networks: [pte-network]
-
-  scoring:
-    build:
-      <<: *build-defaults
-      args:
-        SERVICE_MODULE: services/scoring
-    environment:
-      SCORING_DB_URL: jdbc:postgresql://pg-async:5432/scoring
-      SCORING_DB_USER: ${SCORING_DB_USER:?set SCORING_DB_USER in the env file}
-      SCORING_DB_PASSWORD: ${SCORING_DB_PASSWORD:?set SCORING_DB_PASSWORD in the env file}
-      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
-      INTERNAL_BOOTSTRAP_KEY: ${INTERNAL_BOOTSTRAP_KEY:?set INTERNAL_BOOTSTRAP_KEY in the env file}
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
-      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
-      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
-      # Host answer review (quang-host-answer-review Phase 1) - presign audio/image URLs.
-      MEDIA_URL: http://media:8090/api/media
-    depends_on:
-      pg-async:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-sf", "http://localhost:8087/api/scoring/actuator/health"]
-    networks: [pte-network]
-
-  reporting:
-    build:
-      <<: *build-defaults
-      args:
-        SERVICE_MODULE: services/reporting
-    environment:
-      REPORTING_DB_URL: jdbc:postgresql://pg-core:5432/reporting
-      REPORTING_DB_USER: ${REPORTING_DB_USER:?set REPORTING_DB_USER in the env file}
-      REPORTING_DB_PASSWORD: ${REPORTING_DB_PASSWORD:?set REPORTING_DB_PASSWORD in the env file}
-      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
-      INTERNAL_BOOTSTRAP_KEY: ${INTERNAL_BOOTSTRAP_KEY:?set INTERNAL_BOOTSTRAP_KEY in the env file}
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
-      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
-      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
-      # Direct inter-service calls, bypass the gateway (see spec Assumptions).
-      EXAM_DELIVERY_URL: http://exam-delivery:8085/api/exam-delivery
-      SCORING_URL: http://scoring:8087/api/scoring
-    depends_on:
-      pg-core:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-sf", "http://localhost:8088/api/reporting/actuator/health"]
-    networks: [pte-network]
-
-  notification:
-    build:
-      <<: *build-defaults
-      args:
-        SERVICE_MODULE: services/notification
-    environment:
-      NOTIFICATION_DB_URL: jdbc:postgresql://pg-core:5432/notification
-      NOTIFICATION_DB_USER: ${NOTIFICATION_DB_USER:?set NOTIFICATION_DB_USER in the env file}
-      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?set NOTIFICATION_DB_PASSWORD in the env file}
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
-      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
-      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
-      MAIL_HOST: mailpit
-      MAIL_PORT: 1025
-    depends_on:
-      pg-core:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      mailpit:
-        condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-sf", "http://localhost:8089/api/notification/actuator/health"]
-    networks: [pte-network]
-
-  # Sole service exposed to the host — every backend service above is reached
-  # only through this gateway (or, for the handful of direct service-to-service
-  # calls documented above, via pte-network). No hard depends_on/healthy gate on
-  # the 10 backend services: JWT-consuming routes accept a first-boot retry
-  # window rather than blocking gateway startup (spec decision). redis IS
-  # hard-gated since the rate limiter needs it synchronously per request.
   gateway:
     build:
       <<: *build-defaults
@@ -310,66 +43,26 @@ services:
     environment:
       REDIS_HOST: redis
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
-      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
-      IAM_URI: http://iam:8081
-      ADMIN_URI: http://admin:8082
-      AUTHORING_URI: http://authoring:8083
-      SCHEDULING_URI: http://scheduling:8084
-      EXAM_DELIVERY_URI: http://exam-delivery:8085
-      # More specific than PROCTOR_URI — must keep the ws:// scheme.
-      PROCTOR_WS_URI: ws://proctor:8086
-      PROCTOR_URI: http://proctor:8086
-      SCORING_URI: http://scoring:8087
-      REPORTING_URI: http://reporting:8088
-      NOTIFICATION_URI: http://notification:8089
-      MEDIA_URI: http://media:8090
+      # plans/modular-monolith Phase 11 cutover — every route now points at the
+      # single app monolith container; see gateway/src/main/resources/application.yml.
+      IAM_JWKS_URI: http://app:8091/auth/jwks
+      APP_URI: http://app:8091
+      # More specific proctor-ws route must keep the ws:// scheme.
+      APP_WS_URI: ws://app:8091
     depends_on:
       redis:
+        condition: service_healthy
+      app:
         condition: service_healthy
     healthcheck:
       <<: *healthcheck-defaults
       test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
     networks: [pte-network]
 
-  # media has no RabbitMQ configuration at all (verified against its application.yml) —
-  # deliberately excluded from RABBITMQ_HOST / the rabbitmq depends_on gate.
-  media:
-    build:
-      <<: *build-defaults
-      args:
-        SERVICE_MODULE: services/media
-    environment:
-      MEDIA_DB_URL: jdbc:postgresql://pg-core:5432/media
-      MEDIA_DB_USER: ${MEDIA_DB_USER:?set MEDIA_DB_USER in the env file}
-      MEDIA_DB_PASSWORD: ${MEDIA_DB_PASSWORD:?set MEDIA_DB_PASSWORD in the env file}
-      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in the env file}
-      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
-      IAM_JWKS_URI: http://iam:8081/api/iam/auth/jwks
-      MINIO_ENDPOINT: http://minio:9000
-      # Presigned URLs are handed to an external caller (a student's pte-app
-      # instance on the host machine, not another container) — `minio` only
-      # resolves inside this compose network. `localhost:9000` is what the
-      # host machine actually reaches, since minio's docker-compose.yml maps
-      # container port 9000 to the same host port (found + fixed via
-      # plans/phat-speaking-api-e2e-verify Phase 3).
-      MINIO_PUBLIC_ENDPOINT: http://localhost:9000
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in the env file}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in the env file}
-    depends_on:
-      pg-core:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-sf", "http://localhost:8090/api/media/actuator/health"]
-    networks: [pte-network]
-
-  # MONOLITH — plans/modular-monolith, Phase 01. Grows alongside every service
-  # above; none of them are touched or depended on. Port 8091 (first free after
-  # gateway 8080 + the 10 backend services 8081-8090). No IAM_JWKS_URI: unlike
-  # services/*, this app validates its own tokens against its own keys
-  # (plan.md Phase 02 — deliberately not wired to the old gateway/iam).
+  # MONOLITH — plans/modular-monolith. Since Phase 11 cutover this is the only
+  # backend container gateway routes to. Port 8091 (unchanged from Phase 01).
+  # No IAM_JWKS_URI: this app validates its own tokens against its own keys
+  # (plan.md Phase 02).
   app:
     build:
       <<: *build-defaults
@@ -385,12 +78,37 @@ services:
       RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      # com.pte.media (Phase 04/A) — server-to-server endpoint is the docker-network
+      # hostname; MINIO_PUBLIC_ENDPOINT is what a presigned URL is SIGNED with and
+      # must be reachable from the caller (browser, seed script, pte-app on the
+      # host) — the host port mapping, not the docker-internal hostname. A deploy
+      # overlay points this at the public origin instead.
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in the env file}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in the env file}
+      # com.pte.notification (Phase 09) — Mailpit's SMTP port on the docker network.
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      # com.pte.proctoring (Phase 09) — STOMP console origin(s); override per environment.
+      PROCTOR_WS_ALLOWED_ORIGINS: ${PROCTOR_WS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      # com.pte.attempt (Phase 07) — STRICT answerIntegrityLevel encryption keypair;
+      # required outside dev/local profiles (EncryptionKeyProvider fails fast otherwise).
+      ATTEMPT_ENCRYPTION_PRIVATE_KEY_PEM: ${ATTEMPT_ENCRYPTION_PRIVATE_KEY_PEM:?set ATTEMPT_ENCRYPTION_PRIVATE_KEY_PEM in the env file}
+      ATTEMPT_ENCRYPTION_PUBLIC_KEY_PEM: ${ATTEMPT_ENCRYPTION_PUBLIC_KEY_PEM:?set ATTEMPT_ENCRYPTION_PUBLIC_KEY_PEM in the env file}
+      # com.pte.identity (Phase 02) — JWT signing key; empty falls back to an
+      # ephemeral key with a startup warning, set explicitly so tokens survive a restart.
+      IDENTITY_RSA_PRIVATE_KEY_PEM: ${IDENTITY_RSA_PRIVATE_KEY_PEM:?set IDENTITY_RSA_PRIVATE_KEY_PEM in the env file}
     depends_on:
       pg-monolith:
         condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      mailpit:
         condition: service_healthy
     healthcheck:
       <<: *healthcheck-defaults

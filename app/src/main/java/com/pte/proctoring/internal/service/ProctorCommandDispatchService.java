@@ -18,15 +18,23 @@ import java.util.UUID;
  * attempt live in the same app now). Broadcasts a confirmation to every
  * proctor watching the same exam session, so a multi-proctor session stays
  * in sync.
+ *
+ * <p>Named {@code Dispatch}, not the bare {@code ProctorCommandService} the
+ * source used, because {@code attempt.internal.service.ProctorCommandService}
+ * already exists in this monolith — same simple name across modules is fine
+ * for a compiler that fully qualifies imports, but collides as a Spring bean
+ * name (default component-scan naming uses the simple class name only).
+ * Caught by Phase 11's runtime smoke test, not by any unit test — no unit
+ * test boots a full Spring context.
  */
 @Service
-public class ProctorCommandService {
+public class ProctorCommandDispatchService {
 
     private final ProctorSessionService proctorSessionService;
     private final AttemptService attemptService;
     private final SimpMessagingTemplate messagingTemplate;
 
-    public ProctorCommandService(ProctorSessionService proctorSessionService, AttemptService attemptService,
+    public ProctorCommandDispatchService(ProctorSessionService proctorSessionService, AttemptService attemptService,
                                  SimpMessagingTemplate messagingTemplate) {
         this.proctorSessionService = proctorSessionService;
         this.attemptService = attemptService;

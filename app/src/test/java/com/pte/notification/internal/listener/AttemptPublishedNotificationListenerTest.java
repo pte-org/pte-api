@@ -4,7 +4,7 @@ import com.pte.identity.IdentityService;
 import com.pte.identity.domain.User;
 import com.pte.notification.domain.enums.NotificationType;
 import com.pte.notification.internal.service.NotificationDispatchService;
-import com.pte.notification.dto.event.AttemptPublishedEvent;
+import com.pte.reporting.dto.event.AttemptPublishedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,13 +37,14 @@ class AttemptPublishedNotificationListenerTest {
     void onAttemptPublished_userFound_dispatchesNotification() {
         UUID studentPublicId = UUID.randomUUID();
         UUID attemptPublicId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
 
         User student = new User();
         student.setPublicId(studentPublicId);
         student.setEmail("student@example.com");
 
-        AttemptPublishedEvent event = new AttemptPublishedEvent(attemptPublicId, studentPublicId, tenantId);
+        AttemptPublishedEvent event = new AttemptPublishedEvent(attemptPublicId, sessionPublicId, studentPublicId, tenantId);
 
         when(identityService.findById(studentPublicId)).thenReturn(Optional.of(student));
 
@@ -58,9 +59,10 @@ class AttemptPublishedNotificationListenerTest {
     void onAttemptPublished_userNotFound_dispatchesWithNullRecipient() {
         UUID studentPublicId = UUID.randomUUID();
         UUID attemptPublicId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
 
-        AttemptPublishedEvent event = new AttemptPublishedEvent(attemptPublicId, studentPublicId, tenantId);
+        AttemptPublishedEvent event = new AttemptPublishedEvent(attemptPublicId, sessionPublicId, studentPublicId, tenantId);
 
         when(identityService.findById(studentPublicId)).thenReturn(Optional.empty());
 

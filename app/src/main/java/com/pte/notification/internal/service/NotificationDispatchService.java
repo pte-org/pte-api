@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
@@ -23,6 +24,17 @@ import java.util.UUID;
  * logged and skipped rather than failing the whole listener — an explicit
  * policy, not silence: unlike the old cross-topic directory-lag case, this
  * now only happens for a genuinely bad/stale publicId.
+ *
+ * <p>{@code REQUIRES_NEW} on both methods — every caller is a {@code
+ * @TransactionalEventListener} (AFTER_COMMIT) invoked from inside the
+ * publishing transaction's own commit callback. At that point Spring's
+ * transactional resource for the original transaction can still be bound to
+ * the thread; a plain {@code @Transactional} (REQUIRED) would silently join
+ * that already-completing transaction instead of opening a fresh one —
+ * `notificationLogRepository.save(...)` then never actually commits (caught
+ * by Phase 11's runtime smoke test: the row was visibly created in-process,
+ * `saved.getPublicId()` returned a real value, yet nothing landed in
+ * Postgres — no unit test exercises real transaction-commit timing).
  */
 @Service
 public class NotificationDispatchService {
@@ -37,7 +49,7 @@ public class NotificationDispatchService {
         this.rabbitTemplate = rabbitTemplate;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void dispatch(NotificationType type, User recipient, UUID tenantId, String subject, String body) {
         if (recipient == null) {
             log.warn("Skipping {} notification (tenantId={}): recipient not found in identity", type, tenantId);
@@ -47,7 +59,7 @@ public class NotificationDispatchService {
     }
 
     /** Same as {@link #dispatch} but for a caller fanning out to N already-loaded recipients — avoids a redundant lookup per recipient. */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void dispatchTo(NotificationType type, User recipient, UUID tenantId, String subject, String body) {
         NotificationLog notificationLog = new NotificationLog();
         notificationLog.setRecipientUserPublicId(recipient.getPublicId());
