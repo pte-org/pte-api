@@ -55,6 +55,18 @@ pte:
     batch-size: 100
     max-publish-attempts: 10
     cleanup-retention-days: 7
+  roster:
+    # One-time cold-start rebuild of the student roster projection from IAM.
+    # See StudentRosterBackfillRunner: RabbitMQ cannot replay UserCreated events
+    # published before this service's queue existed, so students predating the
+    # projection are only recoverable by pulling them from IAM.
+    backfill:
+      enabled: ${ROSTER_BACKFILL_ENABLED:true}
+      # 10 x 15s outlasts IAM's 120s healthcheck start_period on the hosted
+      # box — admin's depends_on does not wait for IAM, so early attempts are
+      # expected to fail while IAM is still booting.
+      max-attempts: ${ROSTER_BACKFILL_MAX_ATTEMPTS:10}
+      retry-delay: ${ROSTER_BACKFILL_RETRY_DELAY:15s}
 
 management:
   endpoints:
