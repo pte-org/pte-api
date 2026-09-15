@@ -1,10 +1,10 @@
-package com.pte.iam.domain.event;
+package com.pte.admin.messaging.consumer.dto;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-/** Payload for the {@code UserCreated} outbox event (consumed by notification, etc.). */
+/** Admin-local wire DTO for IAM's additive UserCreated event contract. */
 public record UserCreatedEvent(UUID userPublicId, String email, UUID tenantId, List<String> roles,
                                String fullName, String studentCode, String phone, String status,
                                Instant createdAt) {

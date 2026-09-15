@@ -40,6 +40,7 @@ public class SecurityConfig {
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeExchange(exchange -> exchange
+                        .pathMatchers("/api/iam/internal/**", "/api/admin/internal/**").denyAll()
                         .pathMatchers(PUBLIC_PATHS).permitAll()
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));

@@ -61,6 +61,11 @@ public class UserController {
         return ApiResponse.success(userService.suspend(publicId, currentUser()));
     }
 
+    @PostMapping("/{publicId}/reactivate")
+    public ApiResponse<UserResponse> reactivate(@PathVariable UUID publicId) {
+        return ApiResponse.success(userService.reactivate(publicId, currentUser()));
+    }
+
     // No method-level @PreAuthorize override needed: tenant scope and the
     // STUDENT/PROCTOR-only role restriction are enforced in UserService#resetPassword.
     @PostMapping("/{publicId}/reset-password")

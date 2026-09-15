@@ -29,6 +29,10 @@ spring:
     template:
       mandatory: true
 
+internal:
+  service-key: ${INTERNAL_SERVICE_KEY}
+  bootstrap-key: ${INTERNAL_BOOTSTRAP_KEY}
+
 management:
   endpoints:
     web:

@@ -79,7 +79,8 @@ public class UserBulkCreateWriter {
         outboxWriter.write(IamConstants.AGGREGATE_USER, saved.getPublicId().toString(),
                 IamConstants.EVENT_USER_CREATED,
                 new UserCreatedEvent(saved.getPublicId(), saved.getEmail(), tenantId,
-                        saved.getRoles().stream().map(Role::name).toList()),
+                        saved.getRoles().stream().map(Role::name).toList(), saved.getFullName(),
+                        saved.getStudentCode(), saved.getPhone(), saved.getStatus().name(), saved.getCreatedAt()),
                 tenantId);
 
         return Optional.of(new Result(saved, password));

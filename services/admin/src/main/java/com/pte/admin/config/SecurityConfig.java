@@ -1,17 +1,22 @@
 package com.pte.admin.config;
 
+import com.pte.common.security.InternalApiKeyFilter;
+import com.pte.common.security.InternalBootstrapKeyFilter;
+import com.pte.common.security.InternalServiceAuth;
 import com.pte.common.security.ResourceServerJwt;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * admin is a pure resource server — it validates iam-issued JWTs locally via
- * JWKS (jwk-set-uri in application.yml), never calling iam per request. Roles
- * come from the {@code roles} claim; endpoints are guarded by method security.
+ * Admin exposes a JWT-protected human-facing surface and a separate bootstrap
+ * service surface for bounded projection rebuilds.
  */
 @Configuration
 @EnableMethodSecurity
@@ -20,7 +25,23 @@ public class SecurityConfig {
     private static final String[] PUBLIC_PATHS = {"/actuator/health", "/actuator/health/**"};
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    @Order(1)
+    public SecurityFilterChain internalFilterChain(HttpSecurity http,
+            @Value("${internal.service-key}") String serviceKey,
+            @Value("${internal.bootstrap-key}") String bootstrapKey) throws Exception {
+        http
+                .securityMatcher(InternalServiceAuth.INTERNAL_PATH_PREFIX)
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth.anyRequest().hasRole(InternalServiceAuth.ROLE_INTERNAL_SERVICE))
+                .addFilterBefore(new InternalApiKeyFilter(serviceKey), UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(new InternalBootstrapKeyFilter(bootstrapKey), InternalApiKeyFilter.class);
+        return http.build();
+    }
+
+    @Bean
+    @Order(2)
+    public SecurityFilterChain jwtFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

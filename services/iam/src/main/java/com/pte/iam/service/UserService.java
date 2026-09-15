@@ -8,6 +8,7 @@ import com.pte.iam.domain.User;
 import com.pte.iam.domain.enums.Role;
 import com.pte.iam.domain.event.UserCreatedEvent;
 import com.pte.iam.domain.event.UserPasswordResetEvent;
+import com.pte.iam.domain.event.UserReactivatedEvent;
 import com.pte.iam.domain.event.UserSuspendedEvent;
 import com.pte.iam.domain.exception.DuplicateEmailInBatchException;
 import com.pte.iam.domain.exception.EmailAlreadyUsedException;
@@ -85,7 +86,9 @@ public class UserService {
         user.setClassName(request.className());
         user.setPhone(request.phone());
         user.setDateOfBirth(request.dateOfBirth());
-        User saved = userRepository.save(user);
+        // Flush before publishing the outbox payload so Hibernate's generated
+        // createdAt is available for the roster's immutable sort key.
+        User saved = userRepository.saveAndFlush(user);
 
         LoginHash loginHash = new LoginHash();
         loginHash.setUserId(saved.getId());
@@ -94,7 +97,9 @@ public class UserService {
 
         outboxWriter.write(IamConstants.AGGREGATE_USER, saved.getPublicId().toString(),
                 IamConstants.EVENT_USER_CREATED,
-                new UserCreatedEvent(saved.getPublicId(), saved.getEmail(), tenantId, roles.stream().map(Role::name).toList()),
+                new UserCreatedEvent(saved.getPublicId(), saved.getEmail(), tenantId,
+                        roles.stream().map(Role::name).toList(), saved.getFullName(), saved.getStudentCode(),
+                        saved.getPhone(), saved.getStatus().name(), saved.getCreatedAt()),
                 tenantId);
 
         return UserMapper.toResponse(saved);
@@ -178,6 +183,19 @@ public class UserService {
         outboxWriter.write(IamConstants.AGGREGATE_USER, user.getPublicId().toString(),
                 IamConstants.EVENT_USER_SUSPENDED,
                 new UserSuspendedEvent(user.getPublicId(), user.getTenantId()), user.getTenantId());
+        return UserMapper.toResponse(user);
+    }
+
+    /** Reactivation is idempotent; an event is emitted only for a real transition. */
+    @Transactional
+    public UserResponse reactivate(UUID publicId, CurrentUser caller) {
+        User user = findScoped(publicId, caller);
+        if (user.isSuspended()) {
+            user.reactivate();
+            outboxWriter.write(IamConstants.AGGREGATE_USER, user.getPublicId().toString(),
+                    IamConstants.EVENT_USER_REACTIVATED,
+                    new UserReactivatedEvent(user.getPublicId(), user.getTenantId()), user.getTenantId());
+        }
         return UserMapper.toResponse(user);
     }
 
