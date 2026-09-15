@@ -5,11 +5,11 @@ package com.pte.identity.internal.constant;
  * standard). Error codes are machine-readable and returned in
  * {@code ApiResponse.message}.
  *
- * <p>Trimmed from the microservice-era {@code IamConstants}: no outbox
- * aggregate/event-type constants (no outbox in the monolith) and no incoming
+ * <p>Trimmed from the microservice-era {@code IamConstants}: no synchronization message
+ * aggregate/event-type constants (no synchronization message in the monolith) and no incoming
  * tenant-event constants (see {@code UserService.me()} — tenant lookup moves
  * to an in-process call once Phase 03 ports {@code tenancy}, not an event
- * projection).
+ * read model).
  */
 public final class IdentityConstants {
 

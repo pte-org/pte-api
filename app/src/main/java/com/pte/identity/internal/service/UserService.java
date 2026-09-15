@@ -20,6 +20,7 @@ import com.pte.identity.internal.mapper.UserMapper;
 import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.shared.security.CurrentUser;
+import com.pte.tenancy.TenancyService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,14 +38,14 @@ import java.util.UUID;
  * <p>Ported from {@code services/iam}'s {@code UserService}. Two changes from
  * the microservice version, both required by plan.md's global constraints:
  * <ul>
- *   <li>No outbox writes on create/suspend/reactivate/resetPassword — those
+ *   <li>No synchronization message writes on create/suspend/reactivate/resetPassword — those
  *       existed only to notify other services (admin's now-deleted roster
- *       projection, notification's email trigger) across a process boundary
+ *       read model, notification's email trigger) across a process boundary
  *       that no longer exists here.</li>
  *   <li>{@link #me} always returns a null {@code organizationType} for now
  *       instead of reading a locally-cached {@code TenantRegistry} kept in
  *       sync via RabbitMQ from admin's Tenant/Organization data — the same
- *       kind of cross-service projection as the roster bug Phase 03 removes,
+ *       kind of cross-service read model as the roster bug Phase 03 removes,
  *       just discovered a phase earlier. Once Phase 03 ports {@code tenancy},
  *       this becomes a direct in-process call.</li>
  * </ul>
@@ -60,15 +61,17 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final UserProvisioningHelper provisioningHelper;
     private final UserBulkCreateWriter bulkCreateWriter;
+    private final TenancyService tenancyService;
 
     public UserService(UserRepository userRepository, LoginHashRepository loginHashRepository,
                        PasswordEncoder passwordEncoder, UserProvisioningHelper provisioningHelper,
-                       UserBulkCreateWriter bulkCreateWriter) {
+                       UserBulkCreateWriter bulkCreateWriter, TenancyService tenancyService) {
         this.userRepository = userRepository;
         this.loginHashRepository = loginHashRepository;
         this.passwordEncoder = passwordEncoder;
         this.provisioningHelper = provisioningHelper;
         this.bulkCreateWriter = bulkCreateWriter;
+        this.tenancyService = tenancyService;
     }
 
     @Transactional
@@ -91,7 +94,7 @@ public class UserService {
         // saveAndFlush kept from the microservice version: callers of
         // IdentityService.findById() immediately after create() need the
         // Hibernate-generated createdAt, e.g. enrollment's roster sort key
-        // (Phase 03) — not an outbox concern, a same-transaction read concern.
+        // (Phase 03) — not an synchronization message concern, a same-transaction read concern.
         User saved = userRepository.saveAndFlush(user);
 
         LoginHash loginHash = new LoginHash();
@@ -157,9 +160,8 @@ public class UserService {
     public UserResponse me(CurrentUser caller) {
         User user = userRepository.findByPublicId(caller.userId())
                 .orElseThrow(UserNotFoundException::new);
-        // TODO(Phase 03): call tenancy's public service in-process for the real
-        // organizationType once `tenancy` is ported. See class javadoc.
-        return UserMapper.toResponse(user, null);
+        String organizationType = tenancyService.findOrganizationType(user.getTenantId()).orElse(null);
+        return UserMapper.toResponse(user, organizationType);
     }
 
     @Transactional(readOnly = true)

@@ -16,6 +16,7 @@ import com.pte.identity.internal.exception.UserNotFoundException;
 import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.shared.security.CurrentUser;
+import com.pte.tenancy.TenancyService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,8 +42,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * Ported from {@code services/iam}'s {@code UserServiceTest}. Dropped:
- * {@code outboxWriter} mock and every {@code verify(outboxWriter, ...)} line
- * (UserService no longer writes an outbox — nothing to synchronize across a
+ * {@code synchronizationWriter} mock and every {@code verify(synchronizationWriter, ...)} line
+ * (UserService no longer writes an synchronization message — nothing to synchronize across a
  * process boundary that doesn't exist here), and the three
  * {@code me_*OrganizationType*} tests (organizationType is temporarily always
  * null until Phase 03 wires tenancy in-process — see UserService's class
@@ -63,13 +64,16 @@ class UserServiceTest {
     @Mock
     private UserBulkCreateWriter bulkCreateWriter;
 
+    @Mock
+    private TenancyService tenancyService;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private UserService userService;
 
     @BeforeEach
     void setUp() {
         userService = new UserService(userRepository, loginHashRepository, passwordEncoder,
-                provisioningHelper, bulkCreateWriter);
+                provisioningHelper, bulkCreateWriter, tenancyService);
     }
 
     private User userWithId(Long id, UUID publicId, UUID tenantId) {
@@ -85,16 +89,17 @@ class UserServiceTest {
     }
 
     @Test
-    void me_alwaysReturnsNullOrganizationType_untilPhase03WiresTenancy() {
+    void me_returnsOrganizationType_fromTenancyModule() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         User user = userWithId(1L, userPublicId, tenantId);
         when(userRepository.findByPublicId(userPublicId)).thenReturn(Optional.of(user));
+        when(tenancyService.findOrganizationType(tenantId)).thenReturn(Optional.of("SCHOOL"));
 
         CurrentUser caller = new CurrentUser(userPublicId, tenantId, List.of("HOST_ADMIN"));
         UserResponse response = userService.me(caller);
 
-        assertThat(response.organizationType()).isNull();
+        assertThat(response.organizationType()).isEqualTo("SCHOOL");
     }
 
     @Test
