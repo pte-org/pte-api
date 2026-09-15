@@ -44,6 +44,26 @@ management:
     tracing:
       endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
 
+media:
+  storage:
+    # Used for this module's own server-to-server calls to MinIO (bucket
+    # bootstrap, WAV duration read-back) — must be reachable from inside
+    # this app's own network (the docker-compose internal hostname).
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    # Used ONLY to sign presigned upload/download URLs handed back to an
+    # external caller (a student's pte-app instance) — must be reachable
+    # from THAT caller's network, which differs from `endpoint` whenever
+    # MinIO sits behind a docker-compose-internal hostname. Defaults to the
+    # same value as `endpoint`; override separately only when they differ.
+    public-endpoint: ${MINIO_PUBLIC_ENDPOINT:${media.storage.endpoint}}
+    # Only used by the presign-only MinioClient to avoid a real
+    # GetBucketLocation network call it can't make from inside this
+    # container.
+    region: ${MINIO_REGION:us-east-1}
+    access-key: ${MINIO_ROOT_USER}
+    secret-key: ${MINIO_ROOT_PASSWORD}
+    bucket: ${MEDIA_BUCKET:pte-media}
+
 identity:
   # PKCS#8 PEM-encoded RSA private key (identity.internal.security.RsaKeyProvider).
   # Empty falls back to an ephemeral key with a startup warning — fine for a
