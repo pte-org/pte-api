@@ -1,0 +1,22 @@
+# Test-only overrides for @DataJpaTest, which swaps the real Postgres datasource
+# for an embedded H2 one.
+#
+# Flyway is off here because the migrations are written for Postgres and are not
+# portable to H2 — V2's `LOWER(full_name)` functional index is valid Postgres and
+# a syntax error on H2, which failed every @DataJpaTest context at startup.
+#
+# Running them against H2 would prove nothing anyway: passing on H2 is no
+# evidence a migration is correct on Postgres, and the repository tests exercise
+# JPA query semantics, not DDL. Hibernate derives the H2 schema from the
+# entities instead, which is what those tests actually need.
+#
+# The migrations stay the source of truth for real databases. Note that V1/V2
+# have already been applied in deployed environments, so their contents are
+# frozen — Flyway validates checksums, and editing an applied migration fails
+# the next startup. Schema corrections belong in a new versioned migration.
+spring:
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
