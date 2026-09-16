@@ -87,6 +87,9 @@ public class UserService {
         }
         UUID tenantId = provisioningHelper.resolveTargetTenant(caller, request.tenantId());
         Set<Role> roles = provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles());
+        if (roles.contains(Role.STUDENT)) {
+            tenancyService.assertCanAddStudents(tenantId, 1L);
+        }
 
         User user = new User();
         user.setUsername(request.email());
@@ -119,6 +122,7 @@ public class UserService {
      * (REQUIRES_NEW) transaction, so a rare concurrent-duplicate race only
      * loses that one row.
      */
+    @Transactional
     public BulkCreateUsersResponse createBulk(BulkCreateUsersRequest request, CurrentUser caller) {
         UUID tenantId = provisioningHelper.resolveTargetTenant(caller, request.tenantId());
 
@@ -129,14 +133,19 @@ public class UserService {
             }
         }
 
-        List<String> emails = request.rows().stream().map(BulkCreateUserRow::email).toList();
+        List<BulkCreateUserRow> rows = request.rows();
+        List<String> emails = rows.stream().map(BulkCreateUserRow::email).toList();
         Set<String> existingEmails = new HashSet<>(
                 userRepository.findByEmailIn(emails).stream().map(User::getEmail).toList());
+
+        long adding = rows.stream().filter(row -> !existingEmails.contains(row.email())).count();
+        if (adding > 0L) {
+            tenancyService.assertCanAddStudents(tenantId, adding);
+        }
 
         List<CreatedUser> created = new ArrayList<>();
         List<RowError> skipped = new ArrayList<>();
 
-        List<BulkCreateUserRow> rows = request.rows();
         for (int i = 0; i < rows.size(); i++) {
             BulkCreateUserRow row = rows.get(i);
             int rowIndex = i;

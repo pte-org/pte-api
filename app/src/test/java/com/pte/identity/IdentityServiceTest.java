@@ -93,4 +93,14 @@ class IdentityServiceTest {
         assertThat(result).hasSize(2);
         assertThat(result).containsExactly(student1, student2);
     }
+
+    @Test
+    void countStudents_delegatesToRoleAwareRepositoryQuery() {
+        UUID tenantId = UUID.randomUUID();
+        when(userRepository.countByTenantIdAndRole(tenantId, Role.STUDENT)).thenReturn(487L);
+
+        assertThat(service.countStudents(tenantId)).isEqualTo(487L);
+
+        verify(userRepository).countByTenantIdAndRole(tenantId, Role.STUDENT);
+    }
 }

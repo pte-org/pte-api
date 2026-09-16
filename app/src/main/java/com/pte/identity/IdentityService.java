@@ -7,6 +7,7 @@ import com.pte.identity.domain.UserStatus;
 import com.pte.identity.internal.domain.LoginHash;
 import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
+import com.pte.tenancy.StudentCountProvider;
 import com.pte.identity.internal.util.PasswordGenerator;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -28,7 +29,7 @@ import java.util.UUID;
  * caller.
  */
 @Service
-public class IdentityService {
+public class IdentityService implements StudentCountProvider {
 
     private final UserRepository userRepository;
     private final LoginHashRepository loginHashRepository;
@@ -55,6 +56,11 @@ public class IdentityService {
 
     public List<User> findByTenantIdAndRole(UUID tenantId, Role role) {
         return userRepository.findByTenantIdAndRolesContaining(tenantId, role);
+    }
+
+    @Override
+    public long countStudents(UUID tenantId) {
+        return userRepository.countByTenantIdAndRole(tenantId, Role.STUDENT);
     }
 
     /**

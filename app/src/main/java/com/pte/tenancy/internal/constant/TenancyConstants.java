@@ -11,6 +11,10 @@ public final class TenancyConstants {
     public static final String ORGANIZATION_NOT_FOUND = "ORGANIZATION_NOT_FOUND";
     public static final String ORGANIZATION_NAME_ALREADY_USED = "ORGANIZATION_NAME_ALREADY_USED";
     public static final String QUOTA_CONFLICT = "QUOTA_CONFLICT";
+    public static final String STUDENT_LIMIT_EXCEEDED =
+            "STUDENT_LIMIT_EXCEEDED: current=%d, limit=%d, adding=%d";
+    public static final String STUDENT_COUNT_REQUIRED = "STUDENT_COUNT_REQUIRED";
+    public static final String STUDENT_COUNT_INVALID = "STUDENT_COUNT_INVALID";
     public static final String SYSTEM_QUOTA_PACKAGE = "student-capacity";
     /** Reserved scalar actor for quota grants triggered by a system activation. */
     public static final UUID SYSTEM_ACTOR_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
