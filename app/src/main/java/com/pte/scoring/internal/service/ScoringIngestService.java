@@ -42,6 +42,7 @@ public class ScoringIngestService {
             answer.setPinnedItemPublicId(view.pinnedItemPublicId());
             answer.setSessionPublicId(view.sessionPublicId());
             answer.setTenantId(view.tenantId());
+            answer.setScoreTemplatePublicId(view.scoreTemplatePublicId());
             answer.setTaskType(view.taskType());
             answer.setPayload(view.payload());
             answer.setCorrectAnswerText(view.correctAnswerText());

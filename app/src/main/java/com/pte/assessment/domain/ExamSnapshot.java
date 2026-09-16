@@ -41,6 +41,13 @@ public class ExamSnapshot extends BaseEntity {
     @Column(nullable = false)
     private UUID sourceBlueprintPublicId;
 
+    /** The ACTIVE {@code ScoreTemplate} at publish time, pinned forever (spec FR-13) — later template activations never change an already-published exam's scoring. */
+    @Column(nullable = false)
+    private UUID scoreTemplatePublicId;
+
+    @Column(nullable = false)
+    private int scoreTemplateVersion;
+
     @Column
     private UUID tenantId;
 

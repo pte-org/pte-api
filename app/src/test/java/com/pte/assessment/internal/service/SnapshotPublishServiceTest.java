@@ -13,6 +13,9 @@ import com.pte.itembank.ItembankService;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.dto.response.QuestionFreezeView;
+import com.pte.scoretemplate.ScoreTemplateService;
+import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.scoretemplate.internal.exception.NoActiveScoreTemplateException;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +31,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -48,6 +53,10 @@ class SnapshotPublishServiceTest {
     private ExamSnapshotRepository snapshotRepository;
     @Mock
     private ItembankService itembankService;
+    @Mock
+    private ScoreTemplateService scoreTemplateService;
+
+    private static final UUID ACTIVE_TEMPLATE_ID = UUID.randomUUID();
 
     private SnapshotPublishService service;
     private CurrentUser caller;
@@ -55,8 +64,17 @@ class SnapshotPublishServiceTest {
     @BeforeEach
     void setUp() {
         service = new SnapshotPublishService(blueprintRepository, snapshotRepository, itembankService,
-                new AssessmentAccessPolicy(), JsonMapper.builder().build());
+                new AssessmentAccessPolicy(), JsonMapper.builder().build(), scoreTemplateService);
         caller = new CurrentUser(UUID.randomUUID(), TENANT_ID, List.of("HOST_AUTHOR"));
+    }
+
+    /** Stubs the ACTIVE template every {@code publish} test needs, unless a test overrides it (e.g. no-active-template). */
+    private void stubActiveTemplate() {
+        when(scoreTemplateService.getActive()).thenReturn(activeTemplateResponse());
+    }
+
+    private ScoreTemplateResponse activeTemplateResponse() {
+        return new ScoreTemplateResponse(ACTIVE_TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "ACTIVE", List.of());
     }
 
     private ExamBlueprint blueprintWithOneItem(UUID questionPublicId) {
@@ -105,6 +123,7 @@ class SnapshotPublishServiceTest {
         when(itembankService.freeze(questionId)).thenReturn(frozenQuestion(questionId));
         when(snapshotRepository.countBySourceBlueprintPublicId(blueprintId)).thenReturn(0L);
         when(snapshotRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubActiveTemplate();
 
         SnapshotResponse response = service.publish(blueprintId, caller);
 
@@ -112,6 +131,8 @@ class SnapshotPublishServiceTest {
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).title()).isEqualTo("title");
         assertThat(blueprint.getStatus()).isEqualTo(BlueprintStatus.PUBLISHED);
+        assertThat(response.scoreTemplatePublicId()).isEqualTo(ACTIVE_TEMPLATE_ID);
+        assertThat(response.scoreTemplateVersion()).isEqualTo(1);
     }
 
     @Test
@@ -123,10 +144,25 @@ class SnapshotPublishServiceTest {
         when(itembankService.freeze(questionId)).thenReturn(frozenQuestion(questionId));
         when(snapshotRepository.countBySourceBlueprintPublicId(blueprintId)).thenReturn(1L);
         when(snapshotRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubActiveTemplate();
 
         SnapshotResponse response = service.publish(blueprintId, caller);
 
         assertThat(response.version()).isEqualTo(2);
+    }
+
+    @Test
+    void publish_noActiveTemplate_throwsAndSavesNothing() {
+        UUID blueprintId = UUID.randomUUID();
+        UUID questionId = UUID.randomUUID();
+        ExamBlueprint blueprint = blueprintWithOneItem(questionId);
+        when(blueprintRepository.findWithItemsByPublicId(blueprintId)).thenReturn(Optional.of(blueprint));
+        when(scoreTemplateService.getActive()).thenThrow(new NoActiveScoreTemplateException());
+
+        assertThatThrownBy(() -> service.publish(blueprintId, caller)).isInstanceOf(NoActiveScoreTemplateException.class);
+
+        verify(snapshotRepository, never()).save(any());
+        assertThat(blueprint.getStatus()).isNotEqualTo(BlueprintStatus.PUBLISHED);
     }
 
     @Test
@@ -141,6 +177,7 @@ class SnapshotPublishServiceTest {
         when(snapshotRepository.countBySourceBlueprintPublicId(blueprintId)).thenReturn(0L);
         var captor = org.mockito.ArgumentCaptor.forClass(ExamSnapshot.class);
         when(snapshotRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+        stubActiveTemplate();
 
         service.publish(blueprintId, caller);
 

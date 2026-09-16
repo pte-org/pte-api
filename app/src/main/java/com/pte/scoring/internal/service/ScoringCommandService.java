@@ -2,23 +2,27 @@ package com.pte.scoring.internal.service;
 
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
+import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
  * Executes a host's "score this session" command (ADR-002 host-gated model —
  * scoring NEVER auto-triggers on submit). Ingests whatever attempt has
  * submitted so far, then for every {@code PENDING} answer in the session:
- * {@link ObjectiveScoringService}-supported types score synchronously;
- * {@link AiScoringDispatcher}-supported types (all ten AI-shaped
- * Speaking/Writing/Listening tasks) get queued to RabbitMQ instead; any other
- * type stays {@code PENDING} — honest completion, not a fake "skipped"
- * status. Callable multiple times for the same session as more answers come
- * in (each call only ingests/scores what's newly PENDING).
+ * resolves {@code scoringMethod} from the answer's pinned {@code
+ * ScoreTemplate} (spec FR-07, via {@link ScoringMethodResolver}) — {@code
+ * OBJECTIVE} scores synchronously, {@code AI_SPEECH}/{@code AI_TEXT} gets
+ * queued to RabbitMQ, {@code UNSCORED} or a task type absent from the
+ * template (e.g. {@code PERSONAL_INTRODUCTION}) stays {@code PENDING} —
+ * honest completion, not a fake "skipped" status. Callable multiple times
+ * for the same session as more answers come in (each call only
+ * ingests/scores what's newly PENDING).
  */
 @Service
 public class ScoringCommandService {
@@ -27,15 +31,18 @@ public class ScoringCommandService {
     private final ScoringAnswerRepository scoringAnswerRepository;
     private final ObjectiveScoringService objectiveScoringService;
     private final AiScoringDispatcher aiScoringDispatcher;
+    private final ScoringMethodResolver scoringMethodResolver;
 
     public ScoringCommandService(ScoringIngestService scoringIngestService,
                                  ScoringAnswerRepository scoringAnswerRepository,
                                  ObjectiveScoringService objectiveScoringService,
-                                 AiScoringDispatcher aiScoringDispatcher) {
+                                 AiScoringDispatcher aiScoringDispatcher,
+                                 ScoringMethodResolver scoringMethodResolver) {
         this.scoringIngestService = scoringIngestService;
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.objectiveScoringService = objectiveScoringService;
         this.aiScoringDispatcher = aiScoringDispatcher;
+        this.scoringMethodResolver = scoringMethodResolver;
     }
 
     @Transactional
@@ -45,12 +52,17 @@ public class ScoringCommandService {
         List<ScoringAnswer> pending = scoringAnswerRepository
                 .findBySessionPublicIdAndTenantIdAndStatus(sessionPublicId, tenantId, ScoringAnswerStatus.PENDING);
         for (ScoringAnswer answer : pending) {
-            if (objectiveScoringService.supports(answer.getTaskType())) {
-                scoreObjectively(answer);
-            } else if (aiScoringDispatcher.supports(answer.getTaskType())) {
-                aiScoringDispatcher.dispatch(answer);
+            Optional<ScoringMethod> method =
+                    scoringMethodResolver.resolve(answer.getScoreTemplatePublicId(), answer.getTaskType());
+            if (method.isEmpty()) {
+                continue; // Task type absent from the pinned template (e.g. PERSONAL_INTRODUCTION) — stays PENDING.
             }
-            // Any other type: stays PENDING (honest completion).
+            if (objectiveScoringService.supports(method.get())) {
+                scoreObjectively(answer);
+            } else if (aiScoringDispatcher.supports(method.get())) {
+                aiScoringDispatcher.dispatch(answer, method.get());
+            }
+            // UNSCORED: stays PENDING (honest completion, not an error).
         }
     }
 

@@ -2,6 +2,7 @@ package com.pte.scoring.internal.service;
 
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
+import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
@@ -31,12 +32,13 @@ public class AiScoringDispatcher {
         this.rabbitTemplate = rabbitTemplate;
     }
 
-    public boolean supports(String taskType) {
-        return AiScoringTaskCatalog.supports(taskType);
+    public boolean supports(ScoringMethod scoringMethod) {
+        return scoringMethod == ScoringMethod.AI_SPEECH || scoringMethod == ScoringMethod.AI_TEXT;
     }
 
-    public void dispatch(ScoringAnswer answer) {
-        if (!supports(answer.getTaskType())) {
+    /** {@code scoringMethod} is the caller's ({@code ScoringCommandService}) already-resolved value — this class never re-resolves it. */
+    public void dispatch(ScoringAnswer answer, ScoringMethod scoringMethod) {
+        if (!supports(scoringMethod)) {
             throw new IllegalArgumentException(
                     String.format(ScoringConstants.UNSUPPORTED_AI_TASK_TYPE, answer.getTaskType()));
         }
@@ -45,7 +47,8 @@ public class AiScoringDispatcher {
 
         AiScoringJob job = new AiScoringJob(
                 answer.getAnswerPublicId(), answer.getAttemptPublicId(), answer.getSessionPublicId(),
-                answer.getTenantId(), answer.getTaskType(), answer.getPayload(), answer.getCorrectAnswerText());
+                answer.getTenantId(), answer.getTaskType(), answer.getPayload(), answer.getCorrectAnswerText(),
+                scoringMethod.name());
         rabbitTemplate.convertAndSend(ScoringConstants.AI_SCORING_EXCHANGE, ScoringConstants.AI_SCORING_ROUTING_KEY, job);
     }
 }

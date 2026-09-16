@@ -35,7 +35,7 @@ class ModuleStructureTest {
                 .containsExactlyInAnyOrder(
                         "identity", "tenancy", "enrollment", "itembank", "assessment", "session",
                         "attempt", "scoring", "proctoring", "reporting", "media", "notification",
-                        "shared");
+                        "scoretemplate", "shared");
         // "session" is now implemented (Phase 06); attempt/scoring/proctoring/
         // reporting/notification still exist only as empty package-info.java
         // scaffolds from Phase 01 until their own phase ports real code.

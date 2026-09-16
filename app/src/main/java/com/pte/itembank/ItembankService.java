@@ -3,13 +3,11 @@ package com.pte.itembank;
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.QuestionOption;
 import com.pte.itembank.domain.enums.PteTaskType;
-import com.pte.itembank.domain.enums.Skill;
 import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.request.CreateQuestionRequest;
 import com.pte.itembank.dto.request.OptionRequest;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.dto.response.QuestionResponse;
-import com.pte.itembank.internal.config.PteTaskTypeSkillMapping;
 import com.pte.itembank.internal.constant.ItembankConstants;
 import com.pte.itembank.internal.exception.QuestionNotFoundException;
 import com.pte.itembank.internal.exception.QuestionValidationException;
@@ -43,14 +41,12 @@ public class ItembankService {
     private final QuestionRepository questionRepository;
     private final QuestionValidationHelper validationHelper;
     private final ItembankAccessPolicy accessPolicy;
-    private final PteTaskTypeSkillMapping skillMapping;
 
     public ItembankService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
-                           ItembankAccessPolicy accessPolicy, PteTaskTypeSkillMapping skillMapping) {
+                           ItembankAccessPolicy accessPolicy) {
         this.questionRepository = questionRepository;
         this.validationHelper = validationHelper;
         this.accessPolicy = accessPolicy;
-        this.skillMapping = skillMapping;
     }
 
     @Transactional
@@ -176,9 +172,7 @@ public class ItembankService {
     }
 
     private QuestionResponse toResponse(Question question) {
-        List<String> skills = skillMapping.skillsFor(question.getPteTaskType()).stream()
-                .map(Skill::name).toList();
-        return QuestionMapper.toResponse(question, skills);
+        return QuestionMapper.toResponse(question);
     }
 
     private Visibility parseVisibility(String value) {

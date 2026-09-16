@@ -15,6 +15,8 @@ import com.pte.assessment.internal.repository.ExamBlueprintRepository;
 import com.pte.assessment.internal.repository.ExamSnapshotRepository;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.dto.response.QuestionFreezeView;
+import com.pte.scoretemplate.ScoreTemplateService;
+import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,15 +45,17 @@ public class SnapshotPublishService {
     private final ItembankService itembankService;
     private final AssessmentAccessPolicy accessPolicy;
     private final JsonMapper jsonMapper;
+    private final ScoreTemplateService scoreTemplateService;
 
     public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, ExamSnapshotRepository snapshotRepository,
                                   ItembankService itembankService, AssessmentAccessPolicy accessPolicy,
-                                  JsonMapper jsonMapper) {
+                                  JsonMapper jsonMapper, ScoreTemplateService scoreTemplateService) {
         this.blueprintRepository = blueprintRepository;
         this.snapshotRepository = snapshotRepository;
         this.itembankService = itembankService;
         this.accessPolicy = accessPolicy;
         this.jsonMapper = jsonMapper;
+        this.scoreTemplateService = scoreTemplateService;
     }
 
     @Transactional
@@ -64,12 +68,19 @@ public class SnapshotPublishService {
         if (blueprint.getItems().isEmpty()) {
             throw new EmptyBlueprintException();
         }
+        // Resolved once per publish, before any mutation, so a missing ACTIVE
+        // template (NoActiveScoreTemplateException, not caught here — it must
+        // surface as a loud configuration error) leaves the blueprint DRAFT and
+        // saves no snapshot (spec FR-13's immutable pin starts from a real value).
+        ScoreTemplateResponse activeTemplate = scoreTemplateService.getActive();
 
         int version = (int) snapshotRepository.countBySourceBlueprintPublicId(blueprintPublicId) + 1;
         ExamSnapshot snapshot = new ExamSnapshot();
         snapshot.setName(blueprint.getName());
         snapshot.setVersion(version);
         snapshot.setSourceBlueprintPublicId(blueprintPublicId);
+        snapshot.setScoreTemplatePublicId(activeTemplate.publicId());
+        snapshot.setScoreTemplateVersion(activeTemplate.version());
         snapshot.setTenantId(blueprint.getTenantId());
         blueprint.getItems().forEach(item -> snapshot.addItem(freeze(item)));
 

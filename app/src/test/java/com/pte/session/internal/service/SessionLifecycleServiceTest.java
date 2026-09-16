@@ -59,7 +59,7 @@ class SessionLifecycleServiceTest {
     }
 
     private SnapshotResponse snapshotSummary() {
-        return new SnapshotResponse(UUID.randomUUID(), "Mock Test A", 1, UUID.randomUUID(), null, List.of());
+        return new SnapshotResponse(UUID.randomUUID(), "Mock Test A", 1, UUID.randomUUID(), UUID.randomUUID(), 1, null, List.of());
     }
 
     @Test
@@ -131,7 +131,7 @@ class SessionLifecycleServiceTest {
     void create_usesSnapshotPublicIdFromAssessmentSummary_notRawRequestValue() {
         UUID canonicalSnapshotId = UUID.randomUUID();
         when(assessmentService.getSummary(any()))
-                .thenReturn(new SnapshotResponse(canonicalSnapshotId, "Mock Test A", 1, UUID.randomUUID(), null, List.of()));
+                .thenReturn(new SnapshotResponse(canonicalSnapshotId, "Mock Test A", 1, UUID.randomUUID(), UUID.randomUUID(), 1, null, List.of()));
         when(sessionRepository.save(any())).thenAnswer(invocation -> {
             ExamSession s = invocation.getArgument(0);
             s.setPublicId(UUID.randomUUID());

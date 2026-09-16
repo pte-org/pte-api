@@ -35,7 +35,8 @@ public class SubmittedAnswerQueryService {
     private static SubmittedAnswerView toView(AttemptAnswer answer) {
         return new SubmittedAnswerView(answer.getPublicId(), answer.getAttempt().getPublicId(),
                 answer.getPinnedItem().getPublicId(), answer.getAttempt().getSessionPublicId(),
-                answer.getAttempt().getTenantId(), answer.getPinnedItem().getTaskType(), answer.getPayload(),
+                answer.getAttempt().getTenantId(), answer.getPinnedItem().getPinnedSnapshot().getScoreTemplatePublicId(),
+                answer.getPinnedItem().getTaskType(), answer.getPayload(),
                 answer.getPinnedItem().getCorrectAnswerText(), answer.getPinnedItem().getOptionsJson(),
                 answer.isExpired());
     }

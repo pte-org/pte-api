@@ -21,6 +21,8 @@ public final class SnapshotMapper {
                 snapshot.getName(),
                 snapshot.getVersion(),
                 snapshot.getSourceBlueprintPublicId(),
+                snapshot.getScoreTemplatePublicId(),
+                snapshot.getScoreTemplateVersion(),
                 snapshot.getTenantId(),
                 items);
     }
@@ -36,7 +38,8 @@ public final class SnapshotMapper {
                 .map(SnapshotMapper::toContentItem)
                 .toList();
         return new SnapshotContentResponse(
-                snapshot.getPublicId(), snapshot.getName(), snapshot.getVersion(), snapshot.getTenantId(), items);
+                snapshot.getPublicId(), snapshot.getName(), snapshot.getVersion(),
+                snapshot.getScoreTemplatePublicId(), snapshot.getTenantId(), items);
     }
 
     private static SnapshotContentResponse.Item toContentItem(SnapshotItem item) {

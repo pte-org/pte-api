@@ -7,7 +7,6 @@ import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.request.CreateQuestionRequest;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.dto.response.QuestionResponse;
-import com.pte.itembank.internal.config.PteTaskTypeSkillMapping;
 import com.pte.itembank.internal.exception.QuestionNotFoundException;
 import com.pte.itembank.internal.exception.SharedWriteForbiddenException;
 import com.pte.itembank.internal.repository.QuestionRepository;
@@ -22,7 +21,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,8 +43,6 @@ class ItembankServiceTest {
 
     @Mock
     private QuestionRepository questionRepository;
-    @Mock
-    private PteTaskTypeSkillMapping skillMapping;
 
     private ItembankService service;
     private CurrentUser hostCaller;
@@ -55,7 +51,7 @@ class ItembankServiceTest {
     @BeforeEach
     void setUp() {
         service = new ItembankService(questionRepository, new QuestionValidationHelper(),
-                new ItembankAccessPolicy(), skillMapping);
+                new ItembankAccessPolicy());
         hostCaller = new CurrentUser(UUID.randomUUID(), TENANT_ID, List.of("HOST_AUTHOR"));
         platformCaller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"));
     }
@@ -90,7 +86,6 @@ class ItembankServiceTest {
 
     @Test
     void create_privateByPlatformCallerWithNoTenant_stillPersistsNullTenant() {
-        when(skillMapping.skillsFor(any())).thenReturn(Set.of());
         when(questionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         CreateQuestionRequest request = new CreateQuestionRequest(
                 "READ_ALOUD", "SHARED", "title", "prompt", null, null, null, null, null, null, null);
@@ -117,7 +112,6 @@ class ItembankServiceTest {
     @Test
     void get_sharedQuestion_readableByAnyTenant() {
         UUID publicId = UUID.randomUUID();
-        when(skillMapping.skillsFor(any())).thenReturn(Set.of());
         Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
         when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
 

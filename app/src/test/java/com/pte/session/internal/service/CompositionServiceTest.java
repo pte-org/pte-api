@@ -58,7 +58,7 @@ class CompositionServiceTest {
         ExamSession session = sessionWithSnapshot(snapshotPublicId);
         when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
         when(assessmentService.getSummary(snapshotPublicId)).thenReturn(new SnapshotResponse(
-                snapshotPublicId, "Mock Test A", 1, UUID.randomUUID(), null,
+                snapshotPublicId, "Mock Test A", 1, UUID.randomUUID(), UUID.randomUUID(), 1, null,
                 List.of(new SnapshotResponse.Item(0, "READING", "MC_READING_SINGLE", "title"))));
 
         SessionResponse response = compositionService.setComposition(sessionPublicId,
@@ -77,7 +77,7 @@ class CompositionServiceTest {
         ExamSession session = sessionWithSnapshot(snapshotPublicId);
         when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
         when(assessmentService.getSummary(snapshotPublicId)).thenReturn(new SnapshotResponse(
-                snapshotPublicId, "Mock Test A", 1, UUID.randomUUID(), null,
+                snapshotPublicId, "Mock Test A", 1, UUID.randomUUID(), UUID.randomUUID(), 1, null,
                 List.of(new SnapshotResponse.Item(0, "READING", "MC_READING_SINGLE", "title"))));
 
         assertThatThrownBy(() -> compositionService.setComposition(sessionPublicId,

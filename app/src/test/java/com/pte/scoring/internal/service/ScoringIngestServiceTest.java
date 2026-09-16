@@ -46,7 +46,7 @@ class ScoringIngestServiceTest {
 
         SubmittedAnswerView view = new SubmittedAnswerView(
                 answerPublicId, attemptPublicId, pinnedItemPublicId,
-                sessionPublicId, tenantId, "MC_READING_SINGLE", "1",
+                sessionPublicId, tenantId, UUID.randomUUID(), "MC_READING_SINGLE", "1",
                 "[{\"text\":\"A\",\"correct\":true}]", "[{\"text\":\"A\",\"orderIndex\":0}]", false);
 
         when(attemptService.getSubmittedAnswersForSession(sessionPublicId, tenantId))
@@ -70,7 +70,7 @@ class ScoringIngestServiceTest {
 
         SubmittedAnswerView view = new SubmittedAnswerView(
                 answerPublicId, attemptPublicId, pinnedItemPublicId,
-                sessionPublicId, tenantId, "MC_READING_SINGLE", "1",
+                sessionPublicId, tenantId, UUID.randomUUID(), "MC_READING_SINGLE", "1",
                 "[{\"text\":\"A\",\"correct\":true}]", "[{\"text\":\"A\",\"orderIndex\":0}]", false);
 
         when(attemptService.getSubmittedAnswersForSession(sessionPublicId, tenantId))
@@ -95,7 +95,7 @@ class ScoringIngestServiceTest {
 
         SubmittedAnswerView view = new SubmittedAnswerView(
                 answerPublicId, attemptPublicId, pinnedItemPublicId,
-                sessionPublicId, tenantId, "MC_READING_SINGLE", "1",
+                sessionPublicId, tenantId, UUID.randomUUID(), "MC_READING_SINGLE", "1",
                 "[{\"text\":\"A\",\"correct\":true}]", "[{\"text\":\"A\",\"orderIndex\":0}]", false);
 
         when(attemptService.getSubmittedAnswersForSession(sessionPublicId, tenantId))
@@ -122,10 +122,11 @@ class ScoringIngestServiceTest {
         String optionsJson = "[{\"text\":\"A\",\"orderIndex\":0}]";
         String payload = "0";
         String taskType = "MC_READING_SINGLE";
+        UUID scoreTemplatePublicId = UUID.randomUUID();
 
         SubmittedAnswerView view = new SubmittedAnswerView(
                 answerPublicId, attemptPublicId, pinnedItemPublicId,
-                sessionPublicId, tenantId, taskType, payload,
+                sessionPublicId, tenantId, scoreTemplatePublicId, taskType, payload,
                 correctAnswerText, optionsJson, true);
 
         when(attemptService.getSubmittedAnswersForSession(sessionPublicId, tenantId))
@@ -141,6 +142,7 @@ class ScoringIngestServiceTest {
             capturedAnswer.setPinnedItemPublicId(arg.getPinnedItemPublicId());
             capturedAnswer.setSessionPublicId(arg.getSessionPublicId());
             capturedAnswer.setTenantId(arg.getTenantId());
+            capturedAnswer.setScoreTemplatePublicId(arg.getScoreTemplatePublicId());
             capturedAnswer.setTaskType(arg.getTaskType());
             capturedAnswer.setPayload(arg.getPayload());
             capturedAnswer.setCorrectAnswerText(arg.getCorrectAnswerText());
@@ -156,6 +158,7 @@ class ScoringIngestServiceTest {
         assertThat(capturedAnswer.getPinnedItemPublicId()).isEqualTo(pinnedItemPublicId);
         assertThat(capturedAnswer.getSessionPublicId()).isEqualTo(sessionPublicId);
         assertThat(capturedAnswer.getTenantId()).isEqualTo(tenantId);
+        assertThat(capturedAnswer.getScoreTemplatePublicId()).isEqualTo(scoreTemplatePublicId);
         assertThat(capturedAnswer.getTaskType()).isEqualTo(taskType);
         assertThat(capturedAnswer.getPayload()).isEqualTo(payload);
         assertThat(capturedAnswer.getCorrectAnswerText()).isEqualTo(correctAnswerText);
