@@ -4,13 +4,6 @@ package com.pte.assessment.internal.constant;
 public final class AssessmentConstants {
 
     public static final String BLUEPRINT_NOT_FOUND = "BLUEPRINT_NOT_FOUND";
-    public static final String EMPTY_BLUEPRINT = "EMPTY_BLUEPRINT";
-    public static final String INVALID_SECTION = "INVALID_SECTION";
-
-    public static final String QUESTION_REFERENCE_REQUIRED = "Question reference is required";
-    public static final String SECTION_REQUIRED = "Section is required";
-    public static final String BLUEPRINT_NAME_REQUIRED = "Blueprint name is required";
-    public static final String BLUEPRINT_ITEMS_REQUIRED = "A blueprint needs at least one item";
     public static final String SNAPSHOT_OPTIONS_SERIALIZATION_FAILED = "Failed to serialize snapshot options";
 
     public static final String TEMPLATE_NOT_FOUND = "TEMPLATE_NOT_FOUND";
@@ -35,6 +28,7 @@ public final class AssessmentConstants {
     public static final String TEMPLATE_ACTIVE_STRUCTURE_LOCKED = "TEMPLATE_ACTIVE_STRUCTURE_LOCKED";
     public static final String TEMPLATE_MUST_BE_DRAFT_TO_ACTIVATE = "TEMPLATE_MUST_BE_DRAFT_TO_ACTIVATE";
     public static final String TEMPLATE_ALREADY_ARCHIVED = "TEMPLATE_ALREADY_ARCHIVED";
+    public static final String INSUFFICIENT_QUESTIONS = "INSUFFICIENT_QUESTIONS";
 
     private AssessmentConstants() {
     }

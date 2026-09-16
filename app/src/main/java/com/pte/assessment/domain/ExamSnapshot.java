@@ -12,6 +12,7 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.BatchSize;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,12 +45,29 @@ public class ExamSnapshot extends BaseEntity {
     @Column
     private UUID tenantId;
 
+    @Column(name = "template_public_id")
+    private UUID templatePublicId;
+
+    @Column(name = "random_seed")
+    private long randomSeed;
+
     @OneToMany(mappedBy = "snapshot", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @BatchSize(size = 50)
     @OrderBy("orderIndex ASC")
     private List<SnapshotItem> items = new ArrayList<>();
+
+    @OneToMany(mappedBy = "snapshot", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @BatchSize(size = 50)
+    @OrderBy("orderIndex ASC")
+    private List<SnapshotSectionWeight> sectionWeights = new ArrayList<>();
 
     public void addItem(SnapshotItem item) {
         item.setSnapshot(this);
         items.add(item);
+    }
+
+    public void addSectionWeight(SnapshotSectionWeight sectionWeight) {
+        sectionWeight.setSnapshot(this);
+        sectionWeights.add(sectionWeight);
     }
 }
