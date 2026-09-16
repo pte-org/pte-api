@@ -11,6 +11,25 @@ cors:
 
 rate-limit:
   per-second: ${RATE_LIMIT_PER_SECOND:40}
+  redeem-per-second: ${REDEEM_RATE_LIMIT_PER_SECOND:5}
+
+billing:
+  payos:
+    client-id: ${PAYOS_CLIENT_ID}
+    api-key: ${PAYOS_API_KEY}
+    checksum-key: ${PAYOS_CHECKSUM_KEY}
+    base-url: ${PAYOS_BASE_URL:https://api-merchant.payos.vn}
+    return-url: ${PAYOS_RETURN_URL}
+    cancel-url: ${PAYOS_CANCEL_URL}
+    connect-timeout-ms: ${PAYOS_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${PAYOS_READ_TIMEOUT_MS:10000}
+    payment-link-ttl-hours: ${PAYOS_PAYMENT_LINK_TTL_HOURS:24}
+  order:
+    pending-ttl-hours: ${BILLING_ORDER_PENDING_TTL_HOURS:24}
+  order-expiration:
+    cron: ${BILLING_ORDER_EXPIRATION_CRON:0 0 * * * *}
+  license-code-expiration:
+    cron: ${BILLING_LICENSE_CODE_EXPIRATION_CRON:0 15 * * * *}
 
 spring:
   application:

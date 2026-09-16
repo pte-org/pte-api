@@ -19,6 +19,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Ported from {@code services/iam}'s {@code SecurityConfig}, minus the
@@ -41,8 +42,16 @@ public class SecurityConfig {
     // permitted here — authentication happens per-frame inside STOMP
     // (StompAuthChannelInterceptor), not at the HTTP upgrade request, since
     // browser WS clients can't reliably set custom handshake headers.
+    //
+    // "/applications" (com.pte.billing, plans/quang-tenant-commercialization
+    // Phase 2): an org submits its tenant application before it has any
+    // account to authenticate with. This is an EXACT path match (no "/**"),
+    // and TenantApplicationController maps no other HTTP method there — the
+    // admin-only list/approve/reject endpoints live under
+    // "/admin/applications" specifically so they never fall inside this rule.
     private static final List<String> PUBLIC_PATHS = List.of(
-            "/auth/login", "/auth/refresh", "/actuator/health", "/actuator/health/**", "/ws/**");
+            "/auth/login", "/auth/refresh", "/actuator/health", "/actuator/health/**", "/ws/**",
+            "/applications", "/api/webhooks/payos");
 
     @Bean
     public SecurityFilterChain jwtFilterChain(
@@ -50,7 +59,8 @@ public class SecurityConfig {
             CorsConfigurationSource corsConfigurationSource,
             ProxyManager<String> rateLimitProxyManager,
             JsonMapper jsonMapper,
-            @Value("${rate-limit.per-second:40}") int rateLimitPerSecond) throws Exception {
+            @Value("${rate-limit.per-second:40}") int rateLimitPerSecond,
+            @Value("${rate-limit.redeem-per-second:5}") int redeemRateLimitPerSecond) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .csrf(csrf -> csrf.disable())
@@ -61,7 +71,8 @@ public class SecurityConfig {
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(ResourceServerJwt.rolesConverter())))
                 .addFilterAfter(
-                        new RateLimitFilter(rateLimitProxyManager, jsonMapper, rateLimitPerSecond),
+                        new RateLimitFilter(rateLimitProxyManager, jsonMapper, rateLimitPerSecond,
+                                Map.of("/api/license-codes/redeem", redeemRateLimitPerSecond)),
                         BearerTokenAuthenticationFilter.class);
         return http.build();
     }

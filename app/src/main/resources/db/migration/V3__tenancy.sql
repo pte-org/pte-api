@@ -9,6 +9,11 @@ CREATE TABLE IF NOT EXISTS tenants (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    -- plans/quang-tenant-commercialization Phase 1: chosen by the org when it
+    -- submits its application (Phase 2), immutable after approval. Used as
+    -- the prefix for every student username this tenant's roster import
+    -- generates ({tenant.code}.{random}).
+    code VARCHAR(32) NOT NULL UNIQUE,
     name VARCHAR(255) NOT NULL UNIQUE,
     organization_type VARCHAR(255) NOT NULL,
     status VARCHAR(32) NOT NULL,

@@ -20,7 +20,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/questions")
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR','HOST_ADMIN','HOST_AUTHOR')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
 public class QuestionController {
 
     private final ItembankService itembankService;
@@ -30,6 +30,7 @@ public class QuestionController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
     public ApiResponse<QuestionResponse> create(@Valid @RequestBody CreateQuestionRequest request) {
         return ApiResponse.success(itembankService.create(request, currentUser()));
     }

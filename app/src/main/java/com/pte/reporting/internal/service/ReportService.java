@@ -50,7 +50,9 @@ public class ReportService {
         if (!canView(report, caller)) {
             throw new ReportNotFoundException();
         }
-        AttemptScoreSummary summary = scoreAggregationService.aggregate(attemptPublicId, report.getTenantId());
+        AttemptScoreSummary summary = report.getSnapshotPublicId() == null
+                ? scoreAggregationService.aggregate(attemptPublicId, report.getTenantId())
+                : scoreAggregationService.aggregate(attemptPublicId, report.getTenantId(), report.getSnapshotPublicId());
         return ReportMapper.toResponse(report, summary);
     }
 
@@ -76,6 +78,7 @@ public class ReportService {
         report.setSessionPublicId(summary.sessionPublicId());
         report.setStudentPublicId(summary.studentPublicId());
         report.setTenantId(summary.tenantId());
+        report.setSnapshotPublicId(summary.snapshotPublicId());
         return report;
     }
 

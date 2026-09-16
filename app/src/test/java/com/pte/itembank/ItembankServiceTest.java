@@ -3,13 +3,13 @@ package com.pte.itembank;
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.QuestionOption;
 import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.request.CreateQuestionRequest;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.dto.response.QuestionResponse;
 import com.pte.itembank.internal.config.PteTaskTypeSkillMapping;
 import com.pte.itembank.internal.exception.QuestionNotFoundException;
-import com.pte.itembank.internal.exception.SharedWriteForbiddenException;
 import com.pte.itembank.internal.repository.QuestionRepository;
 import com.pte.itembank.internal.service.ItembankAccessPolicy;
 import com.pte.itembank.internal.service.QuestionValidationHelper;
@@ -19,8 +19,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -28,12 +30,13 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 /**
  * Covers the {@code itembank → assessment} boundary contract (Phase 05/A):
- * {@code create}/{@code get}/{@code listAccessible} preserve the pre-split
- * visibility rules, and {@code freeze} — the only way {@code assessment} is
+ * {@code create}/{@code get}/{@code listAccessible} preserve the platform-bank
+ * rules, and {@code freeze} — the only way {@code assessment} is
  * allowed to read question content — returns options already in delivery
  * order (rotated for {@code RE_ORDER_PARAGRAPHS}, ported from services/authoring's
  * own {@code SnapshotPublishServiceTest.deliveryOrder} coverage).
@@ -65,6 +68,7 @@ class ItembankServiceTest {
         question.setPteTaskType(taskType);
         question.setVisibility(visibility);
         question.setTenantId(tenantId);
+        question.setStatus(QuestionStatus.APPROVED);
         question.setTitle("test");
         for (int i = 0; i < optionCount; i++) {
             QuestionOption option = new QuestionOption();
@@ -77,23 +81,23 @@ class ItembankServiceTest {
     }
 
     // ------------------------------------------------------------------
-    // create — SHARED/PRIVATE visibility enforcement
+    // create — platform-only question-bank write enforcement
     // ------------------------------------------------------------------
 
     @Test
     void create_sharedByHostCaller_throwsForbidden() {
         CreateQuestionRequest request = new CreateQuestionRequest(
-                "READ_ALOUD", "SHARED", "title", "prompt", null, null, null, null, null, null, null);
+                "READ_ALOUD", "title", "prompt", null, null, null, null, null, null, null);
 
-        assertThatThrownBy(() -> service.create(request, hostCaller)).isInstanceOf(SharedWriteForbiddenException.class);
+        assertThatThrownBy(() -> service.create(request, hostCaller)).isInstanceOf(AccessDeniedException.class);
     }
 
     @Test
-    void create_privateByPlatformCallerWithNoTenant_stillPersistsNullTenant() {
+    void create_sharedByPlatformCallerPersistsApprovedPlatformQuestion() {
         when(skillMapping.skillsFor(any())).thenReturn(Set.of());
         when(questionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         CreateQuestionRequest request = new CreateQuestionRequest(
-                "READ_ALOUD", "SHARED", "title", "prompt", null, null, null, null, null, null, null);
+                "READ_ALOUD", "title", "prompt", null, null, null, null, null, null, null);
 
         QuestionResponse response = service.create(request, platformCaller);
 
@@ -104,15 +108,6 @@ class ItembankServiceTest {
     // ------------------------------------------------------------------
     // get — accessibility gate reused by assessment.BlueprintService
     // ------------------------------------------------------------------
-
-    @Test
-    void get_crossTenantPrivateQuestion_throwsNotFound() {
-        UUID publicId = UUID.randomUUID();
-        Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.PRIVATE, UUID.randomUUID(), 0);
-        when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
-
-        assertThatThrownBy(() -> service.get(publicId, hostCaller)).isInstanceOf(QuestionNotFoundException.class);
-    }
 
     @Test
     void get_sharedQuestion_readableByAnyTenant() {
@@ -207,5 +202,39 @@ class ItembankServiceTest {
 
         assertThat(view.options().stream().map(QuestionFreezeView.Option::orderIndex))
                 .containsExactly(0, 1, 2, 3);
+    }
+
+    @Test
+    void countSharedByTaskTypesReturnsRepositoryCounts() {
+        when(questionRepository.countByVisibilityAndTaskTypeIn(eq(Visibility.SHARED), any()))
+                .thenReturn(List.<Object[]>of(new Object[]{PteTaskType.READ_ALOUD, 3L}));
+
+        Map<PteTaskType, Long> counts = service.countSharedByTaskTypes(Set.of(PteTaskType.READ_ALOUD));
+
+        assertThat(counts).containsEntry(PteTaskType.READ_ALOUD, 3L);
+    }
+
+    @Test
+    void findRandomByTaskTypeMapsRepositoryQuestionsToFreezeViews() {
+        Question first = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        Question second = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        first.setTitle("first");
+        second.setTitle("second");
+        when(questionRepository.findRandomByTaskType("READ_ALOUD", 2, 11L))
+                .thenReturn(List.of(first, second));
+
+        List<QuestionFreezeView> result = service.findRandomByTaskType(PteTaskType.READ_ALOUD, 2, 11L);
+
+        assertThat(result).extracting(QuestionFreezeView::title).containsExactly("first", "second");
+    }
+
+    @Test
+    void freeze_draftQuestionIsNotAvailableForGeneration() {
+        UUID publicId = UUID.randomUUID();
+        Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        question.setStatus(QuestionStatus.DRAFT);
+        when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
+
+        assertThatThrownBy(() -> service.freeze(publicId)).isInstanceOf(QuestionNotFoundException.class);
     }
 }

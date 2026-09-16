@@ -44,10 +44,17 @@ public class UserBulkCreateWriter {
     public record Result(User user, String generatedPassword) {
     }
 
-    /** Empty result means the row lost a concurrent race on email uniqueness — caller reports it as skipped. */
+    /** Empty result means the row lost a concurrent race on a unique key — caller reports it as skipped. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<Result> createOne(Row row, UUID tenantId) {
         User user = new User();
+        // username = email here too (plans/quang-tenant-commercialization
+        // Phase 1) — this bulk-create path predates Phase 8's roster import
+        // and per-tenant student username generation; it still needs SOME
+        // value for the now-NOT-NULL-UNIQUE username column. A collision
+        // surfaces as the DataIntegrityViolationException already caught
+        // below, same as an email collision did before.
+        user.setUsername(row.email());
         user.setEmail(row.email());
         user.setFullName(row.fullName());
         user.setTenantId(tenantId);
@@ -57,6 +64,22 @@ public class UserBulkCreateWriter {
         user.setPhone(row.phone());
         user.setDateOfBirth(row.dateOfBirth());
 
+        return persist(user);
+    }
+
+    /** Creates an import-only student with a generated username and first-login password change flag. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Optional<Result> createGeneratedStudent(String username, UUID tenantId) {
+        User user = new User();
+        user.setUsername(username);
+        user.setTenantId(tenantId);
+        user.setRoles(Set.of(Role.STUDENT));
+        user.setMustChangePassword(true);
+
+        return persist(user);
+    }
+
+    private Optional<Result> persist(User user) {
         User saved;
         try {
             saved = userRepository.saveAndFlush(user);

@@ -39,8 +39,10 @@
 
   2. Run this SQL once, e.g. `psql -h localhost -U iam_svc -d iam`:
 
-       INSERT INTO users (public_id, email, full_name, tenant_id, status, deleted, created_at, updated_at)
-       VALUES (gen_random_uuid(), 'admin@test.local', 'Bootstrap Admin', NULL, 'ACTIVE', false, now(), now())
+       -- username = email for a PLATFORM_ADMIN (plans/quang-tenant-commercialization
+       -- Phase 1) -- login now looks up by username, not email.
+       INSERT INTO users (public_id, username, email, full_name, tenant_id, status, deleted, created_at, updated_at)
+       VALUES (gen_random_uuid(), 'admin@test.local', 'admin@test.local', 'Bootstrap Admin', NULL, 'ACTIVE', false, now(), now())
        RETURNING id;
        -- capture the printed id (an integer, e.g. 1) — use it as <USER_ID> below.
        -- CRITICAL: user_roles.user_id and login_hashes.user_id both FK to
@@ -239,7 +241,7 @@ Write-Step "Target gateway: $GatewayBaseUrl"
 # ---------------------------------------------------------------------------
 Write-Step "Logging in as bootstrap PLATFORM_ADMIN ($BootstrapAdminEmail)..."
 $loginResp = Invoke-Api -Method Post -Path '/api/iam/auth/login' -Body @{
-    email    = $BootstrapAdminEmail
+    username = $BootstrapAdminEmail
     password = $BootstrapAdminPassword
 }
 $platformToken = $loginResp.data.accessToken
@@ -321,7 +323,7 @@ Save-State
 # ---------------------------------------------------------------------------
 Write-Step "Logging in as host admin ($HostEmail)..."
 $hostLoginResp = Invoke-Api -Method Post -Path '/api/iam/auth/login' -Body @{
-    email    = $HostEmail
+    username = $HostEmail
     password = $HostPassword
 }
 $hostToken = $hostLoginResp.data.accessToken

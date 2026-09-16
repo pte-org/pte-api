@@ -1,6 +1,7 @@
 package com.pte.session.internal.controller;
 
 import com.pte.session.dto.response.ExamPolicyResponse;
+import com.pte.session.internal.dto.request.ChangeSubscriptionRequest;
 import com.pte.session.internal.dto.request.CreateSessionRequest;
 import com.pte.session.internal.dto.request.PatchExamPolicyRequest;
 import com.pte.session.internal.dto.request.SetCompositionRequest;
@@ -81,6 +82,12 @@ public class SessionController {
     @PostMapping("/{publicId}/close")
     public ApiResponse<SessionResponse> close(@PathVariable UUID publicId) {
         return ApiResponse.success(sessionLifecycleService.close(publicId, currentUser()));
+    }
+
+    @PatchMapping("/{publicId}/subscription")
+    public ApiResponse<SessionResponse> changeSubscription(@PathVariable UUID publicId,
+            @Valid @RequestBody ChangeSubscriptionRequest request) {
+        return ApiResponse.success(sessionLifecycleService.changeSubscription(publicId, request, currentUser()));
     }
 
     private CurrentUser currentUser() {

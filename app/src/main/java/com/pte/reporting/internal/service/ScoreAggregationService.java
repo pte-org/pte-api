@@ -1,10 +1,14 @@
 package com.pte.reporting.internal.service;
 
+import com.pte.assessment.AssessmentService;
+import com.pte.assessment.dto.response.SnapshotScoringSpec;
+import com.pte.itembank.domain.enums.PteSection;
 import com.pte.reporting.domain.enums.Skill;
 import com.pte.reporting.internal.config.TaskSkillMappingConfig;
 import com.pte.scoring.ScoringService;
 import com.pte.scoring.dto.response.ScoredAnswerView;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -29,13 +33,25 @@ public class ScoreAggregationService {
 
     private final ScoringService scoringService;
     private final TaskSkillMappingConfig taskSkillMappingConfig;
+    private final AssessmentService assessmentService;
 
     public ScoreAggregationService(ScoringService scoringService, TaskSkillMappingConfig taskSkillMappingConfig) {
+        this(scoringService, taskSkillMappingConfig, null);
+    }
+
+    @Autowired
+    public ScoreAggregationService(ScoringService scoringService, TaskSkillMappingConfig taskSkillMappingConfig,
+                                   AssessmentService assessmentService) {
         this.scoringService = scoringService;
         this.taskSkillMappingConfig = taskSkillMappingConfig;
+        this.assessmentService = assessmentService;
     }
 
     public AttemptScoreSummary aggregate(UUID attemptPublicId, UUID tenantId) {
+        return aggregate(attemptPublicId, tenantId, null);
+    }
+
+    public AttemptScoreSummary aggregate(UUID attemptPublicId, UUID tenantId, UUID snapshotPublicId) {
         List<ScoredAnswerView> answers = scoringService.getScoredAnswersForAttempt(attemptPublicId, tenantId);
 
         Map<Skill, List<ScoredAnswerView>> contributingBySkill = new EnumMap<>(Skill.class);
@@ -53,7 +69,10 @@ public class ScoreAggregationService {
             skillScores.put(skill, computeSkillScore(contributingBySkill.get(skill)));
         }
 
-        return new AttemptScoreSummary(computeOverall(skillScores), skillScores);
+        SkillScore overall = snapshotPublicId != null && assessmentService != null
+                ? computeWeightedOverall(answers, assessmentService.getSnapshotScoringSpec(snapshotPublicId))
+                : computeOverall(skillScores);
+        return new AttemptScoreSummary(overall, skillScores);
     }
 
     /**
@@ -80,5 +99,37 @@ public class ScoreAggregationService {
         }
         double average = communicativeWithData.stream().mapToInt(Integer::intValue).average().orElse(0);
         return SkillScore.of((int) Math.round(average));
+    }
+
+    private SkillScore computeWeightedOverall(List<ScoredAnswerView> answers, SnapshotScoringSpec spec) {
+        if (spec.sectionWeights().isEmpty()) {
+            return SkillScore.insufficientData();
+        }
+        double weightedTotal = 0;
+        int totalWeight = 0;
+        for (SnapshotScoringSpec.SectionWeight sectionWeight : spec.sectionWeights()) {
+            List<ScoredAnswerView> sectionAnswers = answers.stream()
+                    .filter(answer -> belongsToSection(answer, sectionWeight.section()))
+                    .toList();
+            if (sectionAnswers.isEmpty()) {
+                return SkillScore.insufficientData();
+            }
+            double averageRawScore = sectionAnswers.stream().mapToInt(ScoredAnswerView::rawScore).average().orElse(0);
+            int sectionScore = (int) Math.round(SCALE_FLOOR + (averageRawScore / 100.0) * SCALE_SPAN);
+            weightedTotal += sectionScore * sectionWeight.weightPercent() / 100.0;
+            totalWeight += sectionWeight.weightPercent();
+        }
+        if (totalWeight <= 0) {
+            return SkillScore.insufficientData();
+        }
+        return SkillScore.of((int) Math.round(weightedTotal * 100.0 / totalWeight));
+    }
+
+    private boolean belongsToSection(ScoredAnswerView answer, PteSection section) {
+        try {
+            return com.pte.itembank.domain.enums.PteTaskType.valueOf(answer.taskType()).getSection() == section;
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
     }
 }

@@ -1,8 +1,8 @@
 package com.pte.notification.internal.listener;
 
-import com.pte.identity.IdentityService;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
+import com.pte.identity.IdentityService;
 import com.pte.notification.domain.enums.NotificationType;
 import com.pte.notification.internal.constant.NotificationConstants;
 import com.pte.notification.internal.service.NotificationDispatchService;
@@ -33,7 +33,8 @@ public class ViolationNotificationListener {
         String body = "A proctor flagged attempt " + event.attemptPublicId() + " in session " + event.sessionPublicId()
                 + " for " + event.violationType() + (event.detail() == null ? "" : (" — " + event.detail())) + ".";
 
-        for (User hostAdmin : identityService.findByTenantIdAndRole(event.tenantId(), Role.valueOf(NotificationConstants.ROLE_HOST_ADMIN))) {
+        for (User hostAdmin : identityService.findByTenantIdAndRole(event.tenantId(),
+                Role.valueOf(NotificationConstants.ROLE_HOST_ADMIN))) {
             dispatchService.dispatchTo(NotificationType.VIOLATION_DETECTED, hostAdmin, event.tenantId(), subject, body);
         }
     }

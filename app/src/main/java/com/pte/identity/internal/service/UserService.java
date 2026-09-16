@@ -6,6 +6,7 @@ import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.identity.internal.domain.LoginHash;
 import com.pte.identity.internal.dto.request.BulkCreateUserRow;
 import com.pte.identity.internal.dto.request.BulkCreateUsersRequest;
+import com.pte.identity.internal.dto.request.ChangePasswordRequest;
 import com.pte.identity.internal.dto.request.CreateUserRequest;
 import com.pte.identity.internal.dto.request.ResetPasswordRequest;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
@@ -15,6 +16,7 @@ import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.DuplicateEmailInBatchException;
 import com.pte.identity.internal.exception.EmailAlreadyUsedException;
 import com.pte.identity.internal.exception.ForbiddenPasswordResetException;
+import com.pte.identity.internal.exception.InvalidLoginException;
 import com.pte.identity.internal.exception.UserNotFoundException;
 import com.pte.identity.internal.mapper.UserMapper;
 import com.pte.identity.internal.repository.LoginHashRepository;
@@ -76,13 +78,23 @@ public class UserService {
 
     @Transactional
     public UserResponse create(CreateUserRequest request, CurrentUser caller) {
-        if (userRepository.existsByEmail(request.email())) {
+        // username = email for every role created through this single-user
+        // endpoint (plans/quang-tenant-commercialization Phase 1) — including
+        // STUDENT for now; per-tenant student username generation only
+        // applies to the bulk roster-import path (Phase 8), not here. Since
+        // username carries the real DB uniqueness constraint now, duplicate
+        // detection checks it, not email.
+        if (userRepository.existsByUsername(request.email())) {
             throw new EmailAlreadyUsedException();
         }
         UUID tenantId = provisioningHelper.resolveTargetTenant(caller, request.tenantId());
         Set<Role> roles = provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles());
+        if (roles.contains(Role.STUDENT)) {
+            tenancyService.assertCanAddStudents(tenantId, 1L);
+        }
 
         User user = new User();
+        user.setUsername(request.email());
         user.setEmail(request.email());
         user.setFullName(request.fullName());
         user.setTenantId(tenantId);
@@ -112,6 +124,7 @@ public class UserService {
      * (REQUIRES_NEW) transaction, so a rare concurrent-duplicate race only
      * loses that one row.
      */
+    @Transactional
     public BulkCreateUsersResponse createBulk(BulkCreateUsersRequest request, CurrentUser caller) {
         UUID tenantId = provisioningHelper.resolveTargetTenant(caller, request.tenantId());
 
@@ -122,14 +135,19 @@ public class UserService {
             }
         }
 
-        List<String> emails = request.rows().stream().map(BulkCreateUserRow::email).toList();
+        List<BulkCreateUserRow> rows = request.rows();
+        List<String> emails = rows.stream().map(BulkCreateUserRow::email).toList();
         Set<String> existingEmails = new HashSet<>(
                 userRepository.findByEmailIn(emails).stream().map(User::getEmail).toList());
+
+        long adding = rows.stream().filter(row -> !existingEmails.contains(row.email())).count();
+        if (adding > 0L) {
+            tenancyService.assertCanAddStudents(tenantId, adding);
+        }
 
         List<CreatedUser> created = new ArrayList<>();
         List<RowError> skipped = new ArrayList<>();
 
-        List<BulkCreateUserRow> rows = request.rows();
         for (int i = 0; i < rows.size(); i++) {
             BulkCreateUserRow row = rows.get(i);
             int rowIndex = i;
@@ -202,6 +220,25 @@ public class UserService {
         loginHashRepository.save(loginHash);
 
         return UserMapper.toResponse(user);
+    }
+
+    /** Changes the authenticated user's password and clears the first-login flag. */
+    @Transactional
+    public void changeOwnPassword(ChangePasswordRequest request, CurrentUser caller) {
+        if (caller == null || caller.userId() == null) {
+            throw new UserNotFoundException();
+        }
+        User user = userRepository.findByPublicId(caller.userId())
+                .orElseThrow(UserNotFoundException::new);
+        LoginHash loginHash = loginHashRepository.findByUserId(user.getId())
+                .orElseThrow(UserNotFoundException::new);
+        if (!passwordEncoder.matches(request.currentPassword(), loginHash.getHash())) {
+            throw new InvalidLoginException();
+        }
+        loginHash.setHash(passwordEncoder.encode(request.newPassword()));
+        loginHashRepository.save(loginHash);
+        user.setMustChangePassword(false);
+        userRepository.save(user);
     }
 
     @Transactional(readOnly = true)

@@ -2,8 +2,10 @@ package com.pte.assessment.internal.mapper;
 
 import com.pte.assessment.domain.ExamSnapshot;
 import com.pte.assessment.domain.SnapshotItem;
+import com.pte.assessment.domain.SnapshotSectionWeight;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.dto.response.SnapshotResponse;
+import com.pte.assessment.dto.response.SnapshotScoringSpec;
 
 import java.util.List;
 
@@ -37,6 +39,17 @@ public final class SnapshotMapper {
                 .toList();
         return new SnapshotContentResponse(
                 snapshot.getPublicId(), snapshot.getName(), snapshot.getVersion(), snapshot.getTenantId(), items);
+    }
+
+    public static SnapshotScoringSpec toScoringSpec(ExamSnapshot snapshot) {
+        return new SnapshotScoringSpec(snapshot.getPublicId(), snapshot.getSectionWeights().stream()
+                .map(SnapshotMapper::toSectionWeight)
+                .toList());
+    }
+
+    private static SnapshotScoringSpec.SectionWeight toSectionWeight(SnapshotSectionWeight sectionWeight) {
+        return new SnapshotScoringSpec.SectionWeight(
+                sectionWeight.getSection(), sectionWeight.getWeightPercent(), sectionWeight.getOrderIndex());
     }
 
     private static SnapshotContentResponse.Item toContentItem(SnapshotItem item) {

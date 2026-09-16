@@ -1,7 +1,7 @@
 package com.pte.notification.internal.listener;
 
-import com.pte.identity.IdentityService;
 import com.pte.identity.domain.User;
+import com.pte.identity.IdentityService;
 import com.pte.notification.domain.enums.NotificationType;
 import com.pte.notification.internal.service.NotificationDispatchService;
 import com.pte.reporting.dto.event.AttemptPublishedEvent;
@@ -44,7 +44,8 @@ class AttemptPublishedNotificationListenerTest {
         student.setPublicId(studentPublicId);
         student.setEmail("student@example.com");
 
-        AttemptPublishedEvent event = new AttemptPublishedEvent(attemptPublicId, sessionPublicId, studentPublicId, tenantId);
+        AttemptPublishedEvent event = new AttemptPublishedEvent(attemptPublicId, sessionPublicId, studentPublicId,
+                tenantId);
 
         when(identityService.findById(studentPublicId)).thenReturn(Optional.of(student));
 
@@ -62,7 +63,8 @@ class AttemptPublishedNotificationListenerTest {
         UUID sessionPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
 
-        AttemptPublishedEvent event = new AttemptPublishedEvent(attemptPublicId, sessionPublicId, studentPublicId, tenantId);
+        AttemptPublishedEvent event = new AttemptPublishedEvent(attemptPublicId, sessionPublicId, studentPublicId,
+                tenantId);
 
         when(identityService.findById(studentPublicId)).thenReturn(Optional.empty());
 

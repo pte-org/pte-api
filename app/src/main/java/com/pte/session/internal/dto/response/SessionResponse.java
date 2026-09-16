@@ -11,12 +11,12 @@ public record SessionResponse(
         UUID publicId,
         String name,
         UUID tenantId,
+        UUID subscriptionPublicId,
         UUID snapshotPublicId,
         Instant opensAt,
         Instant closesAt,
         String status,
         ExamPolicyResponse policy,
         List<CompositionItemResponse> composition,
-        /** Null = unlimited. */
         Integer capacity) {
 }

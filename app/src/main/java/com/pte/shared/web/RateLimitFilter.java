@@ -19,6 +19,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Per-tenant request-rate guard (ADR-003 layer 2: noisy-neighbor isolation).
@@ -37,17 +38,31 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final ProxyManager<String> proxyManager;
     private final JsonMapper jsonMapper;
     private final int limitPerSecond;
+    private final Map<String, Integer> routeLimits;
 
     public RateLimitFilter(ProxyManager<String> proxyManager, JsonMapper jsonMapper, int limitPerSecond) {
+        this(proxyManager, jsonMapper, limitPerSecond, Map.of());
+    }
+
+    public RateLimitFilter(ProxyManager<String> proxyManager, JsonMapper jsonMapper, int limitPerSecond,
+            Map<String, Integer> routeLimits) {
+        if (limitPerSecond <= 0 || routeLimits.values().stream().anyMatch(limit -> limit == null || limit <= 0)) {
+            throw new IllegalArgumentException("Rate limits must be positive");
+        }
         this.proxyManager = proxyManager;
         this.jsonMapper = jsonMapper;
         this.limitPerSecond = limitPerSecond;
+        this.routeLimits = Map.copyOf(routeLimits);
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        Bucket bucket = proxyManager.getProxy(resolveTenantKey(), this::bucketConfiguration);
+        Integer routeLimit = routeLimits.get(request.getRequestURI());
+        int effectiveLimit = routeLimit == null ? limitPerSecond : routeLimit;
+        String bucketKey = resolveTenantKey()
+                + (routeLimit == null ? "" : "|route:" + request.getRequestURI());
+        Bucket bucket = proxyManager.getProxy(bucketKey, () -> bucketConfiguration(effectiveLimit));
         if (!bucket.tryConsume(1)) {
             respondTooManyRequests(response);
             return;
@@ -66,9 +81,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return ANONYMOUS_KEY;
     }
 
-    private BucketConfiguration bucketConfiguration() {
+    private BucketConfiguration bucketConfiguration(int effectiveLimit) {
         return BucketConfiguration.builder()
-                .addLimit(Bandwidth.simple(limitPerSecond, Duration.ofSeconds(1)))
+                .addLimit(Bandwidth.simple(effectiveLimit, Duration.ofSeconds(1)))
                 .build();
     }
 

@@ -13,5 +13,8 @@ public interface ExamBlueprintRepository extends JpaRepository<ExamBlueprint, Lo
     @EntityGraph(attributePaths = "items")
     Optional<ExamBlueprint> findWithItemsByPublicId(UUID publicId);
 
+    @EntityGraph(attributePaths = "items")
+    List<ExamBlueprint> findByTenantIdIsNull();
+
     List<ExamBlueprint> findByTenantId(UUID tenantId);
 }

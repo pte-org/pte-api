@@ -1,5 +1,8 @@
 package com.pte.reporting.internal.service;
 
+import com.pte.assessment.AssessmentService;
+import com.pte.assessment.dto.response.SnapshotScoringSpec;
+import com.pte.itembank.domain.enums.PteSection;
 import com.pte.reporting.domain.enums.Skill;
 import com.pte.reporting.internal.config.TaskSkillMappingConfig;
 import com.pte.scoring.ScoringService;
@@ -27,12 +30,14 @@ class ScoreAggregationServiceTest {
 
     @Mock
     private TaskSkillMappingConfig taskSkillMappingConfig;
+    @Mock
+    private AssessmentService assessmentService;
 
     private ScoreAggregationService service;
 
     @BeforeEach
     void setUp() {
-        service = new ScoreAggregationService(scoringService, taskSkillMappingConfig);
+        service = new ScoreAggregationService(scoringService, taskSkillMappingConfig, assessmentService);
     }
 
     @Test
@@ -320,5 +325,28 @@ class ScoreAggregationServiceTest {
 
         // Overall should be average of LISTENING and WRITING (both 74) = 74
         assertThat(summary.overall().score()).isEqualTo(74);
+    }
+
+    @Test
+    void aggregate_usesSnapshotSectionWeightsForWeightedOverall() {
+        UUID attemptPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        UUID snapshotPublicId = UUID.randomUUID();
+
+        ScoredAnswerView reading = new ScoredAnswerView("MC_READING_SINGLE", 100);
+        ScoredAnswerView listening = new ScoredAnswerView("MC_LISTENING_SINGLE", 0);
+        when(scoringService.getScoredAnswersForAttempt(attemptPublicId, tenantId))
+                .thenReturn(List.of(reading, listening));
+        when(taskSkillMappingConfig.skillsFor("MC_READING_SINGLE")).thenReturn(Set.of(Skill.READING));
+        when(taskSkillMappingConfig.skillsFor("MC_LISTENING_SINGLE")).thenReturn(Set.of(Skill.LISTENING));
+        when(assessmentService.getSnapshotScoringSpec(snapshotPublicId)).thenReturn(new SnapshotScoringSpec(
+                snapshotPublicId,
+                List.of(new SnapshotScoringSpec.SectionWeight(PteSection.READING, 25, 0),
+                        new SnapshotScoringSpec.SectionWeight(PteSection.LISTENING, 75, 1))));
+
+        AttemptScoreSummary summary = service.aggregate(attemptPublicId, tenantId, snapshotPublicId);
+
+        // Reading=90, Listening=10; 90*25% + 10*75% = 30.
+        assertThat(summary.overall().score()).isEqualTo(30);
     }
 }

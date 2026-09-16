@@ -25,8 +25,8 @@ import java.util.UUID;
 /**
  * A single authored PTE item. Type-specific fields are nullable and validated per
  * {@link PteTaskType} at save time. Media prompts are referenced by the media
- * module's {@code publicId} (UUID), never a cross-module FK. SHARED items
- * have a null {@code tenantId} (platform bank); PRIVATE items belong to one tenant.
+ * module's {@code publicId} (UUID), never a cross-module FK. All items belong
+ * to the platform bank and have a null {@code tenantId}.
  */
 @Entity
 @Table(name = "questions", indexes = {

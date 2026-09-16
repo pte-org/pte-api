@@ -12,8 +12,19 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     deleted BOOLEAN NOT NULL DEFAULT FALSE,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    full_name VARCHAR(255) NOT NULL,
+    -- plans/quang-tenant-commercialization Phase 1: the actual login key from
+    -- now on (AuthService.login() looks up by this, not email). For every
+    -- role except STUDENT it equals email today. Global unique because a
+    -- STUDENT's is prefixed with its tenant's code ({tenant.code}.{random},
+    -- Phase 8) and every other role's login key must not collide across
+    -- tenants either.
+    username VARCHAR(255) NOT NULL UNIQUE,
+    -- No longer unique and no longer required: two different tenants can
+    -- create a student with the same email. Still required/unique in
+    -- practice for every non-STUDENT role, because UserService.create()
+    -- sets username = email for them and username IS unique.
+    email VARCHAR(255),
+    full_name VARCHAR(255),
     tenant_id UUID,
     status VARCHAR(32) NOT NULL,
     student_code VARCHAR(255),

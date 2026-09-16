@@ -8,7 +8,6 @@ import com.pte.shared.web.ApiResponse;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -20,18 +19,13 @@ import java.util.UUID;
  * human-facing counterpart only.
  */
 @RestController
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR','HOST_ADMIN','HOST_AUTHOR')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
 public class SnapshotController {
 
     private final SnapshotPublishService snapshotPublishService;
 
     public SnapshotController(SnapshotPublishService snapshotPublishService) {
         this.snapshotPublishService = snapshotPublishService;
-    }
-
-    @PostMapping("/blueprints/{publicId}/publish")
-    public ApiResponse<SnapshotResponse> publish(@PathVariable UUID publicId) {
-        return ApiResponse.success(snapshotPublishService.publish(publicId, currentUser()));
     }
 
     @GetMapping("/snapshots/{publicId}")

@@ -48,6 +48,7 @@ class StudentClassRepositoryTest {
 
     private Program persistProgram(String programName) {
         Tenant tenant = new Tenant();
+        tenant.setCode("acme-" + UUID.randomUUID());
         tenant.setName("Acme School " + UUID.randomUUID());
         tenant.setOrganizationType("SCHOOL");
         tenant.setPackageName("starter");
