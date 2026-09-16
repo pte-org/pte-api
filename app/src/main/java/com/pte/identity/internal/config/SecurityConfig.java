@@ -50,7 +50,7 @@ public class SecurityConfig {
     // "/admin/applications" specifically so they never fall inside this rule.
     private static final List<String> PUBLIC_PATHS = List.of(
             "/auth/login", "/auth/refresh", "/actuator/health", "/actuator/health/**", "/ws/**",
-            "/applications");
+            "/applications", "/api/webhooks/payos");
 
     @Bean
     public SecurityFilterChain jwtFilterChain(

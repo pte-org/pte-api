@@ -21,6 +21,34 @@ public final class BillingConstants {
     public static final String SUBSCRIPTION_EXAM_FIELDS_INVALID = "SUBSCRIPTION_EXAM_FIELDS_INVALID";
     public static final String SUBSCRIPTION_CAPACITY_FIELDS_INVALID = "SUBSCRIPTION_CAPACITY_FIELDS_INVALID";
     public static final String LICENSE_KEY_GENERATION_FAILED = "LICENSE_KEY_GENERATION_FAILED";
+    public static final String ORDER_TENANT_REQUIRED = "ORDER_TENANT_REQUIRED";
+    public static final String ORDER_PLAN_REQUIRED = "ORDER_PLAN_REQUIRED";
+    public static final String ORDER_NOT_FOUND = "ORDER_NOT_FOUND";
+    public static final String ORDER_PLAN_NOT_ACTIVE = "ORDER_PLAN_NOT_ACTIVE";
+    public static final String ORDER_PENDING_EXISTS = "ORDER_PENDING_EXISTS";
+    public static final String ORDER_AMOUNT_INVALID = "ORDER_AMOUNT_INVALID";
+    public static final String ORDER_CURRENCY_UNSUPPORTED = "ORDER_CURRENCY_UNSUPPORTED";
+    public static final String PAYOS_CLIENT_ID_REQUIRED = "PAYOS_CLIENT_ID_REQUIRED";
+    public static final String PAYOS_API_KEY_REQUIRED = "PAYOS_API_KEY_REQUIRED";
+    public static final String PAYOS_CHECKSUM_KEY_REQUIRED = "PAYOS_CHECKSUM_KEY_REQUIRED";
+    public static final String PAYOS_BASE_URL_REQUIRED = "PAYOS_BASE_URL_REQUIRED";
+    public static final String PAYOS_RETURN_URL_REQUIRED = "PAYOS_RETURN_URL_REQUIRED";
+    public static final String PAYOS_CANCEL_URL_REQUIRED = "PAYOS_CANCEL_URL_REQUIRED";
+    public static final String PAYOS_TIMEOUT_INVALID = "PAYOS_TIMEOUT_INVALID";
+    public static final String PAYOS_REQUEST_FAILED = "PAYOS_REQUEST_FAILED";
+    public static final String PAYOS_RESPONSE_INVALID = "PAYOS_RESPONSE_INVALID";
+    public static final String PAYOS_SIGNATURE_INVALID = "PAYOS_SIGNATURE_INVALID";
+    public static final String PAYOS_WEBHOOK_INVALID = "PAYOS_WEBHOOK_INVALID";
+    public static final String PAYOS_ORDER_NOT_FOUND = "PAYOS_ORDER_NOT_FOUND";
+    public static final String PAYOS_ORDER_AMOUNT_MISMATCH = "PAYOS_ORDER_AMOUNT_MISMATCH";
+    public static final String PAYOS_ORDER_CURRENCY_MISMATCH = "PAYOS_ORDER_CURRENCY_MISMATCH";
+    public static final String PAYOS_CANCELLATION_FAILED = "PAYOS_CANCELLATION_FAILED";
+
+    public static final int DEFAULT_PENDING_ORDER_TTL_HOURS = 24;
+    public static final int DEFAULT_PAYMENT_LINK_TTL_HOURS = 24;
+    public static final String PAYOS_PAYMENT_SUCCESS_CODE = "00";
+    public static final String PAYOS_CURRENCY = "VND";
+    public static final String PAYOS_EXPIRATION_CANCELLATION_REASON = "Payment link expired";
 
     public static final String FREE_STUDENT_LIMIT_SETTING_KEY = "free_student_limit";
     public static final String SUSPENSION_DEFAULT_DAYS_SETTING_KEY = "suspension_default_days";
