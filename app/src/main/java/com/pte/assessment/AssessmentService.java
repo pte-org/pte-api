@@ -2,7 +2,9 @@ package com.pte.assessment;
 
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.dto.response.SnapshotResponse;
+import com.pte.assessment.dto.response.TemplateSpec;
 import com.pte.assessment.internal.service.SnapshotPublishService;
+import com.pte.assessment.internal.service.TemplateService;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
@@ -12,7 +14,7 @@ import java.util.UUID;
  * SnapshotPublishService}, repositories, and controllers stay in
  * {@code internal/}.
  *
- * <p>Starts with the two read methods known to have cross-module callers:
+ * <p>Exposes read methods known to have cross-module callers:
  * {@code session} (Phase 06) validating composition against a published
  * snapshot's summary, and {@code attempt} (Phase 07) pinning full content at
  * attempt-create. Blueprint CRUD and publish stay internal — only a host's
@@ -23,9 +25,11 @@ import java.util.UUID;
 public class AssessmentService {
 
     private final SnapshotPublishService snapshotPublishService;
+    private final TemplateService templateService;
 
-    public AssessmentService(SnapshotPublishService snapshotPublishService) {
+    public AssessmentService(SnapshotPublishService snapshotPublishService, TemplateService templateService) {
         this.snapshotPublishService = snapshotPublishService;
+        this.templateService = templateService;
     }
 
     /** Answer-stripped summary — safe for {@code session} to validate composition against. */
@@ -36,5 +40,10 @@ public class AssessmentService {
     /** Full-fidelity content including answer keys — trusted application call only, never expose to a human-facing response. */
     public SnapshotContentResponse getFullContent(UUID snapshotPublicId) {
         return snapshotPublishService.getContent(snapshotPublicId);
+    }
+
+    /** Active template structure for the in-process Phase 10 resolver. */
+    public TemplateSpec getTemplateSpec(UUID templatePublicId) {
+        return templateService.getTemplateSpec(templatePublicId);
     }
 }

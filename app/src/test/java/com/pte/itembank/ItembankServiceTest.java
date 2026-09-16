@@ -21,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -28,6 +29,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 /**
@@ -207,5 +209,15 @@ class ItembankServiceTest {
 
         assertThat(view.options().stream().map(QuestionFreezeView.Option::orderIndex))
                 .containsExactly(0, 1, 2, 3);
+    }
+
+    @Test
+    void countSharedByTaskTypesReturnsRepositoryCounts() {
+        when(questionRepository.countByVisibilityAndTaskTypeIn(eq(Visibility.SHARED), any()))
+                .thenReturn(List.<Object[]>of(new Object[]{PteTaskType.READ_ALOUD, 3L}));
+
+        Map<PteTaskType, Long> counts = service.countSharedByTaskTypes(Set.of(PteTaskType.READ_ALOUD));
+
+        assertThat(counts).containsEntry(PteTaskType.READ_ALOUD, 3L);
     }
 }

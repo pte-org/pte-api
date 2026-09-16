@@ -24,7 +24,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -93,6 +96,18 @@ public class ItembankService {
                 ? questionRepository.findAllWithOptions()
                 : questionRepository.findAccessible(caller.tenantId());
         return questions.stream().map(this::toResponse).toList();
+    }
+
+    /** Count platform SHARED questions for a template-feasibility check. */
+    @Transactional(readOnly = true)
+    public Map<PteTaskType, Long> countSharedByTaskTypes(Set<PteTaskType> taskTypes) {
+        if (taskTypes == null || taskTypes.isEmpty()) {
+            return Map.of();
+        }
+        Map<PteTaskType, Long> counts = new HashMap<>();
+        questionRepository.countByVisibilityAndTaskTypeIn(Visibility.SHARED, taskTypes)
+                .forEach(row -> counts.put((PteTaskType) row[0], ((Number) row[1]).longValue()));
+        return Map.copyOf(counts);
     }
 
     /**
