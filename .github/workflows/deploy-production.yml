@@ -182,7 +182,7 @@ jobs:
     timeout-minutes: 5
     steps:
       # No SSH here — this checks from the outside (DNS → Caddy → TLS →
-      # gateway/web), which the deploy job's internal container healthcheck
+      # app/web), which the deploy job's internal container healthcheck
       # loop cannot see. Domains mirror TENANT_DOMAIN/ADMIN_DOMAIN in .env;
       # update here if they ever change.
       - name: Check tenant + admin origins

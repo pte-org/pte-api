@@ -1,0 +1,44 @@
+# Shared route table, imported by both deploy/Caddyfile (hosted, TLS) and
+# deploy/Caddyfile.local (local dev, plain HTTP) so the two never drift apart.
+#
+# gateway-removal: reproduces gateway's old StripPrefix=2 routing table
+# directly in Caddy — each of app's modules owns a disjoint path space at its
+# own root (identity's AuthController maps /auth, admin's ClassController
+# maps /organizations/..., etc.), so stripping the old /api/{name} prefix
+# here is the exact same public contract, with zero changes needed on either
+# frontend or scripts/seed-e2e.ps1. handle_path strips the matched prefix
+# before proxying, same as StripPrefix=2 did.
+(api_routes) {
+	handle_path /api/iam/* {
+		reverse_proxy app:8091
+	}
+	handle_path /api/admin/* {
+		reverse_proxy app:8091
+	}
+	handle_path /api/authoring/* {
+		reverse_proxy app:8091
+	}
+	handle_path /api/scheduling/* {
+		reverse_proxy app:8091
+	}
+	handle_path /api/exam-delivery/* {
+		reverse_proxy app:8091
+	}
+	# Covers /api/proctor/ws/** too — Caddy proxies the WebSocket upgrade
+	# transparently, no extra Upgrade/Connection header handling needed.
+	handle_path /api/proctor/* {
+		reverse_proxy app:8091
+	}
+	handle_path /api/scoring/* {
+		reverse_proxy app:8091
+	}
+	handle_path /api/reporting/* {
+		reverse_proxy app:8091
+	}
+	handle_path /api/notification/* {
+		reverse_proxy app:8091
+	}
+	handle_path /api/media/* {
+		reverse_proxy app:8091
+	}
+}

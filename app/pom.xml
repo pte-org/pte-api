@@ -38,10 +38,15 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-amqp</artifactId>
 		</dependency>
-		<!-- AiScoringWorker/RabbitMqConfig's RetryOperationsInterceptor (com.pte.scoring, Phase 08). -->
+		<!-- AiScoringWorker/RabbitMqConfig's RetryOperationsInterceptor (com.pte.scoring, Phase 08).
+		     Explicit version (gateway-removal): previously resolved via the root
+		     pom's spring-cloud-dependencies BOM import, which existed only for
+		     gateway's spring-cloud-starter-gateway-server-webflux and was removed
+		     with it. Pinned to the same version that BOM was already supplying. -->
 		<dependency>
 			<groupId>org.springframework.retry</groupId>
 			<artifactId>spring-retry</artifactId>
+			<version>2.0.12</version>
 		</dependency>
 		<!-- STOMP/WebSocket for the proctor console (com.pte.proctoring, Phase 09). -->
 		<dependency>

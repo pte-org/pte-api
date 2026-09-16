@@ -5,8 +5,7 @@ name: pte-platform
 # Registry/Debezium retired Phase 10), Redis (cache/rate-limit/single-flight,
 # ADR-003).
 #
-# See docker-compose.services.yml for how `app` and `gateway` connect to
-# this infra.
+# See docker-compose.services.yml for how `app` connects to this infra.
 
 services:
   # Single database `pte` for the `app` module. POSTGRES_DB/USER/PASSWORD

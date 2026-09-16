@@ -30,19 +30,17 @@ docker compose --env-file .env.local -f docker-compose.yml up
 
 **Option 2: Full stack with services**
 
-Run the API gateway and all 10 backend services alongside infrastructure:
+Run `app` alongside infrastructure (gateway was removed — app is reached directly, no separate edge process):
 
 ```bash
 docker compose --env-file .env.local -f docker-compose.yml -f docker-compose.services.yml up --build
 ```
 
-Services are built automatically from the shared `Dockerfile`. The API gateway is accessible on `http://localhost:8080`:
+`app` is built automatically from the shared `Dockerfile` and accessible on `http://localhost:8091`:
 
 ```bash
-curl http://localhost:8080/actuator/health
+curl http://localhost:8091/actuator/health
 ```
-
-Backend services (admin, authoring, exam-delivery, iam, media, notification, proctor, reporting, scheduling, scoring) communicate via the internal Docker network and are not exposed on host ports.
 
 ### Populating test data for end-to-end testing
 

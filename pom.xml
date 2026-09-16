@@ -18,35 +18,19 @@
 
 	<properties>
 		<java.version>21</java.version>
-		<spring-cloud.version>2025.1.0</spring-cloud.version>
 	</properties>
 
-	<!-- plans/modular-monolith Phase 11 cutover: the 10 services/* modules that
-	     used to be listed here are gone — `app` replaces all of them. `gateway`
-	     stays (routes to `app` now); `pte-common` stays (gateway's own shared
-	     JWT claim-name contract dependency, unrelated to services/*'s removal). -->
+	<!-- gateway-removal (follow-up to plans/modular-monolith Phase 11 cutover):
+	     `gateway` is gone — CORS and per-tenant rate limiting were ported into
+	     `app`'s own SecurityConfig (com.pte.identity.internal.config), and
+	     Caddy now routes straight to `app`, doing the old /api/{service}/**
+	     prefix stripping itself. `pte-common` is gone with it: gateway was its
+	     only consumer in this reactor (app deliberately never depended on it —
+	     see app/pom.xml's comment on Spring Modulith module scanning; its
+	     classes were ported into app's own com.pte.shared package instead). -->
 	<modules>
-		<module>pte-common</module>
-		<module>gateway</module>
 		<module>app</module>
 	</modules>
-
-	<dependencyManagement>
-		<dependencies>
-			<dependency>
-				<groupId>org.springframework.cloud</groupId>
-				<artifactId>spring-cloud-dependencies</artifactId>
-				<version>${spring-cloud.version}</version>
-				<type>pom</type>
-				<scope>import</scope>
-			</dependency>
-			<dependency>
-				<groupId>com.pte</groupId>
-				<artifactId>pte-common</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-		</dependencies>
-	</dependencyManagement>
 
 	<build>
 		<pluginManagement>
