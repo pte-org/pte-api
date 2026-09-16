@@ -28,20 +28,20 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 public class Plan extends BaseEntity {
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 255)
     private String name;
 
-    @Column
+    @Column(length = 255)
     private String description;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 32)
     @Enumerated(EnumType.STRING)
     private PlanType type;
 
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal price;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 3)
     private String currency;
 
     /** EXAM_PACKAGE only — how long the Subscription this plan activates stays valid. */
@@ -56,7 +56,7 @@ public class Plan extends BaseEntity {
     @Column
     private Integer extraStudentSlots;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 32)
     @Enumerated(EnumType.STRING)
     private PlanStatus status = PlanStatus.DRAFT;
 

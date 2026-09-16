@@ -34,12 +34,15 @@ public class TenantApplicationService {
     private final TenantApplicationRepository applicationRepository;
     private final TenancyService tenancyService;
     private final IdentityService identityService;
+    private final PlatformSettingService platformSettingService;
 
     public TenantApplicationService(TenantApplicationRepository applicationRepository,
-            TenancyService tenancyService, IdentityService identityService) {
+            TenancyService tenancyService, IdentityService identityService,
+            PlatformSettingService platformSettingService) {
         this.applicationRepository = applicationRepository;
         this.tenancyService = tenancyService;
         this.identityService = identityService;
+        this.platformSettingService = platformSettingService;
     }
 
     /**
@@ -80,9 +83,10 @@ public class TenantApplicationService {
     @Transactional
     public ApproveApplicationResponse approve(UUID applicationPublicId, CurrentUser caller) {
         TenantApplication application = findPending(applicationPublicId);
+        int freeStudentLimit = platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY);
 
         Tenant tenant = tenancyService.createTenant(application.getOrgName(), application.getOrgType(),
-                application.getRequestedCode(), BillingConstants.TEMPORARY_FREE_STUDENT_LIMIT);
+                application.getRequestedCode(), freeStudentLimit);
         HostAdminCreated hostAdmin = identityService.createHostAdmin(
                 tenant.getPublicId(), application.getContactEmail());
 

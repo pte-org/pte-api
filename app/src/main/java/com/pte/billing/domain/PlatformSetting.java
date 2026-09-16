@@ -20,12 +20,12 @@ import lombok.Setter;
 @NoArgsConstructor
 public class PlatformSetting extends BaseEntity {
 
-    @Column(nullable = false, unique = true)
+    @Column(name = "setting_key", nullable = false, unique = true, length = 100)
     private String key;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 255)
     private String value;
 
-    @Column
+    @Column(length = 255)
     private String description;
 }

@@ -6,6 +6,7 @@ import com.pte.billing.internal.dto.request.RejectApplicationRequest;
 import com.pte.billing.internal.dto.request.SubmitApplicationRequest;
 import com.pte.billing.internal.dto.response.ApproveApplicationResponse;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
+import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.exception.ApplicationNotPendingException;
 import com.pte.billing.internal.exception.RequestedCodeAlreadyUsedException;
 import com.pte.billing.internal.exception.TenantApplicationNotFoundException;
@@ -47,11 +48,15 @@ class TenantApplicationServiceTest {
     @Mock
     private IdentityService identityService;
 
+    @Mock
+    private PlatformSettingService platformSettingService;
+
     private TenantApplicationService service;
 
     @BeforeEach
     void setUp() {
-        service = new TenantApplicationService(applicationRepository, tenancyService, identityService);
+        service = new TenantApplicationService(applicationRepository, tenancyService, identityService,
+                platformSettingService);
     }
 
     private SubmitApplicationRequest submitRequest(String code) {
@@ -122,7 +127,8 @@ class TenantApplicationServiceTest {
         HostAdminCreated hostAdmin = new HostAdminCreated(hostAdminUser, "Gener4ted!");
 
         when(applicationRepository.findByPublicId(applicationId)).thenReturn(Optional.of(application));
-        when(tenancyService.createTenant("Acme School", "SCHOOL", "acme", 50)).thenReturn(tenant);
+        when(platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY)).thenReturn(75);
+        when(tenancyService.createTenant("Acme School", "SCHOOL", "acme", 75)).thenReturn(tenant);
         when(identityService.createHostAdmin(tenant.getPublicId(), "contact@acme.example")).thenReturn(hostAdmin);
 
         CurrentUser caller = new CurrentUser(reviewerId, null, List.of("PLATFORM_ADMIN"));
