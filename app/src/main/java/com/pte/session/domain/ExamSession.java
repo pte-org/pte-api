@@ -25,13 +25,15 @@ import java.util.UUID;
 /**
  * A scheduled exam window, referencing a published assessment snapshot by
  * {@code publicId} (never a cross-module JOIN — module boundary is code, not
- * FK). Its {@link SessionComposition} selects which of the snapshot's task
- * types are actually delivered (full mock = all; practice = a host-chosen
- * subset).
+ * FK). Subscription and license references are scalar denormalized values;
+ * billing remains a separate module. Its {@link SessionComposition} selects
+ * which of the snapshot's task types are actually delivered (full mock = all;
+ * practice = a host-chosen subset).
  */
 @Entity
 @Table(name = "exam_sessions", indexes = {
-        @Index(name = "idx_sessions_tenant", columnList = "tenant_id")
+        @Index(name = "idx_sessions_tenant", columnList = "tenant_id"),
+        @Index(name = "idx_sessions_subscription", columnList = "subscription_id")
 })
 @Getter
 @Setter
@@ -43,6 +45,12 @@ public class ExamSession extends BaseEntity {
 
     @Column(nullable = false)
     private UUID tenantId;
+
+    @Column(nullable = false)
+    private UUID subscriptionId;
+
+    @Column(nullable = false, length = 64)
+    private String licenseKey;
 
     @Column(nullable = false)
     private UUID snapshotPublicId;
@@ -57,7 +65,8 @@ public class ExamSession extends BaseEntity {
     @Column(nullable = false)
     private SessionStatus status = SessionStatus.SCHEDULED;
 
-    /** Null = unlimited. Enforced in {@code EnrollmentService.bulkEnroll}. */
+    /** Snapshot of the requested per-session capacity, bounded by the subscription cap. */
+    @Column(nullable = false)
     private Integer capacity;
 
     @Embedded
@@ -73,10 +82,20 @@ public class ExamSession extends BaseEntity {
     }
 
     public void open() {
-        this.status = SessionStatus.OPEN;
+        if (status != SessionStatus.CANCELLED) {
+            this.status = SessionStatus.OPEN;
+        }
     }
 
     public void close() {
-        this.status = SessionStatus.CLOSED;
+        if (status != SessionStatus.CANCELLED) {
+            this.status = SessionStatus.CLOSED;
+        }
+    }
+
+    public void cancel() {
+        if (status == SessionStatus.SCHEDULED) {
+            this.status = SessionStatus.CANCELLED;
+        }
     }
 }

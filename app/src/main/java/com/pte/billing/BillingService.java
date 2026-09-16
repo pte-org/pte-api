@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,6 +35,39 @@ public class BillingService {
                 .findByLicenseKeyAndTenantIdAndStatusAndStartsAtLessThanEqualAndExpiresAtGreaterThan(
                         licenseKey, tenantId, SubscriptionStatus.ACTIVE, now, now)
                 .map(SubscriptionView::from);
+    }
+
+    /** Returns an active, usable subscription owned by the tenant. */
+    @Transactional(readOnly = true)
+    public Optional<SubscriptionView> getActiveSubscription(UUID subscriptionPublicId, UUID tenantId) {
+        if (subscriptionPublicId == null || tenantId == null) {
+            return Optional.empty();
+        }
+        Instant now = Instant.now();
+        return subscriptionRepository.findByPublicIdAndTenantId(subscriptionPublicId, tenantId)
+                .filter(subscription -> subscription.isUsableAt(now))
+                .map(SubscriptionView::from);
+    }
+
+    /**
+     * Locks every requested subscription in public-id order. The order is part
+     * of the public contract because callers changing a session's lane may
+     * arrive with opposite old/new pairs.
+     */
+    @Transactional
+    public List<SubscriptionView> lockSubscriptions(List<UUID> subscriptionPublicIds, UUID tenantId) {
+        if (subscriptionPublicIds == null || tenantId == null) {
+            return List.of();
+        }
+        return subscriptionPublicIds.stream()
+                .filter(id -> id != null)
+                .distinct()
+                .sorted(Comparator.naturalOrder())
+                .map(id -> subscriptionRepository.findWithLockByPublicIdAndTenantId(id, tenantId)
+                        .map(SubscriptionView::from)
+                        .orElse(null))
+                .filter(java.util.Objects::nonNull)
+                .toList();
     }
 
     /** Returns only subscriptions usable at this instant; status alone is not sufficient. */

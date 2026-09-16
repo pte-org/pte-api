@@ -19,6 +19,12 @@ public record SubscriptionView(
         SubscriptionStatus status,
         ActivationSource activationSource) {
 
+    public boolean isUsableAt(Instant now) {
+        return status == SubscriptionStatus.ACTIVE
+                && !startsAt.isAfter(now)
+                && expiresAt.isAfter(now);
+    }
+
     static SubscriptionView from(Subscription subscription) {
         return new SubscriptionView(
                 subscription.getPublicId(),

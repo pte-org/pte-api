@@ -44,4 +44,11 @@ public class Enrollment extends BaseEntity {
 
     @Column(nullable = false)
     private UUID tenantId;
+
+    /**
+     * Denormalized license identifier for audit and license-control queries.
+     * Enrollment correctness and per-session capacity still use {@code session_id}.
+     */
+    @Column(nullable = false, length = 64)
+    private String licenseKey;
 }

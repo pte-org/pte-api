@@ -56,11 +56,18 @@ public class EnrollmentService {
 
     @Transactional
     public EnrollmentResponse enrollStudent(UUID sessionPublicId, EnrollStudentRequest request, CurrentUser caller) {
-        ExamSession session = sessionLifecycleService.findOwned(sessionPublicId, caller);
+        ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
+        if (enrollmentRepository.existsBySessionIdAndStudentPublicId(session.getId(), request.studentPublicId())) {
+            throw new AlreadyEnrolledException();
+        }
+        if (session.getCapacity() != null && enrollmentRepository.countBySessionId(session.getId()) >= session.getCapacity()) {
+            throw new SessionCapacityExceededException();
+        }
         Enrollment enrollment = new Enrollment();
         enrollment.setSession(session);
         enrollment.setStudentPublicId(request.studentPublicId());
         enrollment.setTenantId(session.getTenantId());
+        enrollment.setLicenseKey(session.getLicenseKey());
 
         Enrollment saved = save(enrollment);
         eventPublisher.publishEvent(
@@ -102,6 +109,7 @@ public class EnrollmentService {
             enrollment.setSession(session);
             enrollment.setStudentPublicId(studentPublicId);
             enrollment.setTenantId(session.getTenantId());
+            enrollment.setLicenseKey(session.getLicenseKey());
             toCreate.add(enrollment);
         }
 

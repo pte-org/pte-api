@@ -22,6 +22,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.context.ApplicationEventPublisher;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -62,12 +63,15 @@ class LicenseCodeServiceTest {
     @Mock
     private SubscriptionActivationService subscriptionActivationService;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private LicenseCodeService service;
 
     @BeforeEach
     void setUp() {
         service = new LicenseCodeService(licenseCodeRepository, planRepository, subscriptionRepository,
-                licenseCodePersistenceService, licenseCodeGenerator, subscriptionActivationService);
+                licenseCodePersistenceService, licenseCodeGenerator, subscriptionActivationService, eventPublisher);
     }
 
     @Test

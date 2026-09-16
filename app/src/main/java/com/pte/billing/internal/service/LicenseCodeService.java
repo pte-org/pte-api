@@ -1,5 +1,6 @@
 package com.pte.billing.internal.service;
 
+import com.pte.billing.SubscriptionRevokedEvent;
 import com.pte.billing.domain.LicenseCode;
 import com.pte.billing.domain.Plan;
 import com.pte.billing.domain.Subscription;
@@ -15,6 +16,8 @@ import com.pte.billing.internal.repository.LicenseCodeRepository;
 import com.pte.billing.internal.repository.PlanRepository;
 import com.pte.billing.internal.repository.SubscriptionRepository;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -37,18 +40,22 @@ public class LicenseCodeService {
     private final LicenseCodePersistenceService licenseCodePersistenceService;
     private final LicenseCodeGenerator licenseCodeGenerator;
     private final SubscriptionActivationService subscriptionActivationService;
+    private final ApplicationEventPublisher eventPublisher;
 
+    @Autowired
     public LicenseCodeService(LicenseCodeRepository licenseCodeRepository, PlanRepository planRepository,
             SubscriptionRepository subscriptionRepository,
             LicenseCodePersistenceService licenseCodePersistenceService,
             LicenseCodeGenerator licenseCodeGenerator,
-            SubscriptionActivationService subscriptionActivationService) {
+            SubscriptionActivationService subscriptionActivationService,
+            ApplicationEventPublisher eventPublisher) {
         this.licenseCodeRepository = licenseCodeRepository;
         this.planRepository = planRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.licenseCodePersistenceService = licenseCodePersistenceService;
         this.licenseCodeGenerator = licenseCodeGenerator;
         this.subscriptionActivationService = subscriptionActivationService;
+        this.eventPublisher = eventPublisher;
     }
 
     public LicenseCodeResponse issue(UUID planPublicId, Instant codeExpiresAt, CurrentUser caller) {
@@ -153,8 +160,7 @@ public class LicenseCodeService {
                             BillingConstants.LICENSE_CODE_SUBSCRIPTION_NOT_FOUND));
             subscription.cancel();
             subscriptionRepository.saveAndFlush(subscription);
-            // Scheduled/open/closed exam cancellation is intentionally deferred
-            // to the session contract introduced by Phase 11.
+            eventPublisher.publishEvent(new SubscriptionRevokedEvent(subscription.getPublicId()));
         }
 
         licenseCode.revoke(reason.trim());
