@@ -4,7 +4,6 @@ import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Index;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -24,8 +23,7 @@ public class PaymentTransaction extends BaseEntity {
     @Column(name = "order_code", updatable = false)
     private Long orderCode;
 
-    @Lob
-    @Column(nullable = false, updatable = false)
+    @Column(columnDefinition = "TEXT", nullable = false, updatable = false)
     private String rawPayload;
 
     @Column(nullable = false, updatable = false)
