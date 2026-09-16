@@ -1,0 +1,34 @@
+package com.pte.identity.internal.mapper;
+
+import com.pte.identity.domain.Role;
+import com.pte.identity.domain.User;
+import com.pte.identity.internal.dto.response.UserResponse;
+
+import java.util.List;
+
+/** Maps the {@link User} entity to its response DTO. Never leaks the entity outward. */
+public final class UserMapper {
+
+    private UserMapper() {
+    }
+
+    public static UserResponse toResponse(User user) {
+        return toResponse(user, null);
+    }
+
+    public static UserResponse toResponse(User user, String organizationType) {
+        List<String> roles = user.getRoles().stream().map(Role::name).toList();
+        return new UserResponse(
+                user.getPublicId(),
+                user.getEmail(),
+                user.getFullName(),
+                user.getTenantId(),
+                user.getStatus().name(),
+                roles,
+                user.getStudentCode(),
+                user.getClassName(),
+                user.getPhone(),
+                user.getDateOfBirth(),
+                organizationType);
+    }
+}
