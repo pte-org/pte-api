@@ -1,6 +1,5 @@
 package com.pte.identity.internal.security;
 
-import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.pte.identity.internal.constant.IdentityConstants;
 import org.slf4j.Logger;
@@ -21,8 +20,10 @@ import java.security.spec.RSAPublicKeySpec;
 import java.util.Base64;
 
 /**
- * Provides the RSA key pair identity signs JWTs with and publishes (public
- * half) via JWKS.
+ * Provides the RSA key pair identity signs and verifies JWTs with. No longer
+ * publishes a JWKS (gateway-removal): that endpoint existed only for
+ * gateway's remote JWKS fetch, and app has validated its own tokens
+ * in-process since plan.md Phase 02 — nothing else ever consumed it.
  *
  * <p>Ported from {@code services/iam}'s {@code RsaKeyProvider}, which generated
  * an ephemeral key pair on every startup — its own javadoc flagged this as a
@@ -51,10 +52,6 @@ public class RsaKeyProvider {
 
     public RSAKey rsaKey() {
         return rsaKey;
-    }
-
-    public JWKSet publicJwkSet() {
-        return new JWKSet(rsaKey.toPublicJWK());
     }
 
     private RSAKey generateEphemeralKey() {
