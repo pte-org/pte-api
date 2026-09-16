@@ -41,8 +41,16 @@ public class SecurityConfig {
     // permitted here — authentication happens per-frame inside STOMP
     // (StompAuthChannelInterceptor), not at the HTTP upgrade request, since
     // browser WS clients can't reliably set custom handshake headers.
+    //
+    // "/applications" (com.pte.billing, plans/quang-tenant-commercialization
+    // Phase 2): an org submits its tenant application before it has any
+    // account to authenticate with. This is an EXACT path match (no "/**"),
+    // and TenantApplicationController maps no other HTTP method there — the
+    // admin-only list/approve/reject endpoints live under
+    // "/admin/applications" specifically so they never fall inside this rule.
     private static final List<String> PUBLIC_PATHS = List.of(
-            "/auth/login", "/auth/refresh", "/actuator/health", "/actuator/health/**", "/ws/**");
+            "/auth/login", "/auth/refresh", "/actuator/health", "/actuator/health/**", "/ws/**",
+            "/applications");
 
     @Bean
     public SecurityFilterChain jwtFilterChain(

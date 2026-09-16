@@ -2,12 +2,17 @@ package com.pte.identity;
 
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
+import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
+import com.pte.identity.internal.service.IdentityService;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
 import java.util.UUID;
@@ -22,11 +27,16 @@ class IdentityServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private LoginHashRepository loginHashRepository;
+
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
     private IdentityService service;
 
     @BeforeEach
     void setUp() {
-        service = new IdentityService(userRepository);
+        service = new IdentityService(userRepository, loginHashRepository, passwordEncoder);
     }
 
     @Test

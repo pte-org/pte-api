@@ -43,6 +43,31 @@ public class TenantLifecycleService {
         Tenant saved = tenantRepository.save(tenant);        return TenantMapper.toResponse(saved);
     }
 
+    /**
+     * Called by {@code billing.TenantApplicationService.approve()}, inside its
+     * own transaction — this method has no {@code @Transactional} of its own
+     * because it must join the caller's, not commit independently (a failure
+     * creating the HOST_ADMIN right after this must roll the tenant back too).
+     * Re-validates code/name uniqueness rather than trusting the caller's
+     * earlier check: time passes between an application being submitted and
+     * approved, and another onboarding could have taken the name/code meanwhile.
+     */
+    public Tenant createFromApplication(String name, String organizationType, String code, int studentLimit) {
+        if (tenantRepository.existsByCode(code)) {
+            throw new TenantCodeAlreadyUsedException();
+        }
+        if (tenantRepository.existsByName(name)) {
+            throw new TenantNameAlreadyUsedException();
+        }
+        Tenant tenant = new Tenant();
+        tenant.setCode(code);
+        tenant.setName(name);
+        tenant.setOrganizationType(organizationType);
+        tenant.setPackageName("starter");
+        tenant.setStudentLimit(studentLimit);
+        return tenantRepository.save(tenant);
+    }
+
     @Transactional
     public TenantResponse suspend(UUID publicId) {
         Tenant tenant = tenantRepository.findByPublicId(publicId)
