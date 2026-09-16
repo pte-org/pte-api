@@ -1,0 +1,16 @@
+# Test-only overrides for @DataJpaTest, which swaps the real Postgres datasource
+# for an embedded H2 one.
+#
+# Flyway off, same rationale as services/admin (commit 3bb9670): migrations are
+# written for Postgres and are not portable to H2. Repository tests exercise JPA
+# query semantics, not DDL — Hibernate derives the H2 schema from the entities.
+#
+# Note: ModuleStructureTest never loads this file at all — ApplicationModules.of()
+# is static bytecode analysis, not a Spring context, so it has no datasource
+# dependency and runs the same with or without this profile.
+spring:
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: create-drop

@@ -12,42 +12,26 @@
 #
 # What this overlay changes, and why:
 #   1. Caps every JVM. Without a limit each container sees the host's full RAM
-#      and sizes its heap from that, so 11 services would each claim a multi-GB
-#      max heap on a shared box.
-#   2. Stretches healthcheck start_period. Eleven Spring Boot apps booting at
-#      once on 4 ARM cores do not answer /actuator/health inside the 40s the
-#      base file allows, and compose would keep marking them unhealthy.
-#   3. Points media's presign host at a public origin. The base value
-#      (http://localhost:9000) is correct for a laptop and wrong everywhere
-#      else — the URL is handed to a browser, not to another container.
+#      and sizes its heap from that, so app + gateway would each claim a
+#      multi-GB max heap on a shared box.
+#   2. Stretches healthcheck start_period. Spring Boot apps booting on 4 ARM
+#      cores do not always answer /actuator/health inside the 40s the base
+#      file allows, and compose would keep marking them unhealthy.
+#   3. Points media's presign host (inside `app`) at a public origin. The base
+#      value (http://localhost:9000) is correct for a laptop and wrong
+#      everywhere else — the URL is handed to a browser, not to another
+#      container.
 #   4. Adds Caddy + the two Next.js apps.
 #
-# Not changed: the published host ports on pg-*/redis/rabbitmq/minio. The VCN
-# Security List is the actual boundary and only admits 22/80/443, so those ports
-# are reachable over SSH tunnel and nothing else. Keeping them makes debugging a
-# one-liner instead of a compose edit.
+# Backend containers: gateway + app, backed by a single postgres instance.
+#
+# Not changed: the published host ports on postgres/redis/rabbitmq/minio.
+# The VCN Security List is the actual boundary and only admits 22/80/443, so
+# those ports are reachable over SSH tunnel and nothing else. Keeping them
+# makes debugging a one-liner instead of a compose edit.
 
 x-jvm-env: &jvm-env
   JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70"
-
-# The /internal/** surface authenticates with a shared key. The key is supplied
-# only through the deployment environment/secret manager; it must never be
-# committed to this repo. Those endpoints sit under the /api/{service} context
-# path, so the gateway routes them straight off the public internet.
-#
-# The service compose file passes these values explicitly for local and hosted
-# stacks. `:?` (not `:-`) makes compose refuse to start rather than silently
-# substituting an empty key.
-x-internal-env: &internal-env
-  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70"
-  INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in .env}
-
-# exam-delivery, scoring and reporting additionally expose a tenant-wide
-# bootstrap surface behind a second key.
-x-internal-bootstrap-env: &internal-bootstrap-env
-  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70"
-  INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?set INTERNAL_SERVICE_KEY in .env}
-  INTERNAL_BOOTSTRAP_KEY: ${INTERNAL_BOOTSTRAP_KEY:?set INTERNAL_BOOTSTRAP_KEY in .env}
 
 x-slow-start: &slow-start
   start_period: 120s
@@ -58,46 +42,14 @@ x-limits: &limits
   healthcheck: *slow-start
 
 services:
-  iam:
-    <<: *limits
-    environment: *jvm-env
-
-  admin:
-    <<: *limits
-    environment: *jvm-env
-
-  notification:
-    <<: *limits
-    environment: *jvm-env
-
-  authoring:
-    <<: *limits
-    environment: *internal-env
-
-  scheduling:
-    <<: *limits
-    environment: *internal-env
-
-  proctor:
-    <<: *limits
-    environment: *internal-env
-
-  exam-delivery:
-    <<: *limits
-    environment: *internal-bootstrap-env
-
-  scoring:
-    <<: *limits
-    environment: *internal-bootstrap-env
-
-  reporting:
-    <<: *limits
-    environment: *internal-bootstrap-env
-
-  media:
+  # `app` is the only backend container, and it has no `/internal/**`
+  # service-key surface at all (a cross-module call is a Java method call
+  # inside one process, not an HTTP request with its own trust boundary to
+  # defend — see identity's SecurityConfig).
+  app:
     <<: *limits
     environment:
-      <<: *internal-env
+      <<: *jvm-env
       # Signed with this host, so it must be the origin the browser will hit.
       MINIO_PUBLIC_ENDPOINT: https://${MEDIA_DOMAIN}
 
@@ -110,17 +62,8 @@ services:
       # that is not served from these two hosts (the Flutter app, curl, Postman).
       CORS_ALLOWED_ORIGINS: https://${TENANT_DOMAIN},https://${ADMIN_DOMAIN}
 
-  pg-core:
+  postgres:
     mem_limit: 1g
-
-  pg-exam:
-    mem_limit: 512m
-
-  pg-live:
-    mem_limit: 512m
-
-  pg-async:
-    mem_limit: 512m
 
   rabbitmq:
     mem_limit: 512m

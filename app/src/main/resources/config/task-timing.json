@@ -1,0 +1,29 @@
+{
+  "_comment": "Per-task-type prep/response seconds. Config-driven (not hardcoded), matching itembank's task-skill-mapping.json pattern. TaskTimingConfig.timingFor() fails fast with TaskTimingNotConfiguredException when a task type is missing. All 23 current task types are listed. Existing values remain approximate placeholders pending official Pearson candidate-handbook sourcing. The 7 Listening types are TEMPORARY NON-PRODUCTION PLACEHOLDERS: they only prevent missing-config failures during snapshot pinning/demo and must not ship as production timing until timing semantics and values are verified. Do NOT infer a prep/response split from an audio range. The 5 audio-prompt Speaking types below additionally carry preListenSeconds/preRecordSeconds; their own prepSeconds value stops being consulted once a real audioPromptRef is present because SnapshotPinService computes prepSeconds dynamically. Listening types do not use that dynamic branch.",
+  "version": 1,
+  "timings": {
+    "MC_READING_SINGLE": { "prepSeconds": 0, "responseSeconds": 60 },
+    "MC_READING_MULTIPLE": { "prepSeconds": 0, "responseSeconds": 90 },
+    "RE_ORDER_PARAGRAPHS": { "prepSeconds": 0, "responseSeconds": 75 },
+    "FILL_BLANKS_READING": { "prepSeconds": 0, "responseSeconds": 90 },
+    "FILL_BLANKS_READING_WRITING": { "prepSeconds": 0, "responseSeconds": 90 },
+    "READ_ALOUD": { "prepSeconds": 35, "responseSeconds": 40 },
+    "SUMMARIZE_WRITTEN_TEXT": { "prepSeconds": 0, "responseSeconds": 600 },
+    "WRITE_ESSAY": { "prepSeconds": 0, "responseSeconds": 1200 },
+    "REPEAT_SENTENCE": { "prepSeconds": 10, "responseSeconds": 15, "preListenSeconds": 3, "preRecordSeconds": 3 },
+    "RE_TELL_LECTURE": { "prepSeconds": 70, "responseSeconds": 40, "preListenSeconds": 3, "preRecordSeconds": 10 },
+    "ANSWER_SHORT_QUESTION": { "prepSeconds": 14, "responseSeconds": 10, "preListenSeconds": 3, "preRecordSeconds": 3 },
+    "RESPOND_TO_A_SITUATION": { "prepSeconds": 40, "responseSeconds": 40, "preListenSeconds": 20, "preRecordSeconds": 10 },
+    "SUMMARIZE_GROUP_DISCUSSION": { "prepSeconds": 200, "responseSeconds": 120, "preListenSeconds": 5, "preRecordSeconds": 10 },
+    "DESCRIBE_IMAGE": { "prepSeconds": 25, "responseSeconds": 40 },
+    "PERSONAL_INTRODUCTION": { "prepSeconds": 25, "responseSeconds": 30 },
+    "MC_LISTENING_SINGLE": { "prepSeconds": 0, "responseSeconds": 20 },
+    "SUMMARIZE_SPOKEN_TEXT": { "prepSeconds": 0, "responseSeconds": 600 },
+    "MC_LISTENING_MULTIPLE": { "prepSeconds": 0, "responseSeconds": 20 },
+    "FILL_BLANKS_LISTENING": { "prepSeconds": 0, "responseSeconds": 60 },
+    "HIGHLIGHT_CORRECT_SUMMARY": { "prepSeconds": 0, "responseSeconds": 20 },
+    "SELECT_MISSING_WORD": { "prepSeconds": 0, "responseSeconds": 20 },
+    "HIGHLIGHT_INCORRECT_WORDS": { "prepSeconds": 0, "responseSeconds": 30 },
+    "WRITE_FROM_DICTATION": { "prepSeconds": 0, "responseSeconds": 30 }
+  }
+}

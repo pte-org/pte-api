@@ -1,15 +1,17 @@
 # syntax=docker/dockerfile:1.7
-# Shared multi-stage build for every module in this reactor (gateway + services/*).
+# Shared multi-stage build for every module in this reactor (gateway + app).
 # Which module gets built is selected purely via SERVICE_MODULE, e.g.:
-#   docker build --build-arg SERVICE_MODULE=services/iam -t pte-iam .
+#   docker build --build-arg SERVICE_MODULE=app -t pte-app .
 #   docker build --build-arg SERVICE_MODULE=gateway -t pte-gateway .
+#
+# plans/modular-monolith Phase 11 cutover: services/* (10 modules) is gone —
+# `app` is the one backend module now.
 
 # No ARG in this stage — deliberately. An ARG here makes the stage's cache key
-# differ per module, so all 11 images rebuild the full reactor (`-am` pulls in
+# differ per module, so both images rebuild the full reactor (`-am` pulls in
 # pte-common every time). Keeping the stage identical lets BuildKit run Maven
 # once and reuse the result for every image; the module is selected in the
-# runtime stage instead. On the 4-core ARM deploy host this is the difference
-# between ~15 minutes and over an hour.
+# runtime stage instead. On the 4-core ARM deploy host this saves real time.
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /workspace
 COPY . .

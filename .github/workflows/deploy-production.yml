@@ -14,8 +14,33 @@ permissions:
   contents: read
 
 jobs:
+  validate:
+    name: Validate compose config
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Fast, secret-free sanity check: catches a YAML/interpolation mistake
+      # before we ever spend an SSH session and a 40-minute budget on it.
+      # docker-compose.deploy.yml's web-tenant/web-vendor build contexts point
+      # at ../pte-web, which doesn't exist in this single-repo checkout —
+      # `config` only parses/merges, it never touches build contexts, so that
+      # path not existing here doesn't affect this check.
+      - name: Validate merged compose files
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.example \
+            -f docker-compose.yml \
+            -f docker-compose.services.yml \
+            -f docker-compose.deploy.yml \
+            config --quiet
+
   deploy:
     name: Deploy to Oracle VPS
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 40
     environment: production
@@ -149,3 +174,37 @@ jobs:
 
           compose ps
           REMOTE
+
+  verify:
+    name: Verify public endpoints
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # No SSH here — this checks from the outside (DNS → Caddy → TLS →
+      # gateway/web), which the deploy job's internal container healthcheck
+      # loop cannot see. Domains mirror TENANT_DOMAIN/ADMIN_DOMAIN in .env;
+      # update here if they ever change.
+      - name: Check tenant + admin origins
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          check() {
+            local url="$1"
+            for attempt in 1 2 3; do
+              if code=$(curl -fsS -o /dev/null -w '%{http_code}' "$url"); then
+                echo "OK  $url ($code)"
+                return 0
+              fi
+              [ "$attempt" -lt 3 ] && sleep 5
+            done
+            echo "FAIL $url did not respond after 3 attempts"
+            return 1
+          }
+
+          status=0
+          check https://pte-tenant.duckdns.org/actuator/health || status=1
+          check https://pte-tenant.duckdns.org/ || status=1
+          check https://pte-admin.duckdns.org/ || status=1
+          exit "$status"
