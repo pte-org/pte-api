@@ -14,6 +14,8 @@ public interface TenantRepository extends JpaRepository<Tenant, Long> {
 
     boolean existsByName(String name);
 
+    boolean existsByCode(String code);
+
     boolean existsByPublicId(UUID publicId);
 
     @Query("select t.organizationType from Tenant t where t.publicId = :tenantId")

@@ -4,6 +4,7 @@ import java.util.UUID;
 
 public record TenantResponse(
         UUID publicId,
+        String code,
         String name,
         String organizationType,
         String status,

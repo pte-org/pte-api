@@ -41,7 +41,7 @@ public class AuthService {
 
     @Transactional
     public TokenResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.email())
+        User user = userRepository.findByUsername(request.username())
                 .orElseThrow(InvalidLoginException::new);
         if (user.isSuspended()) {
             throw new InvalidLoginException();

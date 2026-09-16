@@ -76,13 +76,20 @@ public class UserService {
 
     @Transactional
     public UserResponse create(CreateUserRequest request, CurrentUser caller) {
-        if (userRepository.existsByEmail(request.email())) {
+        // username = email for every role created through this single-user
+        // endpoint (plans/quang-tenant-commercialization Phase 1) — including
+        // STUDENT for now; per-tenant student username generation only
+        // applies to the bulk roster-import path (Phase 8), not here. Since
+        // username carries the real DB uniqueness constraint now, duplicate
+        // detection checks it, not email.
+        if (userRepository.existsByUsername(request.email())) {
             throw new EmailAlreadyUsedException();
         }
         UUID tenantId = provisioningHelper.resolveTargetTenant(caller, request.tenantId());
         Set<Role> roles = provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles());
 
         User user = new User();
+        user.setUsername(request.email());
         user.setEmail(request.email());
         user.setFullName(request.fullName());
         user.setTenantId(tenantId);

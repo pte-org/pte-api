@@ -2,6 +2,7 @@ package com.pte.tenancy.internal.service;
 
 import com.pte.tenancy.domain.Tenant;
 import com.pte.tenancy.domain.enums.TenantStatus;
+import com.pte.tenancy.internal.exception.TenantCodeAlreadyUsedException;
 import com.pte.tenancy.internal.exception.TenantNameAlreadyUsedException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
 import com.pte.tenancy.internal.dto.request.OnboardTenantRequest;
@@ -27,10 +28,14 @@ public class TenantLifecycleService {
 
     @Transactional
     public TenantResponse onboard(OnboardTenantRequest request) {
+        if (tenantRepository.existsByCode(request.code())) {
+            throw new TenantCodeAlreadyUsedException();
+        }
         if (tenantRepository.existsByName(request.name())) {
             throw new TenantNameAlreadyUsedException();
         }
         Tenant tenant = new Tenant();
+        tenant.setCode(request.code());
         tenant.setName(request.name());
         tenant.setOrganizationType(request.organizationType());
         tenant.setPackageName(request.packageName());

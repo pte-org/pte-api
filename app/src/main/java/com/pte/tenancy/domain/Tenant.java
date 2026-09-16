@@ -32,6 +32,15 @@ import java.util.List;
 @NoArgsConstructor
 public class Tenant extends BaseEntity {
 
+    /**
+     * Chosen by the org at application time (plans/quang-tenant-commercialization
+     * Phase 2) — every student username this tenant's roster import generates
+     * is prefixed with it. {@code updatable = false}: set once at creation,
+     * Hibernate will not write this column again on any later update.
+     */
+    @Column(nullable = false, unique = true, updatable = false)
+    private String code;
+
     @Column(nullable = false, unique = true)
     private String name;
 

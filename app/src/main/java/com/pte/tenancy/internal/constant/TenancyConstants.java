@@ -5,10 +5,14 @@ public final class TenancyConstants {
 
     public static final String TENANT_NOT_FOUND = "TENANT_NOT_FOUND";
     public static final String TENANT_NAME_ALREADY_USED = "TENANT_NAME_ALREADY_USED";
+    public static final String TENANT_CODE_ALREADY_USED = "TENANT_CODE_ALREADY_USED";
     public static final String ORGANIZATION_NOT_FOUND = "ORGANIZATION_NOT_FOUND";
     public static final String ORGANIZATION_NAME_ALREADY_USED = "ORGANIZATION_NAME_ALREADY_USED";
     public static final String QUOTA_CONFLICT = "QUOTA_CONFLICT";
 
+    public static final String TENANT_CODE_REQUIRED = "Tenant code is required";
+    public static final String TENANT_CODE_INVALID =
+            "Tenant code must be 3-32 lowercase letters, digits, or hyphens";
     public static final String ORGANIZATION_NAME_REQUIRED = "Organization name is required";
     public static final String ORGANIZATION_TYPE_REQUIRED = "Organization type is required";
     public static final String PACKAGE_NAME_REQUIRED = "Package name is required";

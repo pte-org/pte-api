@@ -45,6 +45,7 @@ class ClassMembershipRepositoryTest {
 
     private StudentClass persistClassUnderNewTenant(String tenantName, String programName, String className) {
         Tenant tenant = new Tenant();
+        tenant.setCode("tenant-" + UUID.randomUUID());
         tenant.setName(tenantName + " " + UUID.randomUUID());
         tenant.setOrganizationType("SCHOOL");
         tenant.setPackageName("starter");

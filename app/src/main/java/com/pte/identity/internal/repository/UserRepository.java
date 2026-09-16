@@ -10,6 +10,11 @@ import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<User, Long> {
 
+    Optional<User> findByUsername(String username);
+
+    boolean existsByUsername(String username);
+
+    /** Kept for the password-recovery flow only — login itself uses {@link #findByUsername}. */
     Optional<User> findByEmail(String email);
 
     Optional<User> findByPublicId(UUID publicId);

@@ -21,6 +21,7 @@ public final class IdentityConstants {
     public static final String FORBIDDEN_PASSWORD_RESET = "FORBIDDEN_PASSWORD_RESET";
     public static final String DUPLICATE_EMAIL_IN_BATCH = "DUPLICATE_EMAIL_IN_BATCH";
 
+    public static final String USERNAME_REQUIRED = "Username is required";
     public static final String EMAIL_REQUIRED = "Email is required";
     public static final String EMAIL_INVALID = "Email must be valid";
     public static final String FULL_NAME_REQUIRED = "Full name is required";

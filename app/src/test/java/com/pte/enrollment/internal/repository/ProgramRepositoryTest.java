@@ -37,6 +37,7 @@ class ProgramRepositoryTest {
 
     private Organization persistOrganization() {
         Tenant tenant = new Tenant();
+        tenant.setCode("acme-" + UUID.randomUUID());
         tenant.setName("Acme School " + UUID.randomUUID());
         tenant.setOrganizationType("SCHOOL");
         tenant.setPackageName("starter");

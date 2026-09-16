@@ -4,9 +4,14 @@ import com.pte.tenancy.internal.constant.TenancyConstants;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 
 /** Admin onboards an organization onto the platform. */
 public record OnboardTenantRequest(
+        @NotBlank(message = TenancyConstants.TENANT_CODE_REQUIRED)
+        @Pattern(regexp = "^[a-z0-9-]{3,32}$", message = TenancyConstants.TENANT_CODE_INVALID)
+        String code,
+
         @NotBlank(message = TenancyConstants.ORGANIZATION_NAME_REQUIRED)
         String name,
 

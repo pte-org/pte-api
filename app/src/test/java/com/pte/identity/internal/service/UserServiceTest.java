@@ -169,7 +169,7 @@ class UserServiceTest {
                 List.of("STUDENT"), null,
                 "SC-001", "12A1", "0900000000", LocalDate.of(2008, 5, 1));
 
-        when(userRepository.existsByEmail(request.email())).thenReturn(false);
+        when(userRepository.existsByUsername(request.email())).thenReturn(false);
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
         when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.STUDENT));
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> {

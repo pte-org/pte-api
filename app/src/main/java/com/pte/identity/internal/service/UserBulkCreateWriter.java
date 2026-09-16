@@ -48,6 +48,13 @@ public class UserBulkCreateWriter {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<Result> createOne(Row row, UUID tenantId) {
         User user = new User();
+        // username = email here too (plans/quang-tenant-commercialization
+        // Phase 1) — this bulk-create path predates Phase 8's roster import
+        // and per-tenant student username generation; it still needs SOME
+        // value for the now-NOT-NULL-UNIQUE username column. A collision
+        // surfaces as the DataIntegrityViolationException already caught
+        // below, same as an email collision did before.
+        user.setUsername(row.email());
         user.setEmail(row.email());
         user.setFullName(row.fullName());
         user.setTenantId(tenantId);
