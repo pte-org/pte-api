@@ -29,7 +29,7 @@ import com.pte.enrollment.internal.dto.response.SplitClassResponse;
 import com.pte.enrollment.internal.repository.ClassMembershipRepository;
 import com.pte.enrollment.internal.repository.ProgramRepository;
 import com.pte.enrollment.internal.repository.StudentClassRepository;
-import com.pte.identity.internal.service.IdentityService;
+import com.pte.identity.IdentityService;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;

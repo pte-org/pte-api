@@ -24,7 +24,7 @@ class ModuleStructureTest {
     }
 
     @Test
-    void all_twelve_business_modules_plus_shared_are_detected() {
+    void all_thirteen_business_modules_plus_shared_are_detected() {
         // getName() is deprecated since Modulith 1.3 in favor of getIdentifier().
         // "shared" is included on purpose: it is a real, detected module (declared
         // OPEN rather than absent — see shared/package-info.java), not one of the
@@ -35,10 +35,7 @@ class ModuleStructureTest {
                 .containsExactlyInAnyOrder(
                         "identity", "tenancy", "enrollment", "itembank", "assessment", "session",
                         "attempt", "scoring", "proctoring", "reporting", "media", "notification",
-                        "shared");
-        // "session" is now implemented (Phase 06); attempt/scoring/proctoring/
-        // reporting/notification still exist only as empty package-info.java
-        // scaffolds from Phase 01 until their own phase ports real code.
+                        "billing", "shared");
     }
 
     /** Sinh sơ đồ PlantUML vào target/spring-modulith-docs — dùng cho báo cáo đồ án. */

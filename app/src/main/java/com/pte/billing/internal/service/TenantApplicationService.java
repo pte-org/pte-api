@@ -13,7 +13,7 @@ import com.pte.billing.internal.exception.TenantApplicationNotFoundException;
 import com.pte.billing.internal.mapper.TenantApplicationMapper;
 import com.pte.billing.internal.repository.TenantApplicationRepository;
 import com.pte.identity.domain.HostAdminCreated;
-import com.pte.identity.internal.service.IdentityService;
+import com.pte.identity.IdentityService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
 import com.pte.tenancy.domain.Tenant;

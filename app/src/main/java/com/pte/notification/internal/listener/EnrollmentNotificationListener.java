@@ -1,6 +1,6 @@
 package com.pte.notification.internal.listener;
 
-import com.pte.identity.internal.service.IdentityService;
+import com.pte.identity.IdentityService;
 import com.pte.notification.domain.enums.NotificationType;
 import com.pte.notification.internal.service.NotificationDispatchService;
 import com.pte.session.dto.event.StudentEnrolledEvent;

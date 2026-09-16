@@ -1,12 +1,19 @@
 package com.pte.identity;
 
+import com.pte.identity.domain.HostAdminCreated;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
+import com.pte.identity.domain.UserStatus;
+import com.pte.identity.internal.domain.LoginHash;
+import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
+import com.pte.identity.internal.util.PasswordGenerator;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -24,9 +31,14 @@ import java.util.UUID;
 public class IdentityService {
 
     private final UserRepository userRepository;
+    private final LoginHashRepository loginHashRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public IdentityService(UserRepository userRepository) {
+    public IdentityService(UserRepository userRepository, LoginHashRepository loginHashRepository,
+            PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.loginHashRepository = loginHashRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public Optional<User> findById(UUID publicId) {
@@ -43,5 +55,29 @@ public class IdentityService {
 
     public List<User> findByTenantIdAndRole(UUID tenantId, Role role) {
         return userRepository.findByTenantIdAndRolesContaining(tenantId, role);
+    }
+
+    /**
+     * {@code billing.TenantApplicationService.approve()} — creates the first
+     * HOST_ADMIN of a newly approved tenant. No {@code @Transactional} of its
+     * own for the same reason as {@code TenantLifecycleService.createFromApplication}:
+     * this must join the caller's transaction, not commit independently.
+     */
+    public HostAdminCreated createHostAdmin(UUID tenantId, String email) {
+        User user = new User();
+        user.setUsername(email);
+        user.setEmail(email);
+        user.setTenantId(tenantId);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setRoles(Set.of(Role.HOST_ADMIN));
+        User saved = userRepository.saveAndFlush(user);
+
+        String password = PasswordGenerator.generateReadable();
+        LoginHash loginHash = new LoginHash();
+        loginHash.setUserId(saved.getId());
+        loginHash.setHash(passwordEncoder.encode(password));
+        loginHashRepository.save(loginHash);
+
+        return new HostAdminCreated(saved, password);
     }
 }

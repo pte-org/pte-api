@@ -2,7 +2,7 @@ package com.pte.identity.domain;
 
 /**
  * Result of
- * {@link com.pte.identity.internal.service.IdentityService#createHostAdmin}.
+ * {@link com.pte.identity.IdentityService#createHostAdmin}.
  * Lives
  * in {@code domain}, not the module root — this package already carries
  * {@code @NamedInterface} (see this package's {@code package-info.java}) for
