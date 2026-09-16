@@ -11,6 +11,7 @@ cors:
 
 rate-limit:
   per-second: ${RATE_LIMIT_PER_SECOND:40}
+  redeem-per-second: ${REDEEM_RATE_LIMIT_PER_SECOND:5}
 
 billing:
   payos:
@@ -27,6 +28,8 @@ billing:
     pending-ttl-hours: ${BILLING_ORDER_PENDING_TTL_HOURS:24}
   order-expiration:
     cron: ${BILLING_ORDER_EXPIRATION_CRON:0 0 * * * *}
+  license-code-expiration:
+    cron: ${BILLING_LICENSE_CODE_EXPIRATION_CRON:0 15 * * * *}
 
 spring:
   application:

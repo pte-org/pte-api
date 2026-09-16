@@ -19,6 +19,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Ported from {@code services/iam}'s {@code SecurityConfig}, minus the
@@ -58,7 +59,8 @@ public class SecurityConfig {
             CorsConfigurationSource corsConfigurationSource,
             ProxyManager<String> rateLimitProxyManager,
             JsonMapper jsonMapper,
-            @Value("${rate-limit.per-second:40}") int rateLimitPerSecond) throws Exception {
+            @Value("${rate-limit.per-second:40}") int rateLimitPerSecond,
+            @Value("${rate-limit.redeem-per-second:5}") int redeemRateLimitPerSecond) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .csrf(csrf -> csrf.disable())
@@ -69,7 +71,8 @@ public class SecurityConfig {
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(ResourceServerJwt.rolesConverter())))
                 .addFilterAfter(
-                        new RateLimitFilter(rateLimitProxyManager, jsonMapper, rateLimitPerSecond),
+                        new RateLimitFilter(rateLimitProxyManager, jsonMapper, rateLimitPerSecond,
+                                Map.of("/api/license-codes/redeem", redeemRateLimitPerSecond)),
                         BearerTokenAuthenticationFilter.class);
         return http.build();
     }

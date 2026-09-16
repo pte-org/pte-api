@@ -43,12 +43,31 @@ public final class BillingConstants {
     public static final String PAYOS_ORDER_AMOUNT_MISMATCH = "PAYOS_ORDER_AMOUNT_MISMATCH";
     public static final String PAYOS_ORDER_CURRENCY_MISMATCH = "PAYOS_ORDER_CURRENCY_MISMATCH";
     public static final String PAYOS_CANCELLATION_FAILED = "PAYOS_CANCELLATION_FAILED";
+    public static final String LICENSE_CODE_REQUIRED = "LICENSE_CODE_REQUIRED";
+    public static final String LICENSE_CODE_NOT_FOUND = "LICENSE_CODE_NOT_FOUND";
+    public static final String LICENSE_CODE_PLAN_REQUIRED = "LICENSE_CODE_PLAN_REQUIRED";
+    public static final String LICENSE_CODE_PLAN_NOT_ACTIVE = "LICENSE_CODE_PLAN_NOT_ACTIVE";
+    public static final String LICENSE_CODE_EXPIRY_INVALID = "LICENSE_CODE_EXPIRY_INVALID";
+    public static final String LICENSE_CODE_REVOKE_REASON_REQUIRED = "LICENSE_CODE_REVOKE_REASON_REQUIRED";
+    public static final String LICENSE_CODE_REVOKE_REASON_MAX = "LICENSE_CODE_REVOKE_REASON_MAX";
+    public static final String LICENSE_CODE_REVOKED = "LICENSE_CODE_REVOKED";
+    public static final String LICENSE_CODE_ALREADY_REDEEMED = "LICENSE_CODE_ALREADY_REDEEMED";
+    public static final String LICENSE_CODE_EXPIRED = "LICENSE_CODE_EXPIRED";
+    public static final String LICENSE_CODE_NOT_REDEEMABLE = "LICENSE_CODE_NOT_REDEEMABLE";
+    public static final String LICENSE_CODE_ALREADY_REVOKED = "LICENSE_CODE_ALREADY_REVOKED";
+    public static final String LICENSE_CODE_NOT_REVOCABLE = "LICENSE_CODE_NOT_REVOCABLE";
+    public static final String LICENSE_CODE_TENANT_REQUIRED = "LICENSE_CODE_TENANT_REQUIRED";
+    public static final String LICENSE_CODE_PLATFORM_ADMIN_REQUIRED = "LICENSE_CODE_PLATFORM_ADMIN_REQUIRED";
+    public static final String LICENSE_CODE_HOST_ADMIN_REQUIRED = "LICENSE_CODE_HOST_ADMIN_REQUIRED";
+    public static final String LICENSE_CODE_GENERATION_FAILED = "LICENSE_CODE_GENERATION_FAILED";
+    public static final String LICENSE_CODE_SUBSCRIPTION_NOT_FOUND = "LICENSE_CODE_SUBSCRIPTION_NOT_FOUND";
 
     public static final int DEFAULT_PENDING_ORDER_TTL_HOURS = 24;
     public static final int DEFAULT_PAYMENT_LINK_TTL_HOURS = 24;
     public static final String PAYOS_PAYMENT_SUCCESS_CODE = "00";
     public static final String PAYOS_CURRENCY = "VND";
     public static final String PAYOS_EXPIRATION_CANCELLATION_REASON = "Payment link expired";
+    public static final int DEFAULT_LICENSE_CODE_REDEEM_RATE_PER_SECOND = 5;
 
     public static final String FREE_STUDENT_LIMIT_SETTING_KEY = "free_student_limit";
     public static final String SUSPENSION_DEFAULT_DAYS_SETTING_KEY = "suspension_default_days";

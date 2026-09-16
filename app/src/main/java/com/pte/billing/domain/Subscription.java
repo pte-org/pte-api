@@ -70,4 +70,10 @@ public class Subscription extends BaseEntity {
             status = SubscriptionStatus.EXPIRED;
         }
     }
+
+    public void cancel() {
+        if (status == SubscriptionStatus.ACTIVE) {
+            status = SubscriptionStatus.CANCELLED;
+        }
+    }
 }

@@ -13,6 +13,10 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
 
     boolean existsByLicenseKey(String licenseKey);
 
+    Optional<Subscription> findByLicenseKey(String licenseKey);
+
+    Optional<Subscription> findByPublicId(UUID publicId);
+
     Optional<Subscription> findByLicenseKeyAndTenantIdAndStatusAndStartsAtLessThanEqualAndExpiresAtGreaterThan(
             String licenseKey, UUID tenantId, SubscriptionStatus status, Instant startsAt, Instant expiresAt);
 
