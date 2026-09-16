@@ -6,6 +6,7 @@ import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.identity.internal.domain.LoginHash;
 import com.pte.identity.internal.dto.request.BulkCreateUserRow;
 import com.pte.identity.internal.dto.request.BulkCreateUsersRequest;
+import com.pte.identity.internal.dto.request.ChangePasswordRequest;
 import com.pte.identity.internal.dto.request.CreateUserRequest;
 import com.pte.identity.internal.dto.request.ResetPasswordRequest;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
@@ -15,6 +16,7 @@ import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.DuplicateEmailInBatchException;
 import com.pte.identity.internal.exception.EmailAlreadyUsedException;
 import com.pte.identity.internal.exception.ForbiddenPasswordResetException;
+import com.pte.identity.internal.exception.InvalidLoginException;
 import com.pte.identity.internal.exception.UserNotFoundException;
 import com.pte.identity.internal.mapper.UserMapper;
 import com.pte.identity.internal.repository.LoginHashRepository;
@@ -218,6 +220,25 @@ public class UserService {
         loginHashRepository.save(loginHash);
 
         return UserMapper.toResponse(user);
+    }
+
+    /** Changes the authenticated user's password and clears the first-login flag. */
+    @Transactional
+    public void changeOwnPassword(ChangePasswordRequest request, CurrentUser caller) {
+        if (caller == null || caller.userId() == null) {
+            throw new UserNotFoundException();
+        }
+        User user = userRepository.findByPublicId(caller.userId())
+                .orElseThrow(UserNotFoundException::new);
+        LoginHash loginHash = loginHashRepository.findByUserId(user.getId())
+                .orElseThrow(UserNotFoundException::new);
+        if (!passwordEncoder.matches(request.currentPassword(), loginHash.getHash())) {
+            throw new InvalidLoginException();
+        }
+        loginHash.setHash(passwordEncoder.encode(request.newPassword()));
+        loginHashRepository.save(loginHash);
+        user.setMustChangePassword(false);
+        userRepository.save(user);
     }
 
     @Transactional(readOnly = true)

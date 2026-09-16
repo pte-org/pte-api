@@ -6,6 +6,7 @@ import com.pte.identity.domain.UserStatus;
 import com.pte.identity.internal.domain.LoginHash;
 import com.pte.identity.internal.dto.request.BulkCreateUserRow;
 import com.pte.identity.internal.dto.request.BulkCreateUsersRequest;
+import com.pte.identity.internal.dto.request.ChangePasswordRequest;
 import com.pte.identity.internal.dto.request.CreateUserRequest;
 import com.pte.identity.internal.dto.request.ResetPasswordRequest;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
@@ -309,6 +310,27 @@ class UserServiceTest {
 
         verify(userRepository, never()).saveAndFlush(any(User.class));
         verify(loginHashRepository, never()).save(any());
+    }
+
+    @Test
+    void changeOwnPassword_updatesHashAndClearsFirstLoginFlag() {
+        UUID userPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        User student = userWithId(1L, userPublicId, tenantId);
+        student.setMustChangePassword(true);
+        LoginHash loginHash = new LoginHash();
+        loginHash.setUserId(1L);
+        loginHash.setHash(passwordEncoder.encode("Temporary123"));
+        when(userRepository.findByPublicId(userPublicId)).thenReturn(Optional.of(student));
+        when(loginHashRepository.findByUserId(1L)).thenReturn(Optional.of(loginHash));
+
+        userService.changeOwnPassword(new ChangePasswordRequest("Temporary123", "NewPassword456"),
+                new CurrentUser(userPublicId, tenantId, List.of("STUDENT")));
+
+        assertThat(passwordEncoder.matches("NewPassword456", loginHash.getHash())).isTrue();
+        assertThat(student.isMustChangePassword()).isFalse();
+        verify(userRepository).save(student);
+        verify(loginHashRepository).save(loginHash);
     }
 
     @Test

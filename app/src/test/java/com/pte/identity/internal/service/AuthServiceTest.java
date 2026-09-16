@@ -94,6 +94,7 @@ class AuthServiceTest {
         assertThat(response.accessToken()).isEqualTo("access-token");
         assertThat(response.refreshToken()).isEqualTo("refresh-token");
         assertThat(response.tokenType()).isEqualTo("Bearer");
+        assertThat(response.mustChangePassword()).isFalse();
     }
 
     @Test
@@ -124,6 +125,23 @@ class AuthServiceTest {
     @Test
     void login_student_succeeds() {
         assertLoginSucceeds(Role.STUDENT, UUID.randomUUID());
+    }
+
+    @Test
+    void login_studentWithTemporaryPassword_returnsMustChangePasswordFlag() {
+        UUID tenantId = UUID.randomUUID();
+        String username = "school.abcdefgh";
+        User user = activeUser(1L, tenantId, Role.STUDENT, username);
+        user.setMustChangePassword(true);
+        LoginHash loginHash = hashFor(1L, PASSWORD);
+        when(userRepository.findByUsername(username)).thenReturn(Optional.of(user));
+        when(loginHashRepository.findByUserId(1L)).thenReturn(Optional.of(loginHash));
+        when(accessTokenIssuer.issue(user)).thenReturn("access-token");
+        when(refreshTokenService.issue(user)).thenReturn("refresh-token");
+
+        TokenResponse response = authService.login(new LoginRequest(username, PASSWORD));
+
+        assertThat(response.mustChangePassword()).isTrue();
     }
 
     @Test

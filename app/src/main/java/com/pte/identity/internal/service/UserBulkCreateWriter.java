@@ -44,7 +44,7 @@ public class UserBulkCreateWriter {
     public record Result(User user, String generatedPassword) {
     }
 
-    /** Empty result means the row lost a concurrent race on email uniqueness — caller reports it as skipped. */
+    /** Empty result means the row lost a concurrent race on a unique key — caller reports it as skipped. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<Result> createOne(Row row, UUID tenantId) {
         User user = new User();
@@ -64,6 +64,22 @@ public class UserBulkCreateWriter {
         user.setPhone(row.phone());
         user.setDateOfBirth(row.dateOfBirth());
 
+        return persist(user);
+    }
+
+    /** Creates an import-only student with a generated username and first-login password change flag. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Optional<Result> createGeneratedStudent(String username, UUID tenantId) {
+        User user = new User();
+        user.setUsername(username);
+        user.setTenantId(tenantId);
+        user.setRoles(Set.of(Role.STUDENT));
+        user.setMustChangePassword(true);
+
+        return persist(user);
+    }
+
+    private Optional<Result> persist(User user) {
         User saved;
         try {
             saved = userRepository.saveAndFlush(user);

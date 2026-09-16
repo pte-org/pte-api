@@ -69,6 +69,15 @@ public class TenancyService {
                 .orElseThrow(TenantNotFoundException::new);
     }
 
+    /** Returns the immutable tenant code used as the student username prefix. */
+    @Transactional(readOnly = true)
+    public String getTenantCode(UUID tenantPublicId) {
+        requireTenantId(tenantPublicId);
+        return tenantRepository.findByPublicId(tenantPublicId)
+                .map(Tenant::getCode)
+                .orElseThrow(TenantNotFoundException::new);
+    }
+
     /**
      * Locks the tenant row for the caller's transaction, then checks the live
      * student count. The lock must remain held until the caller's student

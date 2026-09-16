@@ -20,6 +20,23 @@ public final class IdentityConstants {
     public static final String FORBIDDEN_ROLE_ASSIGNMENT = "FORBIDDEN_ROLE_ASSIGNMENT";
     public static final String FORBIDDEN_PASSWORD_RESET = "FORBIDDEN_PASSWORD_RESET";
     public static final String DUPLICATE_EMAIL_IN_BATCH = "DUPLICATE_EMAIL_IN_BATCH";
+    public static final String ROSTER_FILE_REQUIRED = "ROSTER_FILE_REQUIRED";
+    public static final String ROSTER_FILE_EMPTY = "ROSTER_FILE_EMPTY";
+    public static final String ROSTER_FILE_EXTENSION_INVALID = "ROSTER_FILE_EXTENSION_INVALID";
+    public static final String ROSTER_FILE_TYPE_INVALID = "ROSTER_FILE_TYPE_INVALID";
+    public static final String ROSTER_FILE_TOO_LARGE = "ROSTER_FILE_TOO_LARGE: maxBytes=%d";
+    public static final String ROSTER_ROW_LIMIT_EXCEEDED = "ROSTER_ROW_LIMIT_EXCEEDED: maxRows=%d";
+    public static final String ROSTER_NO_DATA_ROWS = "ROSTER_NO_DATA_ROWS";
+    public static final String ROSTER_CREDENTIAL_COUNT_MISMATCH = "ROSTER_CREDENTIAL_COUNT_MISMATCH";
+    public static final String ROSTER_IMPORT_FAILED = "ROSTER_IMPORT_FAILED";
+    public static final String ROSTER_ACCOUNT_HEADER = "account";
+    public static final String ROSTER_PASSWORD_HEADER = "password";
+    public static final String ROSTER_OUTPUT_FILENAME = "students_credentials.xlsx";
+    public static final String ROSTER_CONTENT_TYPE =
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    public static final long ROSTER_MAX_FILE_SIZE_BYTES = 10L * 1024L * 1024L;
+    public static final int ROSTER_MAX_DATA_ROWS = 10_000;
+    public static final int ROSTER_USERNAME_COLLISION_RETRIES = 3;
 
     public static final String USERNAME_REQUIRED = "Username is required";
     public static final String EMAIL_REQUIRED = "Email is required";
@@ -30,6 +47,8 @@ public final class IdentityConstants {
     public static final String AT_LEAST_ONE_ROLE_REQUIRED = "At least one role is required";
     public static final String AT_LEAST_ONE_ROW_REQUIRED = "At least one row is required";
     public static final String REFRESH_TOKEN_REQUIRED = "Refresh token is required";
+    public static final String CURRENT_PASSWORD_REQUIRED = "Current password is required";
+    public static final String NEW_PASSWORD_REQUIRED = "New password is required";
 
     public static final String JWT_DECODER_BUILD_FAILED = "Failed to build JWT decoder";
     public static final String RSA_KEY_GENERATION_FAILED = "RSA key generation failed";

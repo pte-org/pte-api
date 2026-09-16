@@ -72,4 +72,24 @@ class UserBulkCreateWriterTest {
         assertThat(result).isEmpty();
         verify(loginHashRepository, never()).save(any());
     }
+
+    @Test
+    void createGeneratedStudent_setsGeneratedUsernameAndFirstLoginFlag() {
+        UUID tenantId = UUID.randomUUID();
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            user.setId(1L);
+            user.setPublicId(UUID.randomUUID());
+            return user;
+        });
+
+        Optional<UserBulkCreateWriter.Result> result = writer.createGeneratedStudent("school.abcdefgh", tenantId);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().user().getUsername()).isEqualTo("school.abcdefgh");
+        assertThat(result.get().user().getEmail()).isNull();
+        assertThat(result.get().user().isMustChangePassword()).isTrue();
+        assertThat(result.get().user().getTenantId()).isEqualTo(tenantId);
+        verify(loginHashRepository).save(any());
+    }
 }

@@ -12,6 +12,6 @@ public record StudentQuotaResponse(
 
     public static StudentQuotaResponse from(StudentQuota quota, long adding) {
         return new StudentQuotaResponse(quota.current(), quota.limit(), adding,
-                quota.remaining(), quota.canAdd(adding));
+                quota.remainingAfter(adding), quota.canAdd(adding));
     }
 }

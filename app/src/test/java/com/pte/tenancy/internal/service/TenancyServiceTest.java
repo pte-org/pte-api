@@ -4,6 +4,7 @@ import com.pte.tenancy.StudentCountProvider;
 import com.pte.tenancy.StudentQuota;
 import com.pte.tenancy.TenancyService;
 import com.pte.tenancy.domain.Tenant;
+import com.pte.tenancy.internal.dto.response.StudentQuotaResponse;
 import com.pte.tenancy.internal.exception.InvalidStudentCountException;
 import com.pte.tenancy.internal.exception.StudentLimitExceededException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
@@ -65,6 +66,7 @@ class TenancyServiceTest {
         assertThat(quota.current()).isEqualTo(487L);
         assertThat(quota.limit()).isEqualTo(1000L);
         assertThat(quota.remaining()).isEqualTo(513L);
+        assertThat(StudentQuotaResponse.from(quota, 500L).remaining()).isEqualTo(13L);
         assertThat(quota.canAdd(500L)).isTrue();
     }
 

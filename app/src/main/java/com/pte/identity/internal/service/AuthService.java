@@ -73,6 +73,7 @@ public class AuthService {
     private TokenResponse issueTokens(User user) {
         String accessToken = accessTokenIssuer.issue(user);
         String refreshToken = refreshTokenService.issue(user);
-        return TokenResponse.bearer(accessToken, refreshToken, IdentityConstants.ACCESS_TOKEN_TTL_SECONDS);
+        return TokenResponse.bearer(accessToken, refreshToken, IdentityConstants.ACCESS_TOKEN_TTL_SECONDS,
+                user.isMustChangePassword());
     }
 }
