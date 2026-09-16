@@ -5,8 +5,8 @@ mở ra internet.
 
 | Origin | Phục vụ |
 |---|---|
-| `pte-tenant.duckdns.org` | tenant-web + `/api/*` → gateway (cùng origin, không CORS) |
-| `pte-admin.duckdns.org` | vendor-web + `/api/*` → gateway |
+| `pte-tenant.duckdns.org` | tenant-web + `/api/*` → app (cùng origin, không CORS) |
+| `pte-admin.duckdns.org` | vendor-web + `/api/*` → app |
 | `pte-media.duckdns.org` | MinIO — bắt buộc tách origin, xem `Caddyfile` |
 
 ---
@@ -107,8 +107,8 @@ docker compose \
 watch docker compose ps
 ```
 
-Chờ tới khi 11 service + gateway đều `healthy`. `start_period` đã nâng lên 120s
-cho lần boot đầu trên ARM.
+Chờ tới khi `app` và các container hạ tầng đều `healthy`. `start_period` đã
+nâng lên 120s cho lần boot đầu trên ARM.
 
 ## 7. Kiểm chứng — theo đúng thứ tự này
 
@@ -155,7 +155,7 @@ Không có port nào của service mở ra internet. Xem qua SSH tunnel:
 ssh -L 15672:localhost:15672 \
     -L 16686:localhost:16686 \
     -L 9001:localhost:9001 \
-    -L 8080:localhost:8080 <host>
+    -L 8091:localhost:8091 <host>
 ```
 
 | Port | UI |
@@ -163,7 +163,7 @@ ssh -L 15672:localhost:15672 \
 | 15672 | RabbitMQ management |
 | 16686 | Jaeger |
 | 9001 | MinIO console |
-| 8080 | Gateway trực tiếp, bỏ qua Caddy |
+| 8091 | `app` trực tiếp, bỏ qua Caddy |
 
 Cert Let's Encrypt nằm trong named volume `caddy_data`. **Đừng xóa volume đó khi
 dọn dẹp** — mỗi lần mất là một lần xin cert mới, và giới hạn là 5 cert/domain/tuần.

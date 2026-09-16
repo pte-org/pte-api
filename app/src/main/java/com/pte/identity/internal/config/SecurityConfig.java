@@ -1,14 +1,22 @@
 package com.pte.identity.internal.config;
 
 import com.pte.shared.security.ResourceServerJwt;
+import com.pte.shared.web.RateLimitFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
 
@@ -18,6 +26,12 @@ import java.util.List;
  * cross-service HTTP calls (e.g. admin's now-deleted rebuild export), which
  * don't exist inside a monolith — a call between modules is a Java method
  * call, not an HTTP request with its own trust boundary to defend.
+ *
+ * <p>CORS and per-tenant rate limiting were ported in here from {@code
+ * gateway/src/main/java/com/pte/gateway/config/SecurityConfig.java} and
+ * {@code RateLimitConfig.java} when gateway was removed (plans/modular-
+ * monolith gateway-removal) — those two concerns had nowhere else to live
+ * once nothing sat in front of this app anymore.
  */
 @Configuration
 @EnableMethodSecurity
@@ -31,16 +45,42 @@ public class SecurityConfig {
             "/auth/login", "/auth/refresh", "/auth/jwks", "/actuator/health", "/actuator/health/**", "/ws/**");
 
     @Bean
-    public SecurityFilterChain jwtFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain jwtFilterChain(
+            HttpSecurity http,
+            CorsConfigurationSource corsConfigurationSource,
+            StringRedisTemplate redisTemplate,
+            JsonMapper jsonMapper,
+            @Value("${rate-limit.per-second:40}") int rateLimitPerSecond) throws Exception {
         http
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_PATHS.toArray(String[]::new)).permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(ResourceServerJwt.rolesConverter())));
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(ResourceServerJwt.rolesConverter())))
+                .addFilterAfter(
+                        new RateLimitFilter(redisTemplate, jsonMapper, rateLimitPerSecond),
+                        BearerTokenAuthenticationFilter.class);
         return http.build();
+    }
+
+    // FE apps call this app directly now (no cookies — auth is a Bearer JWT
+    // in the Authorization header), so credentials stay disabled and the
+    // origin list stays an explicit allowlist, same as gateway's version.
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource(
+            @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:3001}") List<String> allowedOrigins) {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(allowedOrigins);
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowCredentials(false);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 
     @Bean

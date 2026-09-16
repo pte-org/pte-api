@@ -1,6 +1,17 @@
 server:
   port: ${APP_PORT:8091}
 
+# Ported from gateway/src/main/resources/application.yml when gateway was
+# removed (plans/modular-monolith gateway-removal) -- nothing sits in front
+# of this app anymore, so it owns its own CORS and per-tenant rate limit.
+# See com.pte.identity.internal.config.SecurityConfig and
+# com.pte.shared.web.RateLimitFilter.
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001}
+
+rate-limit:
+  per-second: ${RATE_LIMIT_PER_SECOND:40}
+
 spring:
   application:
     name: app

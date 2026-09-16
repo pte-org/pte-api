@@ -1,71 +1,33 @@
-# Local compose: gateway + app, built from source via the shared root
-# Dockerfile. Always run alongside the infra-only docker-compose.yml (which
-# owns the pte-network definition + postgres/redis/rabbitmq/minio/mailpit/
-# jaeger):
+# Local compose: app, built from source via the shared root Dockerfile.
+# Always run alongside the infra-only docker-compose.yml (which owns the
+# pte-network definition + postgres/redis/rabbitmq/minio/mailpit/jaeger):
 #
 #   docker compose --env-file .env \
 #     -f docker-compose.yml -f docker-compose.services.yml up --build
 #
-# plans/modular-monolith Phase 11 cutover: the 9 microservices + media that
-# used to live in this file (iam, admin, authoring, scheduling, exam-delivery,
-# proctor, scoring, reporting, notification, media) are gone — `app` now
-# serves every one of their public API paths, fronted by `gateway`'s
-# StripPrefix=2 routes (see gateway/src/main/resources/application.yml). Only
-# `gateway` maps a host port; `app` is reached through it.
-#
-# Rollback: `git revert` the cutover commit restores this file, the gateway
-# routes, and services/* (never deleted before this phase) to their
-# pre-cutover state — rehearsed via `git stash`/`git stash pop` before this
-# commit, see plan.md's Rollback section and the Phase 11 smoke-test report.
+# gateway-removal (follow-up to plans/modular-monolith Phase 11 cutover):
+# `gateway` is gone — its JWT validation was always redundant with this app's
+# own oauth2ResourceServer (com.pte.identity.internal.config.SecurityConfig),
+# and CORS + per-tenant rate limiting were ported into that same class (see
+# com.pte.shared.web.RateLimitFilter). `app` maps its own host port directly
+# (no more service-key surface to hide behind an edge). `caddy` below is NOT
+# a gateway replacement — it exists purely so pte-web's hardcoded
+# http://localhost:8080 default and scripts/seed-e2e.ps1 keep working
+# unmodified: it strips the old /api/{service}/** prefix (deploy/api-
+# routes.caddy) the exact same way the hosted deploy's Caddy does.
 
 x-build-defaults: &build-defaults
   context: .
   dockerfile: Dockerfile
 
-# Every app container shares the same shape: curl its own actuator health
-# endpoint. Only `test` (the URL/context-path) differs per service — merge
-# this in and override just that key, so tuning start_period/retries fleet-wide
-# is a one-line change instead of hand-edits drifting out of sync.
-x-healthcheck-defaults: &healthcheck-defaults
-  interval: 10s
-  timeout: 5s
-  retries: 10
-  start_period: 40s
-
 services:
-  gateway:
-    build:
-      <<: *build-defaults
-      args:
-        SERVICE_MODULE: gateway
-    ports:
-      - "${GATEWAY_PORT:-8080}:8080"
-    environment:
-      REDIS_HOST: redis
-      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
-      # Every route points at the single `app` container; see
-      # gateway/src/main/resources/application.yml.
-      IAM_JWKS_URI: http://app:8091/auth/jwks
-      APP_URI: http://app:8091
-      # More specific proctor-ws route must keep the ws:// scheme.
-      APP_WS_URI: ws://app:8091
-    depends_on:
-      redis:
-        condition: service_healthy
-      app:
-        condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
-    networks: [pte-network]
-
-  # The only backend container gateway routes to. No IAM_JWKS_URI: this app
-  # validates its own tokens against its own keys.
   app:
     build:
       <<: *build-defaults
       args:
         SERVICE_MODULE: app
+    ports:
+      - "${APP_PORT:-8091}:8091"
     environment:
       APP_PORT: 8091
       APP_DB_URL: jdbc:postgresql://postgres:5432/pte
@@ -76,6 +38,13 @@ services:
       RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      # com.pte.identity.internal.config.SecurityConfig (gateway-removal) —
+      # browser FE origins allowed to call this app directly.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      # com.pte.shared.web.RateLimitFilter (gateway-removal) — per-tenant
+      # request ceiling, ported from gateway's Redis token-bucket as a
+      # simpler fixed-window counter.
+      RATE_LIMIT_PER_SECOND: ${RATE_LIMIT_PER_SECOND:-40}
       # com.pte.media (Phase 04/A) — server-to-server endpoint is the docker-network
       # hostname; MINIO_PUBLIC_ENDPOINT is what a presigned URL is SIGNED with and
       # must be reachable from the caller (browser, seed script, pte-app on the
@@ -109,6 +78,21 @@ services:
       mailpit:
         condition: service_healthy
     healthcheck:
-      <<: *healthcheck-defaults
       test: ["CMD", "curl", "-sf", "http://localhost:8091/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [pte-network]
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    volumes:
+      - ./deploy/Caddyfile.local:/etc/caddy/Caddyfile:ro
+      - ./deploy/api-routes.caddy:/etc/caddy/api-routes.caddy:ro
+    depends_on:
+      app:
+        condition: service_healthy
     networks: [pte-network]
