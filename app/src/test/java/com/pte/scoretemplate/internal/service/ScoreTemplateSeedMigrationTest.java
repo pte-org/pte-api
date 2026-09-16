@@ -111,9 +111,9 @@ class ScoreTemplateSeedMigrationTest {
     }
 
     @Test
-    void templateRow_isSeededActiveAsApeuniV5() {
+    void templateRow_isSeededActiveAsPteScoreTemplateVersion1() {
         String sql = readMigrationFile();
 
-        assertThat(sql).contains("'APEUNI_V5', 1,").contains("'ACTIVE'");
+        assertThat(sql).contains("'PTE_Score_Template', 1,").contains("'ACTIVE'");
     }
 }

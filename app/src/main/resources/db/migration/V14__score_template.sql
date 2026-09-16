@@ -76,7 +76,7 @@ CREATE INDEX IF NOT EXISTS idx_score_template_items_template ON score_template_i
 --   * "<1%" in the source table = 0.50 (MC_READING_SINGLE, HIGHLIGHT_CORRECT_SUMMARY,
 --     MC_LISTENING_SINGLE overall weight).
 INSERT INTO score_templates (id, public_id, created_at, updated_at, deleted, code, version, name, status)
-VALUES (1, gen_random_uuid(), now(), now(), FALSE, 'APEUNI_V5', 1, 'APEUni PTE Score Table V5', 'ACTIVE');
+VALUES (1, gen_random_uuid(), now(), now(), FALSE, 'PTE_Score_Template', 1, 'APEUni PTE Score Table V5', 'ACTIVE');
 
 -- Advance the identity sequence past the explicit id=1 above, or the next
 -- Hibernate-generated ScoreTemplate insert (e.g. the first cloneToDraft)

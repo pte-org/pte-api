@@ -20,7 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A versioned PTE scoring scheme (e.g. "APEUNI_V5"): which task types exist,
+ * A versioned PTE scoring scheme (e.g. "PTE_Score_Template"): which task types exist,
  * how many questions of each, their timing, how they are scored, and their
  * weight toward each skill/Overall. {@code ExamSnapshot} pins one by
  * {@code publicId} at publish time (assessment module, Phase 2) so a
