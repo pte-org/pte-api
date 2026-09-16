@@ -2,10 +2,10 @@ package com.pte.identity.internal.config;
 
 import com.pte.shared.security.ResourceServerJwt;
 import com.pte.shared.web.RateLimitFilter;
+import io.github.bucket4j.distributed.proxy.ProxyManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -42,13 +42,13 @@ public class SecurityConfig {
     // (StompAuthChannelInterceptor), not at the HTTP upgrade request, since
     // browser WS clients can't reliably set custom handshake headers.
     private static final List<String> PUBLIC_PATHS = List.of(
-            "/auth/login", "/auth/refresh", "/auth/jwks", "/actuator/health", "/actuator/health/**", "/ws/**");
+            "/auth/login", "/auth/refresh", "/actuator/health", "/actuator/health/**", "/ws/**");
 
     @Bean
     public SecurityFilterChain jwtFilterChain(
             HttpSecurity http,
             CorsConfigurationSource corsConfigurationSource,
-            StringRedisTemplate redisTemplate,
+            ProxyManager<String> rateLimitProxyManager,
             JsonMapper jsonMapper,
             @Value("${rate-limit.per-second:40}") int rateLimitPerSecond) throws Exception {
         http
@@ -61,7 +61,7 @@ public class SecurityConfig {
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(ResourceServerJwt.rolesConverter())))
                 .addFilterAfter(
-                        new RateLimitFilter(redisTemplate, jsonMapper, rateLimitPerSecond),
+                        new RateLimitFilter(rateLimitProxyManager, jsonMapper, rateLimitPerSecond),
                         BearerTokenAuthenticationFilter.class);
         return http.build();
     }
