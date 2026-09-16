@@ -6,6 +6,7 @@ import com.pte.tenancy.internal.exception.OrganizationNotFoundException;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
 import com.pte.tenancy.internal.repository.TenantRepository;
 import com.pte.tenancy.internal.service.TenantLifecycleService;
+import com.pte.tenancy.internal.service.QuotaTransactionService;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -18,12 +19,14 @@ public class TenancyService {
     private final OrganizationRepository organizationRepository;
     private final TenantRepository tenantRepository;
     private final TenantLifecycleService tenantLifecycleService;
+    private final QuotaTransactionService quotaTransactionService;
 
     public TenancyService(OrganizationRepository organizationRepository, TenantRepository tenantRepository,
-            TenantLifecycleService tenantLifecycleService) {
+            TenantLifecycleService tenantLifecycleService, QuotaTransactionService quotaTransactionService) {
         this.organizationRepository = organizationRepository;
         this.tenantRepository = tenantRepository;
         this.tenantLifecycleService = tenantLifecycleService;
+        this.quotaTransactionService = quotaTransactionService;
     }
 
     /** {@code billing.TenantApplicationService.submit()} — is this code still free to reserve? */
@@ -34,6 +37,11 @@ public class TenancyService {
     /** {@code billing.TenantApplicationService.approve()} — creates the tenant an approved application promised. */
     public Tenant createTenant(String name, String organizationType, String code, int studentLimit) {
         return tenantLifecycleService.createFromApplication(name, organizationType, code, studentLimit);
+    }
+
+    /** Billing activation path for STUDENT_CAPACITY plans. */
+    public void grantQuota(UUID tenantPublicId, int amount, String note) {
+        quotaTransactionService.grantForSystem(tenantPublicId, amount, note);
     }
 
     /** Returns the tenant's display type without exposing tenancy repositories. */

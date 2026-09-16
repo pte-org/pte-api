@@ -13,6 +13,14 @@ public final class BillingConstants {
     public static final String PLAN_ARCHIVED_NOT_EDITABLE = "PLAN_ARCHIVED_NOT_EDITABLE";
     public static final String PLATFORM_SETTING_NOT_FOUND = "PLATFORM_SETTING_NOT_FOUND";
     public static final String PLATFORM_SETTING_INVALID = "PLATFORM_SETTING_INVALID";
+    public static final String SUBSCRIPTION_TENANT_REQUIRED = "SUBSCRIPTION_TENANT_REQUIRED";
+    public static final String SUBSCRIPTION_PLAN_REQUIRED = "SUBSCRIPTION_PLAN_REQUIRED";
+    public static final String SUBSCRIPTION_SOURCE_REQUIRED = "SUBSCRIPTION_SOURCE_REQUIRED";
+    public static final String SUBSCRIPTION_PLAN_TYPE_INVALID = "SUBSCRIPTION_PLAN_TYPE_INVALID";
+    public static final String SUBSCRIPTION_PLAN_NOT_ACTIVE = "SUBSCRIPTION_PLAN_NOT_ACTIVE";
+    public static final String SUBSCRIPTION_EXAM_FIELDS_INVALID = "SUBSCRIPTION_EXAM_FIELDS_INVALID";
+    public static final String SUBSCRIPTION_CAPACITY_FIELDS_INVALID = "SUBSCRIPTION_CAPACITY_FIELDS_INVALID";
+    public static final String LICENSE_KEY_GENERATION_FAILED = "LICENSE_KEY_GENERATION_FAILED";
 
     public static final String FREE_STUDENT_LIMIT_SETTING_KEY = "free_student_limit";
     public static final String SUSPENSION_DEFAULT_DAYS_SETTING_KEY = "suspension_default_days";
