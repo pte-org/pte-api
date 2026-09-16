@@ -28,7 +28,14 @@ import java.util.UUID;
 @NoArgsConstructor
 public class MediaObject extends BaseEntity {
 
-    @Column(nullable = false)
+    /**
+     * {@code null} for a platform-owned asset (uploaded by a PLATFORM_ADMIN/
+     * PLATFORM_AUTHOR caller, who has no tenant of their own — same convention
+     * as a SHARED {@code Question}'s {@code tenantId}). Every other caller has
+     * a real tenant, so this is only ever null for platform-authored SHARED
+     * question-bank media.
+     */
+    @Column
     private UUID tenantId;
 
     @Column(nullable = false)

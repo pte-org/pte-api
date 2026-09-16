@@ -112,8 +112,20 @@ public class PresignService {
      */
     @Transactional(readOnly = true)
     public PresignedDownloadResponse presignGet(UUID mediaPublicId, long requestedTtlSeconds, UUID tenantId) {
-        MediaObject media = mediaObjectRepository.findByPublicIdAndTenantId(mediaPublicId, tenantId)
+        MediaObject media = mediaObjectRepository.findByPublicId(mediaPublicId)
                 .orElseThrow(MediaNotFoundException::new);
+        // Mirrors AuthoringAccessPolicy.canRead's SHARED-is-world-readable rule:
+        // a platform-owned asset (tenantId null, e.g. a SHARED question's audio
+        // prompt) is readable by any caller; anything else must be the same
+        // tenant. Without this, exam-delivery could never resolve a SHARED
+        // question's audio/image for a real (non-null-tenant) student — the
+        // old findByPublicIdAndTenantId lookup can't match tenantId=null
+        // storage against a caller's real tenantId.
+        boolean shared = media.getTenantId() == null;
+        boolean sameTenant = tenantId != null && tenantId.equals(media.getTenantId());
+        if (!shared && !sameTenant) {
+            throw new MediaNotFoundException();
+        }
         if (media.getStatus() != MediaStatus.UPLOADED) {
             throw new MediaNotYetUploadedException();
         }
@@ -182,7 +194,11 @@ public class PresignService {
 
     private String buildStorageKey(CurrentUser caller, UUID seed, String contentType) {
         String extension = contentType.substring(contentType.indexOf('/') + 1);
-        return "audio/%s/%s.%s".formatted(caller.tenantId(), seed, extension);
+        // A platform caller (PLATFORM_ADMIN/PLATFORM_AUTHOR) has no tenant —
+        // used for platform-authored SHARED question-bank media. Without this,
+        // caller.tenantId() being null would literally format in as "null".
+        String scope = caller.tenantId() != null ? caller.tenantId().toString() : "platform";
+        return "audio/%s/%s.%s".formatted(scope, seed, extension);
     }
 
     private String presignPut(String storageKey) {

@@ -5,6 +5,7 @@ import com.pte.media.domain.enums.MediaStatus;
 import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.media.internal.dto.request.RequestUploadRequest;
 import com.pte.media.internal.exception.InvalidWavFileException;
+import com.pte.media.internal.exception.MediaNotFoundException;
 import com.pte.media.internal.exception.UnsupportedContentTypeException;
 import com.pte.media.internal.repository.MediaObjectRepository;
 import com.pte.shared.security.CurrentUser;
@@ -111,6 +112,17 @@ class PresignServiceTest {
     }
 
     @Test
+    @DisplayName("audioPrompt=false explicitly behaves identically to absent — general allow-list, not narrowed to WAV")
+    void requestUpload_audioPromptFalse_generalAllowList() throws Exception {
+        when(mediaObjectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(presignMinioClient.getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class))).thenReturn("https://minio.local/put");
+
+        service.requestUpload(new RequestUploadRequest("audio/webm", false), caller);
+
+        verify(mediaObjectRepository).save(any());
+    }
+
+    @Test
     @DisplayName("image/png is accepted for a Describe Image prompt upload")
     void requestUpload_imagePng_accepted() throws Exception {
         when(mediaObjectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -119,6 +131,32 @@ class PresignServiceTest {
         service.requestUpload(new RequestUploadRequest("image/png", null), caller);
 
         verify(mediaObjectRepository).save(any());
+    }
+
+    @Test
+    @DisplayName("image/jpeg is accepted too — same general allow-list, not narrowed to a single image format")
+    void requestUpload_imageJpeg_accepted() throws Exception {
+        when(mediaObjectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(presignMinioClient.getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class))).thenReturn("https://minio.local/put");
+
+        service.requestUpload(new RequestUploadRequest("image/jpeg", null), caller);
+
+        verify(mediaObjectRepository).save(any());
+    }
+
+    @Test
+    @DisplayName("a platform caller (no tenant of their own) can upload platform-owned SHARED question-bank media")
+    void requestUpload_platformCaller_tenantIdNull() throws Exception {
+        CurrentUser platformCaller = new CurrentUser(USER_ID, null, java.util.List.of());
+        when(mediaObjectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(presignMinioClient.getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class))).thenReturn("https://minio.local/put");
+
+        service.requestUpload(new RequestUploadRequest("audio/mpeg", null), platformCaller);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(MediaObject.class);
+        verify(mediaObjectRepository).save(captor.capture());
+        assertThat(captor.getValue().getTenantId()).isNull();
+        assertThat(captor.getValue().getStorageKey()).startsWith("audio/platform/");
     }
 
     @Test
@@ -231,7 +269,7 @@ class PresignServiceTest {
         media.setAudioPrompt(true);
         media.markUploaded();
         media.setDurationSeconds(9);
-        when(mediaObjectRepository.findByPublicIdAndTenantId(MEDIA_ID, TENANT_ID)).thenReturn(Optional.of(media));
+        when(mediaObjectRepository.findByPublicId(MEDIA_ID)).thenReturn(Optional.of(media));
         when(presignMinioClient.getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class))).thenReturn("https://minio.local/get");
 
         PresignedDownloadResponse response = service.presignGet(MEDIA_ID, 3600L, TENANT_ID);
@@ -248,12 +286,62 @@ class PresignServiceTest {
         media.setContentType("audio/wav");
         media.setStorageKey("audio/tenant/prompt.wav");
         media.markUploaded();
-        when(mediaObjectRepository.findByPublicIdAndTenantId(MEDIA_ID, TENANT_ID)).thenReturn(Optional.of(media));
+        when(mediaObjectRepository.findByPublicId(MEDIA_ID)).thenReturn(Optional.of(media));
         when(presignMinioClient.getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class))).thenReturn("https://minio.local/get");
 
         PresignedDownloadResponse response = service.presignGet(MEDIA_ID, 999_999L, TENANT_ID);
 
         assertThat(response.expiresInSeconds()).isEqualTo(24 * 60 * 60);
+    }
+
+    @Test
+    @DisplayName("presignGet resolves a platform-owned (tenantId null) SHARED asset for a real-tenant caller")
+    void presignGet_sharedAsset_readableByAnyTenant() throws Exception {
+        MediaObject media = new MediaObject();
+        media.setTenantId(null);
+        media.setOwnerPublicId(USER_ID);
+        media.setContentType("audio/mpeg");
+        media.setStorageKey("audio/platform/prompt.mp3");
+        media.markUploaded();
+        when(mediaObjectRepository.findByPublicId(MEDIA_ID)).thenReturn(Optional.of(media));
+        when(presignMinioClient.getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class))).thenReturn("https://minio.local/get");
+
+        PresignedDownloadResponse response = service.presignGet(MEDIA_ID, 3600L, TENANT_ID);
+
+        assertThat(response.url()).isEqualTo("https://minio.local/get");
+    }
+
+    @Test
+    @DisplayName("presignGet rejects a different tenant's private asset")
+    void presignGet_otherTenantAsset_notFound() {
+        MediaObject media = new MediaObject();
+        media.setTenantId(UUID.randomUUID());
+        media.setOwnerPublicId(USER_ID);
+        media.setContentType("audio/wav");
+        media.setStorageKey("audio/other-tenant/prompt.wav");
+        media.markUploaded();
+        when(mediaObjectRepository.findByPublicId(MEDIA_ID)).thenReturn(Optional.of(media));
+
+        assertThatThrownBy(() -> service.presignGet(MEDIA_ID, 3600L, TENANT_ID))
+                .isInstanceOf(MediaNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("presignGet's response has a null duration for a non-audio-prompt media object")
+    void presignGet_nonAudioPrompt_nullDuration() throws Exception {
+        MediaObject media = new MediaObject();
+        media.setTenantId(TENANT_ID);
+        media.setOwnerPublicId(USER_ID);
+        media.setContentType("audio/wav");
+        media.setStorageKey("audio/tenant/prompt.wav");
+        media.setAudioPrompt(false);
+        media.markUploaded();
+        when(mediaObjectRepository.findByPublicId(MEDIA_ID)).thenReturn(Optional.of(media));
+        when(presignMinioClient.getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class))).thenReturn("https://minio.local/get");
+
+        PresignedDownloadResponse response = service.presignGet(MEDIA_ID, 3600L, TENANT_ID);
+
+        assertThat(response.durationSeconds()).isNull();
     }
 
     // ------------------------------------------------------------------
