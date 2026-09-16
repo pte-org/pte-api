@@ -1,7 +1,7 @@
-# Local compose: gateway + the app monolith, built from source via the shared
-# root Dockerfile. Always run alongside the infra-only docker-compose.yml
-# (which owns the pte-network definition + pg-monolith + redis/rabbitmq/minio/
-# mailpit/jaeger):
+# Local compose: gateway + app, built from source via the shared root
+# Dockerfile. Always run alongside the infra-only docker-compose.yml (which
+# owns the pte-network definition + postgres/redis/rabbitmq/minio/mailpit/
+# jaeger):
 #
 #   docker compose --env-file .env \
 #     -f docker-compose.yml -f docker-compose.services.yml up --build
@@ -43,8 +43,8 @@ services:
     environment:
       REDIS_HOST: redis
       OTLP_ENDPOINT: http://jaeger:4318/v1/traces
-      # plans/modular-monolith Phase 11 cutover — every route now points at the
-      # single app monolith container; see gateway/src/main/resources/application.yml.
+      # Every route points at the single `app` container; see
+      # gateway/src/main/resources/application.yml.
       IAM_JWKS_URI: http://app:8091/auth/jwks
       APP_URI: http://app:8091
       # More specific proctor-ws route must keep the ws:// scheme.
@@ -59,10 +59,8 @@ services:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
     networks: [pte-network]
 
-  # MONOLITH — plans/modular-monolith. Since Phase 11 cutover this is the only
-  # backend container gateway routes to. Port 8091 (unchanged from Phase 01).
-  # No IAM_JWKS_URI: this app validates its own tokens against its own keys
-  # (plan.md Phase 02).
+  # The only backend container gateway routes to. No IAM_JWKS_URI: this app
+  # validates its own tokens against its own keys.
   app:
     build:
       <<: *build-defaults
@@ -70,7 +68,7 @@ services:
         SERVICE_MODULE: app
     environment:
       APP_PORT: 8091
-      APP_DB_URL: jdbc:postgresql://pg-monolith:5432/pte
+      APP_DB_URL: jdbc:postgresql://postgres:5432/pte
       APP_DB_USER: ${APP_DB_USER:?set APP_DB_USER in the env file}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in the env file}
       REDIS_HOST: redis
@@ -100,7 +98,7 @@ services:
       # ephemeral key with a startup warning, set explicitly so tokens survive a restart.
       IDENTITY_RSA_PRIVATE_KEY_PEM: ${IDENTITY_RSA_PRIVATE_KEY_PEM:?set IDENTITY_RSA_PRIVATE_KEY_PEM in the env file}
     depends_on:
-      pg-monolith:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy

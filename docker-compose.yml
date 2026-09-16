@@ -1,139 +1,19 @@
 name: pte-platform
 
-# Local infrastructure for the PTE microservice platform.
-# Backbone: FOUR Postgres instances (one per cell), RabbitMQ (event backbone +
-# work queue, ADR-002 superseded by rabbitmq-outbox-migration — Kafka/Schema
+# Local infrastructure for the PTE platform: Postgres, RabbitMQ (event
+# backbone, ADR-002 superseded by rabbitmq-outbox-migration — Kafka/Schema
 # Registry/Debezium retired Phase 10), Redis (cache/rate-limit/single-flight,
 # ADR-003).
 #
-# ── Cell-based re-architecture, step 1 of 5 ──────────────────────────────────
-# Previously ONE `postgres` container held all 10 databases. Database-per-service
-# (ADR-003) was therefore logical only: a restart, a full disk, or a lock on that
-# single process took down all 10 services simultaneously — 10 services, but one
-# failure domain. The old init script said as much: "splitting to separate
-# instances later is a connection-string change, not a code change." This is that
-# change; no Java was touched, because ADR-001 already forbade cross-database
-# queries so nothing had a join to break.
-#
-# Cells are cut by RESOURCE-EXHAUSTION PROFILE, not by capability and not by
-# actor — two modules that exhaust the same resource gain nothing from being
-# split apart:
-#
-#   pg-exam  :5433  exam-delivery   latency + pool     downtime tolerance: ZERO
-#   pg-live  :5434  proctor         WS conns + FDs     degrades gracefully
-#   pg-core  :5432  7 services       ~nothing          5-10 min
-#   pg-async :5435  scoring         CPU + vendor wait  queue absorbs it
-#
-# pg-core keeps host port 5432 so the application.yml localhost defaults of its
-# seven services stay valid for non-Docker local runs; only the three relocated
-# services had their defaults updated.
-#
-# `wal_level=logical` was required for Debezium CDC, now removed
-# (rabbitmq-outbox-migration Phase 10). Left set deliberately — low-cost no-op,
-# no relay depends on it, and reverting is a Postgres restart either way.
-
-x-postgres-defaults: &postgres-defaults
-  image: postgres:17
-  restart: unless-stopped
-  environment: &postgres-env
-    POSTGRES_DB: postgres
-    POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in the env file}
-    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}
-    # postgres-utc-timestamptz-migration Phase 1: explicit, not relying on the base
-    # image's implicit default — survives an image change that might alter it.
-    TZ: UTC
-  healthcheck:
-    test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:?set POSTGRES_USER in the env file}"]
-    interval: 5s
-    timeout: 5s
-    retries: 10
-    start_period: 10s
-  networks: [pte-network]
+# See docker-compose.services.yml for how `app` and `gateway` connect to
+# this infra.
 
 services:
-  # CELL CORE — iam, admin, authoring, scheduling, reporting, notification, media.
-  # 7 services x default Hikari pool (10) = 70; 120 leaves headroom for a manual
-  # psql session and for the second CORE instance (admin/host split) added later.
-  pg-core:
-    <<: *postgres-defaults
-    container_name: pte-pg-core
-    environment:
-      <<: *postgres-env
-      IAM_DB_USER: ${IAM_DB_USER:?set IAM_DB_USER in the env file}
-      IAM_DB_PASSWORD: ${IAM_DB_PASSWORD:?set IAM_DB_PASSWORD in the env file}
-      ADMIN_DB_USER: ${ADMIN_DB_USER:?set ADMIN_DB_USER in the env file}
-      ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD:?set ADMIN_DB_PASSWORD in the env file}
-      AUTHORING_DB_USER: ${AUTHORING_DB_USER:?set AUTHORING_DB_USER in the env file}
-      AUTHORING_DB_PASSWORD: ${AUTHORING_DB_PASSWORD:?set AUTHORING_DB_PASSWORD in the env file}
-      SCHEDULING_DB_USER: ${SCHEDULING_DB_USER:?set SCHEDULING_DB_USER in the env file}
-      SCHEDULING_DB_PASSWORD: ${SCHEDULING_DB_PASSWORD:?set SCHEDULING_DB_PASSWORD in the env file}
-      REPORTING_DB_USER: ${REPORTING_DB_USER:?set REPORTING_DB_USER in the env file}
-      REPORTING_DB_PASSWORD: ${REPORTING_DB_PASSWORD:?set REPORTING_DB_PASSWORD in the env file}
-      NOTIFICATION_DB_USER: ${NOTIFICATION_DB_USER:?set NOTIFICATION_DB_USER in the env file}
-      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?set NOTIFICATION_DB_PASSWORD in the env file}
-      MEDIA_DB_USER: ${MEDIA_DB_USER:?set MEDIA_DB_USER in the env file}
-      MEDIA_DB_PASSWORD: ${MEDIA_DB_PASSWORD:?set MEDIA_DB_PASSWORD in the env file}
-    ports:
-      - "${PG_CORE_PORT:-5432}:5432"
-    volumes:
-      - pte_pg_core_data:/var/lib/postgresql/data
-      - ./docker/postgres/init-core:/docker-entrypoint-initdb.d:ro
-    command: ["postgres", "-c", "max_connections=120", "-c", "wal_level=logical"]
-
-  # CELL EXAM — exam-delivery only. Sized well above its single Hikari pool: this
-  # is the one service whose connection starvation is unrecoverable for a user.
-  pg-exam:
-    <<: *postgres-defaults
-    container_name: pte-pg-exam
-    environment:
-      <<: *postgres-env
-      EXAM_DELIVERY_DB_USER: ${EXAM_DELIVERY_DB_USER:?set EXAM_DELIVERY_DB_USER in the env file}
-      EXAM_DELIVERY_DB_PASSWORD: ${EXAM_DELIVERY_DB_PASSWORD:?set EXAM_DELIVERY_DB_PASSWORD in the env file}
-    ports:
-      - "${PG_EXAM_PORT:-5433}:5432"
-    volumes:
-      - pte_pg_exam_data:/var/lib/postgresql/data
-      - ./docker/postgres/init-exam:/docker-entrypoint-initdb.d:ro
-    command: ["postgres", "-c", "max_connections=100", "-c", "wal_level=logical"]
-
-  # CELL LIVE — proctor only.
-  pg-live:
-    <<: *postgres-defaults
-    container_name: pte-pg-live
-    environment:
-      <<: *postgres-env
-      PROCTOR_DB_USER: ${PROCTOR_DB_USER:?set PROCTOR_DB_USER in the env file}
-      PROCTOR_DB_PASSWORD: ${PROCTOR_DB_PASSWORD:?set PROCTOR_DB_PASSWORD in the env file}
-    ports:
-      - "${PG_LIVE_PORT:-5434}:5432"
-    volumes:
-      - pte_pg_live_data:/var/lib/postgresql/data
-      - ./docker/postgres/init-live:/docker-entrypoint-initdb.d:ro
-    command: ["postgres", "-c", "max_connections=50", "-c", "wal_level=logical"]
-
-  # CELL ASYNC — scoring only.
-  pg-async:
-    <<: *postgres-defaults
-    container_name: pte-pg-async
-    environment:
-      <<: *postgres-env
-      SCORING_DB_USER: ${SCORING_DB_USER:?set SCORING_DB_USER in the env file}
-      SCORING_DB_PASSWORD: ${SCORING_DB_PASSWORD:?set SCORING_DB_PASSWORD in the env file}
-    ports:
-      - "${PG_ASYNC_PORT:-5435}:5432"
-    volumes:
-      - pte_pg_async_data:/var/lib/postgresql/data
-      - ./docker/postgres/init-async:/docker-entrypoint-initdb.d:ro
-    command: ["postgres", "-c", "max_connections=50", "-c", "wal_level=logical"]
-
-  # MONOLITH — plans/modular-monolith. Single database `pte` for the `app`
-  # module, unrelated to the four cells above (those back services/*, which
-  # keeps running unmodified until Phase 11 cutover). One app, one database:
-  # no need for the createdb-per-service init-script indirection the cells
-  # use, so POSTGRES_DB/USER/PASSWORD point straight at APP_DB_*.
-  pg-monolith:
+  # Single database `pte` for the `app` module. POSTGRES_DB/USER/PASSWORD
+  # point straight at APP_DB_*.
+  postgres:
     image: postgres:17
-    container_name: pte-pg-monolith
+    container_name: pte-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: pte
@@ -141,9 +21,9 @@ services:
       POSTGRES_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in the env file}
       TZ: UTC
     ports:
-      - "${PG_MONOLITH_PORT:-5436}:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - pte_pg_monolith_data:/var/lib/postgresql/data
+      - pte_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${APP_DB_USER:?set APP_DB_USER in the env file}"]
       interval: 5s
@@ -231,20 +111,8 @@ services:
     networks: [pte-network]
 
 volumes:
-  # One volume per cell — a corrupted/filled volume takes down exactly one cell.
-  # The old single `pte_postgres_data` is intentionally NOT reused: mounting it
-  # into pg-core would leave the other three cells' databases sitting unused
-  # inside it. Existing local data must be re-seeded (dev only).
-  pte_pg_core_data:
-    name: pte_pg_core_data
-  pte_pg_exam_data:
-    name: pte_pg_exam_data
-  pte_pg_live_data:
-    name: pte_pg_live_data
-  pte_pg_async_data:
-    name: pte_pg_async_data
-  pte_pg_monolith_data:
-    name: pte_pg_monolith_data
+  pte_postgres_data:
+    name: pte_postgres_data
   pte_minio_data:
     name: pte_minio_data
 

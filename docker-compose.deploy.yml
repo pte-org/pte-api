@@ -23,12 +23,9 @@
 #      container.
 #   4. Adds Caddy + the two Next.js apps.
 #
-# plans/modular-monolith Phase 11 cutover reduced this from 11 backend
-# containers (gateway + 10 services) to 2 (gateway + app), and the 4-cell
-# Postgres topology (pg-core/pg-exam/pg-live/pg-async) to the single
-# pg-monolith already provisioned since Phase 01.
+# Backend containers: gateway + app, backed by a single postgres instance.
 #
-# Not changed: the published host ports on pg-monolith/redis/rabbitmq/minio.
+# Not changed: the published host ports on postgres/redis/rabbitmq/minio.
 # The VCN Security List is the actual boundary and only admits 22/80/443, so
 # those ports are reachable over SSH tunnel and nothing else. Keeping them
 # makes debugging a one-liner instead of a compose edit.
@@ -45,12 +42,10 @@ x-limits: &limits
   healthcheck: *slow-start
 
 services:
-  # plans/modular-monolith Phase 11 cutover: the 9 microservices + media that
-  # used to each get their own x-internal-env/x-internal-bootstrap-env overlay
-  # block here are gone — `app` is the only backend container now, and it has
-  # no `/internal/**` service-key surface at all (a cross-module call is a
-  # Java method call inside one process, not an HTTP request with its own
-  # trust boundary to defend — see identity's SecurityConfig).
+  # `app` is the only backend container, and it has no `/internal/**`
+  # service-key surface at all (a cross-module call is a Java method call
+  # inside one process, not an HTTP request with its own trust boundary to
+  # defend — see identity's SecurityConfig).
   app:
     <<: *limits
     environment:
@@ -67,7 +62,7 @@ services:
       # that is not served from these two hosts (the Flutter app, curl, Postman).
       CORS_ALLOWED_ORIGINS: https://${TENANT_DOMAIN},https://${ADMIN_DOMAIN}
 
-  pg-monolith:
+  postgres:
     mem_limit: 1g
 
   rabbitmq:
