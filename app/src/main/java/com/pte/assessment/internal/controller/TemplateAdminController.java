@@ -20,7 +20,7 @@ import java.util.UUID;
 
 /** Platform-author/admin management of the platform-owned template catalog. */
 @RestController
-@RequestMapping("/api/admin/templates")
+@RequestMapping("/admin/templates")
 @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
 public class TemplateAdminController {
 

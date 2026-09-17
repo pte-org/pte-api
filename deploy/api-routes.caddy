@@ -1,44 +1,28 @@
 # Shared route table, imported by both deploy/Caddyfile (hosted, TLS) and
 # deploy/Caddyfile.local (local dev, plain HTTP) so the two never drift apart.
 #
-# gateway-removal: reproduces gateway's old StripPrefix=2 routing table
-# directly in Caddy — each of app's modules owns a disjoint path space at its
-# own root (identity's AuthController maps /auth, admin's ClassController
-# maps /organizations/..., etc.), so stripping the old /api/{name} prefix
-# here is the exact same public contract, with zero changes needed on either
-# frontend or scripts/seed-e2e.ps1. handle_path strips the matched prefix
-# before proxying, same as StripPrefix=2 did.
+# ONE flat /api prefix. Two things to know before changing this:
+#
+# 1. DO NOT drop /api entirely. Each origin here serves BOTH the Next.js UI
+#    and the API (see deploy/Caddyfile: `import api_routes` then a catch-all
+#    `handle` to the web container). vendor-web has pages at
+#    /admin/applications, /admin/plans, /admin/settings and
+#    /admin/license-codes — the exact same paths as billing's controllers.
+#    Without /api those collide and Caddy can only pick one upstream: route
+#    to app and the admin pages go blank, route to Next.js and the API dies.
+#    /api is the namespace boundary between UI and API, not leftover cruft.
+#
+# 2. The per-service segment IS gone (was /api/iam/*, /api/scheduling/*, ...
+#    reproducing gateway's old StripPrefix=2). Those named services stopped
+#    existing at the modulith collapse — ADR-008. app is one process whose
+#    modules own disjoint bare path roots (identity's AuthController maps
+#    /auth, enrollment's ClassController maps /organizations/..., billing's
+#    OrderController maps /orders), so a single strip is all that is needed.
+#
+# handle_path strips the matched /api prefix before proxying, which is why
+# every controller in pte-api maps a bare root and never writes /api itself.
 (api_routes) {
-	handle_path /api/iam/* {
-		reverse_proxy app:8091
-	}
-	handle_path /api/admin/* {
-		reverse_proxy app:8091
-	}
-	handle_path /api/authoring/* {
-		reverse_proxy app:8091
-	}
-	handle_path /api/scheduling/* {
-		reverse_proxy app:8091
-	}
-	handle_path /api/exam-delivery/* {
-		reverse_proxy app:8091
-	}
-	# Covers /api/proctor/ws/** too — Caddy proxies the WebSocket upgrade
-	# transparently, no extra Upgrade/Connection header handling needed.
-	handle_path /api/proctor/* {
-		reverse_proxy app:8091
-	}
-	handle_path /api/scoring/* {
-		reverse_proxy app:8091
-	}
-	handle_path /api/reporting/* {
-		reverse_proxy app:8091
-	}
-	handle_path /api/notification/* {
-		reverse_proxy app:8091
-	}
-	handle_path /api/media/* {
+	handle_path /api/* {
 		reverse_proxy app:8091
 	}
 }

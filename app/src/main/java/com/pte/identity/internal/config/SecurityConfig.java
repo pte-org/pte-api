@@ -51,7 +51,7 @@ public class SecurityConfig {
     // "/admin/applications" specifically so they never fall inside this rule.
     private static final List<String> PUBLIC_PATHS = List.of(
             "/auth/login", "/auth/refresh", "/actuator/health", "/actuator/health/**", "/ws/**",
-            "/applications", "/api/webhooks/payos");
+            "/applications", "/webhooks/payos");
 
     @Bean
     public SecurityFilterChain jwtFilterChain(
@@ -72,7 +72,11 @@ public class SecurityConfig {
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(ResourceServerJwt.rolesConverter())))
                 .addFilterAfter(
                         new RateLimitFilter(rateLimitProxyManager, jsonMapper, rateLimitPerSecond,
-                                Map.of("/api/license-codes/redeem", redeemRateLimitPerSecond)),
+                                // Matched against request.getRequestURI() — the path AFTER the
+                                // edge strips /api (deploy/api-routes.caddy), so this is the bare
+                                // route LicenseCodeRedeemController actually maps, not the /api/*
+                                // path a browser sends.
+                                Map.of("/license-codes/redeem", redeemRateLimitPerSecond)),
                         BearerTokenAuthenticationFilter.class);
         return http.build();
     }

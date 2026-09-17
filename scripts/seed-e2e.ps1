@@ -240,7 +240,7 @@ Write-Step "Target gateway: $GatewayBaseUrl"
 # 1. Bootstrap admin login
 # ---------------------------------------------------------------------------
 Write-Step "Logging in as bootstrap PLATFORM_ADMIN ($BootstrapAdminEmail)..."
-$loginResp = Invoke-Api -Method Post -Path '/api/iam/auth/login' -Body @{
+$loginResp = Invoke-Api -Method Post -Path '/api/auth/login' -Body @{
     username = $BootstrapAdminEmail
     password = $BootstrapAdminPassword
 }
@@ -251,11 +251,20 @@ Write-Ok "Logged in as bootstrap admin."
 # 2. Tenant (PLATFORM_ADMIN only)
 # ---------------------------------------------------------------------------
 Write-Step "Resolving tenant '$TenantName'..."
-$tenantsResp = Invoke-Api -Method Get -Path '/api/admin/tenants' -Token $platformToken
+$tenantsResp = Invoke-Api -Method Get -Path '/api/tenants' -Token $platformToken
 $tenant = Find-First -Items $tenantsResp.data -Property 'name' -Value $TenantName
 if ($null -eq $tenant) {
     Write-Step "Tenant not found - creating..."
-    $createTenantResp = Invoke-Api -Method Post -Path '/api/admin/tenants' -Token $platformToken -Body @{
+    # `code` is required since Phase 1 of the commercialization work and must
+    # match ^[a-z0-9-]{3,32}$ — it becomes the prefix of every student
+    # username this tenant issues, so it cannot be derived from $TenantName
+    # blindly (spaces/case would fail validation).
+    $tenantCode = ($TenantName -replace '[^a-zA-Z0-9]+', '-').ToLowerInvariant().Trim('-')
+    if ($tenantCode.Length -lt 3) { $tenantCode = "e2e-$tenantCode" }
+    if ($tenantCode.Length -gt 32) { $tenantCode = $tenantCode.Substring(0, 32).Trim('-') }
+
+    $createTenantResp = Invoke-Api -Method Post -Path '/api/tenants' -Token $platformToken -Body @{
+        code             = $tenantCode
         name             = $TenantName
         organizationType = 'SCHOOL'
         packageName      = 'E2E_SEED'
@@ -277,13 +286,13 @@ Save-State
 #    caller).
 # ---------------------------------------------------------------------------
 Write-Step "Resolving users for tenant $($tenant.publicId)..."
-$tenantUsersResp = Invoke-Api -Method Get -Path "/api/iam/users/by-tenant/$($tenant.publicId)" -Token $platformToken
+$tenantUsersResp = Invoke-Api -Method Get -Path "/api/users/by-tenant/$($tenant.publicId)" -Token $platformToken
 $tenantUsers = $tenantUsersResp.data
 
 $hostUser = Find-First -Items $tenantUsers -Property 'email' -Value $HostEmail
 if ($null -eq $hostUser) {
     Write-Step "Host admin not found - creating $HostEmail..."
-    $createHostResp = Invoke-Api -Method Post -Path '/api/iam/users' -Token $platformToken -Body @{
+    $createHostResp = Invoke-Api -Method Post -Path '/api/users' -Token $platformToken -Body @{
         email    = $HostEmail
         fullName = 'E2E Seed Host'
         password = $HostPassword
@@ -300,7 +309,7 @@ $State.hostPublicId = $hostUser.publicId
 $studentUser = Find-First -Items $tenantUsers -Property 'email' -Value $StudentEmail
 if ($null -eq $studentUser) {
     Write-Step "Student not found - creating $StudentEmail..."
-    $createStudentResp = Invoke-Api -Method Post -Path '/api/iam/users' -Token $platformToken -Body @{
+    $createStudentResp = Invoke-Api -Method Post -Path '/api/users' -Token $platformToken -Body @{
         email    = $StudentEmail
         fullName = 'E2E Seed Student'
         password = $StudentPassword
@@ -322,7 +331,7 @@ Save-State
 #    platform token from step 1 does NOT satisfy those checks.
 # ---------------------------------------------------------------------------
 Write-Step "Logging in as host admin ($HostEmail)..."
-$hostLoginResp = Invoke-Api -Method Post -Path '/api/iam/auth/login' -Body @{
+$hostLoginResp = Invoke-Api -Method Post -Path '/api/auth/login' -Body @{
     username = $HostEmail
     password = $HostPassword
 }
@@ -335,11 +344,11 @@ Write-Ok "Logged in as host admin."
 #    authenticates as HOST_ADMIN for authoring calls).
 # ---------------------------------------------------------------------------
 Write-Step "Resolving question '$QuestionTitle'..."
-$questionsResp = Invoke-Api -Method Get -Path '/api/authoring/questions' -Token $hostToken
+$questionsResp = Invoke-Api -Method Get -Path '/api/questions' -Token $hostToken
 $question = Find-First -Items $questionsResp.data -Property 'title' -Value $QuestionTitle
 if ($null -eq $question) {
     Write-Step "Question not found - creating..."
-    $createQuestionResp = Invoke-Api -Method Post -Path '/api/authoring/questions' -Token $hostToken -Body @{
+    $createQuestionResp = Invoke-Api -Method Post -Path '/api/questions' -Token $hostToken -Body @{
         pteTaskType = 'READ_ALOUD'
         visibility  = 'PRIVATE'
         title       = $QuestionTitle
@@ -357,11 +366,11 @@ Save-State
 # 6. Blueprint containing that question
 # ---------------------------------------------------------------------------
 Write-Step "Resolving blueprint '$BlueprintName'..."
-$blueprintsResp = Invoke-Api -Method Get -Path '/api/authoring/blueprints' -Token $hostToken
+$blueprintsResp = Invoke-Api -Method Get -Path '/api/blueprints' -Token $hostToken
 $blueprint = Find-First -Items $blueprintsResp.data -Property 'name' -Value $BlueprintName
 if ($null -eq $blueprint) {
     Write-Step "Blueprint not found - creating..."
-    $createBlueprintResp = Invoke-Api -Method Post -Path '/api/authoring/blueprints' -Token $hostToken -Body @{
+    $createBlueprintResp = Invoke-Api -Method Post -Path '/api/blueprints' -Token $hostToken -Body @{
         name  = $BlueprintName
         items = @(
             @{ questionPublicId = $question.publicId; section = 'SPEAKING'; orderIndex = 0 }
@@ -391,7 +400,7 @@ if ($blueprint.status -eq 'PUBLISHED') {
     }
 } else {
     Write-Step "Blueprint not yet published - publishing..."
-    $publishResp = Invoke-Api -Method Post -Path "/api/authoring/blueprints/$($blueprint.publicId)/publish" -Token $hostToken
+    $publishResp = Invoke-Api -Method Post -Path "/api/blueprints/$($blueprint.publicId)/publish" -Token $hostToken
     $State.snapshotPublicId = $publishResp.data.publicId
     Save-State
     Write-Ok "Published snapshot $($State.snapshotPublicId)"
@@ -406,13 +415,13 @@ $snapshotPublicId = $State.snapshotPublicId
 #    reaching far enough to notice.
 # ---------------------------------------------------------------------------
 Write-Step "Resolving session '$SessionName'..."
-$sessionsResp = Invoke-Api -Method Get -Path '/api/scheduling/sessions' -Token $hostToken
+$sessionsResp = Invoke-Api -Method Get -Path '/api/sessions' -Token $hostToken
 $session = Find-First -Items $sessionsResp.data -Property 'name' -Value $SessionName
 if ($null -eq $session) {
     Write-Step "Session not found - creating..."
     $opensAt = (Get-Date).ToUniversalTime().AddMinutes(5)
     $closesAt = $opensAt.AddHours(2)
-    $createSessionResp = Invoke-Api -Method Post -Path '/api/scheduling/sessions' -Token $hostToken -Body @{
+    $createSessionResp = Invoke-Api -Method Post -Path '/api/sessions' -Token $hostToken -Body @{
         name             = $SessionName
         snapshotPublicId = $snapshotPublicId
         opensAt          = $opensAt.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
@@ -448,7 +457,7 @@ if ($hasReadAloudComposition) {
     Write-Ok "Composition already includes READ_ALOUD."
 } else {
     Write-Step "Setting composition (READ_ALOUD)..."
-    Invoke-Api -Method Put -Path "/api/scheduling/sessions/$($session.publicId)/composition" -Token $hostToken -Body @{
+    Invoke-Api -Method Put -Path "/api/sessions/$($session.publicId)/composition" -Token $hostToken -Body @{
         items = @(
             # No override — real production default (40s). Historical note: this
             # composition used to trip a bug where genuine on-time submissions were
@@ -474,7 +483,7 @@ if ($session.status -eq 'OPEN') {
     Write-Ok "Session already OPEN."
 } else {
     Write-Step "Opening session..."
-    Invoke-Api -Method Post -Path "/api/scheduling/sessions/$($session.publicId)/open" -Token $hostToken | Out-Null
+    Invoke-Api -Method Post -Path "/api/sessions/$($session.publicId)/open" -Token $hostToken | Out-Null
     Write-Ok "Session opened."
 }
 
@@ -482,11 +491,11 @@ if ($session.status -eq 'OPEN') {
 # 11. Enrollment
 # ---------------------------------------------------------------------------
 Write-Step "Resolving enrollment for student $($studentUser.publicId)..."
-$enrollmentsResp = Invoke-Api -Method Get -Path "/api/scheduling/sessions/$($session.publicId)/enrollments" -Token $hostToken
+$enrollmentsResp = Invoke-Api -Method Get -Path "/api/sessions/$($session.publicId)/enrollments" -Token $hostToken
 $enrollment = Find-First -Items $enrollmentsResp.data -Property 'studentPublicId' -Value $studentUser.publicId
 if ($null -eq $enrollment) {
     Write-Step "Student not enrolled - enrolling..."
-    Invoke-Api -Method Post -Path "/api/scheduling/sessions/$($session.publicId)/enrollments" -Token $hostToken -Body @{
+    Invoke-Api -Method Post -Path "/api/sessions/$($session.publicId)/enrollments" -Token $hostToken -Body @{
         studentPublicId = $studentUser.publicId
     } | Out-Null
     Write-Ok "Enrolled student."
@@ -515,7 +524,7 @@ if ($State.repeatSentenceAudioMediaPublicId) {
     Write-Ok "Using previously-uploaded media $($State.repeatSentenceAudioMediaPublicId) from state file."
 } else {
     Write-Step "No prior upload recorded - uploading $RepeatSentenceAudioFixturePath..."
-    $requestUploadResp = Invoke-Api -Method Post -Path '/api/media/objects' -Token $hostToken -Body @{
+    $requestUploadResp = Invoke-Api -Method Post -Path '/api/objects' -Token $hostToken -Body @{
         contentType = 'audio/wav'
         # Opts into WAV-only validation + WAV-header duration extraction at
         # complete-upload time (plans/phat-speaking-dynamic-prep-timing) —
@@ -541,7 +550,7 @@ if ($State.repeatSentenceAudioMediaPublicId) {
         throw
     }
 
-    Invoke-Api -Method Post -Path "/api/media/objects/$mediaPublicId/complete" -Token $hostToken | Out-Null
+    Invoke-Api -Method Post -Path "/api/objects/$mediaPublicId/complete" -Token $hostToken | Out-Null
     $State.repeatSentenceAudioMediaPublicId = $mediaPublicId
     Save-State
     Write-Ok "Uploaded and completed media $mediaPublicId"
@@ -554,11 +563,11 @@ $repeatSentenceAudioMediaPublicId = $State.repeatSentenceAudioMediaPublicId
 #     promptText/options/correctAnswer/wordCount required).
 # ---------------------------------------------------------------------------
 Write-Step "Resolving question '$RepeatSentenceQuestionTitle'..."
-$rsQuestionsResp = Invoke-Api -Method Get -Path '/api/authoring/questions' -Token $hostToken
+$rsQuestionsResp = Invoke-Api -Method Get -Path '/api/questions' -Token $hostToken
 $repeatSentenceQuestion = Find-First -Items $rsQuestionsResp.data -Property 'title' -Value $RepeatSentenceQuestionTitle
 if ($null -eq $repeatSentenceQuestion) {
     Write-Step "Question not found - creating..."
-    $createRsQuestionResp = Invoke-Api -Method Post -Path '/api/authoring/questions' -Token $hostToken -Body @{
+    $createRsQuestionResp = Invoke-Api -Method Post -Path '/api/questions' -Token $hostToken -Body @{
         pteTaskType    = 'REPEAT_SENTENCE'
         visibility     = 'PRIVATE'
         title          = $RepeatSentenceQuestionTitle
@@ -576,11 +585,11 @@ Save-State
 # 14. Blueprint containing that question
 # ---------------------------------------------------------------------------
 Write-Step "Resolving blueprint '$RepeatSentenceBlueprintName'..."
-$rsBlueprintsResp = Invoke-Api -Method Get -Path '/api/authoring/blueprints' -Token $hostToken
+$rsBlueprintsResp = Invoke-Api -Method Get -Path '/api/blueprints' -Token $hostToken
 $repeatSentenceBlueprint = Find-First -Items $rsBlueprintsResp.data -Property 'name' -Value $RepeatSentenceBlueprintName
 if ($null -eq $repeatSentenceBlueprint) {
     Write-Step "Blueprint not found - creating..."
-    $createRsBlueprintResp = Invoke-Api -Method Post -Path '/api/authoring/blueprints' -Token $hostToken -Body @{
+    $createRsBlueprintResp = Invoke-Api -Method Post -Path '/api/blueprints' -Token $hostToken -Body @{
         name  = $RepeatSentenceBlueprintName
         items = @(
             @{ questionPublicId = $repeatSentenceQuestion.publicId; section = 'SPEAKING'; orderIndex = 0 }
@@ -608,7 +617,7 @@ if ($repeatSentenceBlueprint.status -eq 'PUBLISHED') {
     }
 } else {
     Write-Step "Blueprint not yet published - publishing..."
-    $rsPublishResp = Invoke-Api -Method Post -Path "/api/authoring/blueprints/$($repeatSentenceBlueprint.publicId)/publish" -Token $hostToken
+    $rsPublishResp = Invoke-Api -Method Post -Path "/api/blueprints/$($repeatSentenceBlueprint.publicId)/publish" -Token $hostToken
     $State.repeatSentenceSnapshotPublicId = $rsPublishResp.data.publicId
     Save-State
     Write-Ok "Published snapshot $($State.repeatSentenceSnapshotPublicId)"
@@ -619,13 +628,13 @@ $repeatSentenceSnapshotPublicId = $State.repeatSentenceSnapshotPublicId
 # 16. Scheduling session
 # ---------------------------------------------------------------------------
 Write-Step "Resolving session '$RepeatSentenceSessionName'..."
-$rsSessionsResp = Invoke-Api -Method Get -Path '/api/scheduling/sessions' -Token $hostToken
+$rsSessionsResp = Invoke-Api -Method Get -Path '/api/sessions' -Token $hostToken
 $repeatSentenceSession = Find-First -Items $rsSessionsResp.data -Property 'name' -Value $RepeatSentenceSessionName
 if ($null -eq $repeatSentenceSession) {
     Write-Step "Session not found - creating..."
     $rsOpensAt = (Get-Date).ToUniversalTime().AddMinutes(5)
     $rsClosesAt = $rsOpensAt.AddHours(2)
-    $createRsSessionResp = Invoke-Api -Method Post -Path '/api/scheduling/sessions' -Token $hostToken -Body @{
+    $createRsSessionResp = Invoke-Api -Method Post -Path '/api/sessions' -Token $hostToken -Body @{
         name             = $RepeatSentenceSessionName
         snapshotPublicId = $repeatSentenceSnapshotPublicId
         opensAt          = $rsOpensAt.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
@@ -655,7 +664,7 @@ if ($hasRepeatSentenceComposition) {
     Write-Ok "Composition already includes REPEAT_SENTENCE."
 } else {
     Write-Step "Setting composition (REPEAT_SENTENCE)..."
-    Invoke-Api -Method Put -Path "/api/scheduling/sessions/$($repeatSentenceSession.publicId)/composition" -Token $hostToken -Body @{
+    Invoke-Api -Method Put -Path "/api/sessions/$($repeatSentenceSession.publicId)/composition" -Token $hostToken -Body @{
         items = @(
             # No override — real production default (prepSeconds 10 /
             # responseSeconds 15, per task-timing.json, added this same
@@ -673,7 +682,7 @@ if ($repeatSentenceSession.status -eq 'OPEN') {
     Write-Ok "Session already OPEN."
 } else {
     Write-Step "Opening session..."
-    Invoke-Api -Method Post -Path "/api/scheduling/sessions/$($repeatSentenceSession.publicId)/open" -Token $hostToken | Out-Null
+    Invoke-Api -Method Post -Path "/api/sessions/$($repeatSentenceSession.publicId)/open" -Token $hostToken | Out-Null
     Write-Ok "Session opened."
 }
 
@@ -681,11 +690,11 @@ if ($repeatSentenceSession.status -eq 'OPEN') {
 # 19. Enrollment
 # ---------------------------------------------------------------------------
 Write-Step "Resolving enrollment for student $($studentUser.publicId)..."
-$rsEnrollmentsResp = Invoke-Api -Method Get -Path "/api/scheduling/sessions/$($repeatSentenceSession.publicId)/enrollments" -Token $hostToken
+$rsEnrollmentsResp = Invoke-Api -Method Get -Path "/api/sessions/$($repeatSentenceSession.publicId)/enrollments" -Token $hostToken
 $rsEnrollment = Find-First -Items $rsEnrollmentsResp.data -Property 'studentPublicId' -Value $studentUser.publicId
 if ($null -eq $rsEnrollment) {
     Write-Step "Student not enrolled - enrolling..."
-    Invoke-Api -Method Post -Path "/api/scheduling/sessions/$($repeatSentenceSession.publicId)/enrollments" -Token $hostToken -Body @{
+    Invoke-Api -Method Post -Path "/api/sessions/$($repeatSentenceSession.publicId)/enrollments" -Token $hostToken -Body @{
         studentPublicId = $studentUser.publicId
     } | Out-Null
     Write-Ok "Enrolled student."
@@ -709,7 +718,7 @@ if ($State.listeningAudioMediaPublicId) {
     Write-Ok "Using previously-uploaded media $($State.listeningAudioMediaPublicId) from state file."
 } else {
     Write-Step "No prior upload recorded - uploading $ListeningAudioFixturePath..."
-    $listeningUploadResp = Invoke-Api -Method Post -Path '/api/media/objects' -Token $hostToken -Body @{
+    $listeningUploadResp = Invoke-Api -Method Post -Path '/api/objects' -Token $hostToken -Body @{
         contentType = 'audio/wav'
         audioPrompt = $true
     }
@@ -727,7 +736,7 @@ if ($State.listeningAudioMediaPublicId) {
         throw
     }
 
-    Invoke-Api -Method Post -Path "/api/media/objects/$listeningMediaPublicId/complete" -Token $hostToken | Out-Null
+    Invoke-Api -Method Post -Path "/api/objects/$listeningMediaPublicId/complete" -Token $hostToken | Out-Null
     $State.listeningAudioMediaPublicId = $listeningMediaPublicId
     Save-State
     Write-Ok "Uploaded and completed media $listeningMediaPublicId"
@@ -743,11 +752,11 @@ $listeningAudioMediaPublicId = $State.listeningAudioMediaPublicId
 #     string in the client, not per-question authoring content.
 # ---------------------------------------------------------------------------
 Write-Step "Resolving question '$ListeningQuestionTitle'..."
-$listeningQuestionsResp = Invoke-Api -Method Get -Path '/api/authoring/questions' -Token $hostToken
+$listeningQuestionsResp = Invoke-Api -Method Get -Path '/api/questions' -Token $hostToken
 $listeningQuestion = Find-First -Items $listeningQuestionsResp.data -Property 'title' -Value $ListeningQuestionTitle
 if ($null -eq $listeningQuestion) {
     Write-Step "Question not found - creating..."
-    $createListeningQuestionResp = Invoke-Api -Method Post -Path '/api/authoring/questions' -Token $hostToken -Body @{
+    $createListeningQuestionResp = Invoke-Api -Method Post -Path '/api/questions' -Token $hostToken -Body @{
         pteTaskType    = 'MC_LISTENING_SINGLE'
         visibility     = 'PRIVATE'
         title          = $ListeningQuestionTitle
@@ -771,11 +780,11 @@ Save-State
 # 22. Blueprint containing that question
 # ---------------------------------------------------------------------------
 Write-Step "Resolving blueprint '$ListeningBlueprintName'..."
-$listeningBlueprintsResp = Invoke-Api -Method Get -Path '/api/authoring/blueprints' -Token $hostToken
+$listeningBlueprintsResp = Invoke-Api -Method Get -Path '/api/blueprints' -Token $hostToken
 $listeningBlueprint = Find-First -Items $listeningBlueprintsResp.data -Property 'name' -Value $ListeningBlueprintName
 if ($null -eq $listeningBlueprint) {
     Write-Step "Blueprint not found - creating..."
-    $createListeningBlueprintResp = Invoke-Api -Method Post -Path '/api/authoring/blueprints' -Token $hostToken -Body @{
+    $createListeningBlueprintResp = Invoke-Api -Method Post -Path '/api/blueprints' -Token $hostToken -Body @{
         name  = $ListeningBlueprintName
         items = @(
             @{ questionPublicId = $listeningQuestion.publicId; section = 'LISTENING'; orderIndex = 0 }
@@ -803,7 +812,7 @@ if ($listeningBlueprint.status -eq 'PUBLISHED') {
     }
 } else {
     Write-Step "Blueprint not yet published - publishing..."
-    $listeningPublishResp = Invoke-Api -Method Post -Path "/api/authoring/blueprints/$($listeningBlueprint.publicId)/publish" -Token $hostToken
+    $listeningPublishResp = Invoke-Api -Method Post -Path "/api/blueprints/$($listeningBlueprint.publicId)/publish" -Token $hostToken
     $State.listeningSnapshotPublicId = $listeningPublishResp.data.publicId
     Save-State
     Write-Ok "Published snapshot $($State.listeningSnapshotPublicId)"
@@ -814,13 +823,13 @@ $listeningSnapshotPublicId = $State.listeningSnapshotPublicId
 # 24. Scheduling session
 # ---------------------------------------------------------------------------
 Write-Step "Resolving session '$ListeningSessionName'..."
-$listeningSessionsResp = Invoke-Api -Method Get -Path '/api/scheduling/sessions' -Token $hostToken
+$listeningSessionsResp = Invoke-Api -Method Get -Path '/api/sessions' -Token $hostToken
 $listeningSession = Find-First -Items $listeningSessionsResp.data -Property 'name' -Value $ListeningSessionName
 if ($null -eq $listeningSession) {
     Write-Step "Session not found - creating..."
     $listeningOpensAt = (Get-Date).ToUniversalTime().AddMinutes(5)
     $listeningClosesAt = $listeningOpensAt.AddHours(2)
-    $createListeningSessionResp = Invoke-Api -Method Post -Path '/api/scheduling/sessions' -Token $hostToken -Body @{
+    $createListeningSessionResp = Invoke-Api -Method Post -Path '/api/sessions' -Token $hostToken -Body @{
         name             = $ListeningSessionName
         snapshotPublicId = $listeningSnapshotPublicId
         opensAt          = $listeningOpensAt.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
@@ -848,7 +857,7 @@ if ($hasListeningComposition) {
     Write-Ok "Composition already includes MC_LISTENING_SINGLE."
 } else {
     Write-Step "Setting composition (MC_LISTENING_SINGLE)..."
-    Invoke-Api -Method Put -Path "/api/scheduling/sessions/$($listeningSession.publicId)/composition" -Token $hostToken -Body @{
+    Invoke-Api -Method Put -Path "/api/sessions/$($listeningSession.publicId)/composition" -Token $hostToken -Body @{
         items = @(
             @{ taskType = 'MC_LISTENING_SINGLE'; section = 'LISTENING'; orderIndex = 0; timingOverrideSeconds = $null; maxPlayCount = $null }
         )
@@ -863,7 +872,7 @@ if ($listeningSession.status -eq 'OPEN') {
     Write-Ok "Session already OPEN."
 } else {
     Write-Step "Opening session..."
-    Invoke-Api -Method Post -Path "/api/scheduling/sessions/$($listeningSession.publicId)/open" -Token $hostToken | Out-Null
+    Invoke-Api -Method Post -Path "/api/sessions/$($listeningSession.publicId)/open" -Token $hostToken | Out-Null
     Write-Ok "Session opened."
 }
 
@@ -871,11 +880,11 @@ if ($listeningSession.status -eq 'OPEN') {
 # 27. Enrollment
 # ---------------------------------------------------------------------------
 Write-Step "Resolving enrollment for student $($studentUser.publicId)..."
-$listeningEnrollmentsResp = Invoke-Api -Method Get -Path "/api/scheduling/sessions/$($listeningSession.publicId)/enrollments" -Token $hostToken
+$listeningEnrollmentsResp = Invoke-Api -Method Get -Path "/api/sessions/$($listeningSession.publicId)/enrollments" -Token $hostToken
 $listeningEnrollment = Find-First -Items $listeningEnrollmentsResp.data -Property 'studentPublicId' -Value $studentUser.publicId
 if ($null -eq $listeningEnrollment) {
     Write-Step "Student not enrolled - enrolling..."
-    Invoke-Api -Method Post -Path "/api/scheduling/sessions/$($listeningSession.publicId)/enrollments" -Token $hostToken -Body @{
+    Invoke-Api -Method Post -Path "/api/sessions/$($listeningSession.publicId)/enrollments" -Token $hostToken -Body @{
         studentPublicId = $studentUser.publicId
     } | Out-Null
     Write-Ok "Enrolled student."

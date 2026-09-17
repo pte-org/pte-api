@@ -20,7 +20,7 @@ import java.util.List;
 
 /** Tenant-owned PayOS order creation and history endpoints. */
 @RestController
-@RequestMapping("/api/orders")
+@RequestMapping("/orders")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class OrderController {
 

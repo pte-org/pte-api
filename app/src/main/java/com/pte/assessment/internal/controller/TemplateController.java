@@ -12,7 +12,7 @@ import java.util.List;
 
 /** Tenant-facing active template catalog; no write or draft access is exposed. */
 @RestController
-@RequestMapping("/api/templates")
+@RequestMapping("/templates")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class TemplateController {
 

@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Public PayOS callback; authenticity is verified inside the billing module. */
 @RestController
-@RequestMapping("/api/webhooks/payos")
+@RequestMapping("/webhooks/payos")
 public class PayOsWebhookController {
 
     private final PayOsWebhookService payOsWebhookService;

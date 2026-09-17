@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Host-admin endpoint for redeeming one activation code. */
 @RestController
-@RequestMapping("/api/license-codes")
+@RequestMapping("/license-codes")
 public class LicenseCodeRedeemController {
 
     private final LicenseCodeService licenseCodeService;
