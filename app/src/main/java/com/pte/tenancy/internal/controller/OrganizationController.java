@@ -23,7 +23,7 @@ import java.util.UUID;
  * same as {@link TenantController}.
  */
 @RestController
-@RequestMapping("/tenants/{tenantPublicId}/organizations")
+@RequestMapping("/api/v1/tenants/{tenantPublicId}/organizations")
 @PreAuthorize("hasRole('PLATFORM_ADMIN')")
 public class OrganizationController {
 

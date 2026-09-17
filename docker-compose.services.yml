@@ -9,12 +9,8 @@
 # `gateway` is gone — its JWT validation was always redundant with this app's
 # own oauth2ResourceServer (com.pte.identity.internal.config.SecurityConfig),
 # and CORS + per-tenant rate limiting were ported into that same class (see
-# com.pte.shared.web.RateLimitFilter). `app` maps its own host port directly
-# (no more service-key surface to hide behind an edge). `caddy` below is NOT
-# a gateway replacement — it exists purely so pte-web's hardcoded
-# http://localhost:8080 default and scripts/seed-e2e.ps1 keep working
-# unmodified: it strips the old /api/{service}/** prefix (deploy/api-
-# routes.caddy) the exact same way the hosted deploy's Caddy does.
+# com.pte.shared.web.RateLimitFilter). Nginx below is only a local edge for
+# the same-origin API default; it forwards the versioned REST path unchanged.
 
 x-build-defaults: &build-defaults
   context: .
@@ -85,13 +81,13 @@ services:
       start_period: 40s
     networks: [pte-network]
 
-  caddy:
-    image: caddy:2
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: pte-nginx
     ports:
-      - "${GATEWAY_PORT:-8080}:8080"
+      - "${NGINX_PORT:-8080}:8080"
     volumes:
-      - ./deploy/Caddyfile.local:/etc/caddy/Caddyfile:ro
-      - ./deploy/api-routes.caddy:/etc/caddy/api-routes.caddy:ro
+      - ./deploy/nginx.local.conf:/etc/nginx/templates/default.conf.template:ro
     depends_on:
       app:
         condition: service_healthy

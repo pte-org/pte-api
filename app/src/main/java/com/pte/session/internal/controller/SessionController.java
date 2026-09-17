@@ -31,7 +31,7 @@ import java.util.UUID;
  * target.
  */
 @RestController
-@RequestMapping("/sessions")
+@RequestMapping("/api/v1/sessions")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class SessionController {
 

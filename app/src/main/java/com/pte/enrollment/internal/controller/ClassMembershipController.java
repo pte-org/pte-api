@@ -22,7 +22,7 @@ import java.util.UUID;
  * call â€” never trusts a tenant id from the request.
  */
 @RestController
-@RequestMapping("/class-memberships")
+@RequestMapping("/api/v1/class-memberships")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class ClassMembershipController {
 

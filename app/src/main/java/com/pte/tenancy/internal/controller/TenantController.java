@@ -27,7 +27,7 @@ import java.util.UUID;
  * runtime path calls these.
  */
 @RestController
-@RequestMapping("/tenants")
+@RequestMapping("/api/v1/tenants")
 @PreAuthorize("hasRole('PLATFORM_ADMIN')")
 public class TenantController {
 

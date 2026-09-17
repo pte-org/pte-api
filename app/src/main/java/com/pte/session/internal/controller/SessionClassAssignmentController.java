@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/sessions/{sessionPublicId}/classes")
+@RequestMapping("/api/v1/sessions/{sessionPublicId}/classes")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class SessionClassAssignmentController {
 

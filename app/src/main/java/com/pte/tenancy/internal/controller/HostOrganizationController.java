@@ -21,7 +21,7 @@ import java.util.UUID;
  * {@link OrganizationController}; a Host cannot create its own branches.
  */
 @RestController
-@RequestMapping("/organizations")
+@RequestMapping("/api/v1/organizations")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class HostOrganizationController {
 

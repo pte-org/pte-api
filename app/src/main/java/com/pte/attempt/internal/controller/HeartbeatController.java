@@ -14,7 +14,7 @@ import java.util.UUID;
 
 /** Presence signal for the parallel connectivity-monitoring feature — carries no timer/deadline/task data at all. */
 @RestController
-@RequestMapping("/attempts")
+@RequestMapping("/api/v1/attempts")
 @PreAuthorize("hasRole('STUDENT')")
 public class HeartbeatController {
 

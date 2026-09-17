@@ -23,7 +23,7 @@ import java.util.UUID;
 
 /** Host self-service Program (Khá»‘i/KhÃ³a) CRUD, scoped to the caller's own tenant via {@code caller.tenantId()}. */
 @RestController
-@RequestMapping("/organizations/{organizationPublicId}/programs")
+@RequestMapping("/api/v1/organizations/{organizationPublicId}/programs")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class ProgramController {
 

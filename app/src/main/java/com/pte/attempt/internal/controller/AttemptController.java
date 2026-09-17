@@ -26,7 +26,7 @@ import java.util.UUID;
  * purely on this module's own pinned data — no call to another module occurs.
  */
 @RestController
-@RequestMapping("/attempts")
+@RequestMapping("/api/v1/attempts")
 @PreAuthorize("hasRole('STUDENT')")
 public class AttemptController {
 

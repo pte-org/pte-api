@@ -16,7 +16,7 @@ import java.util.UUID;
 
 /** Post-hoc audit review across every proctor who watched a given exam session — {@code sessionPublicId} is session's ExamSession id. */
 @RestController
-@RequestMapping("/exam-sessions")
+@RequestMapping("/api/v1/exam-sessions")
 @PreAuthorize("hasAnyRole('PROCTOR','HOST_ADMIN','HOST_AUTHOR')")
 public class ViolationAuditController {
 

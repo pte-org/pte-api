@@ -50,8 +50,9 @@ public class SecurityConfig {
     // admin-only list/approve/reject endpoints live under
     // "/admin/applications" specifically so they never fall inside this rule.
     private static final List<String> PUBLIC_PATHS = List.of(
-            "/auth/login", "/auth/refresh", "/actuator/health", "/actuator/health/**", "/ws/**",
-            "/applications", "/webhooks/payos");
+            "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout",
+            "/actuator/health", "/actuator/health/**", "/ws/**",
+            "/api/v1/applications", "/api/v1/webhooks/payos");
 
     @Bean
     public SecurityFilterChain jwtFilterChain(
@@ -72,11 +73,9 @@ public class SecurityConfig {
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(ResourceServerJwt.rolesConverter())))
                 .addFilterAfter(
                         new RateLimitFilter(rateLimitProxyManager, jsonMapper, rateLimitPerSecond,
-                                // Matched against request.getRequestURI() — the path AFTER the
-                                // edge strips /api (deploy/api-routes.caddy), so this is the bare
-                                // route LicenseCodeRedeemController actually maps, not the /api/*
-                                // path a browser sends.
-                                Map.of("/license-codes/redeem", redeemRateLimitPerSecond)),
+                                // Matched against request.getRequestURI(); Nginx preserves the
+                                // versioned /api/v1 path sent by the browser.
+                                Map.of("/api/v1/license-code-redemptions", redeemRateLimitPerSecond)),
                         BearerTokenAuthenticationFilter.class);
         return http.build();
     }

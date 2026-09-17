@@ -26,7 +26,7 @@ import java.util.UUID;
  * endpoint then — not by widening this controller's role list.
  */
 @RestController
-@RequestMapping("/score-templates")
+@RequestMapping("/api/v1/score-templates")
 @PreAuthorize("hasRole('PLATFORM_ADMIN')")
 public class ScoreTemplateController {
 
