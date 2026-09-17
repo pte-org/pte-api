@@ -3,9 +3,7 @@ package com.pte.session.internal.controller;
 import com.pte.session.dto.response.ExamPolicyResponse;
 import com.pte.session.internal.dto.request.CreateSessionRequest;
 import com.pte.session.internal.dto.request.PatchExamPolicyRequest;
-import com.pte.session.internal.dto.request.SetCompositionRequest;
 import com.pte.session.internal.dto.response.SessionResponse;
-import com.pte.session.internal.service.CompositionService;
 import com.pte.session.internal.service.SessionLifecycleService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
@@ -16,7 +14,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,11 +35,9 @@ import java.util.UUID;
 public class SessionController {
 
     private final SessionLifecycleService sessionLifecycleService;
-    private final CompositionService compositionService;
 
-    public SessionController(SessionLifecycleService sessionLifecycleService, CompositionService compositionService) {
+    public SessionController(SessionLifecycleService sessionLifecycleService) {
         this.sessionLifecycleService = sessionLifecycleService;
-        this.compositionService = compositionService;
     }
 
     @PostMapping
@@ -58,12 +53,6 @@ public class SessionController {
     @GetMapping
     public ApiResponse<List<SessionResponse>> list() {
         return ApiResponse.success(sessionLifecycleService.list(currentUser()));
-    }
-
-    @PutMapping("/{publicId}/composition")
-    public ApiResponse<SessionResponse> setComposition(@PathVariable UUID publicId,
-                                                        @Valid @RequestBody SetCompositionRequest request) {
-        return ApiResponse.success(compositionService.setComposition(publicId, request, currentUser()));
     }
 
     /** Partial ExamPolicy override — rejected once the session is past pre-open, regardless of attempt count. */

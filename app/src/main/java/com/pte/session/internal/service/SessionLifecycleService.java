@@ -29,10 +29,10 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Session lifecycle: create (resolving the snapshot via {@link AssessmentService#getSummary}
- * — an in-process call, no cache/ref table needed now that assessment lives in
- * the same app), open, close. Tenant-scoped throughout — a host operates only
- * on its own tenant's sessions.
+ * Session lifecycle: create (generating a fresh random exam via {@link
+ * AssessmentService#generateAndPublish} — an in-process call, no cache/ref
+ * table needed now that assessment lives in the same app), open, close.
+ * Tenant-scoped throughout — a host operates only on its own tenant's sessions.
  */
 @Service
 public class SessionLifecycleService {
@@ -51,10 +51,10 @@ public class SessionLifecycleService {
         if (!request.closesAt().isAfter(request.opensAt())) {
             throw new InvalidSessionWindowException();
         }
-        // Propagates assessment's own BlueprintNotFoundException (404) unmodified
-        // when the snapshot doesn't exist — same externally observable behavior
-        // as the pre-split cache-miss-then-fetch path, without the network call.
-        SnapshotResponse snapshot = assessmentService.getSummary(request.snapshotPublicId());
+        // Generates a fresh random exam from the question bank and publishes it —
+        // assessment's own InsufficientQuestionBankException/InvalidSkillSelectionException
+        // propagate unmodified if generation fails, before any ExamSession is saved.
+        SnapshotResponse snapshot = assessmentService.generateAndPublish(request.name(), request.skills(), caller);
 
         ExamSession session = new ExamSession();
         session.setName(request.name());
@@ -147,7 +147,7 @@ public class SessionLifecycleService {
     }
 
     ExamSession findOwned(UUID publicId, CurrentUser caller) {
-        return sessionRepository.findWithCompositionByPublicIdAndTenantId(publicId, requireTenant(caller))
+        return sessionRepository.findByPublicIdAndTenantId(publicId, requireTenant(caller))
                 .orElseThrow(SessionNotFoundException::new);
     }
 

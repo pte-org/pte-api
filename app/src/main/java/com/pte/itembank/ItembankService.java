@@ -3,17 +3,20 @@ package com.pte.itembank;
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.QuestionOption;
 import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.request.CreateQuestionRequest;
 import com.pte.itembank.dto.request.OptionRequest;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.dto.response.QuestionResponse;
 import com.pte.itembank.internal.constant.ItembankConstants;
+import com.pte.itembank.internal.exception.InvalidQuestionStatusTransitionException;
 import com.pte.itembank.internal.exception.QuestionNotFoundException;
 import com.pte.itembank.internal.exception.QuestionValidationException;
 import com.pte.itembank.internal.exception.SharedWriteForbiddenException;
 import com.pte.itembank.internal.mapper.QuestionMapper;
 import com.pte.itembank.internal.repository.QuestionRepository;
+import com.pte.itembank.internal.repository.TaskTypeCountProjection;
 import com.pte.itembank.internal.service.ItembankAccessPolicy;
 import com.pte.itembank.internal.service.QuestionValidationHelper;
 import com.pte.shared.security.CurrentUser;
@@ -22,8 +25,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * The only door other modules use to reach {@code itembank}. {@code
@@ -89,6 +96,71 @@ public class ItembankService {
                 ? questionRepository.findAllWithOptions()
                 : questionRepository.findAccessible(caller.tenantId());
         return questions.stream().map(this::toResponse).toList();
+    }
+
+    /** Publish DRAFT→PUBLISHED, validating required fields first. PUBLISHED is idempotent; ARCHIVED is rejected. */
+    @Transactional
+    public QuestionResponse publish(UUID publicId, CurrentUser caller) {
+        Question question = loadForPlatformWrite(publicId, caller);
+        if (question.getStatus() == QuestionStatus.PUBLISHED) {
+            return toResponse(question);
+        }
+        if (question.getStatus() == QuestionStatus.ARCHIVED) {
+            throw new InvalidQuestionStatusTransitionException();
+        }
+        validationHelper.validate(question);
+        question.setStatus(QuestionStatus.PUBLISHED);
+        return toResponse(question);
+    }
+
+    /** Archive DRAFT/PUBLISHED→ARCHIVED. ARCHIVED is idempotent. */
+    @Transactional
+    public QuestionResponse archive(UUID publicId, CurrentUser caller) {
+        Question question = loadForPlatformWrite(publicId, caller);
+        question.setStatus(QuestionStatus.ARCHIVED);
+        return toResponse(question);
+    }
+
+    /** Unarchive ARCHIVED→DRAFT only — must be published again (with validation) to re-enter the pool. */
+    @Transactional
+    public QuestionResponse unarchive(UUID publicId, CurrentUser caller) {
+        Question question = loadForPlatformWrite(publicId, caller);
+        if (question.getStatus() != QuestionStatus.ARCHIVED) {
+            throw new InvalidQuestionStatusTransitionException();
+        }
+        question.setStatus(QuestionStatus.DRAFT);
+        return toResponse(question);
+    }
+
+    /**
+     * Exam generation count, one grouped query, always PUBLISHED+SHARED — never
+     * takes a {@link CurrentUser}: the pool doesn't depend on which host asked.
+     * Every requested task type is present in the result, 0 if it has no stock.
+     */
+    @Transactional(readOnly = true)
+    public Map<PteTaskType, Long> countPublishedByTaskTypes(Set<PteTaskType> taskTypes) {
+        Set<String> names = taskTypes.stream().map(Enum::name).collect(Collectors.toSet());
+        Map<PteTaskType, Long> counts = new EnumMap<>(PteTaskType.class);
+        taskTypes.forEach(taskType -> counts.put(taskType, 0L));
+        for (TaskTypeCountProjection row : questionRepository.countPublishedSharedGroupedByTaskType(names)) {
+            counts.put(PteTaskType.valueOf(row.getTaskType()), row.getCount());
+        }
+        return counts;
+    }
+
+    /** At most {@code n} random PUBLISHED+SHARED ids for one task type — never takes a {@link CurrentUser}. */
+    @Transactional(readOnly = true)
+    public List<UUID> randomPublishedQuestionIds(PteTaskType taskType, int n) {
+        return questionRepository.randomPublishedSharedIdsByTaskType(taskType.name(), n);
+    }
+
+    private Question loadForPlatformWrite(UUID publicId, CurrentUser caller) {
+        Question question = questionRepository.findWithOptionsByPublicId(publicId)
+                .orElseThrow(QuestionNotFoundException::new);
+        if (!caller.isPlatformUser()) {
+            throw new SharedWriteForbiddenException();
+        }
+        return question;
     }
 
     /**

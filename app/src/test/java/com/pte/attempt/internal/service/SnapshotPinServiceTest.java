@@ -15,7 +15,6 @@ import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.session.SessionService;
-import com.pte.session.dto.response.CompositionItemResponse;
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ExamPolicyResponse;
 
@@ -357,12 +356,58 @@ class SnapshotPinServiceTest {
         assertThat(pinned.getScoreTemplatePublicId()).isEqualTo(SCORE_TEMPLATE_ID);
     }
 
+    /** {@code taskType} is unused now (Plan B: no composition to filter by) — kept as a param so every existing call site reads unchanged. */
+    // ------------------------------------------------------------------
+    // Plan B, Phase 3: SessionComposition removed — pin ALL snapshot items,
+    // no per-type override.
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Every item of the snapshot is pinned, in original orderIndex order — no composition filter")
+    void pin_pinsAllSnapshotItemsInOriginalOrder_noCompositionFilter() {
+        stubEntitlement("READ_ALOUD");
+        SnapshotContentResponse.Item first = new SnapshotContentResponse.Item(
+                0, "SPEAKING", "READ_ALOUD", "t1", "p1", null, null, null, null, null, null, null);
+        SnapshotContentResponse.Item second = new SnapshotContentResponse.Item(
+                1, "READING", "MC_READING_SINGLE", "t2", "p2", null, null, null, null, null, null, null);
+        SnapshotContentResponse content = new SnapshotContentResponse(
+                SNAPSHOT_ID, "snapshot", 1, SCORE_TEMPLATE_ID, TENANT_ID, List.of(second, first));
+        when(assessmentService.getFullContent(SNAPSHOT_ID)).thenReturn(content);
+
+        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
+
+        assertThat(pinned.getItems()).hasSize(2);
+        assertThat(pinned.getItems().get(0).getTaskType()).isEqualTo("READ_ALOUD");
+        assertThat(pinned.getItems().get(1).getTaskType()).isEqualTo("MC_READING_SINGLE");
+    }
+
+    @Test
+    @DisplayName("responseSeconds always comes from the template/json value — there is no override to apply anymore")
+    void pin_responseSecondsAlwaysFromTemplateOrJson_neverOverridden() {
+        stubEntitlement("MC_READING_SINGLE");
+        stubContent(item("READING", "MC_READING_SINGLE", null));
+        stubTemplateItems(templateItem("MC_READING_SINGLE", "READING", 0, 77));
+
+        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
+
+        assertThat(pinned.getItems().get(0).getResponseSeconds()).isEqualTo(77);
+    }
+
+    @Test
+    @DisplayName("maxPlayCountOverride is always null — no composition to source it from")
+    void pin_maxPlayCountOverrideAlwaysNull() {
+        stubEntitlement("READ_ALOUD");
+        stubContent(item("SPEAKING", "READ_ALOUD", null));
+
+        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
+
+        assertThat(pinned.getItems().get(0).getMaxPlayCountOverride()).isNull();
+    }
+
     private void stubEntitlement(String taskType) {
         ExamPolicyResponse policy = new ExamPolicyResponse("UNLIMITED", null, false, false, "STANDARD", "NONE");
-        CompositionItemResponse composition = new CompositionItemResponse(taskType, "SPEAKING", 0, null, null);
         EntitlementResponse entitlement = new EntitlementResponse(
-                SESSION_ID, SNAPSHOT_ID, TENANT_ID, Instant.now(), Instant.now().plusSeconds(3600), policy,
-                List.of(composition));
+                SESSION_ID, SNAPSHOT_ID, TENANT_ID, Instant.now(), Instant.now().plusSeconds(3600), policy);
         when(sessionService.checkEntitlement(SESSION_ID, STUDENT_ID)).thenReturn(entitlement);
     }
 

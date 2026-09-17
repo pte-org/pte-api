@@ -20,7 +20,7 @@ import java.util.UUID;
  * human-facing counterpart only.
  */
 @RestController
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR','HOST_ADMIN','HOST_AUTHOR')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
 public class SnapshotController {
 
     private final SnapshotPublishService snapshotPublishService;

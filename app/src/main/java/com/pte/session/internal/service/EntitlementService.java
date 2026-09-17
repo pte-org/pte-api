@@ -14,7 +14,6 @@ import com.pte.session.internal.repository.ProctorAssignmentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -40,7 +39,7 @@ public class EntitlementService {
 
     @Transactional(readOnly = true)
     public EntitlementResponse checkEntitlement(UUID sessionPublicId, UUID studentPublicId) {
-        ExamSession session = sessionRepository.findWithCompositionByPublicId(sessionPublicId)
+        ExamSession session = sessionRepository.findByPublicId(sessionPublicId)
                 .orElseThrow(NotEntitledException::new);
         if (session.getStatus() != SessionStatus.OPEN) {
             throw new NotEntitledException();
@@ -48,15 +47,13 @@ public class EntitlementService {
         if (!enrollmentRepository.existsBySessionIdAndStudentPublicId(session.getId(), studentPublicId)) {
             throw new NotEntitledException();
         }
-        List<com.pte.session.dto.response.CompositionItemResponse> composition = session.getComposition().stream()
-                .map(SessionMapper::toItem).toList();
         return new EntitlementResponse(session.getPublicId(), session.getSnapshotPublicId(), session.getTenantId(),
-                session.getOpensAt(), session.getClosesAt(), SessionMapper.toPolicy(session.getPolicy()), composition);
+                session.getOpensAt(), session.getClosesAt(), SessionMapper.toPolicy(session.getPolicy()));
     }
 
     @Transactional(readOnly = true)
     public ProctorAssignmentCheckResponse checkProctorAssignment(UUID sessionPublicId, UUID proctorPublicId) {
-        ExamSession session = sessionRepository.findWithCompositionByPublicId(sessionPublicId)
+        ExamSession session = sessionRepository.findByPublicId(sessionPublicId)
                 .orElseThrow(ProctorNotAssignedException::new);
         if (!proctorAssignmentRepository.existsBySessionIdAndProctorPublicId(session.getId(), proctorPublicId)) {
             throw new ProctorNotAssignedException();

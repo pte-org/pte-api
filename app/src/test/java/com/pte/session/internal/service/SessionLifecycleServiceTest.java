@@ -24,11 +24,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -64,7 +66,7 @@ class SessionLifecycleServiceTest {
 
     @Test
     void create_setsLockdownModeToNone_whenExamModeIsPractice() {
-        when(assessmentService.getSummary(any())).thenReturn(snapshotSummary());
+        when(assessmentService.generateAndPublish(any(), any(), any())).thenReturn(snapshotSummary());
         when(sessionRepository.save(any())).thenAnswer(invocation -> {
             ExamSession s = invocation.getArgument(0);
             s.setPublicId(UUID.randomUUID());
@@ -74,7 +76,7 @@ class SessionLifecycleServiceTest {
         SessionResponse response = sessionLifecycleService.create(
                 new CreateSessionRequest(
                         "Practice Session",
-                        UUID.randomUUID(),
+                        Set.of("SPEAKING"),
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
                         ExamMode.PRACTICE,
@@ -87,7 +89,7 @@ class SessionLifecycleServiceTest {
 
     @Test
     void create_setsLockdownModeToStrict_whenExamModeIsRealExam() {
-        when(assessmentService.getSummary(any())).thenReturn(snapshotSummary());
+        when(assessmentService.generateAndPublish(any(), any(), any())).thenReturn(snapshotSummary());
         when(sessionRepository.save(any())).thenAnswer(invocation -> {
             ExamSession s = invocation.getArgument(0);
             s.setPublicId(UUID.randomUUID());
@@ -97,7 +99,7 @@ class SessionLifecycleServiceTest {
         SessionResponse response = sessionLifecycleService.create(
                 new CreateSessionRequest(
                         "Real Exam Session",
-                        UUID.randomUUID(),
+                        Set.of("SPEAKING"),
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
                         ExamMode.REAL_EXAM,
@@ -110,12 +112,12 @@ class SessionLifecycleServiceTest {
 
     @Test
     void create_withTeacherOverride_strictOnPractice_rejected() {
-        when(assessmentService.getSummary(any())).thenReturn(snapshotSummary());
+        when(assessmentService.generateAndPublish(any(), any(), any())).thenReturn(snapshotSummary());
 
         assertThatThrownBy(() -> sessionLifecycleService.create(
                 new CreateSessionRequest(
                         "Invalid Combo",
-                        UUID.randomUUID(),
+                        Set.of("SPEAKING"),
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
                         ExamMode.PRACTICE,
@@ -128,9 +130,10 @@ class SessionLifecycleServiceTest {
     }
 
     @Test
-    void create_usesSnapshotPublicIdFromAssessmentSummary_notRawRequestValue() {
+    void create_delegatesToAssessmentGenerateAndPublish_usesReturnedSnapshotPublicId() {
         UUID canonicalSnapshotId = UUID.randomUUID();
-        when(assessmentService.getSummary(any()))
+        Set<String> skills = Set.of("SPEAKING", "WRITING");
+        when(assessmentService.generateAndPublish("Session", skills, hostAdmin))
                 .thenReturn(new SnapshotResponse(canonicalSnapshotId, "Mock Test A", 1, UUID.randomUUID(), UUID.randomUUID(), 1, null, List.of()));
         when(sessionRepository.save(any())).thenAnswer(invocation -> {
             ExamSession s = invocation.getArgument(0);
@@ -141,7 +144,7 @@ class SessionLifecycleServiceTest {
         SessionResponse response = sessionLifecycleService.create(
                 new CreateSessionRequest(
                         "Session",
-                        UUID.randomUUID(),
+                        skills,
                         Instant.now().plusSeconds(3600),
                         Instant.now().plusSeconds(7200),
                         ExamMode.MOCK_TEST,
@@ -150,6 +153,40 @@ class SessionLifecycleServiceTest {
                 hostAdmin);
 
         assertThat(response.snapshotPublicId()).isEqualTo(canonicalSnapshotId);
+    }
+
+    @Test
+    void create_generationFails_noSessionSaved() {
+        when(assessmentService.generateAndPublish(any(), any(), any()))
+                .thenThrow(new RuntimeException("insufficient question bank"));
+
+        assertThatThrownBy(() -> sessionLifecycleService.create(
+                new CreateSessionRequest(
+                        "Session",
+                        Set.of("SPEAKING"),
+                        Instant.now().plusSeconds(3600),
+                        Instant.now().plusSeconds(7200),
+                        ExamMode.MOCK_TEST,
+                        null,
+                        null),
+                hostAdmin))
+                .isInstanceOf(RuntimeException.class);
+
+        verifyNoInteractions(sessionRepository);
+    }
+
+    @Test
+    void create_invalidSkillCount_rejectedByValidation() {
+        jakarta.validation.Validator validator = jakarta.validation.Validation.buildDefaultValidatorFactory().getValidator();
+
+        CreateSessionRequest empty = new CreateSessionRequest("Session", Set.of(),
+                Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), ExamMode.MOCK_TEST, null, null);
+        CreateSessionRequest tooMany = new CreateSessionRequest("Session",
+                Set.of("SPEAKING", "WRITING", "READING", "LISTENING", "EXTRA"),
+                Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), ExamMode.MOCK_TEST, null, null);
+
+        assertThat(validator.validate(empty)).isNotEmpty();
+        assertThat(validator.validate(tooMany)).isNotEmpty();
     }
 
     @Test

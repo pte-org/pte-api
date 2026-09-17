@@ -23,25 +23,22 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
  * Orchestrates the ONE guarded attempt-create call (Phase 07 design
- * constraint): {@code session} for entitlement+composition, {@code
- * assessment} for full snapshot content, {@code media} for presigned
- * audio/image URLs — each exactly once, in-process — then deep-copies the
- * result into a self-contained {@link PinnedExamSnapshot}. After this
- * returns, attempt never calls another module again for this attempt.
+ * constraint): {@code session} for entitlement, {@code assessment} for full
+ * snapshot content, {@code media} for presigned audio/image URLs — each
+ * exactly once, in-process — then deep-copies the result into a
+ * self-contained {@link PinnedExamSnapshot}. After this returns, attempt
+ * never calls another module again for this attempt.
  *
- * <p>Composition selects task TYPES (not individual items — matches
- * session's model): every snapshot item whose type is included gets pinned,
- * in the source snapshot's original order. A composition {@code
- * timingOverrideSeconds} for a type overrides that type's RESPONSE time
- * only; prep stays the task-type default (practice mode shortens answering
- * time, not think time).
+ * <p>Every item of the source snapshot gets pinned, in its original order
+ * (Plan B removed {@code SessionComposition} — there is no host-chosen
+ * subset or per-type timing override anymore; the skill selection already
+ * happened at exam-generation time, in {@code assessment}).
  */
 @Service
 public class SnapshotPinService {
@@ -83,18 +80,6 @@ public class SnapshotPinService {
         Map<String, ScoreTemplateItemResponse> templateItemsByTaskType = scoreTemplate.items().stream()
                 .collect(Collectors.toMap(ScoreTemplateItemResponse::taskType, Function.identity(), (a, b) -> a));
 
-        Map<String, Integer> responseOverrideByTaskType = entitlement.composition().stream()
-                .filter(item -> item.timingOverrideSeconds() != null)
-                .collect(Collectors.toMap(com.pte.session.dto.response.CompositionItemResponse::taskType,
-                        com.pte.session.dto.response.CompositionItemResponse::timingOverrideSeconds, (a, b) -> a));
-        Map<String, Integer> maxPlayCountByTaskType = entitlement.composition().stream()
-                .filter(item -> item.maxPlayCount() != null)
-                .collect(Collectors.toMap(com.pte.session.dto.response.CompositionItemResponse::taskType,
-                        com.pte.session.dto.response.CompositionItemResponse::maxPlayCount, (a, b) -> a));
-        Set<String> includedTaskTypes = entitlement.composition().stream()
-                .map(com.pte.session.dto.response.CompositionItemResponse::taskType)
-                .collect(Collectors.toSet());
-
         PinnedExamSnapshot pinned = new PinnedExamSnapshot();
         pinned.setAttempt(attempt);
         pinned.setSourceSnapshotPublicId(content.publicId());
@@ -112,10 +97,9 @@ public class SnapshotPinService {
                 + AUDIO_URL_GRACE_SECONDS;
 
         content.items().stream()
-                .filter(item -> includedTaskTypes.contains(item.taskType()))
                 .sorted(Comparator.comparingInt(SnapshotContentResponse.Item::orderIndex))
-                .forEach(item -> pinned.addItem(toPinnedItem(item, templateItemsByTaskType, responseOverrideByTaskType,
-                        maxPlayCountByTaskType, audioUrlTtlSeconds, entitlement.tenantId())));
+                .forEach(item -> pinned.addItem(toPinnedItem(item, templateItemsByTaskType, audioUrlTtlSeconds,
+                        entitlement.tenantId())));
 
         return pinned;
     }
@@ -135,8 +119,6 @@ public class SnapshotPinService {
      */
     private PinnedItem toPinnedItem(SnapshotContentResponse.Item source,
                                     Map<String, ScoreTemplateItemResponse> templateItemsByTaskType,
-                                    Map<String, Integer> responseOverrideByTaskType,
-                                    Map<String, Integer> maxPlayCountByTaskType,
                                     long audioUrlTtlSeconds, UUID tenantId) {
         ScoreTemplateItemResponse templateItem = templateItemsByTaskType.get(source.taskType());
         // Non-throwing when the template already has this taskType — most of
@@ -148,8 +130,8 @@ public class SnapshotPinService {
                 : taskTimingConfig.timingFor(source.taskType());
         boolean isAudioPromptType = jsonTiming != null && jsonTiming.preListenSeconds() != null;
 
-        int responseSeconds = responseOverrideByTaskType.getOrDefault(source.taskType(),
-                templateItem != null ? templateItem.responseSeconds() : jsonTiming.responseSeconds());
+        // No composition override anymore (Plan B) — always the template/json value.
+        int responseSeconds = templateItem != null ? templateItem.responseSeconds() : jsonTiming.responseSeconds();
 
         PinnedItem item = new PinnedItem();
         item.setOrderIndex(source.orderIndex());
@@ -165,7 +147,8 @@ public class SnapshotPinService {
         item.setMaxWordCount(source.maxWordCount());
         item.setOptionsJson(source.optionsJson());
         item.setResponseSeconds(responseSeconds);
-        item.setMaxPlayCountOverride(maxPlayCountByTaskType.get(source.taskType()));
+        // maxPlayCountOverride is never set anymore (Plan B removed SessionComposition) —
+        // always null, meaning "inherit the pinned session-level replay policy".
 
         Integer audioDurationSeconds = null;
         if (LISTENING_SECTION.equals(source.section())) {

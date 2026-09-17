@@ -55,7 +55,7 @@ class EntitlementServiceTest {
         UUID sessionPublicId = UUID.randomUUID();
         UUID studentPublicId = UUID.randomUUID();
         ExamSession session = openSession(sessionPublicId, UUID.randomUUID());
-        when(sessionRepository.findWithCompositionByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
         when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, studentPublicId)).thenReturn(true);
 
         EntitlementResponse response = entitlementService.checkEntitlement(sessionPublicId, studentPublicId);
@@ -70,7 +70,7 @@ class EntitlementServiceTest {
         UUID studentPublicId = UUID.randomUUID();
         ExamSession session = openSession(sessionPublicId, UUID.randomUUID());
         session.setStatus(SessionStatus.SCHEDULED);
-        when(sessionRepository.findWithCompositionByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
 
         assertThatThrownBy(() -> entitlementService.checkEntitlement(sessionPublicId, studentPublicId))
                 .isInstanceOf(NotEntitledException.class);
@@ -81,7 +81,7 @@ class EntitlementServiceTest {
         UUID sessionPublicId = UUID.randomUUID();
         UUID studentPublicId = UUID.randomUUID();
         ExamSession session = openSession(sessionPublicId, UUID.randomUUID());
-        when(sessionRepository.findWithCompositionByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
         when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, studentPublicId)).thenReturn(false);
 
         assertThatThrownBy(() -> entitlementService.checkEntitlement(sessionPublicId, studentPublicId))
@@ -91,7 +91,7 @@ class EntitlementServiceTest {
     @Test
     void checkEntitlement_unknownSession_throwsNotEntitled() {
         UUID sessionPublicId = UUID.randomUUID();
-        when(sessionRepository.findWithCompositionByPublicId(sessionPublicId)).thenReturn(Optional.empty());
+        when(sessionRepository.findByPublicId(sessionPublicId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> entitlementService.checkEntitlement(sessionPublicId, UUID.randomUUID()))
                 .isInstanceOf(NotEntitledException.class);
@@ -103,7 +103,7 @@ class EntitlementServiceTest {
         UUID proctorPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         ExamSession session = openSession(sessionPublicId, tenantId);
-        when(sessionRepository.findWithCompositionByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
         when(proctorAssignmentRepository.existsBySessionIdAndProctorPublicId(1L, proctorPublicId)).thenReturn(true);
 
         ProctorAssignmentCheckResponse response = entitlementService.checkProctorAssignment(sessionPublicId, proctorPublicId);
@@ -116,7 +116,7 @@ class EntitlementServiceTest {
         UUID sessionPublicId = UUID.randomUUID();
         UUID proctorPublicId = UUID.randomUUID();
         ExamSession session = openSession(sessionPublicId, UUID.randomUUID());
-        when(sessionRepository.findWithCompositionByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
         when(proctorAssignmentRepository.existsBySessionIdAndProctorPublicId(1L, proctorPublicId)).thenReturn(false);
 
         assertThatThrownBy(() -> entitlementService.checkProctorAssignment(sessionPublicId, proctorPublicId))

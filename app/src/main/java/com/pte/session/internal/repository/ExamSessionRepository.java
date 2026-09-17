@@ -2,7 +2,6 @@ package com.pte.session.internal.repository;
 
 import com.pte.session.domain.ExamSession;
 import jakarta.persistence.LockModeType;
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -13,9 +12,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> {
-
-    @EntityGraph(attributePaths = "composition")
-    Optional<ExamSession> findWithCompositionByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 
     Optional<ExamSession> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 
@@ -31,9 +27,7 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> 
                                                              @Param("tenantId") UUID tenantId);
 
     /** No tenant filter: used by the trusted application-call surface, not a host-scoped caller. */
-    @EntityGraph(attributePaths = "composition")
-    Optional<ExamSession> findWithCompositionByPublicId(UUID publicId);
+    Optional<ExamSession> findByPublicId(UUID publicId);
 
-    @EntityGraph(attributePaths = "composition")
     List<ExamSession> findByTenantId(UUID tenantId);
 }
