@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/sessions/{sessionPublicId}/proctors")
+@RequestMapping("/api/v1/sessions/{sessionPublicId}/proctors")
 @PreAuthorize("hasRole('HOST_ADMIN')")
 public class ProctorAssignmentController {
 

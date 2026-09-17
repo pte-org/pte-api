@@ -23,8 +23,8 @@
 	<!-- gateway-removal (follow-up to plans/modular-monolith Phase 11 cutover):
 	     `gateway` is gone — CORS and per-tenant rate limiting were ported into
 	     `app`'s own SecurityConfig (com.pte.identity.internal.config), and
-	     Caddy now routes straight to `app`, doing the old /api/{service}/**
-	     prefix stripping itself. `pte-common` is gone with it: gateway was its
+	     Nginx now routes straight to `app`, preserving the versioned /api/v1/**
+	     path. `pte-common` is gone with it: gateway was its
 	     only consumer in this reactor (app deliberately never depended on it —
 	     see app/pom.xml's comment on Spring Modulith module scanning; its
 	     classes were ported into app's own com.pte.shared package instead). -->

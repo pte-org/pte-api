@@ -17,7 +17,7 @@ import java.util.List;
 
 /** Platform-wide configuration, restricted to platform administrators. */
 @RestController
-@RequestMapping("/admin/settings")
+@RequestMapping("/api/v1/settings")
 @PreAuthorize("hasRole('PLATFORM_ADMIN')")
 public class PlatformSettingController {
 

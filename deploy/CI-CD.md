@@ -1,57 +1,57 @@
-# CI/CD deploy production
+﻿# CI/CD deploy production
 
-Hai workflow giống nhau được đặt trong `pte-api` và `pte-web`. Push vào `main`
-của một trong hai repository sẽ SSH vào VPS, fetch `main` của cả hai repository,
-build lại stack và khởi động các container mới.
+Hai workflow giá»‘ng nhau Ä‘Æ°á»£c Ä‘áº·t trong `pte-api` vÃ  `pte-web`. Push vÃ o `main`
+cá»§a má»™t trong hai repository sáº½ SSH vÃ o VPS, fetch `main` cá»§a cáº£ hai repository,
+build láº¡i stack vÃ  khá»Ÿi Ä‘á»™ng cÃ¡c container má»›i.
 
-Workflow không lưu `.env` trong GitHub và không chạy `docker compose down -v`.
-Database, MinIO data và Caddy certificate volumes được giữ nguyên.
+Workflow khÃ´ng lÆ°u `.env` trong GitHub vÃ  khÃ´ng cháº¡y `docker compose down -v`.
+Database, MinIO data vÃ  Nginx/Certbot certificate volumes Ä‘Æ°á»£c giá»¯ nguyÃªn.
 
 ## GitHub Actions secrets
 
-Tạo environment `production` trong cả hai repository, sau đó thêm bốn secrets:
+Táº¡o environment `production` trong cáº£ hai repository, sau Ä‘Ã³ thÃªm bá»‘n secrets:
 
-| Secret | Giá trị |
+| Secret | GiÃ¡ trá»‹ |
 |---|---|
-| `DEPLOY_HOST` | `217.142.185.74` hiện tại; nên thay bằng reserved public IP sau này |
+| `DEPLOY_HOST` | `217.142.185.74` hiá»‡n táº¡i; nÃªn thay báº±ng reserved public IP sau nÃ y |
 | `DEPLOY_USER` | `ubuntu` |
-| `DEPLOY_SSH_PRIVATE_KEY` | Toàn bộ nội dung file private key `.key`, không phải đường dẫn file |
-| `DEPLOY_KNOWN_HOSTS` | Host key SSH của VPS đã xác minh |
+| `DEPLOY_SSH_PRIVATE_KEY` | ToÃ n bá»™ ná»™i dung file private key `.key`, khÃ´ng pháº£i Ä‘Æ°á»ng dáº«n file |
+| `DEPLOY_KNOWN_HOSTS` | Host key SSH cá»§a VPS Ä‘Ã£ xÃ¡c minh |
 
-Tạo `DEPLOY_KNOWN_HOSTS` trên máy đã SSH thành công vào VPS:
+Táº¡o `DEPLOY_KNOWN_HOSTS` trÃªn mÃ¡y Ä‘Ã£ SSH thÃ nh cÃ´ng vÃ o VPS:
 
 ```powershell
 ssh-keyscan -H 217.142.185.74
 ```
 
-Chỉ đưa kết quả vào secret sau khi đối chiếu fingerprint với host key đáng tin
-cậy của VPS. Không dùng `ssh-keyscan` trực tiếp trong workflow để tránh tin mù
-vào host key tại thời điểm deploy.
+Chá»‰ Ä‘Æ°a káº¿t quáº£ vÃ o secret sau khi Ä‘á»‘i chiáº¿u fingerprint vá»›i host key Ä‘Ã¡ng tin
+cáº­y cá»§a VPS. KhÃ´ng dÃ¹ng `ssh-keyscan` trá»±c tiáº¿p trong workflow Ä‘á»ƒ trÃ¡nh tin mÃ¹
+vÃ o host key táº¡i thá»i Ä‘iá»ƒm deploy.
 
-Nếu dùng organization secrets thay vì repository/environment secrets, giới hạn
-quyền truy cập chỉ cho `pte-api` và `pte-web`.
+Náº¿u dÃ¹ng organization secrets thay vÃ¬ repository/environment secrets, giá»›i háº¡n
+quyá»n truy cáº­p chá»‰ cho `pte-api` vÃ  `pte-web`.
 
-## Điều kiện trên VPS
+## Äiá»u kiá»‡n trÃªn VPS
 
-Các điều kiện này đã có trên VPS hiện tại:
+CÃ¡c Ä‘iá»u kiá»‡n nÃ y Ä‘Ã£ cÃ³ trÃªn VPS hiá»‡n táº¡i:
 
-- `/home/ubuntu/pte-org/pte-api` và `/home/ubuntu/pte-org/pte-web` là Git clone,
+- `/home/ubuntu/pte-org/pte-api` vÃ  `/home/ubuntu/pte-org/pte-web` lÃ  Git clone,
   checkout branch `main`.
-- `/home/ubuntu/pte-org/pte-api/.env` tồn tại, permission `600`, và không có
+- `/home/ubuntu/pte-org/pte-api/.env` tá»“n táº¡i, permission `600`, vÃ  khÃ´ng cÃ³
   placeholder secret.
-- User `ubuntu` có quyền chạy Docker.
-- Docker Compose có thể đọc ba file compose khi đứng tại `pte-api`.
-- Ingress TCP `80` và `443` đã mở ở OCI Security List và iptables.
+- User `ubuntu` cÃ³ quyá»n cháº¡y Docker.
+- Docker Compose cÃ³ thá»ƒ Ä‘á»c ba file compose khi Ä‘á»©ng táº¡i `pte-api`.
+- Ingress TCP `80` vÃ  `443` Ä‘Ã£ má»Ÿ á»Ÿ OCI Security List vÃ  iptables.
 
-Workflow sẽ fail trước khi build nếu working tree trên VPS có thay đổi thủ công.
-Điều này bảo vệ `.env` và tránh deploy đè lên chỉnh sửa chưa được review.
+Workflow sáº½ fail trÆ°á»›c khi build náº¿u working tree trÃªn VPS cÃ³ thay Ä‘á»•i thá»§ cÃ´ng.
+Äiá»u nÃ y báº£o vá»‡ `.env` vÃ  trÃ¡nh deploy Ä‘Ã¨ lÃªn chá»‰nh sá»­a chÆ°a Ä‘Æ°á»£c review.
 
-## Lần chạy đầu tiên
+## Láº§n cháº¡y Ä‘áº§u tiÃªn
 
-Sau khi tạo đủ secrets, commit và push workflow này lên `main` của từng repository.
-Theo dõi tab **Actions**. Có thể dùng **Run workflow** để chạy thủ công mà không
-cần tạo thêm commit.
+Sau khi táº¡o Ä‘á»§ secrets, commit vÃ  push workflow nÃ y lÃªn `main` cá»§a tá»«ng repository.
+Theo dÃµi tab **Actions**. CÃ³ thá»ƒ dÃ¹ng **Run workflow** Ä‘á»ƒ cháº¡y thá»§ cÃ´ng mÃ  khÃ´ng
+cáº§n táº¡o thÃªm commit.
 
-Build đầu tiên trên Oracle A1 có thể mất vài phút. Workflow giới hạn build còn
-hai tiến trình để phù hợp với 2 vCPU và bộ nhớ VPS hiện tại, sau đó chờ tối đa
-10 phút cho các container có healthcheck chuyển sang `healthy`.
+Build Ä‘áº§u tiÃªn trÃªn Oracle A1 cÃ³ thá»ƒ máº¥t vÃ i phÃºt. Workflow giá»›i háº¡n build cÃ²n
+hai tiáº¿n trÃ¬nh Ä‘á»ƒ phÃ¹ há»£p vá»›i 2 vCPU vÃ  bá»™ nhá»› VPS hiá»‡n táº¡i, sau Ä‘Ã³ chá» tá»‘i Ä‘a
+10 phÃºt cho cÃ¡c container cÃ³ healthcheck chuyá»ƒn sang `healthy`.

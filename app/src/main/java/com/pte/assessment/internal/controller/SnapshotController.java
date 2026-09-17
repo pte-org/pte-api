@@ -8,6 +8,7 @@ import com.pte.shared.web.ApiResponse;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -19,6 +20,7 @@ import java.util.UUID;
  * human-facing counterpart only.
  */
 @RestController
+@RequestMapping("/api/v1")
 @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
 public class SnapshotController {
 

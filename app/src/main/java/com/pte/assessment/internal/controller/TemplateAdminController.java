@@ -15,12 +15,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 /** Platform-author/admin management of the platform-owned template catalog. */
 @RestController
-@RequestMapping("/admin/templates")
+@RequestMapping("/api/v1/templates")
 @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
 public class TemplateAdminController {
 
@@ -33,11 +32,6 @@ public class TemplateAdminController {
     @PostMapping
     public ApiResponse<TemplateResponse> create(@Valid @RequestBody TemplateRequest request) {
         return ApiResponse.success(templateService.create(request));
-    }
-
-    @GetMapping
-    public ApiResponse<List<TemplateResponse>> list() {
-        return ApiResponse.success(templateService.listForAdmin());
     }
 
     @GetMapping("/{publicId}")

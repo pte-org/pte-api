@@ -20,7 +20,7 @@ import java.util.UUID;
  * ownership/publish check lives in {@link ReportService}.
  */
 @RestController
-@RequestMapping("/reports")
+@RequestMapping("/api/v1/reports")
 @PreAuthorize("hasAnyRole('STUDENT','HOST_ADMIN','HOST_AUTHOR','PLATFORM_ADMIN','PLATFORM_AUTHOR')")
 public class ReportController {
 

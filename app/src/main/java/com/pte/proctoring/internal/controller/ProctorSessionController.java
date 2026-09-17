@@ -14,7 +14,7 @@ import java.util.UUID;
 
 /** REST fallback for lifecycle actions that don't need a live WS round-trip. Opening a session is STOMP-only (see {@link ProctorStompController}). */
 @RestController
-@RequestMapping("/proctor-sessions")
+@RequestMapping("/api/v1/proctor-sessions")
 @PreAuthorize("hasRole('PROCTOR')")
 public class ProctorSessionController {
 

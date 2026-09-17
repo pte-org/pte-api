@@ -15,7 +15,7 @@ import java.util.List;
 
 /** Read-only tenant-scoped audit endpoint. */
 @RestController
-@RequestMapping("/audit-logs")
+@RequestMapping("/api/v1/audit-logs")
 @PreAuthorize("hasRole('HOST_ADMIN')")
 public class AuditLogController {
 

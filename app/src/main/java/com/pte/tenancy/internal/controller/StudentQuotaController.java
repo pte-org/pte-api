@@ -12,6 +12,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -19,11 +20,11 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>No class-level {@code @RequestMapping}: the two methods below own
  * unrelated path roots ({@code /tenant/...} and {@code /students/...}), so
- * there is nothing common to factor out. The edge (Caddy
- * {@code handle_path /api/*}) strips the {@code /api} prefix before proxying
- * — see {@code deploy/api-routes.caddy}.
+ * there is nothing common to factor out. The Nginx edge preserves the
+ * versioned {@code /api/v1} path before proxying to the monolith.
  */
 @RestController
+@RequestMapping("/api/v1")
 @PreAuthorize("hasRole('HOST_ADMIN')")
 public class StudentQuotaController {
 

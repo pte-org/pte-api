@@ -16,23 +16,17 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Guards the route contract the modulith collapse established (ADR-008):
- * every controller maps a BARE path, never one starting with {@code /api}.
+ * Guards the public REST contract of the modular monolith.
  *
- * <p>The edge strips exactly one {@code /api} segment before proxying
- * ({@code deploy/api-routes.caddy}'s single {@code handle_path /api/*}), so a
- * controller that writes {@code /api} itself ends up needing {@code /api/api/...}
- * from a browser and 404s for every real caller. That failure is silent — no
- * startup error, no log line, just a dead endpoint — which is why it needs a
- * test rather than code review.
- *
- * <p>Static reflection over the classpath, no Spring context, same spirit as
- * {@link ModuleStructureTest}: fast, and it cannot be fooled by a context that
- * happens not to load the offending controller.
+ * <p>Public controllers own the complete {@code /api/v1} prefix. Nginx is an
+ * edge reverse proxy only and must forward that prefix unchanged. Controllers
+ * explicitly marked as internal retain their private {@code /internal/**}
+ * surface and are not part of the public route inventory.
  */
 class RouteContractTest {
 
     private static final String BASE_PACKAGE = "com.pte";
+    private static final String PUBLIC_PREFIX = "/api/v1";
 
     private static List<Class<?>> restControllers() {
         ClassPathScanningCandidateComponentProvider scanner =
@@ -54,104 +48,132 @@ class RouteContractTest {
         return controllers;
     }
 
-    /**
-     * Collects declared paths from the class-level mapping and from every
-     * method mapping. {@code @GetMapping}/{@code @PostMapping}/etc. are all
-     * meta-annotated with {@code @RequestMapping}, so
-     * {@link AnnotatedElementUtils#findMergedAnnotation} resolves them
-     * uniformly without listing each one.
-     */
-    private static List<String> declaredPaths(Class<?> controller) {
-        List<String> paths = new ArrayList<>();
-
-        // value() only — @RequestMapping declares path() as an @AliasFor of
-        // value(), and findMergedAnnotation resolves the alias, so reading
-        // both would just duplicate every entry.
-        RequestMapping classMapping =
-                AnnotatedElementUtils.findMergedAnnotation(controller, RequestMapping.class);
-        if (classMapping != null) {
-            paths.addAll(List.of(classMapping.value()));
+    private static List<String> mappingValues(Class<?> type) {
+        RequestMapping mapping = AnnotatedElementUtils.findMergedAnnotation(type, RequestMapping.class);
+        if (mapping == null || mapping.value().length == 0) {
+            return List.of("");
         }
+        return List.of(mapping.value());
+    }
 
+    private static List<String> methodMappingValues(Method method) {
+        RequestMapping mapping = AnnotatedElementUtils.findMergedAnnotation(method, RequestMapping.class);
+        if (mapping == null) {
+            return List.of();
+        }
+        return mapping.value().length == 0 ? List.of("") : List.of(mapping.value());
+    }
+
+    private static List<String> effectivePaths(Class<?> controller) {
+        List<String> classPaths = mappingValues(controller);
+        List<String> paths = new ArrayList<>();
         for (Method method : controller.getDeclaredMethods()) {
-            RequestMapping methodMapping =
-                    AnnotatedElementUtils.findMergedAnnotation(method, RequestMapping.class);
-            if (methodMapping != null) {
-                paths.addAll(List.of(methodMapping.value()));
+            List<String> methodPaths = methodMappingValues(method);
+            if (methodPaths.isEmpty()) {
+                continue;
+            }
+            for (String classPath : classPaths) {
+                for (String methodPath : methodPaths) {
+                    paths.add(join(classPath, methodPath));
+                }
             }
         }
+        return paths.isEmpty() ? classPaths : paths;
+    }
 
-        return paths;
+    private static String join(String classPath, String methodPath) {
+        if (classPath.isEmpty()) {
+            return methodPath;
+        }
+        if (methodPath.isEmpty()) {
+            return classPath;
+        }
+        return classPath.endsWith("/")
+                ? classPath.substring(0, classPath.length() - 1) + methodPath
+                : classPath + methodPath;
+    }
+
+    private static boolean isInternal(Class<?> controller) {
+        return controller.getSimpleName().startsWith("Internal");
     }
 
     @Test
     void scannerFindsTheControllers() {
-        // Guards the reflection itself: a scanner that silently matches
-        // nothing would make every other assertion here vacuously pass.
         assertThat(restControllers()).hasSizeGreaterThan(20);
     }
 
     @Test
-    void noControllerDeclaresTheApiPrefixItself() {
+    void everyPublicControllerOwnsTheVersionedApiPrefix() {
         List<String> offenders = new ArrayList<>();
-
         for (Class<?> controller : restControllers()) {
-            for (String path : declaredPaths(controller)) {
-                if (path.equals("/api") || path.startsWith("/api/")) {
-                    offenders.add(controller.getSimpleName() + " -> " + path);
+            if (!isInternal(controller)) {
+                for (String path : effectivePaths(controller)) {
+                    if (!path.equals(PUBLIC_PREFIX) && !path.startsWith(PUBLIC_PREFIX + "/")) {
+                        offenders.add(controller.getSimpleName() + " -> " + path);
+                    }
                 }
             }
         }
 
         assertThat(offenders)
-                .as("""
-                        These controllers declare the /api prefix the edge already strips \
-                        (deploy/api-routes.caddy). Remove /api from the mapping — the browser \
-                        still calls /api/<path>, Caddy strips it, and Spring must see the bare \
-                        path. Leaving it produces a 404 with no error anywhere.""")
+                .as("Every public Spring MVC mapping must start with /api/v1; Nginx does not rewrite paths")
                 .isEmpty();
     }
 
     @Test
-    void everyControllerPathIsAbsolute() {
+    void publicApiDoesNotUseAdminAsAResourceNamespace() {
         List<String> offenders = new ArrayList<>();
-
         for (Class<?> controller : restControllers()) {
-            for (String path : declaredPaths(controller)) {
-                if (!path.isEmpty() && !path.startsWith("/")) {
-                    offenders.add(controller.getSimpleName() + " -> " + path);
+            if (!isInternal(controller)) {
+                for (String path : effectivePaths(controller)) {
+                    if (path.equals("/admin") || path.startsWith("/admin/")) {
+                        offenders.add(controller.getSimpleName() + " -> " + path);
+                    }
                 }
             }
         }
 
-        assertThat(offenders).isEmpty();
+        assertThat(offenders).as("Authorization belongs in Spring Security, not an /admin API namespace").isEmpty();
     }
 
     @Test
-    void billingRoutesSitWhereTheFrontendExpectsThem() {
-        // Pins the exact paths packages/api-client/src/requests/billing/*
-        // targets (plans/quang-web-billing-integration Phase 2). Both sides
-        // are plain strings with no shared type, so only a test keeps them
-        // from drifting.
-        Set<String> expected = Set.of(
-                "/applications",
-                "/admin/applications",
-                "/plans",
-                "/admin/plans",
-                "/subscriptions",
-                "/orders",
-                "/license-codes",
-                "/admin/license-codes",
-                "/admin/settings",
-                "/webhooks/payos");
-
-        List<String> allBillingPaths = new ArrayList<>();
+    void internalControllersRemainOutsideThePublicContract() {
+        List<String> offenders = new ArrayList<>();
         for (Class<?> controller : restControllers()) {
-            if (controller.getPackageName().startsWith("com.pte.billing")) {
-                allBillingPaths.addAll(declaredPaths(controller));
+            if (isInternal(controller)) {
+                for (String path : effectivePaths(controller)) {
+                    if (!path.equals("/internal") && !path.startsWith("/internal/")) {
+                        offenders.add(controller.getSimpleName() + " -> " + path);
+                    }
+                }
             }
         }
 
-        assertThat(allBillingPaths).containsAll(expected);
+        assertThat(offenders).as("Internal controllers must not become public API routes").isEmpty();
+    }
+
+    @Test
+    void billingRoutesUseTheVersionedResourceContract() {
+        Set<String> expected = Set.of(
+                "/api/v1/applications",
+                "/api/v1/applications/{publicId}/approval",
+                "/api/v1/applications/{publicId}/rejection",
+                "/api/v1/plans",
+                "/api/v1/plans/{publicId}/activation",
+                "/api/v1/orders",
+                "/api/v1/subscriptions",
+                "/api/v1/license-codes",
+                "/api/v1/license-code-redemptions",
+                "/api/v1/settings",
+                "/api/v1/webhooks/payos");
+
+        List<String> billingPaths = new ArrayList<>();
+        for (Class<?> controller : restControllers()) {
+            if (controller.getPackageName().startsWith("com.pte.billing")) {
+                billingPaths.addAll(effectivePaths(controller));
+            }
+        }
+
+        assertThat(billingPaths).containsAll(expected);
     }
 }

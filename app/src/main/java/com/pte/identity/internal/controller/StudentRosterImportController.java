@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -17,11 +18,11 @@ import org.springframework.web.multipart.MultipartFile;
  * Host-only endpoint for in-memory roster import and credential export.
  *
  * <p>No class-level {@code @RequestMapping}: the full path lives on the method
- * below. The edge (Caddy {@code handle_path /api/*}) strips the {@code /api}
- * prefix before proxying, so controllers here map bare roots — see
- * {@code deploy/api-routes.caddy}.
+ * below. The Nginx edge preserves the versioned {@code /api/v1} path before
+ * proxying to the monolith.
  */
 @RestController
+@RequestMapping("/api/v1")
 @PreAuthorize("hasRole('HOST_ADMIN')")
 public class StudentRosterImportController {
 

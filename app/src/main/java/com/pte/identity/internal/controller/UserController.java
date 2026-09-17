@@ -26,7 +26,7 @@ import java.util.UUID;
  * tenant scope so a host can only ever touch its own tenant's users.
  */
 @RestController
-@RequestMapping("/users")
+@RequestMapping("/api/v1/users")
 @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','HOST_ADMIN')")
 public class UserController {
 

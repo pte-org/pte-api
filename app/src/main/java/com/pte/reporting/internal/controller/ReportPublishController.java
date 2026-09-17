@@ -22,7 +22,7 @@ import java.util.UUID;
  * pre-migration public API contract.
  */
 @RestController
-@RequestMapping("/sessions")
+@RequestMapping("/api/v1/sessions")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class ReportPublishController {
 

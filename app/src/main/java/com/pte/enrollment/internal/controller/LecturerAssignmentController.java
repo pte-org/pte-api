@@ -26,7 +26,7 @@ import java.util.UUID;
  * {@code EnrollmentController}).
  */
 @RestController
-@RequestMapping("/organizations/{organizationPublicId}/programs/{programPublicId}/classes/{classPublicId}/lecturers")
+@RequestMapping("/api/v1/organizations/{organizationPublicId}/programs/{programPublicId}/classes/{classPublicId}/lecturers")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class LecturerAssignmentController {
 
