@@ -62,6 +62,16 @@ services:
       # com.pte.identity (Phase 02) — JWT signing key; empty falls back to an
       # ephemeral key with a startup warning, set explicitly so tokens survive a restart.
       IDENTITY_RSA_PRIVATE_KEY_PEM: ${IDENTITY_RSA_PRIVATE_KEY_PEM:?set IDENTITY_RSA_PRIVATE_KEY_PEM in the env file}
+      # com.pte.billing (PayOS payment-link integration) — required by
+      # application.yml's billing.payos.* block (no defaults there except
+      # base-url/timeouts). Previously missing from this file entirely, which
+      # made `app` fail placeholder resolution at startup even with a
+      # perfectly filled-in env file.
+      PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:?set PAYOS_CLIENT_ID in the env file}
+      PAYOS_API_KEY: ${PAYOS_API_KEY:?set PAYOS_API_KEY in the env file}
+      PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:?set PAYOS_CHECKSUM_KEY in the env file}
+      PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:?set PAYOS_RETURN_URL in the env file}
+      PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:?set PAYOS_CANCEL_URL in the env file}
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,6 +1,7 @@
 package com.pte.scoring.internal.service;
 
 import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.exception.UnsupportedTaskTypeException;
 import org.springframework.stereotype.Service;
@@ -21,26 +22,14 @@ import java.util.TreeMap;
  * MC_LISTENING_MULTIPLE}, {@code HIGHLIGHT_CORRECT_SUMMARY}, and {@code
  * SELECT_MISSING_WORD}), plus the reference-based {@code
  * FILL_BLANKS_LISTENING}, {@code HIGHLIGHT_INCORRECT_WORDS}, and {@code
- * WRITE_FROM_DICTATION} types. {@link #supports} lets consumers skip unsupported
- * types WITHOUT treating it as an error (an unsupported type just stays
- * PENDING); {@link #score} fails fast if called for a type it can't grade.
+ * WRITE_FROM_DICTATION} types. Since Phase 4 (plans/score-template-exam-generation),
+ * WHICH task types these are is the pinned {@code ScoreTemplate}'s decision
+ * (via {@code ScoringMethodResolver}) — {@link #supports} is a trivial gate
+ * on the already-resolved {@link ScoringMethod}, not a second hardcoded set;
+ * {@link #score}'s per-task-type algorithm switch is unchanged.
  */
 @Service
 public class ObjectiveScoringService {
-
-    private static final Set<String> SUPPORTED_TASK_TYPES = Set.of(
-            ScoringConstants.TASK_TYPE_MC_READING_SINGLE,
-            ScoringConstants.TASK_TYPE_MC_READING_MULTIPLE,
-            ScoringConstants.TASK_TYPE_RE_ORDER_PARAGRAPHS,
-            ScoringConstants.TASK_TYPE_FILL_BLANKS_READING,
-            ScoringConstants.TASK_TYPE_FILL_BLANKS_READING_WRITING,
-            ScoringConstants.TASK_TYPE_MC_LISTENING_SINGLE,
-            ScoringConstants.TASK_TYPE_MC_LISTENING_MULTIPLE,
-            ScoringConstants.TASK_TYPE_HIGHLIGHT_CORRECT_SUMMARY,
-            ScoringConstants.TASK_TYPE_SELECT_MISSING_WORD,
-            ScoringConstants.TASK_TYPE_FILL_BLANKS_LISTENING,
-            ScoringConstants.TASK_TYPE_HIGHLIGHT_INCORRECT_WORDS,
-            ScoringConstants.TASK_TYPE_WRITE_FROM_DICTATION);
 
     private final JsonMapper jsonMapper;
 
@@ -48,8 +37,8 @@ public class ObjectiveScoringService {
         this.jsonMapper = jsonMapper;
     }
 
-    public boolean supports(String taskType) {
-        return taskType != null && SUPPORTED_TASK_TYPES.contains(taskType);
+    public boolean supports(ScoringMethod scoringMethod) {
+        return scoringMethod == ScoringMethod.OBJECTIVE;
     }
 
     /**

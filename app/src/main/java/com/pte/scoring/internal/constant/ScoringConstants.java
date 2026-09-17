@@ -26,8 +26,8 @@ public final class ScoringConstants {
     public static final String TASK_TYPE_WRITE_ESSAY = "WRITE_ESSAY";
 
     // Speaking task types. Personal Introduction is unscored and intentionally
-    // excluded from the AI route; the other seven are catalogued by
-    // AiScoringTaskCatalog.
+    // excluded from the AI route; the other seven resolve to AI_SPEECH via
+    // the pinned ScoreTemplate (ScoringMethodResolver).
     public static final String TASK_TYPE_PERSONAL_INTRODUCTION = "PERSONAL_INTRODUCTION";
     public static final String TASK_TYPE_REPEAT_SENTENCE = "REPEAT_SENTENCE";
     public static final String TASK_TYPE_DESCRIBE_IMAGE = "DESCRIBE_IMAGE";

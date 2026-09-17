@@ -50,6 +50,10 @@ public class ScoringAnswer extends BaseEntity {
     @Column(nullable = false)
     private UUID tenantId;
 
+    /** Copied once at ingest time from the submitting attempt's pinned snapshot (spec FR-07/FR-14) — resolves scoringMethod via {@code ScoringMethodResolver}, never re-derived from a hardcoded task-type catalog. */
+    @Column(nullable = false)
+    private UUID scoreTemplatePublicId;
+
     @Column(nullable = false)
     private String taskType;
 

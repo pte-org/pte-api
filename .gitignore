@@ -34,6 +34,7 @@ build/
 .env
 .env.local
 local-dev-vars.sh
+docker-compose.local-test.yml
 
 ### Local dev seed scripts ###
 # Captures the one resource (published snapshot) that has no API lookup path

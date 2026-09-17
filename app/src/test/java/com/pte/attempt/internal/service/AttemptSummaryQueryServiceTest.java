@@ -1,7 +1,10 @@
 package com.pte.attempt.internal.service;
 
 import com.pte.attempt.domain.ExamAttempt;
+import com.pte.attempt.domain.PinnedExamSnapshot;
+import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.domain.enums.AttemptStatus;
+import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.attempt.internal.exception.AttemptNotFoundException;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
@@ -153,5 +156,47 @@ class AttemptSummaryQueryServiceTest {
         assertThat(view.sessionPublicId()).isEqualTo(sessionPublicId);
         assertThat(view.studentPublicId()).isEqualTo(studentPublicId);
         assertThat(view.tenantId()).isEqualTo(tenantId);
+    }
+
+    @Test
+    void getScoreContext_returnsPinnedTemplateAndDistinctTestedSections() {
+        UUID attemptPublicId = UUID.randomUUID();
+        UUID scoreTemplateId = UUID.randomUUID();
+
+        PinnedExamSnapshot pinnedSnapshot = new PinnedExamSnapshot();
+        pinnedSnapshot.setScoreTemplatePublicId(scoreTemplateId);
+        pinnedSnapshot.addItem(pinnedItem("SPEAKING"));
+        pinnedSnapshot.addItem(pinnedItem("SPEAKING"));
+        pinnedSnapshot.addItem(pinnedItem("READING"));
+
+        ExamAttempt attempt = new ExamAttempt();
+        attempt.setPublicId(attemptPublicId);
+        attempt.setPinnedSnapshot(pinnedSnapshot);
+
+        when(attemptRepository.findWithPinnedByPublicId(attemptPublicId)).thenReturn(Optional.of(attempt));
+
+        AttemptScoreContextView context = service.getScoreContext(attemptPublicId);
+
+        assertThat(context.scoreTemplatePublicId()).isEqualTo(scoreTemplateId);
+        assertThat(context.testedSections()).containsExactlyInAnyOrder("SPEAKING", "READING");
+    }
+
+    @Test
+    void getScoreContext_attemptNotFound_throwsAttemptNotFoundException() {
+        UUID attemptPublicId = UUID.randomUUID();
+        when(attemptRepository.findWithPinnedByPublicId(attemptPublicId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getScoreContext(attemptPublicId)).isInstanceOf(AttemptNotFoundException.class);
+    }
+
+    private PinnedItem pinnedItem(String section) {
+        PinnedItem item = new PinnedItem();
+        item.setSection(section);
+        item.setTaskType("READ_ALOUD");
+        item.setTitle("title");
+        item.setOrderIndex(0);
+        item.setPrepSeconds(0);
+        item.setResponseSeconds(0);
+        return item;
     }
 }

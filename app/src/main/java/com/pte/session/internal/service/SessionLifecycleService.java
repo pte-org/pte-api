@@ -38,13 +38,19 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
-/** Tenant-scoped exam-session lifecycle and subscription constraints. */
+/**
+ * Session lifecycle: create (gated by an active {@link BillingService}
+ * subscription's window/capacity/overlap, then generating a fresh random
+ * exam via {@link AssessmentService#generateAndPublish} — an in-process
+ * call, no cache/ref table needed now that assessment lives in the same
+ * app), open, close. Tenant-scoped throughout — a host operates only on its
+ * own tenant's sessions.
+ */
 @Service
 public class SessionLifecycleService {
 
@@ -55,7 +61,6 @@ public class SessionLifecycleService {
     private final AssessmentService assessmentService;
     private final BillingService billingService;
     private final ApplicationEventPublisher eventPublisher;
-    private final SecureRandom random = new SecureRandom();
 
     public SessionLifecycleService(ExamSessionRepository sessionRepository,
             EnrollmentRepository enrollmentRepository,
@@ -85,8 +90,10 @@ public class SessionLifecycleService {
                 request.capacity(), false);
         rejectOverlap(subscription.publicId(), request.opensAt(), request.closesAt(), null);
 
-        SnapshotResponse snapshot = assessmentService.generateSnapshotFromTemplate(
-                request.templatePublicId(), random.nextLong());
+        // Generates a fresh random exam from the question bank and publishes it —
+        // assessment's own InsufficientQuestionBankException/InvalidSkillSelectionException
+        // propagate unmodified if generation fails, before any ExamSession is saved.
+        SnapshotResponse snapshot = assessmentService.generateAndPublish(request.name(), request.skills(), caller);
 
         ExamSession session = new ExamSession();
         session.setName(request.name());
@@ -222,7 +229,7 @@ public class SessionLifecycleService {
     }
 
     ExamSession findOwned(UUID publicId, CurrentUser caller) {
-        return sessionRepository.findWithCompositionByPublicIdAndTenantId(publicId, requireTenant(caller))
+        return sessionRepository.findByPublicIdAndTenantId(publicId, requireTenant(caller))
                 .orElseThrow(SessionNotFoundException::new);
     }
 

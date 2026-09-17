@@ -10,6 +10,6 @@ import java.util.UUID;
  * auto-resubmit, never a server-side deadline sweep).
  */
 public record SubmittedAnswerView(UUID answerPublicId, UUID attemptPublicId, UUID pinnedItemPublicId,
-                                   UUID sessionPublicId, UUID tenantId, String taskType, String payload,
-                                   String correctAnswerText, String optionsJson, boolean expired) {
+                                   UUID sessionPublicId, UUID tenantId, UUID scoreTemplatePublicId, String taskType,
+                                   String payload, String correctAnswerText, String optionsJson, boolean expired) {
 }

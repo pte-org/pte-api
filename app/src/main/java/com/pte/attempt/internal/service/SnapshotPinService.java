@@ -9,8 +9,12 @@ import com.pte.attempt.internal.config.TaskTimingConfig;
 import com.pte.attempt.internal.exception.MissingAudioDurationException;
 import com.pte.attempt.internal.exception.MissingAudioPromptException;
 import com.pte.attempt.internal.exception.MissingImagePromptException;
+import com.pte.attempt.internal.exception.TaskTimingNotConfiguredException;
 import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
+import com.pte.scoretemplate.ScoreTemplateService;
+import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
+import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.session.SessionService;
 import com.pte.session.dto.response.EntitlementResponse;
 import org.springframework.stereotype.Service;
@@ -19,24 +23,22 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
  * Orchestrates the ONE guarded attempt-create call (Phase 07 design
- * constraint): {@code session} for entitlement+composition, {@code
- * assessment} for full snapshot content, {@code media} for presigned
- * audio/image URLs — each exactly once, in-process — then deep-copies the
- * result into a self-contained {@link PinnedExamSnapshot}. After this
- * returns, attempt never calls another module again for this attempt.
+ * constraint): {@code session} for entitlement, {@code assessment} for full
+ * snapshot content, {@code media} for presigned audio/image URLs — each
+ * exactly once, in-process — then deep-copies the result into a
+ * self-contained {@link PinnedExamSnapshot}. After this returns, attempt
+ * never calls another module again for this attempt.
  *
- * <p>Composition selects task TYPES (not individual items — matches
- * session's model): every snapshot item whose type is included gets pinned,
- * in the source snapshot's original order. A composition {@code
- * timingOverrideSeconds} for a type overrides that type's RESPONSE time
- * only; prep stays the task-type default (practice mode shortens answering
- * time, not think time).
+ * <p>Every item of the source snapshot gets pinned, in its original order
+ * (Plan B removed {@code SessionComposition} — there is no host-chosen
+ * subset or per-type timing override anymore; the skill selection already
+ * happened at exam-generation time, in {@code assessment}).
  */
 @Service
 public class SnapshotPinService {
@@ -49,13 +51,16 @@ public class SnapshotPinService {
     private final AssessmentService assessmentService;
     private final MediaService mediaService;
     private final TaskTimingConfig taskTimingConfig;
+    private final ScoreTemplateService scoreTemplateService;
 
     public SnapshotPinService(SessionService sessionService, AssessmentService assessmentService,
-                              MediaService mediaService, TaskTimingConfig taskTimingConfig) {
+                              MediaService mediaService, TaskTimingConfig taskTimingConfig,
+                              ScoreTemplateService scoreTemplateService) {
         this.sessionService = sessionService;
         this.assessmentService = assessmentService;
         this.mediaService = mediaService;
         this.taskTimingConfig = taskTimingConfig;
+        this.scoreTemplateService = scoreTemplateService;
     }
 
     public PinnedExamSnapshot pin(ExamAttempt attempt, UUID sessionPublicId, UUID studentPublicId) {
@@ -67,23 +72,19 @@ public class SnapshotPinService {
         EntitlementResponse entitlement = sessionService.checkEntitlement(sessionPublicId, studentPublicId);
         // Throws assessment's own BlueprintNotFoundException (404) unmodified if missing.
         SnapshotContentResponse content = assessmentService.getFullContent(entitlement.snapshotPublicId());
-
-        Map<String, Integer> responseOverrideByTaskType = entitlement.composition().stream()
-                .filter(item -> item.timingOverrideSeconds() != null)
-                .collect(Collectors.toMap(com.pte.session.dto.response.CompositionItemResponse::taskType,
-                        com.pte.session.dto.response.CompositionItemResponse::timingOverrideSeconds, (a, b) -> a));
-        Map<String, Integer> maxPlayCountByTaskType = entitlement.composition().stream()
-                .filter(item -> item.maxPlayCount() != null)
-                .collect(Collectors.toMap(com.pte.session.dto.response.CompositionItemResponse::taskType,
-                        com.pte.session.dto.response.CompositionItemResponse::maxPlayCount, (a, b) -> a));
-        Set<String> includedTaskTypes = entitlement.composition().stream()
-                .map(com.pte.session.dto.response.CompositionItemResponse::taskType)
-                .collect(Collectors.toSet());
+        // Resolved once per pin, by the publicId the snapshot itself pinned at
+        // publish time (spec FR-14) — NOT scoreTemplateService.getActive(),
+        // so an attempt pinned today keeps reading the exact template its exam
+        // was published under even after a later template is activated.
+        ScoreTemplateResponse scoreTemplate = scoreTemplateService.getByPublicId(content.scoreTemplatePublicId());
+        Map<String, ScoreTemplateItemResponse> templateItemsByTaskType = scoreTemplate.items().stream()
+                .collect(Collectors.toMap(ScoreTemplateItemResponse::taskType, Function.identity(), (a, b) -> a));
 
         PinnedExamSnapshot pinned = new PinnedExamSnapshot();
         pinned.setAttempt(attempt);
         pinned.setSourceSnapshotPublicId(content.publicId());
         pinned.setSourceSessionPublicId(sessionPublicId);
+        pinned.setScoreTemplatePublicId(content.scoreTemplatePublicId());
         pinned.setTenantId(entitlement.tenantId());
         pinned.setReplayPolicyType(entitlement.policy().replayPolicyType());
         pinned.setReplayPolicyLimit(entitlement.policy().replayPolicyLimit());
@@ -96,20 +97,41 @@ public class SnapshotPinService {
                 + AUDIO_URL_GRACE_SECONDS;
 
         content.items().stream()
-                .filter(item -> includedTaskTypes.contains(item.taskType()))
                 .sorted(Comparator.comparingInt(SnapshotContentResponse.Item::orderIndex))
-                .forEach(item -> pinned.addItem(toPinnedItem(item, responseOverrideByTaskType, maxPlayCountByTaskType,
-                        audioUrlTtlSeconds, entitlement.tenantId())));
+                .forEach(item -> pinned.addItem(toPinnedItem(item, templateItemsByTaskType, audioUrlTtlSeconds,
+                        entitlement.tenantId())));
 
         return pinned;
     }
 
+    /**
+     * Timing source order per task type (spec FR-14): the pinned {@link
+     * ScoreTemplate} wins whenever it has a row for this {@code taskType}
+     * ({@code templateItem != null}) — the 17 static task types read
+     * prep/response straight off it, and the 5 audio-prompt Speaking types
+     * read their {@code preRecordSeconds} off its {@code prepSeconds} column
+     * (the seed convention documented in {@code V14__score_template.sql}),
+     * while still reading {@code preListenSeconds} from {@code
+     * taskTimingConfig} (no template column for it — a client sub-stage
+     * split, not a scoring concern). Only a task type ABSENT from the
+     * template ({@code PERSONAL_INTRODUCTION} today) falls back to {@code
+     * taskTimingConfig.timingFor} entirely, exactly as before Phase 3.
+     */
     private PinnedItem toPinnedItem(SnapshotContentResponse.Item source,
-                                    Map<String, Integer> responseOverrideByTaskType,
-                                    Map<String, Integer> maxPlayCountByTaskType,
+                                    Map<String, ScoreTemplateItemResponse> templateItemsByTaskType,
                                     long audioUrlTtlSeconds, UUID tenantId) {
-        TaskTimingConfig.Timing timing = taskTimingConfig.timingFor(source.taskType());
-        int responseSeconds = responseOverrideByTaskType.getOrDefault(source.taskType(), timing.responseSeconds());
+        ScoreTemplateItemResponse templateItem = templateItemsByTaskType.get(source.taskType());
+        // Non-throwing when the template already has this taskType — most of
+        // the 22 rows were deliberately REMOVED from task-timing.json (not just
+        // individual fields), so the old throwing timingFor() would wrongly
+        // fail every static template-known type (e.g. MC_READING_SINGLE).
+        TaskTimingConfig.Timing jsonTiming = templateItem != null
+                ? taskTimingConfig.timingForIfConfigured(source.taskType())
+                : taskTimingConfig.timingFor(source.taskType());
+        boolean isAudioPromptType = jsonTiming != null && jsonTiming.preListenSeconds() != null;
+
+        // No composition override anymore (Plan B) — always the template/json value.
+        int responseSeconds = templateItem != null ? templateItem.responseSeconds() : jsonTiming.responseSeconds();
 
         PinnedItem item = new PinnedItem();
         item.setOrderIndex(source.orderIndex());
@@ -125,7 +147,8 @@ public class SnapshotPinService {
         item.setMaxWordCount(source.maxWordCount());
         item.setOptionsJson(source.optionsJson());
         item.setResponseSeconds(responseSeconds);
-        item.setMaxPlayCountOverride(maxPlayCountByTaskType.get(source.taskType()));
+        // maxPlayCountOverride is never set anymore (Plan B removed SessionComposition) —
+        // always null, meaning "inherit the pinned session-level replay policy".
 
         Integer audioDurationSeconds = null;
         if (LISTENING_SECTION.equals(source.section())) {
@@ -159,20 +182,30 @@ public class SnapshotPinService {
             resolveImageUrl(item, source.imagePromptRef(), audioUrlTtlSeconds, tenantId);
         }
 
-        // `timing.preListenSeconds()` (and preRecordSeconds, always set together —
-        // see TaskTimingConfig.Timing's own doc comment) being non-null IS the
-        // signal that this task type computes prep dynamically from real audio
-        // duration instead of the static timing.prepSeconds() fallback — config
-        // presence drives the branch, not a second, hardcoded task-type list.
-        if (timing.preListenSeconds() != null) {
+        // `jsonTiming.preListenSeconds()` being non-null IS the signal that this
+        // task type computes prep dynamically from real audio duration instead
+        // of a static prepSeconds — config presence drives the branch, not a
+        // second, hardcoded task-type list (unchanged principle from before
+        // Phase 3; only preRecordSeconds's SOURCE moved, from this same JSON
+        // entry to the pinned template's prepSeconds column).
+        if (isAudioPromptType) {
             if (audioDurationSeconds == null) {
                 throw new MissingAudioDurationException();
             }
-            item.setPreListenSeconds(timing.preListenSeconds());
-            item.setPreRecordSeconds(timing.preRecordSeconds());
-            item.setPrepSeconds(timing.preListenSeconds() + audioDurationSeconds + timing.preRecordSeconds());
+            if (templateItem == null) {
+                // All 5 audio-prompt types are always `scored` and therefore
+                // always present in any ACTIVE-and-valid template (FR-05) — this
+                // would mean the pinned template itself is inconsistent.
+                throw new TaskTimingNotConfiguredException();
+            }
+            int preRecordSeconds = templateItem.prepSeconds();
+            item.setPreListenSeconds(jsonTiming.preListenSeconds());
+            item.setPreRecordSeconds(preRecordSeconds);
+            item.setPrepSeconds(jsonTiming.preListenSeconds() + audioDurationSeconds + preRecordSeconds);
+        } else if (templateItem != null) {
+            item.setPrepSeconds(templateItem.prepSeconds());
         } else {
-            item.setPrepSeconds(timing.prepSeconds());
+            item.setPrepSeconds(jsonTiming.prepSeconds());
         }
         return item;
     }

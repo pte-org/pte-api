@@ -9,7 +9,6 @@ import com.pte.reporting.internal.service.SkillScore;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.Predicate;
 
 public final class ReportMapper {
 
@@ -17,21 +16,19 @@ public final class ReportMapper {
     }
 
     public static ReportResponse toResponse(AttemptReport report, AttemptScoreSummary summary) {
-        List<SkillScoreResponse> communicative = filterAndMap(summary.skillScores(), Skill::isCommunicative);
-        List<SkillScoreResponse> enabling = filterAndMap(summary.skillScores(), skill -> !skill.isCommunicative());
+        List<SkillScoreResponse> communicative = toSkillList(summary.skillScores());
+        SkillScoreResponse overall = summary.overall() == null ? null : toResponse("OVERALL", summary.overall());
         return new ReportResponse(
                 report.getAttemptPublicId(),
                 report.getSessionPublicId(),
                 report.isPublished(),
                 report.getPublishedAt(),
-                toResponse("OVERALL", summary.overall()),
-                communicative,
-                enabling);
+                overall,
+                communicative);
     }
 
-    private static List<SkillScoreResponse> filterAndMap(Map<Skill, SkillScore> skillScores, Predicate<Skill> filter) {
+    private static List<SkillScoreResponse> toSkillList(Map<Skill, SkillScore> skillScores) {
         return skillScores.entrySet().stream()
-                .filter(e -> filter.test(e.getKey()))
                 .map(e -> toResponse(e.getKey().name(), e.getValue()))
                 .toList();
     }

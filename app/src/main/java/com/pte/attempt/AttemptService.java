@@ -1,5 +1,6 @@
 package com.pte.attempt;
 
+import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.attempt.internal.service.AttemptSummaryQueryService;
@@ -56,5 +57,10 @@ public class AttemptService {
     /** Every submitted attempt in a session — reporting's publish fanout (Phase 10). */
     public List<AttemptSummaryView> getSubmittedAttemptsForSession(UUID sessionPublicId, UUID tenantId) {
         return attemptSummaryQueryService.findSubmittedForSession(sessionPublicId, tenantId);
+    }
+
+    /** The pinned score template + tested sections for one attempt — reporting's weighted scoring (Phase 5). */
+    public AttemptScoreContextView getScoreContext(UUID attemptPublicId) {
+        return attemptSummaryQueryService.getScoreContext(attemptPublicId);
     }
 }

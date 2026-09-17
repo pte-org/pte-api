@@ -50,9 +50,7 @@ public class ReportService {
         if (!canView(report, caller)) {
             throw new ReportNotFoundException();
         }
-        AttemptScoreSummary summary = report.getSnapshotPublicId() == null
-                ? scoreAggregationService.aggregate(attemptPublicId, report.getTenantId())
-                : scoreAggregationService.aggregate(attemptPublicId, report.getTenantId(), report.getSnapshotPublicId());
+        AttemptScoreSummary summary = scoreAggregationService.aggregate(attemptPublicId, report.getTenantId());
         return ReportMapper.toResponse(report, summary);
     }
 

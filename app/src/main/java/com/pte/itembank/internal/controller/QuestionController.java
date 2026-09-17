@@ -30,7 +30,6 @@ public class QuestionController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
     public ApiResponse<QuestionResponse> create(@Valid @RequestBody CreateQuestionRequest request) {
         return ApiResponse.success(itembankService.create(request, currentUser()));
     }
@@ -43,6 +42,21 @@ public class QuestionController {
     @GetMapping
     public ApiResponse<List<QuestionResponse>> list() {
         return ApiResponse.success(itembankService.listAccessible(currentUser()));
+    }
+
+    @PostMapping("/{publicId}/publish")
+    public ApiResponse<QuestionResponse> publish(@PathVariable UUID publicId) {
+        return ApiResponse.success(itembankService.publish(publicId, currentUser()));
+    }
+
+    @PostMapping("/{publicId}/archive")
+    public ApiResponse<QuestionResponse> archive(@PathVariable UUID publicId) {
+        return ApiResponse.success(itembankService.archive(publicId, currentUser()));
+    }
+
+    @PostMapping("/{publicId}/unarchive")
+    public ApiResponse<QuestionResponse> unarchive(@PathVariable UUID publicId) {
+        return ApiResponse.success(itembankService.unarchive(publicId, currentUser()));
     }
 
     private CurrentUser currentUser() {

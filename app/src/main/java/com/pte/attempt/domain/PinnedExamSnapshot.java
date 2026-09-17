@@ -41,6 +41,10 @@ public class PinnedExamSnapshot extends BaseEntity {
     @Column(nullable = false)
     private UUID sourceSessionPublicId;
 
+    /** Copied once from the source snapshot at pin time (spec FR-14) — the score template this attempt's timing/scoring/weights are read from for its entire lifetime. */
+    @Column(nullable = false)
+    private UUID scoreTemplatePublicId;
+
     @Column(nullable = false)
     private UUID tenantId;
 

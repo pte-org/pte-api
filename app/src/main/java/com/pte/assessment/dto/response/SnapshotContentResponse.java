@@ -14,6 +14,7 @@ public record SnapshotContentResponse(
         UUID publicId,
         String name,
         int version,
+        UUID scoreTemplatePublicId,
         UUID tenantId,
         List<Item> items) {
 

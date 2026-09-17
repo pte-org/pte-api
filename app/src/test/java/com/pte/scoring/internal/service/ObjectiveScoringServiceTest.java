@@ -1,6 +1,7 @@
 package com.pte.scoring.internal.service;
 
 import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -26,23 +27,22 @@ class ObjectiveScoringServiceTest {
     }
 
     // ---- supports() ----
+    // Since Phase 4 (plans/score-template-exam-generation), which 12 task
+    // types are "objective" is the pinned ScoreTemplate's decision
+    // (ScoringMethodResolver), not a hardcoded set here — supports() is now a
+    // trivial gate on the already-resolved ScoringMethod.
 
     @Test
-    void supports_allTwelveObjectiveTaskTypes() {
-        assertThat(service.supports(ScoringConstants.TASK_TYPE_MC_READING_SINGLE)).isTrue();
-        assertThat(service.supports(ScoringConstants.TASK_TYPE_MC_READING_MULTIPLE)).isTrue();
-        assertThat(service.supports(ScoringConstants.TASK_TYPE_RE_ORDER_PARAGRAPHS)).isTrue();
-        assertThat(service.supports(ScoringConstants.TASK_TYPE_FILL_BLANKS_READING)).isTrue();
-        assertThat(service.supports(ScoringConstants.TASK_TYPE_FILL_BLANKS_READING_WRITING)).isTrue();
-        assertThat(service.supports(ScoringConstants.TASK_TYPE_MC_LISTENING_SINGLE)).isTrue();
-        assertThat(service.supports(ScoringConstants.TASK_TYPE_MC_LISTENING_MULTIPLE)).isTrue();
-        assertThat(service.supports(ScoringConstants.TASK_TYPE_HIGHLIGHT_CORRECT_SUMMARY)).isTrue();
-        assertThat(service.supports(ScoringConstants.TASK_TYPE_SELECT_MISSING_WORD)).isTrue();
-        assertThat(service.supports(ScoringConstants.TASK_TYPE_FILL_BLANKS_LISTENING)).isTrue();
-        assertThat(service.supports(ScoringConstants.TASK_TYPE_HIGHLIGHT_INCORRECT_WORDS)).isTrue();
-        assertThat(service.supports(ScoringConstants.TASK_TYPE_WRITE_FROM_DICTATION)).isTrue();
+    void supports_objectiveScoringMethod_isTrue() {
+        assertThat(service.supports(ScoringMethod.OBJECTIVE)).isTrue();
+    }
+
+    @Test
+    void supports_nonObjectiveScoringMethods_areFalse() {
+        assertThat(service.supports(ScoringMethod.AI_SPEECH)).isFalse();
+        assertThat(service.supports(ScoringMethod.AI_TEXT)).isFalse();
+        assertThat(service.supports(ScoringMethod.UNSCORED)).isFalse();
         assertThat(service.supports(null)).isFalse();
-        assertThat(service.supports(ScoringConstants.TASK_TYPE_WRITE_ESSAY)).isFalse();
     }
 
     // ---- MC_READING_SINGLE (regression — scoreSingleChoice was refactored to share parseOptions()) ----

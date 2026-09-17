@@ -24,6 +24,7 @@ import com.pte.session.internal.exception.SessionSubscriptionCapacityException;
 import com.pte.session.internal.exception.SessionSubscriptionNotFoundException;
 import com.pte.session.internal.exception.SessionTimeConflictException;
 import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionException;
+import com.pte.session.internal.mapper.SessionMapper;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.shared.security.CurrentUser;
@@ -40,17 +41,25 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * Session creation is gated by an active {@link BillingService} subscription
+ * (window/capacity/overlap — ported from the subscription-billing branch)
+ * before generating a fresh random exam through an in-process
+ * {@link AssessmentService#generateAndPublish} call (Plan B — no
+ * cache/ref table needed now that assessment lives in the same app).
+ */
 @ExtendWith(MockitoExtension.class)
 class SessionLifecycleServiceTest {
 
@@ -72,7 +81,6 @@ class SessionLifecycleServiceTest {
     private SessionLifecycleService service;
     private UUID tenantId;
     private UUID subscriptionId;
-    private UUID templateId;
     private UUID licenseKeyId;
     private CurrentUser hostAdmin;
 
@@ -82,10 +90,17 @@ class SessionLifecycleServiceTest {
                 billingService, eventPublisher);
         tenantId = UUID.randomUUID();
         subscriptionId = UUID.randomUUID();
-        templateId = UUID.randomUUID();
         licenseKeyId = UUID.randomUUID();
         hostAdmin = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
     }
+
+    private SnapshotResponse snapshotSummary() {
+        return new SnapshotResponse(UUID.randomUUID(), "Mock Test A", 1, UUID.randomUUID(), UUID.randomUUID(), 1, null, List.of());
+    }
+
+    // ------------------------------------------------------------------
+    // create — subscription gate (window/capacity/overlap)
+    // ------------------------------------------------------------------
 
     @Test
     void create_rejectsUnknownOrInactiveSubscription_asNotFound() {
@@ -93,7 +108,7 @@ class SessionLifecycleServiceTest {
 
         assertThatThrownBy(() -> service.create(request(100, futureWindow()), hostAdmin))
                 .isInstanceOf(SessionSubscriptionNotFoundException.class);
-        verify(assessmentService, never()).generateSnapshotFromTemplate(any(), any(Long.class));
+        verify(assessmentService, never()).generateAndPublish(any(), any(), any());
     }
 
     @Test
@@ -129,7 +144,7 @@ class SessionLifecycleServiceTest {
         assertThatThrownBy(() -> service.create(request(100, futureWindow()), hostAdmin))
                 .isInstanceOf(SessionTimeConflictException.class)
                 .hasMessageContaining(conflictingId.toString());
-        verify(assessmentService, never()).generateSnapshotFromTemplate(any(), any(Long.class));
+        verify(assessmentService, never()).generateAndPublish(any(), any(), any());
     }
 
     @Test
@@ -137,8 +152,8 @@ class SessionLifecycleServiceTest {
         stubActiveSubscription(200);
         when(sessionRepository.findFirstOverlapping(any(), any(), any(), any())).thenReturn(Optional.empty());
         UUID snapshotId = UUID.randomUUID();
-        when(assessmentService.generateSnapshotFromTemplate(eq(templateId), any(Long.class)))
-                .thenReturn(new SnapshotResponse(snapshotId, "Generated", 1, UUID.randomUUID(), null, List.of()));
+        when(assessmentService.generateAndPublish(any(), any(), any()))
+                .thenReturn(new SnapshotResponse(snapshotId, "Generated", 1, UUID.randomUUID(), UUID.randomUUID(), 1, null, List.of()));
         when(sessionRepository.save(any())).thenAnswer(invocation -> {
             ExamSession saved = invocation.getArgument(0);
             saved.setPublicId(UUID.randomUUID());
@@ -162,8 +177,8 @@ class SessionLifecycleServiceTest {
         when(billingService.getActiveSubscription(secondSubscriptionId, tenantId))
                 .thenReturn(Optional.of(subscription(secondSubscriptionId, 200)));
         when(sessionRepository.findFirstOverlapping(any(), any(), any(), any())).thenReturn(Optional.empty());
-        when(assessmentService.generateSnapshotFromTemplate(any(), any(Long.class)))
-                .thenReturn(new SnapshotResponse(UUID.randomUUID(), "Generated", 1, UUID.randomUUID(), null, List.of()));
+        when(assessmentService.generateAndPublish(any(), any(), any()))
+                .thenReturn(new SnapshotResponse(UUID.randomUUID(), "Generated", 1, UUID.randomUUID(), UUID.randomUUID(), 1, null, List.of()));
         when(sessionRepository.save(any())).thenAnswer(invocation -> {
             ExamSession saved = invocation.getArgument(0);
             saved.setPublicId(UUID.randomUUID());
@@ -180,8 +195,8 @@ class SessionLifecycleServiceTest {
     void create_translatesDatabaseOverlapRaceToConflict() {
         stubActiveSubscription(200);
         when(sessionRepository.findFirstOverlapping(any(), any(), any(), any())).thenReturn(Optional.empty());
-        when(assessmentService.generateSnapshotFromTemplate(any(), any(Long.class)))
-                .thenReturn(new SnapshotResponse(UUID.randomUUID(), "Generated", 1, UUID.randomUUID(), null, List.of()));
+        when(assessmentService.generateAndPublish(any(), any(), any()))
+                .thenReturn(new SnapshotResponse(UUID.randomUUID(), "Generated", 1, UUID.randomUUID(), UUID.randomUUID(), 1, null, List.of()));
         when(sessionRepository.save(any())).thenAnswer(invocation -> {
             ExamSession saved = invocation.getArgument(0);
             saved.setPublicId(UUID.randomUUID());
@@ -193,6 +208,124 @@ class SessionLifecycleServiceTest {
         assertThatThrownBy(() -> service.create(request(100, futureWindow()), hostAdmin))
                 .isInstanceOf(SessionTimeConflictException.class);
     }
+
+    // ------------------------------------------------------------------
+    // create — lockdown-mode propagation and generation delegation (Plan B)
+    // ------------------------------------------------------------------
+
+    @Test
+    void create_setsLockdownModeToNone_whenExamModeIsPractice() {
+        stubActiveSubscription(200);
+        when(sessionRepository.findFirstOverlapping(any(), any(), any(), any())).thenReturn(Optional.empty());
+        when(assessmentService.generateAndPublish(any(), any(), any())).thenReturn(snapshotSummary());
+        when(sessionRepository.save(any())).thenAnswer(invocation -> {
+            ExamSession s = invocation.getArgument(0);
+            s.setPublicId(UUID.randomUUID());
+            return s;
+        });
+
+        SessionResponse response = service.create(
+                new CreateSessionRequest("Practice Session", subscriptionId, Set.of("SPEAKING"),
+                        Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
+                        ExamMode.PRACTICE, null, 100),
+                hostAdmin);
+
+        assertThat(response.policy().lockdownMode()).isEqualTo("NONE");
+    }
+
+    @Test
+    void create_setsLockdownModeToStrict_whenExamModeIsRealExam() {
+        stubActiveSubscription(200);
+        when(sessionRepository.findFirstOverlapping(any(), any(), any(), any())).thenReturn(Optional.empty());
+        when(assessmentService.generateAndPublish(any(), any(), any())).thenReturn(snapshotSummary());
+        when(sessionRepository.save(any())).thenAnswer(invocation -> {
+            ExamSession s = invocation.getArgument(0);
+            s.setPublicId(UUID.randomUUID());
+            return s;
+        });
+
+        SessionResponse response = service.create(
+                new CreateSessionRequest("Real Exam Session", subscriptionId, Set.of("SPEAKING"),
+                        Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
+                        ExamMode.REAL_EXAM, null, 100),
+                hostAdmin);
+
+        assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
+    }
+
+    @Test
+    void create_withTeacherOverride_strictOnPractice_rejected() {
+        stubActiveSubscription(200);
+        when(sessionRepository.findFirstOverlapping(any(), any(), any(), any())).thenReturn(Optional.empty());
+        when(assessmentService.generateAndPublish(any(), any(), any())).thenReturn(snapshotSummary());
+
+        assertThatThrownBy(() -> service.create(
+                new CreateSessionRequest("Invalid Combo", subscriptionId, Set.of("SPEAKING"),
+                        Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
+                        ExamMode.PRACTICE, LockdownMode.STRICT, 100),
+                hostAdmin))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("STRICT")
+                .hasMessageContaining("PRACTICE");
+    }
+
+    @Test
+    void create_delegatesToAssessmentGenerateAndPublish_usesReturnedSnapshotPublicId() {
+        stubActiveSubscription(200);
+        when(sessionRepository.findFirstOverlapping(any(), any(), any(), any())).thenReturn(Optional.empty());
+        UUID canonicalSnapshotId = UUID.randomUUID();
+        Set<String> skills = Set.of("SPEAKING", "WRITING");
+        when(assessmentService.generateAndPublish("Session", skills, hostAdmin))
+                .thenReturn(new SnapshotResponse(canonicalSnapshotId, "Mock Test A", 1, UUID.randomUUID(), UUID.randomUUID(), 1, null, List.of()));
+        when(sessionRepository.save(any())).thenAnswer(invocation -> {
+            ExamSession s = invocation.getArgument(0);
+            s.setPublicId(UUID.randomUUID());
+            return s;
+        });
+
+        SessionResponse response = service.create(
+                new CreateSessionRequest("Session", subscriptionId, skills,
+                        Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
+                        ExamMode.MOCK_TEST, null, 100),
+                hostAdmin);
+
+        assertThat(response.snapshotPublicId()).isEqualTo(canonicalSnapshotId);
+    }
+
+    @Test
+    void create_generationFails_noSessionSaved() {
+        stubActiveSubscription(200);
+        when(sessionRepository.findFirstOverlapping(any(), any(), any(), any())).thenReturn(Optional.empty());
+        when(assessmentService.generateAndPublish(any(), any(), any()))
+                .thenThrow(new RuntimeException("insufficient question bank"));
+
+        assertThatThrownBy(() -> service.create(
+                new CreateSessionRequest("Session", subscriptionId, Set.of("SPEAKING"),
+                        Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
+                        ExamMode.MOCK_TEST, null, 100),
+                hostAdmin))
+                .isInstanceOf(RuntimeException.class);
+
+        verify(sessionRepository, never()).save(any());
+    }
+
+    @Test
+    void create_invalidSkillCount_rejectedByValidation() {
+        jakarta.validation.Validator validator = jakarta.validation.Validation.buildDefaultValidatorFactory().getValidator();
+
+        CreateSessionRequest empty = new CreateSessionRequest("Session", subscriptionId, Set.of(),
+                Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), ExamMode.MOCK_TEST, null, 100);
+        CreateSessionRequest tooMany = new CreateSessionRequest("Session", subscriptionId,
+                Set.of("SPEAKING", "WRITING", "READING", "LISTENING", "EXTRA"),
+                Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), ExamMode.MOCK_TEST, null, 100);
+
+        assertThat(validator.validate(empty)).isNotEmpty();
+        assertThat(validator.validate(tooMany)).isNotEmpty();
+    }
+
+    // ------------------------------------------------------------------
+    // changeSubscription
+    // ------------------------------------------------------------------
 
     @Test
     void changeSubscription_rejectsAfterSessionOpened() {
@@ -287,17 +420,59 @@ class SessionLifecycleServiceTest {
         assertThat(captor.getValue().studentPublicIds()).containsExactly(enrollment.getStudentPublicId());
     }
 
+    // ------------------------------------------------------------------
+    // patchPolicy
+    // ------------------------------------------------------------------
+
     @Test
-    void patchPolicy_keepsExistingLockdownCoverage() {
+    void patchPolicy_updatesLockdownMode_toStrict() {
         ExamSession session = existingSession(SessionStatus.SCHEDULED, 100);
         when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
                 .thenReturn(Optional.of(session));
 
         ExamPolicyResponse response = service.patchPolicy(session.getPublicId(),
-                new PatchExamPolicyRequest(null, null, null, null, null, LockdownMode.STRICT), hostAdmin);
+                new PatchExamPolicyRequest(null, null, null, null, null, LockdownMode.STRICT),
+                hostAdmin);
 
         assertThat(response.lockdownMode()).isEqualTo("STRICT");
     }
+
+    @Test
+    void patchPolicy_doesNotChangeLockdownMode_whenRequestLockdownModeIsNull() {
+        ExamSession session = existingSession(SessionStatus.SCHEDULED, 100);
+        session.getPolicy().setLockdownMode(LockdownMode.STRICT);
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+
+        ExamPolicyResponse response = service.patchPolicy(session.getPublicId(),
+                new PatchExamPolicyRequest(ReplayPolicyType.LIMITED, 1, null, null, null, null),
+                hostAdmin);
+
+        assertThat(response.lockdownMode()).isEqualTo("STRICT");
+    }
+
+    @Test
+    void toPolicy_emitsLockdownModeAsUppercaseString() {
+        ExamPolicy policy = ExamPolicy.realExamDefault();
+
+        ExamPolicyResponse response = SessionMapper.toPolicy(policy);
+
+        assertThat(response.lockdownMode()).isEqualTo("STRICT");
+        assertThat(response.lockdownMode()).matches("^[A-Z_]+$");
+    }
+
+    @Test
+    void toPolicy_throwsOnIncompletePolicy_notSilentFallback() {
+        ExamPolicy incomplete = new ExamPolicy();
+
+        assertThatThrownBy(() -> SessionMapper.toPolicy(incomplete))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("incomplete");
+    }
+
+    // ------------------------------------------------------------------
+    // fixtures
+    // ------------------------------------------------------------------
 
     private void stubActiveSubscription(int maxCapacity) {
         when(billingService.getActiveSubscription(subscriptionId, tenantId))
@@ -324,8 +499,8 @@ class SessionLifecycleServiceTest {
     }
 
     private CreateSessionRequest request(UUID requestedSubscriptionId, int capacity, Window window) {
-        return new CreateSessionRequest("Session", requestedSubscriptionId, templateId, window.opensAt(), window.closesAt(),
-                ExamMode.MOCK_TEST, null, capacity);
+        return new CreateSessionRequest("Session", requestedSubscriptionId, Set.of("SPEAKING"),
+                window.opensAt(), window.closesAt(), ExamMode.MOCK_TEST, null, capacity);
     }
 
     private Window futureWindow() {

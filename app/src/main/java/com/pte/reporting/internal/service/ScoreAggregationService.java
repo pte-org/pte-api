@@ -1,135 +1,138 @@
 package com.pte.reporting.internal.service;
 
-import com.pte.assessment.AssessmentService;
-import com.pte.assessment.dto.response.SnapshotScoringSpec;
-import com.pte.itembank.domain.enums.PteSection;
+import com.pte.attempt.AttemptService;
+import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.reporting.domain.enums.Skill;
-import com.pte.reporting.internal.config.TaskSkillMappingConfig;
+import com.pte.scoretemplate.ScoreTemplateService;
+import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoring.ScoringService;
 import com.pte.scoring.dto.response.ScoredAnswerView;
 import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Autowired;
 
-import java.util.ArrayList;
+import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
- * Computes the 10-90 score summary for an attempt from its scored answers,
- * pulled fresh from {@code scoring} each time (no local copy — see the
- * module's Design Constraints). Simulation formula, not Pearson's algorithm:
- * {@code scaledScore = round(10 + percentCorrect * 80)} per skill from its
- * contributing SCORED answers; a skill with zero contributing scored answers
- * reports "insufficient data," never a fabricated score. Overall averages the
- * communicative skills that have data.
+ * Computes the 10-90 score summary for an attempt, weighted by the {@code
+ * ScoreTemplate} pinned to its snapshot (spec FR-18/19/20) — replaces the
+ * old "every SCORED answer weighs equally, task→skill via a hardcoded
+ * config file" model. Pinned by {@code
+ * AttemptService.getScoreContext} (never {@code
+ * ScoreTemplateService.getActive}), so activating a new template never
+ * changes an already-published attempt's score.
+ *
+ * <p>Formula per skill (FR-18): {@code 10 + 80 × Σ(w×avgRaw/100) / Σw},
+ * summed only over the template's task types that (a) carry a non-zero
+ * weight for that skill AND (b) have ≥1 SCORED answer for this attempt — a
+ * weighted-but-not-yet-scored task type (e.g. AI grading still in flight)
+ * is dropped from both numerator and denominator, never treated as {@code
+ * avgRaw=0}. {@code Σw=0} (nothing scored yet for that skill) always
+ * reports "insufficient data," never a division by zero.
+ *
+ * <p>Only skills in {@code testedSections} (FR-19) appear in the result at
+ * all — an untested skill isn't reported even as insufficient data. Overall
+ * (FR-20) is {@code null} — "not applicable," distinct from "insufficient
+ * data" — unless all 4 skills were tested.
  */
 @Service
 public class ScoreAggregationService {
 
     private static final int SCALE_FLOOR = 10;
     private static final int SCALE_SPAN = 80;
+    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
+    private static final MathContext MATH_CONTEXT = MathContext.DECIMAL64;
 
-    private final ScoringService scoringService;
-    private final TaskSkillMappingConfig taskSkillMappingConfig;
-    private final AssessmentService assessmentService;
+    private static final Map<Skill, Function<ScoreTemplateItemResponse, BigDecimal>> SKILL_WEIGHT_ACCESSORS =
+            new EnumMap<>(Skill.class);
 
-    public ScoreAggregationService(ScoringService scoringService, TaskSkillMappingConfig taskSkillMappingConfig) {
-        this(scoringService, taskSkillMappingConfig, null);
+    static {
+        SKILL_WEIGHT_ACCESSORS.put(Skill.SPEAKING, ScoreTemplateItemResponse::speakingWeight);
+        SKILL_WEIGHT_ACCESSORS.put(Skill.WRITING, ScoreTemplateItemResponse::writingWeight);
+        SKILL_WEIGHT_ACCESSORS.put(Skill.READING, ScoreTemplateItemResponse::readingWeight);
+        SKILL_WEIGHT_ACCESSORS.put(Skill.LISTENING, ScoreTemplateItemResponse::listeningWeight);
     }
 
-    @Autowired
-    public ScoreAggregationService(ScoringService scoringService, TaskSkillMappingConfig taskSkillMappingConfig,
-                                   AssessmentService assessmentService) {
+    private final ScoringService scoringService;
+    private final AttemptService attemptService;
+    private final ScoreTemplateService scoreTemplateService;
+
+    public ScoreAggregationService(ScoringService scoringService, AttemptService attemptService,
+                                   ScoreTemplateService scoreTemplateService) {
         this.scoringService = scoringService;
-        this.taskSkillMappingConfig = taskSkillMappingConfig;
-        this.assessmentService = assessmentService;
+        this.attemptService = attemptService;
+        this.scoreTemplateService = scoreTemplateService;
     }
 
     public AttemptScoreSummary aggregate(UUID attemptPublicId, UUID tenantId) {
-        return aggregate(attemptPublicId, tenantId, null);
-    }
-
-    public AttemptScoreSummary aggregate(UUID attemptPublicId, UUID tenantId, UUID snapshotPublicId) {
         List<ScoredAnswerView> answers = scoringService.getScoredAnswersForAttempt(attemptPublicId, tenantId);
+        Map<String, BigDecimal> avgRawByTaskType = averageRawScoresByTaskType(answers);
 
-        Map<Skill, List<ScoredAnswerView>> contributingBySkill = new EnumMap<>(Skill.class);
-        for (Skill skill : Skill.values()) {
-            contributingBySkill.put(skill, new ArrayList<>());
-        }
-        for (ScoredAnswerView answer : answers) {
-            for (Skill skill : taskSkillMappingConfig.skillsFor(answer.taskType())) {
-                contributingBySkill.get(skill).add(answer);
-            }
-        }
+        AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
+        List<ScoreTemplateItemResponse> templateItems =
+                scoreTemplateService.getByPublicId(context.scoreTemplatePublicId()).items();
 
         Map<Skill, SkillScore> skillScores = new EnumMap<>(Skill.class);
         for (Skill skill : Skill.values()) {
-            skillScores.put(skill, computeSkillScore(contributingBySkill.get(skill)));
+            if (context.testedSections().contains(skill.name())) {
+                skillScores.put(skill, computeWeighted(templateItems, avgRawByTaskType, SKILL_WEIGHT_ACCESSORS.get(skill)));
+            }
         }
 
-        SkillScore overall = snapshotPublicId != null && assessmentService != null
-                ? computeWeightedOverall(answers, assessmentService.getSnapshotScoringSpec(snapshotPublicId))
-                : computeOverall(skillScores);
+        boolean allFourSkillsTested = Set.of("SPEAKING", "WRITING", "READING", "LISTENING")
+                .stream().allMatch(section -> context.testedSections().contains(section));
+        SkillScore overall = allFourSkillsTested
+                ? computeWeighted(templateItems, avgRawByTaskType, ScoreTemplateItemResponse::overallWeight)
+                : null;
+
         return new AttemptScoreSummary(overall, skillScores);
     }
 
-    /**
-     * Every scorer (objective AND AI) reports {@code rawScore} on the SAME
-     * 0-100 percentage scale, so a skill fed by a mix of objective and
-     * AI-scored answers averages correctly — no per-source special-casing.
-     */
-    private SkillScore computeSkillScore(List<ScoredAnswerView> contributing) {
-        if (contributing.isEmpty()) {
-            return SkillScore.insufficientData();
-        }
-        double averageRawScore = contributing.stream().mapToInt(ScoredAnswerView::rawScore).average().orElse(0);
-        double percentCorrect = averageRawScore / 100.0;
-        return SkillScore.of((int) Math.round(SCALE_FLOOR + percentCorrect * SCALE_SPAN));
+    /** One SCORED answer's contribution is its rawScore; multiple SCORED answers of the same task type average together. */
+    private Map<String, BigDecimal> averageRawScoresByTaskType(List<ScoredAnswerView> answers) {
+        Map<String, List<ScoredAnswerView>> byTaskType = answers.stream()
+                .collect(Collectors.groupingBy(ScoredAnswerView::taskType));
+        Map<String, BigDecimal> result = new HashMap<>();
+        byTaskType.forEach((taskType, group) -> {
+            BigDecimal sum = group.stream()
+                    .map(a -> BigDecimal.valueOf(a.rawScore()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            result.put(taskType, sum.divide(BigDecimal.valueOf(group.size()), MATH_CONTEXT));
+        });
+        return result;
     }
 
-    private SkillScore computeOverall(Map<Skill, SkillScore> skillScores) {
-        List<Integer> communicativeWithData = skillScores.entrySet().stream()
-                .filter(e -> e.getKey().isCommunicative() && e.getValue().sufficientData())
-                .map(e -> e.getValue().score())
-                .toList();
-        if (communicativeWithData.isEmpty()) {
-            return SkillScore.insufficientData();
-        }
-        double average = communicativeWithData.stream().mapToInt(Integer::intValue).average().orElse(0);
-        return SkillScore.of((int) Math.round(average));
-    }
-
-    private SkillScore computeWeightedOverall(List<ScoredAnswerView> answers, SnapshotScoringSpec spec) {
-        if (spec.sectionWeights().isEmpty()) {
-            return SkillScore.insufficientData();
-        }
-        double weightedTotal = 0;
-        int totalWeight = 0;
-        for (SnapshotScoringSpec.SectionWeight sectionWeight : spec.sectionWeights()) {
-            List<ScoredAnswerView> sectionAnswers = answers.stream()
-                    .filter(answer -> belongsToSection(answer, sectionWeight.section()))
-                    .toList();
-            if (sectionAnswers.isEmpty()) {
-                return SkillScore.insufficientData();
+    /** FR-18, applied with whichever weight column {@code weightAccessor} selects (one of the 4 skills, or Overall). */
+    private SkillScore computeWeighted(List<ScoreTemplateItemResponse> templateItems,
+                                       Map<String, BigDecimal> avgRawByTaskType,
+                                       Function<ScoreTemplateItemResponse, BigDecimal> weightAccessor) {
+        BigDecimal weightedSum = BigDecimal.ZERO;
+        BigDecimal totalWeight = BigDecimal.ZERO;
+        for (ScoreTemplateItemResponse item : templateItems) {
+            BigDecimal weight = weightAccessor.apply(item);
+            if (weight == null || weight.signum() <= 0) {
+                continue;
             }
-            double averageRawScore = sectionAnswers.stream().mapToInt(ScoredAnswerView::rawScore).average().orElse(0);
-            int sectionScore = (int) Math.round(SCALE_FLOOR + (averageRawScore / 100.0) * SCALE_SPAN);
-            weightedTotal += sectionScore * sectionWeight.weightPercent() / 100.0;
-            totalWeight += sectionWeight.weightPercent();
+            BigDecimal avgRaw = avgRawByTaskType.get(item.taskType());
+            if (avgRaw == null) {
+                continue; // Weighted but not yet SCORED — excluded from both Σw and the numerator, never avgRaw=0.
+            }
+            weightedSum = weightedSum.add(weight.multiply(avgRaw, MATH_CONTEXT).divide(HUNDRED, MATH_CONTEXT));
+            totalWeight = totalWeight.add(weight);
         }
-        if (totalWeight <= 0) {
+        if (totalWeight.signum() <= 0) {
             return SkillScore.insufficientData();
         }
-        return SkillScore.of((int) Math.round(weightedTotal * 100.0 / totalWeight));
-    }
-
-    private boolean belongsToSection(ScoredAnswerView answer, PteSection section) {
-        try {
-            return com.pte.itembank.domain.enums.PteTaskType.valueOf(answer.taskType()).getSection() == section;
-        } catch (IllegalArgumentException ex) {
-            return false;
-        }
+        BigDecimal ratio = weightedSum.divide(totalWeight, MATH_CONTEXT);
+        BigDecimal scaled = BigDecimal.valueOf(SCALE_FLOOR).add(BigDecimal.valueOf(SCALE_SPAN).multiply(ratio, MATH_CONTEXT));
+        return SkillScore.of(scaled.setScale(0, RoundingMode.HALF_UP).intValue());
     }
 }

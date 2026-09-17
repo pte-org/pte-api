@@ -2,13 +2,12 @@ package com.pte.assessment;
 
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.dto.response.SnapshotResponse;
-import com.pte.assessment.dto.response.SnapshotScoringSpec;
-import com.pte.assessment.dto.response.TemplateSpec;
+import com.pte.assessment.internal.service.ExamGenerationService;
 import com.pte.assessment.internal.service.SnapshotPublishService;
-import com.pte.assessment.internal.service.TemplateResolverService;
-import com.pte.assessment.internal.service.TemplateService;
+import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
 
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -27,14 +26,11 @@ import java.util.UUID;
 public class AssessmentService {
 
     private final SnapshotPublishService snapshotPublishService;
-    private final TemplateService templateService;
-    private final TemplateResolverService templateResolverService;
+    private final ExamGenerationService examGenerationService;
 
-    public AssessmentService(SnapshotPublishService snapshotPublishService, TemplateService templateService,
-                             TemplateResolverService templateResolverService) {
+    public AssessmentService(SnapshotPublishService snapshotPublishService, ExamGenerationService examGenerationService) {
         this.snapshotPublishService = snapshotPublishService;
-        this.templateService = templateService;
-        this.templateResolverService = templateResolverService;
+        this.examGenerationService = examGenerationService;
     }
 
     /** Answer-stripped summary - safe for {@code session} to validate composition against. */
@@ -47,18 +43,12 @@ public class AssessmentService {
         return snapshotPublishService.getContent(snapshotPublicId);
     }
 
-    /** Active template structure for the in-process Phase 10 resolver. */
-    public TemplateSpec getTemplateSpec(UUID templatePublicId) {
-        return templateService.getTemplateSpec(templatePublicId);
-    }
-
-    /** Generates and publishes a deterministic snapshot from an active template. */
-    public SnapshotResponse generateSnapshotFromTemplate(UUID templatePublicId, long seed) {
-        return templateResolverService.resolve(templatePublicId, seed);
-    }
-
-    /** Safe reporting contract containing only the weights captured in a snapshot. */
-    public SnapshotScoringSpec getSnapshotScoringSpec(UUID snapshotPublicId) {
-        return snapshotPublishService.getScoringSpec(snapshotPublicId);
+    /**
+     * The only entry point {@code session} (Phase 3) uses to create an exam:
+     * random-draws a blueprint from the question bank shaped by the ACTIVE
+     * {@code ScoreTemplate} and publishes it, all in one transaction.
+     */
+    public SnapshotResponse generateAndPublish(String name, Set<String> skills, CurrentUser caller) {
+        return examGenerationService.generate(name, skills, caller);
     }
 }

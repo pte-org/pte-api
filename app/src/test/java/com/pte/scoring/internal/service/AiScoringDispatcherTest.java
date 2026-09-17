@@ -2,6 +2,7 @@ package com.pte.scoring.internal.service;
 
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
+import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
@@ -21,6 +22,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+/**
+ * Since Phase 4 (plans/score-template-exam-generation): the caller
+ * ({@code ScoringCommandService}) already resolved {@code scoringMethod}
+ * via {@code ScoringMethodResolver} before calling {@code supports}/{@code
+ * dispatch} — no more hardcoded-catalog lookup inside this class.
+ */
 @ExtendWith(MockitoExtension.class)
 class AiScoringDispatcherTest {
 
@@ -37,10 +44,10 @@ class AiScoringDispatcherTest {
     }
 
     @Test
-    void dispatch_marksAnswerInFlightAndPublishesAllJobFields() {
+    void dispatch_marksAnswerInFlightAndPublishesAllJobFieldsIncludingScoringMethod() {
         ScoringAnswer answer = answer(ScoringConstants.TASK_TYPE_REPEAT_SENTENCE);
 
-        dispatcher.dispatch(answer);
+        dispatcher.dispatch(answer, ScoringMethod.AI_SPEECH);
 
         assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.AI_SCORING);
         verify(scoringAnswerRepository).save(answer);
@@ -57,13 +64,26 @@ class AiScoringDispatcherTest {
         assertThat(job.taskType()).isEqualTo(answer.getTaskType());
         assertThat(job.payload()).isEqualTo(answer.getPayload());
         assertThat(job.referenceText()).isEqualTo(answer.getCorrectAnswerText());
+        assertThat(job.scoringMethod()).isEqualTo("AI_SPEECH");
     }
 
     @Test
-    void dispatch_rejectsUnsupportedTypeBeforeChangingState() {
+    void dispatch_aiTextScoringMethod_embedsAiTextInJob() {
+        ScoringAnswer answer = answer(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
+
+        dispatcher.dispatch(answer, ScoringMethod.AI_TEXT);
+
+        ArgumentCaptor<AiScoringJob> jobCaptor = ArgumentCaptor.forClass(AiScoringJob.class);
+        verify(rabbitTemplate).convertAndSend(eq(ScoringConstants.AI_SCORING_EXCHANGE),
+                eq(ScoringConstants.AI_SCORING_ROUTING_KEY), jobCaptor.capture());
+        assertThat(jobCaptor.getValue().scoringMethod()).isEqualTo("AI_TEXT");
+    }
+
+    @Test
+    void dispatch_rejectsNonAiScoringMethodBeforeChangingState() {
         ScoringAnswer answer = answer(ScoringConstants.TASK_TYPE_PERSONAL_INTRODUCTION);
 
-        assertThatThrownBy(() -> dispatcher.dispatch(answer))
+        assertThatThrownBy(() -> dispatcher.dispatch(answer, ScoringMethod.UNSCORED))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining(ScoringConstants.TASK_TYPE_PERSONAL_INTRODUCTION);
 
@@ -72,10 +92,12 @@ class AiScoringDispatcherTest {
     }
 
     @Test
-    void supports_isNullSafeForUnknownType() {
+    void supports_onlyAiSpeechAndAiTextScoringMethods() {
         assertThat(dispatcher.supports(null)).isFalse();
-        assertThat(dispatcher.supports("UNKNOWN")).isFalse();
-        assertThat(dispatcher.supports(ScoringConstants.TASK_TYPE_SUMMARIZE_SPOKEN_TEXT)).isTrue();
+        assertThat(dispatcher.supports(ScoringMethod.OBJECTIVE)).isFalse();
+        assertThat(dispatcher.supports(ScoringMethod.UNSCORED)).isFalse();
+        assertThat(dispatcher.supports(ScoringMethod.AI_SPEECH)).isTrue();
+        assertThat(dispatcher.supports(ScoringMethod.AI_TEXT)).isTrue();
     }
 
     private ScoringAnswer answer(String taskType) {

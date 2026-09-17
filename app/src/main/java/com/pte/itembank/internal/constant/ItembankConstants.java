@@ -15,6 +15,7 @@ public final class ItembankConstants {
     public static final String OPTIONS_REQUIRED = "OPTIONS_REQUIRED";
     public static final String CORRECT_OPTION_REQUIRED = "CORRECT_OPTION_REQUIRED";
     public static final String CORRECT_ANSWER_REQUIRED = "CORRECT_ANSWER_REQUIRED";
+    public static final String INVALID_QUESTION_STATUS_TRANSITION = "INVALID_QUESTION_STATUS_TRANSITION";
 
     public static final String OPTION_TEXT_REQUIRED = "Option text is required";
     public static final String TASK_TYPE_REQUIRED = "Task type is required";

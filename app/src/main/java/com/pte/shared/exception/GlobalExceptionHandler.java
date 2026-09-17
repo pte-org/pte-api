@@ -23,9 +23,19 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    /**
+     * {@code ex.getData()} is null for almost every {@link DomainException}
+     * (an {@code ApiResponse} with a null {@code data} field, same as before) —
+     * only a subtype that opted into the 3-arg constructor (e.g. {@code
+     * InsufficientQuestionBankException}'s shortage list) carries a non-null
+     * structured payload. Keeping this generic (rather than one handler per
+     * exception type) avoids importing any module's {@code internal}
+     * exception classes into {@code shared}, which {@code ModuleStructureTest}
+     * would otherwise flag as a boundary violation.
+     */
     @ExceptionHandler(DomainException.class)
-    public ResponseEntity<ApiResponse<Void>> handleDomain(DomainException ex) {
-        return ResponseEntity.status(ex.getStatus()).body(ApiResponse.error(ex.getMessage()));
+    public ResponseEntity<ApiResponse<Object>> handleDomain(DomainException ex) {
+        return ResponseEntity.status(ex.getStatus()).body(new ApiResponse<>(false, ex.getData(), ex.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

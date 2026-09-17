@@ -7,13 +7,13 @@ import com.pte.itembank.dto.response.QuestionResponse;
 
 import java.util.List;
 
-/** Maps {@link Question} to its response DTO. Skills are supplied by the service (config-driven). */
+/** Maps {@link Question} to its response DTO. */
 public final class QuestionMapper {
 
     private QuestionMapper() {
     }
 
-    public static QuestionResponse toResponse(Question question, List<String> skills) {
+    public static QuestionResponse toResponse(Question question) {
         List<OptionResponse> options = question.getOptions().stream()
                 .map(QuestionMapper::toOption)
                 .toList();
@@ -32,8 +32,7 @@ public final class QuestionMapper {
                 question.getCorrectAnswerText(),
                 question.getMinWordCount(),
                 question.getMaxWordCount(),
-                options,
-                skills);
+                options);
     }
 
     private static OptionResponse toOption(QuestionOption option) {
