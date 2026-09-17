@@ -55,6 +55,7 @@ class StudentRosterRepositoryTest {
     @Test
     void sameCreatedAt_usesStudentPublicIdTieBreakSoPagesDoNotRepeatRows() {
         Tenant tenant = new Tenant();
+        tenant.setCode("roster-" + UUID.randomUUID());
         tenant.setName("Roster Tenant " + UUID.randomUUID());
         tenant.setOrganizationType("SCHOOL");
         tenant.setPackageName("starter");
@@ -88,6 +89,7 @@ class StudentRosterRepositoryTest {
     private User student(String email, UUID tenantId, Instant createdAt) {
         User user = new User();
         user.setPublicId(UUID.randomUUID());
+        user.setUsername(email);
         user.setEmail(email);
         user.setFullName(email.substring(0, email.indexOf('@')));
         user.setTenantId(tenantId);

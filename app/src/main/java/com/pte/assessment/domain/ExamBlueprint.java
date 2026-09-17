@@ -21,9 +21,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * A reusable exam composition: an ordered set of questions (SHARED and/or the
- * host's own PRIVATE, from {@code itembank}). Publishing freezes it into an
- * immutable {@link ExamSnapshot}.
+ * A generated exam composition: an ordered set of approved SHARED questions
+ * from {@code itembank}. Publishing freezes it into an immutable {@link ExamSnapshot}.
  */
 @Entity
 @Table(name = "exam_blueprints", indexes = {

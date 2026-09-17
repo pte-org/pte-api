@@ -41,7 +41,7 @@ public class AuthService {
 
     @Transactional
     public TokenResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.email())
+        User user = userRepository.findByUsername(request.username())
                 .orElseThrow(InvalidLoginException::new);
         if (user.isSuspended()) {
             throw new InvalidLoginException();
@@ -73,6 +73,7 @@ public class AuthService {
     private TokenResponse issueTokens(User user) {
         String accessToken = accessTokenIssuer.issue(user);
         String refreshToken = refreshTokenService.issue(user);
-        return TokenResponse.bearer(accessToken, refreshToken, IdentityConstants.ACCESS_TOKEN_TTL_SECONDS);
+        return TokenResponse.bearer(accessToken, refreshToken, IdentityConstants.ACCESS_TOKEN_TTL_SECONDS,
+                user.isMustChangePassword());
     }
 }

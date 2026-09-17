@@ -9,6 +9,8 @@ import java.util.UUID;
 
 public interface ExamSnapshotRepository extends JpaRepository<ExamSnapshot, Long> {
 
+    Optional<ExamSnapshot> findByPublicId(UUID publicId);
+
     @EntityGraph(attributePaths = "items")
     Optional<ExamSnapshot> findWithItemsByPublicId(UUID publicId);
 

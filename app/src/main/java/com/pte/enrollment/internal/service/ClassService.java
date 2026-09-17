@@ -82,7 +82,8 @@ public class ClassService {
         StudentClass studentClass = new StudentClass();
         studentClass.setProgram(program);
         studentClass.setName(request.name());
-        StudentClass saved = studentClassRepository.save(studentClass);        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, saved.getPublicId().toString(),
+        StudentClass saved = studentClassRepository.save(studentClass);
+        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, saved.getPublicId().toString(),
                 EnrollmentConstants.EVENT_CLASS_CREATED, "Created Class \"" + saved.getName() + "\"");
         return StudentClassMapper.toResponse(saved, programPublicId);
     }
@@ -112,7 +113,8 @@ public class ClassService {
                         programPublicId, request.name())) {
             throw new StudentClassNameAlreadyUsedException();
         }
-        studentClass.setName(request.name());        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
+        studentClass.setName(request.name());
+        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
                 EnrollmentConstants.EVENT_CLASS_UPDATED, "Renamed Class to \"" + studentClass.getName() + "\"");
         return StudentClassMapper.toResponse(studentClass, programPublicId);
     }
@@ -129,7 +131,10 @@ public class ClassService {
         return changeStatus(organizationPublicId, programPublicId, classPublicId, caller, ClassStatus.SUSPENDED);
     }
 
-    /** Unlike {@code activate}/{@code suspend}, deactivating requires every student to be unassigned/transferred out first. */
+    /**
+     * Unlike {@code activate}/{@code suspend}, deactivating requires every student
+     * to be unassigned/transferred out first.
+     */
     @Transactional
     public ClassResponse deactivate(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
             CurrentUser caller) {
@@ -140,8 +145,10 @@ public class ClassService {
         if (classMembershipRepository.existsByTenantIdAndStudentClass_PublicId(caller.tenantId(), classPublicId)) {
             throw new ClassHasActiveMembersException();
         }
-        studentClass.setStatus(ClassStatus.INACTIVE);        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
-                EnrollmentConstants.EVENT_CLASS_STATUS_CHANGED, "Changed Class status to " + ClassStatus.INACTIVE.name());
+        studentClass.setStatus(ClassStatus.INACTIVE);
+        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
+                EnrollmentConstants.EVENT_CLASS_STATUS_CHANGED,
+                "Changed Class status to " + ClassStatus.INACTIVE.name());
         return StudentClassMapper.toResponse(studentClass, programPublicId);
     }
 
@@ -161,7 +168,8 @@ public class ClassService {
         if (classMembershipRepository.existsByTenantIdAndStudentClass_PublicId(caller.tenantId(), classPublicId)) {
             throw new ClassHasActiveMembersException();
         }
-        studentClass.setDeleted(true);        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
+        studentClass.setDeleted(true);
+        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
                 EnrollmentConstants.EVENT_CLASS_ARCHIVED, "Archived Class \"" + studentClass.getName() + "\"");
         return StudentClassMapper.toResponse(studentClass, programPublicId);
     }
@@ -191,7 +199,8 @@ public class ClassService {
             saved = classMembershipRepository.save(membership);
         } catch (DataIntegrityViolationException ex) {
             throw new StudentAlreadyInClassException();
-        }        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
+        }
+        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
                 EnrollmentConstants.EVENT_STUDENT_ASSIGNED_TO_CLASS,
                 "Assigned student " + saved.getStudentPublicId() + " to Class \"" + studentClass.getName() + "\"");
         return ClassMembershipMapper.toResponse(saved);
@@ -208,8 +217,8 @@ public class ClassService {
     public BulkAssignStudentsResponse bulkAssign(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
             BulkAssignStudentsRequest request, CurrentUser caller) {
         StudentClass studentClass = findOwned(organizationPublicId, programPublicId, classPublicId, caller);
-        request.studentPublicIds().forEach(studentPublicId ->
-                assertStudentBelongsToTenant(studentPublicId, caller.tenantId()));
+        request.studentPublicIds()
+                .forEach(studentPublicId -> assertStudentBelongsToTenant(studentPublicId, caller.tenantId()));
 
         List<UUID> existing = classMembershipRepository
                 .findByTenantIdAndStudentPublicIdIn(caller.tenantId(), request.studentPublicIds())
@@ -251,7 +260,8 @@ public class ClassService {
             UUID membershipPublicId, CurrentUser caller) {
         findOwned(organizationPublicId, programPublicId, classPublicId, caller);
         ClassMembership membership = loadMembershipOwned(classPublicId, membershipPublicId, caller.tenantId());
-        classMembershipRepository.delete(membership);        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
+        classMembershipRepository.delete(membership);
+        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
                 EnrollmentConstants.EVENT_STUDENT_UNASSIGNED_FROM_CLASS,
                 "Unassigned student " + membership.getStudentPublicId() + " from Class");
     }
@@ -273,7 +283,8 @@ public class ClassService {
         StudentClass targetClass = loadClassForTenant(request.targetClassPublicId(), caller.tenantId());
 
         membership.setStudentClass(targetClass);
-        ClassMembership saved = classMembershipRepository.save(membership);        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, targetClass.getPublicId().toString(),
+        ClassMembership saved = classMembershipRepository.save(membership);
+        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, targetClass.getPublicId().toString(),
                 EnrollmentConstants.EVENT_STUDENT_TRANSFERRED_CLASS,
                 "Transferred student " + saved.getStudentPublicId() + " to Class \"" + targetClass.getName() + "\"");
         return ClassMembershipMapper.toResponse(saved);
@@ -308,8 +319,10 @@ public class ClassService {
             for (ClassMembership membership : memberships) {
                 membership.setStudentClass(targetClass);
                 ClassMembership saved = classMembershipRepository.save(membership);
-                movedStudentPublicIds.add(saved.getStudentPublicId());            }
-        }        if (!movedStudentPublicIds.isEmpty()) {
+                movedStudentPublicIds.add(saved.getStudentPublicId());
+            }
+        }
+        if (!movedStudentPublicIds.isEmpty()) {
             auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, targetClassPublicId.toString(),
                     EnrollmentConstants.EVENT_CLASSES_MERGED,
                     "Merged " + request.sourceClassPublicIds().size() + " Class(es) into \"" + targetClass.getName()
@@ -349,7 +362,9 @@ public class ClassService {
         for (ClassMembership membership : membershipsToMove) {
             membership.setStudentClass(savedNewClass);
             ClassMembership saved = classMembershipRepository.save(membership);
-            movedStudentPublicIds.add(saved.getStudentPublicId());        }        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, savedNewClass.getPublicId().toString(),
+            movedStudentPublicIds.add(saved.getStudentPublicId());
+        }
+        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, savedNewClass.getPublicId().toString(),
                 EnrollmentConstants.EVENT_CLASS_SPLIT,
                 "Split Class into new Class \"" + savedNewClass.getName() + "\" (" + movedStudentPublicIds.size()
                         + " student(s) moved)");
@@ -380,7 +395,8 @@ public class ClassService {
         if (studentClass.getStatus() == target) {
             return StudentClassMapper.toResponse(studentClass, programPublicId);
         }
-        studentClass.setStatus(target);        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
+        studentClass.setStatus(target);
+        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
                 EnrollmentConstants.EVENT_CLASS_STATUS_CHANGED, "Changed Class status to " + target.name());
         return StudentClassMapper.toResponse(studentClass, programPublicId);
     }
@@ -421,7 +437,10 @@ public class ClassService {
         return studentClass;
     }
 
-    /** Loads a Class by (classPublicId, tenant) only â€” used to validate a transfer target, which may be under a different Program. */
+    /**
+     * Loads a Class by (classPublicId, tenant) only â€” used to validate a transfer
+     * target, which may be under a different Program.
+     */
     private StudentClass loadClassForTenant(UUID classPublicId, UUID tenantId) {
         StudentClass studentClass = studentClassRepository.findByPublicId(classPublicId)
                 .orElseThrow(StudentClassNotFoundException::new);

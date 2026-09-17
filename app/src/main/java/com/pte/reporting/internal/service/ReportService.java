@@ -76,6 +76,7 @@ public class ReportService {
         report.setSessionPublicId(summary.sessionPublicId());
         report.setStudentPublicId(summary.studentPublicId());
         report.setTenantId(summary.tenantId());
+        report.setSnapshotPublicId(summary.snapshotPublicId());
         return report;
     }
 

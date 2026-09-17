@@ -9,11 +9,11 @@ public record SessionResponse(
         UUID publicId,
         String name,
         UUID tenantId,
+        UUID subscriptionPublicId,
         UUID snapshotPublicId,
         Instant opensAt,
         Instant closesAt,
         String status,
         ExamPolicyResponse policy,
-        /** Null = unlimited. */
         Integer capacity) {
 }

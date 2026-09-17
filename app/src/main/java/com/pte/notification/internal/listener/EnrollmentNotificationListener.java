@@ -19,14 +19,16 @@ public class EnrollmentNotificationListener {
     private final IdentityService identityService;
     private final NotificationDispatchService dispatchService;
 
-    public EnrollmentNotificationListener(IdentityService identityService, NotificationDispatchService dispatchService) {
+    public EnrollmentNotificationListener(IdentityService identityService,
+            NotificationDispatchService dispatchService) {
         this.identityService = identityService;
         this.dispatchService = dispatchService;
     }
 
     @TransactionalEventListener
     public void onStudentEnrolled(StudentEnrolledEvent event) {
-        dispatchService.dispatch(NotificationType.STUDENT_ENROLLED, identityService.findById(event.studentPublicId()).orElse(null),
+        dispatchService.dispatch(NotificationType.STUDENT_ENROLLED,
+                identityService.findById(event.studentPublicId()).orElse(null),
                 event.tenantId(), "You've been enrolled in an exam session",
                 "You've been enrolled in exam session " + event.sessionPublicId() + ". Log in to view your schedule.");
     }

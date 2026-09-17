@@ -32,9 +32,11 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long> 
     Optional<ExamAttempt> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 
     /** No tenant filter: reporting (Phase 10) resolves tenant from the attempt itself, then checks it against the caller — same trusted-caller pattern as session's EntitlementService. */
+    @EntityGraph(attributePaths = "pinnedSnapshot")
     Optional<ExamAttempt> findByPublicIdAndStatus(UUID publicId, AttemptStatus status);
 
     /** Reporting's publish fanout (Phase 10) — every submitted attempt in a session. */
+    @EntityGraph(attributePaths = "pinnedSnapshot")
     List<ExamAttempt> findBySessionPublicIdAndTenantIdAndStatus(UUID sessionPublicId, UUID tenantId, AttemptStatus status);
 
     /** Mirrors {@link #findWithPinnedByPublicIdAndStudentPublicId} but no student filter — trusted internal caller (reporting's per-attempt scoring, Phase 5), not a student-facing read. */

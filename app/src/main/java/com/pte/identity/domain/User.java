@@ -33,10 +33,25 @@ import java.util.UUID;
 @NoArgsConstructor
 public class User extends BaseEntity {
 
+    /**
+     * The actual login key ({@link com.pte.identity.internal.service.AuthService#login}
+     * looks up by this, not {@code email}). Equals {@code email} for every role
+     * except STUDENT, whose roster-import-generated username is prefixed with
+     * its tenant's code instead (plans/quang-tenant-commercialization Phase 8).
+     */
     @Column(nullable = false, unique = true)
+    private String username;
+
+    /**
+     * No longer unique or required at the DB level: two different tenants may
+     * create a student with the same email. Still required and unique in
+     * practice for every non-STUDENT role, since {@code username} is set equal
+     * to it for them.
+     */
+    @Column
     private String email;
 
-    @Column(nullable = false)
+    @Column
     private String fullName;
 
     @Column
@@ -45,6 +60,9 @@ public class User extends BaseEntity {
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     private UserStatus status = UserStatus.ACTIVE;
+
+    @Column(nullable = false)
+    private boolean mustChangePassword = false;
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))

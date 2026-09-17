@@ -60,8 +60,10 @@ docker run --rm httpd:2.4-alpine htpasswd -nbBC 10 "" 'Password123!'
 2. Connect to the `iam` database and run this SQL once:
 
 ```sql
-INSERT INTO users (public_id, email, full_name, tenant_id, status, deleted, created_at, updated_at)
-VALUES (gen_random_uuid(), 'admin@test.local', 'Bootstrap Admin', NULL, 'ACTIVE', false, now(), now())
+-- username = email for a PLATFORM_ADMIN (plans/quang-tenant-commercialization
+-- Phase 1) — login now looks up by username, not email.
+INSERT INTO users (public_id, username, email, full_name, tenant_id, status, deleted, created_at, updated_at)
+VALUES (gen_random_uuid(), 'admin@test.local', 'admin@test.local', 'Bootstrap Admin', NULL, 'ACTIVE', false, now(), now())
 RETURNING id;
 -- Capture the printed id value, use it as <USER_ID> in the next two statements
 

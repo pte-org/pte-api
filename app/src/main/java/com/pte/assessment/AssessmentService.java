@@ -15,12 +15,12 @@ import java.util.UUID;
  * SnapshotPublishService}, repositories, and controllers stay in
  * {@code internal/}.
  *
- * <p>Starts with the two read methods known to have cross-module callers:
+ * <p>Exposes read methods known to have cross-module callers:
  * {@code session} (Phase 06) validating composition against a published
- * snapshot's summary, and {@code attempt} (Phase 07) pinning full content at
- * attempt-create. Blueprint CRUD and publish stay internal — only a host's
- * own authoring UI calls those, through {@code BlueprintController}/{@code
- * SnapshotController} directly.
+ * snapshot's summary, {@code attempt} (Phase 07) pinning full content at
+ * attempt-create, and {@code reporting} (Phase 10) reading immutable snapshot
+ * weights. Generation is also exposed here so future session creation does not
+ * reach assessment internals.
  */
 @Service
 public class AssessmentService {
@@ -33,12 +33,12 @@ public class AssessmentService {
         this.examGenerationService = examGenerationService;
     }
 
-    /** Answer-stripped summary — safe for {@code session} to validate composition against. */
+    /** Answer-stripped summary - safe for {@code session} to validate composition against. */
     public SnapshotResponse getSummary(UUID snapshotPublicId) {
         return snapshotPublishService.getSummary(snapshotPublicId);
     }
 
-    /** Full-fidelity content including answer keys — trusted application call only, never expose to a human-facing response. */
+    /** Full-fidelity content including answer keys - trusted application call only. */
     public SnapshotContentResponse getFullContent(UUID snapshotPublicId) {
         return snapshotPublishService.getContent(snapshotPublicId);
     }

@@ -3,6 +3,7 @@ package com.pte.session;
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
 import com.pte.session.internal.service.EntitlementService;
+import com.pte.session.internal.service.SessionLifecycleService;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
@@ -24,9 +25,11 @@ import java.util.UUID;
 public class SessionService {
 
     private final EntitlementService entitlementService;
+    private final SessionLifecycleService sessionLifecycleService;
 
-    public SessionService(EntitlementService entitlementService) {
+    public SessionService(EntitlementService entitlementService, SessionLifecycleService sessionLifecycleService) {
         this.entitlementService = entitlementService;
+        this.sessionLifecycleService = sessionLifecycleService;
     }
 
     /** Throws if the session isn't OPEN or the student isn't enrolled — never returns a false/empty result for "not entitled". */
@@ -42,5 +45,10 @@ public class SessionService {
     /** Throws if the session doesn't exist in the caller's tenant. */
     public void verifyHostAccess(UUID sessionPublicId, UUID tenantId) {
         entitlementService.verifyHostAccess(sessionPublicId, tenantId);
+    }
+
+    /** Cancels scheduled sessions for a revoked subscription; open/closed sessions are untouched. */
+    public void cancelScheduledSessionsBySubscription(UUID subscriptionId) {
+        sessionLifecycleService.cancelScheduledSessionsBySubscription(subscriptionId);
     }
 }

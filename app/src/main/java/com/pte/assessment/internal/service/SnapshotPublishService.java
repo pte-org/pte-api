@@ -1,6 +1,5 @@
 package com.pte.assessment.internal.service;
 
-import com.pte.assessment.domain.BlueprintItem;
 import com.pte.assessment.domain.ExamBlueprint;
 import com.pte.assessment.domain.ExamSnapshot;
 import com.pte.assessment.domain.SnapshotItem;
@@ -14,6 +13,7 @@ import com.pte.assessment.internal.mapper.SnapshotMapper;
 import com.pte.assessment.internal.repository.ExamBlueprintRepository;
 import com.pte.assessment.internal.repository.ExamSnapshotRepository;
 import com.pte.itembank.ItembankService;
+import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
@@ -29,7 +29,7 @@ import java.util.UUID;
 /**
  * Freezes a blueprint into an immutable, versioned {@link ExamSnapshot} by
  * DEEP-COPYING each question's content (including options serialized to JSON,
- * already in delivery order from {@link ItembankService#freeze}) so a
+ * already in delivery order from {@code ItembankService}) so a
  * published snapshot never changes when source questions are later edited.
  *
  * <p>No outbox/event emission (plan.md's forbidden-artifact list) — in the
@@ -82,7 +82,8 @@ public class SnapshotPublishService {
         snapshot.setScoreTemplatePublicId(activeTemplate.publicId());
         snapshot.setScoreTemplateVersion(activeTemplate.version());
         snapshot.setTenantId(blueprint.getTenantId());
-        blueprint.getItems().forEach(item -> snapshot.addItem(freeze(item)));
+        blueprint.getItems().forEach(item -> snapshot.addItem(toSnapshotItem(
+                itembankService.freeze(item.getQuestionPublicId()), item.getSection(), item.getOrderIndex())));
 
         ExamSnapshot saved = snapshotRepository.save(snapshot);
         blueprint.setStatus(BlueprintStatus.PUBLISHED);
@@ -126,13 +127,12 @@ public class SnapshotPublishService {
         return SnapshotMapper.toResponse(snapshot);
     }
 
-    private SnapshotItem freeze(BlueprintItem blueprintItem) {
-        QuestionFreezeView question = itembankService.freeze(blueprintItem.getQuestionPublicId());
+    private SnapshotItem toSnapshotItem(QuestionFreezeView question, PteSection section, int orderIndex) {
         SnapshotItem item = new SnapshotItem();
         item.setSourceQuestionPublicId(question.sourceQuestionPublicId());
         item.setPteTaskType(question.pteTaskType());
-        item.setSection(blueprintItem.getSection());
-        item.setOrderIndex(blueprintItem.getOrderIndex());
+        item.setSection(section);
+        item.setOrderIndex(orderIndex);
         item.setTitle(question.title());
         item.setPromptText(question.promptText());
         item.setAudioPromptRef(question.audioPromptRef());

@@ -43,6 +43,7 @@ class TenantLifecycleServiceTest {
     private Tenant activeTenant(UUID publicId) {
         Tenant tenant = new Tenant();
         tenant.setPublicId(publicId);
+        tenant.setCode("acme-school");
         tenant.setName("Acme School");
         tenant.setOrganizationType("SCHOOL");
         tenant.setPackageName("starter");
@@ -53,7 +54,7 @@ class TenantLifecycleServiceTest {
 
     @Test
     void onboard_savesTenant() {
-        OnboardTenantRequest request = new OnboardTenantRequest("Acme School", "SCHOOL", "starter", 500);
+        OnboardTenantRequest request = new OnboardTenantRequest("acme-school", "Acme School", "SCHOOL", "starter", 500);
         when(tenantRepository.existsByName("Acme School")).thenReturn(false);
         when(tenantRepository.save(any(Tenant.class))).thenAnswer(invocation -> {
             Tenant saved = invocation.getArgument(0);
@@ -69,7 +70,7 @@ class TenantLifecycleServiceTest {
 
     @Test
     void onboard_duplicateName_throwsWithoutSaving() {
-        OnboardTenantRequest request = new OnboardTenantRequest("Acme School", "SCHOOL", "starter", 500);
+        OnboardTenantRequest request = new OnboardTenantRequest("acme-school", "Acme School", "SCHOOL", "starter", 500);
         when(tenantRepository.existsByName("Acme School")).thenReturn(true);
 
         assertThatThrownBy(() -> service.onboard(request)).isInstanceOf(TenantNameAlreadyUsedException.class);

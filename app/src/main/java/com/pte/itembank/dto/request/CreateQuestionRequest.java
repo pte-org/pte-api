@@ -13,7 +13,6 @@ import java.util.UUID;
  */
 public record CreateQuestionRequest(
         @NotBlank(message = ItembankConstants.TASK_TYPE_REQUIRED) String pteTaskType,
-        @NotBlank(message = ItembankConstants.VISIBILITY_REQUIRED) String visibility,
         @NotBlank(message = ItembankConstants.TITLE_REQUIRED) String title,
         String promptText,
         UUID audioPromptRef,

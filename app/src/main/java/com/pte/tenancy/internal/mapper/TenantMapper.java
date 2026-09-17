@@ -12,6 +12,7 @@ public final class TenantMapper {
     public static TenantResponse toResponse(Tenant tenant) {
         return new TenantResponse(
                 tenant.getPublicId(),
+                tenant.getCode(),
                 tenant.getName(),
                 tenant.getOrganizationType(),
                 tenant.getStatus().name(),

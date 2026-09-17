@@ -233,4 +233,5 @@ class ScoreAggregationServiceTest {
         assertThat(summary.skillScores().get(Skill.SPEAKING).score()).isEqualTo(90);
         assertThat(summary.skillScores().get(Skill.LISTENING).score()).isEqualTo(90);
     }
+
 }

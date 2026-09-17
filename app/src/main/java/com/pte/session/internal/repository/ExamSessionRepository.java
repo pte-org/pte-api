@@ -1,12 +1,14 @@
 package com.pte.session.internal.repository;
 
 import com.pte.session.domain.ExamSession;
+import com.pte.session.domain.enums.SessionStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,4 +32,15 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> 
     Optional<ExamSession> findByPublicId(UUID publicId);
 
     List<ExamSession> findByTenantId(UUID tenantId);
+
+    @Query("SELECT s FROM ExamSession s WHERE s.subscriptionId = :subscriptionId "
+            + "AND s.opensAt < :closesAt AND s.closesAt > :opensAt "
+            + "AND (:excludedPublicId IS NULL OR s.publicId <> :excludedPublicId)")
+    Optional<ExamSession> findFirstOverlapping(@Param("subscriptionId") UUID subscriptionId,
+                                                @Param("opensAt") Instant opensAt,
+                                                @Param("closesAt") Instant closesAt,
+                                                @Param("excludedPublicId") UUID excludedPublicId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    List<ExamSession> findBySubscriptionIdAndStatus(UUID subscriptionId, SessionStatus status);
 }

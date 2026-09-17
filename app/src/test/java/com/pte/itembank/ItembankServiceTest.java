@@ -3,15 +3,14 @@ package com.pte.itembank;
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.QuestionOption;
 import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.request.CreateQuestionRequest;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.dto.response.QuestionResponse;
-import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.internal.exception.InvalidQuestionStatusTransitionException;
 import com.pte.itembank.internal.exception.QuestionNotFoundException;
 import com.pte.itembank.internal.exception.QuestionValidationException;
-import com.pte.itembank.internal.exception.SharedWriteForbiddenException;
 import com.pte.itembank.internal.repository.QuestionRepository;
 import com.pte.itembank.internal.repository.TaskTypeCountProjection;
 import com.pte.itembank.internal.service.ItembankAccessPolicy;
@@ -22,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
 import java.util.Map;
@@ -38,8 +38,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * Covers the {@code itembank → assessment} boundary contract (Phase 05/A):
- * {@code create}/{@code get}/{@code listAccessible} preserve the pre-split
- * visibility rules, and {@code freeze} — the only way {@code assessment} is
+ * {@code create}/{@code get}/{@code listAccessible} preserve the platform-bank
+ * rules, and {@code freeze} — the only way {@code assessment} is
  * allowed to read question content — returns options already in delivery
  * order (rotated for {@code RE_ORDER_PARAGRAPHS}, ported from services/authoring's
  * own {@code SnapshotPublishServiceTest.deliveryOrder} coverage).
@@ -69,6 +69,7 @@ class ItembankServiceTest {
         question.setPteTaskType(taskType);
         question.setVisibility(visibility);
         question.setTenantId(tenantId);
+        question.setStatus(QuestionStatus.APPROVED);
         question.setTitle("test");
         for (int i = 0; i < optionCount; i++) {
             QuestionOption option = new QuestionOption();
@@ -81,22 +82,22 @@ class ItembankServiceTest {
     }
 
     // ------------------------------------------------------------------
-    // create — SHARED/PRIVATE visibility enforcement
+    // create — platform-only question-bank write enforcement
     // ------------------------------------------------------------------
 
     @Test
     void create_sharedByHostCaller_throwsForbidden() {
         CreateQuestionRequest request = new CreateQuestionRequest(
-                "READ_ALOUD", "SHARED", "title", "prompt", null, null, null, null, null, null, null);
+                "READ_ALOUD", "title", "prompt", null, null, null, null, null, null, null);
 
-        assertThatThrownBy(() -> service.create(request, hostCaller)).isInstanceOf(SharedWriteForbiddenException.class);
+        assertThatThrownBy(() -> service.create(request, hostCaller)).isInstanceOf(AccessDeniedException.class);
     }
 
     @Test
-    void create_privateByPlatformCallerWithNoTenant_stillPersistsNullTenant() {
+    void create_sharedByPlatformCallerPersistsApprovedPlatformQuestion() {
         when(questionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         CreateQuestionRequest request = new CreateQuestionRequest(
-                "READ_ALOUD", "SHARED", "title", "prompt", null, null, null, null, null, null, null);
+                "READ_ALOUD", "title", "prompt", null, null, null, null, null, null, null);
 
         QuestionResponse response = service.create(request, platformCaller);
 
@@ -107,15 +108,6 @@ class ItembankServiceTest {
     // ------------------------------------------------------------------
     // get — accessibility gate reused by assessment.BlueprintService
     // ------------------------------------------------------------------
-
-    @Test
-    void get_crossTenantPrivateQuestion_throwsNotFound() {
-        UUID publicId = UUID.randomUUID();
-        Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.PRIVATE, UUID.randomUUID(), 0);
-        when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
-
-        assertThatThrownBy(() -> service.get(publicId, hostCaller)).isInstanceOf(QuestionNotFoundException.class);
-    }
 
     @Test
     void get_sharedQuestion_readableByAnyTenant() {
@@ -144,6 +136,16 @@ class ItembankServiceTest {
     void freeze_unknownQuestion_throwsNotFound() {
         UUID publicId = UUID.randomUUID();
         when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.freeze(publicId)).isInstanceOf(QuestionNotFoundException.class);
+    }
+
+    @Test
+    void freeze_draftQuestionIsNotAvailableForGeneration() {
+        UUID publicId = UUID.randomUUID();
+        Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        question.setStatus(QuestionStatus.DRAFT);
+        when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
 
         assertThatThrownBy(() -> service.freeze(publicId)).isInstanceOf(QuestionNotFoundException.class);
     }
@@ -220,6 +222,7 @@ class ItembankServiceTest {
         UUID publicId = UUID.randomUUID();
         // REPEAT_SENTENCE requires an audio prompt; none set here.
         Question question = questionWithOptions(PteTaskType.REPEAT_SENTENCE, Visibility.SHARED, null, 0);
+        question.setStatus(QuestionStatus.DRAFT);
         when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
 
         assertThatThrownBy(() -> service.publish(publicId, platformCaller))
@@ -231,24 +234,26 @@ class ItembankServiceTest {
     void publish_byPlatformCaller_succeeds() {
         UUID publicId = UUID.randomUUID();
         Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        question.setStatus(QuestionStatus.DRAFT);
         question.setPromptText("read this aloud");
         when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
 
         QuestionResponse response = service.publish(publicId, platformCaller);
 
-        assertThat(response.status()).isEqualTo("PUBLISHED");
-        assertThat(question.getStatus()).isEqualTo(QuestionStatus.PUBLISHED);
+        assertThat(response.status()).isEqualTo("APPROVED");
+        assertThat(question.getStatus()).isEqualTo(QuestionStatus.APPROVED);
     }
 
     @Test
     void publish_byHostCaller_forbidden() {
         UUID publicId = UUID.randomUUID();
         Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        question.setStatus(QuestionStatus.DRAFT);
         question.setAudioPromptRef(UUID.randomUUID());
         when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
 
         assertThatThrownBy(() -> service.publish(publicId, hostCaller))
-                .isInstanceOf(SharedWriteForbiddenException.class);
+                .isInstanceOf(AccessDeniedException.class);
         assertThat(question.getStatus()).isEqualTo(QuestionStatus.DRAFT);
     }
 
@@ -266,37 +271,38 @@ class ItembankServiceTest {
     }
 
     @Test
-    void publish_alreadyPublished_isIdempotentNoOp() {
+    void publish_alreadyApproved_isIdempotentNoOp() {
         UUID publicId = UUID.randomUUID();
         Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
         question.setAudioPromptRef(UUID.randomUUID());
-        question.setStatus(QuestionStatus.PUBLISHED);
+        question.setStatus(QuestionStatus.APPROVED);
         when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
 
         QuestionResponse response = service.publish(publicId, platformCaller);
 
-        assertThat(response.status()).isEqualTo("PUBLISHED");
-        assertThat(question.getStatus()).isEqualTo(QuestionStatus.PUBLISHED);
+        assertThat(response.status()).isEqualTo("APPROVED");
+        assertThat(question.getStatus()).isEqualTo(QuestionStatus.APPROVED);
     }
 
     @Test
-    void archive_fromDraftOrPublished_succeeds() {
+    void archive_fromDraftOrApproved_succeeds() {
         UUID draftId = UUID.randomUUID();
         Question draft = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        draft.setStatus(QuestionStatus.DRAFT);
         when(questionRepository.findWithOptionsByPublicId(draftId)).thenReturn(Optional.of(draft));
 
         service.archive(draftId, platformCaller);
 
         assertThat(draft.getStatus()).isEqualTo(QuestionStatus.ARCHIVED);
 
-        UUID publishedId = UUID.randomUUID();
-        Question published = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
-        published.setStatus(QuestionStatus.PUBLISHED);
-        when(questionRepository.findWithOptionsByPublicId(publishedId)).thenReturn(Optional.of(published));
+        UUID approvedId = UUID.randomUUID();
+        Question approved = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        approved.setStatus(QuestionStatus.APPROVED);
+        when(questionRepository.findWithOptionsByPublicId(approvedId)).thenReturn(Optional.of(approved));
 
-        service.archive(publishedId, platformCaller);
+        service.archive(approvedId, platformCaller);
 
-        assertThat(published.getStatus()).isEqualTo(QuestionStatus.ARCHIVED);
+        assertThat(approved.getStatus()).isEqualTo(QuestionStatus.ARCHIVED);
     }
 
     @Test
@@ -315,15 +321,16 @@ class ItembankServiceTest {
     void archive_byHostCaller_forbidden() {
         UUID publicId = UUID.randomUUID();
         Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        question.setStatus(QuestionStatus.DRAFT);
         when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
 
         assertThatThrownBy(() -> service.archive(publicId, hostCaller))
-                .isInstanceOf(SharedWriteForbiddenException.class);
+                .isInstanceOf(AccessDeniedException.class);
         assertThat(question.getStatus()).isEqualTo(QuestionStatus.DRAFT);
     }
 
     @Test
-    void unarchive_archivedQuestion_becomesDraft_notPublished() {
+    void unarchive_archivedQuestion_becomesDraft_notApproved() {
         UUID publicId = UUID.randomUUID();
         Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
         question.setStatus(QuestionStatus.ARCHIVED);
@@ -335,20 +342,21 @@ class ItembankServiceTest {
     }
 
     @Test
-    void unarchive_draftOrPublished_rejectedWithInvalidTransition() {
+    void unarchive_draftOrApproved_rejectedWithInvalidTransition() {
         UUID draftId = UUID.randomUUID();
         Question draft = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        draft.setStatus(QuestionStatus.DRAFT);
         when(questionRepository.findWithOptionsByPublicId(draftId)).thenReturn(Optional.of(draft));
 
         assertThatThrownBy(() -> service.unarchive(draftId, platformCaller))
                 .isInstanceOf(InvalidQuestionStatusTransitionException.class);
 
-        UUID publishedId = UUID.randomUUID();
-        Question published = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
-        published.setStatus(QuestionStatus.PUBLISHED);
-        when(questionRepository.findWithOptionsByPublicId(publishedId)).thenReturn(Optional.of(published));
+        UUID approvedId = UUID.randomUUID();
+        Question approved = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        approved.setStatus(QuestionStatus.APPROVED);
+        when(questionRepository.findWithOptionsByPublicId(approvedId)).thenReturn(Optional.of(approved));
 
-        assertThatThrownBy(() -> service.unarchive(publishedId, platformCaller))
+        assertThatThrownBy(() -> service.unarchive(approvedId, platformCaller))
                 .isInstanceOf(InvalidQuestionStatusTransitionException.class);
     }
 
@@ -360,7 +368,7 @@ class ItembankServiceTest {
         when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
 
         assertThatThrownBy(() -> service.unarchive(publicId, hostCaller))
-                .isInstanceOf(SharedWriteForbiddenException.class);
+                .isInstanceOf(AccessDeniedException.class);
         assertThat(question.getStatus()).isEqualTo(QuestionStatus.ARCHIVED);
     }
 

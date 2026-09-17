@@ -2,12 +2,16 @@ package com.pte.identity;
 
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
+import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
 import java.util.UUID;
@@ -22,11 +26,16 @@ class IdentityServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private LoginHashRepository loginHashRepository;
+
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
     private IdentityService service;
 
     @BeforeEach
     void setUp() {
-        service = new IdentityService(userRepository);
+        service = new IdentityService(userRepository, loginHashRepository, passwordEncoder);
     }
 
     @Test
@@ -83,5 +92,15 @@ class IdentityServiceTest {
 
         assertThat(result).hasSize(2);
         assertThat(result).containsExactly(student1, student2);
+    }
+
+    @Test
+    void countStudents_delegatesToRoleAwareRepositoryQuery() {
+        UUID tenantId = UUID.randomUUID();
+        when(userRepository.countByTenantIdAndRole(tenantId, Role.STUDENT)).thenReturn(487L);
+
+        assertThat(service.countStudents(tenantId)).isEqualTo(487L);
+
+        verify(userRepository).countByTenantIdAndRole(tenantId, Role.STUDENT);
     }
 }

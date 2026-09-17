@@ -6,6 +6,7 @@ import com.pte.identity.domain.UserStatus;
 import com.pte.identity.internal.domain.LoginHash;
 import com.pte.identity.internal.dto.request.BulkCreateUserRow;
 import com.pte.identity.internal.dto.request.BulkCreateUsersRequest;
+import com.pte.identity.internal.dto.request.ChangePasswordRequest;
 import com.pte.identity.internal.dto.request.CreateUserRequest;
 import com.pte.identity.internal.dto.request.ResetPasswordRequest;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
@@ -13,6 +14,7 @@ import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.DuplicateEmailInBatchException;
 import com.pte.identity.internal.exception.ForbiddenPasswordResetException;
 import com.pte.identity.internal.exception.UserNotFoundException;
+import com.pte.tenancy.internal.exception.StudentLimitExceededException;
 import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.shared.security.CurrentUser;
@@ -36,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -169,7 +172,7 @@ class UserServiceTest {
                 List.of("STUDENT"), null,
                 "SC-001", "12A1", "0900000000", LocalDate.of(2008, 5, 1));
 
-        when(userRepository.existsByEmail(request.email())).thenReturn(false);
+        when(userRepository.existsByUsername(request.email())).thenReturn(false);
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
         when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.STUDENT));
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> {
@@ -181,6 +184,7 @@ class UserServiceTest {
 
         UserResponse response = userService.create(request, caller);
 
+        verify(tenancyService).assertCanAddStudents(tenantId, 1L);
         assertThat(response.studentCode()).isEqualTo("SC-001");
         assertThat(response.className()).isEqualTo("12A1");
         assertThat(response.phone()).isEqualTo("0900000000");
@@ -219,6 +223,7 @@ class UserServiceTest {
         assertThat(response.created()).hasSize(2);
         assertThat(response.skipped()).isEmpty();
         assertThat(response.created().get(0).generatedPassword()).matches("^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$");
+        verify(tenancyService).assertCanAddStudents(tenantId, 2L);
     }
 
     @Test
@@ -245,6 +250,7 @@ class UserServiceTest {
         assertThat(response.skipped()).hasSize(1);
         assertThat(response.skipped().get(0).rowIndex()).isEqualTo(0);
         assertThat(response.skipped().get(0).email()).isEqualTo(existing.email());
+        verify(tenancyService).assertCanAddStudents(tenantId, 1L);
     }
 
     @Test
@@ -282,6 +288,49 @@ class UserServiceTest {
         assertThat(response.created().get(0).email()).isEqualTo(fine.email());
         assertThat(response.skipped()).hasSize(1);
         assertThat(response.skipped().get(0).email()).isEqualTo(raced.email());
+        verify(tenancyService).assertCanAddStudents(tenantId, 2L);
+    }
+
+    @Test
+    void create_studentLimitExceeded_rejectsBeforeInsert() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        CreateUserRequest request = new CreateUserRequest(
+                "student@tenant.example", "Student One", "Password123",
+                List.of("STUDENT"), null, null, null, null, null);
+
+        when(userRepository.existsByUsername(request.email())).thenReturn(false);
+        when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
+        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.STUDENT));
+        doThrow(new StudentLimitExceededException(100L, 100L, 1L))
+                .when(tenancyService).assertCanAddStudents(tenantId, 1L);
+
+        assertThatThrownBy(() -> userService.create(request, caller))
+                .isInstanceOf(StudentLimitExceededException.class);
+
+        verify(userRepository, never()).saveAndFlush(any(User.class));
+        verify(loginHashRepository, never()).save(any());
+    }
+
+    @Test
+    void changeOwnPassword_updatesHashAndClearsFirstLoginFlag() {
+        UUID userPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        User student = userWithId(1L, userPublicId, tenantId);
+        student.setMustChangePassword(true);
+        LoginHash loginHash = new LoginHash();
+        loginHash.setUserId(1L);
+        loginHash.setHash(passwordEncoder.encode("Temporary123"));
+        when(userRepository.findByPublicId(userPublicId)).thenReturn(Optional.of(student));
+        when(loginHashRepository.findByUserId(1L)).thenReturn(Optional.of(loginHash));
+
+        userService.changeOwnPassword(new ChangePasswordRequest("Temporary123", "NewPassword456"),
+                new CurrentUser(userPublicId, tenantId, List.of("STUDENT")));
+
+        assertThat(passwordEncoder.matches("NewPassword456", loginHash.getHash())).isTrue();
+        assertThat(student.isMustChangePassword()).isFalse();
+        verify(userRepository).save(student);
+        verify(loginHashRepository).save(loginHash);
     }
 
     @Test

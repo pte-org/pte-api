@@ -2,6 +2,7 @@ package com.pte.identity.internal.controller;
 
 import com.pte.identity.internal.dto.request.LoginRequest;
 import com.pte.identity.internal.dto.request.RefreshRequest;
+import com.pte.identity.internal.dto.request.ChangePasswordRequest;
 import com.pte.identity.internal.dto.response.TokenResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.service.AuthService;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/auth")
@@ -47,6 +49,13 @@ public class AuthController {
     @PostMapping("/logout")
     public ApiResponse<Void> logout(@Valid @RequestBody RefreshRequest request) {
         authService.logout(request);
+        return ApiResponse.success(null);
+    }
+
+    @PostMapping("/change-password")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        userService.changeOwnPassword(request, CurrentUserContext.required());
         return ApiResponse.success(null);
     }
 }

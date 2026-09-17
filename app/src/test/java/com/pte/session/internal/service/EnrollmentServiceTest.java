@@ -92,7 +92,7 @@ class EnrollmentServiceTest {
         ExamSession session = session(1L, sessionPublicId, tenantId);
         CurrentUser caller = hostAdmin(tenantId);
 
-        when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
         when(enrollmentRepository.save(any(Enrollment.class))).thenAnswer(invocation -> {
             Enrollment enrollment = invocation.getArgument(0);
             enrollment.setPublicId(UUID.randomUUID());
@@ -103,6 +103,22 @@ class EnrollmentServiceTest {
                 new EnrollStudentRequest(studentPublicId), caller);
 
         assertThat(response.studentPublicId()).isEqualTo(studentPublicId);
+    }
+
+    @Test
+    void enrollStudent_rejectsWhenSessionCapacityIsFull() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        session.setCapacity(1);
+        CurrentUser caller = hostAdmin(tenantId);
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+        when(enrollmentRepository.countBySessionId(1L)).thenReturn(1L);
+
+        assertThatThrownBy(() -> enrollmentService.enrollStudent(sessionPublicId,
+                new EnrollStudentRequest(UUID.randomUUID()), caller))
+                .isInstanceOf(SessionCapacityExceededException.class);
+        verify(enrollmentRepository, never()).save(any());
     }
 
     @Test
@@ -378,7 +394,7 @@ class EnrollmentServiceTest {
         ExamSession session = session(1L, sessionPublicId, tenantId);
         CurrentUser caller = hostAdmin(tenantId);
 
-        when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
         when(enrollmentRepository.save(any(Enrollment.class))).thenAnswer(invocation -> {
             Enrollment enrollment = invocation.getArgument(0);
             enrollment.setPublicId(UUID.randomUUID());

@@ -16,6 +16,7 @@ public final class SessionMapper {
                 session.getPublicId(),
                 session.getName(),
                 session.getTenantId(),
+                session.getSubscriptionId(),
                 session.getSnapshotPublicId(),
                 session.getOpensAt(),
                 session.getClosesAt(),

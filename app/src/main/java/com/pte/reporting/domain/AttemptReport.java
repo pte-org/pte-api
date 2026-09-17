@@ -41,6 +41,10 @@ public class AttemptReport extends BaseEntity {
     @Column(nullable = false)
     private UUID tenantId;
 
+    /** Source snapshot provenance used to apply its immutable section weights. */
+    @Column
+    private UUID snapshotPublicId;
+
     @Column(nullable = false)
     private boolean published = false;
 

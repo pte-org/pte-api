@@ -12,9 +12,11 @@ import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
 import java.util.Set;
+import java.util.UUID;
 
 public record CreateSessionRequest(
         @NotBlank(message = SessionConstants.SESSION_NAME_REQUIRED) String name,
+        @NotNull(message = SessionConstants.SUBSCRIPTION_REFERENCE_REQUIRED) UUID subscriptionPublicId,
         /** 1–4 distinct {@code PteSection} names — the exam is randomly generated from these skills. */
         @NotEmpty(message = SessionConstants.SKILLS_REQUIRED)
         @Size(min = 1, max = 4, message = SessionConstants.SKILLS_SIZE_INVALID) Set<String> skills,
@@ -25,6 +27,6 @@ public record CreateSessionRequest(
         /** Optional teacher override — null means use ExamMode default.
          *  Validation: STRICT is not allowed when examMode is PRACTICE. */
         LockdownMode lockdownMode,
-        /** Null = unlimited, matching {@link com.pte.session.domain.ExamSession#getCapacity()}. */
+        @NotNull(message = SessionConstants.CAPACITY_REQUIRED)
         @Positive(message = SessionConstants.CAPACITY_POSITIVE) Integer capacity) {
 }

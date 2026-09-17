@@ -20,13 +20,16 @@ import java.util.UUID;
  * A scheduled exam window, referencing a published assessment snapshot by
  * {@code publicId} (never a cross-module JOIN — module boundary is code, not
  * FK). A student pins every item of that snapshot at attempt-create time —
- * there is no host-chosen subset (Plan B removed {@code SessionComposition};
- * the random-exam-generation step already applies the skill selection at
- * exam-creation time, not delivery time).
+ * there is no host-chosen subset (the random-exam-generation step already
+ * applies the skill selection at exam-creation time, not delivery time).
+ * Subscription and license references are scalar denormalized values;
+ * billing remains a separate module, consulted only as a creation-time gate
+ * (window/capacity/overlap).
  */
 @Entity
 @Table(name = "exam_sessions", indexes = {
-        @Index(name = "idx_sessions_tenant", columnList = "tenant_id")
+        @Index(name = "idx_sessions_tenant", columnList = "tenant_id"),
+        @Index(name = "idx_sessions_subscription", columnList = "subscription_id")
 })
 @Getter
 @Setter
@@ -38,6 +41,12 @@ public class ExamSession extends BaseEntity {
 
     @Column(nullable = false)
     private UUID tenantId;
+
+    @Column(nullable = false)
+    private UUID subscriptionId;
+
+    @Column(nullable = false, length = 64)
+    private String licenseKey;
 
     @Column(nullable = false)
     private UUID snapshotPublicId;
@@ -52,17 +61,28 @@ public class ExamSession extends BaseEntity {
     @Column(nullable = false)
     private SessionStatus status = SessionStatus.SCHEDULED;
 
-    /** Null = unlimited. Enforced in {@code EnrollmentService.bulkEnroll}. */
+    /** Snapshot of the requested per-session capacity, bounded by the subscription cap. */
+    @Column(nullable = false)
     private Integer capacity;
 
     @Embedded
     private ExamPolicy policy = ExamPolicy.mockTestDefault();
 
     public void open() {
-        this.status = SessionStatus.OPEN;
+        if (status != SessionStatus.CANCELLED) {
+            this.status = SessionStatus.OPEN;
+        }
     }
 
     public void close() {
-        this.status = SessionStatus.CLOSED;
+        if (status != SessionStatus.CANCELLED) {
+            this.status = SessionStatus.CLOSED;
+        }
+    }
+
+    public void cancel() {
+        if (status == SessionStatus.SCHEDULED) {
+            this.status = SessionStatus.CANCELLED;
+        }
     }
 }

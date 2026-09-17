@@ -51,6 +51,7 @@ public class AttemptSummaryQueryService {
 
     private static AttemptSummaryView toView(ExamAttempt attempt) {
         return new AttemptSummaryView(attempt.getPublicId(), attempt.getSessionPublicId(),
-                attempt.getStudentPublicId(), attempt.getTenantId());
+                attempt.getStudentPublicId(), attempt.getTenantId(),
+                attempt.getPinnedSnapshot() == null ? null : attempt.getPinnedSnapshot().getSourceSnapshotPublicId());
     }
 }
