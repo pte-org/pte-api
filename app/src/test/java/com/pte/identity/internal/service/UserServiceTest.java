@@ -177,7 +177,7 @@ class UserServiceTest {
                 List.of("STUDENT"), null,
                 "SC-001", "12A1", "0900000000", LocalDate.of(2008, 5, 1));
 
-        when(userRepository.existsByUsername(request.email())).thenReturn(false);
+        when(userRepository.existsByUsernameAndTenantId(request.email(), tenantId)).thenReturn(false);
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
         when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.STUDENT));
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> {
@@ -218,7 +218,8 @@ class UserServiceTest {
         BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(rowA, rowB), null);
 
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
-        when(userRepository.findByEmailIn(List.of(rowA.email(), rowB.email()))).thenReturn(List.of());
+        when(userRepository.findByTenantIdAndEmailIn(tenantId, List.of(rowA.email(), rowB.email())))
+                .thenReturn(List.of());
         when(bulkCreateWriter.createOne(any(), eq(tenantId)))
                 .thenReturn(Optional.of(writerResult(rowA.email(), UUID.randomUUID(), "Abcd-2345")))
                 .thenReturn(Optional.of(writerResult(rowB.email(), UUID.randomUUID(), "Efgh-6789")));
@@ -243,7 +244,7 @@ class UserServiceTest {
         existingUser.setEmail(existing.email());
 
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
-        when(userRepository.findByEmailIn(List.of(existing.email(), fresh.email())))
+        when(userRepository.findByTenantIdAndEmailIn(tenantId, List.of(existing.email(), fresh.email())))
                 .thenReturn(List.of(existingUser));
         when(bulkCreateWriter.createOne(any(), eq(tenantId)))
                 .thenReturn(Optional.of(writerResult(fresh.email(), UUID.randomUUID(), "Ijkl-2345")));
@@ -282,7 +283,8 @@ class UserServiceTest {
         BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(raced, fine), null);
 
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
-        when(userRepository.findByEmailIn(List.of(raced.email(), fine.email()))).thenReturn(List.of());
+        when(userRepository.findByTenantIdAndEmailIn(tenantId, List.of(raced.email(), fine.email())))
+                .thenReturn(List.of());
         when(bulkCreateWriter.createOne(any(), eq(tenantId)))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(writerResult(fine.email(), UUID.randomUUID(), "Mnop-2345")));
@@ -304,7 +306,7 @@ class UserServiceTest {
                 "student@tenant.example", "Student One", "Password123",
                 List.of("STUDENT"), null, null, null, null, null);
 
-        when(userRepository.existsByUsername(request.email())).thenReturn(false);
+        when(userRepository.existsByUsernameAndTenantId(request.email(), tenantId)).thenReturn(false);
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
         when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.STUDENT));
         doThrow(new StudentLimitExceededException(100L, 100L, 1L))

@@ -55,6 +55,7 @@ class ItembankServiceTest {
     private ItembankService service;
     private CurrentUser hostCaller;
     private CurrentUser platformCaller;
+    private CurrentUser platformAdminCaller;
 
     @BeforeEach
     void setUp() {
@@ -62,6 +63,7 @@ class ItembankServiceTest {
                 new ItembankAccessPolicy());
         hostCaller = new CurrentUser(UUID.randomUUID(), TENANT_ID, List.of("HOST_ADMIN"));
         platformCaller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"));
+        platformAdminCaller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
     }
 
     private Question questionWithOptions(PteTaskType taskType, Visibility visibility, UUID tenantId, int optionCount) {
@@ -225,7 +227,7 @@ class ItembankServiceTest {
         question.setStatus(QuestionStatus.DRAFT);
         when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
 
-        assertThatThrownBy(() -> service.publish(publicId, platformCaller))
+        assertThatThrownBy(() -> service.publish(publicId, platformAdminCaller))
                 .isInstanceOf(QuestionValidationException.class);
         assertThat(question.getStatus()).isEqualTo(QuestionStatus.DRAFT);
     }
@@ -238,7 +240,7 @@ class ItembankServiceTest {
         question.setPromptText("read this aloud");
         when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
 
-        QuestionResponse response = service.publish(publicId, platformCaller);
+        QuestionResponse response = service.publish(publicId, platformAdminCaller);
 
         assertThat(response.status()).isEqualTo("APPROVED");
         assertThat(question.getStatus()).isEqualTo(QuestionStatus.APPROVED);
@@ -249,8 +251,6 @@ class ItembankServiceTest {
         UUID publicId = UUID.randomUUID();
         Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
         question.setStatus(QuestionStatus.DRAFT);
-        question.setAudioPromptRef(UUID.randomUUID());
-        when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
 
         assertThatThrownBy(() -> service.publish(publicId, hostCaller))
                 .isInstanceOf(AccessDeniedException.class);
@@ -265,7 +265,7 @@ class ItembankServiceTest {
         question.setStatus(QuestionStatus.ARCHIVED);
         when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
 
-        assertThatThrownBy(() -> service.publish(publicId, platformCaller))
+        assertThatThrownBy(() -> service.publish(publicId, platformAdminCaller))
                 .isInstanceOf(InvalidQuestionStatusTransitionException.class);
         assertThat(question.getStatus()).isEqualTo(QuestionStatus.ARCHIVED);
     }
@@ -278,10 +278,33 @@ class ItembankServiceTest {
         question.setStatus(QuestionStatus.APPROVED);
         when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
 
-        QuestionResponse response = service.publish(publicId, platformCaller);
+        QuestionResponse response = service.publish(publicId, platformAdminCaller);
 
         assertThat(response.status()).isEqualTo("APPROVED");
         assertThat(question.getStatus()).isEqualTo(QuestionStatus.APPROVED);
+    }
+
+    @Test
+    void publish_revision_archivesSupersededQuestion() {
+        UUID publicId = UUID.randomUUID();
+        UUID previousPublicId = UUID.randomUUID();
+        Question previous = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        previous.setPublicId(previousPublicId);
+        previous.setStatus(QuestionStatus.APPROVED);
+        previous.setCurrent(true);
+
+        Question revision = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        revision.setStatus(QuestionStatus.DRAFT);
+        revision.setPromptText("read this revision aloud");
+        revision.setSupersedesPublicId(previousPublicId);
+        when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(revision));
+        when(questionRepository.findWithOptionsByPublicId(previousPublicId)).thenReturn(Optional.of(previous));
+
+        service.publish(publicId, platformAdminCaller);
+
+        assertThat(revision.getStatus()).isEqualTo(QuestionStatus.APPROVED);
+        assertThat(previous.getStatus()).isEqualTo(QuestionStatus.ARCHIVED);
+        assertThat(previous.isCurrent()).isFalse();
     }
 
     @Test

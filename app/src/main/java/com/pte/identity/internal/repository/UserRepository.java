@@ -12,9 +12,11 @@ import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<User, Long> {
 
-    Optional<User> findByUsername(String username);
+    List<User> findByUsername(String username);
 
-    boolean existsByUsername(String username);
+    Optional<User> findByUsernameAndTenantId(String username, UUID tenantId);
+
+    boolean existsByUsernameAndTenantId(String username, UUID tenantId);
 
     /** Kept for the password-recovery flow only — login itself uses {@link #findByUsername}. */
     Optional<User> findByEmail(String email);
@@ -28,6 +30,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
 
     List<User> findByEmailIn(List<String> emails);
+
+    List<User> findByTenantIdAndEmailIn(UUID tenantId, List<String> emails);
 
     @Query("select count(distinct u.id) from User u join u.roles role "
             + "where u.tenantId = :tenantId and role = :role and u.deleted = false")

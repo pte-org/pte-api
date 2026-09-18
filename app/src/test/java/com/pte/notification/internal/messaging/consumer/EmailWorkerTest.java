@@ -42,7 +42,7 @@ class EmailWorkerTest {
     @BeforeEach
     void setUp() {
         notificationProperties = new NotificationProperties();
-        notificationProperties.setMailFrom("no-reply@ptehub.test");
+        notificationProperties.setMailFrom("no-reply@pteprep.test");
         service = new EmailWorker(notificationLogRepository, mailSender, notificationProperties);
     }
 
@@ -70,7 +70,7 @@ class EmailWorkerTest {
         verify(mailSender).send(messageCaptor.capture());
         SimpleMailMessage sentMessage = messageCaptor.getValue();
         assertThat(sentMessage.getTo()).isEqualTo(new String[]{recipientEmail});
-        assertThat(sentMessage.getFrom()).isEqualTo("no-reply@ptehub.test");
+        assertThat(sentMessage.getFrom()).isEqualTo("no-reply@pteprep.test");
         assertThat(sentMessage.getSubject()).isEqualTo(subject);
         assertThat(sentMessage.getText()).isEqualTo(body);
 

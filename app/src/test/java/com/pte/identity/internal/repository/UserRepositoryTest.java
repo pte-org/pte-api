@@ -21,9 +21,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * schema change itself, not any service-layer behavior: two different
  * tenants can each have a student with the same email, because {@code email}
  * dropped its unique constraint in plans/quang-tenant-commercialization
- * Phase 1 (only {@code username}, which the two rows below deliberately keep
- * distinct, still carries one). Actually generating distinct per-tenant
- * student usernames in production traffic is Phase 8's job, not this test's.
+ * Phase 1. Usernames are unique inside a tenant but may be reused by a
+ * different tenant so duplicate host-admin emails can be disambiguated at
+ * login time.
  */
 @DataJpaTest
 class UserRepositoryTest {
@@ -71,7 +71,7 @@ class UserRepositoryTest {
     }
 
     @Test
-    void username_mustBeUniqueEvenAcrossTenants() {
+    void username_mayBeReusedAcrossDifferentTenants() {
         Tenant tenantA = persistTenant("tenant-c-" + UUID.randomUUID());
         Tenant tenantB = persistTenant("tenant-d-" + UUID.randomUUID());
         String sharedUsername = "collision@example.test";
@@ -89,7 +89,28 @@ class UserRepositoryTest {
         second.setTenantId(tenantB.getPublicId());
         second.setRoles(Set.of(Role.HOST_ADMIN));
 
-        assertThat(userRepository.existsByUsername(sharedUsername)).isTrue();
+        assertThat(userRepository.existsByUsernameAndTenantId(sharedUsername, tenantA.getPublicId())).isTrue();
+        userRepository.saveAndFlush(second);
+    }
+
+    @Test
+    void username_mustBeUniqueInsideTheSameTenant() {
+        Tenant tenant = persistTenant("tenant-e-" + UUID.randomUUID());
+        String sharedUsername = "collision@example.test";
+
+        User first = new User();
+        first.setUsername(sharedUsername);
+        first.setEmail(sharedUsername);
+        first.setTenantId(tenant.getPublicId());
+        first.setRoles(Set.of(Role.HOST_ADMIN));
+        userRepository.saveAndFlush(first);
+
+        User second = new User();
+        second.setUsername(sharedUsername);
+        second.setEmail("different@example.test");
+        second.setTenantId(tenant.getPublicId());
+        second.setRoles(Set.of(Role.HOST_ADMIN));
+
         assertThatThrownBy(() -> userRepository.saveAndFlush(second))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }

@@ -14,6 +14,8 @@ public final class NotificationConstants {
 
     public static final String EMAIL_SEND_RETRIES_EXHAUSTED = "Email send retries exhausted";
     public static final String EMAIL_SEND_FAILED = "Email send failed for %s";
+    public static final String SENSITIVE_EMAIL_BODY_REDACTED =
+            "Sensitive email content is not retained in notification history.";
 
     private NotificationConstants() {
     }

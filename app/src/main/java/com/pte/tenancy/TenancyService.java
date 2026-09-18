@@ -2,6 +2,7 @@ package com.pte.tenancy;
 
 import com.pte.tenancy.domain.Organization;
 import com.pte.tenancy.domain.Tenant;
+import com.pte.tenancy.domain.enums.TenantStatus;
 import com.pte.tenancy.internal.exception.OrganizationNotFoundException;
 import com.pte.tenancy.internal.exception.InvalidStudentCountException;
 import com.pte.tenancy.internal.exception.StudentLimitExceededException;
@@ -108,6 +109,15 @@ public class TenancyService {
     /** Returns the tenant's display type without exposing tenancy repositories. */
     public Optional<String> findOrganizationType(UUID tenantId) {
         return tenantRepository.findOrganizationTypeByPublicId(tenantId);
+    }
+
+    /** Returns safe tenant metadata for credential-matched login disambiguation. */
+    @Transactional(readOnly = true)
+    public Optional<LoginOrganizationOption> findLoginOrganization(UUID tenantId) {
+        return tenantRepository.findByPublicId(tenantId)
+                .filter(tenant -> tenant.getStatus() == TenantStatus.ACTIVE)
+                .map(tenant -> new LoginOrganizationOption(
+                        tenant.getPublicId(), tenant.getCode(), tenant.getName(), tenant.getOrganizationType()));
     }
 
     /** Resolves an organization only when it belongs to the supplied tenant. */

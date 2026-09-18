@@ -8,7 +8,6 @@ import com.pte.billing.TenantApplicationSubmittedEvent;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.dto.request.RejectApplicationRequest;
 import com.pte.billing.internal.dto.request.SubmitApplicationRequest;
-import com.pte.billing.internal.dto.response.ApproveApplicationResponse;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.exception.ApplicationNotPendingException;
 import com.pte.billing.internal.exception.RequestedCodeAlreadyUsedException;
@@ -55,7 +54,7 @@ public class TenantApplicationService {
      * Public, no auth — see class javadoc and {@code SecurityConfig.PUBLIC_PATHS}.
      */
     @Transactional
-    public TenantApplicationResponse submit(SubmitApplicationRequest request) {
+    public void submit(SubmitApplicationRequest request) {
         if (tenancyService.existsByCode(request.requestedCode())
                 || applicationRepository.existsByRequestedCodeAndStatus(
                         request.requestedCode(), TenantApplicationStatus.PENDING)) {
@@ -73,7 +72,6 @@ public class TenantApplicationService {
         TenantApplication saved = applicationRepository.saveAndFlush(application);
         eventPublisher.publishEvent(new TenantApplicationSubmittedEvent(
                 saved.getPublicId(), saved.getOrgName(), saved.getRequestedCode(), saved.getContactEmail()));
-        return TenantApplicationMapper.toResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -89,7 +87,7 @@ public class TenantApplicationService {
      * HOST_ADMIN must not leave an orphaned tenant with no one able to log in.
      */
     @Transactional
-    public ApproveApplicationResponse approve(UUID applicationPublicId, CurrentUser caller) {
+    public void approve(UUID applicationPublicId, CurrentUser caller) {
         TenantApplication application = findPending(applicationPublicId);
         int freeStudentLimit = platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY);
 
@@ -101,14 +99,7 @@ public class TenantApplicationService {
         application.approve(caller.userId());
         eventPublisher.publishEvent(new TenantApplicationApprovedEvent(
                 application.getPublicId(), tenant.getPublicId(), application.getOrgName(), tenant.getCode(),
-                application.getContactEmail(), hostAdmin.user().getUsername()));
-
-        return new ApproveApplicationResponse(
-                tenant.getPublicId(),
-                tenant.getCode(),
-                hostAdmin.user().getPublicId(),
-                hostAdmin.user().getUsername(),
-                hostAdmin.generatedPassword());
+                application.getContactEmail(), hostAdmin.user().getUsername(), hostAdmin.generatedPassword()));
     }
 
     /**

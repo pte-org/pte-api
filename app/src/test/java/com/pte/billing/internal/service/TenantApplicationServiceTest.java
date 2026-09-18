@@ -2,9 +2,9 @@ package com.pte.billing.internal.service;
 
 import com.pte.billing.domain.TenantApplication;
 import com.pte.billing.domain.enums.TenantApplicationStatus;
+import com.pte.billing.TenantApplicationApprovedEvent;
 import com.pte.billing.internal.dto.request.RejectApplicationRequest;
 import com.pte.billing.internal.dto.request.SubmitApplicationRequest;
-import com.pte.billing.internal.dto.response.ApproveApplicationResponse;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.exception.ApplicationNotPendingException;
@@ -22,6 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -79,11 +80,8 @@ class TenantApplicationServiceTest {
             return application;
         });
 
-        TenantApplicationResponse response = service.submit(submitRequest("acme"));
+        service.submit(submitRequest("acme"));
 
-        assertThat(response.status()).isEqualTo("PENDING");
-        assertThat(response.requestedCode()).isEqualTo("acme");
-        assertThat(response.taxCode()).isEqualTo("0123456789");
         verify(eventPublisher).publishEvent(any(Object.class));
     }
 
@@ -140,15 +138,15 @@ class TenantApplicationServiceTest {
         when(identityService.createHostAdmin(tenant.getPublicId(), "contact@acme.example")).thenReturn(hostAdmin);
 
         CurrentUser caller = new CurrentUser(reviewerId, null, List.of("PLATFORM_ADMIN"));
-        ApproveApplicationResponse response = service.approve(applicationId, caller);
+        service.approve(applicationId, caller);
 
-        assertThat(response.tenantPublicId()).isEqualTo(tenant.getPublicId());
-        assertThat(response.tenantCode()).isEqualTo("acme");
-        assertThat(response.hostAdminUsername()).isEqualTo("contact@acme.example");
-        assertThat(response.hostAdminPassword()).isEqualTo("Gener4ted!");
         assertThat(application.getStatus()).isEqualTo(TenantApplicationStatus.APPROVED);
         assertThat(application.getReviewedBy()).isEqualTo(reviewerId);
-        verify(eventPublisher).publishEvent(any(Object.class));
+        ArgumentCaptor<TenantApplicationApprovedEvent> eventCaptor =
+                ArgumentCaptor.forClass(TenantApplicationApprovedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().hostAdminUsername()).isEqualTo("contact@acme.example");
+        assertThat(eventCaptor.getValue().hostAdminPassword()).isEqualTo("Gener4ted!");
     }
 
     @Test
