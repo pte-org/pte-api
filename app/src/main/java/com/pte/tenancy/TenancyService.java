@@ -42,6 +42,11 @@ public class TenancyService {
         return tenantRepository.existsByCode(code);
     }
 
+    /** {@code billing.TenantApplicationService.submit()} — is this name already reserved? */
+    public boolean existsByName(String name) {
+        return tenantRepository.existsByName(name);
+    }
+
     /** {@code billing.TenantApplicationService.approve()} — creates the tenant an approved application promised. */
     public Tenant createTenant(String name, String organizationType, String code, String taxCode, int studentLimit) {
         return tenantLifecycleService.createFromApplication(name, organizationType, code, taxCode, studentLimit);

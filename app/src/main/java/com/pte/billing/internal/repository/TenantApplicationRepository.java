@@ -14,5 +14,7 @@ public interface TenantApplicationRepository extends JpaRepository<TenantApplica
 
     boolean existsByRequestedCodeAndStatus(String requestedCode, TenantApplicationStatus status);
 
+    boolean existsByOrgNameAndStatus(String orgName, TenantApplicationStatus status);
+
     List<TenantApplication> findAllByOrderByCreatedAtDesc();
 }
