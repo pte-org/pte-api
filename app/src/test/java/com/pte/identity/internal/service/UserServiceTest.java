@@ -120,6 +120,7 @@ class UserServiceTest {
         when(loginHashRepository.findByUserId(1L)).thenReturn(Optional.of(loginHash));
 
         CurrentUser caller = new CurrentUser(callerId, null, List.of("PLATFORM_ADMIN"));
+        when(provisioningHelper.canManageTarget(caller, user.getRoles())).thenReturn(true);
         UserResponse response = userService.resetPassword(userPublicId,
                 new ResetPasswordRequest("NewPassword456"), caller);
 
@@ -149,7 +150,10 @@ class UserServiceTest {
         User user = userWithId(1L, UUID.randomUUID(), tenantId);
         when(userRepository.findByTenantId(tenantId)).thenReturn(List.of(user));
 
-        List<UserResponse> result = userService.listForTenant(tenantId);
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
+        when(provisioningHelper.canManageTarget(caller, user.getRoles())).thenReturn(true);
+
+        List<UserResponse> result = userService.listForTenant(tenantId, caller);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).tenantId()).isEqualTo(tenantId);
@@ -160,7 +164,8 @@ class UserServiceTest {
         UUID tenantId = UUID.randomUUID();
         when(userRepository.findByTenantId(tenantId)).thenReturn(List.of());
 
-        assertThat(userService.listForTenant(tenantId)).isEmpty();
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
+        assertThat(userService.listForTenant(tenantId, caller)).isEmpty();
     }
 
     @Test
@@ -348,6 +353,7 @@ class UserServiceTest {
         when(loginHashRepository.findByUserId(1L)).thenReturn(Optional.of(loginHash));
 
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        when(provisioningHelper.canManageTarget(caller, student.getRoles())).thenReturn(true);
         UserResponse response = userService.resetPassword(userPublicId,
                 new ResetPasswordRequest("NewPassword456"), caller);
 
@@ -365,6 +371,7 @@ class UserServiceTest {
         when(userRepository.findByPublicIdAndTenantId(userPublicId, tenantId)).thenReturn(Optional.of(fellowHostAdmin));
 
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        when(provisioningHelper.canManageTarget(caller, fellowHostAdmin.getRoles())).thenReturn(false);
 
         assertThatThrownBy(() -> userService.resetPassword(userPublicId,
                 new ResetPasswordRequest("NewPassword456"), caller))
@@ -390,7 +397,7 @@ class UserServiceTest {
     }
 
     @Test
-    void resetPassword_platformAdmin_stillWorksAgainstAnyRoleAnyTenant() {
+    void resetPassword_platformAdmin_stillWorksAgainstHostAdminAnyTenant() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         User hostAdmin = userWithId(1L, userPublicId, tenantId);
@@ -404,10 +411,30 @@ class UserServiceTest {
         when(loginHashRepository.findByUserId(1L)).thenReturn(Optional.of(loginHash));
 
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
+        when(provisioningHelper.canManageTarget(caller, hostAdmin.getRoles())).thenReturn(true);
         UserResponse response = userService.resetPassword(userPublicId,
                 new ResetPasswordRequest("NewPassword456"), caller);
 
         assertThat(response.publicId()).isEqualTo(userPublicId);
         assertThat(passwordEncoder.matches("NewPassword456", loginHash.getHash())).isTrue();
+    }
+
+    @Test
+    void resetPassword_platformAdmin_againstLowerTenantRole_throwsForbidden() {
+        UUID userPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        User student = userWithId(1L, userPublicId, tenantId);
+        student.setRoles(Set.of(Role.STUDENT));
+
+        when(userRepository.findByPublicId(userPublicId)).thenReturn(Optional.of(student));
+
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
+        when(provisioningHelper.canManageTarget(caller, student.getRoles())).thenReturn(false);
+
+        assertThatThrownBy(() -> userService.resetPassword(userPublicId,
+                new ResetPasswordRequest("NewPassword456"), caller))
+                .isInstanceOf(ForbiddenPasswordResetException.class);
+
+        verify(loginHashRepository, never()).save(any());
     }
 }

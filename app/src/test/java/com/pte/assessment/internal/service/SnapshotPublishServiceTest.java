@@ -65,7 +65,7 @@ class SnapshotPublishServiceTest {
     void setUp() {
         service = new SnapshotPublishService(blueprintRepository, snapshotRepository, itembankService,
                 new AssessmentAccessPolicy(), JsonMapper.builder().build(), scoreTemplateService);
-        caller = new CurrentUser(UUID.randomUUID(), TENANT_ID, List.of("HOST_AUTHOR"));
+        caller = new CurrentUser(UUID.randomUUID(), TENANT_ID, List.of("HOST_ADMIN"));
     }
 
     /** Stubs the ACTIVE template every {@code publish} test needs, unless a test overrides it (e.g. no-active-template). */

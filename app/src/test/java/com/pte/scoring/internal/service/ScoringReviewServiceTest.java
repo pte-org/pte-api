@@ -47,7 +47,7 @@ class ScoringReviewServiceTest {
     void setUp() {
         service = new ScoringReviewService(scoringAnswerRepository, answerPayloadDecoder, mediaService);
         tenantId = UUID.randomUUID();
-        caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_AUTHOR"));
+        caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
     }
 
     @Test

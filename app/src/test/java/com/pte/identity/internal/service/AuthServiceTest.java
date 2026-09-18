@@ -113,8 +113,8 @@ class AuthServiceTest {
     }
 
     @Test
-    void login_hostAuthor_succeeds() {
-        assertLoginSucceeds(Role.HOST_AUTHOR, UUID.randomUUID());
+    void login_examiner_succeeds() {
+        assertLoginSucceeds(Role.EXAMINER, UUID.randomUUID());
     }
 
     @Test
@@ -142,16 +142,6 @@ class AuthServiceTest {
         TokenResponse response = authService.login(new LoginRequest(username, PASSWORD));
 
         assertThat(response.mustChangePassword()).isTrue();
-    }
-
-    @Test
-    void login_lecturer_succeeds() {
-        assertLoginSucceeds(Role.LECTURER, UUID.randomUUID());
-    }
-
-    @Test
-    void login_programCoordinator_succeeds() {
-        assertLoginSucceeds(Role.PROGRAM_COORDINATOR, UUID.randomUUID());
     }
 
     @Test

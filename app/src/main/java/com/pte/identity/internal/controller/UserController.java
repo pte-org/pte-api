@@ -22,8 +22,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Host/proctor/student provisioning. Guarded by role; the service further enforces
- * tenant scope so a host can only ever touch its own tenant's users.
+ * Tenant-user provisioning. The service applies the role hierarchy and tenant
+ * scope so a Host can only touch lower roles in its own tenant and a platform
+ * admin can only touch HOST_ADMIN accounts.
  */
 @RestController
 @RequestMapping("/api/v1/users")
@@ -42,6 +43,7 @@ public class UserController {
     }
 
     @PostMapping("/bulk")
+    @PreAuthorize("hasRole('HOST_ADMIN')")
     public ApiResponse<BulkCreateUsersResponse> createBulk(@Valid @RequestBody BulkCreateUsersRequest request) {
         return ApiResponse.success(userService.createBulk(request, currentUser()));
     }
@@ -67,20 +69,19 @@ public class UserController {
     }
 
     // No method-level @PreAuthorize override needed: tenant scope and the
-    // STUDENT/PROCTOR-only role restriction are enforced in UserService#resetPassword.
+    // role hierarchy are enforced in UserService.
     @PostMapping("/{publicId}/reset-password")
     public ApiResponse<UserResponse> resetPassword(@PathVariable UUID publicId,
                                                     @Valid @RequestBody ResetPasswordRequest request) {
         return ApiResponse.success(userService.resetPassword(publicId, request, currentUser()));
     }
 
-    // Separate from GET /users (which is caller-tenant-scoped) so a platform admin
-    // can look up an arbitrary tenant's users without overloading that endpoint's
-    // existing semantics.
+    // Separate from GET /users (which is caller-tenant-scoped). A platform admin
+    // can use this to look up the tenant's HOST_ADMIN account only.
     @GetMapping("/by-tenant/{tenantId}")
     @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<List<UserResponse>> listByTenant(@PathVariable UUID tenantId) {
-        return ApiResponse.success(userService.listForTenant(tenantId));
+        return ApiResponse.success(userService.listForTenant(tenantId, currentUser()));
     }
 
     private CurrentUser currentUser() {

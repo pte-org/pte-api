@@ -30,7 +30,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/answers")
-@PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
+@PreAuthorize("hasRole('HOST_ADMIN')")
 public class ScoringReviewController {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
