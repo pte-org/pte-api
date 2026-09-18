@@ -41,6 +41,12 @@ services:
       # request ceiling, ported from gateway's Redis token-bucket as a
       # simpler fixed-window counter.
       RATE_LIMIT_PER_SECOND: ${RATE_LIMIT_PER_SECOND:-40}
+      # com.pte.media (Cloudinary authoring uploads) — these are deliberately
+      # required here so a deployment cannot start with a broken media signer.
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:?set CLOUDINARY_CLOUD_NAME in the env file}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:?set CLOUDINARY_API_KEY in the env file}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:?set CLOUDINARY_API_SECRET in the env file}
+      CLOUDINARY_AUTHORING_FOLDER: ${CLOUDINARY_AUTHORING_FOLDER:-pte/authoring}
       # com.pte.media (Phase 04/A) — server-to-server endpoint is the docker-network
       # hostname; MINIO_PUBLIC_ENDPOINT is what a presigned URL is SIGNED with and
       # must be reachable from the caller (browser, seed script, pte-app on the
