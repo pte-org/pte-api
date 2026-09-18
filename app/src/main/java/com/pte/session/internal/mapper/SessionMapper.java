@@ -2,13 +2,9 @@ package com.pte.session.internal.mapper;
 
 import com.pte.session.domain.ExamPolicy;
 import com.pte.session.domain.ExamSession;
-import com.pte.session.domain.SessionComposition;
-import com.pte.session.dto.response.CompositionItemResponse;
 import com.pte.session.dto.response.ExamPolicyResponse;
 import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.dto.response.SessionResponse;
-
-import java.util.List;
 
 public final class SessionMapper {
 
@@ -16,9 +12,6 @@ public final class SessionMapper {
     }
 
     public static SessionResponse toResponse(ExamSession session) {
-        List<CompositionItemResponse> composition = session.getComposition().stream()
-                .map(SessionMapper::toItem)
-                .toList();
         return new SessionResponse(
                 session.getPublicId(),
                 session.getName(),
@@ -29,7 +22,6 @@ public final class SessionMapper {
                 session.getClosesAt(),
                 session.getStatus().name(),
                 toPolicy(session.getPolicy()),
-                composition,
                 session.getCapacity());
     }
 
@@ -53,10 +45,5 @@ public final class SessionMapper {
                 policy.getProctorRequired(),
                 policy.getAnswerIntegrityLevel().name(),
                 policy.getLockdownMode() != null ? policy.getLockdownMode().name() : null);
-    }
-
-    public static CompositionItemResponse toItem(SessionComposition item) {
-        return new CompositionItemResponse(item.getTaskType(), item.getSection(), item.getOrderIndex(),
-                item.getTimingOverrideSeconds(), item.getMaxPlayCount());
     }
 }

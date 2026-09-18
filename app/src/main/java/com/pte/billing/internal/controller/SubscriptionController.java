@@ -14,7 +14,7 @@ import java.util.List;
 
 /** Tenant read endpoint for currently usable purchased exam packages. */
 @RestController
-@RequestMapping("/subscriptions")
+@RequestMapping("/api/v1/subscriptions")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class SubscriptionController {
 

@@ -14,7 +14,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,28 +22,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/**
+ * Since Phase 4 (plans/score-template-exam-generation): {@code
+ * AiScoringDispatcher} embeds the already-resolved {@code scoringMethod}
+ * ("AI_SPEECH"/"AI_TEXT") into the job at dispatch time — {@code
+ * callVendor} switches on that field, no more hardcoded-catalog lookup by
+ * task type.
+ */
 @ExtendWith(MockitoExtension.class)
 class AiScoringWorkerTest {
-
-    private static final List<String> SPEECH_TYPES = List.of(
-            ScoringConstants.TASK_TYPE_READ_ALOUD,
-            ScoringConstants.TASK_TYPE_REPEAT_SENTENCE,
-            ScoringConstants.TASK_TYPE_DESCRIBE_IMAGE,
-            ScoringConstants.TASK_TYPE_RE_TELL_LECTURE,
-            ScoringConstants.TASK_TYPE_ANSWER_SHORT_QUESTION,
-            ScoringConstants.TASK_TYPE_RESPOND_TO_A_SITUATION,
-            ScoringConstants.TASK_TYPE_SUMMARIZE_GROUP_DISCUSSION);
-
-    private static final List<String> TEXT_TYPES = List.of(
-            ScoringConstants.TASK_TYPE_WRITE_ESSAY,
-            ScoringConstants.TASK_TYPE_SUMMARIZE_WRITTEN_TEXT,
-            ScoringConstants.TASK_TYPE_SUMMARIZE_SPOKEN_TEXT);
 
     @Mock
     private ScoringAnswerRepository scoringAnswerRepository;
@@ -61,46 +52,40 @@ class AiScoringWorkerTest {
     }
 
     @Test
-    void worker_routesEverySpeechTaskToSpeechClient() {
+    void worker_aiSpeechJob_routesToSpeechClient() {
         stubSpeechClient();
-        for (String taskType : SPEECH_TYPES) {
-            ScoringAnswer answer = answer(taskType);
-            when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
-                    .thenReturn(Optional.of(answer));
+        ScoringAnswer answer = answer(ScoringConstants.TASK_TYPE_REPEAT_SENTENCE);
+        when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
+                .thenReturn(Optional.of(answer));
 
-            worker.onAiScoringJob(job(answer));
+        worker.onAiScoringJob(job(answer, "AI_SPEECH"));
 
-            assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
-            verify(speechScoringClient).score(answer.getPayload(), answer.getCorrectAnswerText(), answer.getTenantId());
-            verifyNoInteractions(essayScoringClient);
-            clearInvocations(speechScoringClient, essayScoringClient);
-        }
+        assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
+        verify(speechScoringClient).score(answer.getPayload(), answer.getCorrectAnswerText(), answer.getTenantId());
+        verifyNoInteractions(essayScoringClient);
     }
 
     @Test
-    void worker_routesEveryTextTaskToEssayClient() {
+    void worker_aiTextJob_routesToEssayClient() {
         stubEssayClient();
-        for (String taskType : TEXT_TYPES) {
-            ScoringAnswer answer = answer(taskType);
-            when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
-                    .thenReturn(Optional.of(answer));
+        ScoringAnswer answer = answer(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
+        when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
+                .thenReturn(Optional.of(answer));
 
-            worker.onAiScoringJob(job(answer));
+        worker.onAiScoringJob(job(answer, "AI_TEXT"));
 
-            assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
-            verify(essayScoringClient).score(answer.getPayload(), answer.getCorrectAnswerText());
-            verifyNoInteractions(speechScoringClient);
-            clearInvocations(speechScoringClient, essayScoringClient);
-        }
+        assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
+        verify(essayScoringClient).score(answer.getPayload(), answer.getCorrectAnswerText());
+        verifyNoInteractions(speechScoringClient);
     }
 
     @Test
-    void worker_rejectsUnsupportedJobWithoutCallingEitherClient() {
+    void worker_rejectsUnknownScoringMethodWithoutCallingEitherClient() {
         ScoringAnswer answer = answer("UNKNOWN");
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
 
-        assertThatThrownBy(() -> worker.onAiScoringJob(job(answer)))
+        assertThatThrownBy(() -> worker.onAiScoringJob(job(answer, "UNSCORED")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("UNKNOWN");
 
@@ -115,7 +100,7 @@ class AiScoringWorkerTest {
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
 
-        worker.onAiScoringJob(job(answer));
+        worker.onAiScoringJob(job(answer, "AI_SPEECH"));
 
         verify(speechScoringClient, never()).score(anyString(), anyString(), any(UUID.class));
         verifyNoInteractions(essayScoringClient);
@@ -134,10 +119,10 @@ class AiScoringWorkerTest {
         return answer;
     }
 
-    private AiScoringJob job(ScoringAnswer answer) {
+    private AiScoringJob job(ScoringAnswer answer, String scoringMethod) {
         return new AiScoringJob(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
                 answer.getSessionPublicId(), answer.getTenantId(), answer.getTaskType(),
-                answer.getPayload(), answer.getCorrectAnswerText());
+                answer.getPayload(), answer.getCorrectAnswerText(), scoringMethod);
     }
 
     private void stubSpeechClient() {

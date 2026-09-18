@@ -16,7 +16,7 @@ import java.util.UUID;
 
 /** Tenant-scoped server-side student roster endpoint. */
 @RestController
-@RequestMapping("/student-roster")
+@RequestMapping("/api/v1/student-roster")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class StudentRosterController {
 

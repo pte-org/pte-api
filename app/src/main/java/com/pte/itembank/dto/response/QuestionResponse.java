@@ -18,6 +18,5 @@ public record QuestionResponse(
         String correctAnswerText,
         Integer minWordCount,
         Integer maxWordCount,
-        List<OptionResponse> options,
-        List<String> skills) {
+        List<OptionResponse> options) {
 }

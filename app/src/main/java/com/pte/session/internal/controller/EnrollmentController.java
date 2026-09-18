@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/sessions/{sessionPublicId}/enrollments")
+@RequestMapping("/api/v1/sessions/{sessionPublicId}/enrollments")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class EnrollmentController {
 

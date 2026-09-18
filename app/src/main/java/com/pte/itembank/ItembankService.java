@@ -4,18 +4,18 @@ import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.QuestionOption;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionStatus;
-import com.pte.itembank.domain.enums.Skill;
 import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.request.CreateQuestionRequest;
 import com.pte.itembank.dto.request.OptionRequest;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.dto.response.QuestionResponse;
-import com.pte.itembank.internal.config.PteTaskTypeSkillMapping;
 import com.pte.itembank.internal.constant.ItembankConstants;
+import com.pte.itembank.internal.exception.InvalidQuestionStatusTransitionException;
 import com.pte.itembank.internal.exception.QuestionNotFoundException;
 import com.pte.itembank.internal.exception.QuestionValidationException;
 import com.pte.itembank.internal.mapper.QuestionMapper;
 import com.pte.itembank.internal.repository.QuestionRepository;
+import com.pte.itembank.internal.repository.TaskTypeCountProjection;
 import com.pte.itembank.internal.service.ItembankAccessPolicy;
 import com.pte.itembank.internal.service.QuestionValidationHelper;
 import com.pte.shared.security.CurrentUser;
@@ -25,11 +25,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * The only door other modules use to reach {@code itembank}. {@code
@@ -46,14 +47,12 @@ public class ItembankService {
     private final QuestionRepository questionRepository;
     private final QuestionValidationHelper validationHelper;
     private final ItembankAccessPolicy accessPolicy;
-    private final PteTaskTypeSkillMapping skillMapping;
 
     public ItembankService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
-                           ItembankAccessPolicy accessPolicy, PteTaskTypeSkillMapping skillMapping) {
+                           ItembankAccessPolicy accessPolicy) {
         this.questionRepository = questionRepository;
         this.validationHelper = validationHelper;
         this.accessPolicy = accessPolicy;
-        this.skillMapping = skillMapping;
     }
 
     @Transactional
@@ -95,33 +94,69 @@ public class ItembankService {
         return questions.stream().map(this::toResponse).toList();
     }
 
-    /** Count platform SHARED questions for a template-feasibility check. */
-    @Transactional(readOnly = true)
-    public Map<PteTaskType, Long> countSharedByTaskTypes(Set<PteTaskType> taskTypes) {
-        if (taskTypes == null || taskTypes.isEmpty()) {
-            return Map.of();
+    /** Publish DRAFT→APPROVED, validating required fields first. APPROVED is idempotent; ARCHIVED is rejected. */
+    @Transactional
+    public QuestionResponse publish(UUID publicId, CurrentUser caller) {
+        Question question = loadForPlatformWrite(publicId, caller);
+        if (question.getStatus() == QuestionStatus.APPROVED) {
+            return toResponse(question);
         }
-        Map<PteTaskType, Long> counts = new HashMap<>();
-        questionRepository.countByVisibilityAndTaskTypeIn(Visibility.SHARED, taskTypes)
-                .forEach(row -> counts.put((PteTaskType) row[0], ((Number) row[1]).longValue()));
-        return Map.copyOf(counts);
+        if (question.getStatus() == QuestionStatus.ARCHIVED) {
+            throw new InvalidQuestionStatusTransitionException();
+        }
+        validationHelper.validate(question);
+        question.setStatus(QuestionStatus.APPROVED);
+        return toResponse(question);
     }
 
-    /** Count APPROVED platform questions available for template generation. */
-    @Transactional(readOnly = true)
-    public long countAvailableByTaskType(PteTaskType taskType) {
-        return questionRepository.countAvailableByTaskType(taskType);
+    /** Archive DRAFT/APPROVED→ARCHIVED. ARCHIVED is idempotent. */
+    @Transactional
+    public QuestionResponse archive(UUID publicId, CurrentUser caller) {
+        Question question = loadForPlatformWrite(publicId, caller);
+        question.setStatus(QuestionStatus.ARCHIVED);
+        return toResponse(question);
     }
 
-    /** Deterministically select APPROVED platform questions for one template slot. */
-    @Transactional(readOnly = true)
-    public List<QuestionFreezeView> findRandomByTaskType(PteTaskType taskType, int limit, long seed) {
-        if (limit <= 0) {
-            return List.of();
+    /** Unarchive ARCHIVED→DRAFT only — must be published again (with validation) to re-enter the pool. */
+    @Transactional
+    public QuestionResponse unarchive(UUID publicId, CurrentUser caller) {
+        Question question = loadForPlatformWrite(publicId, caller);
+        if (question.getStatus() != QuestionStatus.ARCHIVED) {
+            throw new InvalidQuestionStatusTransitionException();
         }
-        return questionRepository.findRandomByTaskType(taskType.name(), limit, seed).stream()
-                .map(this::toFreezeView)
-                .toList();
+        question.setStatus(QuestionStatus.DRAFT);
+        return toResponse(question);
+    }
+
+    /**
+     * Exam generation count, one grouped query, always APPROVED+SHARED — never
+     * takes a {@link CurrentUser}: the pool doesn't depend on which host asked.
+     * Every requested task type is present in the result, 0 if it has no stock.
+     */
+    @Transactional(readOnly = true)
+    public Map<PteTaskType, Long> countPublishedByTaskTypes(Set<PteTaskType> taskTypes) {
+        Set<String> names = taskTypes.stream().map(Enum::name).collect(Collectors.toSet());
+        Map<PteTaskType, Long> counts = new EnumMap<>(PteTaskType.class);
+        taskTypes.forEach(taskType -> counts.put(taskType, 0L));
+        for (TaskTypeCountProjection row : questionRepository.countPublishedSharedGroupedByTaskType(names)) {
+            counts.put(PteTaskType.valueOf(row.getTaskType()), row.getCount());
+        }
+        return counts;
+    }
+
+    /** At most {@code n} random APPROVED+SHARED ids for one task type — never takes a {@link CurrentUser}. */
+    @Transactional(readOnly = true)
+    public List<UUID> randomPublishedQuestionIds(PteTaskType taskType, int n) {
+        return questionRepository.randomPublishedSharedIdsByTaskType(taskType.name(), n);
+    }
+
+    private Question loadForPlatformWrite(UUID publicId, CurrentUser caller) {
+        Question question = questionRepository.findWithOptionsByPublicId(publicId)
+                .orElseThrow(QuestionNotFoundException::new);
+        if (!caller.isPlatformUser()) {
+            throw new AccessDeniedException("Only platform users may write the shared question bank");
+        }
+        return question;
     }
 
     /**
@@ -180,9 +215,7 @@ public class ItembankService {
     }
 
     private QuestionResponse toResponse(Question question) {
-        List<String> skills = skillMapping.skillsFor(question.getPteTaskType()).stream()
-                .map(Skill::name).toList();
-        return QuestionMapper.toResponse(question, skills);
+        return QuestionMapper.toResponse(question);
     }
 
     private PteTaskType parseTaskType(String value) {

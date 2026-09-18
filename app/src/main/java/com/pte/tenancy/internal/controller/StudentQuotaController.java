@@ -15,9 +15,16 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Tenant-facing student-capacity status and import preview endpoints. */
+/**
+ * Tenant-facing student-capacity status and import preview endpoints.
+ *
+ * <p>No class-level {@code @RequestMapping}: the two methods below own
+ * unrelated path roots ({@code /tenant/...} and {@code /students/...}), so
+ * there is nothing common to factor out. The Nginx edge preserves the
+ * versioned {@code /api/v1} path before proxying to the monolith.
+ */
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/v1")
 @PreAuthorize("hasRole('HOST_ADMIN')")
 public class StudentQuotaController {
 

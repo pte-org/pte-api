@@ -2,10 +2,8 @@ package com.pte.assessment.internal.mapper;
 
 import com.pte.assessment.domain.ExamSnapshot;
 import com.pte.assessment.domain.SnapshotItem;
-import com.pte.assessment.domain.SnapshotSectionWeight;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.dto.response.SnapshotResponse;
-import com.pte.assessment.dto.response.SnapshotScoringSpec;
 
 import java.util.List;
 
@@ -23,6 +21,8 @@ public final class SnapshotMapper {
                 snapshot.getName(),
                 snapshot.getVersion(),
                 snapshot.getSourceBlueprintPublicId(),
+                snapshot.getScoreTemplatePublicId(),
+                snapshot.getScoreTemplateVersion(),
                 snapshot.getTenantId(),
                 items);
     }
@@ -38,18 +38,8 @@ public final class SnapshotMapper {
                 .map(SnapshotMapper::toContentItem)
                 .toList();
         return new SnapshotContentResponse(
-                snapshot.getPublicId(), snapshot.getName(), snapshot.getVersion(), snapshot.getTenantId(), items);
-    }
-
-    public static SnapshotScoringSpec toScoringSpec(ExamSnapshot snapshot) {
-        return new SnapshotScoringSpec(snapshot.getPublicId(), snapshot.getSectionWeights().stream()
-                .map(SnapshotMapper::toSectionWeight)
-                .toList());
-    }
-
-    private static SnapshotScoringSpec.SectionWeight toSectionWeight(SnapshotSectionWeight sectionWeight) {
-        return new SnapshotScoringSpec.SectionWeight(
-                sectionWeight.getSection(), sectionWeight.getWeightPercent(), sectionWeight.getOrderIndex());
+                snapshot.getPublicId(), snapshot.getName(), snapshot.getVersion(),
+                snapshot.getScoreTemplatePublicId(), snapshot.getTenantId(), items);
     }
 
     private static SnapshotContentResponse.Item toContentItem(SnapshotItem item) {

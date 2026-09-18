@@ -2,6 +2,7 @@ package com.pte.attempt.internal.service;
 
 import com.pte.attempt.domain.AttemptAnswer;
 import com.pte.attempt.domain.ExamAttempt;
+import com.pte.attempt.domain.PinnedExamSnapshot;
 import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.attempt.internal.repository.AttemptAnswerRepository;
@@ -20,6 +21,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class SubmittedAnswerQueryServiceTest {
 
+    private static final UUID SCORE_TEMPLATE_ID = UUID.randomUUID();
+
     @Mock
     private AttemptAnswerRepository attemptAnswerRepository;
 
@@ -28,6 +31,13 @@ class SubmittedAnswerQueryServiceTest {
     @BeforeEach
     void setUp() {
         service = new SubmittedAnswerQueryService(attemptAnswerRepository);
+    }
+
+    /** Every {@code PinnedItem} belongs to a {@code PinnedExamSnapshot} in production — tests must wire it too, or {@code getPinnedSnapshot()} is null. */
+    private void attachToPinnedSnapshot(PinnedItem item, UUID scoreTemplateId) {
+        PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
+        snapshot.setScoreTemplatePublicId(scoreTemplateId);
+        snapshot.addItem(item);
     }
 
     @Test
@@ -48,6 +58,7 @@ class SubmittedAnswerQueryServiceTest {
         pinnedItem.setTaskType("MC_READING_SINGLE");
         pinnedItem.setCorrectAnswerText("[{\"text\":\"A\",\"correct\":true}]");
         pinnedItem.setOptionsJson("[{\"text\":\"A\",\"orderIndex\":0}]");
+        attachToPinnedSnapshot(pinnedItem, SCORE_TEMPLATE_ID);
 
         AttemptAnswer answer = new AttemptAnswer();
         answer.setPublicId(answerPublicId);
@@ -73,6 +84,7 @@ class SubmittedAnswerQueryServiceTest {
         assertThat(view.correctAnswerText()).isEqualTo("[{\"text\":\"A\",\"correct\":true}]");
         assertThat(view.optionsJson()).isEqualTo("[{\"text\":\"A\",\"orderIndex\":0}]");
         assertThat(view.expired()).isFalse();
+        assertThat(view.scoreTemplatePublicId()).isEqualTo(SCORE_TEMPLATE_ID);
     }
 
     @Test
@@ -90,6 +102,7 @@ class SubmittedAnswerQueryServiceTest {
         pinnedItem.setTaskType("MC_READING_SINGLE");
         pinnedItem.setCorrectAnswerText("[{\"text\":\"A\",\"correct\":true}]");
         pinnedItem.setOptionsJson("[{\"text\":\"A\",\"orderIndex\":0}]");
+        attachToPinnedSnapshot(pinnedItem, SCORE_TEMPLATE_ID);
 
         AttemptAnswer answer = new AttemptAnswer();
         answer.setPublicId(UUID.randomUUID());
@@ -135,12 +148,14 @@ class SubmittedAnswerQueryServiceTest {
         pinnedItem1.setTaskType("MC_READING_SINGLE");
         pinnedItem1.setCorrectAnswerText("answer1");
         pinnedItem1.setOptionsJson("options1");
+        attachToPinnedSnapshot(pinnedItem1, SCORE_TEMPLATE_ID);
 
         PinnedItem pinnedItem2 = new PinnedItem();
         pinnedItem2.setPublicId(UUID.randomUUID());
         pinnedItem2.setTaskType("MC_READING_MULTIPLE");
         pinnedItem2.setCorrectAnswerText("answer2");
         pinnedItem2.setOptionsJson("options2");
+        attachToPinnedSnapshot(pinnedItem2, SCORE_TEMPLATE_ID);
 
         AttemptAnswer answer1 = new AttemptAnswer();
         answer1.setPublicId(UUID.randomUUID());

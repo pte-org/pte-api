@@ -29,6 +29,7 @@ import java.util.UUID;
  * same as {@code TenantController}.
  */
 @RestController
+@RequestMapping("/api/v1")
 public class TenantApplicationController {
 
     private final TenantApplicationService applicationService;
@@ -42,19 +43,19 @@ public class TenantApplicationController {
         return ApiResponse.success(applicationService.submit(request));
     }
 
-    @GetMapping("/admin/applications")
+    @GetMapping("/applications")
     @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<List<TenantApplicationResponse>> list() {
         return ApiResponse.success(applicationService.list());
     }
 
-    @PostMapping("/admin/applications/{publicId}/approve")
+    @PostMapping("/applications/{publicId}/approval")
     @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<ApproveApplicationResponse> approve(@PathVariable UUID publicId) {
         return ApiResponse.success(applicationService.approve(publicId, currentUser()));
     }
 
-    @PostMapping("/admin/applications/{publicId}/reject")
+    @PostMapping("/applications/{publicId}/rejection")
     @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<TenantApplicationResponse> reject(@PathVariable UUID publicId,
             @Valid @RequestBody RejectApplicationRequest request) {

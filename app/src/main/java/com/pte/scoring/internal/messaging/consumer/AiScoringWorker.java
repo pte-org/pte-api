@@ -5,7 +5,6 @@ import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.service.AiScoringTaskCatalog;
 import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.EssayScoringClient;
 import com.pte.scoring.internal.vendor.SpeechScoringClient;
@@ -70,14 +69,13 @@ public class AiScoringWorker {
         });
     }
 
+    /** Switches on {@code job.scoringMethod()} — resolved once at dispatch time from the pinned ScoreTemplate (spec FR-07), not re-derived from task type here. */
     private AiScoreResult callVendor(AiScoringJob job) {
-        if (AiScoringTaskCatalog.isSpeech(job.taskType())) {
-            return speechScoringClient.score(job.payload(), job.referenceText(), job.tenantId());
-        }
-        if (AiScoringTaskCatalog.isText(job.taskType())) {
-            return essayScoringClient.score(job.payload(), job.referenceText());
-        }
-        throw new IllegalArgumentException(
-                String.format(ScoringConstants.UNSUPPORTED_AI_TASK_TYPE, job.taskType()));
+        return switch (job.scoringMethod()) {
+            case "AI_SPEECH" -> speechScoringClient.score(job.payload(), job.referenceText(), job.tenantId());
+            case "AI_TEXT" -> essayScoringClient.score(job.payload(), job.referenceText());
+            default -> throw new IllegalArgumentException(
+                    String.format(ScoringConstants.UNSUPPORTED_AI_TASK_TYPE, job.taskType()));
+        };
     }
 }

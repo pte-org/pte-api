@@ -17,7 +17,7 @@ import java.util.UUID;
 
 /** Any authenticated actor can request an upload (students recording Read Aloud; hosts uploading media for authoring later). Ownership is enforced at complete-time. */
 @RestController
-@RequestMapping("/objects")
+@RequestMapping("/api/v1/objects")
 public class MediaController {
 
     private final PresignService presignService;

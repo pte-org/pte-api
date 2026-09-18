@@ -37,18 +37,26 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
             + "AND q.pteTaskType = :taskType")
     long countAvailableByTaskType(@Param("taskType") PteTaskType taskType);
 
-    @EntityGraph(attributePaths = "options")
+    /**
+     * Exam-generation pool count, grouped by task type. Literal
+     * {@code visibility = 'SHARED'} — the generation pool never depends on
+     * which tenant's host is asking (Plan B, 2026-09-17 platform-only decision).
+     */
     @Query(value = """
-            SELECT q.*
-            FROM questions q
-            WHERE q.deleted = FALSE
-              AND q.visibility = 'SHARED'
-              AND q.status = 'APPROVED'
-              AND q.pte_task_type = :taskType
-            ORDER BY md5(CAST(q.id AS text) || CAST(:seed AS text)), q.id
-            LIMIT :limit
+            SELECT pte_task_type AS taskType, COUNT(*) AS count
+            FROM questions
+            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND pte_task_type IN (:taskTypes)
+            GROUP BY pte_task_type
             """, nativeQuery = true)
-    List<Question> findRandomByTaskType(@Param("taskType") String taskType,
-                                         @Param("limit") int limit,
-                                         @Param("seed") long seed);
+    List<TaskTypeCountProjection> countPublishedSharedGroupedByTaskType(@Param("taskTypes") Set<String> taskTypes);
+
+    /** At most {@code n} random APPROVED+SHARED ids for one task type — the exam-generation draw. */
+    @Query(value = """
+            SELECT public_id
+            FROM questions
+            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND pte_task_type = :taskType
+            ORDER BY random()
+            LIMIT :n
+            """, nativeQuery = true)
+    List<UUID> randomPublishedSharedIdsByTaskType(@Param("taskType") String taskType, @Param("n") int n);
 }

@@ -22,7 +22,7 @@ import java.util.List;
 
 /** Platform-admin issue/list/revoke operations for individual activation codes. */
 @RestController
-@RequestMapping("/api/admin/license-codes")
+@RequestMapping("/api/v1/license-codes")
 @PreAuthorize("hasRole('PLATFORM_ADMIN')")
 public class LicenseCodeController {
 

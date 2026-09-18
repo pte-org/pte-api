@@ -22,6 +22,9 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
     List<Enrollment> findBySessionIdAndStudentPublicIdIn(Long sessionId, List<UUID> studentPublicIds);
 
+    /** Backs Class-unassign (Plan B, Phase 4) — removes only the current members of the unassigned Class. */
+    long deleteBySessionIdAndStudentPublicIdIn(Long sessionId, List<UUID> studentPublicIds);
+
     /**
      * Backs enrollment's pending-exam-request transfer warning (join-fetches
      * {@code session} in the same query — a student's enrollment history is

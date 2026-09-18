@@ -150,6 +150,28 @@ jobs:
           fi
           compose up -d --no-build --remove-orphans
 
+          # First deploys start Nginx in HTTP bootstrap mode. Obtain one
+          # multi-domain certificate through the shared webroot, then restart
+          # Nginx so its command selects the validated TLS configuration.
+          letsencrypt_volume="$(docker volume inspect pte_letsencrypt --format '{{.Mountpoint}}')"
+          if [ ! -s "$letsencrypt_volume/live/pte-platform/fullchain.pem" ]; then
+            TENANT_DOMAIN="$(awk -F= '$1 == "TENANT_DOMAIN" { print substr($0, index($0, "=") + 1) }' .env)"
+            ADMIN_DOMAIN="$(awk -F= '$1 == "ADMIN_DOMAIN" { print substr($0, index($0, "=") + 1) }' .env)"
+            MEDIA_DOMAIN="$(awk -F= '$1 == "MEDIA_DOMAIN" { print substr($0, index($0, "=") + 1) }' .env)"
+            ACME_EMAIL="$(awk -F= '$1 == "ACME_EMAIL" { print substr($0, index($0, "=") + 1) }' .env)"
+            : "${TENANT_DOMAIN:?TENANT_DOMAIN is required in .env}"
+            : "${ADMIN_DOMAIN:?ADMIN_DOMAIN is required in .env}"
+            : "${MEDIA_DOMAIN:?MEDIA_DOMAIN is required in .env}"
+            : "${ACME_EMAIL:?ACME_EMAIL is required in .env}"
+            compose run --rm certbot certonly \
+              --webroot -w /var/www/certbot \
+              --cert-name pte-platform \
+              --email "$ACME_EMAIL" \
+              --agree-tos --no-eff-email --non-interactive \
+              -d "$TENANT_DOMAIN" -d "$ADMIN_DOMAIN" -d "$MEDIA_DOMAIN"
+            compose restart nginx
+          fi
+
           deadline=$((SECONDS + 600))
           while true; do
             unhealthy="$(
@@ -181,7 +203,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # No SSH here — this checks from the outside (DNS → Caddy → TLS →
+      # No SSH here — this checks from the outside (DNS → Nginx → TLS →
       # app/web), which the deploy job's internal container healthcheck
       # loop cannot see. Domains mirror TENANT_DOMAIN/ADMIN_DOMAIN in .env;
       # update here if they ever change.
@@ -207,4 +229,5 @@ jobs:
           check https://pte-tenant.duckdns.org/actuator/health || status=1
           check https://pte-tenant.duckdns.org/ || status=1
           check https://pte-admin.duckdns.org/ || status=1
+          check https://pte-media.duckdns.org/minio/health/live || status=1
           exit "$status"

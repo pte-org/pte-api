@@ -1,7 +1,6 @@
 package com.pte.session.dto.response;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -15,6 +14,5 @@ public record EntitlementResponse(
         UUID tenantId,
         Instant opensAt,
         Instant closesAt,
-        ExamPolicyResponse policy,
-        List<CompositionItemResponse> composition) {
+        ExamPolicyResponse policy) {
 }

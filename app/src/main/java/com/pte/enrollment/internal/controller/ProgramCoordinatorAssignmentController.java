@@ -25,7 +25,7 @@ import java.util.UUID;
  * narrower-than-list pattern as {@link LecturerAssignmentController}).
  */
 @RestController
-@RequestMapping("/organizations/{organizationPublicId}/programs/{programPublicId}/coordinators")
+@RequestMapping("/api/v1/organizations/{organizationPublicId}/programs/{programPublicId}/coordinators")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class ProgramCoordinatorAssignmentController {
 

@@ -29,7 +29,7 @@ import java.util.UUID;
  * parallel data, never a gate.
  */
 @RestController
-@RequestMapping("/answers")
+@RequestMapping("/api/v1/answers")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class ScoringReviewController {
 

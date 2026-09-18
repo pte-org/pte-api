@@ -20,7 +20,7 @@ import java.util.UUID;
  * pending-exam-request warning — read-only, never blocks the transfer.
  */
 @RestController
-@RequestMapping("/students/{studentPublicId}/enrollments")
+@RequestMapping("/api/v1/students/{studentPublicId}/enrollments")
 @PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
 public class StudentEnrollmentController {
 

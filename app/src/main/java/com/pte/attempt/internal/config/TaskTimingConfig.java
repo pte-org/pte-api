@@ -39,6 +39,20 @@ public class TaskTimingConfig {
         return timing;
     }
 
+    /**
+     * Non-throwing lookup — {@code null} if this task type has no entry here
+     * at all. Since Phase 3, that's every task type except {@code
+     * PERSONAL_INTRODUCTION} and the 5 audio-prompt Speaking types (everyone
+     * else's timing now lives in the pinned {@code ScoreTemplate}); {@code
+     * SnapshotPinService} uses this instead of {@link #timingFor} whenever a
+     * task type IS in the pinned template, so a template-only static type
+     * (e.g. {@code MC_READING_SINGLE}) never trips {@link
+     * TaskTimingNotConfiguredException} just because it's absent from this file.
+     */
+    public Timing timingForIfConfigured(String taskType) {
+        return timings.get(taskType);
+    }
+
     private void load(JsonMapper jsonMapper) {
         try (InputStream in = new ClassPathResource(RESOURCE).getInputStream()) {
             JsonNode root = jsonMapper.readTree(in).path("timings");
