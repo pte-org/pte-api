@@ -171,9 +171,9 @@ class AttemptMapperTest {
     @Test
     @DisplayName("imageUrl flows through from PinnedItemView to TaskView unchanged")
     void imageUrl_flowsThroughToTaskView() {
-        TaskView task = toTask("[]", null, null, "https://minio.local/signed-image");
+        TaskView task = toTask("[]", null, null, "https://res.cloudinary.com/test/signed-image");
 
-        assertThat(task.imageUrl()).isEqualTo("https://minio.local/signed-image");
+        assertThat(task.imageUrl()).isEqualTo("https://res.cloudinary.com/test/signed-image");
     }
 
     @Test

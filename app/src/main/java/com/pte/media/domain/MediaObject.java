@@ -44,22 +44,11 @@ public class MediaObject extends BaseEntity {
     @Column(nullable = false)
     private MediaStatus status = MediaStatus.PENDING_UPLOAD;
 
-    /**
-     * Set at request-upload time from {@code RequestUploadRequest.audioPrompt()}
-     * — {@code false} for any caller that doesn't opt in (candidates' own
-     * recorded answers). Gates both the WAV-only content-type restriction and
-     * whether {@code completeUpload} attempts duration extraction.
-     */
+    /** Whether the asset is an authoring audio prompt rather than an image prompt. */
     @Column(nullable = false, columnDefinition = "boolean not null default false")
     private boolean audioPrompt;
 
-    /**
-     * WAV duration in whole seconds, set only for {@link #audioPrompt} objects,
-     * only once it's been successfully extracted at complete-upload time — never
-     * a guessed/estimated value. {@code null} for every non-audio-prompt object,
-     * and for an audio-prompt object that failed extraction (which never
-     * reaches {@link MediaStatus#UPLOADED} at all).
-     */
+    /** Duration returned by Cloudinary for an audio prompt, when available. */
     @Column
     private Integer durationSeconds;
 

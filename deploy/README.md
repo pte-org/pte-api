@@ -1,18 +1,17 @@
 # PTE hosted deployment runbook
 
 The hosted demo is one modular-monolith stack on the Oracle VPS. Nginx is the
-only public edge: it terminates TLS and routes the tenant, vendor, API,
-WebSocket, and media origins.
+only public edge: it terminates TLS and routes the tenant, vendor, API, and
+WebSocket origins. Question-bank media uploads go directly from the browser to
+Cloudinary after the app issues signed upload parameters.
 
 | Origin | Routing |
 |---|---|
 | `pte-tenant.duckdns.org` | tenant-web, `/api/v1/*`, `/actuator/*`, `/ws` |
 | `pte-admin.duckdns.org` | vendor-web and the same API/transport routes |
-| `pte-media.duckdns.org` | MinIO object API and presigned URLs |
-
 Only TCP 22, 80, and 443 should be allowed from the internet. The hosted
 Compose overlay removes host bindings for app, web, PostgreSQL, Redis,
-RabbitMQ, MinIO, Mailpit, and Jaeger.
+RabbitMQ, Mailpit, and Jaeger.
 
 ## VPS and environment
 
@@ -33,7 +32,6 @@ required credentials, and set these hosted values:
 ```text
 TENANT_DOMAIN=pte-tenant.duckdns.org
 ADMIN_DOMAIN=pte-admin.duckdns.org
-MEDIA_DOMAIN=pte-media.duckdns.org
 ACME_EMAIL=admin@example.com
 ```
 
@@ -55,7 +53,7 @@ For a manual first deployment:
 ```bash
 cd /home/ubuntu/pte-org/pte-api
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.services.yml -f docker-compose.deploy.yml up -d --build
-docker compose --env-file .env -f docker-compose.yml -f docker-compose.services.yml -f docker-compose.deploy.yml run --rm certbot certonly --webroot -w /var/www/certbot --cert-name pte-platform --email "$ACME_EMAIL" --agree-tos --no-eff-email --non-interactive -d "$TENANT_DOMAIN" -d "$ADMIN_DOMAIN" -d "$MEDIA_DOMAIN"
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.services.yml -f docker-compose.deploy.yml run --rm certbot certonly --webroot -w /var/www/certbot --cert-name pte-platform --email "$ACME_EMAIL" --agree-tos --no-eff-email --non-interactive -d "$TENANT_DOMAIN" -d "$ADMIN_DOMAIN"
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.services.yml -f docker-compose.deploy.yml restart nginx
 ```
 
@@ -90,7 +88,6 @@ openssl x509 -checkend $((14*24*3600)) -noout -in /var/lib/docker/volumes/pte_le
 ```bash
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.services.yml -f docker-compose.deploy.yml ps
 curl -fsS https://pte-tenant.duckdns.org/actuator/health
-curl -fsS https://pte-media.duckdns.org/minio/health/live
 curl -fsS https://pte-tenant.duckdns.org/
 curl -fsS https://pte-admin.duckdns.org/
 ```
@@ -108,5 +105,5 @@ before reloading.
 
 Rollback means checking out the previously verified commit in both repositories
 and rerunning deployment. Do not delete `pte_letsencrypt`,
-`pte_postgres_data`, or `pte_minio_data`; deleting them destroys
-certificates or application data and is not a normal rollback.
+`pte_postgres_data`; deleting it destroys certificates or application data and
+is not a normal rollback.

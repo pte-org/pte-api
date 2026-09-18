@@ -11,7 +11,7 @@ else
     template="$template_dir/nginx.bootstrap.conf.template"
 fi
 
-envsubst '${TENANT_DOMAIN} ${ADMIN_DOMAIN} ${MEDIA_DOMAIN}' \
+envsubst '${TENANT_DOMAIN} ${ADMIN_DOMAIN}' \
     < "$template" > "$output"
 
 nginx -t

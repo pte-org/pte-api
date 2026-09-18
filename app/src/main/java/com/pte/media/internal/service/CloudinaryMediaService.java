@@ -26,7 +26,6 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Set;
 import java.util.UUID;
-import java.util.Optional;
 
 /** Cloudinary direct-upload adapter for platform authoring media. */
 @Service
@@ -132,13 +131,9 @@ public class CloudinaryMediaService {
     @Transactional(readOnly = true)
     public PresignedDownloadResponse resolveForTrustedCaller(UUID mediaPublicId, long requestedTtlSeconds,
             UUID tenantId) {
-        Optional<MediaObject> mediaCandidate = repository.findByPublicId(mediaPublicId);
-        if (mediaCandidate.isEmpty()) {
-            return null;
-        }
-        MediaObject media = mediaCandidate.get();
+        MediaObject media = repository.findByPublicId(mediaPublicId).orElseThrow(MediaNotFoundException::new);
         if (media.getCloudinaryPublicId() == null) {
-            return null;
+            throw new MediaNotFoundException();
         }
         if (media.getTenantId() != null && !media.getTenantId().equals(tenantId)) {
             throw new MediaNotFoundException();
