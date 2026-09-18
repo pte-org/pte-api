@@ -9,6 +9,7 @@ import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.exception.ApplicationNotPendingException;
 import com.pte.billing.internal.exception.RequestedCodeAlreadyUsedException;
+import com.pte.billing.internal.exception.RequestedNameAlreadyUsedException;
 import com.pte.billing.internal.exception.TenantApplicationNotFoundException;
 import com.pte.billing.internal.repository.TenantApplicationRepository;
 import com.pte.identity.domain.HostAdminCreated;
@@ -71,6 +72,9 @@ class TenantApplicationServiceTest {
 
     @Test
     void submit_savesApplicationAsPending() {
+        when(tenancyService.existsByName("Acme School")).thenReturn(false);
+        when(applicationRepository.existsByOrgNameAndStatus("Acme School", TenantApplicationStatus.PENDING))
+                .thenReturn(false);
         when(tenancyService.existsByCode("acme")).thenReturn(false);
         when(applicationRepository.existsByRequestedCodeAndStatus("acme", TenantApplicationStatus.PENDING))
                 .thenReturn(false);
@@ -87,6 +91,9 @@ class TenantApplicationServiceTest {
 
     @Test
     void submit_codeAlreadyATenant_throwsWithoutSaving() {
+        when(tenancyService.existsByName("Acme School")).thenReturn(false);
+        when(applicationRepository.existsByOrgNameAndStatus("Acme School", TenantApplicationStatus.PENDING))
+                .thenReturn(false);
         when(tenancyService.existsByCode("acme")).thenReturn(true);
 
         assertThatThrownBy(() -> service.submit(submitRequest("acme")))
@@ -96,12 +103,35 @@ class TenantApplicationServiceTest {
 
     @Test
     void submit_codeHeldByAnotherPendingApplication_throwsWithoutSaving() {
+        when(tenancyService.existsByName("Acme School")).thenReturn(false);
+        when(applicationRepository.existsByOrgNameAndStatus("Acme School", TenantApplicationStatus.PENDING))
+                .thenReturn(false);
         when(tenancyService.existsByCode("acme")).thenReturn(false);
         when(applicationRepository.existsByRequestedCodeAndStatus("acme", TenantApplicationStatus.PENDING))
                 .thenReturn(true);
 
         assertThatThrownBy(() -> service.submit(submitRequest("acme")))
                 .isInstanceOf(RequestedCodeAlreadyUsedException.class);
+        verify(applicationRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void submit_nameAlreadyATenant_throwsWithoutSaving() {
+        when(tenancyService.existsByName("Acme School")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.submit(submitRequest("acme-new")))
+                .isInstanceOf(RequestedNameAlreadyUsedException.class);
+        verify(applicationRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void submit_nameHeldByAnotherPendingApplication_throwsWithoutSaving() {
+        when(tenancyService.existsByName("Acme School")).thenReturn(false);
+        when(applicationRepository.existsByOrgNameAndStatus("Acme School", TenantApplicationStatus.PENDING))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> service.submit(submitRequest("acme-new")))
+                .isInstanceOf(RequestedNameAlreadyUsedException.class);
         verify(applicationRepository, never()).saveAndFlush(any());
     }
 

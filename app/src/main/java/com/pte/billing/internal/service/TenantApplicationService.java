@@ -11,6 +11,7 @@ import com.pte.billing.internal.dto.request.SubmitApplicationRequest;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.exception.ApplicationNotPendingException;
 import com.pte.billing.internal.exception.RequestedCodeAlreadyUsedException;
+import com.pte.billing.internal.exception.RequestedNameAlreadyUsedException;
 import com.pte.billing.internal.exception.TenantApplicationNotFoundException;
 import com.pte.billing.internal.mapper.TenantApplicationMapper;
 import com.pte.billing.internal.repository.TenantApplicationRepository;
@@ -55,6 +56,12 @@ public class TenantApplicationService {
      */
     @Transactional
     public void submit(SubmitApplicationRequest request) {
+        String organizationName = request.orgName().trim();
+        if (tenancyService.existsByName(organizationName)
+                || applicationRepository.existsByOrgNameAndStatus(
+                        organizationName, TenantApplicationStatus.PENDING)) {
+            throw new RequestedNameAlreadyUsedException();
+        }
         if (tenancyService.existsByCode(request.requestedCode())
                 || applicationRepository.existsByRequestedCodeAndStatus(
                         request.requestedCode(), TenantApplicationStatus.PENDING)) {
@@ -62,7 +69,7 @@ public class TenantApplicationService {
         }
 
         TenantApplication application = new TenantApplication();
-        application.setOrgName(request.orgName());
+        application.setOrgName(organizationName);
         application.setOrgType(request.orgType());
         application.setRequestedCode(request.requestedCode());
         application.setContactEmail(request.contactEmail());
