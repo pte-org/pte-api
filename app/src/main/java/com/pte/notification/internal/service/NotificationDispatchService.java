@@ -73,4 +73,29 @@ public class NotificationDispatchService {
         rabbitTemplate.convertAndSend(NotificationConstants.EMAIL_EXCHANGE, NotificationConstants.EMAIL_ROUTING_KEY,
                 new EmailJob(saved.getPublicId(), recipient.getEmail(), subject, body));
     }
+
+    /**
+     * Enqueues a mail to an address that is not yet linked to a platform user,
+     * such as a public tenant application. The dedupe key is the application
+     * lifecycle event identity, so redelivered events do not send a second mail.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void dispatchExternal(NotificationType type, String recipientEmail, UUID tenantId, String dedupeKey,
+            String subject, String body) {
+        if (notificationLogRepository.findByDedupeKey(dedupeKey).isPresent()) {
+            return;
+        }
+
+        NotificationLog notificationLog = new NotificationLog();
+        notificationLog.setRecipientEmail(recipientEmail);
+        notificationLog.setTenantId(tenantId);
+        notificationLog.setDedupeKey(dedupeKey);
+        notificationLog.setNotificationType(type);
+        notificationLog.setSubject(subject);
+        notificationLog.setBody(body);
+        NotificationLog saved = notificationLogRepository.save(notificationLog);
+
+        rabbitTemplate.convertAndSend(NotificationConstants.EMAIL_EXCHANGE, NotificationConstants.EMAIL_ROUTING_KEY,
+                new EmailJob(saved.getPublicId(), recipientEmail, subject, body));
+    }
 }

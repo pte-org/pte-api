@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.Optional;
@@ -51,12 +52,15 @@ class TenantApplicationServiceTest {
     @Mock
     private PlatformSettingService platformSettingService;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private TenantApplicationService service;
 
     @BeforeEach
     void setUp() {
         service = new TenantApplicationService(applicationRepository, tenancyService, identityService,
-                platformSettingService);
+                platformSettingService, eventPublisher);
     }
 
     private SubmitApplicationRequest submitRequest(String code) {
@@ -78,6 +82,7 @@ class TenantApplicationServiceTest {
 
         assertThat(response.status()).isEqualTo("PENDING");
         assertThat(response.requestedCode()).isEqualTo("acme");
+        verify(eventPublisher).publishEvent(any(Object.class));
     }
 
     @Test
@@ -140,6 +145,7 @@ class TenantApplicationServiceTest {
         assertThat(response.hostAdminPassword()).isEqualTo("Gener4ted!");
         assertThat(application.getStatus()).isEqualTo(TenantApplicationStatus.APPROVED);
         assertThat(application.getReviewedBy()).isEqualTo(reviewerId);
+        verify(eventPublisher).publishEvent(any(Object.class));
     }
 
     @Test
@@ -182,6 +188,7 @@ class TenantApplicationServiceTest {
         assertThat(response.status()).isEqualTo("REJECTED");
         assertThat(response.rejectReason()).isEqualTo("Brand name conflict");
         assertThat(application.getReviewedBy()).isEqualTo(reviewerId);
+        verify(eventPublisher).publishEvent(any(Object.class));
     }
 
     @Test

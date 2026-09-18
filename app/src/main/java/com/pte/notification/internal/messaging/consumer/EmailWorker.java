@@ -3,6 +3,7 @@ package com.pte.notification.internal.messaging.consumer;
 import com.pte.notification.domain.NotificationLog;
 import com.pte.notification.domain.enums.NotificationStatus;
 import com.pte.notification.internal.constant.NotificationConstants;
+import com.pte.notification.internal.config.NotificationProperties;
 import com.pte.notification.internal.messaging.job.EmailJob;
 import com.pte.notification.internal.repository.NotificationLogRepository;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -26,10 +27,13 @@ public class EmailWorker {
 
     private final NotificationLogRepository notificationLogRepository;
     private final JavaMailSender mailSender;
+    private final NotificationProperties notificationProperties;
 
-    public EmailWorker(NotificationLogRepository notificationLogRepository, JavaMailSender mailSender) {
+    public EmailWorker(NotificationLogRepository notificationLogRepository, JavaMailSender mailSender,
+            NotificationProperties notificationProperties) {
         this.notificationLogRepository = notificationLogRepository;
         this.mailSender = mailSender;
+        this.notificationProperties = notificationProperties;
     }
 
     @RabbitListener(queues = NotificationConstants.EMAIL_QUEUE, containerFactory = "notificationRabbitListenerContainerFactory")
@@ -62,6 +66,7 @@ public class EmailWorker {
 
     private void sendEmail(EmailJob job) {
         SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(notificationProperties.getMailFrom());
         message.setTo(job.recipientEmail());
         message.setSubject(job.subject());
         message.setText(job.body());

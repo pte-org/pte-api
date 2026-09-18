@@ -130,4 +130,38 @@ class NotificationDispatchServiceTest {
         assertThat(savedLog_.getSubject()).isEqualTo(subject);
         assertThat(savedLog_.getBody()).isEqualTo(body);
     }
+
+    @Test
+    void dispatchExternal_withoutTenantUser_savesLogAndEnqueuesEmail() {
+        String email = "contact@example.com";
+        String dedupeKey = "tenant-application:123:submitted";
+        NotificationLog savedLog = new NotificationLog();
+        savedLog.setPublicId(UUID.randomUUID());
+        when(notificationLogRepository.findByDedupeKey(dedupeKey)).thenReturn(java.util.Optional.empty());
+        when(notificationLogRepository.save(any(NotificationLog.class))).thenReturn(savedLog);
+
+        service.dispatchExternal(NotificationType.TENANT_APPLICATION_SUBMITTED, email, null, dedupeKey,
+                "Application received", "Body");
+
+        ArgumentCaptor<NotificationLog> logCaptor = ArgumentCaptor.forClass(NotificationLog.class);
+        verify(notificationLogRepository).save(logCaptor.capture());
+        NotificationLog savedLog_ = logCaptor.getValue();
+        assertThat(savedLog_.getRecipientUserPublicId()).isNull();
+        assertThat(savedLog_.getRecipientEmail()).isEqualTo(email);
+        assertThat(savedLog_.getTenantId()).isNull();
+        assertThat(savedLog_.getDedupeKey()).isEqualTo(dedupeKey);
+        assertThat(savedLog_.getNotificationType()).isEqualTo(NotificationType.TENANT_APPLICATION_SUBMITTED);
+    }
+
+    @Test
+    void dispatchExternal_duplicateDedupeKey_doesNotEnqueueAgain() {
+        String dedupeKey = "tenant-application:123:submitted";
+        when(notificationLogRepository.findByDedupeKey(dedupeKey))
+                .thenReturn(java.util.Optional.of(new NotificationLog()));
+
+        service.dispatchExternal(NotificationType.TENANT_APPLICATION_SUBMITTED, "contact@example.com", null,
+                dedupeKey, "Application received", "Body");
+
+        verify(notificationLogRepository, never()).save(any());
+    }
 }
