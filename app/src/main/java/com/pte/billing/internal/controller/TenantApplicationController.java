@@ -2,7 +2,6 @@ package com.pte.billing.internal.controller;
 
 import com.pte.billing.internal.dto.request.RejectApplicationRequest;
 import com.pte.billing.internal.dto.request.SubmitApplicationRequest;
-import com.pte.billing.internal.dto.response.ApproveApplicationResponse;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.service.TenantApplicationService;
 import com.pte.shared.security.CurrentUser;
@@ -39,8 +38,9 @@ public class TenantApplicationController {
     }
 
     @PostMapping("/applications")
-    public ApiResponse<TenantApplicationResponse> submit(@Valid @RequestBody SubmitApplicationRequest request) {
-        return ApiResponse.success(applicationService.submit(request));
+    public ApiResponse<Void> submit(@Valid @RequestBody SubmitApplicationRequest request) {
+        applicationService.submit(request);
+        return ApiResponse.success(null);
     }
 
     @GetMapping("/applications")
@@ -51,8 +51,9 @@ public class TenantApplicationController {
 
     @PostMapping("/applications/{publicId}/approval")
     @PreAuthorize("hasRole('PLATFORM_ADMIN')")
-    public ApiResponse<ApproveApplicationResponse> approve(@PathVariable UUID publicId) {
-        return ApiResponse.success(applicationService.approve(publicId, currentUser()));
+    public ApiResponse<Void> approve(@PathVariable UUID publicId) {
+        applicationService.approve(publicId, currentUser());
+        return ApiResponse.success(null);
     }
 
     @PostMapping("/applications/{publicId}/rejection")

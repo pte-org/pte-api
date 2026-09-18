@@ -11,7 +11,7 @@ import org.springframework.validation.annotation.Validated;
 public class NotificationProperties {
 
     @NotBlank
-    private String mailFrom = "no-reply@ptehub.local";
+    private String mailFrom = "no-reply@pteprep.local";
 
     @Min(1)
     private int applicationResponseSlaHours = 72;

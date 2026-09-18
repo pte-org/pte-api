@@ -22,12 +22,17 @@ class QuestionControllerSecurityTest {
     }
 
     @Test
-    void noMethodOverridesTheClassLevelRestrictionWithABroaderRole() {
+    void methodLevelRestrictionsOnlyNarrowTheClassLevelRestriction() {
         for (var method : QuestionController.class.getDeclaredMethods()) {
             PreAuthorize methodLevel = method.getAnnotation(PreAuthorize.class);
-            assertThat(methodLevel)
-                    .as("method %s must not override the controller's platform-only restriction", method.getName())
-                    .isNull();
+            if (method.getName().equals("approve") || method.getName().equals("reject")) {
+                assertThat(methodLevel).isNotNull();
+                assertThat(methodLevel.value()).isEqualTo("hasRole('PLATFORM_ADMIN')");
+            } else {
+                assertThat(methodLevel)
+                        .as("method %s must not broaden the controller's platform-only restriction", method.getName())
+                        .isNull();
+            }
         }
     }
 }

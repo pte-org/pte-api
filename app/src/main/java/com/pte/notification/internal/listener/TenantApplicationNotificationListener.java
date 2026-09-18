@@ -26,23 +26,17 @@ public class TenantApplicationNotificationListener {
 
     @TransactionalEventListener
     public void onApplicationSubmitted(TenantApplicationSubmittedEvent event) {
-        String subject = "PTE Hub - Application received";
+        String subject = "PTE Prep - Application received";
         String body = """
                 Hello,
 
-                Thank you for submitting your organization application to PTE Hub.
-
-                Application ID: %s
-                Organization: %s
-                Requested tenant code: %s
+                Thank you for submitting your organization application to PTE Prep.
 
                 Our platform team will review your application and send an update within %d hours.
-                Please keep this email and your application ID for reference.
 
                 Regards,
-                PTE Hub Platform Team
-                """.formatted(event.applicationPublicId(), event.organizationName(), event.requestedCode(),
-                notificationProperties.getApplicationResponseSlaHours());
+                PTE Prep Platform Team
+                """.formatted(notificationProperties.getApplicationResponseSlaHours());
 
         dispatchService.dispatchExternal(NotificationType.TENANT_APPLICATION_SUBMITTED, event.contactEmail(), null,
                 dedupeKey(event.applicationPublicId(), "submitted"), subject, body);
@@ -50,7 +44,7 @@ public class TenantApplicationNotificationListener {
 
     @TransactionalEventListener
     public void onApplicationApproved(TenantApplicationApprovedEvent event) {
-        String subject = "PTE Hub - Your application was approved";
+        String subject = "PTE Prep - Your application was approved";
         String body = """
                 Hello,
 
@@ -58,39 +52,36 @@ public class TenantApplicationNotificationListener {
 
                 Organization: %s
                 Tenant code: %s
-                Login username: %s
+                Username: %s
+                Temporary password: %s
 
-                A platform administrator will provide the one-time password through a separate secure channel.
-                Please change that password after your first sign-in.
+                Please change the temporary password after your first sign-in.
 
                 Regards,
-                PTE Hub Platform Team
-                """.formatted(event.organizationName(), event.tenantCode(), event.hostAdminUsername());
+                PTE Prep Platform Team
+                """.formatted(event.organizationName(), event.tenantCode(), event.hostAdminUsername(),
+                event.hostAdminPassword());
 
-        dispatchService.dispatchExternal(NotificationType.TENANT_APPLICATION_APPROVED, event.contactEmail(),
+        dispatchService.dispatchExternalSensitive(NotificationType.TENANT_APPLICATION_APPROVED, event.contactEmail(),
                 event.tenantPublicId(), dedupeKey(event.applicationPublicId(), "approved"), subject, body);
     }
 
     @TransactionalEventListener
     public void onApplicationRejected(TenantApplicationRejectedEvent event) {
-        String subject = "PTE Hub - Update on your application";
+        String subject = "PTE Prep - Update on your application";
         String body = """
                 Hello,
 
-                Thank you for your interest in PTE Hub. After reviewing your organization application, we are unable
+                Thank you for your interest in PTE Prep. After reviewing your organization application, we are unable
                 to approve it at this time.
 
-                Application ID: %s
-                Organization: %s
-                Requested tenant code: %s
                 Reason: %s
 
                 Please address the reason above and submit a new application if you would like us to review it again.
 
                 Regards,
-                PTE Hub Platform Team
-                """.formatted(event.applicationPublicId(), event.organizationName(), event.requestedCode(),
-                event.rejectReason());
+                PTE Prep Platform Team
+                """.formatted(event.rejectReason());
 
         dispatchService.dispatchExternal(NotificationType.TENANT_APPLICATION_REJECTED, event.contactEmail(), null,
                 dedupeKey(event.applicationPublicId(), "rejected"), subject, body);

@@ -49,29 +49,34 @@ class TenantApplicationNotificationListenerTest {
                 subject.capture(), body.capture());
         assertThat(subject.getValue()).contains("Application received");
         assertThat(body.getValue()).contains("within 48 hours");
-        assertThat(body.getValue()).contains(applicationId.toString());
+        assertThat(body.getValue()).doesNotContain(applicationId.toString());
+        assertThat(body.getValue()).doesNotContain("Application ID");
     }
 
     @Test
-    void approved_sendsResultWithoutOneTimePassword() {
+    void approved_sendsLoginCredentialsWithoutApplicationId() {
+        UUID applicationId = UUID.randomUUID();
         listener.onApplicationApproved(new TenantApplicationApprovedEvent(
-                UUID.randomUUID(), UUID.randomUUID(), "Acme School", "acme", "contact@acme.example",
-                "contact@acme.example"));
+                applicationId, UUID.randomUUID(), "Acme School", "acme", "contact@acme.example",
+                "contact@acme.example", "Gener4ted!"));
 
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
-        verify(dispatchService).dispatchExternal(
+        verify(dispatchService).dispatchExternalSensitive(
                 org.mockito.ArgumentMatchers.eq(NotificationType.TENANT_APPLICATION_APPROVED),
                 org.mockito.ArgumentMatchers.eq("contact@acme.example"),
                 org.mockito.ArgumentMatchers.any(UUID.class), org.mockito.ArgumentMatchers.contains(":approved"),
                 org.mockito.ArgumentMatchers.contains("approved"), body.capture());
         assertThat(body.getValue()).contains("Tenant code: acme");
-        assertThat(body.getValue()).contains("Login username: contact@acme.example");
+        assertThat(body.getValue()).contains("Username: contact@acme.example");
+        assertThat(body.getValue()).contains("Temporary password: Gener4ted!");
+        assertThat(body.getValue()).doesNotContain(applicationId.toString());
     }
 
     @Test
     void rejected_sendsReasonToApplicant() {
+        UUID applicationId = UUID.randomUUID();
         listener.onApplicationRejected(new TenantApplicationRejectedEvent(
-                UUID.randomUUID(), "Acme School", "acme", "contact@acme.example", "Missing documents"));
+                applicationId, "Acme School", "acme", "contact@acme.example", "Missing documents"));
 
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
         verify(dispatchService).dispatchExternal(
@@ -80,5 +85,7 @@ class TenantApplicationNotificationListenerTest {
                 org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.contains(":rejected"),
                 org.mockito.ArgumentMatchers.contains("Update"), body.capture());
         assertThat(body.getValue()).contains("Reason: Missing documents");
+        assertThat(body.getValue()).doesNotContain(applicationId.toString());
+        assertThat(body.getValue()).doesNotContain("Application ID");
     }
 }

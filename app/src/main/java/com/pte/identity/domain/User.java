@@ -26,7 +26,8 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "users", indexes = {
-        @Index(name = "idx_users_tenant", columnList = "tenant_id")
+        @Index(name = "idx_users_tenant", columnList = "tenant_id"),
+        @Index(name = "uk_users_tenant_username", columnList = "tenant_id, username", unique = true)
 })
 @Getter
 @Setter
@@ -39,14 +40,14 @@ public class User extends BaseEntity {
      * except STUDENT, whose roster-import-generated username is prefixed with
      * its tenant's code instead (plans/quang-tenant-commercialization Phase 8).
      */
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String username;
 
     /**
-     * No longer unique or required at the DB level: two different tenants may
-     * create a student with the same email. Still required and unique in
-     * practice for every non-STUDENT role, since {@code username} is set equal
-     * to it for them.
+     * No longer globally unique or required at the DB level: two different
+     * tenants may create an account with the same email. It remains unique
+     * within each tenant, since {@code username} is the tenant-scoped login
+     * key.
      */
     @Column
     private String email;

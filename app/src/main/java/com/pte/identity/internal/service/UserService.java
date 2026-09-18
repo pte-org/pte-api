@@ -86,7 +86,7 @@ public class UserService {
         // applies to the bulk roster-import path (Phase 8), not here. Since
         // username carries the real DB uniqueness constraint now, duplicate
         // detection checks it, not email.
-        if (userRepository.existsByUsername(request.email())) {
+        if (userRepository.existsByUsernameAndTenantId(request.email(), tenantId)) {
             throw new EmailAlreadyUsedException();
         }
         if (roles.contains(Role.STUDENT)) {
@@ -139,7 +139,8 @@ public class UserService {
         List<BulkCreateUserRow> rows = request.rows();
         List<String> emails = rows.stream().map(BulkCreateUserRow::email).toList();
         Set<String> existingEmails = new HashSet<>(
-                userRepository.findByEmailIn(emails).stream().map(User::getEmail).toList());
+                userRepository.findByTenantIdAndEmailIn(tenantId, emails)
+                        .stream().map(User::getEmail).toList());
 
         long adding = rows.stream().filter(row -> !existingEmails.contains(row.email())).count();
         if (adding > 0L) {

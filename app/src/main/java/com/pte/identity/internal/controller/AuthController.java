@@ -1,9 +1,11 @@
 package com.pte.identity.internal.controller;
 
 import com.pte.identity.internal.dto.request.LoginRequest;
+import com.pte.identity.internal.dto.request.LoginOrganizationOptionsRequest;
 import com.pte.identity.internal.dto.request.RefreshRequest;
 import com.pte.identity.internal.dto.request.ChangePasswordRequest;
 import com.pte.identity.internal.dto.response.TokenResponse;
+import com.pte.identity.internal.dto.response.LoginOrganizationOptionResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.service.AuthService;
 import com.pte.identity.internal.service.UserService;
@@ -17,6 +19,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -33,6 +37,12 @@ public class AuthController {
     @PostMapping("/login")
     public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
         return ApiResponse.success(authService.login(request));
+    }
+
+    @PostMapping("/login-options")
+    public ApiResponse<List<LoginOrganizationOptionResponse>> loginOptions(
+            @Valid @RequestBody LoginOrganizationOptionsRequest request) {
+        return ApiResponse.success(authService.loginOrganizations(request));
     }
 
     @GetMapping("/me")

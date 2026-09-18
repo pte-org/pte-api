@@ -50,7 +50,8 @@ public class SecurityConfig {
     // admin-only list/approve/reject endpoints live under
     // "/admin/applications" specifically so they never fall inside this rule.
     private static final List<String> PUBLIC_PATHS = List.of(
-            "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout",
+            "/api/v1/auth/login", "/api/v1/auth/login-options",
+            "/api/v1/auth/refresh", "/api/v1/auth/logout",
             "/actuator/health", "/actuator/health/**", "/ws/**",
             "/api/v1/applications", "/api/v1/webhooks/payos");
 

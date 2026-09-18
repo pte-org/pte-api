@@ -82,6 +82,22 @@ public class NotificationDispatchService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void dispatchExternal(NotificationType type, String recipientEmail, UUID tenantId, String dedupeKey,
             String subject, String body) {
+        dispatchExternal(type, recipientEmail, tenantId, dedupeKey, subject, body, body);
+    }
+
+    /**
+     * Enqueues an external email while keeping sensitive content out of the
+     * notification history exposed to tenant users.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void dispatchExternalSensitive(NotificationType type, String recipientEmail, UUID tenantId,
+            String dedupeKey, String subject, String body) {
+        dispatchExternal(type, recipientEmail, tenantId, dedupeKey, subject, body,
+                NotificationConstants.SENSITIVE_EMAIL_BODY_REDACTED);
+    }
+
+    private void dispatchExternal(NotificationType type, String recipientEmail, UUID tenantId, String dedupeKey,
+            String subject, String body, String logBody) {
         if (notificationLogRepository.findByDedupeKey(dedupeKey).isPresent()) {
             return;
         }
@@ -92,7 +108,7 @@ public class NotificationDispatchService {
         notificationLog.setDedupeKey(dedupeKey);
         notificationLog.setNotificationType(type);
         notificationLog.setSubject(subject);
-        notificationLog.setBody(body);
+        notificationLog.setBody(logBody);
         NotificationLog saved = notificationLogRepository.save(notificationLog);
 
         rabbitTemplate.convertAndSend(NotificationConstants.EMAIL_EXCHANGE, NotificationConstants.EMAIL_ROUTING_KEY,

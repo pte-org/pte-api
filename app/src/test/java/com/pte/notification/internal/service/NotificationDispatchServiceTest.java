@@ -164,4 +164,21 @@ class NotificationDispatchServiceTest {
 
         verify(notificationLogRepository, never()).save(any());
     }
+
+    @Test
+    void dispatchExternalSensitive_redactsBodyInNotificationHistory() {
+        String dedupeKey = "tenant-application:123:approved";
+        NotificationLog savedLog = new NotificationLog();
+        savedLog.setPublicId(UUID.randomUUID());
+        when(notificationLogRepository.findByDedupeKey(dedupeKey)).thenReturn(java.util.Optional.empty());
+        when(notificationLogRepository.save(any(NotificationLog.class))).thenReturn(savedLog);
+
+        service.dispatchExternalSensitive(NotificationType.TENANT_APPLICATION_APPROVED, "contact@example.com",
+                UUID.randomUUID(), dedupeKey, "Application approved", "Temporary password: Gener4ted!");
+
+        ArgumentCaptor<NotificationLog> logCaptor = ArgumentCaptor.forClass(NotificationLog.class);
+        verify(notificationLogRepository).save(logCaptor.capture());
+        assertThat(logCaptor.getValue().getBody()).isEqualTo(NotificationConstants.SENSITIVE_EMAIL_BODY_REDACTED);
+        assertThat(logCaptor.getValue().getBody()).doesNotContain("Gener4ted!");
+    }
 }

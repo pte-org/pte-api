@@ -203,12 +203,7 @@ public class ItembankService {
         }
         validationHelper.validate(question);
         validateMediaReferences(question, caller);
-        if (question.getSupersedesPublicId() != null) {
-            questionRepository.findWithOptionsByPublicId(question.getSupersedesPublicId()).ifPresent(previous -> {
-                previous.setCurrent(false);
-                previous.setStatus(QuestionStatus.ARCHIVED);
-            });
-        }
+        archiveSupersededQuestion(question);
         question.setRejectionReason(null);
         question.setCurrent(true);
         question.setStatus(QuestionStatus.APPROVED);
@@ -233,7 +228,34 @@ public class ItembankService {
     /** Publish DRAFT→APPROVED, validating required fields first. APPROVED is idempotent; ARCHIVED is rejected. */
     @Transactional
     public QuestionResponse publish(UUID publicId, CurrentUser caller) {
-        return approve(publicId, caller);
+        if (!accessPolicy.canApprove(caller)) {
+            throw new AccessDeniedException("Only platform admins may publish questions");
+        }
+        Question question = questionRepository.findWithOptionsByPublicId(publicId)
+                .orElseThrow(QuestionNotFoundException::new);
+        if (question.getStatus() == QuestionStatus.APPROVED) {
+            return toResponse(question);
+        }
+        if (question.getStatus() != QuestionStatus.DRAFT) {
+            throw new InvalidQuestionStatusTransitionException();
+        }
+        validationHelper.validate(question);
+        validateMediaReferences(question, caller);
+        archiveSupersededQuestion(question);
+        question.setRejectionReason(null);
+        question.setCurrent(true);
+        question.setStatus(QuestionStatus.APPROVED);
+        return toResponse(question);
+    }
+
+    private void archiveSupersededQuestion(Question question) {
+        if (question.getSupersedesPublicId() == null) {
+            return;
+        }
+        questionRepository.findWithOptionsByPublicId(question.getSupersedesPublicId()).ifPresent(previous -> {
+            previous.setCurrent(false);
+            previous.setStatus(QuestionStatus.ARCHIVED);
+        });
     }
 
     /** Archive DRAFT/APPROVED→ARCHIVED. ARCHIVED is idempotent. */
