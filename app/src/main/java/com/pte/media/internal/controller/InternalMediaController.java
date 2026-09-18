@@ -1,7 +1,7 @@
 package com.pte.media.internal.controller;
 
 import com.pte.media.dto.response.PresignedDownloadResponse;
-import com.pte.media.internal.service.PresignService;
+import com.pte.media.MediaService;
 import com.pte.shared.web.ApiResponse;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,16 +24,16 @@ import java.util.UUID;
 @PreAuthorize("hasRole('INTERNAL_SERVICE')")
 public class InternalMediaController {
 
-    private final PresignService presignService;
+    private final MediaService mediaService;
 
-    public InternalMediaController(PresignService presignService) {
-        this.presignService = presignService;
+    public InternalMediaController(MediaService mediaService) {
+        this.mediaService = mediaService;
     }
 
     @GetMapping("/{publicId}/presigned-url")
     public ApiResponse<PresignedDownloadResponse> presignGet(@PathVariable UUID publicId,
                                                               @RequestParam long ttlSeconds,
                                                               @RequestParam UUID tenantId) {
-        return ApiResponse.success(presignService.presignGet(publicId, ttlSeconds, tenantId));
+        return ApiResponse.success(mediaService.presignGet(publicId, ttlSeconds, tenantId));
     }
 }

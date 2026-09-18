@@ -12,6 +12,4 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
     Optional<Organization> findByPublicId(UUID publicId);
 
     List<Organization> findByTenant_PublicIdOrderByCreatedAtAsc(UUID tenantPublicId);
-
-    boolean existsByTenant_PublicIdAndNameIgnoreCase(UUID tenantPublicId, String name);
 }

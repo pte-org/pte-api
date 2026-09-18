@@ -3,6 +3,7 @@ package com.pte.notification.internal.messaging.consumer;
 import com.pte.notification.domain.NotificationLog;
 import com.pte.notification.domain.enums.NotificationStatus;
 import com.pte.notification.internal.messaging.job.EmailJob;
+import com.pte.notification.internal.config.NotificationProperties;
 import com.pte.notification.internal.repository.NotificationLogRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,11 +35,15 @@ class EmailWorkerTest {
     @Mock
     private JavaMailSender mailSender;
 
+    private NotificationProperties notificationProperties;
+
     private EmailWorker service;
 
     @BeforeEach
     void setUp() {
-        service = new EmailWorker(notificationLogRepository, mailSender);
+        notificationProperties = new NotificationProperties();
+        notificationProperties.setMailFrom("no-reply@ptehub.test");
+        service = new EmailWorker(notificationLogRepository, mailSender, notificationProperties);
     }
 
     @Test
@@ -65,6 +70,7 @@ class EmailWorkerTest {
         verify(mailSender).send(messageCaptor.capture());
         SimpleMailMessage sentMessage = messageCaptor.getValue();
         assertThat(sentMessage.getTo()).isEqualTo(new String[]{recipientEmail});
+        assertThat(sentMessage.getFrom()).isEqualTo("no-reply@ptehub.test");
         assertThat(sentMessage.getSubject()).isEqualTo(subject);
         assertThat(sentMessage.getText()).isEqualTo(body);
 

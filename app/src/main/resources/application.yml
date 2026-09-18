@@ -64,12 +64,22 @@ spring:
   mail:
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
     properties:
       mail:
         smtp:
-          auth: false
+          auth: ${MAIL_SMTP_AUTH:false}
           starttls:
-            enable: false
+            enable: ${MAIL_SMTP_STARTTLS:false}
+            required: ${MAIL_SMTP_STARTTLS_REQUIRED:false}
+          connectiontimeout: ${MAIL_SMTP_CONNECTION_TIMEOUT_MS:5000}
+          timeout: ${MAIL_SMTP_TIMEOUT_MS:10000}
+          writetimeout: ${MAIL_SMTP_WRITE_TIMEOUT_MS:10000}
+
+notification:
+  mail-from: ${MAIL_FROM:no-reply@ptehub.local}
+  application-response-sla-hours: ${TENANT_APPLICATION_RESPONSE_SLA_HOURS:72}
 
 management:
   endpoints:
@@ -102,6 +112,12 @@ media:
     access-key: ${MINIO_ROOT_USER}
     secret-key: ${MINIO_ROOT_PASSWORD}
     bucket: ${MEDIA_BUCKET:pte-media}
+
+  cloudinary:
+    cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+    api-key: ${CLOUDINARY_API_KEY:}
+    api-secret: ${CLOUDINARY_API_SECRET:}
+    authoring-folder: ${CLOUDINARY_AUTHORING_FOLDER:pte/authoring}
 
 attempt:
   # RSA keypair for answer-submission encryption (STRICT answerIntegrityLevel

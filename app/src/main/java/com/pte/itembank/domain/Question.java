@@ -54,6 +54,26 @@ public class Question extends BaseEntity {
     @Column(nullable = false)
     private QuestionStatus status = QuestionStatus.DRAFT;
 
+    /** Stable logical group shared by all revisions of one authored question. */
+    @Column(name = "revision_group_public_id", nullable = false)
+    private UUID revisionGroupPublicId;
+
+    @Column(name = "revision_number", nullable = false)
+    private int revisionNumber = 1;
+
+    @Column(name = "supersedes_public_id")
+    private UUID supersedesPublicId;
+
+    @Column(name = "is_current", nullable = false)
+    private boolean current = true;
+
+    @jakarta.persistence.Version
+    @Column(nullable = false)
+    private long version;
+
+    @Column(name = "rejection_reason", length = 500)
+    private String rejectionReason;
+
     @Column(nullable = false)
     private String title;
 

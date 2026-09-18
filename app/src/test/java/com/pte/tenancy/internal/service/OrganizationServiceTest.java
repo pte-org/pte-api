@@ -1,14 +1,11 @@
 package com.pte.tenancy.internal.service;
 
-import com.pte.tenancy.internal.constant.TenancyConstants;
 import com.pte.tenancy.domain.Organization;
 import com.pte.tenancy.domain.Tenant;
 import com.pte.tenancy.domain.enums.FacilityType;
 import com.pte.tenancy.domain.enums.OrganizationStatus;
-import com.pte.tenancy.internal.exception.OrganizationNameAlreadyUsedException;
 import com.pte.tenancy.internal.exception.OrganizationNotFoundException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
-import com.pte.tenancy.internal.dto.request.CreateOrganizationRequest;
 import com.pte.tenancy.internal.dto.response.OrganizationResponse;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
 import com.pte.tenancy.internal.repository.TenantRepository;
@@ -25,10 +22,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -64,59 +57,6 @@ class OrganizationServiceTest {
         organization.setStatus(OrganizationStatus.ACTIVE);
         organization.setTenant(tenant);
         return organization;
-    }
-
-    @Test
-    void create_savesOrganizationUnderTenant() {
-        UUID tenantPublicId = UUID.randomUUID();
-        Tenant tenant = tenantWithPublicId(tenantPublicId);
-        CreateOrganizationRequest request = new CreateOrganizationRequest("Downtown Branch", "123 Main St",
-                FacilityType.BRANCH);
-        when(tenantRepository.findByPublicId(tenantPublicId)).thenReturn(Optional.of(tenant));
-        when(organizationRepository.existsByTenant_PublicIdAndNameIgnoreCase(tenantPublicId, "Downtown Branch"))
-                .thenReturn(false);
-        // The service persists via organizationRepository.save(organization) directly
-        // (NOT tenantRepository.save(tenant)) specifically so the exact `organization`
-        // reference — not a merge()-created copy — receives the generated publicId.
-        when(organizationRepository.save(any(Organization.class))).thenAnswer(invocation -> {
-            Organization saved = invocation.getArgument(0);
-            saved.setPublicId(UUID.randomUUID());
-            return saved;
-        });
-
-        OrganizationResponse response = service.create(tenantPublicId, request, caller);
-
-        assertThat(response.publicId()).isNotNull();
-        assertThat(response.name()).isEqualTo("Downtown Branch");
-        assertThat(response.tenantPublicId()).isEqualTo(tenantPublicId);
-        assertThat(response.facilityType()).isEqualTo("BRANCH");
-        assertThat(tenant.getOrganizations()).hasSize(1);
-        assertThat(tenant.getOrganizations().get(0).getTenant()).isSameAs(tenant);
-    }
-
-    @Test
-    void create_unknownTenant_throwsNotFoundWithoutSaving() {
-        UUID tenantPublicId = UUID.randomUUID();
-        when(tenantRepository.findByPublicId(tenantPublicId)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.create(tenantPublicId,
-                new CreateOrganizationRequest("Downtown Branch", null, FacilityType.BRANCH), caller))
-                .isInstanceOf(TenantNotFoundException.class);
-        verify(organizationRepository, never()).save(any());
-    }
-
-    @Test
-    void create_duplicateNameWithinTenant_throwsWithoutSaving() {
-        UUID tenantPublicId = UUID.randomUUID();
-        Tenant tenant = tenantWithPublicId(tenantPublicId);
-        when(tenantRepository.findByPublicId(tenantPublicId)).thenReturn(Optional.of(tenant));
-        when(organizationRepository.existsByTenant_PublicIdAndNameIgnoreCase(tenantPublicId, "Downtown Branch"))
-                .thenReturn(true);
-
-        assertThatThrownBy(() -> service.create(tenantPublicId,
-                new CreateOrganizationRequest("Downtown Branch", null, FacilityType.BRANCH), caller))
-                .isInstanceOf(OrganizationNameAlreadyUsedException.class);
-        verify(organizationRepository, never()).save(any());
     }
 
     @Test

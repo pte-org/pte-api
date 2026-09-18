@@ -8,6 +8,8 @@ public record BlueprintResponse(
         String name,
         UUID tenantId,
         String status,
+        String rejectionReason,
+        long version,
         List<Item> items) {
 
     public record Item(UUID questionPublicId, String section, int orderIndex) {

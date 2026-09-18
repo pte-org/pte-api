@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.Optional;
@@ -51,16 +52,20 @@ class TenantApplicationServiceTest {
     @Mock
     private PlatformSettingService platformSettingService;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private TenantApplicationService service;
 
     @BeforeEach
     void setUp() {
         service = new TenantApplicationService(applicationRepository, tenancyService, identityService,
-                platformSettingService);
+                platformSettingService, eventPublisher);
     }
 
     private SubmitApplicationRequest submitRequest(String code) {
-        return new SubmitApplicationRequest("Acme School", "SCHOOL", code, "contact@acme.example", null, null);
+        return new SubmitApplicationRequest("Acme School", "SCHOOL", code, "contact@acme.example", null,
+                "0123456789");
     }
 
     @Test
@@ -78,6 +83,8 @@ class TenantApplicationServiceTest {
 
         assertThat(response.status()).isEqualTo("PENDING");
         assertThat(response.requestedCode()).isEqualTo("acme");
+        assertThat(response.taxCode()).isEqualTo("0123456789");
+        verify(eventPublisher).publishEvent(any(Object.class));
     }
 
     @Test
@@ -107,6 +114,7 @@ class TenantApplicationServiceTest {
         application.setOrgType("SCHOOL");
         application.setRequestedCode(code);
         application.setContactEmail("contact@acme.example");
+        application.setTaxCode("0123456789");
         return application;
     }
 
@@ -128,7 +136,7 @@ class TenantApplicationServiceTest {
 
         when(applicationRepository.findByPublicId(applicationId)).thenReturn(Optional.of(application));
         when(platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY)).thenReturn(75);
-        when(tenancyService.createTenant("Acme School", "SCHOOL", "acme", 75)).thenReturn(tenant);
+        when(tenancyService.createTenant("Acme School", "SCHOOL", "acme", "0123456789", 75)).thenReturn(tenant);
         when(identityService.createHostAdmin(tenant.getPublicId(), "contact@acme.example")).thenReturn(hostAdmin);
 
         CurrentUser caller = new CurrentUser(reviewerId, null, List.of("PLATFORM_ADMIN"));
@@ -140,6 +148,7 @@ class TenantApplicationServiceTest {
         assertThat(response.hostAdminPassword()).isEqualTo("Gener4ted!");
         assertThat(application.getStatus()).isEqualTo(TenantApplicationStatus.APPROVED);
         assertThat(application.getReviewedBy()).isEqualTo(reviewerId);
+        verify(eventPublisher).publishEvent(any(Object.class));
     }
 
     @Test
@@ -164,7 +173,7 @@ class TenantApplicationServiceTest {
 
         assertThatThrownBy(() -> service.approve(applicationId, caller))
                 .isInstanceOf(ApplicationNotPendingException.class);
-        verify(tenancyService, never()).createTenant(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt());
+        verify(tenancyService, never()).createTenant(any(), any(), any(), any(), org.mockito.ArgumentMatchers.anyInt());
         verify(identityService, never()).createHostAdmin(any(), any());
     }
 
@@ -182,6 +191,7 @@ class TenantApplicationServiceTest {
         assertThat(response.status()).isEqualTo("REJECTED");
         assertThat(response.rejectReason()).isEqualTo("Brand name conflict");
         assertThat(application.getReviewedBy()).isEqualTo(reviewerId);
+        verify(eventPublisher).publishEvent(any(Object.class));
     }
 
     @Test

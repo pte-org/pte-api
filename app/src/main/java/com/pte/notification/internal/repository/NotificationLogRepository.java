@@ -11,5 +11,7 @@ public interface NotificationLogRepository extends JpaRepository<NotificationLog
 
     Optional<NotificationLog> findByPublicId(UUID publicId);
 
+    Optional<NotificationLog> findByDedupeKey(String dedupeKey);
+
     List<NotificationLog> findByTenantIdOrderByCreatedAtDesc(UUID tenantId);
 }

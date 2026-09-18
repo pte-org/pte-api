@@ -14,7 +14,7 @@
 #      SQL block in this repo's merge-conflict chat history, or bootstrap it
 #      yourself: username/email admin@test.local, PLATFORM_ADMIN role,
 #      against the running `pte-postgres` container's `pte` database).
-#   2. Onboards a Tenant + one Organization, creates a HOST_ADMIN and 2
+#   2. Onboards a Tenant (which provisions one Organization), creates a HOST_ADMIN and 2
 #      STUDENT users, a Program, a StudentClass, and enrolls both students.
 #   3. As platform admin: creates + activates a Plan, issues a LicenseCode.
 #   4. As host: redeems the LicenseCode (billing gate needs an ACTIVE
@@ -62,8 +62,8 @@ TENANT_CODE="seed-$RUN_ID"
 TENANT_ID=$(api POST /api/v1/tenants "$ADMIN_TOKEN" "{\"code\":\"$TENANT_CODE\",\"name\":\"Seed Tenant $RUN_ID\",\"organizationType\":\"SCHOOL\",\"packageName\":\"STANDARD\",\"studentLimit\":100}" | jq -r '.data.publicId')
 echo "  tenant: $TENANT_ID (code: $TENANT_CODE)"
 
-echo "== Creating Organization =="
-ORG_ID=$(api POST "/api/v1/tenants/$TENANT_ID/organizations" "$ADMIN_TOKEN" '{"name":"Main Campus","address":"1 Seed St","facilityType":"MAIN"}' | jq -r '.data.publicId')
+echo "== Reading provisioned Organization =="
+ORG_ID=$(api GET "/api/v1/tenants/$TENANT_ID/organizations" "$ADMIN_TOKEN" | jq -r '.data[0].publicId')
 echo "  organization: $ORG_ID"
 
 echo "== Creating HOST_ADMIN user =="

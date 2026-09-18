@@ -42,8 +42,8 @@ public class TenancyService {
     }
 
     /** {@code billing.TenantApplicationService.approve()} — creates the tenant an approved application promised. */
-    public Tenant createTenant(String name, String organizationType, String code, int studentLimit) {
-        return tenantLifecycleService.createFromApplication(name, organizationType, code, studentLimit);
+    public Tenant createTenant(String name, String organizationType, String code, String taxCode, int studentLimit) {
+        return tenantLifecycleService.createFromApplication(name, organizationType, code, taxCode, studentLimit);
     }
 
     /** Billing activation path for STUDENT_CAPACITY plans. */

@@ -15,9 +15,9 @@ import lombok.Setter;
 import java.util.UUID;
 
 /**
- * One uploaded (or pending-upload) binary asset. {@code storageKey} is the
- * MinIO/S3 object key — never exposed directly to a caller outside this
- * module; every access goes through a presigned URL with a short TTL.
+ * One uploaded (or pending-upload) binary asset. Authoring media is stored in
+ * Cloudinary; the provider public id is kept in {@code storageKey} for
+ * compatibility with the existing media aggregate.
  */
 @Entity
 @Table(name = "media_objects", indexes = {
@@ -28,7 +28,7 @@ import java.util.UUID;
 @NoArgsConstructor
 public class MediaObject extends BaseEntity {
 
-    @Column(nullable = false)
+    @Column
     private UUID tenantId;
 
     @Column(nullable = false)
@@ -62,6 +62,21 @@ public class MediaObject extends BaseEntity {
      */
     @Column
     private Integer durationSeconds;
+
+    @Column(name = "cloudinary_public_id")
+    private String cloudinaryPublicId;
+
+    @Column(name = "cloudinary_resource_type")
+    private String cloudinaryResourceType;
+
+    @Column(name = "secure_url", columnDefinition = "text")
+    private String secureUrl;
+
+    @Column(name = "asset_id")
+    private String assetId;
+
+    @Column(name = "size_bytes")
+    private Long sizeBytes;
 
     public void markUploaded() {
         this.status = MediaStatus.UPLOADED;

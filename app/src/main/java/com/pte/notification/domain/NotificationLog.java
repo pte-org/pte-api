@@ -26,14 +26,18 @@ import java.util.UUID;
 @NoArgsConstructor
 public class NotificationLog extends BaseEntity {
 
-    @Column(name = "recipient_user_public_id", nullable = false)
+    @Column(name = "recipient_user_public_id")
     private UUID recipientUserPublicId;
 
     @Column(name = "recipient_email", nullable = false)
     private String recipientEmail;
 
-    @Column(nullable = false)
+    @Column
     private UUID tenantId;
+
+    /** Stable event key used to prevent duplicate application emails. */
+    @Column(name = "dedupe_key", length = 255)
+    private String dedupeKey;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "notification_type", nullable = false)

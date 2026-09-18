@@ -47,6 +47,10 @@ public class Tenant extends BaseEntity {
     @Column(nullable = false)
     private String organizationType;
 
+    /** Government tax identifier used by platform admins to verify the organization. */
+    @Column(length = 64, unique = true)
+    private String taxCode;
+
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     private TenantStatus status = TenantStatus.ACTIVE;

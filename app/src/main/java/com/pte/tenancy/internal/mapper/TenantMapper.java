@@ -15,6 +15,7 @@ public final class TenantMapper {
                 tenant.getCode(),
                 tenant.getName(),
                 tenant.getOrganizationType(),
+                tenant.getTaxCode(),
                 tenant.getStatus().name(),
                 tenant.getPackageName(),
                 tenant.getStudentLimit(),

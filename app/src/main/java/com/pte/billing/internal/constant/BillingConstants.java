@@ -79,6 +79,8 @@ public final class BillingConstants {
             "Requested code must be 3-32 lowercase letters, digits, or hyphens";
     public static final String CONTACT_EMAIL_REQUIRED = "Contact email is required";
     public static final String CONTACT_EMAIL_INVALID = "Contact email must be valid";
+    public static final String TAX_CODE_REQUIRED = "Tax code is required";
+    public static final String TAX_CODE_MAX = "Tax code must be at most 64 characters";
     public static final String REJECT_REASON_REQUIRED = "Reject reason is required";
     public static final String PLAN_NAME_REQUIRED = "Plan name is required";
     public static final String PLAN_PRICE_REQUIRED = "Plan price is required";

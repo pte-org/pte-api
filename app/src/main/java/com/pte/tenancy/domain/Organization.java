@@ -12,6 +12,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -22,7 +23,11 @@ import lombok.Setter;
  * future scheduling/session-location feature), not only nested under Tenant.
  */
 @Entity
-@Table(name = "organizations", indexes = {@Index(name = "idx_organizations_tenant", columnList = "tenant_id")})
+@Table(name = "organizations", indexes = {
+        @Index(name = "idx_organizations_tenant", columnList = "tenant_id")
+}, uniqueConstraints = {
+        @UniqueConstraint(name = "uk_organizations_tenant", columnNames = "tenant_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

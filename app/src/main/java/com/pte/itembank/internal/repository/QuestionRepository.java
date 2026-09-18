@@ -27,6 +27,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("SELECT q.pteTaskType, COUNT(q) FROM Question q "
             + "WHERE q.deleted = false AND q.visibility = :visibility "
             + "AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED "
+            + "AND q.current = true "
             + "AND q.pteTaskType IN :taskTypes GROUP BY q.pteTaskType")
     List<Object[]> countByVisibilityAndTaskTypeIn(@Param("visibility") Visibility visibility,
                                                     @Param("taskTypes") Set<PteTaskType> taskTypes);
@@ -34,6 +35,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("SELECT COUNT(q) FROM Question q WHERE q.deleted = false "
             + "AND q.visibility = com.pte.itembank.domain.enums.Visibility.SHARED "
             + "AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED "
+            + "AND q.current = true "
             + "AND q.pteTaskType = :taskType")
     long countAvailableByTaskType(@Param("taskType") PteTaskType taskType);
 
@@ -45,7 +47,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT pte_task_type AS taskType, COUNT(*) AS count
             FROM questions
-            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND pte_task_type IN (:taskTypes)
+            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pte_task_type IN (:taskTypes)
             GROUP BY pte_task_type
             """, nativeQuery = true)
     List<TaskTypeCountProjection> countPublishedSharedGroupedByTaskType(@Param("taskTypes") Set<String> taskTypes);
@@ -54,7 +56,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND pte_task_type = :taskType
+            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pte_task_type = :taskType
             ORDER BY random()
             LIMIT :n
             """, nativeQuery = true)

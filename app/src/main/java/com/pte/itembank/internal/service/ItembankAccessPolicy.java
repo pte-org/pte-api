@@ -10,4 +10,8 @@ public class ItembankAccessPolicy {
     public boolean canWrite(CurrentUser caller) {
         return caller.isPlatformUser();
     }
+
+    public boolean canApprove(CurrentUser caller) {
+        return caller.hasRole("PLATFORM_ADMIN");
+    }
 }
