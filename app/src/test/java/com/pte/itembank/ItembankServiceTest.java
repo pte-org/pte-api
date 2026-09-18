@@ -60,7 +60,7 @@ class ItembankServiceTest {
     void setUp() {
         service = new ItembankService(questionRepository, new QuestionValidationHelper(),
                 new ItembankAccessPolicy());
-        hostCaller = new CurrentUser(UUID.randomUUID(), TENANT_ID, List.of("HOST_AUTHOR"));
+        hostCaller = new CurrentUser(UUID.randomUUID(), TENANT_ID, List.of("HOST_ADMIN"));
         platformCaller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"));
     }
 

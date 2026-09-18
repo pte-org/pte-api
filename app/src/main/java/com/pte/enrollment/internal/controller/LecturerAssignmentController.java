@@ -21,13 +21,13 @@ import java.util.UUID;
 
 /**
  * Host self-service Lecturer assignment for a Class â€” list is available to
- * `HOST_ADMIN`/`HOST_AUTHOR`, assign/unassign are `HOST_ADMIN`-only (same
+ * `HOST_ADMIN`, assign/unassign are `HOST_ADMIN`-only (same
  * narrower-than-list pattern as {@code scheduling.ProctorAssignmentController}/
  * {@code EnrollmentController}).
  */
 @RestController
 @RequestMapping("/api/v1/organizations/{organizationPublicId}/programs/{programPublicId}/classes/{classPublicId}/lecturers")
-@PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
+@PreAuthorize("hasRole('HOST_ADMIN')")
 public class LecturerAssignmentController {
 
     private final AssignmentService assignmentService;

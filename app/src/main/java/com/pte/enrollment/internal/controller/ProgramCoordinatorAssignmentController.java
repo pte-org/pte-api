@@ -21,12 +21,12 @@ import java.util.UUID;
 
 /**
  * Host self-service Program Coordinator assignment â€” list is available to
- * `HOST_ADMIN`/`HOST_AUTHOR`, assign/unassign are `HOST_ADMIN`-only (same
+ * `HOST_ADMIN`, assign/unassign are `HOST_ADMIN`-only (same
  * narrower-than-list pattern as {@link LecturerAssignmentController}).
  */
 @RestController
 @RequestMapping("/api/v1/organizations/{organizationPublicId}/programs/{programPublicId}/coordinators")
-@PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
+@PreAuthorize("hasRole('HOST_ADMIN')")
 public class ProgramCoordinatorAssignmentController {
 
     private final AssignmentService assignmentService;

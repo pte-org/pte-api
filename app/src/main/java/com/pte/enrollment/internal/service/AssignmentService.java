@@ -55,7 +55,7 @@ public class AssignmentService {
 
     /**
      * Does not validate that {@code assigneePublicId} actually holds the
-     * {@code LECTURER} role at the DB level â€” iam and admin are separate
+     * {@code EXAMINER} role at the DB level â€” iam and admin are separate
      * services/databases; mirrors how {@code ProctorAssignment.proctorPublicId}
      * is never validated either. The FE is responsible for only offering
      * correctly-roled users in the picker.

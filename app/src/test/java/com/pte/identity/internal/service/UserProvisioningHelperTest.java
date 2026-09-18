@@ -2,6 +2,7 @@ package com.pte.identity.internal.service;
 
 import com.pte.identity.domain.Role;
 import com.pte.identity.internal.exception.ForbiddenRoleAssignmentException;
+import com.pte.identity.internal.exception.ForbiddenUserManagementException;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.Test;
 
@@ -25,17 +26,10 @@ class UserProvisioningHelperTest {
     }
 
     @Test
-    void resolveAndAuthorizeRoles_hostCaller_canGrantLecturer() {
-        Set<Role> roles = helper.resolveAndAuthorizeRoles(hostAdmin(UUID.randomUUID()), List.of("LECTURER"));
+    void resolveAndAuthorizeRoles_hostCaller_canGrantExaminer() {
+        Set<Role> roles = helper.resolveAndAuthorizeRoles(hostAdmin(UUID.randomUUID()), List.of("EXAMINER"));
 
-        assertThat(roles).containsExactly(Role.LECTURER);
-    }
-
-    @Test
-    void resolveAndAuthorizeRoles_hostCaller_canGrantProgramCoordinator() {
-        Set<Role> roles = helper.resolveAndAuthorizeRoles(hostAdmin(UUID.randomUUID()), List.of("PROGRAM_COORDINATOR"));
-
-        assertThat(roles).containsExactly(Role.PROGRAM_COORDINATOR);
+        assertThat(roles).containsExactly(Role.EXAMINER);
     }
 
     @Test
@@ -55,11 +49,23 @@ class UserProvisioningHelperTest {
     }
 
     @Test
-    void resolveAndAuthorizeRoles_platformCaller_unrestrictedIncludingNewRoles() {
-        Set<Role> roles = helper.resolveAndAuthorizeRoles(platformAdmin(),
-                List.of("PLATFORM_ADMIN", "LECTURER", "PROGRAM_COORDINATOR"));
+    void resolveAndAuthorizeRoles_platformCaller_canOnlyCreateHostAdmin() {
+        Set<Role> roles = helper.resolveAndAuthorizeRoles(platformAdmin(), List.of("HOST_ADMIN"));
 
-        assertThat(roles).containsExactlyInAnyOrder(Role.PLATFORM_ADMIN, Role.LECTURER, Role.PROGRAM_COORDINATOR);
+        assertThat(roles).containsExactly(Role.HOST_ADMIN);
+    }
+
+    @Test
+    void resolveAndAuthorizeRoles_platformCaller_cannotCreateLowerTenantRole() {
+        assertThatThrownBy(() -> helper.resolveAndAuthorizeRoles(platformAdmin(), List.of("STUDENT")))
+                .isInstanceOf(ForbiddenRoleAssignmentException.class);
+    }
+
+    @Test
+    void resolveAndAuthorizeRoles_platformCaller_cannotMixHostWithLowerRole() {
+        assertThatThrownBy(() -> helper.resolveAndAuthorizeRoles(
+                platformAdmin(), List.of("HOST_ADMIN", "STUDENT")))
+                .isInstanceOf(ForbiddenRoleAssignmentException.class);
     }
 
     @Test
@@ -67,6 +73,18 @@ class UserProvisioningHelperTest {
         CurrentUser caller = platformAdmin();
 
         assertThatThrownBy(() -> helper.resolveAndAuthorizeRoles(caller, List.of("NOT_A_ROLE")))
+                .isInstanceOf(ForbiddenRoleAssignmentException.class);
+    }
+
+    @Test
+    void resolveAndAuthorizeRoles_removedRoleNames_areRejected() {
+        CurrentUser caller = hostAdmin(UUID.randomUUID());
+
+        assertThatThrownBy(() -> helper.resolveAndAuthorizeRoles(caller, List.of("HOST_AUTHOR")))
+                .isInstanceOf(ForbiddenRoleAssignmentException.class);
+        assertThatThrownBy(() -> helper.resolveAndAuthorizeRoles(caller, List.of("LECTURER")))
+                .isInstanceOf(ForbiddenRoleAssignmentException.class);
+        assertThatThrownBy(() -> helper.resolveAndAuthorizeRoles(caller, List.of("PROGRAM_COORDINATOR")))
                 .isInstanceOf(ForbiddenRoleAssignmentException.class);
     }
 
@@ -87,5 +105,41 @@ class UserProvisioningHelperTest {
         UUID resolved = helper.resolveTargetTenant(hostAdmin(callerTenantId), requestedTenantId);
 
         assertThat(resolved).isEqualTo(callerTenantId);
+    }
+
+    @Test
+    void validateTenantScope_platformCaller_requiresTenantScopedHostAdmin() {
+        UUID tenantId = UUID.randomUUID();
+
+        helper.validateTenantScope(platformAdmin(), tenantId, Set.of(Role.HOST_ADMIN));
+
+        assertThatThrownBy(() -> helper.validateTenantScope(platformAdmin(), null, Set.of(Role.HOST_ADMIN)))
+                .isInstanceOf(ForbiddenRoleAssignmentException.class);
+    }
+
+    @Test
+    void authorizeTarget_platformCaller_canManageHostAdminOnly() {
+        helper.authorizeTarget(platformAdmin(), Set.of(Role.HOST_ADMIN));
+
+        assertThatThrownBy(() -> helper.authorizeTarget(platformAdmin(), Set.of(Role.STUDENT)))
+                .isInstanceOf(ForbiddenUserManagementException.class);
+    }
+
+    @Test
+    void authorizeTarget_hostCaller_canManageLowerTenantRoles_butNotHostAdmin() {
+        CurrentUser caller = hostAdmin(UUID.randomUUID());
+
+        helper.authorizeTarget(caller, Set.of(Role.STUDENT, Role.PROCTOR, Role.EXAMINER));
+
+        assertThatThrownBy(() -> helper.authorizeTarget(caller, Set.of(Role.HOST_ADMIN)))
+                .isInstanceOf(ForbiddenUserManagementException.class);
+    }
+
+    @Test
+    void authorizeBulkStudentCreation_isHostOnly() {
+        helper.authorizeBulkStudentCreation(hostAdmin(UUID.randomUUID()));
+
+        assertThatThrownBy(() -> helper.authorizeBulkStudentCreation(platformAdmin()))
+                .isInstanceOf(ForbiddenRoleAssignmentException.class);
     }
 }

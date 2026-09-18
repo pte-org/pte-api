@@ -23,7 +23,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/class-memberships")
-@PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
+@PreAuthorize("hasRole('HOST_ADMIN')")
 public class ClassMembershipController {
 
     private final ClassService classService;

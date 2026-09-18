@@ -92,7 +92,7 @@ class ReportServiceTest {
             scoreSummarySkills.put(skill, SkillScore.insufficientData());
         }
         AttemptScoreSummary scoreSummary = new AttemptScoreSummary(SkillScore.of(50), scoreSummarySkills);
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_AUTHOR"));
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
 
         when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.empty());
@@ -126,7 +126,7 @@ class ReportServiceTest {
             scoreSummarySkills.put(skill, SkillScore.insufficientData());
         }
         AttemptScoreSummary scoreSummary = new AttemptScoreSummary(SkillScore.of(50), scoreSummarySkills);
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_AUTHOR"));
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
 
         when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.empty());
@@ -235,7 +235,7 @@ class ReportServiceTest {
             skillScores.put(skill, SkillScore.insufficientData());
         }
         AttemptScoreSummary summary = new AttemptScoreSummary(SkillScore.of(50), skillScores);
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_AUTHOR"));
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
 
         when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.of(report));
@@ -260,7 +260,7 @@ class ReportServiceTest {
         report.setTenantId(otherTenantId);
         report.setPublished(false);
 
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_AUTHOR"));
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
 
         when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.of(report));
@@ -311,7 +311,7 @@ class ReportServiceTest {
             scoreSummarySkills.put(skill, SkillScore.insufficientData());
         }
         AttemptScoreSummary scoreSummary = new AttemptScoreSummary(SkillScore.of(50), scoreSummarySkills);
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_AUTHOR"));
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
 
         AttemptReport savedReport = new AttemptReport();
         savedReport.setAttemptPublicId(attemptPublicId);

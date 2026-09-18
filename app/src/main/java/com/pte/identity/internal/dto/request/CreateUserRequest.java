@@ -11,9 +11,12 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Create a host/proctor/student (or, for a platform caller, a host/platform user).
+ * Create a tenant user (for HOST_ADMIN) or a tenant's HOST_ADMIN account
+ * (for PLATFORM_ADMIN).
  * {@code tenantId} is honored ONLY for platform callers; a tenant-scoped caller's
  * created users are forced into the caller's own tenant (service enforces this).
+ * Platform callers may only assign HOST_ADMIN; HOST_ADMIN callers may assign
+ * the lower tenant roles.
  * The four profile fields are optional and apply to any role, not just STUDENT.
  */
 public record CreateUserRequest(

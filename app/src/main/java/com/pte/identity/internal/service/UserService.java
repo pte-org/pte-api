@@ -56,8 +56,6 @@ import java.util.UUID;
 public class UserService {
 
     /** Roles a tenant-scoped caller (HOST_ADMIN) may reset — rescuing a locked-out Student/Proctor, not a peer admin. */
-    private static final Set<Role> HOST_RESETTABLE_ROLES = Set.of(Role.STUDENT, Role.PROCTOR);
-
     private final UserRepository userRepository;
     private final LoginHashRepository loginHashRepository;
     private final PasswordEncoder passwordEncoder;
@@ -78,6 +76,10 @@ public class UserService {
 
     @Transactional
     public UserResponse create(CreateUserRequest request, CurrentUser caller) {
+        UUID tenantId = provisioningHelper.resolveTargetTenant(caller, request.tenantId());
+        Set<Role> roles = provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles());
+        provisioningHelper.validateTenantScope(caller, tenantId, roles);
+
         // username = email for every role created through this single-user
         // endpoint (plans/quang-tenant-commercialization Phase 1) — including
         // STUDENT for now; per-tenant student username generation only
@@ -87,8 +89,6 @@ public class UserService {
         if (userRepository.existsByUsername(request.email())) {
             throw new EmailAlreadyUsedException();
         }
-        UUID tenantId = provisioningHelper.resolveTargetTenant(caller, request.tenantId());
-        Set<Role> roles = provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles());
         if (roles.contains(Role.STUDENT)) {
             tenancyService.assertCanAddStudents(tenantId, 1L);
         }
@@ -126,6 +126,7 @@ public class UserService {
      */
     @Transactional
     public BulkCreateUsersResponse createBulk(BulkCreateUsersRequest request, CurrentUser caller) {
+        provisioningHelper.authorizeBulkStudentCreation(caller);
         UUID tenantId = provisioningHelper.resolveTargetTenant(caller, request.tenantId());
 
         Set<String> seenInBatch = new HashSet<>();
@@ -188,7 +189,10 @@ public class UserService {
         if (tenantId == null) {
             return List.of();
         }
-        return userRepository.findByTenantId(tenantId).stream().map(UserMapper::toResponse).toList();
+        return userRepository.findByTenantId(tenantId).stream()
+                .filter(user -> provisioningHelper.canManageTarget(caller, user.getRoles()))
+                .map(UserMapper::toResponse)
+                .toList();
     }
 
     @Transactional
@@ -211,7 +215,7 @@ public class UserService {
     @Transactional
     public UserResponse resetPassword(UUID publicId, ResetPasswordRequest request, CurrentUser caller) {
         User user = findScoped(publicId, caller);
-        if (!caller.isPlatformUser() && !HOST_RESETTABLE_ROLES.containsAll(user.getRoles())) {
+        if (!provisioningHelper.canManageTarget(caller, user.getRoles())) {
             throw new ForbiddenPasswordResetException();
         }
         LoginHash loginHash = loginHashRepository.findByUserId(user.getId())
@@ -242,15 +246,20 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    public List<UserResponse> listForTenant(UUID tenantId) {
-        return userRepository.findByTenantId(tenantId).stream().map(UserMapper::toResponse).toList();
+    public List<UserResponse> listForTenant(UUID tenantId, CurrentUser caller) {
+        provisioningHelper.authorizePlatformTenantListing(caller);
+        return userRepository.findByTenantId(tenantId).stream()
+                .filter(user -> provisioningHelper.canManageTarget(caller, user.getRoles()))
+                .map(UserMapper::toResponse)
+                .toList();
     }
 
     private User findScoped(UUID publicId, CurrentUser caller) {
-        if (caller.isPlatformUser()) {
-            return userRepository.findByPublicId(publicId).orElseThrow(UserNotFoundException::new);
-        }
-        return userRepository.findByPublicIdAndTenantId(publicId, caller.tenantId())
-                .orElseThrow(UserNotFoundException::new);
+        User user = caller.isPlatformUser()
+                ? userRepository.findByPublicId(publicId).orElseThrow(UserNotFoundException::new)
+                : userRepository.findByPublicIdAndTenantId(publicId, caller.tenantId())
+                        .orElseThrow(UserNotFoundException::new);
+        provisioningHelper.authorizeTarget(caller, user.getRoles());
+        return user;
     }
 }

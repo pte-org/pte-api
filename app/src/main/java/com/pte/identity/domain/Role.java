@@ -8,9 +8,7 @@ public enum Role {
     PLATFORM_ADMIN,
     PLATFORM_AUTHOR,
     HOST_ADMIN,
-    HOST_AUTHOR,
     PROCTOR,
-    STUDENT,
-    LECTURER,
-    PROGRAM_COORDINATOR
+    EXAMINER,
+    STUDENT
 }

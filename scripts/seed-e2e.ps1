@@ -326,7 +326,7 @@ Save-State
 
 # ---------------------------------------------------------------------------
 # 4. Host login â€” authoring's Question/Blueprint/Snapshot endpoints and every
-#    scheduling endpoint require HOST_ADMIN/HOST_AUTHOR specifically; there
+#    scheduling endpoint require HOST_ADMIN specifically; there
 #    is no role hierarchy configured anywhere in this backend, so the
 #    platform token from step 1 does NOT satisfy those checks.
 # ---------------------------------------------------------------------------

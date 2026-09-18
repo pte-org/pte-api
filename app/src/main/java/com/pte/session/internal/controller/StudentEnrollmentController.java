@@ -21,7 +21,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/students/{studentPublicId}/enrollments")
-@PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
+@PreAuthorize("hasRole('HOST_ADMIN')")
 public class StudentEnrollmentController {
 
     private final EnrollmentService enrollmentService;

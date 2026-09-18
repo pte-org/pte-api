@@ -21,7 +21,7 @@ import java.util.List;
 /** Tenant-owned PayOS order creation and history endpoints. */
 @RestController
 @RequestMapping("/api/v1/orders")
-@PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
+@PreAuthorize("hasRole('HOST_ADMIN')")
 public class OrderController {
 
     private final OrderService orderService;

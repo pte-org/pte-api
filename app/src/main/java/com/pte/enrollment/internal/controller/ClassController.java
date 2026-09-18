@@ -33,7 +33,7 @@ import java.util.UUID;
 /** Host self-service Class (Lá»›p) CRUD + student assignment, scoped to the caller's own tenant via {@code caller.tenantId()}. */
 @RestController
 @RequestMapping("/api/v1/organizations/{organizationPublicId}/programs/{programPublicId}/classes")
-@PreAuthorize("hasAnyRole('HOST_ADMIN','HOST_AUTHOR')")
+@PreAuthorize("hasRole('HOST_ADMIN')")
 public class ClassController {
 
     private final ClassService classService;

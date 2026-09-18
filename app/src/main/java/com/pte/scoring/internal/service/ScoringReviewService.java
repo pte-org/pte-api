@@ -58,7 +58,7 @@ public class ScoringReviewService {
     /**
      * Tenant-scoped answer review list — a host is always tenant-scoped
      * ({@link com.pte.scoring.internal.controller.ScoringReviewController}
-     * grants only HOST_ADMIN/HOST_AUTHOR, never a platform role), so tenantId
+     * grants only HOST_ADMIN, never a platform role), so tenantId
      * always comes from {@code caller}, never a request parameter.
      */
     @Transactional(readOnly = true)
