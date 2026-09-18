@@ -1,10 +1,11 @@
 package com.pte.tenancy.internal.service;
 
-import com.pte.tenancy.internal.constant.TenancyConstants;
 import com.pte.tenancy.domain.Tenant;
+import com.pte.tenancy.domain.enums.FacilityType;
 import com.pte.tenancy.domain.enums.TenantStatus;
 import com.pte.tenancy.internal.exception.TenantNameAlreadyUsedException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
+import com.pte.tenancy.internal.exception.TenantTaxCodeAlreadyUsedException;
 import com.pte.tenancy.internal.dto.request.OnboardTenantRequest;
 import com.pte.tenancy.internal.dto.request.UpdateBrandingRequest;
 import com.pte.tenancy.internal.dto.response.TenantResponse;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
@@ -54,7 +56,8 @@ class TenantLifecycleServiceTest {
 
     @Test
     void onboard_savesTenant() {
-        OnboardTenantRequest request = new OnboardTenantRequest("acme-school", "Acme School", "SCHOOL", "starter", 500);
+        OnboardTenantRequest request = new OnboardTenantRequest("acme-school", "Acme School", "SCHOOL",
+                "0123456789", "starter", 500);
         when(tenantRepository.existsByName("Acme School")).thenReturn(false);
         when(tenantRepository.save(any(Tenant.class))).thenAnswer(invocation -> {
             Tenant saved = invocation.getArgument(0);
@@ -66,14 +69,33 @@ class TenantLifecycleServiceTest {
 
         assertThat(response.name()).isEqualTo("Acme School");
         assertThat(response.status()).isEqualTo("ACTIVE");
+
+        ArgumentCaptor<Tenant> savedTenant = ArgumentCaptor.forClass(Tenant.class);
+        verify(tenantRepository).save(savedTenant.capture());
+        assertThat(savedTenant.getValue().getOrganizations()).hasSize(1);
+        assertThat(savedTenant.getValue().getOrganizations().get(0).getName()).isEqualTo("Acme School");
+        assertThat(savedTenant.getValue().getOrganizations().get(0).getFacilityType())
+                .isEqualTo(FacilityType.MAIN);
+        assertThat(savedTenant.getValue().getTaxCode()).isEqualTo("0123456789");
     }
 
     @Test
     void onboard_duplicateName_throwsWithoutSaving() {
-        OnboardTenantRequest request = new OnboardTenantRequest("acme-school", "Acme School", "SCHOOL", "starter", 500);
+        OnboardTenantRequest request = new OnboardTenantRequest("acme-school", "Acme School", "SCHOOL",
+                "0123456789", "starter", 500);
         when(tenantRepository.existsByName("Acme School")).thenReturn(true);
 
         assertThatThrownBy(() -> service.onboard(request)).isInstanceOf(TenantNameAlreadyUsedException.class);
+        verify(tenantRepository, never()).save(any());
+    }
+
+    @Test
+    void onboard_duplicateTaxCode_throwsWithoutSaving() {
+        OnboardTenantRequest request = new OnboardTenantRequest("new-school", "New School", "SCHOOL",
+                "0123456789", "starter", 500);
+        when(tenantRepository.existsByTaxCode("0123456789")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.onboard(request)).isInstanceOf(TenantTaxCodeAlreadyUsedException.class);
         verify(tenantRepository, never()).save(any());
     }
 

@@ -7,6 +7,7 @@ public record TenantResponse(
         String code,
         String name,
         String organizationType,
+        String taxCode,
         String status,
         String packageName,
         int studentLimit,

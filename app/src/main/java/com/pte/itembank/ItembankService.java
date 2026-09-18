@@ -3,24 +3,30 @@ package com.pte.itembank;
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.QuestionOption;
 import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.request.CreateQuestionRequest;
 import com.pte.itembank.dto.request.OptionRequest;
+import com.pte.itembank.dto.request.RejectQuestionRequest;
+import com.pte.itembank.dto.request.UpdateQuestionRequest;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.dto.response.QuestionResponse;
 import com.pte.itembank.internal.constant.ItembankConstants;
 import com.pte.itembank.internal.exception.InvalidQuestionStatusTransitionException;
 import com.pte.itembank.internal.exception.QuestionNotFoundException;
 import com.pte.itembank.internal.exception.QuestionValidationException;
+import com.pte.itembank.internal.exception.QuestionVersionConflictException;
 import com.pte.itembank.internal.mapper.QuestionMapper;
 import com.pte.itembank.internal.repository.QuestionRepository;
 import com.pte.itembank.internal.repository.TaskTypeCountProjection;
 import com.pte.itembank.internal.service.ItembankAccessPolicy;
 import com.pte.itembank.internal.service.QuestionValidationHelper;
+import com.pte.media.MediaService;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
@@ -47,12 +53,21 @@ public class ItembankService {
     private final QuestionRepository questionRepository;
     private final QuestionValidationHelper validationHelper;
     private final ItembankAccessPolicy accessPolicy;
+    private final MediaService mediaService;
 
+    @Autowired
     public ItembankService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
-                           ItembankAccessPolicy accessPolicy) {
+                           ItembankAccessPolicy accessPolicy, MediaService mediaService) {
         this.questionRepository = questionRepository;
         this.validationHelper = validationHelper;
         this.accessPolicy = accessPolicy;
+        this.mediaService = mediaService;
+    }
+
+    /** Compatibility constructor for focused itembank unit tests without media wiring. */
+    public ItembankService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
+            ItembankAccessPolicy accessPolicy) {
+        this(questionRepository, validationHelper, accessPolicy, null);
     }
 
     @Transactional
@@ -65,7 +80,10 @@ public class ItembankService {
         question.setPteTaskType(parseTaskType(request.pteTaskType()));
         question.setVisibility(Visibility.SHARED);
         question.setTenantId(null);
-        question.setStatus(QuestionStatus.APPROVED);
+        question.setStatus(QuestionStatus.DRAFT);
+        question.setRevisionGroupPublicId(UUID.randomUUID());
+        question.setRevisionNumber(1);
+        question.setCurrent(true);
         question.setTitle(request.title());
         question.setPromptText(request.promptText());
         question.setAudioPromptRef(request.audioPromptRef());
@@ -77,6 +95,7 @@ public class ItembankService {
         addOptions(question, request.options());
 
         validationHelper.validate(question);
+        validateMediaReferences(question, caller);
         return toResponse(questionRepository.save(question));
     }
 
@@ -94,19 +113,127 @@ public class ItembankService {
         return questions.stream().map(this::toResponse).toList();
     }
 
-    /** Publish DRAFT→APPROVED, validating required fields first. APPROVED is idempotent; ARCHIVED is rejected. */
+    @Transactional(readOnly = true)
+    public List<QuestionResponse> listAccessible(CurrentUser caller, String taskType, String status, String query) {
+        return listAccessible(caller, taskType, null, status, query);
+    }
+
+    @Transactional(readOnly = true)
+    public List<QuestionResponse> listAccessible(CurrentUser caller, String taskType, String section, String status,
+            String query) {
+        PteTaskType requestedTaskType = parseOptionalTaskType(taskType);
+        PteSection requestedSection = parseOptionalSection(section);
+        QuestionStatus requestedStatus = parseOptionalStatus(status);
+        String normalizedQuery = query == null ? "" : query.trim().toLowerCase();
+        return questionRepository.findAllWithOptions().stream()
+                .filter(question -> requestedTaskType == null || question.getPteTaskType() == requestedTaskType)
+                .filter(question -> requestedSection == null || question.getPteTaskType().getSection() == requestedSection)
+                .filter(question -> requestedStatus == null || question.getStatus() == requestedStatus)
+                .filter(question -> normalizedQuery.isBlank()
+                        || question.getTitle().toLowerCase().contains(normalizedQuery)
+                        || (question.getPromptText() != null
+                                && question.getPromptText().toLowerCase().contains(normalizedQuery)))
+                .map(this::toResponse)
+                .toList();
+    }
+
     @Transactional
-    public QuestionResponse publish(UUID publicId, CurrentUser caller) {
+    public QuestionResponse update(UUID publicId, UpdateQuestionRequest request, CurrentUser caller) {
         Question question = loadForPlatformWrite(publicId, caller);
-        if (question.getStatus() == QuestionStatus.APPROVED) {
-            return toResponse(question);
+        if (question.getStatus() != QuestionStatus.DRAFT) {
+            throw new InvalidQuestionStatusTransitionException();
         }
-        if (question.getStatus() == QuestionStatus.ARCHIVED) {
+        if (request.version() != null && request.version() != question.getVersion()) {
+            throw new QuestionVersionConflictException();
+        }
+        applyContent(question, request.title(), request.promptText(), request.audioPromptRef(),
+                request.imagePromptRef(), request.referenceAnswerText(), request.correctAnswerText(),
+                request.minWordCount(), request.maxWordCount(), request.options());
+        validationHelper.validate(question);
+        validateMediaReferences(question, caller);
+        return toResponse(question);
+    }
+
+    @Transactional
+    public QuestionResponse createRevision(UUID publicId, CurrentUser caller) {
+        Question source = loadForPlatformWrite(publicId, caller);
+        if (source.getStatus() != QuestionStatus.APPROVED || !source.isCurrent()) {
+            throw new InvalidQuestionStatusTransitionException();
+        }
+        Question revision = new Question();
+        revision.setPteTaskType(source.getPteTaskType());
+        revision.setVisibility(source.getVisibility());
+        revision.setTenantId(source.getTenantId());
+        revision.setStatus(QuestionStatus.DRAFT);
+        revision.setRevisionGroupPublicId(source.getRevisionGroupPublicId());
+        revision.setRevisionNumber(source.getRevisionNumber() + 1);
+        revision.setSupersedesPublicId(source.getPublicId());
+        revision.setCurrent(false);
+        applyContent(revision, source.getTitle(), source.getPromptText(), source.getAudioPromptRef(),
+                source.getImagePromptRef(), source.getReferenceAnswerText(), source.getCorrectAnswerText(),
+                source.getMinWordCount(), source.getMaxWordCount(), source.getOptions().stream()
+                        .map(option -> new OptionRequest(option.getText(), option.isCorrect(), option.getOrderIndex(),
+                                option.getBlankIndex(), option.getCorrectGapIndex()))
+                        .toList());
+        return toResponse(questionRepository.save(revision));
+    }
+
+    @Transactional
+    public QuestionResponse submitApproval(UUID publicId, CurrentUser caller) {
+        Question question = loadForPlatformWrite(publicId, caller);
+        if (question.getStatus() != QuestionStatus.DRAFT) {
             throw new InvalidQuestionStatusTransitionException();
         }
         validationHelper.validate(question);
+        validateMediaReferences(question, caller);
+        question.setRejectionReason(null);
+        question.setStatus(QuestionStatus.PENDING_APPROVAL);
+        return toResponse(question);
+    }
+
+    @Transactional
+    public QuestionResponse approve(UUID publicId, CurrentUser caller) {
+        if (!accessPolicy.canApprove(caller)) {
+            throw new AccessDeniedException("Only platform admins may approve questions");
+        }
+        Question question = questionRepository.findWithOptionsByPublicId(publicId)
+                .orElseThrow(QuestionNotFoundException::new);
+        if (question.getStatus() != QuestionStatus.PENDING_APPROVAL) {
+            throw new InvalidQuestionStatusTransitionException();
+        }
+        validationHelper.validate(question);
+        validateMediaReferences(question, caller);
+        if (question.getSupersedesPublicId() != null) {
+            questionRepository.findWithOptionsByPublicId(question.getSupersedesPublicId()).ifPresent(previous -> {
+                previous.setCurrent(false);
+                previous.setStatus(QuestionStatus.ARCHIVED);
+            });
+        }
+        question.setRejectionReason(null);
+        question.setCurrent(true);
         question.setStatus(QuestionStatus.APPROVED);
         return toResponse(question);
+    }
+
+    @Transactional
+    public QuestionResponse reject(UUID publicId, RejectQuestionRequest request, CurrentUser caller) {
+        if (!accessPolicy.canApprove(caller)) {
+            throw new AccessDeniedException("Only platform admins may reject questions");
+        }
+        Question question = questionRepository.findWithOptionsByPublicId(publicId)
+                .orElseThrow(QuestionNotFoundException::new);
+        if (question.getStatus() != QuestionStatus.PENDING_APPROVAL) {
+            throw new InvalidQuestionStatusTransitionException();
+        }
+        question.setStatus(QuestionStatus.DRAFT);
+        question.setRejectionReason(request.reason());
+        return toResponse(question);
+    }
+
+    /** Publish DRAFT→APPROVED, validating required fields first. APPROVED is idempotent; ARCHIVED is rejected. */
+    @Transactional
+    public QuestionResponse publish(UUID publicId, CurrentUser caller) {
+        return approve(publicId, caller);
     }
 
     /** Archive DRAFT/APPROVED→ARCHIVED. ARCHIVED is idempotent. */
@@ -114,6 +241,7 @@ public class ItembankService {
     public QuestionResponse archive(UUID publicId, CurrentUser caller) {
         Question question = loadForPlatformWrite(publicId, caller);
         question.setStatus(QuestionStatus.ARCHIVED);
+        question.setCurrent(false);
         return toResponse(question);
     }
 
@@ -124,7 +252,11 @@ public class ItembankService {
         if (question.getStatus() != QuestionStatus.ARCHIVED) {
             throw new InvalidQuestionStatusTransitionException();
         }
+        if (question.getSupersedesPublicId() != null) {
+            throw new InvalidQuestionStatusTransitionException();
+        }
         question.setStatus(QuestionStatus.DRAFT);
+        question.setCurrent(true);
         return toResponse(question);
     }
 
@@ -171,7 +303,8 @@ public class ItembankService {
     public QuestionFreezeView freeze(UUID questionPublicId) {
         Question question = questionRepository.findWithOptionsByPublicId(questionPublicId)
                 .orElseThrow(QuestionNotFoundException::new);
-        if (question.getVisibility() != Visibility.SHARED || question.getStatus() != QuestionStatus.APPROVED) {
+        if (question.getVisibility() != Visibility.SHARED || question.getStatus() != QuestionStatus.APPROVED
+                || !question.isCurrent()) {
             throw new QuestionNotFoundException();
         }
         return toFreezeView(question);
@@ -210,8 +343,66 @@ public class ItembankService {
             option.setText(source.text());
             option.setCorrect(source.correct());
             option.setOrderIndex(source.orderIndex());
+            option.setBlankIndex(source.blankIndex());
+            option.setCorrectGapIndex(source.correctGapIndex());
             question.addOption(option);
         });
+    }
+
+    private void applyContent(Question question, String title, String promptText, UUID audioPromptRef,
+            UUID imagePromptRef, String referenceAnswerText, String correctAnswerText, Integer minWordCount,
+            Integer maxWordCount, List<OptionRequest> options) {
+        question.setTitle(title);
+        question.setPromptText(promptText);
+        question.setAudioPromptRef(audioPromptRef);
+        question.setImagePromptRef(imagePromptRef);
+        question.setReferenceAnswerText(referenceAnswerText);
+        question.setCorrectAnswerText(correctAnswerText);
+        question.setMinWordCount(minWordCount);
+        question.setMaxWordCount(maxWordCount);
+        question.getOptions().clear();
+        addOptions(question, options);
+    }
+
+    private void validateMediaReferences(Question question, CurrentUser caller) {
+        if (mediaService == null) {
+            return;
+        }
+        if (question.getAudioPromptRef() != null) {
+            mediaService.validateAuthoringMedia(question.getAudioPromptRef(), "AUDIO_PROMPT", caller);
+        }
+        if (question.getImagePromptRef() != null) {
+            mediaService.validateAuthoringMedia(question.getImagePromptRef(), "IMAGE_PROMPT", caller);
+        }
+    }
+
+    private PteTaskType parseOptionalTaskType(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return parseTaskType(value);
+    }
+
+    private QuestionStatus parseOptionalStatus(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return QuestionStatus.valueOf(value.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new QuestionValidationException(ItembankConstants.INVALID_QUESTION_FIELDS);
+        }
+    }
+
+    private PteSection parseOptionalSection(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return PteSection.valueOf(value.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new QuestionValidationException(ItembankConstants.INVALID_QUESTION_FIELDS);
+        }
     }
 
     private QuestionResponse toResponse(Question question) {

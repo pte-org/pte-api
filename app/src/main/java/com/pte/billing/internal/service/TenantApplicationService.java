@@ -68,7 +68,7 @@ public class TenantApplicationService {
         application.setRequestedCode(request.requestedCode());
         application.setContactEmail(request.contactEmail());
         application.setContactPhone(request.contactPhone());
-        application.setTaxCode(request.taxCode());
+        application.setTaxCode(request.taxCode().trim());
 
         TenantApplication saved = applicationRepository.saveAndFlush(application);
         eventPublisher.publishEvent(new TenantApplicationSubmittedEvent(
@@ -94,7 +94,7 @@ public class TenantApplicationService {
         int freeStudentLimit = platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY);
 
         Tenant tenant = tenancyService.createTenant(application.getOrgName(), application.getOrgType(),
-                application.getRequestedCode(), freeStudentLimit);
+                application.getRequestedCode(), application.getTaxCode(), freeStudentLimit);
         HostAdminCreated hostAdmin = identityService.createHostAdmin(
                 tenant.getPublicId(), application.getContactEmail());
 

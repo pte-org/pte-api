@@ -23,4 +23,12 @@ public class AssessmentAccessPolicy {
         }
         return entityTenantId != null && entityTenantId.equals(caller.tenantId());
     }
+
+    public boolean canAuthor(CurrentUser caller) {
+        return caller != null && (caller.hasRole("PLATFORM_ADMIN") || caller.hasRole("PLATFORM_AUTHOR"));
+    }
+
+    public boolean canApprove(CurrentUser caller) {
+        return caller != null && caller.hasRole("PLATFORM_ADMIN");
+    }
 }

@@ -32,10 +32,17 @@ public final class QuestionMapper {
                 question.getCorrectAnswerText(),
                 question.getMinWordCount(),
                 question.getMaxWordCount(),
-                options);
+                options,
+                question.getRevisionGroupPublicId(),
+                question.getRevisionNumber(),
+                question.getSupersedesPublicId(),
+                question.isCurrent(),
+                question.getVersion(),
+                question.getRejectionReason());
     }
 
     private static OptionResponse toOption(QuestionOption option) {
-        return new OptionResponse(option.getPublicId(), option.getText(), option.isCorrect(), option.getOrderIndex());
+        return new OptionResponse(option.getPublicId(), option.getText(), option.isCorrect(), option.getOrderIndex(),
+                option.getBlankIndex(), option.getCorrectGapIndex());
     }
 }

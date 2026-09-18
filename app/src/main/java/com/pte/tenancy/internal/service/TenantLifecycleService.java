@@ -1,10 +1,13 @@
 package com.pte.tenancy.internal.service;
 
+import com.pte.tenancy.domain.Organization;
 import com.pte.tenancy.domain.Tenant;
+import com.pte.tenancy.domain.enums.FacilityType;
 import com.pte.tenancy.domain.enums.TenantStatus;
 import com.pte.tenancy.internal.exception.TenantCodeAlreadyUsedException;
 import com.pte.tenancy.internal.exception.TenantNameAlreadyUsedException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
+import com.pte.tenancy.internal.exception.TenantTaxCodeAlreadyUsedException;
 import com.pte.tenancy.internal.dto.request.OnboardTenantRequest;
 import com.pte.tenancy.internal.dto.request.UpdateBrandingRequest;
 import com.pte.tenancy.internal.dto.response.TenantResponse;
@@ -34,13 +37,19 @@ public class TenantLifecycleService {
         if (tenantRepository.existsByName(request.name())) {
             throw new TenantNameAlreadyUsedException();
         }
+        if (tenantRepository.existsByTaxCode(request.taxCode().trim())) {
+            throw new TenantTaxCodeAlreadyUsedException();
+        }
         Tenant tenant = new Tenant();
         tenant.setCode(request.code());
         tenant.setName(request.name());
         tenant.setOrganizationType(request.organizationType());
+        tenant.setTaxCode(request.taxCode().trim());
         tenant.setPackageName(request.packageName());
         tenant.setStudentLimit(request.studentLimit());
-        Tenant saved = tenantRepository.save(tenant);        return TenantMapper.toResponse(saved);
+        addDefaultOrganization(tenant);
+        Tenant saved = tenantRepository.save(tenant);
+        return TenantMapper.toResponse(saved);
     }
 
     /**
@@ -52,20 +61,37 @@ public class TenantLifecycleService {
      * earlier check: time passes between an application being submitted and
      * approved, and another onboarding could have taken the name/code meanwhile.
      */
-    public Tenant createFromApplication(String name, String organizationType, String code, int studentLimit) {
+    public Tenant createFromApplication(String name, String organizationType, String code, String taxCode,
+            int studentLimit) {
         if (tenantRepository.existsByCode(code)) {
             throw new TenantCodeAlreadyUsedException();
         }
         if (tenantRepository.existsByName(name)) {
             throw new TenantNameAlreadyUsedException();
         }
+        if (tenantRepository.existsByTaxCode(taxCode.trim())) {
+            throw new TenantTaxCodeAlreadyUsedException();
+        }
         Tenant tenant = new Tenant();
         tenant.setCode(code);
         tenant.setName(name);
         tenant.setOrganizationType(organizationType);
+        tenant.setTaxCode(taxCode.trim());
         tenant.setPackageName("starter");
         tenant.setStudentLimit(studentLimit);
+        addDefaultOrganization(tenant);
         return tenantRepository.save(tenant);
+    }
+
+    /**
+     * A Host owns exactly one Organization. The child is created together with
+     * the Tenant so no later branch-creation step is needed (or exposed).
+     */
+    private void addDefaultOrganization(Tenant tenant) {
+        Organization organization = new Organization();
+        organization.setName(tenant.getName());
+        organization.setFacilityType(FacilityType.MAIN);
+        tenant.addOrganization(organization);
     }
 
     @Transactional

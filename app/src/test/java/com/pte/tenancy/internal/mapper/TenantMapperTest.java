@@ -26,6 +26,7 @@ class TenantMapperTest {
         tenant.setPublicId(UUID.randomUUID());
         tenant.setName("Acme School");
         tenant.setOrganizationType("SCHOOL");
+        tenant.setTaxCode("0123456789");
         tenant.setStatus(TenantStatus.ACTIVE);
         tenant.setPackageName("starter");
         tenant.setStudentLimit(500);
@@ -33,6 +34,7 @@ class TenantMapperTest {
         TenantResponse response = TenantMapper.toResponse(tenant);
 
         assertThat(response.name()).isEqualTo("Acme School");
+        assertThat(response.taxCode()).isEqualTo("0123456789");
         verify(tenant, never()).getOrganizations();
     }
 

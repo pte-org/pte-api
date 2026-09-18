@@ -20,6 +20,8 @@ public final class BlueprintMapper {
                 blueprint.getName(),
                 blueprint.getTenantId(),
                 blueprint.getStatus().name(),
+                blueprint.getRejectionReason(),
+                blueprint.getVersion(),
                 items);
     }
 

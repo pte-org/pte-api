@@ -4,6 +4,7 @@ import com.pte.billing.internal.constant.BillingConstants;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 /** Submitted publicly, no auth — see BillingConstants for why validation here is strict. */
 public record SubmitApplicationRequest(
@@ -23,5 +24,7 @@ public record SubmitApplicationRequest(
 
         String contactPhone,
 
+        @NotBlank(message = BillingConstants.TAX_CODE_REQUIRED)
+        @Size(max = 64, message = BillingConstants.TAX_CODE_MAX)
         String taxCode) {
 }

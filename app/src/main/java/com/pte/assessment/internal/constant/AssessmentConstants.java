@@ -13,6 +13,11 @@ public final class AssessmentConstants {
     public static final String SECTION_REQUIRED = "Section is required";
     public static final String BLUEPRINT_NAME_REQUIRED = "Blueprint name is required";
     public static final String BLUEPRINT_ITEMS_REQUIRED = "A blueprint needs at least one item";
+    public static final String BLUEPRINT_REJECTION_REASON_REQUIRED = "A rejection reason is required";
+    public static final String BLUEPRINT_STATUS_INVALID = "Blueprint status does not allow this operation";
+    public static final String BLUEPRINT_ITEM_INVALID = "Blueprint contains an invalid or unavailable question";
+    public static final String BLUEPRINT_DUPLICATE_QUESTION = "A question cannot appear more than once in a blueprint";
+    public static final String BLUEPRINT_TEMPLATE_COMPLIANCE_INVALID = "Blueprint does not match the active PTE template counts";
     public static final String SNAPSHOT_OPTIONS_SERIALIZATION_FAILED = "Failed to serialize snapshot options";
 
     private AssessmentConstants() {

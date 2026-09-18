@@ -1,13 +1,16 @@
 package com.pte.media.internal.controller;
 
-import com.pte.media.internal.dto.request.RequestUploadRequest;
-import com.pte.media.internal.dto.response.RequestUploadResponse;
-import com.pte.media.internal.service.PresignService;
+import com.pte.media.internal.dto.request.CloudinaryCompleteRequest;
+import com.pte.media.internal.dto.request.CloudinaryUploadRequest;
+import com.pte.media.internal.dto.response.CloudinaryUploadResponse;
+import com.pte.media.internal.dto.response.MediaPreviewResponse;
+import com.pte.media.internal.service.CloudinaryMediaService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,21 +23,27 @@ import java.util.UUID;
 @RequestMapping("/api/v1/objects")
 public class MediaController {
 
-    private final PresignService presignService;
+    private final CloudinaryMediaService cloudinaryMediaService;
 
-    public MediaController(PresignService presignService) {
-        this.presignService = presignService;
+    public MediaController(CloudinaryMediaService cloudinaryMediaService) {
+        this.cloudinaryMediaService = cloudinaryMediaService;
     }
 
     @PostMapping
-    public ApiResponse<RequestUploadResponse> requestUpload(@Valid @RequestBody RequestUploadRequest request) {
-        return ApiResponse.success(presignService.requestUpload(request, currentUser()));
+    public ApiResponse<CloudinaryUploadResponse> requestUpload(@Valid @RequestBody CloudinaryUploadRequest request) {
+        return ApiResponse.success(cloudinaryMediaService.requestUpload(request, currentUser()));
     }
 
     @PostMapping("/{publicId}/complete")
-    public ApiResponse<Void> completeUpload(@PathVariable UUID publicId) {
-        presignService.completeUpload(publicId, currentUser());
+    public ApiResponse<Void> completeUpload(@PathVariable UUID publicId,
+            @Valid @RequestBody CloudinaryCompleteRequest request) {
+        cloudinaryMediaService.completeUpload(publicId, request, currentUser());
         return ApiResponse.success(null);
+    }
+
+    @GetMapping("/{publicId}/preview-url")
+    public ApiResponse<MediaPreviewResponse> preview(@PathVariable UUID publicId) {
+        return ApiResponse.success(cloudinaryMediaService.preview(publicId, currentUser()));
     }
 
     private CurrentUser currentUser() {

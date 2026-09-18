@@ -12,6 +12,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -42,6 +43,13 @@ public class ExamBlueprint extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private BlueprintStatus status = BlueprintStatus.DRAFT;
+
+    @Column
+    private String rejectionReason;
+
+    @Version
+    @Column(nullable = false)
+    private long version;
 
     @OneToMany(mappedBy = "blueprint", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("orderIndex ASC")

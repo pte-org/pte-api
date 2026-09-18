@@ -18,5 +18,11 @@ public record QuestionResponse(
         String correctAnswerText,
         Integer minWordCount,
         Integer maxWordCount,
-        List<OptionResponse> options) {
+        List<OptionResponse> options,
+        UUID revisionGroupPublicId,
+        int revisionNumber,
+        UUID supersedesPublicId,
+        boolean current,
+        long version,
+        String rejectionReason) {
 }

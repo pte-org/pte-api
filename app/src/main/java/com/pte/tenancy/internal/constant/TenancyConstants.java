@@ -8,8 +8,8 @@ public final class TenancyConstants {
     public static final String TENANT_NOT_FOUND = "TENANT_NOT_FOUND";
     public static final String TENANT_NAME_ALREADY_USED = "TENANT_NAME_ALREADY_USED";
     public static final String TENANT_CODE_ALREADY_USED = "TENANT_CODE_ALREADY_USED";
+    public static final String TENANT_TAX_CODE_ALREADY_USED = "TENANT_TAX_CODE_ALREADY_USED";
     public static final String ORGANIZATION_NOT_FOUND = "ORGANIZATION_NOT_FOUND";
-    public static final String ORGANIZATION_NAME_ALREADY_USED = "ORGANIZATION_NAME_ALREADY_USED";
     public static final String QUOTA_CONFLICT = "QUOTA_CONFLICT";
     public static final String STUDENT_LIMIT_EXCEEDED =
             "STUDENT_LIMIT_EXCEEDED: current=%d, limit=%d, adding=%d";
@@ -27,6 +27,8 @@ public final class TenancyConstants {
     public static final String PACKAGE_NAME_REQUIRED = "Package name is required";
     public static final String STUDENT_LIMIT_REQUIRED = "Student limit is required";
     public static final String STUDENT_LIMIT_MINIMUM = "Student limit must be at least 1";
+    public static final String TAX_CODE_REQUIRED = "Tax code is required";
+    public static final String TAX_CODE_MAX = "Tax code must be at most 64 characters";
     public static final String FACILITY_TYPE_REQUIRED = "Facility type is required";
     public static final String AMOUNT_REQUIRED = "Amount is required";
     public static final String AMOUNT_POSITIVE = "Amount must be positive for a grant";
