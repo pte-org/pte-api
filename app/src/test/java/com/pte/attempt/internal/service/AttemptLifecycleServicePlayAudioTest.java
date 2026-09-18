@@ -125,7 +125,7 @@ class AttemptLifecycleServicePlayAudioTest {
         item.setSection("LISTENING");
         item.setTaskType("SUMMARIZE_SPOKEN_TEXT");
         item.setTitle("Test task");
-        item.setAudioUrl("https://minio.local/signed-audio");
+        item.setAudioUrl("https://res.cloudinary.com/test/signed-audio");
         item.setAudioUrlExpiresAt(Instant.now().plusSeconds(600));
         item.setPinnedSnapshot(snapshot);
 
@@ -142,7 +142,7 @@ class AttemptLifecycleServicePlayAudioTest {
 
         AudioPlayResponse response = attemptLifecycleService.playAudio(attemptPublicId, pinnedItemPublicId, "req-1", caller);
 
-        assertThat(response.audioUrl()).isEqualTo("https://minio.local/signed-audio");
+        assertThat(response.audioUrl()).isEqualTo("https://res.cloudinary.com/test/signed-audio");
         verify(attemptRepository).findWithLockById(1L);
         verifyNoInteractions(timerService);
     }
@@ -171,7 +171,7 @@ class AttemptLifecycleServicePlayAudioTest {
 
         AudioPlayResponse response = attemptLifecycleService.playAudio(attemptPublicId, pinnedItemPublicId, "req-1", caller);
 
-        assertThat(response.audioUrl()).isEqualTo("https://minio.local/signed-audio");
+        assertThat(response.audioUrl()).isEqualTo("https://res.cloudinary.com/test/signed-audio");
         assertThat(attempt.getPlayCount()).isEqualTo(1);
         verify(attemptRepository, never()).save(any());
     }
@@ -231,7 +231,7 @@ class AttemptLifecycleServicePlayAudioTest {
 
         AudioPlayResponse response = attemptLifecycleService.playAudio(attemptPublicId, pinnedItemPublicId, "req-51", caller);
 
-        assertThat(response.audioUrl()).isEqualTo("https://minio.local/signed-audio");
+        assertThat(response.audioUrl()).isEqualTo("https://res.cloudinary.com/test/signed-audio");
         assertThat(attempt.getPlayCount()).isEqualTo(51);
     }
 }

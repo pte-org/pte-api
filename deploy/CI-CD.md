@@ -5,7 +5,7 @@ cá»§a má»™t trong hai repository sáº½ SSH vÃ o VPS, fetch `main` cá
 build láº¡i stack vÃ  khá»Ÿi Ä‘á»™ng cÃ¡c container má»›i.
 
 Workflow khÃ´ng lÆ°u `.env` trong GitHub vÃ  khÃ´ng cháº¡y `docker compose down -v`.
-Database, MinIO data vÃ  Nginx/Certbot certificate volumes Ä‘Æ°á»£c giá»¯ nguyÃªn.
+Database and Nginx/Certbot certificate volumes are preserved.
 
 ## GitHub Actions secrets
 

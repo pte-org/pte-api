@@ -125,7 +125,7 @@ class SnapshotPinServiceTest {
         PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
 
         PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getAudioUrl()).isEqualTo("https://minio.local/signed");
+        assertThat(pinnedItem.getAudioUrl()).isEqualTo("https://res.cloudinary.com/test/signed");
         assertThat(pinnedItem.getAudioUrlExpiresAt()).isNotNull();
     }
 
@@ -139,7 +139,7 @@ class SnapshotPinServiceTest {
         PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
 
         PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getAudioUrl()).isEqualTo("https://minio.local/signed");
+        assertThat(pinnedItem.getAudioUrl()).isEqualTo("https://res.cloudinary.com/test/signed");
         assertThat(pinnedItem.getAudioUrlExpiresAt()).isNotNull();
     }
 
@@ -205,7 +205,7 @@ class SnapshotPinServiceTest {
         PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
 
         PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getImageUrl()).isEqualTo("https://minio.local/signed");
+        assertThat(pinnedItem.getImageUrl()).isEqualTo("https://res.cloudinary.com/test/signed");
         assertThat(pinnedItem.getImageUrlExpiresAt()).isNotNull();
         assertThat(pinnedItem.getAudioUrl()).isNull();
     }
@@ -439,11 +439,11 @@ class SnapshotPinServiceTest {
     }
 
     private PresignedDownloadResponse presigned() {
-        return new PresignedDownloadResponse("https://minio.local/signed", 3600L, null);
+        return new PresignedDownloadResponse("https://res.cloudinary.com/test/signed", 3600L, null);
     }
 
     private PresignedDownloadResponse presignedWithDuration(Integer durationSeconds) {
-        return new PresignedDownloadResponse("https://minio.local/signed", 3600L, durationSeconds);
+        return new PresignedDownloadResponse("https://res.cloudinary.com/test/signed", 3600L, durationSeconds);
     }
 
     private ExamAttempt attempt() {
