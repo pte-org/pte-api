@@ -100,6 +100,11 @@ public class UserController {
         return ApiResponse.success(userService.sendGeneratedCredentials(publicId, currentUser()));
     }
 
+    @PostMapping("/{publicId}/credentials/generate")
+    public ApiResponse<GeneratedCredentialsResponse> generateStudentCredentials(@PathVariable UUID publicId) {
+        return ApiResponse.success(userService.generateStudentCredentials(publicId, currentUser()));
+    }
+
     // Separate from GET /users (which is caller-tenant-scoped). A platform admin
     // can use this to look up the tenant's HOST_ADMIN account only.
     @GetMapping("/by-tenant/{tenantId}")

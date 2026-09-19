@@ -21,6 +21,7 @@ import com.pte.identity.internal.exception.ForbiddenPasswordResetException;
 import com.pte.identity.internal.exception.InvalidLoginException;
 import com.pte.identity.internal.exception.UserNotFoundException;
 import com.pte.identity.internal.exception.UserEmailRequiredException;
+import com.pte.identity.internal.exception.StudentCredentialEmailNotAllowedException;
 import com.pte.identity.internal.mapper.UserMapper;
 import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
@@ -297,10 +298,40 @@ public class UserService {
         if (!provisioningHelper.canManageTarget(caller, user.getRoles())) {
             throw new ForbiddenPasswordResetException();
         }
+        if (user.getRoles().contains(Role.STUDENT)) {
+            throw new StudentCredentialEmailNotAllowedException();
+        }
         if (user.getEmail() == null || user.getEmail().isBlank()) {
             throw new UserEmailRequiredException();
         }
 
+        String temporaryPassword = rotateTemporaryPassword(user);
+        eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(
+                UUID.randomUUID(), user.getPublicId(), user.getTenantId(), user.getUsername(), user.getEmail(),
+                user.getFullName(), temporaryPassword));
+
+        return new GeneratedCredentialsResponse(user.getPublicId(), user.getUsername(), user.getEmail(),
+                user.getFullName(), temporaryPassword, true);
+    }
+
+    /**
+     * Generates a fresh Student credential for Host verification without
+     * sending email. The cleartext password is returned only in this response.
+     */
+    @Transactional
+    public GeneratedCredentialsResponse generateStudentCredentials(UUID publicId, CurrentUser caller) {
+        User user = findScoped(publicId, caller);
+        if (!provisioningHelper.canManageTarget(caller, user.getRoles())
+                || !user.getRoles().contains(Role.STUDENT)) {
+            throw new ForbiddenPasswordResetException();
+        }
+
+        String temporaryPassword = rotateTemporaryPassword(user);
+        return new GeneratedCredentialsResponse(user.getPublicId(), user.getUsername(), user.getEmail(),
+                user.getFullName(), temporaryPassword, false);
+    }
+
+    private String rotateTemporaryPassword(User user) {
         String temporaryPassword = PasswordGenerator.generateReadable();
         LoginHash loginHash = loginHashRepository.findByUserId(user.getId())
                 .orElseThrow(UserNotFoundException::new);
@@ -308,13 +339,7 @@ public class UserService {
         loginHashRepository.save(loginHash);
         user.setMustChangePassword(true);
         userRepository.save(user);
-
-        eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(
-                UUID.randomUUID(), user.getPublicId(), user.getTenantId(), user.getUsername(), user.getEmail(),
-                user.getFullName(), temporaryPassword));
-
-        return new GeneratedCredentialsResponse(user.getPublicId(), user.getUsername(), user.getEmail(),
-                user.getFullName(), temporaryPassword, true);
+        return temporaryPassword;
     }
 
     /** Changes the authenticated user's password and clears the first-login flag. */
