@@ -54,20 +54,23 @@ public class ItembankService {
     private final QuestionValidationHelper validationHelper;
     private final ItembankAccessPolicy accessPolicy;
     private final MediaService mediaService;
+    private final QuestionTypeService questionTypeService;
 
     @Autowired
     public ItembankService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
-                           ItembankAccessPolicy accessPolicy, MediaService mediaService) {
+                           ItembankAccessPolicy accessPolicy, MediaService mediaService,
+                           QuestionTypeService questionTypeService) {
         this.questionRepository = questionRepository;
         this.validationHelper = validationHelper;
         this.accessPolicy = accessPolicy;
         this.mediaService = mediaService;
+        this.questionTypeService = questionTypeService;
     }
 
     /** Compatibility constructor for focused itembank unit tests without media wiring. */
     public ItembankService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
             ItembankAccessPolicy accessPolicy) {
-        this(questionRepository, validationHelper, accessPolicy, null);
+        this(questionRepository, validationHelper, accessPolicy, null, null);
     }
 
     @Transactional
@@ -76,8 +79,13 @@ public class ItembankService {
             throw new AccessDeniedException("Only platform users may write the shared question bank");
         }
 
+        PteTaskType taskType = parseTaskType(request.pteTaskType());
+        if (questionTypeService != null && !questionTypeService.isActive(taskType.name())) {
+            throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);
+        }
+
         Question question = new Question();
-        question.setPteTaskType(parseTaskType(request.pteTaskType()));
+        question.setPteTaskType(taskType);
         question.setVisibility(Visibility.SHARED);
         question.setTenantId(null);
         question.setStatus(QuestionStatus.DRAFT);
@@ -348,7 +356,12 @@ public class ItembankService {
      */
     List<QuestionOption> deliveryOrder(Question question) {
         List<QuestionOption> natural = question.getOptions();
-        if (question.getPteTaskType() != PteTaskType.RE_ORDER_PARAGRAPHS || natural.size() < 2) {
+        boolean usesOptionOrderAsCorrectPosition = questionTypeService == null
+                ? question.getPteTaskType() == PteTaskType.RE_ORDER_PARAGRAPHS
+                : questionTypeService.findDefinitionByCode(question.getPteTaskType().name())
+                        .map(definition -> definition.isUsesOptionOrderAsCorrectPosition())
+                        .orElse(false);
+        if (!usesOptionOrderAsCorrectPosition || natural.size() < 2) {
             return natural;
         }
         List<QuestionOption> rotated = new ArrayList<>(natural);

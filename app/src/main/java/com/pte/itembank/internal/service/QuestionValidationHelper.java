@@ -2,9 +2,12 @@ package com.pte.itembank.internal.service;
 
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.QuestionOption;
+import com.pte.itembank.domain.QuestionTypeDefinition;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.internal.constant.ItembankConstants;
 import com.pte.itembank.internal.exception.QuestionValidationException;
+import com.pte.itembank.QuestionTypeService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -12,15 +15,33 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Task-type-aware required-field validation. Category-driven off {@link PteTaskType}
- * flags rather than 22 hand-written rules, so a new task type is validated by
- * declaring its requirement flags.
+ * Task-type-aware required-field validation. In production the requirements are
+ * loaded from the persisted question-type catalog; the enum flags are retained
+ * only as a compatibility fallback for focused unit tests that construct this
+ * helper without Spring.
  */
 @Component
 public class QuestionValidationHelper {
 
+    private final QuestionTypeService questionTypeService;
+
+    @Autowired
+    public QuestionValidationHelper(QuestionTypeService questionTypeService) {
+        this.questionTypeService = questionTypeService;
+    }
+
+    /** Compatibility constructor for focused tests without the catalog bean. */
+    public QuestionValidationHelper() {
+        this.questionTypeService = null;
+    }
+
     public void validate(Question question) {
         PteTaskType type = question.getPteTaskType();
+        QuestionTypeDefinition definition = definitionFor(type);
+        boolean requiresAudioPrompt = definition == null ? type.requiresAudioPrompt() : definition.isRequiresAudioPrompt();
+        boolean requiresImagePrompt = definition == null ? type.requiresImagePrompt() : definition.isRequiresImagePrompt();
+        boolean requiresPromptText = definition == null ? type.requiresPromptText() : definition.isRequiresPromptText();
+        boolean requiresWordCount = definition == null ? type.requiresWordCount() : definition.isRequiresWordCount();
 
         if (!StringUtils.hasText(question.getTitle())) {
             throw new QuestionValidationException(ItembankConstants.TITLE_REQUIRED);
@@ -30,23 +51,29 @@ public class QuestionValidationHelper {
             throw new QuestionValidationException(ItembankConstants.INVALID_QUESTION_FIELDS);
         }
 
-        if (type.requiresAudioPrompt() && question.getAudioPromptRef() == null) {
+        if (requiresAudioPrompt && question.getAudioPromptRef() == null) {
             throw new QuestionValidationException(ItembankConstants.AUDIO_PROMPT_REQUIRED);
         }
-        if (type.requiresImagePrompt() && question.getImagePromptRef() == null) {
+        if (requiresImagePrompt && question.getImagePromptRef() == null) {
             throw new QuestionValidationException(ItembankConstants.IMAGE_PROMPT_REQUIRED);
         }
-        if (type.requiresPromptText() && !StringUtils.hasText(question.getPromptText())) {
+        if (requiresPromptText && !StringUtils.hasText(question.getPromptText())) {
             throw new QuestionValidationException(ItembankConstants.PROMPT_TEXT_REQUIRED);
         }
-        if (type.requiresWordCount() && (question.getMinWordCount() == null || question.getMaxWordCount() == null)) {
+        if (requiresWordCount && (question.getMinWordCount() == null || question.getMaxWordCount() == null)) {
             throw new QuestionValidationException(ItembankConstants.WORD_COUNT_REQUIRED);
         }
-        validateAnswers(question, type);
+        validateAnswers(question, type, definition);
     }
 
-    private void validateAnswers(Question question, PteTaskType type) {
-        if (type.requiresOptions()) {
+    private void validateAnswers(Question question, PteTaskType type, QuestionTypeDefinition definition) {
+        boolean requiresOptions = definition == null ? type.requiresOptions() : definition.isRequiresOptions();
+        boolean requiresCorrectAnswer = definition == null ? type.requiresCorrectAnswer() : definition.isRequiresCorrectAnswer();
+        boolean requiresSingleCorrectOption = definition == null
+                ? type == PteTaskType.MC_READING_SINGLE || type == PteTaskType.MC_LISTENING_SINGLE
+                : definition.isRequiresSingleCorrectOption();
+
+        if (requiresOptions) {
             if (question.getOptions().isEmpty()) {
                 throw new QuestionValidationException(ItembankConstants.OPTIONS_REQUIRED);
             }
@@ -59,16 +86,27 @@ public class QuestionValidationHelper {
                     throw new QuestionValidationException(ItembankConstants.INVALID_QUESTION_FIELDS);
                 }
             }
-            if (type.requiresCorrectAnswer()
+            if (requiresCorrectAnswer
                     && question.getOptions().stream().noneMatch(QuestionOption::isCorrect)) {
                 throw new QuestionValidationException(ItembankConstants.CORRECT_OPTION_REQUIRED);
             }
-            if ((type == PteTaskType.MC_READING_SINGLE || type == PteTaskType.MC_LISTENING_SINGLE)
+            if (requiresSingleCorrectOption
                     && question.getOptions().stream().filter(QuestionOption::isCorrect).count() != 1) {
                 throw new QuestionValidationException(ItembankConstants.INVALID_QUESTION_FIELDS);
             }
-        } else if (type.requiresCorrectAnswer() && !StringUtils.hasText(question.getCorrectAnswerText())) {
+        } else if (requiresCorrectAnswer && !StringUtils.hasText(question.getCorrectAnswerText())) {
             throw new QuestionValidationException(ItembankConstants.CORRECT_ANSWER_REQUIRED);
         }
+    }
+
+    private QuestionTypeDefinition definitionFor(PteTaskType type) {
+        if (type == null) {
+            throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);
+        }
+        if (questionTypeService == null) {
+            return null;
+        }
+        return questionTypeService.findDefinitionByCode(type.name())
+                .orElseThrow(() -> new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE));
     }
 }

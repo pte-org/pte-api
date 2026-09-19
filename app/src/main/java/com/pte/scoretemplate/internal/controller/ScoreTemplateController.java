@@ -1,6 +1,7 @@
 package com.pte.scoretemplate.internal.controller;
 
 import com.pte.scoretemplate.dto.request.ReplaceScoreTemplateItemsRequest;
+import com.pte.scoretemplate.dto.request.ImportScoreTemplateRequest;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.scoretemplate.internal.service.ScoreTemplateAdminService;
 import com.pte.shared.web.ApiResponse;
@@ -44,6 +45,12 @@ public class ScoreTemplateController {
     @GetMapping("/{publicId}")
     public ApiResponse<ScoreTemplateResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(adminService.getForEdit(publicId));
+    }
+
+    @PostMapping("/import")
+    public ApiResponse<ScoreTemplateResponse> importTemplate(
+            @Valid @RequestBody ImportScoreTemplateRequest request) {
+        return ApiResponse.success(adminService.importAsDraft(request));
     }
 
     @PostMapping("/{publicId}/clone")

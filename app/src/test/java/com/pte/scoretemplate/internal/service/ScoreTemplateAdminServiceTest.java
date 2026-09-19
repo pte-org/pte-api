@@ -5,6 +5,7 @@ import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
 import com.pte.scoretemplate.domain.enums.ScoringMethod;
 import com.pte.scoretemplate.domain.enums.TimingMode;
+import com.pte.scoretemplate.dto.request.ImportScoreTemplateRequest;
 import com.pte.scoretemplate.dto.request.ReplaceScoreTemplateItemsRequest;
 import com.pte.scoretemplate.dto.request.ScoreTemplateItemRequest;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
@@ -171,6 +172,23 @@ class ScoreTemplateAdminServiceTest {
 
         assertThatThrownBy(() -> service.cloneToDraft(sourceId))
                 .isInstanceOf(ScoreTemplateConcurrentModificationException.class);
+    }
+
+    @Test
+    void importAsDraft_createsNewVersionFromUiExport() {
+        when(repository.findMaxVersionByCode("PTE_Score_Template")).thenReturn(1);
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ScoreTemplateResponse response = service.importAsDraft(new ImportScoreTemplateRequest(
+                "PTE_Score_Template",
+                "Imported VPS template",
+                List.of(sampleItemRequest())));
+
+        assertThat(response.code()).isEqualTo("PTE_Score_Template");
+        assertThat(response.version()).isEqualTo(2);
+        assertThat(response.status()).isEqualTo("DRAFT");
+        assertThat(response.name()).isEqualTo("Imported VPS template");
+        assertThat(response.items()).hasSize(1);
     }
 
     private ScoreTemplateItemRequest sampleItemRequest() {

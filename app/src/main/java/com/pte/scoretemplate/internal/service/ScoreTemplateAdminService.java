@@ -5,6 +5,7 @@ import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
 import com.pte.scoretemplate.domain.enums.ScoringMethod;
 import com.pte.scoretemplate.domain.enums.TimingMode;
+import com.pte.scoretemplate.dto.request.ImportScoreTemplateRequest;
 import com.pte.scoretemplate.dto.request.ReplaceScoreTemplateItemsRequest;
 import com.pte.scoretemplate.dto.request.ScoreTemplateItemRequest;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
@@ -45,6 +46,23 @@ public class ScoreTemplateAdminService {
     @Transactional(readOnly = true)
     public ScoreTemplateResponse getForEdit(UUID publicId) {
         return ScoreTemplateMapper.toResponse(findByPublicId(publicId));
+    }
+
+    /** Imports a UI-exported template as a new DRAFT in the same code family. */
+    @Transactional
+    public ScoreTemplateResponse importAsDraft(ImportScoreTemplateRequest request) {
+        String code = request.code().trim();
+        repository.findAllByCodeForUpdate(code);
+        int nextVersion = repository.findMaxVersionByCode(code) + 1;
+
+        ScoreTemplate draft = new ScoreTemplate();
+        draft.setCode(code);
+        draft.setVersion(nextVersion);
+        draft.setName(request.name().trim());
+        draft.setStatus(ScoreTemplateStatus.DRAFT);
+        request.items().forEach(itemRequest -> draft.addItem(toEntity(itemRequest)));
+
+        return ScoreTemplateMapper.toResponse(saveOrTranslateConflict(draft));
     }
 
     /** Copies every item of {@code sourcePublicId} into a new DRAFT one version ahead, same {@code code}. */
