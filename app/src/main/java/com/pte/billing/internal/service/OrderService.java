@@ -11,13 +11,17 @@ import com.pte.billing.internal.exception.PlanNotFoundException;
 import com.pte.billing.internal.repository.OrderRepository;
 import com.pte.billing.internal.repository.PlanRepository;
 import com.pte.billing.internal.vendor.payos.PayOsClient;
+import com.pte.shared.web.PageMeta;
+import com.pte.shared.web.PagedResult;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -73,13 +77,17 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    public List<OrderResponse> listOrders(UUID tenantId) {
+    public PagedResult<OrderResponse> listOrders(UUID tenantId, int requestedPage, int requestedSize) {
         if (tenantId == null) {
             throw invalid(BillingConstants.ORDER_TENANT_REQUIRED);
         }
-        return orderRepository.findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(tenantId).stream()
-                .map(OrderResponse::from)
-                .toList();
+        int page = Math.max(0, requestedPage);
+        int size = requestedSize <= 0 ? 20 : Math.min(requestedSize, 100);
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Order> orders = orderRepository.findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(tenantId, pageable);
+        return new PagedResult<>(orders.map(OrderResponse::from).getContent(),
+                new PageMeta(orders.getNumber(), orders.getSize(), orders.getTotalElements(), orders.getTotalPages(),
+                        orders.isFirst(), orders.isLast(), orders.hasNext(), orders.hasPrevious()));
     }
 
     private void validatePayOsAmount(BigDecimal amount, String currency) {

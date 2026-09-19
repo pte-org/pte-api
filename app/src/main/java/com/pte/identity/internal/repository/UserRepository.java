@@ -2,12 +2,16 @@ package com.pte.identity.internal.repository;
 
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
+import com.pte.identity.domain.UserStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -26,6 +30,28 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 
     List<User> findByTenantId(UUID tenantId);
+
+    @Query("""
+            select distinct u
+            from User u
+            join u.roles userRole
+            where u.tenantId = :tenantId
+              and u.deleted = false
+              and userRole in :staffRoles
+              and (:role is null or userRole = :role)
+              and (:status is null or u.status = :status)
+              and (:search = ''
+                   or lower(coalesce(u.fullName, '')) like concat('%', :search, '%')
+                   or lower(coalesce(u.email, '')) like concat('%', :search, '%')
+                   or lower(u.username) like concat('%', :search, '%'))
+            """)
+    Page<User> findPageForExamStaff(
+            @Param("tenantId") UUID tenantId,
+            @Param("staffRoles") Set<Role> staffRoles,
+            @Param("role") Role role,
+            @Param("status") UserStatus status,
+            @Param("search") String search,
+            Pageable pageable);
 
     boolean existsByEmail(String email);
 

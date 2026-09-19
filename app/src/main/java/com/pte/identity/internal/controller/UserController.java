@@ -5,10 +5,12 @@ import com.pte.identity.internal.dto.request.CreateUserRequest;
 import com.pte.identity.internal.dto.request.ResetPasswordRequest;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
+import com.pte.identity.internal.service.ExamStaffQueryService;
 import com.pte.identity.internal.service.UserService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
+import com.pte.shared.web.PagedResult;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -32,9 +35,11 @@ import java.util.UUID;
 public class UserController {
 
     private final UserService userService;
+    private final ExamStaffQueryService examStaffQueryService;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService, ExamStaffQueryService examStaffQueryService) {
         this.userService = userService;
+        this.examStaffQueryService = examStaffQueryService;
     }
 
     @PostMapping
@@ -56,6 +61,19 @@ public class UserController {
     @GetMapping
     public ApiResponse<List<UserResponse>> list() {
         return ApiResponse.success(userService.listByTenant(currentUser()));
+    }
+
+    @GetMapping("/exam-staff")
+    public ApiResponse<PagedResult<UserResponse>> listExamStaff(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) String direction) {
+        return ApiResponse.success(examStaffQueryService.search(page, size, search, role, status, sort, direction,
+                currentUser()));
     }
 
     @PostMapping("/{publicId}/suspend")

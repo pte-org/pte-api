@@ -1,11 +1,11 @@
 package com.pte.shared.audit;
 
 import com.pte.enrollment.internal.constant.EnrollmentConstants;
-import com.pte.enrollment.internal.constant.EnrollmentConstants;
 import com.pte.shared.audit.domain.AuditLog;
-import com.pte.shared.audit.dto.AuditLogResponse;
 import com.pte.shared.audit.internal.repository.AuditLogRepository;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -61,12 +61,14 @@ class AuditLogServiceTest {
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
         AuditLog row = rowOf(tenantPublicId);
 
-        when(auditLogRepository.findByTenantIdOrderByCreatedAtDesc(tenantPublicId)).thenReturn(List.of(row));
+        when(auditLogRepository.findByTenantIdOrderByCreatedAtDesc(tenantPublicId, PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
 
-        List<AuditLogResponse> result = service.list(caller, null);
+        var result = service.list(caller, null, 0, 20);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).publicId()).isEqualTo(row.getPublicId());
+        assertThat(result.data()).hasSize(1);
+        assertThat(result.data().get(0).publicId()).isEqualTo(row.getPublicId());
+        assertThat(result.meta().totalElements()).isEqualTo(1);
     }
 
     @Test
@@ -76,12 +78,14 @@ class AuditLogServiceTest {
         AuditLog row = rowOf(tenantPublicId);
 
         when(auditLogRepository.findByTenantIdAndAggregateTypeOrderByCreatedAtDesc(
-                tenantPublicId, EnrollmentConstants.AGGREGATE_PROGRAM)).thenReturn(List.of(row));
+                tenantPublicId, EnrollmentConstants.AGGREGATE_PROGRAM, PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
 
-        List<AuditLogResponse> result = service.list(caller, EnrollmentConstants.AGGREGATE_PROGRAM);
+        var result = service.list(caller, EnrollmentConstants.AGGREGATE_PROGRAM, 0, 20);
 
-        assertThat(result).hasSize(1);
-        verify(auditLogRepository, org.mockito.Mockito.never()).findByTenantIdOrderByCreatedAtDesc(any());
+        assertThat(result.data()).hasSize(1);
+        verify(auditLogRepository, org.mockito.Mockito.never())
+                .findByTenantIdOrderByCreatedAtDesc(any(), any());
     }
 
     private AuditLog rowOf(UUID tenantPublicId) {
