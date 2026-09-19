@@ -70,10 +70,22 @@ public class UserBulkCreateWriter {
     /** Creates an import-only student with a generated username and first-login password change flag. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<Result> createGeneratedStudent(String username, UUID tenantId) {
+        return createGeneratedStudent(username, new Row(null, null, null, null, null, null), tenantId);
+    }
+
+    /** Creates an import-only student while preserving any optional roster profile fields. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Optional<Result> createGeneratedStudent(String username, Row row, UUID tenantId) {
         User user = new User();
         user.setUsername(username);
+        user.setEmail(row.email());
+        user.setFullName(row.fullName());
         user.setTenantId(tenantId);
         user.setRoles(Set.of(Role.STUDENT));
+        user.setStudentCode(row.studentCode());
+        user.setClassName(row.className());
+        user.setPhone(row.phone());
+        user.setDateOfBirth(row.dateOfBirth());
         user.setMustChangePassword(true);
 
         return persist(user);

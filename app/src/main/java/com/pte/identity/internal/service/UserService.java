@@ -21,6 +21,7 @@ import com.pte.identity.internal.exception.UserNotFoundException;
 import com.pte.identity.internal.mapper.UserMapper;
 import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
+import com.pte.identity.internal.util.UsernameGenerator;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -30,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -131,18 +133,29 @@ public class UserService {
 
         Set<String> seenInBatch = new HashSet<>();
         for (BulkCreateUserRow row : request.rows()) {
-            if (!seenInBatch.add(row.email())) {
+            String email = normalizeOptional(row.email());
+            if (email != null && !seenInBatch.add(email)) {
                 throw new DuplicateEmailInBatchException();
             }
         }
 
         List<BulkCreateUserRow> rows = request.rows();
-        List<String> emails = rows.stream().map(BulkCreateUserRow::email).toList();
-        Set<String> existingEmails = new HashSet<>(
-                userRepository.findByTenantIdAndEmailIn(tenantId, emails)
-                        .stream().map(User::getEmail).toList());
+        List<String> emails = rows.stream()
+                .map(BulkCreateUserRow::email)
+                .map(UserService::normalizeOptional)
+                .filter(email -> email != null)
+                .toList();
+        Set<String> existingEmails = emails.isEmpty()
+                ? Set.of()
+                : new HashSet<>(userRepository.findByTenantIdAndEmailIn(tenantId, emails)
+                        .stream().map(User::getEmail).map(UserService::normalizeOptional).toList());
 
-        long adding = rows.stream().filter(row -> !existingEmails.contains(row.email())).count();
+        long adding = rows.stream()
+                .filter(row -> {
+                    String email = normalizeOptional(row.email());
+                    return email == null || !existingEmails.contains(email);
+                })
+                .count();
         if (adding > 0L) {
             tenancyService.assertCanAddStudents(tenantId, adding);
         }
@@ -150,25 +163,61 @@ public class UserService {
         List<CreatedUser> created = new ArrayList<>();
         List<RowError> skipped = new ArrayList<>();
 
+        String tenantCode = null;
         for (int i = 0; i < rows.size(); i++) {
             BulkCreateUserRow row = rows.get(i);
             int rowIndex = i;
-            if (existingEmails.contains(row.email())) {
-                skipped.add(new RowError(rowIndex, row.email(), IdentityConstants.EMAIL_ALREADY_USED));
+            String email = normalizeOptional(row.email());
+            String fullName = normalizeOptional(row.fullName());
+            UserBulkCreateWriter.Row writerRow = new UserBulkCreateWriter.Row(
+                    email, fullName, row.studentCode(), row.className(), row.phone(), row.dateOfBirth());
+            if (email != null && existingEmails.contains(email)) {
+                skipped.add(new RowError(rowIndex, email, IdentityConstants.EMAIL_ALREADY_USED));
                 continue;
             }
-            UserBulkCreateWriter.Row writerRow = new UserBulkCreateWriter.Row(
-                    row.email(), row.fullName(), row.studentCode(), row.className(),
-                    row.phone(), row.dateOfBirth());
-            bulkCreateWriter.createOne(writerRow, tenantId)
+
+            Optional<UserBulkCreateWriter.Result> result;
+            if (email == null) {
+                if (tenantCode == null) {
+                    tenantCode = tenancyService.getTenantCode(tenantId);
+                }
+                result = createGeneratedStudentWithRetry(writerRow, tenantId, tenantCode);
+            } else {
+                result = bulkCreateWriter.createOne(writerRow, tenantId);
+            }
+
+            result
                     .ifPresentOrElse(
-                            result -> created.add(new CreatedUser(result.user().getPublicId(),
-                                    result.user().getEmail(), result.user().getFullName(),
-                                    result.generatedPassword())),
-                            () -> skipped.add(new RowError(rowIndex, row.email(), IdentityConstants.EMAIL_ALREADY_USED)));
+                            createdResult -> created.add(new CreatedUser(createdResult.user().getPublicId(),
+                                    createdResult.user().getUsername(), createdResult.user().getEmail(),
+                                    createdResult.user().getFullName(),
+                                    createdResult.generatedPassword())),
+                            () -> skipped.add(new RowError(rowIndex, email,
+                                    email == null ? IdentityConstants.ROSTER_IMPORT_FAILED
+                                            : IdentityConstants.EMAIL_ALREADY_USED)));
         }
 
         return new BulkCreateUsersResponse(created, skipped);
+    }
+
+    private Optional<UserBulkCreateWriter.Result> createGeneratedStudentWithRetry(
+            UserBulkCreateWriter.Row row, UUID tenantId, String tenantCode) {
+        for (int attempt = 0; attempt < IdentityConstants.ROSTER_USERNAME_COLLISION_RETRIES; attempt++) {
+            Optional<UserBulkCreateWriter.Result> result = bulkCreateWriter.createGeneratedStudent(
+                    UsernameGenerator.generate(tenantCode), row, tenantId);
+            if (result.isPresent()) {
+                return result;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static String normalizeOptional(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     @Transactional(readOnly = true)

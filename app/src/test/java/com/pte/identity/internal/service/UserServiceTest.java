@@ -36,6 +36,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
@@ -204,6 +205,7 @@ class UserServiceTest {
     private UserBulkCreateWriter.Result writerResult(String email, UUID publicId, String password) {
         User user = new User();
         user.setPublicId(publicId);
+        user.setUsername(email);
         user.setEmail(email);
         user.setFullName("Student " + email);
         return new UserBulkCreateWriter.Result(user, password);
@@ -230,6 +232,33 @@ class UserServiceTest {
         assertThat(response.skipped()).isEmpty();
         assertThat(response.created().get(0).generatedPassword()).matches("^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$");
         verify(tenancyService).assertCanAddStudents(tenantId, 2L);
+    }
+
+    @Test
+    void createBulk_allowsStudentRowWithoutEmailOrFullName_andReturnsGeneratedUsername() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        BulkCreateUserRow row = new BulkCreateUserRow(null, null, null, null, null, null);
+        BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(row), null);
+        UUID publicId = UUID.randomUUID();
+        User createdUser = new User();
+        createdUser.setPublicId(publicId);
+        createdUser.setUsername("school.abcd2345");
+
+        when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
+        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
+        when(bulkCreateWriter.createGeneratedStudent(anyString(), any(UserBulkCreateWriter.Row.class), eq(tenantId)))
+                .thenReturn(Optional.of(new UserBulkCreateWriter.Result(createdUser, "Abcd-2345")));
+
+        BulkCreateUsersResponse response = userService.createBulk(request, caller);
+
+        assertThat(response.created()).hasSize(1);
+        assertThat(response.created().get(0).username()).isEqualTo("school.abcd2345");
+        assertThat(response.created().get(0).email()).isNull();
+        assertThat(response.created().get(0).fullName()).isNull();
+        assertThat(response.skipped()).isEmpty();
+        verify(bulkCreateWriter, never()).createOne(any(), any());
+        verify(tenancyService).assertCanAddStudents(tenantId, 1L);
     }
 
     @Test

@@ -3,6 +3,8 @@ package com.pte.billing.internal.repository;
 import com.pte.billing.domain.Order;
 import com.pte.billing.domain.enums.OrderStatus;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -21,7 +23,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     boolean existsByTenantIdAndPlanIdAndStatusAndDeletedFalse(UUID tenantId, UUID planId,
             OrderStatus status);
 
-    List<Order> findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(UUID tenantId);
+    Page<Order> findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(UUID tenantId, Pageable pageable);
 
     List<Order> findByStatusAndDeletedFalseAndCreatedAtLessThanEqual(OrderStatus status,
             Instant createdAt);

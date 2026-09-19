@@ -2,12 +2,15 @@ package com.pte.identity.internal.repository;
 
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
+import com.pte.identity.domain.UserStatus;
 import com.pte.tenancy.domain.Tenant;
 import com.pte.tenancy.internal.repository.TenantRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 
 import java.util.List;
 import java.util.Set;
@@ -113,5 +116,35 @@ class UserRepositoryTest {
 
         assertThatThrownBy(() -> userRepository.saveAndFlush(second))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void examStaffPage_filtersStaffRolesSearchAndStatus() {
+        Tenant tenant = persistTenant("tenant-staff-" + UUID.randomUUID());
+
+        User examiner = new User();
+        examiner.setUsername("examiner@example.test");
+        examiner.setEmail("examiner@example.test");
+        examiner.setFullName("Examiner One");
+        examiner.setTenantId(tenant.getPublicId());
+        examiner.setStatus(UserStatus.ACTIVE);
+        examiner.setRoles(Set.of(Role.EXAMINER));
+        userRepository.save(examiner);
+
+        User student = new User();
+        student.setUsername("student@example.test");
+        student.setEmail("student@example.test");
+        student.setFullName("Student One");
+        student.setTenantId(tenant.getPublicId());
+        student.setRoles(Set.of(Role.STUDENT));
+        userRepository.saveAndFlush(student);
+
+        Page<User> result = userRepository.findPageForExamStaff(
+                tenant.getPublicId(), Set.of(Role.PROCTOR, Role.EXAMINER), Role.EXAMINER,
+                UserStatus.ACTIVE, "examiner", PageRequest.of(0, 20));
+
+        assertThat(result.getContent()).extracting(User::getUsername)
+                .containsExactly("examiner@example.test");
+        assertThat(result.getTotalElements()).isEqualTo(1);
     }
 }
