@@ -6,7 +6,8 @@ import java.util.UUID;
 /** Result of a bulk-create call. {@code generatedPassword} is write/return-once — never echoed by any other endpoint afterward. */
 public record BulkCreateUsersResponse(List<CreatedUser> created, List<RowError> skipped) {
 
-    public record CreatedUser(UUID publicId, String email, String fullName, String generatedPassword) {
+    public record CreatedUser(UUID publicId, String username, String email, String fullName,
+                              String generatedPassword) {
     }
 
     /** {@code reason} is one of IdentityConstants' error codes (e.g. EMAIL_ALREADY_USED). */
