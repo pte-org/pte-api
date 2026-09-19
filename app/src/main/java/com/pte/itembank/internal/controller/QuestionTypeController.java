@@ -1,13 +1,15 @@
 package com.pte.itembank.internal.controller;
 
 import com.pte.itembank.QuestionTypeService;
-import com.pte.itembank.dto.request.ImportQuestionTypesFromScoreTemplateRequest;
+import com.pte.itembank.dto.request.CreateQuestionTypeRequest;
 import com.pte.itembank.dto.request.UpdateQuestionTypeRequest;
 import com.pte.itembank.dto.response.QuestionTypeResponse;
+import com.pte.itembank.dto.response.SupportedQuestionTypeResponse;
 import com.pte.shared.web.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -37,20 +39,31 @@ public class QuestionTypeController {
         return ApiResponse.success(service.list(activeOnly));
     }
 
+    @GetMapping("/supported")
+    public ApiResponse<List<SupportedQuestionTypeResponse>> listSupported() {
+        return ApiResponse.success(service.listSupported());
+    }
+
     @GetMapping("/{publicId}")
     public ApiResponse<QuestionTypeResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(service.get(publicId));
     }
 
-    @PostMapping("/import/score-template")
-    public ApiResponse<List<QuestionTypeResponse>> importFromScoreTemplate(
-            @Valid @RequestBody ImportQuestionTypesFromScoreTemplateRequest request) {
-        return ApiResponse.success(service.importFromScoreTemplate(request));
+    @PostMapping
+    public ApiResponse<QuestionTypeResponse> create(
+            @Valid @RequestBody CreateQuestionTypeRequest request) {
+        return ApiResponse.success(service.create(request));
     }
 
     @PutMapping("/{publicId}")
     public ApiResponse<QuestionTypeResponse> update(@PathVariable UUID publicId,
                                                      @Valid @RequestBody UpdateQuestionTypeRequest request) {
         return ApiResponse.success(service.update(publicId, request));
+    }
+
+    @DeleteMapping("/{publicId}")
+    public ApiResponse<Void> delete(@PathVariable UUID publicId) {
+        service.delete(publicId);
+        return ApiResponse.success(null);
     }
 }

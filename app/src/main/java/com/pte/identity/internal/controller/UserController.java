@@ -4,6 +4,7 @@ import com.pte.identity.internal.dto.request.BulkCreateUsersRequest;
 import com.pte.identity.internal.dto.request.CreateUserRequest;
 import com.pte.identity.internal.dto.request.ResetPasswordRequest;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
+import com.pte.identity.internal.dto.response.GeneratedCredentialsResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.service.ExamStaffQueryService;
 import com.pte.identity.internal.service.UserService;
@@ -92,6 +93,11 @@ public class UserController {
     public ApiResponse<UserResponse> resetPassword(@PathVariable UUID publicId,
                                                     @Valid @RequestBody ResetPasswordRequest request) {
         return ApiResponse.success(userService.resetPassword(publicId, request, currentUser()));
+    }
+
+    @PostMapping("/{publicId}/credentials/send-email")
+    public ApiResponse<GeneratedCredentialsResponse> sendCredentialsEmail(@PathVariable UUID publicId) {
+        return ApiResponse.success(userService.sendGeneratedCredentials(publicId, currentUser()));
     }
 
     // Separate from GET /users (which is caller-tenant-scoped). A platform admin

@@ -1,10 +1,11 @@
 package com.pte.itembank;
 
 import com.pte.itembank.domain.QuestionTypeDefinition;
-import com.pte.itembank.dto.request.ImportQuestionTypesFromScoreTemplateRequest;
+import com.pte.itembank.domain.enums.PteSection;
+import com.pte.itembank.dto.request.CreateQuestionTypeRequest;
 import com.pte.itembank.dto.request.UpdateQuestionTypeRequest;
 import com.pte.itembank.dto.response.QuestionTypeResponse;
-import com.pte.itembank.internal.exception.QuestionTypeImportException;
+import com.pte.itembank.dto.response.SupportedQuestionTypeResponse;
 import com.pte.itembank.internal.repository.QuestionTypeRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,10 +19,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class QuestionTypeServiceTest {
@@ -48,6 +48,21 @@ class QuestionTypeServiceTest {
     }
 
     @Test
+    void listSupported_readsTheStandardTaskVocabularyFromTheBackend() {
+        List<SupportedQuestionTypeResponse> result = service.listSupported();
+
+        assertThat(result).hasSize(23);
+        assertThat(result).extracting(SupportedQuestionTypeResponse::code)
+                .contains("READ_ALOUD", "WRITE_FROM_DICTATION");
+        assertThat(result.stream().filter(type -> type.code().equals("READ_ALOUD")).findFirst())
+                .get()
+                .satisfies(type -> {
+                    assertThat(type.section()).isEqualTo(PteSection.SPEAKING);
+                    assertThat(type.scored()).isTrue();
+                });
+    }
+
+    @Test
     void update_persistsPresentationAndAuthoringMetadata_withoutChangingStableCode() {
         UUID publicId = UUID.randomUUID();
         QuestionTypeDefinition definition = definition("READ_ALOUD", true);
@@ -70,33 +85,57 @@ class QuestionTypeServiceTest {
     }
 
     @Test
-    void importFromScoreTemplate_createsMissingTypeFromUiSourceRow() {
-        when(repository.findMaxDisplayOrder()).thenReturn(0);
-        QuestionTypeDefinition persisted = definition("READ_ALOUD", true);
-        when(repository.findByCodeAndDeletedFalse("READ_ALOUD"))
-                .thenReturn(Optional.empty(), Optional.of(persisted));
+    void create_derivesCanonicalMetadataFromTheStandardTaskType() {
+        when(repository.findByCode("PERSONAL_INTRODUCTION")).thenReturn(Optional.empty());
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        List<QuestionTypeResponse> result = service.importFromScoreTemplate(
-                new ImportQuestionTypesFromScoreTemplateRequest(List.of(
-                        new ImportQuestionTypesFromScoreTemplateRequest.Item("READ_ALOUD", "SPEAKING", 1))));
+        QuestionTypeResponse result = service.create(new CreateQuestionTypeRequest(
+                " personal_introduction ", "Personal Introduction", "PI", "SPEAKING", 23, true));
 
-        var captor = forClass(QuestionTypeDefinition.class);
-        verify(repository).save(captor.capture());
-        assertThat(result).extracting(QuestionTypeResponse::code).containsExactly("READ_ALOUD");
-        assertThat(captor.getValue().getDisplayName()).isEqualTo("Read Aloud");
-        assertThat(captor.getValue().isRequiresPromptText()).isTrue();
-        assertThat(captor.getValue().getDisplayOrder()).isEqualTo(1);
+        assertThat(result.code()).isEqualTo("PERSONAL_INTRODUCTION");
+        assertThat(result.section()).isEqualTo("SPEAKING");
+        assertThat(result.scored()).isFalse();
+        assertThat(result.requiresPromptText()).isTrue();
     }
 
     @Test
-    void importFromScoreTemplate_rejectsUnknownTaskType() {
-        when(repository.findMaxDisplayOrder()).thenReturn(0);
+    void create_rejectsASectionThatDoesNotMatchTheStandardTaskType() {
+        assertThatThrownBy(() -> service.create(new CreateQuestionTypeRequest(
+                "READ_ALOUD", "Read aloud", "RA", "READING", 1, true)))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("INVALID_QUESTION_TYPE");
+    }
 
-        assertThatThrownBy(() -> service.importFromScoreTemplate(
-                new ImportQuestionTypesFromScoreTemplateRequest(List.of(
-                        new ImportQuestionTypesFromScoreTemplateRequest.Item("UNKNOWN", "READING", 1)))))
-                .isInstanceOf(QuestionTypeImportException.class);
+    @Test
+    void create_rejectsAnUnknownSectionWithTheCatalogValidationError() {
+        assertThatThrownBy(() -> service.create(new CreateQuestionTypeRequest(
+                "READ_ALOUD", "Read aloud", "RA", "NOT_A_SECTION", 1, true)))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("INVALID_QUESTION_TYPE");
+    }
+
+    @Test
+    void findDefinitionByCode_keepsDeletedMetadataAvailableToRuntimeValidation() {
+        QuestionTypeDefinition definition = definition("READ_ALOUD", false);
+        definition.setDeleted(true);
+        when(repository.findByCode("READ_ALOUD")).thenReturn(Optional.of(definition));
+
+        assertThat(service.findDefinitionByCode("READ_ALOUD")).containsSame(definition);
+    }
+
+    @Test
+    void delete_softDeletesTheCatalogRowToPreserveExistingQuestionReferences() {
+        UUID publicId = UUID.randomUUID();
+        QuestionTypeDefinition definition = definition("READ_ALOUD", true);
+        definition.setPublicId(publicId);
+        when(repository.findByPublicIdAndDeletedFalse(publicId)).thenReturn(Optional.of(definition));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.delete(publicId);
+
+        assertThat(definition.isDeleted()).isTrue();
+        assertThat(definition.isActive()).isFalse();
+        verify(repository).save(definition);
     }
 
     private QuestionTypeDefinition definition(String code, boolean active) {

@@ -25,4 +25,8 @@ public interface StudentRosterRow {
     String getClassPublicId();
 
     String getClassName();
+
+    String getUsername();
+
+    boolean getMustChangePassword();
 }

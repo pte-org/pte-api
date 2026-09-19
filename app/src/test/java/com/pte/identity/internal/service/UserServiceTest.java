@@ -1,5 +1,6 @@
 package com.pte.identity.internal.service;
 
+import com.pte.identity.UserCredentialsEmailRequestedEvent;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
@@ -10,6 +11,7 @@ import com.pte.identity.internal.dto.request.ChangePasswordRequest;
 import com.pte.identity.internal.dto.request.CreateUserRequest;
 import com.pte.identity.internal.dto.request.ResetPasswordRequest;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
+import com.pte.identity.internal.dto.response.GeneratedCredentialsResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.DuplicateEmailInBatchException;
 import com.pte.identity.internal.exception.ForbiddenPasswordResetException;
@@ -26,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -71,13 +74,16 @@ class UserServiceTest {
     @Mock
     private TenancyService tenancyService;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private UserService userService;
 
     @BeforeEach
     void setUp() {
         userService = new UserService(userRepository, loginHashRepository, passwordEncoder,
-                provisioningHelper, bulkCreateWriter, tenancyService);
+                provisioningHelper, bulkCreateWriter, tenancyService, eventPublisher);
     }
 
     private User userWithId(Long id, UUID publicId, UUID tenantId) {
@@ -390,6 +396,61 @@ class UserServiceTest {
 
         assertThat(response.publicId()).isEqualTo(userPublicId);
         assertThat(passwordEncoder.matches("NewPassword456", loginHash.getHash())).isTrue();
+    }
+
+    @Test
+    void sendGeneratedCredentials_rotatesHash_marksFirstLogin_andPublishesEmailEvent() {
+        UUID userPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        User student = userWithId(1L, userPublicId, tenantId);
+        student.setUsername("tenant.student");
+        student.setEmail("student@tenant.example");
+        student.setRoles(Set.of(Role.STUDENT));
+
+        LoginHash loginHash = new LoginHash();
+        loginHash.setUserId(1L);
+        loginHash.setHash(passwordEncoder.encode("OldPassword123"));
+
+        when(userRepository.findByPublicIdAndTenantId(userPublicId, tenantId)).thenReturn(Optional.of(student));
+        when(loginHashRepository.findByUserId(1L)).thenReturn(Optional.of(loginHash));
+
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        when(provisioningHelper.canManageTarget(caller, student.getRoles())).thenReturn(true);
+
+        GeneratedCredentialsResponse response = userService.sendGeneratedCredentials(userPublicId, caller);
+
+        assertThat(response.publicId()).isEqualTo(userPublicId);
+        assertThat(response.username()).isEqualTo("tenant.student");
+        assertThat(response.email()).isEqualTo("student@tenant.example");
+        assertThat(response.temporaryPassword()).matches("^[2-9A-HJ-NP-Za-hj-np-z]{4}-[2-9A-HJ-NP-Za-hj-np-z]{4}$");
+        assertThat(response.emailQueued()).isTrue();
+        assertThat(passwordEncoder.matches("OldPassword123", loginHash.getHash())).isFalse();
+        assertThat(passwordEncoder.matches(response.temporaryPassword(), loginHash.getHash())).isTrue();
+        assertThat(student.isMustChangePassword()).isTrue();
+        verify(eventPublisher).publishEvent(any(UserCredentialsEmailRequestedEvent.class));
+        verify(loginHashRepository).save(loginHash);
+        verify(userRepository).save(student);
+    }
+
+    @Test
+    void sendGeneratedCredentials_withoutEmail_rejectsBeforeHashChange() {
+        UUID userPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        User student = userWithId(1L, userPublicId, tenantId);
+        student.setUsername("tenant.student");
+        student.setEmail(null);
+        student.setRoles(Set.of(Role.STUDENT));
+
+        when(userRepository.findByPublicIdAndTenantId(userPublicId, tenantId)).thenReturn(Optional.of(student));
+
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        when(provisioningHelper.canManageTarget(caller, student.getRoles())).thenReturn(true);
+
+        assertThatThrownBy(() -> userService.sendGeneratedCredentials(userPublicId, caller))
+                .isInstanceOf(com.pte.identity.internal.exception.UserEmailRequiredException.class);
+
+        verify(loginHashRepository, never()).findByUserId(any());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test

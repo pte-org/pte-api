@@ -5,7 +5,7 @@ import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
 import com.pte.scoretemplate.domain.enums.ScoringMethod;
 import com.pte.scoretemplate.domain.enums.TimingMode;
-import com.pte.scoretemplate.dto.request.ImportScoreTemplateRequest;
+import com.pte.scoretemplate.dto.request.CreateScoreTemplateRequest;
 import com.pte.scoretemplate.dto.request.ReplaceScoreTemplateItemsRequest;
 import com.pte.scoretemplate.dto.request.ScoreTemplateItemRequest;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
@@ -48,9 +48,9 @@ public class ScoreTemplateAdminService {
         return ScoreTemplateMapper.toResponse(findByPublicId(publicId));
     }
 
-    /** Imports a UI-exported template as a new DRAFT in the same code family. */
+    /** Creates an empty DRAFT in the next version of a template code family. */
     @Transactional
-    public ScoreTemplateResponse importAsDraft(ImportScoreTemplateRequest request) {
+    public ScoreTemplateResponse createDraft(CreateScoreTemplateRequest request) {
         String code = request.code().trim();
         repository.findAllByCodeForUpdate(code);
         int nextVersion = repository.findMaxVersionByCode(code) + 1;
@@ -60,7 +60,6 @@ public class ScoreTemplateAdminService {
         draft.setVersion(nextVersion);
         draft.setName(request.name().trim());
         draft.setStatus(ScoreTemplateStatus.DRAFT);
-        request.items().forEach(itemRequest -> draft.addItem(toEntity(itemRequest)));
 
         return ScoreTemplateMapper.toResponse(saveOrTranslateConflict(draft));
     }
@@ -93,6 +92,14 @@ public class ScoreTemplateAdminService {
         template.getItems().clear();
         request.items().forEach(itemRequest -> template.addItem(toEntity(itemRequest)));
         return ScoreTemplateMapper.toResponse(repository.save(template));
+    }
+
+    /** Deletes a DRAFT; ACTIVE and RETIRED versions remain immutable and auditable. */
+    @Transactional
+    public void deleteDraft(UUID publicId) {
+        ScoreTemplate template = findByPublicId(publicId);
+        requireDraft(template);
+        repository.delete(template);
     }
 
     /**

@@ -15,5 +15,7 @@ public record StudentRosterRowResponse(
         UUID programPublicId,
         String programName,
         UUID classPublicId,
-        String className) {
+        String className,
+        String username,
+        boolean mustChangePassword) {
 }

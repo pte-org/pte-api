@@ -5,7 +5,7 @@ import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
 import com.pte.scoretemplate.domain.enums.ScoringMethod;
 import com.pte.scoretemplate.domain.enums.TimingMode;
-import com.pte.scoretemplate.dto.request.ImportScoreTemplateRequest;
+import com.pte.scoretemplate.dto.request.CreateScoreTemplateRequest;
 import com.pte.scoretemplate.dto.request.ReplaceScoreTemplateItemsRequest;
 import com.pte.scoretemplate.dto.request.ScoreTemplateItemRequest;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
@@ -146,6 +146,57 @@ class ScoreTemplateAdminServiceTest {
     }
 
     @Test
+    void replaceItems_allowsEmptyDraftWhileItIsBeingBuilt() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate draft = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ScoreTemplateResponse response = service.replaceItems(
+                publicId, new ReplaceScoreTemplateItemsRequest("Empty draft", List.of()));
+
+        assertThat(response.name()).isEqualTo("Empty draft");
+        assertThat(response.items()).isEmpty();
+    }
+
+    @Test
+    void createDraft_createsEmptyNextVersion() {
+        when(repository.findMaxVersionByCode("CUSTOM")).thenReturn(2);
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ScoreTemplateResponse response = service.createDraft(
+                new CreateScoreTemplateRequest("CUSTOM", "Custom template"));
+
+        assertThat(response.code()).isEqualTo("CUSTOM");
+        assertThat(response.version()).isEqualTo(3);
+        assertThat(response.name()).isEqualTo("Custom template");
+        assertThat(response.status()).isEqualTo("DRAFT");
+        assertThat(response.items()).isEmpty();
+    }
+
+    @Test
+    void deleteDraft_removesOnlyDraftTemplates() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate draft = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+
+        service.deleteDraft(publicId);
+
+        verify(repository).delete(draft);
+    }
+
+    @Test
+    void deleteDraft_onActiveTemplate_throwsNotDraft() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate active = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.ACTIVE);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(active));
+
+        assertThatThrownBy(() -> service.deleteDraft(publicId))
+                .isInstanceOf(ScoreTemplateNotDraftException.class);
+        verify(repository, never()).delete(any());
+    }
+
+    @Test
     void cloneToDraft_copiesAllItemsAndIncrementsVersion() {
         UUID sourceId = UUID.randomUUID();
         ScoreTemplate source = fullyValidTemplate(sourceId, "APEUNI_V5", 3, ScoreTemplateStatus.ACTIVE);
@@ -172,23 +223,6 @@ class ScoreTemplateAdminServiceTest {
 
         assertThatThrownBy(() -> service.cloneToDraft(sourceId))
                 .isInstanceOf(ScoreTemplateConcurrentModificationException.class);
-    }
-
-    @Test
-    void importAsDraft_createsNewVersionFromUiExport() {
-        when(repository.findMaxVersionByCode("PTE_Score_Template")).thenReturn(1);
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-
-        ScoreTemplateResponse response = service.importAsDraft(new ImportScoreTemplateRequest(
-                "PTE_Score_Template",
-                "Imported VPS template",
-                List.of(sampleItemRequest())));
-
-        assertThat(response.code()).isEqualTo("PTE_Score_Template");
-        assertThat(response.version()).isEqualTo(2);
-        assertThat(response.status()).isEqualTo("DRAFT");
-        assertThat(response.name()).isEqualTo("Imported VPS template");
-        assertThat(response.items()).hasSize(1);
     }
 
     private ScoreTemplateItemRequest sampleItemRequest() {

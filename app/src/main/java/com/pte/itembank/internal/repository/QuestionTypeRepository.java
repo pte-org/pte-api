@@ -16,6 +16,9 @@ public interface QuestionTypeRepository extends JpaRepository<QuestionTypeDefini
 
     Optional<QuestionTypeDefinition> findByCodeAndDeletedFalse(String code);
 
+    /** Includes soft-deleted rows so a deleted standard type can be restored. */
+    Optional<QuestionTypeDefinition> findByCode(String code);
+
     Optional<QuestionTypeDefinition> findByPublicIdAndDeletedFalse(UUID publicId);
 
     @Query("SELECT COALESCE(MAX(q.displayOrder), 0) FROM QuestionTypeDefinition q WHERE q.deleted = false")

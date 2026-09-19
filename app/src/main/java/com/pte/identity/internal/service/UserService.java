@@ -1,5 +1,6 @@
 package com.pte.identity.internal.service;
 
+import com.pte.identity.UserCredentialsEmailRequestedEvent;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.constant.IdentityConstants;
@@ -12,18 +13,22 @@ import com.pte.identity.internal.dto.request.ResetPasswordRequest;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse.CreatedUser;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse.RowError;
+import com.pte.identity.internal.dto.response.GeneratedCredentialsResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.DuplicateEmailInBatchException;
 import com.pte.identity.internal.exception.EmailAlreadyUsedException;
 import com.pte.identity.internal.exception.ForbiddenPasswordResetException;
 import com.pte.identity.internal.exception.InvalidLoginException;
 import com.pte.identity.internal.exception.UserNotFoundException;
+import com.pte.identity.internal.exception.UserEmailRequiredException;
 import com.pte.identity.internal.mapper.UserMapper;
 import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
+import com.pte.identity.internal.util.PasswordGenerator;
 import com.pte.identity.internal.util.UsernameGenerator;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -64,16 +69,19 @@ public class UserService {
     private final UserProvisioningHelper provisioningHelper;
     private final UserBulkCreateWriter bulkCreateWriter;
     private final TenancyService tenancyService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public UserService(UserRepository userRepository, LoginHashRepository loginHashRepository,
                        PasswordEncoder passwordEncoder, UserProvisioningHelper provisioningHelper,
-                       UserBulkCreateWriter bulkCreateWriter, TenancyService tenancyService) {
+                       UserBulkCreateWriter bulkCreateWriter, TenancyService tenancyService,
+                       ApplicationEventPublisher eventPublisher) {
         this.userRepository = userRepository;
         this.loginHashRepository = loginHashRepository;
         this.passwordEncoder = passwordEncoder;
         this.provisioningHelper = provisioningHelper;
         this.bulkCreateWriter = bulkCreateWriter;
         this.tenancyService = tenancyService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -274,6 +282,39 @@ public class UserService {
         loginHashRepository.save(loginHash);
 
         return UserMapper.toResponse(user);
+    }
+
+    /**
+     * Generates a fresh temporary password and queues it for delivery. The
+     * previous password is intentionally not recoverable because only a hash
+     * is stored. The cleartext value is returned exactly once to the
+     * authenticated operator and carried only by the in-memory notification
+     * event after the transaction commits.
+     */
+    @Transactional
+    public GeneratedCredentialsResponse sendGeneratedCredentials(UUID publicId, CurrentUser caller) {
+        User user = findScoped(publicId, caller);
+        if (!provisioningHelper.canManageTarget(caller, user.getRoles())) {
+            throw new ForbiddenPasswordResetException();
+        }
+        if (user.getEmail() == null || user.getEmail().isBlank()) {
+            throw new UserEmailRequiredException();
+        }
+
+        String temporaryPassword = PasswordGenerator.generateReadable();
+        LoginHash loginHash = loginHashRepository.findByUserId(user.getId())
+                .orElseThrow(UserNotFoundException::new);
+        loginHash.setHash(passwordEncoder.encode(temporaryPassword));
+        loginHashRepository.save(loginHash);
+        user.setMustChangePassword(true);
+        userRepository.save(user);
+
+        eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(
+                UUID.randomUUID(), user.getPublicId(), user.getTenantId(), user.getUsername(), user.getEmail(),
+                user.getFullName(), temporaryPassword));
+
+        return new GeneratedCredentialsResponse(user.getPublicId(), user.getUsername(), user.getEmail(),
+                user.getFullName(), temporaryPassword, true);
     }
 
     /** Changes the authenticated user's password and clears the first-login flag. */
