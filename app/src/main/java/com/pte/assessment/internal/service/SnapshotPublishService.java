@@ -158,10 +158,10 @@ public class SnapshotPublishService {
 
     /**
      * Frozen option shape stored in {@code SnapshotItem.optionsJson}.
-     * {@code blankIndex} is null except for {@code FILL_BLANKS_READING_WRITING}
+     * {@code blankIndex} is null except for {@code FILL_IN_THE_BLANKS_DROPDOWN}
      * options, where it groups options under their owning blank; {@code
      * correctGapIndex} is scoring-only, set only for {@code
-     * FILL_BLANKS_READING} correct options. {@code attempt}'s own frozen-option
+     * FILL_IN_THE_BLANKS_DRAG_AND_DROP} correct options. {@code attempt}'s own frozen-option
      * reader only needs {@code text}/{@code orderIndex}/{@code blankIndex}
      * (unknown fields deserialize as ignored by default), so the two shapes are
      * not required to stay field-for-field identical — only {@code scoring}'s

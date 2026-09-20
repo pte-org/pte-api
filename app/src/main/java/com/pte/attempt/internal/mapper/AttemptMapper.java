@@ -105,7 +105,7 @@ public class AttemptMapper {
 
     /**
      * Flat, ungrouped option list for every task type except
-     * {@code FILL_BLANKS_READING_WRITING} — {@code null} when the parsed
+     * {@code FILL_IN_THE_BLANKS_DROPDOWN} — {@code null} when the parsed
      * options are blank-grouped instead (never both populated on one task,
      * per {@link TaskView}'s doc comment).
      */
@@ -117,7 +117,7 @@ public class AttemptMapper {
     }
 
     /**
-     * Groups parsed options by {@code blankIndex} for {@code FILL_BLANKS_READING_WRITING}
+     * Groups parsed options by {@code blankIndex} for {@code FILL_IN_THE_BLANKS_DROPDOWN}
      * — {@code null} when no option carries a {@code blankIndex} (every other task type).
      */
     private List<BlankGroupView> toBlankGroups(List<FrozenOption> parsed) {
@@ -135,7 +135,7 @@ public class AttemptMapper {
     /**
      * Mirrors assessment's frozen option shape (text/correct/orderIndex/blankIndex)
      * — {@code correct} is read but discarded. {@code blankIndex} is null except
-     * for {@code FILL_BLANKS_READING_WRITING} options; must stay structurally
+     * for {@code FILL_IN_THE_BLANKS_DROPDOWN} options; must stay structurally
      * identical to assessment's own frozen-option shape, which writes this same
      * JSON into {@code SnapshotItem.optionsJson}.
      */

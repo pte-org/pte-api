@@ -14,10 +14,10 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * FR-05: activation validation is deliberately NOT "weights sum to 100" (the
- * source V5 table itself doesn't, due to rounding) — only structural
- * soundness is enforced. No Spring context (plain JUnit + AssertJ), matching
- * this codebase's other stateless-validator tests.
+ * FR-05: structural soundness, plus an exact-100 total on each of the 4
+ * skill weight columns (OVERALL is exempt — never required to hit a fixed
+ * total). No Spring context (plain JUnit + AssertJ), matching this
+ * codebase's other stateless-validator tests.
  */
 class ScoreTemplateActivationValidatorTest {
 
@@ -26,20 +26,26 @@ class ScoreTemplateActivationValidatorTest {
             "READ_ALOUD", "REPEAT_SENTENCE", "DESCRIBE_IMAGE", "RE_TELL_LECTURE", "ANSWER_SHORT_QUESTION",
             "RESPOND_TO_A_SITUATION", "SUMMARIZE_GROUP_DISCUSSION",
             "SUMMARIZE_WRITTEN_TEXT", "WRITE_ESSAY",
-            "MC_READING_SINGLE", "MC_READING_MULTIPLE", "RE_ORDER_PARAGRAPHS", "FILL_BLANKS_READING",
-            "FILL_BLANKS_READING_WRITING",
-            "SUMMARIZE_SPOKEN_TEXT", "MC_LISTENING_SINGLE", "MC_LISTENING_MULTIPLE", "FILL_BLANKS_LISTENING",
+            "MC_READING_SINGLE", "MC_READING_MULTIPLE", "RE_ORDER_PARAGRAPHS", "FILL_IN_THE_BLANKS_DRAG_AND_DROP",
+            "FILL_IN_THE_BLANKS_DROPDOWN",
+            "SUMMARIZE_SPOKEN_TEXT", "MC_LISTENING_SINGLE", "MC_LISTENING_MULTIPLE", "FILL_IN_THE_BLANKS_TYPE_IN",
             "HIGHLIGHT_CORRECT_SUMMARY", "SELECT_MISSING_WORD", "HIGHLIGHT_INCORRECT_WORDS", "WRITE_FROM_DICTATION");
 
-    /** One valid item per required task type: min=1/max=2, every weight column gets >0 from at least one item. */
+    /**
+     * One valid item per required task type: min=1/max=2. Every weight goes
+     * to the last item (100) and every other item gets 0 — the simplest
+     * distribution that satisfies both "every skill total > 0" and the new
+     * "every skill total == exactly 100" check.
+     */
     private ScoreTemplate validTemplate() {
         ScoreTemplate template = new ScoreTemplate();
         template.setCode("TEST");
         template.setVersion(1);
         template.setName("Test template");
-        int seq = 0;
-        for (String taskType : REQUIRED_TASK_TYPES) {
-            template.addItem(item(taskType, seq++, 1, 2, BigDecimal.ONE));
+        int lastIndex = REQUIRED_TASK_TYPES.size() - 1;
+        for (int i = 0; i <= lastIndex; i++) {
+            BigDecimal weight = i == lastIndex ? BigDecimal.valueOf(100) : BigDecimal.ZERO;
+            template.addItem(item(REQUIRED_TASK_TYPES.get(i), i, 1, 2, weight));
         }
         return template;
     }
@@ -116,6 +122,36 @@ class ScoreTemplateActivationValidatorTest {
         assertThatThrownBy(() -> ScoreTemplateActivationValidator.validate(template))
                 .isInstanceOf(ScoreTemplateValidationException.class)
                 .hasMessageContaining("LISTENING");
+    }
+
+    @Test
+    void validate_skillWeightTotalUnder100_throws() {
+        ScoreTemplate template = validTemplate();
+        // Still >0 (passes the positive-weight check) but short of 100.
+        template.getItems().get(template.getItems().size() - 1).setReadingWeight(BigDecimal.valueOf(99));
+
+        assertThatThrownBy(() -> ScoreTemplateActivationValidator.validate(template))
+                .isInstanceOf(ScoreTemplateValidationException.class)
+                .hasMessageContaining("READING");
+    }
+
+    @Test
+    void validate_skillWeightTotalOver100_throws() {
+        ScoreTemplate template = validTemplate();
+        template.getItems().get(0).setWritingWeight(BigDecimal.ONE);
+
+        assertThatThrownBy(() -> ScoreTemplateActivationValidator.validate(template))
+                .isInstanceOf(ScoreTemplateValidationException.class)
+                .hasMessageContaining("WRITING");
+    }
+
+    @Test
+    void validate_overallWeightNotExactly100_doesNotThrow() {
+        ScoreTemplate template = validTemplate();
+        template.getItems().get(template.getItems().size() - 1).setOverallWeight(BigDecimal.valueOf(50));
+        template.getItems().get(0).setOverallWeight(BigDecimal.valueOf(3));
+
+        assertThatCode(() -> ScoreTemplateActivationValidator.validate(template)).doesNotThrowAnyException();
     }
 
     @Test
