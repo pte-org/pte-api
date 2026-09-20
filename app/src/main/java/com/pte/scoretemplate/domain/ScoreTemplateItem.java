@@ -1,7 +1,6 @@
 package com.pte.scoretemplate.domain;
 
 import com.pte.scoretemplate.domain.enums.ScoringMethod;
-import com.pte.scoretemplate.domain.enums.TimingMode;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -67,10 +66,6 @@ public class ScoreTemplateItem extends BaseEntity {
 
     @Column(nullable = false)
     private int responseSeconds;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private TimingMode timingMode;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

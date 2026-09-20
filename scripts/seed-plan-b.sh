@@ -134,11 +134,11 @@ for i in $(seq 1 3); do
 done
 
 for i in $(seq 1 5); do
-  publish_question "{\"pteTaskType\":\"FILL_BLANKS_READING\",\"title\":\"FBR $RUN_ID-$i\",\"promptText\":\"Climate change is one of the most ___ issues of our time.\",\"options\":[{\"text\":\"pressing\",\"correct\":true,\"orderIndex\":0},{\"text\":\"irrelevant\",\"correct\":false,\"orderIndex\":1},{\"text\":\"amusing\",\"correct\":false,\"orderIndex\":2}]}"
+  publish_question "{\"pteTaskType\":\"FILL_IN_THE_BLANKS_DRAG_AND_DROP\",\"title\":\"FBR $RUN_ID-$i\",\"promptText\":\"Climate change is one of the most ___ issues of our time.\",\"options\":[{\"text\":\"pressing\",\"correct\":true,\"orderIndex\":0},{\"text\":\"irrelevant\",\"correct\":false,\"orderIndex\":1},{\"text\":\"amusing\",\"correct\":false,\"orderIndex\":2}]}"
 done
 
 for i in $(seq 1 6); do
-  publish_question "{\"pteTaskType\":\"FILL_BLANKS_READING_WRITING\",\"title\":\"FBRW $RUN_ID-$i\",\"promptText\":\"Solar power has become increasingly ___ over the past decade.\",\"options\":[{\"text\":\"affordable\",\"correct\":true,\"orderIndex\":0},{\"text\":\"forbidden\",\"correct\":false,\"orderIndex\":1},{\"text\":\"irrelevant\",\"correct\":false,\"orderIndex\":2}]}"
+  publish_question "{\"pteTaskType\":\"FILL_IN_THE_BLANKS_DROPDOWN\",\"title\":\"FBRW $RUN_ID-$i\",\"promptText\":\"Solar power has become increasingly ___ over the past decade.\",\"options\":[{\"text\":\"affordable\",\"correct\":true,\"orderIndex\":0},{\"text\":\"forbidden\",\"correct\":false,\"orderIndex\":1},{\"text\":\"irrelevant\",\"correct\":false,\"orderIndex\":2}]}"
 done
 
 echo "== Creating exam Session (skills: READING, gated by the Subscription) as host =="

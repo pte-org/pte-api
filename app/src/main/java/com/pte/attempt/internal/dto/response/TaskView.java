@@ -8,7 +8,7 @@ import java.util.UUID;
  * Student-facing task content. Deliberately excludes
  * {@code correctAnswerText}/{@code referenceAnswerText} and options'
  * {@code correct} flag — those stay server-side for scoring only.
- * {@code blankGroups} is populated only for {@code FILL_BLANKS_READING_WRITING}
+ * {@code blankGroups} is populated only for {@code FILL_IN_THE_BLANKS_DROPDOWN}
  * (each blank has its own distinct option list); {@code options} carries every
  * other task type's flat choice/word-bank/paragraph list. The two are mutually
  * exclusive per task — never both populated at once.

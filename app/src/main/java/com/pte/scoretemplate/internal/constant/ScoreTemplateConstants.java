@@ -14,6 +14,7 @@ public final class ScoreTemplateConstants {
     public static final String INVALID_COUNT_RANGE = "minCount/maxCount invalid for task type ";
     public static final String NEGATIVE_WEIGHT = "Weight cannot be negative for task type ";
     public static final String SKILL_WITH_NO_WEIGHT = "No task type contributes any weight to skill ";
+    public static final String SKILL_WEIGHT_NOT_100 = "Skill weight column must total exactly 100 for ";
 
     private ScoreTemplateConstants() {
     }

@@ -3,8 +3,6 @@ package com.pte.scoretemplate.internal.service;
 import com.pte.scoretemplate.domain.ScoreTemplate;
 import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
-import com.pte.scoretemplate.domain.enums.ScoringMethod;
-import com.pte.scoretemplate.domain.enums.TimingMode;
 import com.pte.scoretemplate.dto.request.CreateScoreTemplateRequest;
 import com.pte.scoretemplate.dto.request.ReplaceScoreTemplateItemsRequest;
 import com.pte.scoretemplate.dto.request.ScoreTemplateItemRequest;
@@ -12,13 +10,14 @@ import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.scoretemplate.internal.exception.ScoreTemplateConcurrentModificationException;
 import com.pte.scoretemplate.internal.exception.ScoreTemplateNotDraftException;
 import com.pte.scoretemplate.internal.exception.ScoreTemplateNotFoundException;
-import com.pte.scoretemplate.internal.exception.ScoreTemplateValidationException;
 import com.pte.scoretemplate.internal.mapper.ScoreTemplateMapper;
 import com.pte.scoretemplate.internal.repository.ScoreTemplateRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.UUID;
 
@@ -83,7 +82,14 @@ public class ScoreTemplateAdminService {
         return ScoreTemplateMapper.toResponse(saveOrTranslateConflict(draft));
     }
 
-    /** Replaces a DRAFT's name + full item list — no partial/incremental item edits (FR-02). */
+    /**
+     * Replaces a DRAFT's name + full item list — no partial/incremental item
+     * edits (FR-02). Enforces the exact-100 skill-weight check on every
+     * save (not only at {@link #activate}) so a DRAFT in the database is
+     * never left with weights that don't add up — {@code overallWeight} is
+     * recomputed here too (via {@code toEntity}), on every save, regardless
+     * of whether this validation passes or the caller is mid-edit.
+     */
     @Transactional
     public ScoreTemplateResponse replaceItems(UUID draftPublicId, ReplaceScoreTemplateItemsRequest request) {
         ScoreTemplate template = findByPublicId(draftPublicId);
@@ -91,6 +97,7 @@ public class ScoreTemplateAdminService {
         template.setName(request.name());
         template.getItems().clear();
         request.items().forEach(itemRequest -> template.addItem(toEntity(itemRequest)));
+        ScoreTemplateActivationValidator.validateSkillWeightTotals(template);
         return ScoreTemplateMapper.toResponse(repository.save(template));
     }
 
@@ -105,9 +112,16 @@ public class ScoreTemplateAdminService {
     /**
      * FR-04/FR-05: validates, then in one transaction retires whichever
      * template is currently ACTIVE (if any, and if not the target itself)
-     * and activates the target. The partial unique ACTIVE index is the
-     * final safety net if two admins race this concurrently — translated to
-     * a clean 409 rather than a raw 500.
+     * and activates the target. The old row is retired via
+     * {@code saveAndFlush} — not left to Hibernate's automatic dirty-check
+     * flush — because the partial unique ACTIVE index sees both rows as
+     * ACTIVE for an instant otherwise: Hibernate doesn't guarantee it flushes
+     * the retire-UPDATE before the activate-UPDATE just because the source
+     * mutates {@code active} first, and flushing them in the wrong order
+     * trips the index mid-transaction even though the net result would have
+     * been valid. That same index is still the final safety net for two
+     * admins racing this concurrently — translated to a clean 409 rather
+     * than a raw 500.
      */
     @Transactional
     public ScoreTemplateResponse activate(UUID publicId) {
@@ -117,7 +131,10 @@ public class ScoreTemplateAdminService {
         repository.findAllByCodeForUpdate(target.getCode());
         repository.findWithItemsByStatus(ScoreTemplateStatus.ACTIVE)
                 .filter(active -> !active.getPublicId().equals(target.getPublicId()))
-                .ifPresent(active -> active.setStatus(ScoreTemplateStatus.RETIRED));
+                .ifPresent(active -> {
+                    active.setStatus(ScoreTemplateStatus.RETIRED);
+                    repository.saveAndFlush(active);
+                });
         target.setStatus(ScoreTemplateStatus.ACTIVE);
 
         return ScoreTemplateMapper.toResponse(saveOrTranslateConflict(target));
@@ -150,7 +167,6 @@ public class ScoreTemplateAdminService {
         copy.setMaxCount(source.getMaxCount());
         copy.setPrepSeconds(source.getPrepSeconds());
         copy.setResponseSeconds(source.getResponseSeconds());
-        copy.setTimingMode(source.getTimingMode());
         copy.setScoringMethod(source.getScoringMethod());
         copy.setOverallWeight(source.getOverallWeight());
         copy.setSpeakingWeight(source.getSpeakingWeight());
@@ -169,21 +185,32 @@ public class ScoreTemplateAdminService {
         item.setMaxCount(request.maxCount());
         item.setPrepSeconds(request.prepSeconds());
         item.setResponseSeconds(request.responseSeconds());
-        item.setTimingMode(parseEnum(TimingMode.class, request.timingMode(), request.taskType()));
-        item.setScoringMethod(parseEnum(ScoringMethod.class, request.scoringMethod(), request.taskType()));
-        item.setOverallWeight(request.overallWeight());
+        item.setScoringMethod(TaskTypeScoringMethods.resolve(request.taskType()));
         item.setSpeakingWeight(request.speakingWeight());
         item.setWritingWeight(request.writingWeight());
         item.setReadingWeight(request.readingWeight());
         item.setListeningWeight(request.listeningWeight());
+        item.setOverallWeight(computeOverallWeight(
+                request.speakingWeight(), request.writingWeight(), request.readingWeight(), request.listeningWeight()));
         return item;
     }
 
-    private <E extends Enum<E>> E parseEnum(Class<E> type, String value, String taskType) {
-        try {
-            return Enum.valueOf(type, value);
-        } catch (IllegalArgumentException ex) {
-            throw new ScoreTemplateValidationException("Invalid " + type.getSimpleName() + " '" + value + "' for task type " + taskType);
-        }
+    /**
+     * PTE weighs all 4 communicative skills equally toward the overall
+     * score, so a task type's overall contribution is simply the mean of
+     * its 4 skill weights — verified cell-by-cell against the APEUni V5
+     * table (every one of the 22 rows matches exactly). Never admin input:
+     * an admin typing a number here that didn't match this formula would
+     * silently desync the displayed "Overall %" from what actually drives
+     * scoring. Rounding independently per row (rather than distributing a
+     * remainder) can leave the 22 rows summing to e.g. 100.01 instead of
+     * 100.00 — harmless and expected, matching the source table itself;
+     * see {@link ScoreTemplateActivationValidator} for why OVERALL is
+     * exempt from the exact-100 check the other 4 columns get.
+     */
+    private static BigDecimal computeOverallWeight(
+            BigDecimal speakingWeight, BigDecimal writingWeight, BigDecimal readingWeight, BigDecimal listeningWeight) {
+        BigDecimal sum = speakingWeight.add(writingWeight).add(readingWeight).add(listeningWeight);
+        return sum.divide(BigDecimal.valueOf(4), 2, RoundingMode.HALF_UP);
     }
 }

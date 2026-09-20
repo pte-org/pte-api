@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
  * populated (answer is one or more option picks). The two structured
  * Listening task types are decoded by their named sets; the five remaining
  * types continue through the generic TEXT/SELECTION fallback.
- * FILL_BLANKS_LISTENING and HIGHLIGHT_INCORRECT_WORDS use explicit task-type
+ * FILL_IN_THE_BLANKS_TYPE_IN and HIGHLIGHT_INCORRECT_WORDS use explicit task-type
  * sets because their comma-separated payload shapes are ambiguous without
  * task context; malformed or unparseable payloads use {@link
  * AnswerPayloadKind#UNRECOGNIZED} rather than crashing.
@@ -53,8 +53,8 @@ public class AnswerPayloadDecoder {
             ScoringConstants.TASK_TYPE_RESPOND_TO_A_SITUATION,
             ScoringConstants.TASK_TYPE_SUMMARIZE_GROUP_DISCUSSION);
 
-    private static final Set<String> FILL_BLANKS_LISTENING_TASK_TYPES = Set.of(
-            ScoringConstants.TASK_TYPE_FILL_BLANKS_LISTENING);
+    private static final Set<String> FILL_IN_THE_BLANKS_TYPE_IN_TASK_TYPES = Set.of(
+            ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_TYPE_IN);
 
     private static final Set<String> HIGHLIGHT_INCORRECT_WORDS_TASK_TYPES = Set.of(
             ScoringConstants.TASK_TYPE_HIGHLIGHT_INCORRECT_WORDS);
@@ -70,7 +70,7 @@ public class AnswerPayloadDecoder {
             return decodeAudio(answer);
         }
         if (answer.getTaskType() != null
-                && FILL_BLANKS_LISTENING_TASK_TYPES.contains(answer.getTaskType())
+                && FILL_IN_THE_BLANKS_TYPE_IN_TASK_TYPES.contains(answer.getTaskType())
                 && answer.getOptionsJson() == null) {
             return decodePositionalSelection(answer);
         }

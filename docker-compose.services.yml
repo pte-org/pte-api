@@ -56,6 +56,13 @@ services:
       MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-false}
       MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS:-false}
       MAIL_SMTP_STARTTLS_REQUIRED: ${MAIL_SMTP_STARTTLS_REQUIRED:-false}
+      # Spring Boot's MailHealthIndicator calls Transport.connect() with a
+      # non-null (empty-string) username, which JavaMail treats as an AUTH
+      # attempt regardless of mail.smtp.auth=false — always fails against
+      # Mailpit (no auth), permanently tanking the app's aggregate
+      # /actuator/health and this container's healthcheck. Disabled here
+      # since local dev has no real mail credentials to satisfy it anyway.
+      MANAGEMENT_HEALTH_MAIL_ENABLED: ${MANAGEMENT_HEALTH_MAIL_ENABLED:-false}
       TENANT_APPLICATION_RESPONSE_SLA_HOURS: ${TENANT_APPLICATION_RESPONSE_SLA_HOURS:-72}
       # com.pte.proctoring (Phase 09) — STOMP console origin(s); override per environment.
       PROCTOR_WS_ALLOWED_ORIGINS: ${PROCTOR_WS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}

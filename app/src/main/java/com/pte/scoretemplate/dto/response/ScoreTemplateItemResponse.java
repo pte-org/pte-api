@@ -10,7 +10,6 @@ public record ScoreTemplateItemResponse(
         int maxCount,
         int prepSeconds,
         int responseSeconds,
-        String timingMode,
         String scoringMethod,
         BigDecimal overallWeight,
         BigDecimal speakingWeight,

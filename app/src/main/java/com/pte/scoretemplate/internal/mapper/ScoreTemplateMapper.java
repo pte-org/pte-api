@@ -29,7 +29,6 @@ public final class ScoreTemplateMapper {
                 item.getMaxCount(),
                 item.getPrepSeconds(),
                 item.getResponseSeconds(),
-                item.getTimingMode().name(),
                 item.getScoringMethod().name(),
                 item.getOverallWeight(),
                 item.getSpeakingWeight(),

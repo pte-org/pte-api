@@ -21,7 +21,7 @@ import java.util.TreeMap;
  * the four option-based Listening types ({@code MC_LISTENING_SINGLE}, {@code
  * MC_LISTENING_MULTIPLE}, {@code HIGHLIGHT_CORRECT_SUMMARY}, and {@code
  * SELECT_MISSING_WORD}), plus the reference-based {@code
- * FILL_BLANKS_LISTENING}, {@code HIGHLIGHT_INCORRECT_WORDS}, and {@code
+ * FILL_IN_THE_BLANKS_TYPE_IN}, {@code HIGHLIGHT_INCORRECT_WORDS}, and {@code
  * WRITE_FROM_DICTATION} types. Since Phase 4 (plans/score-template-exam-generation),
  * WHICH task types these are is the pinned {@code ScoreTemplate}'s decision
  * (via {@code ScoringMethodResolver}) — {@link #supports} is a trivial gate
@@ -56,9 +56,9 @@ public class ObjectiveScoringService {
                     ScoringConstants.TASK_TYPE_SELECT_MISSING_WORD -> scoreSingleChoice(answer);
             case ScoringConstants.TASK_TYPE_MC_LISTENING_MULTIPLE -> scoreMultipleChoice(answer);
             case ScoringConstants.TASK_TYPE_RE_ORDER_PARAGRAPHS -> scoreReorderParagraphs(answer);
-            case ScoringConstants.TASK_TYPE_FILL_BLANKS_READING, ScoringConstants.TASK_TYPE_FILL_BLANKS_READING_WRITING ->
+            case ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_DRAG_AND_DROP, ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_DROPDOWN ->
                     scoreFillBlanks(answer);
-            case ScoringConstants.TASK_TYPE_FILL_BLANKS_LISTENING -> scoreListeningFillBlanks(answer);
+            case ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_TYPE_IN -> scoreListeningFillBlanks(answer);
             case ScoringConstants.TASK_TYPE_HIGHLIGHT_INCORRECT_WORDS -> scoreHighlightIncorrectWords(answer);
             case ScoringConstants.TASK_TYPE_WRITE_FROM_DICTATION -> scoreWriteFromDictation(answer);
             default -> throw new UnsupportedTaskTypeException();
@@ -134,9 +134,9 @@ public class ObjectiveScoringService {
     }
 
     /**
-     * Shared evaluator for both fill-blanks types: {@code FILL_BLANKS_READING}
+     * Shared evaluator for both fill-blanks types: {@code FILL_IN_THE_BLANKS_DRAG_AND_DROP}
      * (shared word bank — each correct option's target gap comes from {@link
-     * FrozenOption#correctGapIndex}) and {@code FILL_BLANKS_READING_WRITING}
+     * FrozenOption#correctGapIndex}) and {@code FILL_IN_THE_BLANKS_DROPDOWN}
      * (per-blank groups — each correct option's target gap comes from {@link
      * FrozenOption#blankIndex}, since every option in a group already carries
      * it). Payload parsing preserves a trailing empty entry (mirrors the
