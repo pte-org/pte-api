@@ -33,7 +33,7 @@ class ListeningPayloadFixtureSchemaTest {
             "MC_LISTENING_MULTIPLE",
             "HIGHLIGHT_CORRECT_SUMMARY",
             "SELECT_MISSING_WORD",
-            "FILL_BLANKS_LISTENING",
+            "FILL_IN_THE_BLANKS_TYPE_IN",
             "HIGHLIGHT_INCORRECT_WORDS",
             "MC_LISTENING_SINGLE");
 

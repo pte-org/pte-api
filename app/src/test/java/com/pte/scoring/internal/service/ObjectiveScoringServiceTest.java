@@ -203,10 +203,10 @@ class ObjectiveScoringServiceTest {
                 answer(ScoringConstants.TASK_TYPE_RE_ORDER_PARAGRAPHS, oneOption, ""))).isZero();
     }
 
-    // ---- FILL_BLANKS_READING (shared word bank, correctGapIndex) ----
+    // ---- FILL_IN_THE_BLANKS_DRAG_AND_DROP (shared word bank, correctGapIndex) ----
 
     // 3 gaps: gap0 correct=orderIndex0, gap1 correct=orderIndex4, gap2 correct=orderIndex6; 2 distractors.
-    private static final String FILL_BLANKS_READING_OPTIONS =
+    private static final String FILL_IN_THE_BLANKS_DRAG_AND_DROP_OPTIONS =
             "[{\"text\":\"tragic\",\"correct\":true,\"orderIndex\":0,\"correctGapIndex\":0},"
                     + "{\"text\":\"boring\",\"correct\":false,\"orderIndex\":1},"
                     + "{\"text\":\"nastiness\",\"correct\":true,\"orderIndex\":4,\"correctGapIndex\":1},"
@@ -215,19 +215,19 @@ class ObjectiveScoringServiceTest {
 
     @Test
     void fillBlanksReading_allGapsCorrect_scoresFullMarks() {
-        int score = service.score(answer(ScoringConstants.TASK_TYPE_FILL_BLANKS_READING, FILL_BLANKS_READING_OPTIONS, "0,4,6"));
+        int score = service.score(answer(ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_DRAG_AND_DROP, FILL_IN_THE_BLANKS_DRAG_AND_DROP_OPTIONS, "0,4,6"));
         assertThat(score).isEqualTo(100);
     }
 
     @Test
     void fillBlanksReading_leadingEmptyEntry_gap0UnansweredScoresPartial() {
-        int score = service.score(answer(ScoringConstants.TASK_TYPE_FILL_BLANKS_READING, FILL_BLANKS_READING_OPTIONS, ",4,6"));
+        int score = service.score(answer(ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_DRAG_AND_DROP, FILL_IN_THE_BLANKS_DRAG_AND_DROP_OPTIONS, ",4,6"));
         assertThat(score).isEqualTo(67); // round(2/3 * 100)
     }
 
     @Test
     void fillBlanksReading_middleEmptyEntry_gap1UnansweredScoresPartial() {
-        int score = service.score(answer(ScoringConstants.TASK_TYPE_FILL_BLANKS_READING, FILL_BLANKS_READING_OPTIONS, "0,,6"));
+        int score = service.score(answer(ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_DRAG_AND_DROP, FILL_IN_THE_BLANKS_DRAG_AND_DROP_OPTIONS, "0,,6"));
         assertThat(score).isEqualTo(67);
     }
 
@@ -236,18 +236,18 @@ class ObjectiveScoringServiceTest {
         // The HIGH-risk case: "0,4," must parse as 3 positions (gap2 empty),
         // not 2 (which would misalign every gap index and silently corrupt
         // scoring for every task with an unanswered final gap).
-        int score = service.score(answer(ScoringConstants.TASK_TYPE_FILL_BLANKS_READING, FILL_BLANKS_READING_OPTIONS, "0,4,"));
+        int score = service.score(answer(ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_DRAG_AND_DROP, FILL_IN_THE_BLANKS_DRAG_AND_DROP_OPTIONS, "0,4,"));
         assertThat(score).isEqualTo(67);
     }
 
     @Test
     void fillBlanksReading_wrongWordInGap_scoresIncorrectForThatGapOnly() {
         // gap0 answered with the gap1-correct word instead of its own.
-        int score = service.score(answer(ScoringConstants.TASK_TYPE_FILL_BLANKS_READING, FILL_BLANKS_READING_OPTIONS, "4,4,6"));
+        int score = service.score(answer(ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_DRAG_AND_DROP, FILL_IN_THE_BLANKS_DRAG_AND_DROP_OPTIONS, "4,4,6"));
         assertThat(score).isEqualTo(67);
     }
 
-    // ---- FILL_BLANKS_READING_WRITING (per-blank groups, blankIndex) ----
+    // ---- FILL_IN_THE_BLANKS_DROPDOWN (per-blank groups, blankIndex) ----
 
     private static final String FILL_BLANKS_WRITING_OPTIONS =
             "[{\"text\":\"efficiently\",\"correct\":true,\"orderIndex\":0,\"blankIndex\":0},"
@@ -258,21 +258,21 @@ class ObjectiveScoringServiceTest {
     @Test
     void fillBlanksReadingWriting_bothGapsCorrect_scoresFullMarks() {
         int score = service.score(
-                answer(ScoringConstants.TASK_TYPE_FILL_BLANKS_READING_WRITING, FILL_BLANKS_WRITING_OPTIONS, "0,0"));
+                answer(ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_DROPDOWN, FILL_BLANKS_WRITING_OPTIONS, "0,0"));
         assertThat(score).isEqualTo(100);
     }
 
     @Test
     void fillBlanksReadingWriting_trailingEmptyEntry_secondGapUnanswered() {
         int score = service.score(
-                answer(ScoringConstants.TASK_TYPE_FILL_BLANKS_READING_WRITING, FILL_BLANKS_WRITING_OPTIONS, "0,"));
+                answer(ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_DROPDOWN, FILL_BLANKS_WRITING_OPTIONS, "0,"));
         assertThat(score).isEqualTo(50);
     }
 
     @Test
     void fillBlanksReadingWriting_wrongOptionInEachGap_scoresZero() {
         int score = service.score(
-                answer(ScoringConstants.TASK_TYPE_FILL_BLANKS_READING_WRITING, FILL_BLANKS_WRITING_OPTIONS, "1,1"));
+                answer(ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_DROPDOWN, FILL_BLANKS_WRITING_OPTIONS, "1,1"));
         assertThat(score).isZero();
     }
 
@@ -287,7 +287,7 @@ class ObjectiveScoringServiceTest {
     @Test
     void fillBlanksListening_allGapsCorrect_ignoresCaseAndOuterWhitespace() {
         int score = service.score(referenceAnswer(
-                ScoringConstants.TASK_TYPE_FILL_BLANKS_LISTENING,
+                ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_TYPE_IN,
                 "[\"rapid\",\"forest\"]",
                 " RAPID , forest "));
         assertThat(score).isEqualTo(100);
@@ -296,7 +296,7 @@ class ObjectiveScoringServiceTest {
     @Test
     void fillBlanksListening_trailingEmptyEntry_scoresOnlyAnsweredGaps() {
         int score = service.score(referenceAnswer(
-                ScoringConstants.TASK_TYPE_FILL_BLANKS_LISTENING,
+                ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_TYPE_IN,
                 "[\"rapid\",\"forest\"]",
                 "rapid,"));
         assertThat(score).isEqualTo(50);
@@ -305,7 +305,7 @@ class ObjectiveScoringServiceTest {
     @Test
     void fillBlanksListening_malformedReference_failsClosedAtZero() {
         int score = service.score(referenceAnswer(
-                ScoringConstants.TASK_TYPE_FILL_BLANKS_LISTENING,
+                ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_TYPE_IN,
                 "not-json",
                 "rapid,forest"));
         assertThat(score).isZero();

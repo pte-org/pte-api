@@ -17,10 +17,10 @@ import lombok.Setter;
  * select-missing-word, highlight-correct-summary). {@code correct} marks the
  * expected choice(s); {@code orderIndex} preserves authored order.
  * {@code blankIndex} is null for every task type except
- * {@code FILL_BLANKS_READING_WRITING}, where it groups this option under one
+ * {@code FILL_IN_THE_BLANKS_DROPDOWN}, where it groups this option under one
  * of the question's several independently-choosable blanks (each blank has
  * its own distinct option list, unlike the shared word bank used by
- * {@code FILL_BLANKS_READING}).
+ * {@code FILL_IN_THE_BLANKS_DRAG_AND_DROP}).
  */
 @Entity
 @Table(name = "question_options", indexes = {
@@ -48,7 +48,7 @@ public class QuestionOption extends BaseEntity {
     private Integer blankIndex;
 
     /**
-     * Scoring-only: for a {@code FILL_BLANKS_READING} (shared word-bank)
+     * Scoring-only: for a {@code FILL_IN_THE_BLANKS_DRAG_AND_DROP} (shared word-bank)
      * correct option, the gap index this word is correct for. Null for
      * every distractor option and for every other task type — deliberately
      * distinct from {@link #blankIndex}: setting both on the same option

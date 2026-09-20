@@ -4,7 +4,6 @@ import com.pte.scoretemplate.domain.ScoreTemplate;
 import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
 import com.pte.scoretemplate.domain.enums.ScoringMethod;
-import com.pte.scoretemplate.domain.enums.TimingMode;
 import com.pte.scoretemplate.dto.request.CreateScoreTemplateRequest;
 import com.pte.scoretemplate.dto.request.ReplaceScoreTemplateItemsRequest;
 import com.pte.scoretemplate.dto.request.ScoreTemplateItemRequest;
@@ -59,27 +58,31 @@ class ScoreTemplateAdminServiceTest {
                 "READ_ALOUD", "REPEAT_SENTENCE", "DESCRIBE_IMAGE", "RE_TELL_LECTURE", "ANSWER_SHORT_QUESTION",
                 "RESPOND_TO_A_SITUATION", "SUMMARIZE_GROUP_DISCUSSION",
                 "SUMMARIZE_WRITTEN_TEXT", "WRITE_ESSAY",
-                "MC_READING_SINGLE", "MC_READING_MULTIPLE", "RE_ORDER_PARAGRAPHS", "FILL_BLANKS_READING",
-                "FILL_BLANKS_READING_WRITING",
-                "SUMMARIZE_SPOKEN_TEXT", "MC_LISTENING_SINGLE", "MC_LISTENING_MULTIPLE", "FILL_BLANKS_LISTENING",
+                "MC_READING_SINGLE", "MC_READING_MULTIPLE", "RE_ORDER_PARAGRAPHS", "FILL_IN_THE_BLANKS_DRAG_AND_DROP",
+                "FILL_IN_THE_BLANKS_DROPDOWN",
+                "SUMMARIZE_SPOKEN_TEXT", "MC_LISTENING_SINGLE", "MC_LISTENING_MULTIPLE", "FILL_IN_THE_BLANKS_TYPE_IN",
                 "HIGHLIGHT_CORRECT_SUMMARY", "SELECT_MISSING_WORD", "HIGHLIGHT_INCORRECT_WORDS", "WRITE_FROM_DICTATION");
-        int seq = 0;
-        for (String taskType : taskTypes) {
+        // Every weight goes to the last item (100) and every other item gets
+        // 0 — the simplest distribution satisfying both "every skill total >
+        // 0" and ScoreTemplateActivationValidator's "every skill total ==
+        // exactly 100" check.
+        int lastIndex = taskTypes.size() - 1;
+        for (int i = 0; i <= lastIndex; i++) {
+            BigDecimal weight = i == lastIndex ? BigDecimal.valueOf(100) : BigDecimal.ZERO;
             ScoreTemplateItem item = new ScoreTemplateItem();
-            item.setTaskType(taskType);
+            item.setTaskType(taskTypes.get(i));
             item.setSection("SPEAKING");
-            item.setSequence(seq++);
+            item.setSequence(i);
             item.setMinCount(1);
             item.setMaxCount(2);
             item.setPrepSeconds(0);
             item.setResponseSeconds(30);
-            item.setTimingMode(TimingMode.FIXED);
             item.setScoringMethod(ScoringMethod.AI_SPEECH);
-            item.setOverallWeight(BigDecimal.ONE);
-            item.setSpeakingWeight(BigDecimal.ONE);
-            item.setWritingWeight(BigDecimal.ONE);
-            item.setReadingWeight(BigDecimal.ONE);
-            item.setListeningWeight(BigDecimal.ONE);
+            item.setOverallWeight(weight);
+            item.setSpeakingWeight(weight);
+            item.setWritingWeight(weight);
+            item.setReadingWeight(weight);
+            item.setListeningWeight(weight);
             template.addItem(item);
         }
         return template;
@@ -159,6 +162,83 @@ class ScoreTemplateAdminServiceTest {
         assertThat(response.items()).isEmpty();
     }
 
+    /**
+     * Every skill column on {@code replaceItems} must total exactly 100
+     * (validated on every save, not just activate) — so a test asserting on
+     * one item's derived fields must pad the other 3 skill totals up to 100
+     * with a second item, even though that item is otherwise irrelevant to
+     * the assertion.
+     */
+    private ScoreTemplateItemRequest paddingItemRequest(String taskType, BigDecimal speaking, BigDecimal writing,
+                                                         BigDecimal reading, BigDecimal listening) {
+        return new ScoreTemplateItemRequest(taskType, "SPEAKING", 1, 1, 1, 0, 30,
+                speaking, writing, reading, listening);
+    }
+
+    @Test
+    void replaceItems_derivesScoringMethodFromTaskType_notFromRequest() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate draft = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        // sampleItemRequest(): speaking=9, writing/reading/listening=0 — padded to 100 per column.
+        var padding = paddingItemRequest("WRITE_ESSAY", BigDecimal.valueOf(91), BigDecimal.valueOf(100),
+                BigDecimal.valueOf(100), BigDecimal.valueOf(100));
+
+        ScoreTemplateResponse response = service.replaceItems(
+                publicId, new ReplaceScoreTemplateItemsRequest("Custom", List.of(sampleItemRequest(), padding)));
+
+        assertThat(response.items()).hasSize(2);
+        assertThat(response.items().get(0).scoringMethod()).isEqualTo("AI_SPEECH");
+        // sampleItemRequest(): speaking=9, writing/reading/listening=0 -> (9+0+0+0)/4 = 2.25
+        assertThat(response.items().get(0).overallWeight()).isEqualByComparingTo("2.25");
+    }
+
+    @Test
+    void replaceItems_computesOverallWeightAsMeanOfFourSkillWeights_notFromRequest() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate draft = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        var request = new ScoreTemplateItemRequest("SUMMARIZE_SPOKEN_TEXT", "LISTENING", 0, 1, 1, 0, 600,
+                BigDecimal.ZERO, BigDecimal.valueOf(23), BigDecimal.ZERO, BigDecimal.valueOf(10));
+        // Padded so every column still totals exactly 100.
+        var padding = paddingItemRequest("WRITE_ESSAY", BigDecimal.valueOf(100), BigDecimal.valueOf(77),
+                BigDecimal.valueOf(100), BigDecimal.valueOf(90));
+
+        ScoreTemplateResponse response = service.replaceItems(
+                publicId, new ReplaceScoreTemplateItemsRequest("Custom", List.of(request, padding)));
+
+        // (0 + 23 + 0 + 10) / 4 = 8.25 — matches the APEUni V5 table's SUMMARIZE_SPOKEN_TEXT row exactly.
+        assertThat(response.items().get(0).overallWeight()).isEqualByComparingTo("8.25");
+    }
+
+    @Test
+    void replaceItems_skillWeightsNotSummingTo100_throws() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate draft = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+
+        assertThatThrownBy(() -> service.replaceItems(
+                publicId, new ReplaceScoreTemplateItemsRequest("Custom", List.of(sampleItemRequest()))))
+                .isInstanceOf(ScoreTemplateValidationException.class)
+                .hasMessageContaining("SPEAKING");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void replaceItems_unknownTaskType_throwsValidationException() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate draft = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+        var badRequest = new ScoreTemplateItemRequest("NOT_A_REAL_TASK_TYPE", "SPEAKING", 0, 1, 1, 0, 30,
+                BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+
+        assertThatThrownBy(() -> service.replaceItems(publicId, new ReplaceScoreTemplateItemsRequest("Custom", List.of(badRequest))))
+                .isInstanceOf(ScoreTemplateValidationException.class);
+        verify(repository, never()).save(any());
+    }
+
     @Test
     void createDraft_createsEmptyNextVersion() {
         when(repository.findMaxVersionByCode("CUSTOM")).thenReturn(2);
@@ -226,7 +306,7 @@ class ScoreTemplateAdminServiceTest {
     }
 
     private ScoreTemplateItemRequest sampleItemRequest() {
-        return new ScoreTemplateItemRequest("READ_ALOUD", "SPEAKING", 0, 6, 7, 35, 40, "FIXED", "AI_SPEECH",
-                BigDecimal.valueOf(4), BigDecimal.valueOf(9), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+        return new ScoreTemplateItemRequest("READ_ALOUD", "SPEAKING", 0, 6, 7, 35, 40,
+                BigDecimal.valueOf(9), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 }

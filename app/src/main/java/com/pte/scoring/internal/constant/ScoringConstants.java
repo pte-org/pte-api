@@ -7,15 +7,15 @@ public final class ScoringConstants {
     public static final String TASK_TYPE_MC_READING_SINGLE = "MC_READING_SINGLE";
     public static final String TASK_TYPE_MC_READING_MULTIPLE = "MC_READING_MULTIPLE";
     public static final String TASK_TYPE_RE_ORDER_PARAGRAPHS = "RE_ORDER_PARAGRAPHS";
-    public static final String TASK_TYPE_FILL_BLANKS_READING = "FILL_BLANKS_READING";
-    public static final String TASK_TYPE_FILL_BLANKS_READING_WRITING = "FILL_BLANKS_READING_WRITING";
+    public static final String TASK_TYPE_FILL_IN_THE_BLANKS_DRAG_AND_DROP = "FILL_IN_THE_BLANKS_DRAG_AND_DROP";
+    public static final String TASK_TYPE_FILL_IN_THE_BLANKS_DROPDOWN = "FILL_IN_THE_BLANKS_DROPDOWN";
 
     // Listening payload-shape discriminators.
     public static final String TASK_TYPE_MC_LISTENING_SINGLE = "MC_LISTENING_SINGLE";
     public static final String TASK_TYPE_MC_LISTENING_MULTIPLE = "MC_LISTENING_MULTIPLE";
     public static final String TASK_TYPE_HIGHLIGHT_CORRECT_SUMMARY = "HIGHLIGHT_CORRECT_SUMMARY";
     public static final String TASK_TYPE_SELECT_MISSING_WORD = "SELECT_MISSING_WORD";
-    public static final String TASK_TYPE_FILL_BLANKS_LISTENING = "FILL_BLANKS_LISTENING";
+    public static final String TASK_TYPE_FILL_IN_THE_BLANKS_TYPE_IN = "FILL_IN_THE_BLANKS_TYPE_IN";
     public static final String TASK_TYPE_HIGHLIGHT_INCORRECT_WORDS = "HIGHLIGHT_INCORRECT_WORDS";
     public static final String TASK_TYPE_WRITE_FROM_DICTATION = "WRITE_FROM_DICTATION";
 

@@ -172,7 +172,7 @@ class SnapshotPublishServiceTest {
         ExamBlueprint blueprint = blueprintWithOneItem(questionId);
         when(blueprintRepository.findWithItemsByPublicId(blueprintId)).thenReturn(Optional.of(blueprint));
         when(itembankService.freeze(questionId)).thenReturn(new QuestionFreezeView(
-                questionId, PteTaskType.FILL_BLANKS_READING, "title", "prompt", null, null, null, null, null, null,
+                questionId, PteTaskType.FILL_IN_THE_BLANKS_DRAG_AND_DROP, "title", "prompt", null, null, null, null, null, null,
                 List.of(new QuestionFreezeView.Option("word", true, 0, null, 3))));
         when(snapshotRepository.countBySourceBlueprintPublicId(blueprintId)).thenReturn(0L);
         var captor = org.mockito.ArgumentCaptor.forClass(ExamSnapshot.class);

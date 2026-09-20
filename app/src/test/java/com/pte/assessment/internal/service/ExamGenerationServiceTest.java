@@ -72,14 +72,14 @@ class ExamGenerationServiceTest {
             new Row("RESPOND_TO_A_SITUATION", "SPEAKING", 7, 2, 3),
             new Row("SUMMARIZE_WRITTEN_TEXT", "WRITING", 8, 2, 2),
             new Row("WRITE_ESSAY", "WRITING", 9, 1, 1),
-            new Row("FILL_BLANKS_READING_WRITING", "READING", 10, 5, 6),
+            new Row("FILL_IN_THE_BLANKS_DROPDOWN", "READING", 10, 5, 6),
             new Row("MC_READING_MULTIPLE", "READING", 11, 2, 3),
             new Row("RE_ORDER_PARAGRAPHS", "READING", 12, 2, 3),
-            new Row("FILL_BLANKS_READING", "READING", 13, 4, 5),
+            new Row("FILL_IN_THE_BLANKS_DRAG_AND_DROP", "READING", 13, 4, 5),
             new Row("MC_READING_SINGLE", "READING", 14, 2, 3),
             new Row("SUMMARIZE_SPOKEN_TEXT", "LISTENING", 15, 1, 1),
             new Row("MC_LISTENING_MULTIPLE", "LISTENING", 16, 2, 3),
-            new Row("FILL_BLANKS_LISTENING", "LISTENING", 17, 2, 3),
+            new Row("FILL_IN_THE_BLANKS_TYPE_IN", "LISTENING", 17, 2, 3),
             new Row("HIGHLIGHT_CORRECT_SUMMARY", "LISTENING", 18, 2, 3),
             new Row("MC_LISTENING_SINGLE", "LISTENING", 19, 2, 3),
             new Row("SELECT_MISSING_WORD", "LISTENING", 20, 1, 2),
@@ -89,7 +89,7 @@ class ExamGenerationServiceTest {
     private ScoreTemplateResponse v5Template() {
         List<ScoreTemplateItemResponse> items = V5_ROWS.stream()
                 .map(r -> new ScoreTemplateItemResponse(r.taskType(), r.section(), r.sequence(), r.min(), r.max(),
-                        0, 30, "FIXED", "OBJECTIVE", BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO,
+                        0, 30, "OBJECTIVE", BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO,
                         BigDecimal.ZERO, BigDecimal.ZERO))
                 .toList();
         return new ScoreTemplateResponse(UUID.randomUUID(), "PTE_Score_Template", 1, "APEUni PTE Score Table V5",
