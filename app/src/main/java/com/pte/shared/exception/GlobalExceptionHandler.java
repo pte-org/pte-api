@@ -35,7 +35,8 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(DomainException.class)
     public ResponseEntity<ApiResponse<Object>> handleDomain(DomainException ex) {
-        return ResponseEntity.status(ex.getStatus()).body(new ApiResponse<>(false, ex.getData(), ex.getMessage()));
+        return ResponseEntity.status(ex.getStatus())
+                .body(new ApiResponse<>(false, ex.getData(), ex.getMessage(), ex.getCode(), ex.getUserMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -43,18 +44,21 @@ public class GlobalExceptionHandler {
         String message = ex.getBindingResult().getFieldError() != null
                 ? ex.getBindingResult().getFieldError().getDefaultMessage()
                 : SharedConstants.VALIDATION_FALLBACK;
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.error(message));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(SharedConstants.VALIDATION_FALLBACK, message, message));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(SharedConstants.ACCESS_DENIED));
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error(SharedConstants.ACCESS_DENIED, SharedConstants.ACCESS_DENIED,
+                        SharedConstants.ACCESS_DENIED));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnexpected(Exception ex) {
         log.error("Unhandled exception", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(SharedConstants.INTERNAL_ERROR));
+                .body(ApiResponse.error(SharedConstants.INTERNAL_ERROR, SharedConstants.INTERNAL_ERROR, null));
     }
 }
