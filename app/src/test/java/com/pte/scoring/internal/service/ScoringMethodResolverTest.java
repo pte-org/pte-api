@@ -41,7 +41,7 @@ class ScoringMethodResolverTest {
     }
 
     private ScoreTemplateItemResponse item(String taskType, String scoringMethod) {
-        return new ScoreTemplateItemResponse(taskType, "SPEAKING", 0, 1, 1, 0, 0, "FIXED", scoringMethod,
+        return new ScoreTemplateItemResponse(taskType, "SPEAKING", 0, 1, 1, 0, 0, scoringMethod,
                 BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 

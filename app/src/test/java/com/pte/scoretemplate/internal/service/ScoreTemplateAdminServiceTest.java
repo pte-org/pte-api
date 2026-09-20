@@ -4,7 +4,6 @@ import com.pte.scoretemplate.domain.ScoreTemplate;
 import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
 import com.pte.scoretemplate.domain.enums.ScoringMethod;
-import com.pte.scoretemplate.domain.enums.TimingMode;
 import com.pte.scoretemplate.dto.request.CreateScoreTemplateRequest;
 import com.pte.scoretemplate.dto.request.ReplaceScoreTemplateItemsRequest;
 import com.pte.scoretemplate.dto.request.ScoreTemplateItemRequest;
@@ -73,7 +72,6 @@ class ScoreTemplateAdminServiceTest {
             item.setMaxCount(2);
             item.setPrepSeconds(0);
             item.setResponseSeconds(30);
-            item.setTimingMode(TimingMode.FIXED);
             item.setScoringMethod(ScoringMethod.AI_SPEECH);
             item.setOverallWeight(BigDecimal.ONE);
             item.setSpeakingWeight(BigDecimal.ONE);
@@ -226,7 +224,7 @@ class ScoreTemplateAdminServiceTest {
     }
 
     private ScoreTemplateItemRequest sampleItemRequest() {
-        return new ScoreTemplateItemRequest("READ_ALOUD", "SPEAKING", 0, 6, 7, 35, 40, "FIXED", "AI_SPEECH",
+        return new ScoreTemplateItemRequest("READ_ALOUD", "SPEAKING", 0, 6, 7, 35, 40, "AI_SPEECH",
                 BigDecimal.valueOf(4), BigDecimal.valueOf(9), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 }

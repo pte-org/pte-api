@@ -68,7 +68,7 @@ class ScoreAggregationServiceTest {
     /** One row, only the given skill's weight column set to a non-zero value; every other weight column is 0. */
     private ScoreTemplateItemResponse item(String taskType, BigDecimal overall, BigDecimal speaking,
                                             BigDecimal writing, BigDecimal reading, BigDecimal listening) {
-        return new ScoreTemplateItemResponse(taskType, "SPEAKING", 0, 1, 1, 0, 0, "FIXED", "AI_SPEECH",
+        return new ScoreTemplateItemResponse(taskType, "SPEAKING", 0, 1, 1, 0, 0, "AI_SPEECH",
                 overall, speaking, writing, reading, listening);
     }
 

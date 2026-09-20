@@ -89,7 +89,7 @@ class ExamGenerationServiceTest {
     private ScoreTemplateResponse v5Template() {
         List<ScoreTemplateItemResponse> items = V5_ROWS.stream()
                 .map(r -> new ScoreTemplateItemResponse(r.taskType(), r.section(), r.sequence(), r.min(), r.max(),
-                        0, 30, "FIXED", "OBJECTIVE", BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO,
+                        0, 30, "OBJECTIVE", BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO,
                         BigDecimal.ZERO, BigDecimal.ZERO))
                 .toList();
         return new ScoreTemplateResponse(UUID.randomUUID(), "PTE_Score_Template", 1, "APEUni PTE Score Table V5",

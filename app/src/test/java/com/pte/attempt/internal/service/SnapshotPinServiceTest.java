@@ -424,7 +424,7 @@ class SnapshotPinServiceTest {
     }
 
     private ScoreTemplateItemResponse templateItem(String taskType, String section, int prepSeconds, int responseSeconds) {
-        return new ScoreTemplateItemResponse(taskType, section, 0, 1, 1, prepSeconds, responseSeconds, "FIXED",
+        return new ScoreTemplateItemResponse(taskType, section, 0, 1, 1, prepSeconds, responseSeconds,
                 "OBJECTIVE", BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 

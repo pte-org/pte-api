@@ -14,7 +14,6 @@ public record ScoreTemplateItemRequest(
         @PositiveOrZero int maxCount,
         @PositiveOrZero int prepSeconds,
         @PositiveOrZero int responseSeconds,
-        @NotBlank String timingMode,
         @NotBlank String scoringMethod,
         @NotNull BigDecimal overallWeight,
         @NotNull BigDecimal speakingWeight,

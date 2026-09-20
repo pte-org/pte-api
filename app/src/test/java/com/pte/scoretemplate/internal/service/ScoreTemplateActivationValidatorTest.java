@@ -3,7 +3,6 @@ package com.pte.scoretemplate.internal.service;
 import com.pte.scoretemplate.domain.ScoreTemplate;
 import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.domain.enums.ScoringMethod;
-import com.pte.scoretemplate.domain.enums.TimingMode;
 import com.pte.scoretemplate.internal.exception.ScoreTemplateValidationException;
 import org.junit.jupiter.api.Test;
 
@@ -54,7 +53,6 @@ class ScoreTemplateActivationValidatorTest {
         item.setMaxCount(max);
         item.setPrepSeconds(0);
         item.setResponseSeconds(30);
-        item.setTimingMode(TimingMode.FIXED);
         item.setScoringMethod(ScoringMethod.AI_SPEECH);
         item.setOverallWeight(weight);
         item.setSpeakingWeight(weight);

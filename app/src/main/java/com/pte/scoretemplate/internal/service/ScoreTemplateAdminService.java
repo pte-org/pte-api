@@ -4,7 +4,6 @@ import com.pte.scoretemplate.domain.ScoreTemplate;
 import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
 import com.pte.scoretemplate.domain.enums.ScoringMethod;
-import com.pte.scoretemplate.domain.enums.TimingMode;
 import com.pte.scoretemplate.dto.request.CreateScoreTemplateRequest;
 import com.pte.scoretemplate.dto.request.ReplaceScoreTemplateItemsRequest;
 import com.pte.scoretemplate.dto.request.ScoreTemplateItemRequest;
@@ -150,7 +149,6 @@ public class ScoreTemplateAdminService {
         copy.setMaxCount(source.getMaxCount());
         copy.setPrepSeconds(source.getPrepSeconds());
         copy.setResponseSeconds(source.getResponseSeconds());
-        copy.setTimingMode(source.getTimingMode());
         copy.setScoringMethod(source.getScoringMethod());
         copy.setOverallWeight(source.getOverallWeight());
         copy.setSpeakingWeight(source.getSpeakingWeight());
@@ -169,7 +167,6 @@ public class ScoreTemplateAdminService {
         item.setMaxCount(request.maxCount());
         item.setPrepSeconds(request.prepSeconds());
         item.setResponseSeconds(request.responseSeconds());
-        item.setTimingMode(parseEnum(TimingMode.class, request.timingMode(), request.taskType()));
         item.setScoringMethod(parseEnum(ScoringMethod.class, request.scoringMethod(), request.taskType()));
         item.setOverallWeight(request.overallWeight());
         item.setSpeakingWeight(request.speakingWeight());
