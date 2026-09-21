@@ -312,6 +312,12 @@ public class ItembankService {
         return questionRepository.randomPublishedSharedIdsByTaskType(taskType.name(), n);
     }
 
+    /** Stable candidate list used by deterministic exam generation. */
+    @Transactional(readOnly = true)
+    public List<UUID> publishedQuestionIds(PteTaskType taskType) {
+        return questionRepository.publishedSharedIdsByTaskType(taskType.name());
+    }
+
     private Question loadForPlatformWrite(UUID publicId, CurrentUser caller) {
         Question question = questionRepository.findWithOptionsByPublicId(publicId)
                 .orElseThrow(QuestionNotFoundException::new);

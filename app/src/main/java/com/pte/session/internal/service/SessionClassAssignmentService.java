@@ -8,6 +8,7 @@ import com.pte.session.internal.dto.request.BulkEnrollRequest;
 import com.pte.session.internal.dto.response.SessionClassAssignmentResponse;
 import com.pte.session.internal.exception.ClassAssignmentNotAllowedException;
 import com.pte.session.internal.exception.ClassAssignmentNotFoundException;
+import com.pte.session.internal.exception.ExamAudienceLockedException;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.SessionClassAssignmentRepository;
 import com.pte.shared.security.CurrentUser;
@@ -102,7 +103,10 @@ public class SessionClassAssignmentService {
 
     private ExamSession requireScheduled(UUID sessionPublicId, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
-        if (session.getStatus() != SessionStatus.SCHEDULED) {
+        if (session.getStatus() != SessionStatus.SCHEDULED || session.getGenerationJobPublicId() != null) {
+            if (session.getGenerationJobPublicId() != null) {
+                throw new ExamAudienceLockedException();
+            }
             throw new ClassAssignmentNotAllowedException();
         }
         return session;

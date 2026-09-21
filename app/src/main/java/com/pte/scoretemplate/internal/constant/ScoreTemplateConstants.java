@@ -7,6 +7,11 @@ public final class ScoreTemplateConstants {
     public static final String NO_ACTIVE_TEMPLATE = "NO_ACTIVE_SCORE_TEMPLATE";
     public static final String TEMPLATE_NOT_DRAFT = "SCORE_TEMPLATE_NOT_DRAFT";
     public static final String CONCURRENT_MODIFICATION = "SCORE_TEMPLATE_CONCURRENT_MODIFICATION";
+    public static final String TEMPLATE_PENDING_APPROVAL = "SCORE_TEMPLATE_PENDING_APPROVAL";
+    public static final String TEMPLATE_NOT_PENDING_APPROVAL = "SCORE_TEMPLATE_NOT_PENDING_APPROVAL";
+    public static final String TEMPLATE_APPROVAL_REASON_REQUIRED = "Approval decision reason is required";
+    public static final String TEMPLATE_TASK_TYPE_INVALID = "Template contains an unknown or inactive task type: ";
+    public static final String TEMPLATE_SECTION_INVALID = "Template section does not match task type: ";
 
     public static final String NAME_REQUIRED = "Template name is required";
     public static final String ITEMS_REQUIRED = "A template needs at least one item";

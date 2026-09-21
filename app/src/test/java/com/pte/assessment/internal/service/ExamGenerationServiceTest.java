@@ -25,6 +25,7 @@ import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -33,6 +34,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -335,5 +339,54 @@ class ExamGenerationServiceTest {
                 .randomPublishedQuestionIds(any(PteTaskType.class), anyInt());
         // No overload taking CurrentUser exists on these two methods (compile-level guard,
         // enforced already in ItembankServiceTest.generationFacades_neverTakeACurrentUserParameter).
+    }
+
+    @Test
+    void generateDeterministic_sameSeedAndTemplateProducesSameBlueprintOrder() {
+        UUID templateId = UUID.randomUUID();
+        ScoreTemplateResponse template = new ScoreTemplateResponse(
+                templateId,
+                "CUSTOM",
+                4,
+                "Deterministic template",
+                "ACTIVE",
+                null,
+                List.of(new ScoreTemplateItemResponse(
+                        "READ_ALOUD", "SPEAKING", 1, 2, 2, 0, 30, "AI_SPEECH", BigDecimal.ONE,
+                        BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)));
+        when(scoreTemplateService.findActiveByPublicId(templateId)).thenReturn(Optional.of(template));
+        when(itembankService.countPublishedByTaskTypes(anySet())).thenAnswer(invocation -> {
+            Set<PteTaskType> requested = invocation.getArgument(0);
+            Map<PteTaskType, Long> counts = new EnumMap<>(PteTaskType.class);
+            requested.forEach(taskType -> counts.put(taskType, 20L));
+            return counts;
+        });
+        when(itembankService.publishedQuestionIds(any(PteTaskType.class))).thenAnswer(invocation -> {
+            PteTaskType taskType = invocation.getArgument(0);
+            return java.util.stream.IntStream.range(0, 20)
+                    .mapToObj(index -> UUID.nameUUIDFromBytes((taskType.name() + index).getBytes()))
+                    .toList();
+        });
+        when(blueprintRepository.save(any(ExamBlueprint.class))).thenAnswer(invocation -> {
+            ExamBlueprint blueprint = invocation.getArgument(0);
+            blueprint.setPublicId(UUID.randomUUID());
+            return blueprint;
+        });
+        when(snapshotPublishService.publish(any(UUID.class), any(CurrentUser.class), any(ScoreTemplateResponse.class),
+                anyLong(), anyString(), anyString())).thenReturn(mock(SnapshotResponse.class));
+
+        long seed = 20260921L;
+        service.generateDeterministic("Exam", templateId, seed, hostCaller);
+        service.generateDeterministic("Exam", templateId, seed, hostCaller);
+
+        org.mockito.ArgumentCaptor<ExamBlueprint> captor = org.mockito.ArgumentCaptor.forClass(ExamBlueprint.class);
+        verify(blueprintRepository, org.mockito.Mockito.times(2)).save(captor.capture());
+        List<UUID> first = captor.getAllValues().get(0).getItems().stream()
+                .map(BlueprintItem::getQuestionPublicId).toList();
+        List<UUID> second = captor.getAllValues().get(1).getItems().stream()
+                .map(BlueprintItem::getQuestionPublicId).toList();
+        assertThat(first).containsExactlyElementsOf(second);
+        verify(snapshotPublishService, org.mockito.Mockito.times(2)).publish(any(UUID.class), any(CurrentUser.class),
+                eq(template), eq(seed), eq("PTE_SEEDED_V1"), eq(templateId + ":4"));
     }
 }

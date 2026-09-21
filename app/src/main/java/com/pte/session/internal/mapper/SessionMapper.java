@@ -22,7 +22,15 @@ public final class SessionMapper {
                 session.getClosesAt(),
                 session.getStatus().name(),
                 toPolicy(session.getPolicy()),
-                session.getCapacity());
+                session.getCapacity(),
+                session.getTemplatePublicId(),
+                session.getTemplateVersion(),
+                session.getExamMode(),
+                session.getFormMode(),
+                session.getReusePolicy(),
+                session.getSeriesKey(),
+                session.getGenerationJobPublicId(),
+                session.getDraftVersion() == null ? 0L : session.getDraftVersion());
     }
 
     /**

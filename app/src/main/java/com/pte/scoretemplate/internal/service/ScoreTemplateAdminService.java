@@ -3,16 +3,22 @@ package com.pte.scoretemplate.internal.service;
 import com.pte.scoretemplate.domain.ScoreTemplate;
 import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
+import com.pte.itembank.QuestionTypeService;
+import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.scoretemplate.dto.request.CreateScoreTemplateRequest;
+import com.pte.scoretemplate.dto.request.RejectScoreTemplateRequest;
 import com.pte.scoretemplate.dto.request.ReplaceScoreTemplateItemsRequest;
 import com.pte.scoretemplate.dto.request.ScoreTemplateItemRequest;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.scoretemplate.internal.exception.ScoreTemplateConcurrentModificationException;
 import com.pte.scoretemplate.internal.exception.ScoreTemplateNotDraftException;
 import com.pte.scoretemplate.internal.exception.ScoreTemplateNotFoundException;
+import com.pte.scoretemplate.internal.exception.ScoreTemplateValidationException;
+import com.pte.scoretemplate.internal.constant.ScoreTemplateConstants;
 import com.pte.scoretemplate.internal.mapper.ScoreTemplateMapper;
 import com.pte.scoretemplate.internal.repository.ScoreTemplateRepository;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,19 +28,26 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Platform-admin-only CRUD/lifecycle for {@link ScoreTemplate}. Every HTTP
- * endpoint calling this is gated {@code PLATFORM_ADMIN} at the controller
- * (see {@code ScoreTemplateController}); this service has no tenant/caller
- * check of its own because a {@code ScoreTemplate} is a global, not
- * tenant-scoped, resource (FR-03).
+ * Platform-owned score-template CRUD and review lifecycle. Draft authoring is
+ * available to platform authors; activation remains an admin-only controller
+ * operation because the template is global, not tenant-scoped.
  */
 @Service
 public class ScoreTemplateAdminService {
 
     private final ScoreTemplateRepository repository;
+    private final QuestionTypeService questionTypeService;
 
+    @Autowired
+    public ScoreTemplateAdminService(ScoreTemplateRepository repository, QuestionTypeService questionTypeService) {
+        this.repository = repository;
+        this.questionTypeService = questionTypeService;
+    }
+
+    /** Compatibility constructor used by focused unit tests. */
     public ScoreTemplateAdminService(ScoreTemplateRepository repository) {
         this.repository = repository;
+        this.questionTypeService = null;
     }
 
     @Transactional(readOnly = true)
@@ -101,6 +114,40 @@ public class ScoreTemplateAdminService {
         return ScoreTemplateMapper.toResponse(repository.save(template));
     }
 
+    /** Author submits a complete, structurally valid draft for admin review. */
+    @Transactional
+    public ScoreTemplateResponse submitApproval(UUID publicId) {
+        ScoreTemplate template = findByPublicId(publicId);
+        requireDraft(template);
+        validateCatalog(template);
+        ScoreTemplateActivationValidator.validate(template);
+        template.setRejectionReason(null);
+        template.setStatus(ScoreTemplateStatus.PENDING_APPROVAL);
+        return ScoreTemplateMapper.toResponse(repository.save(template));
+    }
+
+    /** Admin approval returns the immutable review decision to an editable draft. */
+    @Transactional
+    public ScoreTemplateResponse approve(UUID publicId) {
+        ScoreTemplate template = findByPublicId(publicId);
+        requirePendingApproval(template);
+        validateCatalog(template);
+        ScoreTemplateActivationValidator.validate(template);
+        template.setRejectionReason(null);
+        template.setStatus(ScoreTemplateStatus.DRAFT);
+        return ScoreTemplateMapper.toResponse(repository.save(template));
+    }
+
+    /** Admin rejection returns the template to DRAFT with an actionable reason. */
+    @Transactional
+    public ScoreTemplateResponse reject(UUID publicId, RejectScoreTemplateRequest request) {
+        ScoreTemplate template = findByPublicId(publicId);
+        requirePendingApproval(template);
+        template.setRejectionReason(request.reason().trim());
+        template.setStatus(ScoreTemplateStatus.DRAFT);
+        return ScoreTemplateMapper.toResponse(repository.save(template));
+    }
+
     /** Deletes a DRAFT; ACTIVE and RETIRED versions remain immutable and auditable. */
     @Transactional
     public void deleteDraft(UUID publicId) {
@@ -126,6 +173,8 @@ public class ScoreTemplateAdminService {
     @Transactional
     public ScoreTemplateResponse activate(UUID publicId) {
         ScoreTemplate target = findByPublicId(publicId);
+        requireDraft(target);
+        validateCatalog(target);
         ScoreTemplateActivationValidator.validate(target);
 
         repository.findAllByCodeForUpdate(target.getCode());
@@ -148,6 +197,35 @@ public class ScoreTemplateAdminService {
         if (template.getStatus() != ScoreTemplateStatus.DRAFT) {
             throw new ScoreTemplateNotDraftException();
         }
+    }
+
+    private void requirePendingApproval(ScoreTemplate template) {
+        if (template.getStatus() != ScoreTemplateStatus.PENDING_APPROVAL) {
+            throw new ScoreTemplateValidationException(ScoreTemplateConstants.TEMPLATE_NOT_PENDING_APPROVAL);
+        }
+    }
+
+    private void validateCatalog(ScoreTemplate template) {
+        if (questionTypeService == null) {
+            return;
+        }
+        template.getItems().forEach(item -> {
+            final PteTaskType taskType;
+            try {
+                taskType = PteTaskType.valueOf(item.getTaskType());
+            } catch (IllegalArgumentException ex) {
+                throw new ScoreTemplateValidationException(
+                        ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + item.getTaskType());
+            }
+            if (!questionTypeService.isActive(taskType.name())) {
+                throw new ScoreTemplateValidationException(
+                        ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + item.getTaskType());
+            }
+            if (!taskType.getSection().name().equals(item.getSection())) {
+                throw new ScoreTemplateValidationException(
+                        ScoreTemplateConstants.TEMPLATE_SECTION_INVALID + item.getTaskType());
+            }
+        });
     }
 
     private ScoreTemplate saveOrTranslateConflict(ScoreTemplate template) {

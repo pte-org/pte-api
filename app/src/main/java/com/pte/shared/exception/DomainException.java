@@ -28,7 +28,16 @@ public abstract class DomainException extends RuntimeException {
      * machine/diagnostic value returned by {@link #getMessage()}.
      */
     protected DomainException(HttpStatus status, String code, Object data, String userMessage) {
-        super(code);
+        this(status, code, data, userMessage, code);
+    }
+
+    /**
+     * Allows a stable machine code to coexist with a richer diagnostic message
+     * for logs and backwards-compatible API consumers.
+     */
+    protected DomainException(HttpStatus status, String code, Object data, String userMessage,
+                               String diagnosticMessage) {
+        super(diagnosticMessage);
         this.status = status;
         this.data = data;
         this.code = code;

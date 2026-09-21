@@ -17,6 +17,7 @@ public final class ScoreTemplateMapper {
                 template.getVersion(),
                 template.getName(),
                 template.getStatus().name(),
+                template.getRejectionReason(),
                 template.getItems().stream().map(ScoreTemplateMapper::toItemResponse).toList());
     }
 

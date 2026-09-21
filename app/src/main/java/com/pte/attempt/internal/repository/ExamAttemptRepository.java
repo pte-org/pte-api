@@ -39,6 +39,9 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long> 
     @EntityGraph(attributePaths = "pinnedSnapshot")
     List<ExamAttempt> findBySessionPublicIdAndTenantIdAndStatus(UUID sessionPublicId, UUID tenantId, AttemptStatus status);
 
+    List<ExamAttempt> findByTenantIdAndSessionPublicIdInAndStudentPublicIdInAndStatus(
+            UUID tenantId, List<UUID> sessionPublicIds, List<UUID> studentPublicIds, AttemptStatus status);
+
     /** Mirrors {@link #findWithPinnedByPublicIdAndStudentPublicId} but no student filter — trusted internal caller (reporting's per-attempt scoring, Phase 5), not a student-facing read. */
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
     Optional<ExamAttempt> findWithPinnedByPublicId(UUID publicId);

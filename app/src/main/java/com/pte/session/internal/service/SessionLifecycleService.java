@@ -25,6 +25,7 @@ import com.pte.session.internal.exception.PolicyLockedException;
 import com.pte.session.internal.exception.SessionCapacityInvalidException;
 import com.pte.session.internal.exception.SessionCapacityRequiredException;
 import com.pte.session.internal.exception.SessionNotFoundException;
+import com.pte.session.internal.exception.SessionNotReadyToOpenException;
 import com.pte.session.internal.exception.SessionSubscriptionCapacityException;
 import com.pte.session.internal.exception.SessionSubscriptionNotFoundException;
 import com.pte.session.internal.exception.SessionTimeConflictException;
@@ -101,10 +102,15 @@ public class SessionLifecycleService {
         session.setSubscriptionId(subscription.publicId());
         session.setLicenseKey(subscription.licenseKey());
         session.setSnapshotPublicId(snapshot.publicId());
+        session.setTemplatePublicId(snapshot.scoreTemplatePublicId());
+        session.setTemplateVersion(snapshot.scoreTemplateVersion());
         session.setOpensAt(request.opensAt());
         session.setClosesAt(request.closesAt());
         session.setCapacity(request.capacity());
         ExamMode mode = request.examMode() != null ? request.examMode() : ExamMode.MOCK_TEST;
+        session.setExamMode(mode);
+        session.setFormMode(com.pte.session.domain.enums.FormMode.SHARED_FORM);
+        session.setReusePolicy(com.pte.session.domain.enums.ReusePolicy.ALLOW);
         ExamPolicy policy = ExamPolicy.forMode(mode);
 
         if (request.lockdownMode() != null) {
@@ -175,6 +181,9 @@ public class SessionLifecycleService {
     public SessionResponse open(UUID publicId, CurrentUser caller) {
         ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, requireTenant(caller))
                 .orElseThrow(SessionNotFoundException::new);
+        if (session.getStatus() != SessionStatus.SCHEDULED) {
+            throw new SessionNotReadyToOpenException();
+        }
         session.open();
         return SessionMapper.toResponse(session);
     }

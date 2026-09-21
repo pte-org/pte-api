@@ -34,6 +34,8 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> 
     List<ExamSession> findByTenantId(UUID tenantId);
 
     @Query("SELECT s FROM ExamSession s WHERE s.subscriptionId = :subscriptionId "
+            + "AND s.status IN (com.pte.session.domain.enums.SessionStatus.SCHEDULED, "
+            + "com.pte.session.domain.enums.SessionStatus.OPEN) "
             + "AND s.opensAt < :closesAt AND s.closesAt > :opensAt "
             + "AND (:excludedPublicId IS NULL OR s.publicId <> :excludedPublicId)")
     Optional<ExamSession> findFirstOverlapping(@Param("subscriptionId") UUID subscriptionId,

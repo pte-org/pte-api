@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 public class SessionCapacityExceededException extends DomainException {
 
     public SessionCapacityExceededException() {
-        super(HttpStatus.CONFLICT, SessionConstants.SESSION_CAPACITY_EXCEEDED);
+        super(HttpStatus.CONFLICT, SessionConstants.SESSION_CAPACITY_EXCEEDED,
+                null, SessionConstants.SESSION_CAPACITY_EXCEEDED_FRIENDLY);
     }
 }

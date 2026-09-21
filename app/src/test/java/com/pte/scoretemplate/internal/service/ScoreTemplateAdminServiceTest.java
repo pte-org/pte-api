@@ -12,6 +12,8 @@ import com.pte.scoretemplate.internal.exception.ScoreTemplateConcurrentModificat
 import com.pte.scoretemplate.internal.exception.ScoreTemplateNotDraftException;
 import com.pte.scoretemplate.internal.exception.ScoreTemplateValidationException;
 import com.pte.scoretemplate.internal.repository.ScoreTemplateRepository;
+import com.pte.itembank.QuestionTypeService;
+import com.pte.itembank.domain.enums.PteTaskType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +40,9 @@ class ScoreTemplateAdminServiceTest {
 
     @Mock
     private ScoreTemplateRepository repository;
+
+    @Mock
+    private QuestionTypeService questionTypeService;
 
     private ScoreTemplateAdminService service;
 
@@ -303,6 +308,27 @@ class ScoreTemplateAdminServiceTest {
 
         assertThatThrownBy(() -> service.cloneToDraft(sourceId))
                 .isInstanceOf(ScoreTemplateConcurrentModificationException.class);
+    }
+
+    @Test
+    void approvalWorkflow_requiresCatalogAndMovesDraftThroughReview() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate template = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        template.getItems().forEach(item -> item.setSection(PteTaskType.valueOf(item.getTaskType()).getSection().name()));
+        when(questionTypeService.isActive(any())).thenReturn(true);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(template));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service = new ScoreTemplateAdminService(repository, questionTypeService);
+
+        ScoreTemplateResponse pending = service.submitApproval(publicId);
+        assertThat(pending.status()).isEqualTo("PENDING_APPROVAL");
+        assertThat(template.getStatus()).isEqualTo(ScoreTemplateStatus.PENDING_APPROVAL);
+
+        ScoreTemplateResponse approvedForEditing = service.approve(publicId);
+        assertThat(approvedForEditing.status()).isEqualTo("DRAFT");
+        assertThat(template.getStatus()).isEqualTo(ScoreTemplateStatus.DRAFT);
+        verify(questionTypeService, org.mockito.Mockito.times(2)).isActive("READ_ALOUD");
     }
 
     private ScoreTemplateItemRequest sampleItemRequest() {

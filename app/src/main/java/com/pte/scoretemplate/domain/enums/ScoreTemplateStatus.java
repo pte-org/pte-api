@@ -8,6 +8,7 @@ package com.pte.scoretemplate.domain.enums;
  */
 public enum ScoreTemplateStatus {
     DRAFT,
+    PENDING_APPROVAL,
     ACTIVE,
     RETIRED
 }

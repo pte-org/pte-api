@@ -7,21 +7,22 @@ import org.springframework.http.HttpStatus;
 public class SessionSubscriptionCapacityException extends DomainException {
 
     public SessionSubscriptionCapacityException(int requestedCapacity, int subscriptionCapacity) {
-        super(HttpStatus.UNPROCESSABLE_ENTITY,
-                SessionConstants.SESSION_CAPACITY_EXCEEDS_SUBSCRIPTION + ": "
-                        + String.format(SessionConstants.SESSION_CAPACITY_EXCEEDS_SUBSCRIPTION_DETAIL,
+        this(SessionConstants.SESSION_CAPACITY_EXCEEDS_SUBSCRIPTION,
+                SessionConstants.SESSION_CAPACITY_EXCEEDS_SUBSCRIPTION_FRIENDLY,
+                String.format(SessionConstants.SESSION_CAPACITY_EXCEEDS_SUBSCRIPTION_DETAIL,
                         requestedCapacity, subscriptionCapacity));
     }
 
     public static SessionSubscriptionCapacityException forEnrollments(long enrollmentCount,
                                                                         int subscriptionCapacity) {
         return new SessionSubscriptionCapacityException(
-                SessionConstants.SESSION_ENROLLMENTS_EXCEED_SUBSCRIPTION + ": "
-                        + String.format(SessionConstants.SESSION_ENROLLMENTS_EXCEED_SUBSCRIPTION_DETAIL,
+                SessionConstants.SESSION_ENROLLMENTS_EXCEED_SUBSCRIPTION,
+                SessionConstants.SESSION_ENROLLMENTS_EXCEED_SUBSCRIPTION_FRIENDLY,
+                String.format(SessionConstants.SESSION_ENROLLMENTS_EXCEED_SUBSCRIPTION_DETAIL,
                         enrollmentCount, subscriptionCapacity));
     }
 
-    private SessionSubscriptionCapacityException(String message) {
-        super(HttpStatus.UNPROCESSABLE_ENTITY, message);
+    private SessionSubscriptionCapacityException(String code, String friendlyMessage, String diagnosticMessage) {
+        super(HttpStatus.UNPROCESSABLE_ENTITY, code, null, friendlyMessage, code + ": " + diagnosticMessage);
     }
 }
