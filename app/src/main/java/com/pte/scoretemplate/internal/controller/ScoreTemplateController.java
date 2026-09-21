@@ -7,6 +7,8 @@ import com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.scoretemplate.internal.service.ScoreTemplateAdminService;
 import com.pte.scoretemplate.ScoreTemplateService;
+import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,7 +54,7 @@ public class ScoreTemplateController {
     @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
     public ApiResponse<ScoreTemplateResponse> create(
             @Valid @RequestBody CreateScoreTemplateRequest request) {
-        return ApiResponse.success(adminService.createDraft(request));
+        return ApiResponse.success(adminService.createDraft(request, currentUser()));
     }
 
     @GetMapping("/{publicId}")
@@ -64,14 +66,14 @@ public class ScoreTemplateController {
     @PostMapping("/{publicId}/clone")
     @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
     public ApiResponse<ScoreTemplateResponse> clone(@PathVariable UUID publicId) {
-        return ApiResponse.success(adminService.cloneToDraft(publicId));
+        return ApiResponse.success(adminService.cloneToDraft(publicId, currentUser()));
     }
 
     @PutMapping("/{publicId}/items")
     @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
     public ApiResponse<ScoreTemplateResponse> replaceItems(@PathVariable UUID publicId,
                                                             @Valid @RequestBody ReplaceScoreTemplateItemsRequest request) {
-        return ApiResponse.success(adminService.replaceItems(publicId, request));
+        return ApiResponse.success(adminService.replaceItems(publicId, request, currentUser()));
     }
 
     @DeleteMapping("/{publicId}")
@@ -84,7 +86,7 @@ public class ScoreTemplateController {
     @PostMapping("/{publicId}/activate")
     @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<ScoreTemplateResponse> activate(@PathVariable UUID publicId) {
-        return ApiResponse.success(adminService.activate(publicId));
+        return ApiResponse.success(adminService.activate(publicId, currentUser()));
     }
 
     @GetMapping("/active")
@@ -99,25 +101,29 @@ public class ScoreTemplateController {
     @PostMapping("/{publicId}/submit-approval")
     @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
     public ApiResponse<ScoreTemplateResponse> submitApproval(@PathVariable UUID publicId) {
-        return ApiResponse.success(adminService.submitApproval(publicId));
+        return ApiResponse.success(adminService.submitApproval(publicId, currentUser()));
     }
 
     @PostMapping("/{publicId}/approve")
     @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<ScoreTemplateResponse> approve(@PathVariable UUID publicId) {
-        return ApiResponse.success(adminService.approve(publicId));
+        return ApiResponse.success(adminService.approve(publicId, currentUser()));
     }
 
     @PostMapping("/{publicId}/reject")
     @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<ScoreTemplateResponse> reject(@PathVariable UUID publicId,
             @Valid @RequestBody RejectScoreTemplateRequest request) {
-        return ApiResponse.success(adminService.reject(publicId, request));
+        return ApiResponse.success(adminService.reject(publicId, request, currentUser()));
     }
 
     @GetMapping("/{publicId}/feasibility")
     @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
     public ApiResponse<ScoreTemplateFeasibilityResponse> feasibility(@PathVariable UUID publicId) {
         return ApiResponse.success(scoreTemplateService.getTemplateFeasibility(publicId));
+    }
+
+    private CurrentUser currentUser() {
+        return CurrentUserContext.required();
     }
 }

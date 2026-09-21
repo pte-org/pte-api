@@ -21,7 +21,8 @@ import java.util.UUID;
 @NoArgsConstructor
 public class AuditLog extends BaseEntity {
 
-    @Column(name = "tenant_id", nullable = false)
+    /** Null for platform-level actions that are intentionally outside a tenant. */
+    @Column(name = "tenant_id")
     private UUID tenantId;
 
     @Column(name = "actor_user_id", nullable = false)

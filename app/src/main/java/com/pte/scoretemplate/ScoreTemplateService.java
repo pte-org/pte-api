@@ -4,6 +4,8 @@ import com.pte.scoretemplate.domain.ScoreTemplate;
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.TaskTypeCodeCompatibility;
+import com.pte.itembank.TaskRuntimeProfileService;
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse;
@@ -13,6 +15,7 @@ import com.pte.scoretemplate.internal.exception.NoActiveScoreTemplateException;
 import com.pte.scoretemplate.internal.exception.ScoreTemplateNotFoundException;
 import com.pte.scoretemplate.internal.mapper.ScoreTemplateMapper;
 import com.pte.scoretemplate.internal.repository.ScoreTemplateRepository;
+import com.pte.scoretemplate.internal.constant.ScoreTemplateConstants;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +26,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The only door other modules use to reach {@code scoretemplate}. {@code
@@ -38,17 +42,24 @@ public class ScoreTemplateService {
 
     private final ScoreTemplateRepository repository;
     private final ItembankService itembankService;
+    private final TaskRuntimeProfileService runtimeProfileService;
 
     @Autowired
-    public ScoreTemplateService(ScoreTemplateRepository repository, ItembankService itembankService) {
+    public ScoreTemplateService(ScoreTemplateRepository repository, ItembankService itembankService,
+            TaskRuntimeProfileService runtimeProfileService) {
         this.repository = repository;
         this.itembankService = itembankService;
+        this.runtimeProfileService = runtimeProfileService;
+    }
+
+    /** Compatibility constructor for focused readiness tests. */
+    public ScoreTemplateService(ScoreTemplateRepository repository, ItembankService itembankService) {
+        this(repository, itembankService, null);
     }
 
     /** Compatibility constructor for focused read-service tests. */
     public ScoreTemplateService(ScoreTemplateRepository repository) {
-        this.repository = repository;
-        this.itembankService = null;
+        this(repository, null, null);
     }
 
     /** Used by {@code assessment.SnapshotPublishService} to pin the scoring scheme at exam-publish time. */
@@ -95,17 +106,24 @@ public class ScoreTemplateService {
                 taskTypes.add(taskType);
             } catch (RuntimeException ex) {
                 slots.add(new ScoreTemplateSlotFeasibilityResponse(item.taskType(), item.section(),
-                        item.maxCount(), 0, false, "UNKNOWN_TASK_TYPE"));
+                        item.maxCount(), 0, false, ScoreTemplateConstants.UNKNOWN_TASK_TYPE));
             }
         }
         Map<PteTaskType, Long> availability = itembankService.countPublishedByTaskTypes(taskTypes);
+        Set<TaskRuntimeProfileDescriptor> invalidProfiles = runtimeProfileService == null ? Set.of()
+                : runtimeProfileService.invalidPinnedProfiles(template.items().stream()
+                        .map(ScoreTemplateItemResponse::runtime)
+                        .filter(java.util.Objects::nonNull)
+                        .toList());
         for (ScoreTemplateItemResponse item : template.items()) {
             try {
                 PteTaskType taskType = TaskTypeCodeCompatibility.parse(item.taskType());
                 long available = availability.getOrDefault(taskType, 0L);
                 boolean sectionMatches = taskType.getSection().name().equals(item.section());
-                boolean ready = sectionMatches && available >= item.maxCount();
-                String reason = !sectionMatches ? "SECTION_MISMATCH" : ready ? null : "INSUFFICIENT_POOL";
+                String profileReason = runtimeProfileReason(item, invalidProfiles);
+                boolean ready = profileReason == null && sectionMatches && available >= item.maxCount();
+                String reason = profileReason != null ? profileReason
+                        : !sectionMatches ? "SECTION_MISMATCH" : ready ? null : "INSUFFICIENT_POOL";
                 slots.add(new ScoreTemplateSlotFeasibilityResponse(item.taskType(), item.section(),
                         item.maxCount(), available, ready, reason));
             } catch (RuntimeException ignored) {
@@ -114,5 +132,16 @@ public class ScoreTemplateService {
         }
         return new ScoreTemplateFeasibilityResponse(template.publicId(), template.version(),
                 slots.stream().allMatch(ScoreTemplateSlotFeasibilityResponse::ready), slots);
+    }
+
+    private String runtimeProfileReason(ScoreTemplateItemResponse item,
+            Set<TaskRuntimeProfileDescriptor> invalidProfiles) {
+        if (item.runtime() == null) {
+            return ScoreTemplateConstants.RUNTIME_PROFILE_NOT_PINNED;
+        }
+        if (invalidProfiles.contains(item.runtime())) {
+            return ScoreTemplateConstants.RUNTIME_PROFILE_INVALID;
+        }
+        return null;
     }
 }

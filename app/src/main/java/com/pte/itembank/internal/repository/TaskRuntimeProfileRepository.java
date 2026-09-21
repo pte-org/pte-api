@@ -18,4 +18,7 @@ public interface TaskRuntimeProfileRepository extends JpaRepository<TaskRuntimeP
 
     List<TaskRuntimeProfile> findAllByTaskTypeCodeInAndStatusAndDeletedFalse(
             Collection<String> taskTypeCodes, TaskRuntimeProfileStatus status);
+
+    List<TaskRuntimeProfile> findAllByTaskTypeCodeInAndProfileVersionInAndDeletedFalse(
+            Collection<String> taskTypeCodes, Collection<Integer> profileVersions);
 }

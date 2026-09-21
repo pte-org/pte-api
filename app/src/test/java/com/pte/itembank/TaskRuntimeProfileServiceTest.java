@@ -11,6 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -51,6 +52,22 @@ class TaskRuntimeProfileServiceTest {
 
         assertThatThrownBy(() -> new TaskRuntimeProfileService(repository).resolveActive("READ_ALOUD"))
                 .hasMessage("TASK_RUNTIME_PROFILE_NOT_ALLOWED");
+    }
+
+    @Test
+    void pinnedValidation_usesOneQueryForAllTemplateProfiles() {
+        TaskRuntimeProfile readAloud = profile("READ_ALOUD");
+        TaskRuntimeProfile writeEssay = profile("WRITE_ESSAY");
+        TaskRuntimeProfileDescriptor readDescriptor = TaskRuntimeProfileRegistry.descriptorFor("READ_ALOUD");
+        TaskRuntimeProfileDescriptor writeDescriptor = TaskRuntimeProfileRegistry.descriptorFor("WRITE_ESSAY");
+        when(repository.findAllByTaskTypeCodeInAndProfileVersionInAndDeletedFalse(any(), any()))
+                .thenReturn(List.of(readAloud, writeEssay));
+
+        Set<TaskRuntimeProfileDescriptor> invalid = new TaskRuntimeProfileService(repository)
+                .invalidPinnedProfiles(List.of(readDescriptor, writeDescriptor));
+
+        assertThat(invalid).isEmpty();
+        verify(repository, times(1)).findAllByTaskTypeCodeInAndProfileVersionInAndDeletedFalse(any(), any());
     }
 
     private TaskRuntimeProfile profile(String taskTypeCode) {

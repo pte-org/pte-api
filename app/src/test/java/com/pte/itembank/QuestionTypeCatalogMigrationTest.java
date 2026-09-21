@@ -55,4 +55,16 @@ class QuestionTypeCatalogMigrationTest {
             assertThat(sql).contains("WRITE_FROM_DICTATION");
         }
     }
+
+    @Test
+    void platformAuditMigration_allowsPlatformScopedLifecycleEvents() throws IOException {
+        try (InputStream input = getClass().getResourceAsStream(
+                "/db/migration/V46__allow_platform_audit_events.sql")) {
+            assertThat(input).isNotNull();
+            String sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+
+            assertThat(sql).contains("ALTER TABLE audit_logs")
+                    .contains("ALTER COLUMN tenant_id DROP NOT NULL");
+        }
+    }
 }

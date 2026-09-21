@@ -21,6 +21,8 @@ import com.pte.scoretemplate.internal.exception.ScoreTemplateValidationException
 import com.pte.scoretemplate.internal.constant.ScoreTemplateConstants;
 import com.pte.scoretemplate.internal.mapper.ScoreTemplateMapper;
 import com.pte.scoretemplate.internal.repository.ScoreTemplateRepository;
+import com.pte.shared.audit.AuditLogService;
+import com.pte.shared.security.CurrentUser;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -28,7 +30,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -42,22 +48,30 @@ public class ScoreTemplateAdminService {
     private final ScoreTemplateRepository repository;
     private final QuestionTypeService questionTypeService;
     private final TaskRuntimeProfileService runtimeProfileService;
+    private final AuditLogService auditLogService;
 
     public ScoreTemplateAdminService(ScoreTemplateRepository repository, QuestionTypeService questionTypeService) {
-        this(repository, questionTypeService, null);
+        this(repository, questionTypeService, null, null);
     }
 
     @Autowired
     public ScoreTemplateAdminService(ScoreTemplateRepository repository, QuestionTypeService questionTypeService,
-            TaskRuntimeProfileService runtimeProfileService) {
+            TaskRuntimeProfileService runtimeProfileService, AuditLogService auditLogService) {
         this.repository = repository;
         this.questionTypeService = questionTypeService;
         this.runtimeProfileService = runtimeProfileService;
+        this.auditLogService = auditLogService;
+    }
+
+    /** Compatibility constructor used by focused tests and legacy in-process callers. */
+    public ScoreTemplateAdminService(ScoreTemplateRepository repository, QuestionTypeService questionTypeService,
+            TaskRuntimeProfileService runtimeProfileService) {
+        this(repository, questionTypeService, runtimeProfileService, null);
     }
 
     /** Compatibility constructor used by focused unit tests. */
     public ScoreTemplateAdminService(ScoreTemplateRepository repository) {
-        this(repository, null, null);
+        this(repository, null, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -73,6 +87,11 @@ public class ScoreTemplateAdminService {
     /** Creates an empty DRAFT in the next version of a template code family. */
     @Transactional
     public ScoreTemplateResponse createDraft(CreateScoreTemplateRequest request) {
+        return createDraft(request, null);
+    }
+
+    @Transactional
+    public ScoreTemplateResponse createDraft(CreateScoreTemplateRequest request, CurrentUser caller) {
         String code = request.code().trim();
         repository.findAllByCodeForUpdate(code);
         int nextVersion = repository.findMaxVersionByCode(code) + 1;
@@ -83,12 +102,20 @@ public class ScoreTemplateAdminService {
         draft.setName(request.name().trim());
         draft.setStatus(ScoreTemplateStatus.DRAFT);
 
-        return ScoreTemplateMapper.toResponse(saveOrTranslateConflict(draft));
+        ScoreTemplate saved = saveOrTranslateConflict(draft);
+        audit(caller, ScoreTemplateConstants.AUDIT_CREATED, saved,
+                "Created draft version " + saved.getVersion());
+        return ScoreTemplateMapper.toResponse(saved);
     }
 
     /** Copies every item of {@code sourcePublicId} into a new DRAFT one version ahead, same {@code code}. */
     @Transactional
     public ScoreTemplateResponse cloneToDraft(UUID sourcePublicId) {
+        return cloneToDraft(sourcePublicId, null);
+    }
+
+    @Transactional
+    public ScoreTemplateResponse cloneToDraft(UUID sourcePublicId, CurrentUser caller) {
         ScoreTemplate source = findByPublicId(sourcePublicId);
         // Locks every row of this code family first, closing the TOCTOU window
         // against a concurrent clone/activate on the same family (phase-01 Risks).
@@ -102,7 +129,10 @@ public class ScoreTemplateAdminService {
         draft.setStatus(ScoreTemplateStatus.DRAFT);
         source.getItems().forEach(item -> draft.addItem(copyItem(item)));
 
-        return ScoreTemplateMapper.toResponse(saveOrTranslateConflict(draft));
+        ScoreTemplate saved = saveOrTranslateConflict(draft);
+        audit(caller, ScoreTemplateConstants.AUDIT_CLONED, saved,
+                "Cloned from version " + source.getVersion());
+        return ScoreTemplateMapper.toResponse(saved);
     }
 
     /**
@@ -115,47 +145,93 @@ public class ScoreTemplateAdminService {
      */
     @Transactional
     public ScoreTemplateResponse replaceItems(UUID draftPublicId, ReplaceScoreTemplateItemsRequest request) {
+        return replaceItems(draftPublicId, request, null);
+    }
+
+    @Transactional
+    public ScoreTemplateResponse replaceItems(UUID draftPublicId, ReplaceScoreTemplateItemsRequest request,
+            CurrentUser caller) {
         ScoreTemplate template = findByPublicId(draftPublicId);
         requireDraft(template);
-        template.setName(request.name());
-        template.getItems().clear();
-        request.items().forEach(itemRequest -> template.addItem(toEntity(itemRequest)));
-        ScoreTemplateActivationValidator.validateSkillWeightTotals(template);
-        return ScoreTemplateMapper.toResponse(repository.save(template));
+        try {
+            template.setName(request.name());
+            template.getItems().clear();
+            request.items().forEach(itemRequest -> template.addItem(toEntity(itemRequest)));
+            ScoreTemplateActivationValidator.validateSkillWeightTotals(template);
+            validateCatalog(template);
+            return ScoreTemplateMapper.toResponse(repository.save(template));
+        } catch (ScoreTemplateValidationException ex) {
+            auditValidationFailure(caller, template, ex);
+            throw ex;
+        }
     }
 
     /** Author submits a complete, structurally valid draft for admin review. */
     @Transactional
     public ScoreTemplateResponse submitApproval(UUID publicId) {
+        return submitApproval(publicId, null);
+    }
+
+    @Transactional
+    public ScoreTemplateResponse submitApproval(UUID publicId, CurrentUser caller) {
         ScoreTemplate template = findByPublicId(publicId);
         requireDraft(template);
-        validateCatalog(template);
-        ScoreTemplateActivationValidator.validate(template);
+        try {
+            validateCatalog(template);
+            ScoreTemplateActivationValidator.validate(template);
+        } catch (ScoreTemplateValidationException ex) {
+            auditValidationFailure(caller, template, ex);
+            throw ex;
+        }
         template.setRejectionReason(null);
         template.setStatus(ScoreTemplateStatus.PENDING_APPROVAL);
-        return ScoreTemplateMapper.toResponse(repository.save(template));
+        ScoreTemplateResponse response = ScoreTemplateMapper.toResponse(repository.save(template));
+        audit(caller, ScoreTemplateConstants.AUDIT_SUBMITTED, template,
+                "Submitted version " + template.getVersion() + " for approval");
+        return response;
     }
 
     /** Admin approval returns the immutable review decision to an editable draft. */
     @Transactional
     public ScoreTemplateResponse approve(UUID publicId) {
+        return approve(publicId, null);
+    }
+
+    @Transactional
+    public ScoreTemplateResponse approve(UUID publicId, CurrentUser caller) {
         ScoreTemplate template = findByPublicId(publicId);
         requirePendingApproval(template);
-        validateCatalog(template);
-        ScoreTemplateActivationValidator.validate(template);
+        try {
+            validateCatalog(template);
+            ScoreTemplateActivationValidator.validate(template);
+        } catch (ScoreTemplateValidationException ex) {
+            auditValidationFailure(caller, template, ex);
+            throw ex;
+        }
         template.setRejectionReason(null);
         template.setStatus(ScoreTemplateStatus.DRAFT);
-        return ScoreTemplateMapper.toResponse(repository.save(template));
+        ScoreTemplateResponse response = ScoreTemplateMapper.toResponse(repository.save(template));
+        audit(caller, ScoreTemplateConstants.AUDIT_APPROVED, template,
+                "Approved version " + template.getVersion() + " for activation");
+        return response;
     }
 
     /** Admin rejection returns the template to DRAFT with an actionable reason. */
     @Transactional
     public ScoreTemplateResponse reject(UUID publicId, RejectScoreTemplateRequest request) {
+        return reject(publicId, request, null);
+    }
+
+    @Transactional
+    public ScoreTemplateResponse reject(UUID publicId, RejectScoreTemplateRequest request, CurrentUser caller) {
         ScoreTemplate template = findByPublicId(publicId);
         requirePendingApproval(template);
         template.setRejectionReason(request.reason().trim());
         template.setStatus(ScoreTemplateStatus.DRAFT);
-        return ScoreTemplateMapper.toResponse(repository.save(template));
+        ScoreTemplateResponse response = ScoreTemplateMapper.toResponse(repository.save(template));
+        audit(caller, ScoreTemplateConstants.AUDIT_REJECTED, template,
+                "Returned version " + template.getVersion() + " to draft: " + template.getRejectionReason());
+        return response;
     }
 
     /** Deletes a DRAFT; ACTIVE and RETIRED versions remain immutable and auditable. */
@@ -182,10 +258,20 @@ public class ScoreTemplateAdminService {
      */
     @Transactional
     public ScoreTemplateResponse activate(UUID publicId) {
+        return activate(publicId, null);
+    }
+
+    @Transactional
+    public ScoreTemplateResponse activate(UUID publicId, CurrentUser caller) {
         ScoreTemplate target = findByPublicId(publicId);
         requireDraft(target);
-        validateCatalog(target);
-        ScoreTemplateActivationValidator.validate(target);
+        try {
+            validateCatalog(target);
+            ScoreTemplateActivationValidator.validate(target);
+        } catch (ScoreTemplateValidationException ex) {
+            auditValidationFailure(caller, target, ex);
+            throw ex;
+        }
 
         repository.findAllByCodeForUpdate(target.getCode());
         repository.findWithItemsByStatus(ScoreTemplateStatus.ACTIVE)
@@ -193,10 +279,16 @@ public class ScoreTemplateAdminService {
                 .ifPresent(active -> {
                     active.setStatus(ScoreTemplateStatus.RETIRED);
                     repository.saveAndFlush(active);
+                    audit(caller, ScoreTemplateConstants.AUDIT_RETIRED, active,
+                            "Retired version " + active.getVersion() + " after activating version "
+                                    + target.getVersion());
                 });
         target.setStatus(ScoreTemplateStatus.ACTIVE);
 
-        return ScoreTemplateMapper.toResponse(saveOrTranslateConflict(target));
+        ScoreTemplate saved = saveOrTranslateConflict(target);
+        audit(caller, ScoreTemplateConstants.AUDIT_ACTIVATED, saved,
+                "Activated version " + saved.getVersion());
+        return ScoreTemplateMapper.toResponse(saved);
     }
 
     private ScoreTemplate findByPublicId(UUID publicId) {
@@ -219,34 +311,110 @@ public class ScoreTemplateAdminService {
         if (questionTypeService == null) {
             return;
         }
-        template.getItems().forEach(item -> {
+        List<String> errors = new ArrayList<>();
+        List<ScoreTemplateItem> profileItems = new ArrayList<>();
+        List<String> missingProfileCodes = new ArrayList<>();
+        for (ScoreTemplateItem item : template.getItems()) {
             final PteTaskType taskType;
             try {
                 String canonicalCode = TaskTypeCodeCompatibility.canonicalize(item.getTaskType());
                 item.setTaskType(canonicalCode);
                 taskType = TaskTypeCodeCompatibility.parse(canonicalCode);
             } catch (RuntimeException ex) {
-                throw new ScoreTemplateValidationException(
-                        ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + item.getTaskType());
+                errors.add(ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + item.getTaskType());
+                continue;
             }
             if (!questionTypeService.isActive(taskType.name())) {
-                throw new ScoreTemplateValidationException(
-                        ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + item.getTaskType());
+                errors.add(ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + item.getTaskType());
+                continue;
             }
             if (!taskType.getSection().name().equals(item.getSection())) {
-                throw new ScoreTemplateValidationException(
-                        ScoreTemplateConstants.TEMPLATE_SECTION_INVALID + item.getTaskType());
+                errors.add(ScoreTemplateConstants.TEMPLATE_SECTION_INVALID + item.getTaskType());
+                continue;
             }
-            TaskRuntimeProfileDescriptor pinned = item.pinnedRuntimeProfile();
-            if (pinned == null) {
-                item.pinRuntimeProfile(resolveActiveProfile(taskType.name()));
-            } else if (runtimeProfileService != null) {
-                runtimeProfileService.validatePinned(pinned);
-            } else if (!TaskRuntimeProfileRegistry.descriptorFor(taskType.name()).equals(pinned)) {
-                throw new ScoreTemplateValidationException(ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID
-                        + item.getTaskType());
+            profileItems.add(item);
+            if (item.pinnedRuntimeProfile() == null) {
+                missingProfileCodes.add(taskType.name());
             }
-        });
+        }
+
+        Map<String, TaskRuntimeProfileDescriptor> activeProfiles = new LinkedHashMap<>();
+        boolean activeProfileLookupFailed = false;
+        if (!missingProfileCodes.isEmpty()) {
+            try {
+                if (runtimeProfileService == null) {
+                    for (String code : missingProfileCodes) {
+                        activeProfiles.put(code, TaskRuntimeProfileRegistry.descriptorFor(code));
+                    }
+                } else {
+                    activeProfiles.putAll(runtimeProfileService.resolveActiveByTaskTypeCodes(missingProfileCodes));
+                }
+            } catch (RuntimeException ex) {
+                activeProfileLookupFailed = true;
+            }
+        }
+
+        for (ScoreTemplateItem item : profileItems) {
+            if (item.pinnedRuntimeProfile() == null) {
+                TaskRuntimeProfileDescriptor active = activeProfiles.get(item.getTaskType());
+                if (!activeProfileLookupFailed && active != null) {
+                    item.pinRuntimeProfile(active);
+                }
+            }
+        }
+
+        List<TaskRuntimeProfileDescriptor> pinnedProfiles = profileItems.stream()
+                .map(ScoreTemplateItem::pinnedRuntimeProfile)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        Set<TaskRuntimeProfileDescriptor> invalidProfiles = runtimeProfileService == null
+                ? profileItems.stream()
+                        .map(ScoreTemplateItem::pinnedRuntimeProfile)
+                        .filter(java.util.Objects::nonNull)
+                        .filter(profile -> !isAllowlistedProfile(profile))
+                        .collect(java.util.stream.Collectors.toSet())
+                : runtimeProfileService.invalidPinnedProfiles(pinnedProfiles);
+        for (ScoreTemplateItem item : profileItems) {
+            if (item.pinnedRuntimeProfile() == null || invalidProfiles.contains(item.pinnedRuntimeProfile())) {
+                errors.add(ScoreTemplateConstants.TEMPLATE_PROFILE_INVALID + item.getTaskType());
+            }
+        }
+        if (!errors.isEmpty()) {
+            throw new ScoreTemplateValidationException(String.join("; ", errors));
+        }
+    }
+
+    private boolean isAllowlistedProfile(TaskRuntimeProfileDescriptor profile) {
+        try {
+            return TaskRuntimeProfileRegistry.descriptorFor(profile.taskTypeCode()).equals(profile);
+        } catch (RuntimeException ex) {
+            return false;
+        }
+    }
+
+    private void audit(CurrentUser caller, String action, ScoreTemplate template, String summary) {
+        if (auditLogService == null || caller == null || template == null) {
+            return;
+        }
+        auditLogService.record(caller, ScoreTemplateConstants.AUDIT_AGGREGATE_TYPE,
+                String.valueOf(template.getPublicId()), action, truncate(summary));
+    }
+
+    private void auditValidationFailure(CurrentUser caller, ScoreTemplate template,
+            ScoreTemplateValidationException exception) {
+        if (auditLogService == null || caller == null || template == null) {
+            return;
+        }
+        auditLogService.recordFailure(caller, ScoreTemplateConstants.AUDIT_AGGREGATE_TYPE,
+                String.valueOf(template.getPublicId()), ScoreTemplateConstants.AUDIT_VALIDATION_FAILED,
+                truncate(exception.getMessage()));
+    }
+
+    private String truncate(String summary) {
+        if (summary == null) {
+            return "";
+        }
+        return summary.length() <= 500 ? summary : summary.substring(0, 500);
     }
 
     private ScoreTemplate saveOrTranslateConflict(ScoreTemplate template) {

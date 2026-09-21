@@ -84,6 +84,28 @@ class ScoreTemplateActivationValidatorTest {
     }
 
     @Test
+    void validate_duplicateTaskType_reportsDuplicateInsteadOfSilentlyAcceptingIt() {
+        ScoreTemplate template = validTemplate();
+        template.getItems().get(1).setTaskType(template.getItems().get(0).getTaskType());
+
+        assertThatThrownBy(() -> ScoreTemplateActivationValidator.validate(template))
+                .isInstanceOf(ScoreTemplateValidationException.class)
+                .hasMessageContaining("Duplicate task types")
+                .hasMessageContaining("READ_ALOUD");
+    }
+
+    @Test
+    void validate_duplicateSequence_reportsDuplicateInsteadOfSilentlyAcceptingIt() {
+        ScoreTemplate template = validTemplate();
+        template.getItems().get(1).setSequence(template.getItems().get(0).getSequence());
+
+        assertThatThrownBy(() -> ScoreTemplateActivationValidator.validate(template))
+                .isInstanceOf(ScoreTemplateValidationException.class)
+                .hasMessageContaining("Duplicate template sequence values")
+                .hasMessageContaining("0");
+    }
+
+    @Test
     void validate_minCountGreaterThanMaxCount_throws() {
         ScoreTemplate template = validTemplate();
         template.getItems().get(0).setMinCount(5);

@@ -155,23 +155,29 @@ public final class ScoreTemplateActivationValidator {
         }
     }
 
-    private static void validateEverySkillHasPositiveTotalWeight(List<ScoreTemplateItem> items) {
+    private static void collectPositiveWeightErrors(List<ScoreTemplateItem> items, List<String> errors) {
         WEIGHT_COLUMNS.forEach((skillName, accessor) -> {
-            BigDecimal total = items.stream().map(accessor).reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal total = sum(items, accessor);
             if (total.signum() <= 0) {
-                throw new ScoreTemplateValidationException(ScoreTemplateConstants.SKILL_WITH_NO_WEIGHT + skillName);
+                errors.add(ScoreTemplateConstants.SKILL_WITH_NO_WEIGHT + skillName);
             }
         });
     }
 
     /** Speaking/Writing/Reading/Listening must each sum to exactly 100 — no more, no less. {@code OVERALL} is exempt (see class Javadoc). */
-    private static void validateSkillWeightsSumToExactly100(List<ScoreTemplateItem> items) {
+    private static void collectSkillWeightTotalErrors(List<ScoreTemplateItem> items, List<String> errors) {
         SKILL_WEIGHT_COLUMNS.forEach((skillName, accessor) -> {
-            BigDecimal total = items.stream().map(accessor).reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal total = sum(items, accessor);
             if (total.compareTo(REQUIRED_SKILL_TOTAL) != 0) {
-                throw new ScoreTemplateValidationException(
-                        ScoreTemplateConstants.SKILL_WEIGHT_NOT_100 + skillName + " (current total: " + total + ")");
+                errors.add(ScoreTemplateConstants.SKILL_WEIGHT_NOT_100 + skillName + " (current total: " + total + ")");
             }
         });
+    }
+
+    private static BigDecimal sum(List<ScoreTemplateItem> items, Function<ScoreTemplateItem, BigDecimal> accessor) {
+        return items.stream()
+                .map(accessor)
+                .map(value -> value == null ? BigDecimal.ZERO : value)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

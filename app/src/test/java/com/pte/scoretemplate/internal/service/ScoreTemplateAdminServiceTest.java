@@ -14,6 +14,8 @@ import com.pte.scoretemplate.internal.exception.ScoreTemplateValidationException
 import com.pte.scoretemplate.internal.repository.ScoreTemplateRepository;
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.shared.audit.AuditLogService;
+import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +45,9 @@ class ScoreTemplateAdminServiceTest {
 
     @Mock
     private QuestionTypeService questionTypeService;
+
+    @Mock
+    private AuditLogService auditLogService;
 
     private ScoreTemplateAdminService service;
 
@@ -151,6 +156,14 @@ class ScoreTemplateAdminServiceTest {
 
         assertThatThrownBy(() -> service.replaceItems(publicId, request)).isInstanceOf(ScoreTemplateNotDraftException.class);
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void notDraftError_hasStableCodeAndActionableUserMessage() {
+        ScoreTemplateNotDraftException exception = new ScoreTemplateNotDraftException();
+
+        assertThat(exception.getCode()).isEqualTo("SCORE_TEMPLATE_NOT_DRAFT");
+        assertThat(exception.getUserMessage()).containsIgnoringCase("clone");
     }
 
     @Test
@@ -331,6 +344,50 @@ class ScoreTemplateAdminServiceTest {
         assertThat(approvedForEditing.status()).isEqualTo("DRAFT");
         assertThat(template.getStatus()).isEqualTo(ScoreTemplateStatus.DRAFT);
         verify(questionTypeService, org.mockito.Mockito.times(2)).isActive("READ_ALOUD");
+    }
+
+    @Test
+    void invalidActivation_isRecordedWithoutLeakingQuestionContent() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate invalid = new ScoreTemplate();
+        invalid.setPublicId(publicId);
+        invalid.setCode("CUSTOM");
+        invalid.setVersion(1);
+        invalid.setName("Broken");
+        invalid.setStatus(ScoreTemplateStatus.DRAFT);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(invalid));
+        service = new ScoreTemplateAdminService(repository, questionTypeService, null, auditLogService);
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
+
+        assertThatThrownBy(() -> service.activate(publicId, caller))
+                .isInstanceOf(ScoreTemplateValidationException.class);
+
+        verify(auditLogService).recordFailure(eq(caller), eq("SCORE_TEMPLATE"), eq(publicId.toString()),
+                eq("VALIDATION_FAILED"), any());
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void clone_recordsPlatformAuditEvent() {
+        UUID sourceId = UUID.randomUUID();
+        ScoreTemplate source = fullyValidTemplate(sourceId, "APEUNI_V5", 3, ScoreTemplateStatus.ACTIVE);
+        when(repository.findWithItemsByPublicId(sourceId)).thenReturn(Optional.of(source));
+        when(repository.findAllByCodeForUpdate("APEUNI_V5")).thenReturn(List.of(source));
+        when(repository.findMaxVersionByCode("APEUNI_V5")).thenReturn(3);
+        when(repository.save(any())).thenAnswer(inv -> {
+            ScoreTemplate saved = inv.getArgument(0);
+            if (saved.getPublicId() == null) {
+                saved.setPublicId(UUID.randomUUID());
+            }
+            return saved;
+        });
+        service = new ScoreTemplateAdminService(repository, null, null, auditLogService);
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"));
+
+        ScoreTemplateResponse response = service.cloneToDraft(sourceId, caller);
+
+        verify(auditLogService).record(eq(caller), eq("SCORE_TEMPLATE"), eq(response.publicId().toString()),
+                eq("CLONED"), any());
     }
 
     private ScoreTemplateItemRequest sampleItemRequest() {
