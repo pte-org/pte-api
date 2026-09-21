@@ -3,13 +3,18 @@ package com.pte.attempt;
 import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
+import com.pte.attempt.domain.enums.AttemptStatus;
+import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import com.pte.attempt.internal.service.AttemptSummaryQueryService;
 import com.pte.attempt.internal.service.ProctorCommandService;
 import com.pte.attempt.internal.service.SubmittedAnswerQueryService;
+import com.pte.shared.StartedAttemptLookup;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * The only door other modules use to reach {@code attempt}. {@code
@@ -25,18 +30,21 @@ import java.util.UUID;
  * directly.
  */
 @Service
-public class AttemptService {
+public class AttemptService implements StartedAttemptLookup {
 
     private final ProctorCommandService proctorCommandService;
     private final SubmittedAnswerQueryService submittedAnswerQueryService;
     private final AttemptSummaryQueryService attemptSummaryQueryService;
+    private final ExamAttemptRepository examAttemptRepository;
 
     public AttemptService(ProctorCommandService proctorCommandService,
                           SubmittedAnswerQueryService submittedAnswerQueryService,
-                          AttemptSummaryQueryService attemptSummaryQueryService) {
+                          AttemptSummaryQueryService attemptSummaryQueryService,
+                          ExamAttemptRepository examAttemptRepository) {
         this.proctorCommandService = proctorCommandService;
         this.submittedAnswerQueryService = submittedAnswerQueryService;
         this.attemptSummaryQueryService = attemptSummaryQueryService;
+        this.examAttemptRepository = examAttemptRepository;
     }
 
     /** Silent no-op if the attempt doesn't exist or isn't IN_PROGRESS — a stale/duplicate/late command is not an error. */
@@ -62,5 +70,20 @@ public class AttemptService {
     /** The pinned score template + tested sections for one attempt — reporting's weighted scoring (Phase 5). */
     public AttemptScoreContextView getScoreContext(UUID attemptPublicId) {
         return attemptSummaryQueryService.getScoreContext(attemptPublicId);
+    }
+
+    /** Batch conflict read for session publish; no attempt content crosses the module boundary. */
+    @Override
+    public Set<UUID> findStartedStudentPublicIds(UUID tenantId, List<UUID> sessionPublicIds,
+            List<UUID> studentPublicIds) {
+        if (sessionPublicIds.isEmpty() || studentPublicIds.isEmpty()) {
+            return Set.of();
+        }
+        return examAttemptRepository
+                .findByTenantIdAndSessionPublicIdInAndStudentPublicIdInAndStatus(
+                        tenantId, sessionPublicIds, studentPublicIds, AttemptStatus.IN_PROGRESS)
+                .stream()
+                .map(com.pte.attempt.domain.ExamAttempt::getStudentPublicId)
+                .collect(Collectors.toSet());
     }
 }

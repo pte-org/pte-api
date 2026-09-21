@@ -1,6 +1,9 @@
 package com.pte.session.domain;
 
 import com.pte.session.domain.enums.SessionStatus;
+import com.pte.session.domain.enums.FormMode;
+import com.pte.session.domain.enums.ReusePolicy;
+import com.pte.session.domain.enums.ExamMode;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
@@ -9,6 +12,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -48,8 +52,36 @@ public class ExamSession extends BaseEntity {
     @Column(nullable = false, length = 64)
     private String licenseKey;
 
-    @Column(nullable = false)
+    @Column
     private UUID snapshotPublicId;
+
+    @Column
+    private UUID templatePublicId;
+
+    @Column
+    private Integer templateVersion;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "form_mode", length = 32)
+    private FormMode formMode = FormMode.SHARED_FORM;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "exam_mode", length = 16)
+    private ExamMode examMode = ExamMode.MOCK_TEST;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reuse_policy", length = 40)
+    private ReusePolicy reusePolicy = ReusePolicy.ALLOW;
+
+    @Column(name = "series_key", length = 128)
+    private String seriesKey;
+
+    @Column(name = "generation_job_public_id")
+    private UUID generationJobPublicId;
+
+    @Version
+    @Column(name = "draft_version", nullable = false)
+    private Long draftVersion = 0L;
 
     @Column(nullable = false)
     private Instant opensAt;
@@ -81,7 +113,8 @@ public class ExamSession extends BaseEntity {
     }
 
     public void cancel() {
-        if (status == SessionStatus.SCHEDULED) {
+        if (status == SessionStatus.DRAFT || status == SessionStatus.PREPARING
+                || status == SessionStatus.READY || status == SessionStatus.SCHEDULED) {
             this.status = SessionStatus.CANCELLED;
         }
     }

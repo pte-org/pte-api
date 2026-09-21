@@ -7,6 +7,8 @@ import com.pte.assessment.internal.exception.InsufficientQuestionBankException;
 import com.pte.assessment.internal.exception.InsufficientQuestionBankException.Shortage;
 import com.pte.assessment.internal.exception.InvalidSectionException;
 import com.pte.assessment.internal.exception.InvalidSkillSelectionException;
+import com.pte.assessment.internal.constant.AssessmentConstants;
+import com.pte.assessment.internal.exception.TemplateNotActiveException;
 import com.pte.assessment.internal.repository.ExamBlueprintRepository;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.domain.enums.PteSection;
@@ -19,7 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -86,6 +90,37 @@ public class ExamGenerationService {
         return snapshotPublishService.publish(saved.getPublicId(), caller);
     }
 
+    /** Deterministic, template-pinned generation used by the new session flow. */
+    @Transactional
+    public SnapshotResponse generateDeterministic(String name, UUID templatePublicId, long seed,
+            CurrentUser caller) {
+        ScoreTemplateResponse template = scoreTemplateService.findActiveByPublicId(templatePublicId)
+                .orElseThrow(TemplateNotActiveException::new);
+        List<Requirement> requirements = buildRequirements(template, Set.of(
+                PteSection.SPEAKING, PteSection.WRITING, PteSection.READING, PteSection.LISTENING));
+        List<RolledRequirement> rolled = requirements.stream()
+                .map(requirement -> roll(requirement, new Random(seed ^ requirement.taskType().name().hashCode())))
+                .toList();
+        checkStockOrThrow(rolled);
+        List<PickedItem> picked = drawDeterministic(rolled, seed);
+
+        ExamBlueprint blueprint = new ExamBlueprint();
+        blueprint.setName(name);
+        blueprint.setTenantId(caller.tenantId());
+        int orderIndex = 0;
+        for (PickedItem item : picked) {
+            BlueprintItem blueprintItem = new BlueprintItem();
+            blueprintItem.setQuestionPublicId(item.questionPublicId());
+            blueprintItem.setSection(item.section());
+            blueprintItem.setOrderIndex(orderIndex++);
+            blueprint.addItem(blueprintItem);
+        }
+        ExamBlueprint saved = blueprintRepository.save(blueprint);
+        return snapshotPublishService.publish(saved.getPublicId(), caller, template, seed,
+                AssessmentConstants.DETERMINISTIC_ALGORITHM_VERSION,
+                template.publicId() + ":" + template.version());
+    }
+
     private Set<PteSection> parseSkills(Set<String> skills) {
         if (skills == null || skills.isEmpty() || skills.size() > 4) {
             throw new InvalidSkillSelectionException();
@@ -122,10 +157,42 @@ public class ExamGenerationService {
     }
 
     private RolledRequirement roll(Requirement requirement) {
+        return roll(requirement, random);
+    }
+
+    private RolledRequirement roll(Requirement requirement, Random source) {
         int n = requirement.minCount() == requirement.maxCount()
                 ? requirement.minCount()
-                : requirement.minCount() + random.nextInt(requirement.maxCount() - requirement.minCount() + 1);
+                : requirement.minCount() + source.nextInt(requirement.maxCount() - requirement.minCount() + 1);
         return new RolledRequirement(requirement.taskType(), requirement.section(), n);
+    }
+
+    private List<PickedItem> drawDeterministic(List<RolledRequirement> rolled, long seed) {
+        List<PickedItem> picked = new ArrayList<>();
+        Set<UUID> used = new HashSet<>();
+        List<Shortage> shortages = new ArrayList<>();
+        for (RolledRequirement requirement : rolled) {
+            List<UUID> candidates = new ArrayList<>(itembankService.publishedQuestionIds(requirement.taskType()));
+            Collections.shuffle(candidates, new Random(seed ^ requirement.taskType().name().hashCode()
+                    ^ requirement.section().name().hashCode()));
+            int selected = 0;
+            for (UUID candidate : candidates) {
+                if (used.add(candidate)) {
+                    picked.add(new PickedItem(candidate, requirement.section()));
+                    selected++;
+                    if (selected == requirement.n()) {
+                        break;
+                    }
+                }
+            }
+            if (selected < requirement.n()) {
+                shortages.add(new Shortage(requirement.taskType().name(), requirement.n(), selected));
+            }
+        }
+        if (!shortages.isEmpty()) {
+            throw new InsufficientQuestionBankException(shortages);
+        }
+        return picked;
     }
 
     private void checkStockOrThrow(List<RolledRequirement> rolled) {

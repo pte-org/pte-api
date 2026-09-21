@@ -82,6 +82,7 @@ public class QuestionController {
     }
 
     @PostMapping("/{publicId}/publish")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<QuestionResponse> publish(@PathVariable UUID publicId) {
         return ApiResponse.success(itembankService.publish(publicId, currentUser()));
     }

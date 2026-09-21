@@ -60,6 +60,14 @@ public class SnapshotPublishService {
 
     @Transactional
     public SnapshotResponse publish(UUID blueprintPublicId, CurrentUser caller) {
+        return publish(blueprintPublicId, caller, null, null, null, null);
+    }
+
+    /** Publishes with an explicit template/provenance for the orchestration flow. */
+    @Transactional
+    public SnapshotResponse publish(UUID blueprintPublicId, CurrentUser caller,
+            ScoreTemplateResponse requestedTemplate, Long generationSeed,
+            String generationAlgorithmVersion, String poolPolicyFingerprint) {
         ExamBlueprint blueprint = blueprintRepository.findWithItemsByPublicId(blueprintPublicId)
                 .orElseThrow(BlueprintNotFoundException::new);
         if (!accessPolicy.canRead(blueprint.getTenantId(), blueprint.getTenantId() == null, caller)) {
@@ -72,7 +80,8 @@ public class SnapshotPublishService {
         // template (NoActiveScoreTemplateException, not caught here — it must
         // surface as a loud configuration error) leaves the blueprint DRAFT and
         // saves no snapshot (spec FR-13's immutable pin starts from a real value).
-        ScoreTemplateResponse activeTemplate = scoreTemplateService.getActive();
+        ScoreTemplateResponse activeTemplate = requestedTemplate != null
+                ? requestedTemplate : scoreTemplateService.getActive();
 
         int version = (int) snapshotRepository.countBySourceBlueprintPublicId(blueprintPublicId) + 1;
         ExamSnapshot snapshot = new ExamSnapshot();
@@ -81,6 +90,9 @@ public class SnapshotPublishService {
         snapshot.setSourceBlueprintPublicId(blueprintPublicId);
         snapshot.setScoreTemplatePublicId(activeTemplate.publicId());
         snapshot.setScoreTemplateVersion(activeTemplate.version());
+        snapshot.setGenerationSeed(generationSeed);
+        snapshot.setGenerationAlgorithmVersion(generationAlgorithmVersion);
+        snapshot.setPoolPolicyFingerprint(poolPolicyFingerprint);
         snapshot.setTenantId(blueprint.getTenantId());
         blueprint.getItems().forEach(item -> snapshot.addItem(toSnapshotItem(
                 itembankService.freeze(item.getQuestionPublicId()), item.getSection(), item.getOrderIndex())));

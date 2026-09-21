@@ -4,8 +4,12 @@ import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.dto.response.SnapshotResponse;
 import com.pte.assessment.internal.service.ExamGenerationService;
 import com.pte.assessment.internal.service.SnapshotPublishService;
+import com.pte.scoretemplate.ScoreTemplateService;
+import com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
 import java.util.UUID;
@@ -27,10 +31,21 @@ public class AssessmentService {
 
     private final SnapshotPublishService snapshotPublishService;
     private final ExamGenerationService examGenerationService;
+    private final ScoreTemplateService scoreTemplateService;
 
+    @Autowired
+    public AssessmentService(SnapshotPublishService snapshotPublishService, ExamGenerationService examGenerationService,
+            ScoreTemplateService scoreTemplateService) {
+        this.snapshotPublishService = snapshotPublishService;
+        this.examGenerationService = examGenerationService;
+        this.scoreTemplateService = scoreTemplateService;
+    }
+
+    /** Compatibility constructor for focused assessment unit tests. */
     public AssessmentService(SnapshotPublishService snapshotPublishService, ExamGenerationService examGenerationService) {
         this.snapshotPublishService = snapshotPublishService;
         this.examGenerationService = examGenerationService;
+        this.scoreTemplateService = null;
     }
 
     /** Answer-stripped summary - safe for {@code session} to validate composition against. */
@@ -50,5 +65,20 @@ public class AssessmentService {
      */
     public SnapshotResponse generateAndPublish(String name, Set<String> skills, CurrentUser caller) {
         return examGenerationService.generate(name, skills, caller);
+    }
+
+    /** Generates one immutable, template-pinned snapshot from a persisted seed. */
+    public SnapshotResponse generateDeterministic(String name, UUID templatePublicId, long seed,
+            CurrentUser caller) {
+        return examGenerationService.generateDeterministic(name, templatePublicId, seed, caller);
+    }
+
+    /** Safe, answer-free readiness report used by authoring/admin screens. */
+    @Transactional(readOnly = true)
+    public ScoreTemplateFeasibilityResponse getTemplateFeasibility(UUID templatePublicId) {
+        if (scoreTemplateService == null) {
+            throw new IllegalStateException("Template feasibility dependencies are not configured");
+        }
+        return scoreTemplateService.getTemplateFeasibility(templatePublicId);
     }
 }

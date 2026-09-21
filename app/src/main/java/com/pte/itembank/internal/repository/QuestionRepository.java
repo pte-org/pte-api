@@ -61,4 +61,13 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
             LIMIT :n
             """, nativeQuery = true)
     List<UUID> randomPublishedSharedIdsByTaskType(@Param("taskType") String taskType, @Param("n") int n);
+
+    /** Stable candidate order for the assessment generator to shuffle with a persisted seed. */
+    @Query(value = """
+            SELECT public_id
+            FROM questions
+            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pte_task_type = :taskType
+            ORDER BY public_id
+            """, nativeQuery = true)
+    List<UUID> publishedSharedIdsByTaskType(@Param("taskType") String taskType);
 }

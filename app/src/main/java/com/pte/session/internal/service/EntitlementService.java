@@ -2,6 +2,7 @@ package com.pte.session.internal.service;
 
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.enums.SessionStatus;
+import com.pte.session.domain.enums.FormMode;
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
 import com.pte.session.internal.exception.NotEntitledException;
@@ -11,6 +12,8 @@ import com.pte.session.internal.mapper.SessionMapper;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.session.internal.repository.ProctorAssignmentRepository;
+import com.pte.session.internal.repository.FormAssignmentRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,12 +32,22 @@ public class EntitlementService {
     private final ExamSessionRepository sessionRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final ProctorAssignmentRepository proctorAssignmentRepository;
+    private final FormAssignmentRepository formAssignmentRepository;
 
+    @Autowired
     public EntitlementService(ExamSessionRepository sessionRepository, EnrollmentRepository enrollmentRepository,
-                              ProctorAssignmentRepository proctorAssignmentRepository) {
+                              ProctorAssignmentRepository proctorAssignmentRepository,
+                              FormAssignmentRepository formAssignmentRepository) {
         this.sessionRepository = sessionRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.proctorAssignmentRepository = proctorAssignmentRepository;
+        this.formAssignmentRepository = formAssignmentRepository;
+    }
+
+    /** Compatibility constructor for focused session unit tests. */
+    public EntitlementService(ExamSessionRepository sessionRepository, EnrollmentRepository enrollmentRepository,
+                              ProctorAssignmentRepository proctorAssignmentRepository) {
+        this(sessionRepository, enrollmentRepository, proctorAssignmentRepository, null);
     }
 
     @Transactional(readOnly = true)
@@ -47,7 +60,13 @@ public class EntitlementService {
         if (!enrollmentRepository.existsBySessionIdAndStudentPublicId(session.getId(), studentPublicId)) {
             throw new NotEntitledException();
         }
-        return new EntitlementResponse(session.getPublicId(), session.getSnapshotPublicId(), session.getTenantId(),
+        UUID snapshotPublicId = session.getSnapshotPublicId();
+        if (session.getFormMode() == FormMode.UNIQUE_FORM_PER_STUDENT && formAssignmentRepository != null) {
+            snapshotPublicId = formAssignmentRepository.findBySessionIdAndStudentPublicId(session.getId(), studentPublicId)
+                    .map(assignment -> assignment.getForm().getSnapshotPublicId())
+                    .orElseThrow(NotEntitledException::new);
+        }
+        return new EntitlementResponse(session.getPublicId(), snapshotPublicId, session.getTenantId(),
                 session.getOpensAt(), session.getClosesAt(), SessionMapper.toPolicy(session.getPolicy()));
     }
 

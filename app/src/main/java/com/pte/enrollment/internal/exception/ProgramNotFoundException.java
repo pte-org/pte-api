@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 public class ProgramNotFoundException extends DomainException {
 
     public ProgramNotFoundException() {
-        super(HttpStatus.NOT_FOUND, EnrollmentConstants.PROGRAM_NOT_FOUND);
+        super(HttpStatus.NOT_FOUND, EnrollmentConstants.PROGRAM_NOT_FOUND,
+                null, EnrollmentConstants.PROGRAM_NOT_FOUND_FRIENDLY);
     }
 }

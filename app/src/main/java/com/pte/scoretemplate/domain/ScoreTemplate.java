@@ -53,6 +53,9 @@ public class ScoreTemplate extends BaseEntity {
     @Column(nullable = false)
     private ScoreTemplateStatus status = ScoreTemplateStatus.DRAFT;
 
+    @Column(name = "rejection_reason", length = 1000)
+    private String rejectionReason;
+
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("sequence ASC")
     private List<ScoreTemplateItem> items = new ArrayList<>();

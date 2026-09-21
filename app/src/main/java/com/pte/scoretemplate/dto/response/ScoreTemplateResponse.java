@@ -9,5 +9,12 @@ public record ScoreTemplateResponse(
         int version,
         String name,
         String status,
+        String rejectionReason,
         List<ScoreTemplateItemResponse> items) {
+
+    /** Source-compatible constructor for existing trusted module callers. */
+    public ScoreTemplateResponse(UUID publicId, String code, int version, String name, String status,
+            List<ScoreTemplateItemResponse> items) {
+        this(publicId, code, version, name, status, null, items);
+    }
 }

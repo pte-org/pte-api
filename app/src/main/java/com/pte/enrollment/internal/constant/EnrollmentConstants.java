@@ -4,6 +4,8 @@ package com.pte.enrollment.internal.constant;
 public final class EnrollmentConstants {
 
     public static final String PROGRAM_NOT_FOUND = "PROGRAM_NOT_FOUND";
+    public static final String PROGRAM_NOT_FOUND_FRIENDLY =
+            "The selected program could not be found or is no longer active.";
     public static final String PROGRAM_NAME_ALREADY_USED = "PROGRAM_NAME_ALREADY_USED";
     public static final String PROGRAM_HAS_ACTIVE_CLASSES = "PROGRAM_HAS_ACTIVE_CLASSES";
     public static final String ORGANIZATION_NOT_FOUND = "ORGANIZATION_NOT_FOUND";
