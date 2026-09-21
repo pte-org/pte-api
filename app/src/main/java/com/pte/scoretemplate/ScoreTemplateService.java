@@ -3,6 +3,7 @@ package com.pte.scoretemplate;
 import com.pte.scoretemplate.domain.ScoreTemplate;
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
 import com.pte.itembank.ItembankService;
+import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse;
@@ -90,7 +91,7 @@ public class ScoreTemplateService {
         List<ScoreTemplateSlotFeasibilityResponse> slots = new ArrayList<>();
         for (ScoreTemplateItemResponse item : template.items()) {
             try {
-                PteTaskType taskType = PteTaskType.valueOf(item.taskType());
+                PteTaskType taskType = TaskTypeCodeCompatibility.parse(item.taskType());
                 taskTypes.add(taskType);
             } catch (RuntimeException ex) {
                 slots.add(new ScoreTemplateSlotFeasibilityResponse(item.taskType(), item.section(),
@@ -100,7 +101,7 @@ public class ScoreTemplateService {
         Map<PteTaskType, Long> availability = itembankService.countPublishedByTaskTypes(taskTypes);
         for (ScoreTemplateItemResponse item : template.items()) {
             try {
-                PteTaskType taskType = PteTaskType.valueOf(item.taskType());
+                PteTaskType taskType = TaskTypeCodeCompatibility.parse(item.taskType());
                 long available = availability.getOrDefault(taskType, 0L);
                 boolean sectionMatches = taskType.getSection().name().equals(item.section());
                 boolean ready = sectionMatches && available >= item.maxCount();

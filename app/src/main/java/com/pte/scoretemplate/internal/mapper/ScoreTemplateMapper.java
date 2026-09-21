@@ -1,5 +1,6 @@
 package com.pte.scoretemplate.internal.mapper;
 
+import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.scoretemplate.domain.ScoreTemplate;
 import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
@@ -23,7 +24,7 @@ public final class ScoreTemplateMapper {
 
     private static ScoreTemplateItemResponse toItemResponse(ScoreTemplateItem item) {
         return new ScoreTemplateItemResponse(
-                item.getTaskType(),
+                TaskTypeCodeCompatibility.normalizeForLookup(item.getTaskType()),
                 item.getSection(),
                 item.getSequence(),
                 item.getMinCount(),
@@ -35,6 +36,7 @@ public final class ScoreTemplateMapper {
                 item.getSpeakingWeight(),
                 item.getWritingWeight(),
                 item.getReadingWeight(),
-                item.getListeningWeight());
+                item.getListeningWeight(),
+                item.pinnedRuntimeProfile());
     }
 }

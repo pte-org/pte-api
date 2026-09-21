@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 public class ScoreTemplateNotDraftException extends DomainException {
 
     public ScoreTemplateNotDraftException() {
-        super(HttpStatus.CONFLICT, ScoreTemplateConstants.TEMPLATE_NOT_DRAFT);
+        super(HttpStatus.CONFLICT, ScoreTemplateConstants.TEMPLATE_NOT_DRAFT_CODE, null,
+                ScoreTemplateConstants.TEMPLATE_NOT_DRAFT, ScoreTemplateConstants.TEMPLATE_NOT_DRAFT_CODE);
     }
 }

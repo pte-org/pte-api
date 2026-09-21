@@ -1,5 +1,6 @@
 package com.pte.scoretemplate.domain;
 
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.scoretemplate.domain.enums.ScoringMethod;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
@@ -16,6 +17,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * One task-type row of a {@link ScoreTemplate} (one of the 22 scored PTE
@@ -85,4 +88,59 @@ public class ScoreTemplateItem extends BaseEntity {
 
     @Column(nullable = false, precision = 5, scale = 2)
     private BigDecimal listeningWeight = BigDecimal.ZERO;
+
+    @Column(name = "runtime_profile_key", length = 96)
+    private String runtimeProfileKey;
+
+    @Column(name = "runtime_profile_version")
+    private Integer runtimeProfileVersion;
+
+    @Column(name = "runtime_behavior_key", length = 64)
+    private String runtimeBehaviorKey;
+
+    @Column(name = "runtime_renderer_key", length = 96)
+    private String runtimeRendererKey;
+
+    @Column(name = "runtime_answer_schema_version")
+    private Integer runtimeAnswerSchemaVersion;
+
+    @Column(name = "runtime_scoring_profile_key", length = 64)
+    private String runtimeScoringProfileKey;
+
+    @Column(name = "runtime_scoring_profile_version")
+    private Integer runtimeScoringProfileVersion;
+
+    @Column(name = "runtime_required_client_capabilities", length = 512)
+    private String runtimeRequiredClientCapabilities;
+
+    @Column(name = "runtime_profile_status", length = 16)
+    private String runtimeProfileStatus;
+
+    public void pinRuntimeProfile(TaskRuntimeProfileDescriptor profile) {
+        this.runtimeProfileKey = profile.profileKey();
+        this.runtimeProfileVersion = profile.profileVersion();
+        this.runtimeBehaviorKey = profile.behaviorKey();
+        this.runtimeRendererKey = profile.rendererKey();
+        this.runtimeAnswerSchemaVersion = profile.answerSchemaVersion();
+        this.runtimeScoringProfileKey = profile.scoringProfileKey();
+        this.runtimeScoringProfileVersion = profile.scoringProfileVersion();
+        this.runtimeRequiredClientCapabilities = String.join(",", profile.requiredClientCapabilities());
+        this.runtimeProfileStatus = profile.status();
+    }
+
+    public TaskRuntimeProfileDescriptor pinnedRuntimeProfile() {
+        if (runtimeProfileKey == null || runtimeProfileVersion == null || runtimeBehaviorKey == null
+                || runtimeRendererKey == null || runtimeAnswerSchemaVersion == null
+                || runtimeScoringProfileKey == null || runtimeScoringProfileVersion == null
+                || runtimeProfileStatus == null) {
+            return null;
+        }
+        List<String> capabilities = runtimeRequiredClientCapabilities == null
+                || runtimeRequiredClientCapabilities.isBlank()
+                ? List.of()
+                : Arrays.stream(runtimeRequiredClientCapabilities.split(",")).toList();
+        return new TaskRuntimeProfileDescriptor(taskType, runtimeProfileKey, runtimeProfileVersion,
+                runtimeBehaviorKey, runtimeRendererKey, runtimeAnswerSchemaVersion, runtimeScoringProfileKey,
+                runtimeScoringProfileVersion, capabilities, runtimeProfileStatus);
+    }
 }

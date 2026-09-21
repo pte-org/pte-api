@@ -6,6 +6,7 @@ import com.pte.scoretemplate.internal.constant.ScoreTemplateConstants;
 import com.pte.scoretemplate.internal.exception.ScoreTemplateValidationException;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -69,11 +70,16 @@ public final class ScoreTemplateActivationValidator {
             throw new ScoreTemplateValidationException(ScoreTemplateConstants.ITEMS_REQUIRED);
         }
 
-        validateAllRequiredTaskTypesPresent(items);
-        items.forEach(ScoreTemplateActivationValidator::validateCountRange);
-        items.forEach(ScoreTemplateActivationValidator::validateWeightsNonNegative);
-        validateEverySkillHasPositiveTotalWeight(items);
-        validateSkillWeightsSumToExactly100(items);
+        List<String> errors = new ArrayList<>();
+        collectTaskTypeErrors(items, errors);
+        collectSequenceErrors(items, errors);
+        items.forEach(item -> collectCountError(item, errors));
+        items.forEach(item -> collectWeightErrors(item, errors));
+        collectPositiveWeightErrors(items, errors);
+        collectSkillWeightTotalErrors(items, errors);
+        if (!errors.isEmpty()) {
+            throw new ScoreTemplateValidationException(String.join("; ", errors));
+        }
     }
 
     /**
@@ -91,29 +97,60 @@ public final class ScoreTemplateActivationValidator {
         if (items == null || items.isEmpty()) {
             return;
         }
-        validateSkillWeightsSumToExactly100(items);
+        List<String> errors = new ArrayList<>();
+        collectSkillWeightTotalErrors(items, errors);
+        if (!errors.isEmpty()) {
+            throw new ScoreTemplateValidationException(String.join("; ", errors));
+        }
     }
 
-    private static void validateAllRequiredTaskTypesPresent(List<ScoreTemplateItem> items) {
+    private static void collectTaskTypeErrors(List<ScoreTemplateItem> items, List<String> errors) {
         Set<String> present = new LinkedHashSet<>();
         items.forEach(item -> present.add(item.getTaskType()));
         Set<String> missing = new LinkedHashSet<>(REQUIRED_TASK_TYPES);
         missing.removeAll(present);
         if (!missing.isEmpty()) {
-            throw new ScoreTemplateValidationException(ScoreTemplateConstants.MISSING_TASK_TYPES + missing);
+            errors.add(ScoreTemplateConstants.MISSING_TASK_TYPES + missing);
+        }
+        Set<String> duplicates = new LinkedHashSet<>();
+        Set<String> seen = new LinkedHashSet<>();
+        items.forEach(item -> {
+            if (!seen.add(item.getTaskType())) {
+                duplicates.add(item.getTaskType());
+            }
+        });
+        if (!duplicates.isEmpty()) {
+            errors.add(ScoreTemplateConstants.DUPLICATE_TASK_TYPES + duplicates);
         }
     }
 
-    private static void validateCountRange(ScoreTemplateItem item) {
+    private static void collectSequenceErrors(List<ScoreTemplateItem> items, List<String> errors) {
+        Set<Integer> seen = new LinkedHashSet<>();
+        Set<Integer> duplicates = new LinkedHashSet<>();
+        for (ScoreTemplateItem item : items) {
+            if (item.getSequence() < 0) {
+                errors.add(ScoreTemplateConstants.INVALID_SEQUENCE + item.getSequence());
+            } else if (!seen.add(item.getSequence())) {
+                duplicates.add(item.getSequence());
+            }
+        }
+        if (!duplicates.isEmpty()) {
+            errors.add(ScoreTemplateConstants.DUPLICATE_SEQUENCES + duplicates);
+        }
+    }
+
+    private static void collectCountError(ScoreTemplateItem item, List<String> errors) {
         if (item.getMinCount() < 0 || item.getMinCount() > item.getMaxCount() || item.getMaxCount() < 1) {
-            throw new ScoreTemplateValidationException(ScoreTemplateConstants.INVALID_COUNT_RANGE + item.getTaskType());
+            errors.add(ScoreTemplateConstants.INVALID_COUNT_RANGE + item.getTaskType());
         }
     }
 
-    private static void validateWeightsNonNegative(ScoreTemplateItem item) {
+    private static void collectWeightErrors(ScoreTemplateItem item, List<String> errors) {
         for (Function<ScoreTemplateItem, BigDecimal> accessor : WEIGHT_COLUMNS.values()) {
-            if (accessor.apply(item).signum() < 0) {
-                throw new ScoreTemplateValidationException(ScoreTemplateConstants.NEGATIVE_WEIGHT + item.getTaskType());
+            BigDecimal value = accessor.apply(item);
+            if (value == null || value.signum() < 0) {
+                errors.add(ScoreTemplateConstants.NEGATIVE_WEIGHT + item.getTaskType());
+                return;
             }
         }
     }

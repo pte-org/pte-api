@@ -1,5 +1,6 @@
 package com.pte.assessment.internal.service;
 
+import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.assessment.domain.BlueprintItem;
 import com.pte.assessment.domain.ExamBlueprint;
 import com.pte.assessment.dto.response.SnapshotResponse;
@@ -151,7 +152,7 @@ public class ExamGenerationService {
             itemsBySection.getOrDefault(section, List.of()).stream()
                     .sorted(Comparator.comparingInt(ScoreTemplateItemResponse::sequence))
                     .forEach(i -> requirements.add(new Requirement(
-                            PteTaskType.valueOf(i.taskType()), section, i.minCount(), i.maxCount())));
+                            TaskTypeCodeCompatibility.parse(i.taskType()), section, i.minCount(), i.maxCount())));
         }
         return requirements;
     }

@@ -4,6 +4,10 @@ import com.pte.scoretemplate.domain.ScoreTemplate;
 import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
 import com.pte.itembank.QuestionTypeService;
+import com.pte.itembank.TaskTypeCodeCompatibility;
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
+import com.pte.itembank.TaskRuntimeProfileRegistry;
+import com.pte.itembank.TaskRuntimeProfileService;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.scoretemplate.dto.request.CreateScoreTemplateRequest;
 import com.pte.scoretemplate.dto.request.RejectScoreTemplateRequest;
@@ -37,17 +41,23 @@ public class ScoreTemplateAdminService {
 
     private final ScoreTemplateRepository repository;
     private final QuestionTypeService questionTypeService;
+    private final TaskRuntimeProfileService runtimeProfileService;
+
+    public ScoreTemplateAdminService(ScoreTemplateRepository repository, QuestionTypeService questionTypeService) {
+        this(repository, questionTypeService, null);
+    }
 
     @Autowired
-    public ScoreTemplateAdminService(ScoreTemplateRepository repository, QuestionTypeService questionTypeService) {
+    public ScoreTemplateAdminService(ScoreTemplateRepository repository, QuestionTypeService questionTypeService,
+            TaskRuntimeProfileService runtimeProfileService) {
         this.repository = repository;
         this.questionTypeService = questionTypeService;
+        this.runtimeProfileService = runtimeProfileService;
     }
 
     /** Compatibility constructor used by focused unit tests. */
     public ScoreTemplateAdminService(ScoreTemplateRepository repository) {
-        this.repository = repository;
-        this.questionTypeService = null;
+        this(repository, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -212,8 +222,10 @@ public class ScoreTemplateAdminService {
         template.getItems().forEach(item -> {
             final PteTaskType taskType;
             try {
-                taskType = PteTaskType.valueOf(item.getTaskType());
-            } catch (IllegalArgumentException ex) {
+                String canonicalCode = TaskTypeCodeCompatibility.canonicalize(item.getTaskType());
+                item.setTaskType(canonicalCode);
+                taskType = TaskTypeCodeCompatibility.parse(canonicalCode);
+            } catch (RuntimeException ex) {
                 throw new ScoreTemplateValidationException(
                         ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + item.getTaskType());
             }
@@ -224,6 +236,15 @@ public class ScoreTemplateAdminService {
             if (!taskType.getSection().name().equals(item.getSection())) {
                 throw new ScoreTemplateValidationException(
                         ScoreTemplateConstants.TEMPLATE_SECTION_INVALID + item.getTaskType());
+            }
+            TaskRuntimeProfileDescriptor pinned = item.pinnedRuntimeProfile();
+            if (pinned == null) {
+                item.pinRuntimeProfile(resolveActiveProfile(taskType.name()));
+            } else if (runtimeProfileService != null) {
+                runtimeProfileService.validatePinned(pinned);
+            } else if (!TaskRuntimeProfileRegistry.descriptorFor(taskType.name()).equals(pinned)) {
+                throw new ScoreTemplateValidationException(ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID
+                        + item.getTaskType());
             }
         });
     }
@@ -238,7 +259,7 @@ public class ScoreTemplateAdminService {
 
     private ScoreTemplateItem copyItem(ScoreTemplateItem source) {
         ScoreTemplateItem copy = new ScoreTemplateItem();
-        copy.setTaskType(source.getTaskType());
+        copy.setTaskType(TaskTypeCodeCompatibility.normalizeForLookup(source.getTaskType()));
         copy.setSection(source.getSection());
         copy.setSequence(source.getSequence());
         copy.setMinCount(source.getMinCount());
@@ -251,19 +272,34 @@ public class ScoreTemplateAdminService {
         copy.setWritingWeight(source.getWritingWeight());
         copy.setReadingWeight(source.getReadingWeight());
         copy.setListeningWeight(source.getListeningWeight());
+        TaskRuntimeProfileDescriptor pinned = source.pinnedRuntimeProfile();
+        copy.pinRuntimeProfile(pinned == null ? resolveActiveProfile(copy.getTaskType()) : pinned);
         return copy;
     }
 
     private ScoreTemplateItem toEntity(ScoreTemplateItemRequest request) {
         ScoreTemplateItem item = new ScoreTemplateItem();
-        item.setTaskType(request.taskType());
+        final String canonicalTaskType;
+        try {
+            canonicalTaskType = TaskTypeCodeCompatibility.canonicalize(request.taskType());
+        } catch (RuntimeException ex) {
+            throw new ScoreTemplateValidationException(
+                    ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + request.taskType());
+        }
+        item.setTaskType(canonicalTaskType);
+        try {
+            item.pinRuntimeProfile(resolveActiveProfile(canonicalTaskType));
+        } catch (RuntimeException ex) {
+            throw new ScoreTemplateValidationException(
+                    ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + request.taskType());
+        }
         item.setSection(request.section());
         item.setSequence(request.sequence());
         item.setMinCount(request.minCount());
         item.setMaxCount(request.maxCount());
         item.setPrepSeconds(request.prepSeconds());
         item.setResponseSeconds(request.responseSeconds());
-        item.setScoringMethod(TaskTypeScoringMethods.resolve(request.taskType()));
+        item.setScoringMethod(TaskTypeScoringMethods.resolve(canonicalTaskType));
         item.setSpeakingWeight(request.speakingWeight());
         item.setWritingWeight(request.writingWeight());
         item.setReadingWeight(request.readingWeight());
@@ -271,6 +307,12 @@ public class ScoreTemplateAdminService {
         item.setOverallWeight(computeOverallWeight(
                 request.speakingWeight(), request.writingWeight(), request.readingWeight(), request.listeningWeight()));
         return item;
+    }
+
+    private TaskRuntimeProfileDescriptor resolveActiveProfile(String taskTypeCode) {
+        return runtimeProfileService == null
+                ? TaskRuntimeProfileRegistry.descriptorFor(taskTypeCode)
+                : runtimeProfileService.resolveActive(taskTypeCode);
     }
 
     /**

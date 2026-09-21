@@ -1,5 +1,7 @@
 package com.pte.itembank.internal.mapper;
 
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
+import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.domain.QuestionTypeDefinition;
 import com.pte.itembank.dto.response.QuestionTypeResponse;
 
@@ -9,6 +11,11 @@ public final class QuestionTypeMapper {
     }
 
     public static QuestionTypeResponse toResponse(QuestionTypeDefinition definition) {
+        return toResponse(definition, TaskRuntimeProfileRegistry.descriptorFor(definition.getCode()));
+    }
+
+    public static QuestionTypeResponse toResponse(QuestionTypeDefinition definition,
+            TaskRuntimeProfileDescriptor runtimeProfile) {
         return new QuestionTypeResponse(
                 definition.getPublicId(),
                 definition.getCode(),
@@ -25,6 +32,6 @@ public final class QuestionTypeMapper {
                 definition.isRequiresCorrectAnswer(),
                 definition.isRequiresWordCount(),
                 definition.isRequiresSingleCorrectOption(),
-                definition.isUsesOptionOrderAsCorrectPosition());
+                definition.isUsesOptionOrderAsCorrectPosition(), runtimeProfile, definition.getCode());
     }
 }

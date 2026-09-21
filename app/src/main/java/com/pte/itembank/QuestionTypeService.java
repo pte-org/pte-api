@@ -12,12 +12,15 @@ import com.pte.itembank.internal.exception.QuestionTypeCodeAlreadyUsedException;
 import com.pte.itembank.internal.exception.QuestionTypeNotFoundException;
 import com.pte.itembank.internal.mapper.QuestionTypeMapper;
 import com.pte.itembank.internal.repository.QuestionTypeRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,9 +32,17 @@ import java.util.UUID;
 public class QuestionTypeService {
 
     private final QuestionTypeRepository repository;
+    private final TaskRuntimeProfileService runtimeProfileService;
 
-    public QuestionTypeService(QuestionTypeRepository repository) {
+    @Autowired
+    public QuestionTypeService(QuestionTypeRepository repository, TaskRuntimeProfileService runtimeProfileService) {
         this.repository = repository;
+        this.runtimeProfileService = runtimeProfileService;
+    }
+
+    /** Compatibility constructor for focused catalog tests. */
+    public QuestionTypeService(QuestionTypeRepository repository) {
+        this(repository, null);
     }
 
     @Transactional(readOnly = true)
@@ -39,12 +50,15 @@ public class QuestionTypeService {
         List<QuestionTypeDefinition> definitions = activeOnly
                 ? repository.findAllByDeletedFalseAndActiveTrueOrderByDisplayOrderAscCodeAsc()
                 : repository.findAllByDeletedFalseOrderByDisplayOrderAscCodeAsc();
-        return definitions.stream().map(QuestionTypeMapper::toResponse).toList();
+        Map<String, TaskRuntimeProfileDescriptor> profiles = resolveProfiles(definitions);
+        return definitions.stream().map(definition -> QuestionTypeMapper.toResponse(
+                definition, profiles.get(TaskTypeCodeCompatibility.normalizeForLookup(definition.getCode())))).toList();
     }
 
     @Transactional(readOnly = true)
     public QuestionTypeResponse get(UUID publicId) {
-        return QuestionTypeMapper.toResponse(findByPublicId(publicId));
+        QuestionTypeDefinition definition = findByPublicId(publicId);
+        return QuestionTypeMapper.toResponse(definition, resolveProfile(definition.getCode()));
     }
 
     /**
@@ -70,8 +84,8 @@ public class QuestionTypeService {
      */
     @Transactional
     public QuestionTypeResponse create(CreateQuestionTypeRequest request) {
-        String code = normalizeCode(request.code());
-        PteTaskType taskType = parseTaskType(code);
+        String code = TaskTypeCodeCompatibility.requireCanonicalCode(request.code());
+        PteTaskType taskType = TaskTypeCodeCompatibility.parse(code);
         validateSection(taskType, request.section());
 
         QuestionTypeDefinition definition = repository.findByCode(code)
@@ -93,7 +107,8 @@ public class QuestionTypeService {
         definition.setDisplayOrder(request.displayOrder());
         applyCanonicalRequirements(definition, taskType);
 
-        return QuestionTypeMapper.toResponse(repository.save(definition));
+        definition = repository.save(definition);
+        return QuestionTypeMapper.toResponse(definition, resolveProfile(definition.getCode()));
     }
 
     @Transactional
@@ -103,15 +118,9 @@ public class QuestionTypeService {
         definition.setShortName(request.shortName().trim());
         definition.setDisplayOrder(request.displayOrder());
         definition.setActive(request.active());
-        definition.setRequiresAudioPrompt(request.requiresAudioPrompt());
-        definition.setRequiresImagePrompt(request.requiresImagePrompt());
-        definition.setRequiresPromptText(request.requiresPromptText());
-        definition.setRequiresOptions(request.requiresOptions());
-        definition.setRequiresCorrectAnswer(request.requiresCorrectAnswer());
-        definition.setRequiresWordCount(request.requiresWordCount());
-        definition.setRequiresSingleCorrectOption(request.requiresSingleCorrectOption());
-        definition.setUsesOptionOrderAsCorrectPosition(request.usesOptionOrderAsCorrectPosition());
-        return QuestionTypeMapper.toResponse(repository.save(definition));
+        applyCanonicalRequirements(definition, TaskTypeCodeCompatibility.parse(definition.getCode()));
+        definition = repository.save(definition);
+        return QuestionTypeMapper.toResponse(definition, resolveProfile(definition.getCode()));
     }
 
     /** Soft-deletes a type so existing question rows keep their stable FK key. */
@@ -127,25 +136,18 @@ public class QuestionTypeService {
     public Optional<QuestionTypeDefinition> findDefinitionByCode(String code) {
         // A deleted catalog row must remain readable by validation/delivery so
         // existing questions keep their authored behavior and stable code.
-        return repository.findByCode(code);
+        return repository.findByCode(TaskTypeCodeCompatibility.normalizeForLookup(code));
     }
 
     @Transactional(readOnly = true)
     public boolean isActive(String code) {
-        return repository.findByCodeAndDeletedFalse(code).map(QuestionTypeDefinition::isActive).orElse(false);
+        return repository.findByCodeAndDeletedFalse(TaskTypeCodeCompatibility.normalizeForLookup(code))
+                .map(QuestionTypeDefinition::isActive).orElse(false);
     }
 
     private QuestionTypeDefinition findByPublicId(UUID publicId) {
         return repository.findByPublicIdAndDeletedFalse(publicId)
                 .orElseThrow(QuestionTypeNotFoundException::new);
-    }
-
-    private PteTaskType parseTaskType(String code) {
-        try {
-            return PteTaskType.valueOf(code);
-        } catch (IllegalArgumentException ex) {
-            throw new InvalidQuestionTypeException();
-        }
     }
 
     private void validateSection(PteTaskType taskType, String section) {
@@ -175,7 +177,24 @@ public class QuestionTypeService {
         definition.setUsesOptionOrderAsCorrectPosition(taskType == PteTaskType.RE_ORDER_PARAGRAPHS);
     }
 
-    private String normalizeCode(String code) {
-        return code.trim().toUpperCase(Locale.ROOT);
+    private Map<String, TaskRuntimeProfileDescriptor> resolveProfiles(List<QuestionTypeDefinition> definitions) {
+        if (definitions.isEmpty()) {
+            return Map.of();
+        }
+        if (runtimeProfileService == null) {
+            Map<String, TaskRuntimeProfileDescriptor> fallback = new LinkedHashMap<>();
+            definitions.forEach(definition -> fallback.put(definition.getCode(),
+                    TaskRuntimeProfileRegistry.descriptorFor(definition.getCode())));
+            return fallback;
+        }
+        return runtimeProfileService.resolveActiveByTaskTypeCodes(
+                definitions.stream().map(QuestionTypeDefinition::getCode).toList());
     }
+
+    private TaskRuntimeProfileDescriptor resolveProfile(String code) {
+        return runtimeProfileService == null
+                ? TaskRuntimeProfileRegistry.descriptorFor(code)
+                : runtimeProfileService.resolveActive(code);
+    }
+
 }

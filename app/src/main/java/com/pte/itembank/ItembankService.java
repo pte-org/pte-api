@@ -301,7 +301,7 @@ public class ItembankService {
         Map<PteTaskType, Long> counts = new EnumMap<>(PteTaskType.class);
         taskTypes.forEach(taskType -> counts.put(taskType, 0L));
         for (TaskTypeCountProjection row : questionRepository.countPublishedSharedGroupedByTaskType(names)) {
-            counts.put(PteTaskType.valueOf(row.getTaskType()), row.getCount());
+            counts.put(TaskTypeCodeCompatibility.parse(row.getTaskType()), row.getCount());
         }
         return counts;
     }
@@ -452,8 +452,8 @@ public class ItembankService {
 
     private PteTaskType parseTaskType(String value) {
         try {
-            return PteTaskType.valueOf(value);
-        } catch (IllegalArgumentException ex) {
+            return TaskTypeCodeCompatibility.parse(value);
+        } catch (RuntimeException ex) {
             throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);
         }
     }

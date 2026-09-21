@@ -1,5 +1,6 @@
 package com.pte.scoretemplate.internal.exception;
 
+import com.pte.scoretemplate.internal.constant.ScoreTemplateConstants;
 import com.pte.shared.exception.DomainException;
 import org.springframework.http.HttpStatus;
 
@@ -11,6 +12,6 @@ import org.springframework.http.HttpStatus;
 public class ScoreTemplateValidationException extends DomainException {
 
     public ScoreTemplateValidationException(String reason) {
-        super(HttpStatus.BAD_REQUEST, reason);
+        super(HttpStatus.BAD_REQUEST, ScoreTemplateConstants.TEMPLATE_VALIDATION_FAILED, null, reason, reason);
     }
 }

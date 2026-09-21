@@ -195,6 +195,8 @@ class ScoreTemplateAdminServiceTest {
 
         assertThat(response.items()).hasSize(2);
         assertThat(response.items().get(0).scoringMethod()).isEqualTo("AI_SPEECH");
+        assertThat(response.items().get(0).runtime()).isNotNull();
+        assertThat(response.items().get(0).runtime().rendererKey()).isEqualTo("READ_ALOUD_V1");
         // sampleItemRequest(): speaking=9, writing/reading/listening=0 -> (9+0+0+0)/4 = 2.25
         assertThat(response.items().get(0).overallWeight()).isEqualByComparingTo("2.25");
     }

@@ -1,0 +1,141 @@
+package com.pte.itembank;
+
+import com.pte.itembank.domain.TaskRuntimeProfile;
+import com.pte.itembank.domain.enums.TaskRuntimeProfileStatus;
+import com.pte.itembank.internal.exception.TaskRuntimeProfileException;
+import com.pte.itembank.internal.repository.TaskRuntimeProfileRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/** Public itembank facade for resolving immutable, allowlisted runtime profiles. */
+@Service
+public class TaskRuntimeProfileService {
+
+    private final TaskRuntimeProfileRepository repository;
+
+    @Autowired
+    public TaskRuntimeProfileService(TaskRuntimeProfileRepository repository) {
+        this.repository = repository;
+    }
+
+    /** Compatibility constructor for focused tests that use the static allowlist. */
+    public TaskRuntimeProfileService() {
+        this.repository = null;
+    }
+
+    @Transactional(readOnly = true)
+    public TaskRuntimeProfileDescriptor resolveActive(String taskTypeCode) {
+        String canonicalCode = TaskTypeCodeCompatibility.canonicalize(taskTypeCode);
+        if (repository == null) {
+            return TaskRuntimeProfileRegistry.descriptorFor(canonicalCode);
+        }
+        TaskRuntimeProfile profile = repository
+                .findByTaskTypeCodeAndStatusAndDeletedFalse(canonicalCode, TaskRuntimeProfileStatus.ACTIVE)
+                .orElseThrow(TaskRuntimeProfileException::notFound);
+        return validateAndMap(profile, true);
+    }
+
+    /** Resolves all requested task types with one repository query. */
+    @Transactional(readOnly = true)
+    public Map<String, TaskRuntimeProfileDescriptor> resolveActiveByTaskTypeCodes(
+            Collection<String> taskTypeCodes) {
+        Map<String, TaskRuntimeProfileDescriptor> resolved = new LinkedHashMap<>();
+        for (String taskTypeCode : taskTypeCodes) {
+            String canonicalCode = TaskTypeCodeCompatibility.canonicalize(taskTypeCode);
+            resolved.put(canonicalCode, null);
+        }
+        if (repository == null) {
+            resolved.replaceAll((code, ignored) -> TaskRuntimeProfileRegistry.descriptorFor(code));
+            return resolved;
+        }
+        List<TaskRuntimeProfile> profiles = repository.findAllByTaskTypeCodeInAndStatusAndDeletedFalse(
+                resolved.keySet(), TaskRuntimeProfileStatus.ACTIVE);
+        for (TaskRuntimeProfile profile : profiles) {
+            resolved.put(profile.getTaskTypeCode(), validateAndMap(profile, true));
+        }
+        if (resolved.values().stream().anyMatch(value -> value == null)) {
+            throw TaskRuntimeProfileException.notFound();
+        }
+        return resolved;
+    }
+
+    /** Reads a pinned version; retired profiles remain readable for history. */
+    @Transactional(readOnly = true)
+    public TaskRuntimeProfileDescriptor resolvePinned(String taskTypeCode, Integer profileVersion) {
+        String canonicalCode = TaskTypeCodeCompatibility.canonicalize(taskTypeCode);
+        if (profileVersion == null || repository == null) {
+            return resolveActive(canonicalCode);
+        }
+        TaskRuntimeProfile profile = repository
+                .findByTaskTypeCodeAndProfileVersionAndDeletedFalse(canonicalCode, profileVersion)
+                .orElseThrow(TaskRuntimeProfileException::notFound);
+        return validateAndMap(profile, false);
+    }
+
+    /** Checks that a template item keeps an allowlisted profile version. */
+    public void validatePinned(TaskRuntimeProfileDescriptor pinned) {
+        TaskRuntimeProfileDescriptor allowlisted = TaskRuntimeProfileRegistry.descriptorFor(pinned.taskTypeCode());
+        if (!sameImmutableContract(allowlisted, pinned)) {
+            throw TaskRuntimeProfileException.notAllowed();
+        }
+        if (repository != null) {
+            // A retired version is valid for historical templates, but every
+            // pinned version must still resolve from the database and never be
+            // invented by a client or a malformed legacy row.
+            TaskRuntimeProfileDescriptor persisted = resolvePinned(
+                    pinned.taskTypeCode(), pinned.profileVersion());
+            if (!sameImmutableContract(persisted, pinned)
+                    || !persisted.status().equals(pinned.status())) {
+                throw TaskRuntimeProfileException.notAllowed();
+            }
+        }
+    }
+
+    private TaskRuntimeProfileDescriptor validateAndMap(TaskRuntimeProfile profile, boolean requireActive) {
+        TaskRuntimeProfileDescriptor allowlisted;
+        try {
+            allowlisted = TaskRuntimeProfileRegistry.descriptorFor(profile.getTaskTypeCode());
+        } catch (RuntimeException ex) {
+            throw TaskRuntimeProfileException.notAllowed();
+        }
+        TaskRuntimeProfileDescriptor actual = toDescriptor(profile);
+        if (!sameImmutableContract(allowlisted, actual)) {
+            throw TaskRuntimeProfileException.notAllowed();
+        }
+        if (requireActive && !actual.active()) {
+            throw TaskRuntimeProfileException.notActive();
+        }
+        return actual;
+    }
+
+    private TaskRuntimeProfileDescriptor toDescriptor(TaskRuntimeProfile profile) {
+        List<String> capabilities = profile.getRequiredClientCapabilities() == null
+                || profile.getRequiredClientCapabilities().isBlank()
+                ? List.of()
+                : List.of(profile.getRequiredClientCapabilities().split(","));
+        return new TaskRuntimeProfileDescriptor(
+                profile.getTaskTypeCode(), profile.getProfileKey(), profile.getProfileVersion(),
+                profile.getBehaviorKey(), profile.getRendererKey(), profile.getAnswerSchemaVersion(),
+                profile.getScoringProfileKey(), profile.getScoringProfileVersion(), capabilities,
+                profile.getStatus().name());
+    }
+
+    private boolean sameImmutableContract(TaskRuntimeProfileDescriptor expected,
+            TaskRuntimeProfileDescriptor actual) {
+        return expected.taskTypeCode().equals(actual.taskTypeCode())
+                && expected.profileKey().equals(actual.profileKey())
+                && expected.profileVersion() == actual.profileVersion()
+                && expected.behaviorKey().equals(actual.behaviorKey())
+                && expected.rendererKey().equals(actual.rendererKey())
+                && expected.answerSchemaVersion() == actual.answerSchemaVersion()
+                && expected.scoringProfileKey().equals(actual.scoringProfileKey())
+                && expected.scoringProfileVersion() == actual.scoringProfileVersion()
+                && expected.requiredClientCapabilities().equals(actual.requiredClientCapabilities());
+    }
+}

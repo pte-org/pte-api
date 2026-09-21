@@ -5,6 +5,7 @@ public final class ItembankConstants {
 
     public static final String QUESTION_NOT_FOUND = "QUESTION_NOT_FOUND";
     public static final String INVALID_QUESTION_FIELDS = "INVALID_QUESTION_FIELDS";
+    public static final String INVALID_QUESTION_TYPE = "INVALID_QUESTION_TYPE";
     public static final String UNKNOWN_TASK_TYPE = "UNKNOWN_TASK_TYPE";
 
     // Task-type-specific validation codes

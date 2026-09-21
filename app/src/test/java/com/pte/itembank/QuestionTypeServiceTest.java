@@ -81,7 +81,15 @@ class QuestionTypeServiceTest {
         assertThat(result.shortName()).isEqualTo("RA+");
         assertThat(result.displayOrder()).isEqualTo(42);
         assertThat(result.active()).isFalse();
-        assertThat(result.requiresPromptText()).isFalse();
+        assertThat(result.requiresPromptText()).isTrue();
+    }
+
+    @Test
+    void create_rejectsLegacyFillBlanksAliases() {
+        assertThatThrownBy(() -> service.create(new CreateQuestionTypeRequest(
+                "FILL_BLANKS_READING", "Fill in the blanks", "FIB", "READING", 1, true)))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("INVALID_QUESTION_TYPE");
     }
 
     @Test
@@ -121,6 +129,14 @@ class QuestionTypeServiceTest {
         when(repository.findByCode("READ_ALOUD")).thenReturn(Optional.of(definition));
 
         assertThat(service.findDefinitionByCode("READ_ALOUD")).containsSame(definition);
+    }
+
+    @Test
+    void findDefinitionByCode_readsTheKnownLegacyAliasAsCanonical() {
+        QuestionTypeDefinition definition = definition("FILL_IN_THE_BLANKS_DRAG_AND_DROP", true);
+        when(repository.findByCode("FILL_IN_THE_BLANKS_DRAG_AND_DROP")).thenReturn(Optional.of(definition));
+
+        assertThat(service.findDefinitionByCode("FILL_BLANKS_READING")).containsSame(definition);
     }
 
     @Test
