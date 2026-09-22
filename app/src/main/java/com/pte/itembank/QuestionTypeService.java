@@ -38,7 +38,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.text.Normalizer;
 
 /**
  * Source of truth for the question-type catalog used by authoring clients and

@@ -71,6 +71,54 @@ public final class TaskRuntimeProfileRegistry {
         }
     }
 
+    /**
+     * Validates the canonical screen-contract projection independently of a
+     * logical task key. Custom task keys may reuse a standard screen, so the
+     * task-key-specific check above is not sufficient for the capability
+     * registry boundary.
+     */
+    public static boolean isAllowlistedScreenContract(TaskRuntimeContractDescriptor actual) {
+        if (actual == null || !("ACTIVE".equals(actual.status()) || "RETIRED".equals(actual.status()))) {
+            return false;
+        }
+        return all().stream()
+                .filter(profile -> profile.screenKey().equals(actual.screenKey())
+                        && profile.contractVersion() == actual.contractVersion())
+                .anyMatch(profile -> profileKeyMatches(profile, actual)
+                        && "1.0.0".equals(actual.minSupportedAppVersion())
+                        && ("PTE." + profile.taskTypeCode() + "_AUTHORING")
+                                .equals(actual.authoringContractKey())
+                        && Integer.valueOf(1).equals(actual.authoringContractVersion())
+                        && authoringRequirementsFor(profile.taskTypeCode()).equals(actual.authoringRequirements()));
+    }
+
+    /** Returns the code-owned authoring contract for a standard runtime key. */
+    public static TaskAuthoringRequirements authoringRequirementsFor(String taskTypeCode) {
+        PteTaskType taskType = TaskTypeCodeCompatibility.parse(taskTypeCode);
+        return new TaskAuthoringRequirements(
+                taskType.requiresAudioPrompt(),
+                taskType.requiresImagePrompt(),
+                taskType.requiresPromptText(),
+                taskType.requiresOptions(),
+                taskType.requiresCorrectAnswer(),
+                taskType.requiresWordCount(),
+                taskType == PteTaskType.MC_READING_SINGLE || taskType == PteTaskType.MC_LISTENING_SINGLE,
+                taskType == PteTaskType.RE_ORDER_PARAGRAPHS);
+    }
+
+    private static boolean profileKeyMatches(TaskRuntimeProfileDescriptor profile,
+            TaskRuntimeContractDescriptor actual) {
+        return profile.profileKey().equals(actual.profileKey())
+                && profile.profileVersion() == actual.profileVersion()
+                && profile.behaviorKey().equals(actual.behaviorKey())
+                && profile.rendererKey().equals(actual.rendererKey())
+                && profile.answerSchemaVersion() == actual.answerSchemaVersion()
+                && profile.scoringProfileKey().equals(actual.scoringProfileKey())
+                && profile.scoringProfileVersion() == actual.scoringProfileVersion()
+                && profile.requiredClientCapabilities().equals(actual.requiredClientCapabilities())
+                && profile.scoringMode().equals(actual.scoringMode());
+    }
+
     private static Map<PteTaskType, TaskRuntimeProfileDescriptor> buildProfiles() {
         EnumMap<PteTaskType, TaskRuntimeProfileDescriptor> profiles = new EnumMap<>(PteTaskType.class);
         add(profiles, PteTaskType.PERSONAL_INTRODUCTION, "PERSONAL_INTRODUCTION", "PERSONAL_INTRODUCTION_V1",
@@ -125,6 +173,7 @@ public final class TaskRuntimeProfileRegistry {
             String behaviorKey, String rendererKey, String scoringProfileKey, String... capabilities) {
         profiles.put(taskType, new TaskRuntimeProfileDescriptor(
                 taskType.name(), "PTE." + taskType.name(), PROFILE_VERSION, behaviorKey, rendererKey,
-                ANSWER_SCHEMA_VERSION, scoringProfileKey, SCORING_PROFILE_VERSION, List.of(capabilities), "ACTIVE"));
+                ANSWER_SCHEMA_VERSION, scoringProfileKey, SCORING_PROFILE_VERSION,
+                Arrays.stream(capabilities).sorted().toList(), "ACTIVE"));
     }
 }

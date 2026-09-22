@@ -43,6 +43,30 @@ class TaskRuntimeContractServiceTest {
                 .hasMessage("TASK_RUNTIME_PROFILE_NOT_ACTIVE");
     }
 
+    @Test
+    void activeResolution_rejectsAContractThatIsNotInTheReleaseAllowlist() {
+        TaskRuntimeContract invalid = contract("ACTIVE");
+        invalid.setRendererKey("UNKNOWN_SCREEN_V1");
+        when(repository.findByScreenKeyAndContractVersionAndDeletedFalse("READ_ALOUD_V1", 1))
+                .thenReturn(Optional.of(invalid));
+
+        assertThatThrownBy(() -> new TaskRuntimeContractService(repository)
+                .resolveActive("READ_ALOUD_V1", 1))
+                .hasMessage("TASK_RUNTIME_PROFILE_NOT_ALLOWED");
+    }
+
+    @Test
+    void activeResolution_rejectsDuplicateOrNonCanonicalCapabilities() {
+        TaskRuntimeContract invalid = contract("ACTIVE");
+        invalid.setRequiredClientCapabilities(new String[] {"AUDIO_RECORDING", "AUDIO_RECORDING"});
+        when(repository.findByScreenKeyAndContractVersionAndDeletedFalse("READ_ALOUD_V1", 1))
+                .thenReturn(Optional.of(invalid));
+
+        assertThatThrownBy(() -> new TaskRuntimeContractService(repository)
+                .resolveActive("READ_ALOUD_V1", 1))
+                .hasMessage("TASK_RUNTIME_PROFILE_NOT_ALLOWED");
+    }
+
     private TaskRuntimeContract contract(String status) {
         TaskRuntimeProfileDescriptor profile = TaskRuntimeProfileRegistry.descriptorFor("READ_ALOUD");
         TaskRuntimeContract contract = new TaskRuntimeContract();
@@ -60,6 +84,16 @@ class TaskRuntimeContractServiceTest {
         contract.setMinSupportedAppVersion("1.0.0");
         contract.setAuthoringContractKey("PTE.READ_ALOUD_AUTHORING");
         contract.setAuthoringContractVersion(1);
+        TaskAuthoringRequirements requirements = TaskRuntimeProfileRegistry
+                .authoringRequirementsFor("READ_ALOUD");
+        contract.setRequiresAudioPrompt(requirements.requiresAudioPrompt());
+        contract.setRequiresImagePrompt(requirements.requiresImagePrompt());
+        contract.setRequiresPromptText(requirements.requiresPromptText());
+        contract.setRequiresOptions(requirements.requiresOptions());
+        contract.setRequiresCorrectAnswer(requirements.requiresCorrectAnswer());
+        contract.setRequiresWordCount(requirements.requiresWordCount());
+        contract.setRequiresSingleCorrectOption(requirements.requiresSingleCorrectOption());
+        contract.setUsesOptionOrderAsCorrectPosition(requirements.usesOptionOrderAsCorrectPosition());
         contract.setStatus(status);
         return contract;
     }

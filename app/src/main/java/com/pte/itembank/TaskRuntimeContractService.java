@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,9 @@ import java.util.Map;
  */
 @Service
 public class TaskRuntimeContractService {
+
+    private static final int MAX_REQUIRED_CAPABILITIES = 16;
+    private static final int MAX_CAPABILITY_LENGTH = 64;
 
     private final TaskRuntimeContractRepository repository;
 
@@ -130,8 +134,8 @@ public class TaskRuntimeContractService {
         if (!allowRetired && !profile.active()) {
             throw TaskRuntimeProfileException.notActive();
         }
-        TaskAuthoringRequirements requirements = new TaskAuthoringRequirements(
-                false, false, false, false, false, false, false, false);
+        TaskAuthoringRequirements requirements = TaskRuntimeProfileRegistry
+                .authoringRequirementsFor(profile.taskTypeCode());
         return new TaskRuntimeContractDescriptor(
                 profile.rendererKey(), contractVersion, profile.profileKey(), profile.profileVersion(),
                 profile.behaviorKey(), profile.rendererKey(), profile.answerSchemaVersion(),
@@ -152,7 +156,15 @@ public class TaskRuntimeContractService {
         if (descriptor.minSupportedAppVersion() != null) {
             SemanticVersion.parse(descriptor.minSupportedAppVersion());
         }
-        if (descriptor.requiredClientCapabilities().stream().anyMatch(value -> value == null || value.isBlank())) {
+        List<String> capabilities = descriptor.requiredClientCapabilities();
+        if (capabilities.size() > MAX_REQUIRED_CAPABILITIES
+                || capabilities.stream().anyMatch(value -> value == null || value.isBlank()
+                        || value.length() > MAX_CAPABILITY_LENGTH)
+                || capabilities.stream().distinct().count() != capabilities.size()
+                || !capabilities.equals(capabilities.stream().sorted(Comparator.naturalOrder()).toList())) {
+            throw new TaskRuntimeProfileException(TaskRuntimeProfileConstants.PROFILE_NOT_ALLOWED);
+        }
+        if (!TaskRuntimeProfileRegistry.isAllowlistedScreenContract(descriptor)) {
             throw new TaskRuntimeProfileException(TaskRuntimeProfileConstants.PROFILE_NOT_ALLOWED);
         }
     }
