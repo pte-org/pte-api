@@ -4,6 +4,7 @@ import com.pte.assessment.domain.ExamSnapshot;
 import com.pte.assessment.domain.SnapshotItem;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.dto.response.SnapshotResponse;
+import com.pte.itembank.TaskRuntimeContractConstants;
 
 import java.util.List;
 
@@ -29,7 +30,9 @@ public final class SnapshotMapper {
 
     private static SnapshotResponse.Item toItem(SnapshotItem item) {
         return new SnapshotResponse.Item(
-                item.getOrderIndex(), item.getSection().name(), item.getPteTaskType().name(), item.getTitle());
+                item.getOrderIndex(), item.getSection().name(), item.getPteTaskType().name(), item.getTitle(),
+                item.getTaskTypeCode() != null ? item.getTaskTypeCode() : item.getPteTaskType().name(),
+                item.runtimeProfile(), item.getRuntimeMappingVersion(), runtimeMappingStatus(item));
     }
 
     /** Full-fidelity mapping for the trusted application-call surface only. */
@@ -55,6 +58,13 @@ public final class SnapshotMapper {
                 item.getCorrectAnswerText(),
                 item.getMinWordCount(),
                 item.getMaxWordCount(),
-                item.getOptionsJson());
+                item.getOptionsJson(),
+                item.getTaskTypeCode() != null ? item.getTaskTypeCode() : item.getPteTaskType().name(),
+                item.runtimeProfile(), item.getRuntimeMappingVersion(), runtimeMappingStatus(item));
+    }
+
+    private static String runtimeMappingStatus(SnapshotItem item) {
+        return item.hasPartialRuntimeProfile() ? TaskRuntimeContractConstants.MAPPING_STATUS_INCOMPATIBLE
+                : item.getRuntimeMappingStatus();
     }
 }

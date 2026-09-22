@@ -1,5 +1,7 @@
 package com.pte.attempt.internal.dto.response;
 
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -45,5 +47,17 @@ public record TaskView(
          * no separate on-demand endpoint for images (no replay-limit concern for
          * a static image), so this is embedded directly here.
          */
-        String imageUrl) {
+        String imageUrl,
+        String taskTypeCode,
+        TaskRuntimeProfileDescriptor runtime) {
+
+    public TaskView(UUID pinnedItemPublicId, int orderIndex, int totalTasks, String section,
+            String taskType, String title, String promptText, UUID audioPromptRef, UUID imagePromptRef,
+            Integer minWordCount, Integer maxWordCount, List<OptionView> options,
+            List<BlankGroupView> blankGroups, int prepSeconds, int responseSeconds, Instant examEndTime,
+            Integer preListenSeconds, Integer preRecordSeconds, String imageUrl) {
+        this(pinnedItemPublicId, orderIndex, totalTasks, section, taskType, title, promptText, audioPromptRef,
+                imagePromptRef, minWordCount, maxWordCount, options, blankGroups, prepSeconds, responseSeconds,
+                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, taskType, null);
+    }
 }

@@ -6,12 +6,18 @@ import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.domain.PinnedExamSnapshot;
 import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.internal.config.TaskTimingConfig;
+import com.pte.attempt.internal.constant.AttemptConstants;
+import com.pte.attempt.internal.exception.ExamCapabilityException;
 import com.pte.attempt.internal.exception.MissingAudioDurationException;
 import com.pte.attempt.internal.exception.MissingAudioPromptException;
 import com.pte.attempt.internal.exception.MissingImagePromptException;
 import com.pte.attempt.internal.exception.TaskTimingNotConfiguredException;
 import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
+import com.pte.itembank.TaskRuntimeContractConstants;
+import com.pte.itembank.TaskRuntimeProfileRegistry;
+import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
@@ -22,6 +28,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -78,7 +85,8 @@ public class SnapshotPinService {
         // was published under even after a later template is activated.
         ScoreTemplateResponse scoreTemplate = scoreTemplateService.getByPublicId(content.scoreTemplatePublicId());
         Map<String, ScoreTemplateItemResponse> templateItemsByTaskType = scoreTemplate.items().stream()
-                .collect(Collectors.toMap(ScoreTemplateItemResponse::taskType, Function.identity(), (a, b) -> a));
+                .collect(Collectors.toMap(item -> TaskTypeCodeCompatibility.normalizeForLookup(item.taskType()),
+                        Function.identity(), (a, b) -> a));
 
         PinnedExamSnapshot pinned = new PinnedExamSnapshot();
         pinned.setAttempt(attempt);
@@ -120,14 +128,27 @@ public class SnapshotPinService {
     private PinnedItem toPinnedItem(SnapshotContentResponse.Item source,
                                     Map<String, ScoreTemplateItemResponse> templateItemsByTaskType,
                                     long audioUrlTtlSeconds, UUID tenantId) {
-        ScoreTemplateItemResponse templateItem = templateItemsByTaskType.get(source.taskType());
+        String taskTypeCode = source.taskTypeCode() == null
+                ? TaskTypeCodeCompatibility.normalizeForLookup(source.taskType())
+                : TaskTypeCodeCompatibility.normalizeForLookup(source.taskTypeCode());
+        try {
+            if (!taskTypeCode.equals(TaskTypeCodeCompatibility.normalizeForLookup(source.taskType()))) {
+                throw new IllegalArgumentException("task type code does not match the frozen task type");
+            }
+            if (!TaskTypeCodeCompatibility.parse(taskTypeCode).getSection().name().equals(source.section())) {
+                throw new IllegalArgumentException("task type section does not match the frozen snapshot section");
+            }
+        } catch (RuntimeException ex) {
+            throw new ExamCapabilityException(AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE, List.of());
+        }
+        ScoreTemplateItemResponse templateItem = templateItemsByTaskType.get(taskTypeCode);
         // Non-throwing when the template already has this taskType — most of
         // the 22 rows were deliberately REMOVED from task-timing.json (not just
         // individual fields), so the old throwing timingFor() would wrongly
         // fail every static template-known type (e.g. MC_READING_SINGLE).
         TaskTimingConfig.Timing jsonTiming = templateItem != null
-                ? taskTimingConfig.timingForIfConfigured(source.taskType())
-                : taskTimingConfig.timingFor(source.taskType());
+                ? taskTimingConfig.timingForIfConfigured(taskTypeCode)
+                : taskTimingConfig.timingFor(taskTypeCode);
         boolean isAudioPromptType = jsonTiming != null && jsonTiming.preListenSeconds() != null;
 
         // No composition override anymore (Plan B) — always the template/json value.
@@ -137,6 +158,8 @@ public class SnapshotPinService {
         item.setOrderIndex(source.orderIndex());
         item.setSection(source.section());
         item.setTaskType(source.taskType());
+        item.setTaskTypeCode(taskTypeCode);
+        copyRuntimeContract(source, item, taskTypeCode);
         item.setTitle(source.title());
         item.setPromptText(source.promptText());
         item.setAudioPromptRef(source.audioPromptRef());
@@ -167,7 +190,7 @@ public class SnapshotPinService {
             audioDurationSeconds = resolveAudioUrl(item, source.audioPromptRef(), audioUrlTtlSeconds, tenantId);
         }
 
-        if (DESCRIBE_IMAGE_TASK_TYPE.equals(source.taskType())) {
+        if (DESCRIBE_IMAGE_TASK_TYPE.equals(taskTypeCode)) {
             // DESCRIBE_IMAGE's imagePromptRef is mandatory — same fail-loud rationale
             // as LISTENING's audioPromptRef above (an authoring data problem, not a
             // client error).
@@ -208,6 +231,47 @@ public class SnapshotPinService {
             item.setPrepSeconds(jsonTiming.prepSeconds());
         }
         return item;
+    }
+
+    /**
+     * The source snapshot is the only runtime-provenance source. The pinned
+     * score template is still read for its existing timing contract, but it is
+     * never consulted to reconstruct renderer/scoring behavior.
+     */
+    private void copyRuntimeContract(SnapshotContentResponse.Item source, PinnedItem target, String taskTypeCode) {
+        TaskRuntimeProfileDescriptor runtime = source.runtime();
+        if (runtime == null) {
+            if (source.runtimeMappingStatus() != null
+                    && !TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_LEGACY
+                            .equals(source.runtimeMappingStatus())) {
+                throw new ExamCapabilityException(AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE, List.of());
+            }
+            if (source.runtimeMappingVersion() != null
+                    && !TaskRuntimeContractConstants.MAPPING_VERSION_LEGACY.equals(source.runtimeMappingVersion())) {
+                throw new ExamCapabilityException(AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE, List.of());
+            }
+            // Rows created before Phase 4 are explicitly grandfathered as a
+            // named historical mapping. The enum/alias compatibility boundary
+            // above is the only mapping used; no mutable catalog lookup occurs.
+            target.setRuntimeMappingVersion(TaskRuntimeContractConstants.MAPPING_VERSION_LEGACY);
+            target.setRuntimeMappingStatus(TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_LEGACY);
+            return;
+        }
+        if (!TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_CANONICAL
+                .equals(source.runtimeMappingStatus())
+                || !TaskRuntimeContractConstants.MAPPING_VERSION_CANONICAL.equals(source.runtimeMappingVersion())) {
+            throw new ExamCapabilityException(AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE, List.of());
+        }
+        try {
+            if (!taskTypeCode.equals(runtime.taskTypeCode())
+                    || !TaskRuntimeProfileRegistry.descriptorFor(taskTypeCode).equals(runtime)) {
+                throw new IllegalArgumentException("runtime profile is not an allowlisted match");
+            }
+        } catch (RuntimeException ex) {
+            throw new ExamCapabilityException(AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE, List.of());
+        }
+        target.pinRuntimeProfile(runtime, TaskRuntimeContractConstants.MAPPING_VERSION_CANONICAL,
+                TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_CANONICAL);
     }
 
     private Integer resolveAudioUrl(PinnedItem item, UUID audioPromptRef, long audioUrlTtlSeconds, UUID tenantId) {

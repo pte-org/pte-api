@@ -9,15 +9,25 @@ import com.pte.assessment.dto.response.SnapshotResponse;
 import com.pte.assessment.internal.constant.AssessmentConstants;
 import com.pte.assessment.internal.exception.BlueprintNotFoundException;
 import com.pte.assessment.internal.exception.EmptyBlueprintException;
+import com.pte.assessment.internal.exception.SnapshotRuntimeContractException;
 import com.pte.assessment.internal.mapper.SnapshotMapper;
 import com.pte.assessment.internal.repository.ExamBlueprintRepository;
 import com.pte.assessment.internal.repository.ExamSnapshotRepository;
 import com.pte.itembank.ItembankService;
+import com.pte.itembank.TaskRuntimeContractConstants;
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
+import com.pte.itembank.TaskRuntimeProfileRegistry;
+import com.pte.itembank.TaskRuntimeProfileService;
+import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.itembank.domain.enums.PteSection;
+import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.scoretemplate.ScoreTemplateService;
+import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
@@ -46,16 +56,40 @@ public class SnapshotPublishService {
     private final AssessmentAccessPolicy accessPolicy;
     private final JsonMapper jsonMapper;
     private final ScoreTemplateService scoreTemplateService;
+    private final TaskRuntimeProfileService runtimeProfileService;
+    private final AuditLogService auditLogService;
 
+    @Autowired
     public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, ExamSnapshotRepository snapshotRepository,
                                   ItembankService itembankService, AssessmentAccessPolicy accessPolicy,
-                                  JsonMapper jsonMapper, ScoreTemplateService scoreTemplateService) {
+                                  JsonMapper jsonMapper, ScoreTemplateService scoreTemplateService,
+                                  TaskRuntimeProfileService runtimeProfileService,
+                                  AuditLogService auditLogService) {
         this.blueprintRepository = blueprintRepository;
         this.snapshotRepository = snapshotRepository;
         this.itembankService = itembankService;
         this.accessPolicy = accessPolicy;
         this.jsonMapper = jsonMapper;
         this.scoreTemplateService = scoreTemplateService;
+        this.runtimeProfileService = runtimeProfileService;
+        this.auditLogService = auditLogService;
+    }
+
+    /** Compatibility constructor for focused tests predating runtime provenance. */
+    public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, ExamSnapshotRepository snapshotRepository,
+                                  ItembankService itembankService, AssessmentAccessPolicy accessPolicy,
+                                  JsonMapper jsonMapper, ScoreTemplateService scoreTemplateService) {
+        this(blueprintRepository, snapshotRepository, itembankService, accessPolicy, jsonMapper,
+                scoreTemplateService, null, null);
+    }
+
+    /** Compatibility constructor for tests that provide the runtime service but not audit infrastructure. */
+    public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, ExamSnapshotRepository snapshotRepository,
+                                  ItembankService itembankService, AssessmentAccessPolicy accessPolicy,
+                                  JsonMapper jsonMapper, ScoreTemplateService scoreTemplateService,
+                                  TaskRuntimeProfileService runtimeProfileService) {
+        this(blueprintRepository, snapshotRepository, itembankService, accessPolicy, jsonMapper,
+                scoreTemplateService, runtimeProfileService, null);
     }
 
     @Transactional
@@ -94,8 +128,28 @@ public class SnapshotPublishService {
         snapshot.setGenerationAlgorithmVersion(generationAlgorithmVersion);
         snapshot.setPoolPolicyFingerprint(poolPolicyFingerprint);
         snapshot.setTenantId(blueprint.getTenantId());
-        blueprint.getItems().forEach(item -> snapshot.addItem(toSnapshotItem(
-                itembankService.freeze(item.getQuestionPublicId()), item.getSection(), item.getOrderIndex())));
+        java.util.Map<String, ScoreTemplateItemResponse> templateItemsByTaskType = activeTemplate.items().stream()
+                .collect(java.util.stream.Collectors.toMap(item -> TaskTypeCodeCompatibility
+                                .normalizeForLookup(item.taskType()),
+                        java.util.function.Function.identity(), (first, ignored) -> first));
+        List<QuestionFreezeView> frozenQuestions = blueprint.getItems().stream()
+                .map(item -> itembankService.freeze(item.getQuestionPublicId()))
+                .toList();
+        try {
+            validateRuntimeProfiles(frozenQuestions, templateItemsByTaskType);
+            for (int index = 0; index < blueprint.getItems().size(); index++) {
+                var blueprintItem = blueprint.getItems().get(index);
+                snapshot.addItem(toSnapshotItem(frozenQuestions.get(index), blueprintItem.getSection(),
+                        blueprintItem.getOrderIndex(), templateItemsByTaskType));
+            }
+        } catch (SnapshotRuntimeContractException ex) {
+            if (auditLogService != null && caller != null) {
+                auditLogService.recordFailure(caller, AssessmentConstants.AUDIT_AGGREGATE_SNAPSHOT,
+                        blueprintPublicId.toString(), AssessmentConstants.AUDIT_RUNTIME_MAPPING_REJECTED,
+                        ex.diagnosticMessage());
+            }
+            throw ex;
+        }
 
         ExamSnapshot saved = snapshotRepository.save(snapshot);
         blueprint.setStatus(BlueprintStatus.PUBLISHED);
@@ -139,10 +193,14 @@ public class SnapshotPublishService {
         return SnapshotMapper.toResponse(snapshot);
     }
 
-    private SnapshotItem toSnapshotItem(QuestionFreezeView question, PteSection section, int orderIndex) {
+    private SnapshotItem toSnapshotItem(QuestionFreezeView question, PteSection section, int orderIndex,
+            java.util.Map<String, ScoreTemplateItemResponse> templateItemsByTaskType) {
         SnapshotItem item = new SnapshotItem();
         item.setSourceQuestionPublicId(question.sourceQuestionPublicId());
         item.setPteTaskType(question.pteTaskType());
+        TaskRuntimeProfileDescriptor runtime = resolveRuntimeProfile(question.pteTaskType(), templateItemsByTaskType);
+        item.pinRuntimeProfile(runtime, TaskRuntimeContractConstants.MAPPING_VERSION_CANONICAL,
+                TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_CANONICAL);
         item.setSection(section);
         item.setOrderIndex(orderIndex);
         item.setTitle(question.title());
@@ -155,6 +213,46 @@ public class SnapshotPublishService {
         item.setMaxWordCount(question.maxWordCount());
         item.setOptionsJson(serializeOptions(question.options()));
         return item;
+    }
+
+    private TaskRuntimeProfileDescriptor resolveRuntimeProfile(PteTaskType taskType,
+            java.util.Map<String, ScoreTemplateItemResponse> templateItemsByTaskType) {
+        ScoreTemplateItemResponse templateItem = templateItemsByTaskType.get(taskType.name());
+        TaskRuntimeProfileDescriptor runtime = templateItem == null && !taskType.isScored()
+                ? TaskRuntimeProfileRegistry.descriptorFor(taskType.name())
+                : templateItem == null && runtimeProfileService == null
+                        ? TaskRuntimeProfileRegistry.descriptorFor(taskType.name())
+                        : templateItem == null ? null : templateItem.runtime();
+        if (runtime == null) {
+            throw new SnapshotRuntimeContractException(
+                    "Missing runtime profile for task type " + taskType.name() + " in the active score template");
+        }
+        if (!taskType.name().equals(runtime.taskTypeCode())) {
+            throw new SnapshotRuntimeContractException(
+                    "Runtime profile task type " + runtime.taskTypeCode() + " does not match " + taskType.name());
+        }
+        TaskRuntimeProfileDescriptor allowlisted = TaskRuntimeProfileRegistry.descriptorFor(taskType.name());
+        if (!allowlisted.equals(runtime)) {
+            throw new SnapshotRuntimeContractException(
+                    "Runtime profile contract differs from the allowlisted profile for " + taskType.name());
+        }
+        return runtime;
+    }
+
+    private void validateRuntimeProfiles(List<QuestionFreezeView> frozenQuestions,
+            java.util.Map<String, ScoreTemplateItemResponse> templateItemsByTaskType) {
+        if (runtimeProfileService == null) {
+            return;
+        }
+        java.util.List<TaskRuntimeProfileDescriptor> profiles = frozenQuestions.stream()
+                .map(QuestionFreezeView::pteTaskType)
+                .map(taskType -> resolveRuntimeProfile(taskType, templateItemsByTaskType))
+                .distinct()
+                .toList();
+        if (!runtimeProfileService.invalidPinnedProfiles(profiles).isEmpty()) {
+            throw new SnapshotRuntimeContractException(
+                    "One or more runtime profiles are not allowlisted or persisted consistently");
+        }
     }
 
     private String serializeOptions(List<QuestionFreezeView.Option> options) {

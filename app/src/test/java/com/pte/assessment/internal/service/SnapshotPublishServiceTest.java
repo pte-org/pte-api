@@ -10,10 +10,12 @@ import com.pte.assessment.internal.exception.EmptyBlueprintException;
 import com.pte.assessment.internal.repository.ExamBlueprintRepository;
 import com.pte.assessment.internal.repository.ExamSnapshotRepository;
 import com.pte.itembank.ItembankService;
+import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.scoretemplate.ScoreTemplateService;
+import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.scoretemplate.internal.exception.NoActiveScoreTemplateException;
 import com.pte.shared.security.CurrentUser;
@@ -149,6 +151,31 @@ class SnapshotPublishServiceTest {
         SnapshotResponse response = service.publish(blueprintId, caller);
 
         assertThat(response.version()).isEqualTo(2);
+    }
+
+    @Test
+    void publish_copiesAllowlistedRuntimeContractIntoImmutableSnapshotItem() {
+        UUID blueprintId = UUID.randomUUID();
+        UUID questionId = UUID.randomUUID();
+        ExamBlueprint blueprint = blueprintWithOneItem(questionId);
+        when(blueprintRepository.findWithItemsByPublicId(blueprintId)).thenReturn(Optional.of(blueprint));
+        when(itembankService.freeze(questionId)).thenReturn(frozenQuestion(questionId));
+        when(snapshotRepository.countBySourceBlueprintPublicId(blueprintId)).thenReturn(0L);
+        var captor = org.mockito.ArgumentCaptor.forClass(ExamSnapshot.class);
+        when(snapshotRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+        ScoreTemplateItemResponse templateItem = new ScoreTemplateItemResponse(
+                "MC_READING_SINGLE", "READING", 1, 2, 3, 0, 60, "OBJECTIVE", null, null, null, null, null,
+                TaskRuntimeProfileRegistry.descriptorFor("MC_READING_SINGLE"));
+        when(scoreTemplateService.getActive()).thenReturn(new ScoreTemplateResponse(
+                ACTIVE_TEMPLATE_ID, "PTE", 1, "PTE", "ACTIVE", List.of(templateItem)));
+
+        service.publish(blueprintId, caller);
+
+        var item = captor.getValue().getItems().get(0);
+        assertThat(item.getTaskTypeCode()).isEqualTo("MC_READING_SINGLE");
+        assertThat(item.runtimeProfile()).isEqualTo(TaskRuntimeProfileRegistry.descriptorFor("MC_READING_SINGLE"));
+        assertThat(item.getRuntimeMappingVersion()).isEqualTo("CANONICAL_V1");
+        assertThat(item.getRuntimeMappingStatus()).isEqualTo("RESOLVED_CANONICAL");
     }
 
     @Test

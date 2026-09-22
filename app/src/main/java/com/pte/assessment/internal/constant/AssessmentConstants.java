@@ -21,6 +21,11 @@ public final class AssessmentConstants {
     public static final String BLUEPRINT_DUPLICATE_QUESTION = "A question cannot appear more than once in a blueprint";
     public static final String BLUEPRINT_TEMPLATE_COMPLIANCE_INVALID = "Blueprint does not match the active PTE template counts";
     public static final String SNAPSHOT_OPTIONS_SERIALIZATION_FAILED = "Failed to serialize snapshot options";
+    public static final String SNAPSHOT_RUNTIME_CONTRACT_INVALID = "EXAM_CONFIGURATION_NOT_COMPATIBLE";
+    public static final String SNAPSHOT_RUNTIME_CONTRACT_MESSAGE =
+            "This exam is not currently compatible with the configured task runtime. Please ask an administrator to review the exam configuration.";
+    public static final String AUDIT_AGGREGATE_SNAPSHOT = "EXAM_SNAPSHOT";
+    public static final String AUDIT_RUNTIME_MAPPING_REJECTED = "RUNTIME_MAPPING_REJECTED";
 
     private AssessmentConstants() {
     }

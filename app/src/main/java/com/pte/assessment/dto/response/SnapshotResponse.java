@@ -1,5 +1,7 @@
 package com.pte.assessment.dto.response;
 
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -14,6 +16,17 @@ public record SnapshotResponse(
         UUID tenantId,
         List<Item> items) {
 
-    public record Item(int orderIndex, String section, String taskType, String title) {
+    public record Item(int orderIndex, String section, String taskType, String title,
+            String taskTypeCode, TaskRuntimeProfileDescriptor runtime,
+            String runtimeMappingVersion, String runtimeMappingStatus) {
+
+        public Item(int orderIndex, String section, String taskType, String title,
+                String taskTypeCode, TaskRuntimeProfileDescriptor runtime) {
+            this(orderIndex, section, taskType, title, taskTypeCode, runtime, null, null);
+        }
+
+        public Item(int orderIndex, String section, String taskType, String title) {
+            this(orderIndex, section, taskType, title, taskType, null, null, null);
+        }
     }
 }

@@ -11,6 +11,9 @@ import com.pte.attempt.internal.exception.MissingAudioPromptException;
 import com.pte.attempt.internal.exception.MissingImagePromptException;
 import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
+import com.pte.itembank.TaskRuntimeProfileRegistry;
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
+import com.pte.itembank.TaskRuntimeContractConstants;
 import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
@@ -354,6 +357,26 @@ class SnapshotPinServiceTest {
         PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
 
         assertThat(pinned.getScoreTemplatePublicId()).isEqualTo(SCORE_TEMPLATE_ID);
+    }
+
+    @Test
+    @DisplayName("pin copies the frozen runtime contract without consulting a mutable catalog")
+    void pin_copiesFrozenRuntimeContractToPinnedItem() {
+        stubEntitlement("READ_ALOUD");
+        TaskRuntimeProfileDescriptor runtime = TaskRuntimeProfileRegistry.descriptorFor("READ_ALOUD");
+        SnapshotContentResponse.Item source = new SnapshotContentResponse.Item(
+                0, "SPEAKING", "READ_ALOUD", "title", "prompt", null, null, null, null, null, null, null,
+                "READ_ALOUD", runtime, TaskRuntimeContractConstants.MAPPING_VERSION_CANONICAL,
+                TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_CANONICAL);
+        stubContent(source);
+
+        PinnedItem pinnedItem = service.pin(attempt(), SESSION_ID, STUDENT_ID).getItems().get(0);
+
+        assertThat(pinnedItem.getTaskType()).isEqualTo("READ_ALOUD");
+        assertThat(pinnedItem.getTaskTypeCode()).isEqualTo("READ_ALOUD");
+        assertThat(pinnedItem.runtimeProfile()).isEqualTo(runtime);
+        assertThat(pinnedItem.getRuntimeMappingVersion()).isEqualTo("CANONICAL_V1");
+        assertThat(pinnedItem.getRuntimeMappingStatus()).isEqualTo("RESOLVED_CANONICAL");
     }
 
     /** {@code taskType} is unused now (Plan B: no composition to filter by) — kept as a param so every existing call site reads unchanged. */

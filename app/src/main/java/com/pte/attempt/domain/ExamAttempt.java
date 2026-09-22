@@ -111,6 +111,10 @@ public class ExamAttempt extends BaseEntity {
     @Column
     private Instant sectionStartedAt;
 
+    /** Canonical, allowlisted capability set accepted when this attempt started. */
+    @Column(name = "capability_fingerprint", length = 2048)
+    private String capabilityFingerprint;
+
     @OneToOne(mappedBy = "attempt", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private PinnedExamSnapshot pinnedSnapshot;
 

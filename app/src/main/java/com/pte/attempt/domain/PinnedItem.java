@@ -1,5 +1,6 @@
 package com.pte.attempt.domain;
 
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -42,6 +43,10 @@ public class PinnedItem extends BaseEntity {
 
     @Column(nullable = false)
     private String taskType;
+
+    /** Additive canonical code; {@link #taskType} remains for old clients and historical rows. */
+    @Column(name = "task_type_code", length = 64)
+    private String taskTypeCode;
 
     @Column(nullable = false)
     private String title;
@@ -113,4 +118,80 @@ public class PinnedItem extends BaseEntity {
 
     @Column
     private Instant imageUrlExpiresAt;
+
+    @Column(name = "runtime_profile_key", length = 96)
+    private String runtimeProfileKey;
+
+    @Column(name = "runtime_profile_version")
+    private Integer runtimeProfileVersion;
+
+    @Column(name = "runtime_behavior_key", length = 64)
+    private String runtimeBehaviorKey;
+
+    @Column(name = "runtime_renderer_key", length = 96)
+    private String runtimeRendererKey;
+
+    @Column(name = "runtime_answer_schema_version")
+    private Integer runtimeAnswerSchemaVersion;
+
+    @Column(name = "runtime_scoring_profile_key", length = 64)
+    private String runtimeScoringProfileKey;
+
+    @Column(name = "runtime_scoring_profile_version")
+    private Integer runtimeScoringProfileVersion;
+
+    @Column(name = "runtime_required_client_capabilities", length = 512)
+    private String runtimeRequiredClientCapabilities;
+
+    @Column(name = "runtime_profile_status", length = 16)
+    private String runtimeProfileStatus;
+
+    @Column(name = "runtime_mapping_version", length = 32)
+    private String runtimeMappingVersion;
+
+    @Column(name = "runtime_mapping_status", length = 32)
+    private String runtimeMappingStatus;
+
+    public void pinRuntimeProfile(TaskRuntimeProfileDescriptor profile, String mappingVersion,
+            String mappingStatus) {
+        this.taskTypeCode = profile.taskTypeCode();
+        this.runtimeProfileKey = profile.profileKey();
+        this.runtimeProfileVersion = profile.profileVersion();
+        this.runtimeBehaviorKey = profile.behaviorKey();
+        this.runtimeRendererKey = profile.rendererKey();
+        this.runtimeAnswerSchemaVersion = profile.answerSchemaVersion();
+        this.runtimeScoringProfileKey = profile.scoringProfileKey();
+        this.runtimeScoringProfileVersion = profile.scoringProfileVersion();
+        this.runtimeRequiredClientCapabilities = String.join(",", profile.requiredClientCapabilities());
+        this.runtimeProfileStatus = profile.status();
+        this.runtimeMappingVersion = mappingVersion;
+        this.runtimeMappingStatus = mappingStatus;
+    }
+
+    public TaskRuntimeProfileDescriptor runtimeProfile() {
+        if (taskTypeCode == null || runtimeProfileKey == null || runtimeProfileVersion == null || runtimeBehaviorKey == null
+                || runtimeRendererKey == null || runtimeAnswerSchemaVersion == null
+                || runtimeScoringProfileKey == null || runtimeScoringProfileVersion == null
+                || runtimeRequiredClientCapabilities == null || runtimeProfileStatus == null) {
+            return null;
+        }
+        java.util.List<String> capabilities = runtimeRequiredClientCapabilities == null
+                || runtimeRequiredClientCapabilities.isBlank()
+                ? java.util.List.of()
+                : java.util.Arrays.stream(runtimeRequiredClientCapabilities.split(",")).toList();
+        return new TaskRuntimeProfileDescriptor(
+                taskTypeCode, runtimeProfileKey, runtimeProfileVersion,
+                runtimeBehaviorKey, runtimeRendererKey, runtimeAnswerSchemaVersion, runtimeScoringProfileKey,
+                runtimeScoringProfileVersion, capabilities, runtimeProfileStatus);
+    }
+
+    /** A partially populated new contract is unsafe to reinterpret as legacy. */
+    public boolean hasPartialRuntimeProfile() {
+        boolean anyRuntimeField = runtimeProfileKey != null || runtimeProfileVersion != null
+                || runtimeBehaviorKey != null || runtimeRendererKey != null
+                || runtimeAnswerSchemaVersion != null || runtimeScoringProfileKey != null
+                || runtimeScoringProfileVersion != null || runtimeRequiredClientCapabilities != null
+                || runtimeProfileStatus != null;
+        return anyRuntimeField && runtimeProfile() == null;
+    }
 }

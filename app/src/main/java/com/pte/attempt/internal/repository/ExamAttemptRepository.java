@@ -18,6 +18,10 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long> 
     Optional<ExamAttempt> findBySessionPublicIdAndStudentPublicId(UUID sessionPublicId, UUID studentPublicId);
 
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
+    Optional<ExamAttempt> findWithPinnedBySessionPublicIdAndStudentPublicId(UUID sessionPublicId,
+            UUID studentPublicId);
+
+    @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
     Optional<ExamAttempt> findWithPinnedByPublicIdAndStudentPublicId(UUID publicId, UUID studentPublicId);
 
     /** No {@code pinnedSnapshot} eager-fetch — deliberately lighter than {@link #findWithPinnedByPublicIdAndStudentPublicId} for the heartbeat endpoint, which only needs ownership + status, never task content. */

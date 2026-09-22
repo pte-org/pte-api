@@ -1,5 +1,7 @@
 package com.pte.attempt.internal.service.cache;
 
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
+
 import java.util.UUID;
 
 /**
@@ -30,5 +32,17 @@ public record PinnedItemView(
         int responseSeconds,
         Integer preListenSeconds,
         Integer preRecordSeconds,
-        String imageUrl) {
+        String imageUrl,
+        String taskTypeCode,
+        TaskRuntimeProfileDescriptor runtime) {
+
+    public PinnedItemView(UUID publicId, int orderIndex, String section, String taskType, String title,
+            String promptText, UUID audioPromptRef, UUID imagePromptRef, String referenceAnswerText,
+            String correctAnswerText, Integer minWordCount, Integer maxWordCount, String optionsJson,
+            int prepSeconds, int responseSeconds, Integer preListenSeconds, Integer preRecordSeconds,
+            String imageUrl) {
+        this(publicId, orderIndex, section, taskType, title, promptText, audioPromptRef, imagePromptRef,
+                referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson, prepSeconds,
+                responseSeconds, preListenSeconds, preRecordSeconds, imageUrl, taskType, null);
+    }
 }

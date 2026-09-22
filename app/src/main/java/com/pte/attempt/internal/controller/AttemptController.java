@@ -1,10 +1,12 @@
 package com.pte.attempt.internal.controller;
 
 import com.pte.attempt.internal.dto.request.EncryptedSubmissionRequest;
+import com.pte.attempt.internal.dto.request.AttemptPreflightRequest;
 import com.pte.attempt.internal.dto.request.StartAttemptRequest;
 import com.pte.attempt.internal.dto.request.SubmitAnswerRequest;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.dto.response.AudioPlayResponse;
+import com.pte.attempt.internal.dto.response.AttemptPreflightResponse;
 import com.pte.attempt.internal.service.AttemptLifecycleService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
@@ -39,6 +41,11 @@ public class AttemptController {
     @PostMapping
     public ApiResponse<AttemptTaskResponse> start(@Valid @RequestBody StartAttemptRequest request) {
         return ApiResponse.success(attemptLifecycleService.startAttempt(request, currentUser()));
+    }
+
+    @PostMapping("/preflight")
+    public ApiResponse<AttemptPreflightResponse> preflight(@Valid @RequestBody AttemptPreflightRequest request) {
+        return ApiResponse.success(attemptLifecycleService.preflight(request, currentUser()));
     }
 
     @GetMapping("/{publicId}/next-task")

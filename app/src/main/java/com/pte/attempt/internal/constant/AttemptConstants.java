@@ -17,6 +17,19 @@ public final class AttemptConstants {
     public static final String MISSING_IMAGE_PROMPT = "MISSING_IMAGE_PROMPT";
     public static final String ANSWER_ALREADY_SUBMITTED = "ANSWER_ALREADY_SUBMITTED";
     public static final String PINNED_SNAPSHOT_EMPTY = "PINNED_SNAPSHOT_EMPTY";
+    public static final String EXAM_REQUIRES_APP_UPDATE = "EXAM_REQUIRES_APP_UPDATE";
+    public static final String EXAM_CONFIGURATION_NOT_COMPATIBLE = "EXAM_CONFIGURATION_NOT_COMPATIBLE";
+    public static final String CAPABILITY_MANIFEST_INVALID = "CAPABILITY_MANIFEST_INVALID";
+
+    public static final String EXAM_REQUIRES_APP_UPDATE_MESSAGE =
+            "Please update the PTE Prep app before starting this exam. It requires capabilities that this app does not provide.";
+    public static final String EXAM_CONFIGURATION_NOT_COMPATIBLE_MESSAGE =
+            "This exam is not currently compatible with the configured task runtime. Please ask an administrator to review the exam configuration.";
+    public static final String CAPABILITY_MANIFEST_INVALID_MESSAGE =
+            "The app capability manifest is invalid. Please update the app and try again.";
+    public static final String RUNTIME_CONTRACT_FAILURE_AUDIT_ACTION = "RUNTIME_CONTRACT_FAILURE";
+    public static final String RUNTIME_CONTRACT_FAILURE_AUDIT_SUMMARY =
+            "Attempt delivery was blocked because the frozen exam runtime contract was incompatible";
 
     public static final String TASK_REFERENCE_REQUIRED = "Task reference is required";
     public static final String WRAPPED_KEY_REQUIRED = "Wrapped key is required";
