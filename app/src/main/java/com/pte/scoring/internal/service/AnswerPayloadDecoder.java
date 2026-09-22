@@ -8,6 +8,7 @@ import com.pte.scoring.internal.dto.response.AnswerPayloadKind;
 import com.pte.scoring.internal.dto.response.DecodedAnswerPayload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
@@ -67,6 +68,7 @@ public class AnswerPayloadDecoder {
         this(jsonMapper, null);
     }
 
+    @Autowired
     public AnswerPayloadDecoder(JsonMapper jsonMapper, ScoringMethodResolver scoringMethodResolver) {
         this.jsonMapper = jsonMapper;
         this.scoringMethodResolver = scoringMethodResolver;

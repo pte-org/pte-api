@@ -83,6 +83,11 @@ services:
       PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:?set PAYOS_CHECKSUM_KEY in the env file}
       PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:?set PAYOS_RETURN_URL in the env file}
       PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:?set PAYOS_CANCEL_URL in the env file}
+      # Task-type contract rollout switches. Keep the safe defaults for local
+      # and hosted environments; enable explicitly through the env file when
+      # the authenticated walkthrough is approved.
+      TASK_TYPES_CUSTOM_CREATION_ENABLED: ${TASK_TYPES_CUSTOM_CREATION_ENABLED:-false}
+      TASK_TYPES_CUSTOM_TEMPLATE_ACTIVATION_ENABLED: ${TASK_TYPES_CUSTOM_TEMPLATE_ACTIVATION_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy
