@@ -46,7 +46,8 @@ public class AttemptSummaryQueryService {
         Set<String> testedSections = attempt.getPinnedSnapshot().getItems().stream()
                 .map(item -> item.getSection())
                 .collect(Collectors.toSet());
-        return new AttemptScoreContextView(attempt.getPinnedSnapshot().getScoreTemplatePublicId(), testedSections);
+        return new AttemptScoreContextView(attempt.getPinnedSnapshot().getScoreTemplatePublicId(),
+                attempt.getPinnedSnapshot().getScoreTemplateVersion(), testedSections);
     }
 
     private static AttemptSummaryView toView(ExamAttempt attempt) {

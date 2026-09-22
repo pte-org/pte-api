@@ -20,6 +20,7 @@ import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.session.SessionService;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
@@ -47,6 +48,7 @@ public class CapabilityNegotiationService {
     private final AuditLogService auditLogService;
     private final Set<String> allowlistedCapabilities;
 
+    @Autowired
     public CapabilityNegotiationService(SessionService sessionService, AssessmentService assessmentService,
             CapabilityProperties properties, AuditLogService auditLogService) {
         this.sessionService = sessionService;

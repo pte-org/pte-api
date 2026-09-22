@@ -11,5 +11,11 @@ import java.util.UUID;
  * {@code SessionComposition} flow (no declarative {@code selectedSkills} yet;
  * that's Plan B's random-exam-generation concern).
  */
-public record AttemptScoreContextView(UUID scoreTemplatePublicId, Set<String> testedSections) {
+public record AttemptScoreContextView(UUID scoreTemplatePublicId, Integer scoreTemplateVersion,
+        Set<String> testedSections) {
+
+    /** Source-compatible constructor for existing reporting callers. */
+    public AttemptScoreContextView(UUID scoreTemplatePublicId, Set<String> testedSections) {
+        this(scoreTemplatePublicId, null, testedSections);
+    }
 }

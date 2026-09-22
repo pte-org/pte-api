@@ -45,6 +45,10 @@ public class PinnedExamSnapshot extends BaseEntity {
     @Column(nullable = false)
     private UUID scoreTemplatePublicId;
 
+    /** Additive provenance for the immutable scoring/weight contract; null only for legacy attempts. */
+    @Column
+    private Integer scoreTemplateVersion;
+
     @Column(nullable = false)
     private UUID tenantId;
 

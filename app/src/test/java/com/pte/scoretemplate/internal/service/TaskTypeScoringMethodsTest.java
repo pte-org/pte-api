@@ -1,5 +1,7 @@
 package com.pte.scoretemplate.internal.service;
 
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
+import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.scoretemplate.domain.enums.ScoringMethod;
 import com.pte.scoretemplate.internal.exception.ScoreTemplateValidationException;
 import org.junit.jupiter.api.Test;
@@ -14,6 +16,7 @@ class TaskTypeScoringMethodsTest {
 
     @ParameterizedTest
     @CsvSource({
+            "PERSONAL_INTRODUCTION, UNSCORED",
             "READ_ALOUD, AI_SPEECH",
             "REPEAT_SENTENCE, AI_SPEECH",
             "DESCRIBE_IMAGE, AI_SPEECH",
@@ -44,6 +47,24 @@ class TaskTypeScoringMethodsTest {
     @Test
     void resolve_unknownTaskType_throws() {
         assertThatThrownBy(() -> TaskTypeScoringMethods.resolve("NOT_A_REAL_TASK_TYPE"))
+                .isInstanceOf(ScoreTemplateValidationException.class);
+    }
+
+    @Test
+    void resolve_legacyFillAlias_usesCanonicalRuntimeProfile() {
+        assertThat(TaskTypeScoringMethods.resolve("FILL_BLANKS_READING_WRITING"))
+                .isEqualTo(ScoringMethod.OBJECTIVE);
+    }
+
+    @Test
+    void resolve_tamperedProfile_isRejectedEvenWhenTaskTypeIsStandard() {
+        TaskRuntimeProfileDescriptor expected = TaskRuntimeProfileRegistry.descriptorFor("READ_ALOUD");
+        TaskRuntimeProfileDescriptor tampered = new TaskRuntimeProfileDescriptor(
+                expected.taskTypeCode(), expected.profileKey(), expected.profileVersion(), expected.behaviorKey(),
+                expected.rendererKey(), expected.answerSchemaVersion(), "OBJECTIVE",
+                expected.scoringProfileVersion(), expected.requiredClientCapabilities(), expected.status());
+
+        assertThatThrownBy(() -> TaskTypeScoringMethods.resolve(tampered))
                 .isInstanceOf(ScoreTemplateValidationException.class);
     }
 }

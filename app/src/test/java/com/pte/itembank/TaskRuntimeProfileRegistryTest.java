@@ -38,4 +38,27 @@ class TaskRuntimeProfileRegistryTest {
         assertThat(rendererKeys).allMatch(key -> key.endsWith("_V1"));
         assertThat(rendererKeys).noneMatch(key -> key.contains(".") || key.contains("/") || key.contains("Class"));
     }
+
+    @Test
+    void allowlistedContract_rejectsChangedBehaviorSchemaOrScoringVersion() {
+        TaskRuntimeProfileDescriptor expected = TaskRuntimeProfileRegistry.descriptorFor("READ_ALOUD");
+        TaskRuntimeProfileDescriptor tampered = new TaskRuntimeProfileDescriptor(
+                expected.taskTypeCode(), expected.profileKey(), expected.profileVersion(), "CUSTOM_BEHAVIOR",
+                expected.rendererKey(), expected.answerSchemaVersion(), expected.scoringProfileKey(),
+                expected.scoringProfileVersion(), expected.requiredClientCapabilities(), expected.status());
+
+        assertThat(TaskRuntimeProfileRegistry.isAllowlistedContract(expected)).isTrue();
+        assertThat(TaskRuntimeProfileRegistry.isAllowlistedContract(tampered)).isFalse();
+    }
+
+    @Test
+    void allowlistedContract_allowsRetiredStatusForHistoricalSnapshots() {
+        TaskRuntimeProfileDescriptor active = TaskRuntimeProfileRegistry.descriptorFor("READ_ALOUD");
+        TaskRuntimeProfileDescriptor retired = new TaskRuntimeProfileDescriptor(
+                active.taskTypeCode(), active.profileKey(), active.profileVersion(), active.behaviorKey(),
+                active.rendererKey(), active.answerSchemaVersion(), active.scoringProfileKey(),
+                active.scoringProfileVersion(), active.requiredClientCapabilities(), "RETIRED");
+
+        assertThat(TaskRuntimeProfileRegistry.isAllowlistedContract(retired)).isTrue();
+    }
 }

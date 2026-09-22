@@ -30,6 +30,33 @@ public final class TaskRuntimeProfileRegistry {
         return Arrays.stream(PteTaskType.values()).map(PROFILES::get).toList();
     }
 
+    /**
+     * Checks the immutable, code-owned part of a persisted/profile response.
+     * The lifecycle status is deliberately excluded from this comparison so a
+     * retired profile can continue to serve historical templates and
+     * snapshots. Callers that resolve a new profile must still require ACTIVE.
+     */
+    public static boolean isAllowlistedContract(TaskRuntimeProfileDescriptor actual) {
+        if (actual == null || !("ACTIVE".equals(actual.status()) || "RETIRED".equals(actual.status()))) {
+            return false;
+        }
+        try {
+            TaskRuntimeProfileDescriptor expected = descriptorFor(actual.taskTypeCode());
+            return expected != null
+                    && expected.taskTypeCode().equals(actual.taskTypeCode())
+                    && expected.profileKey().equals(actual.profileKey())
+                    && expected.profileVersion() == actual.profileVersion()
+                    && expected.behaviorKey().equals(actual.behaviorKey())
+                    && expected.rendererKey().equals(actual.rendererKey())
+                    && expected.answerSchemaVersion() == actual.answerSchemaVersion()
+                    && expected.scoringProfileKey().equals(actual.scoringProfileKey())
+                    && expected.scoringProfileVersion() == actual.scoringProfileVersion()
+                    && expected.requiredClientCapabilities().equals(actual.requiredClientCapabilities());
+        } catch (RuntimeException ex) {
+            return false;
+        }
+    }
+
     private static Map<PteTaskType, TaskRuntimeProfileDescriptor> buildProfiles() {
         EnumMap<PteTaskType, TaskRuntimeProfileDescriptor> profiles = new EnumMap<>(PteTaskType.class);
         add(profiles, PteTaskType.PERSONAL_INTRODUCTION, "PERSONAL_INTRODUCTION", "PERSONAL_INTRODUCTION_V1",

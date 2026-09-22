@@ -103,9 +103,7 @@ public class TaskRuntimeProfileService {
         Map<String, TaskRuntimeProfileDescriptor> expected = new LinkedHashMap<>();
         for (TaskRuntimeProfileDescriptor pinned : pinnedProfiles) {
             try {
-                TaskRuntimeProfileDescriptor allowlisted = TaskRuntimeProfileRegistry
-                        .descriptorFor(pinned.taskTypeCode());
-                if (!sameImmutableContract(allowlisted, pinned)) {
+                if (!TaskRuntimeProfileRegistry.isAllowlistedContract(pinned)) {
                     invalid.add(pinned);
                 } else {
                     expected.put(profileKey(pinned), pinned);
@@ -132,7 +130,8 @@ public class TaskRuntimeProfileService {
 
         expected.forEach((key, requested) -> {
             TaskRuntimeProfileDescriptor actual = persisted.get(key);
-            if (actual == null || !sameImmutableContract(actual, requested)
+            if (actual == null || !TaskRuntimeProfileRegistry.isAllowlistedContract(actual)
+                    || !sameImmutableContract(actual, requested)
                     || !actual.status().equals(requested.status())) {
                 invalid.add(requested);
             }
@@ -141,14 +140,8 @@ public class TaskRuntimeProfileService {
     }
 
     private TaskRuntimeProfileDescriptor validateAndMap(TaskRuntimeProfile profile, boolean requireActive) {
-        TaskRuntimeProfileDescriptor allowlisted;
-        try {
-            allowlisted = TaskRuntimeProfileRegistry.descriptorFor(profile.getTaskTypeCode());
-        } catch (RuntimeException ex) {
-            throw TaskRuntimeProfileException.notAllowed();
-        }
         TaskRuntimeProfileDescriptor actual = toDescriptor(profile);
-        if (!sameImmutableContract(allowlisted, actual)) {
+        if (!TaskRuntimeProfileRegistry.isAllowlistedContract(actual)) {
             throw TaskRuntimeProfileException.notAllowed();
         }
         if (requireActive && !actual.active()) {

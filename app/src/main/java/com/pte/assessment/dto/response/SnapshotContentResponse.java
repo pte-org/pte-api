@@ -17,8 +17,15 @@ public record SnapshotContentResponse(
         String name,
         int version,
         UUID scoreTemplatePublicId,
+        Integer scoreTemplateVersion,
         UUID tenantId,
         List<Item> items) {
+
+    /** Source-compatible constructor for callers created before template-version pinning. */
+    public SnapshotContentResponse(UUID publicId, String name, int version, UUID scoreTemplatePublicId,
+            UUID tenantId, List<Item> items) {
+        this(publicId, name, version, scoreTemplatePublicId, null, tenantId, items);
+    }
 
     public record Item(
             int orderIndex,

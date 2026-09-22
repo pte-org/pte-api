@@ -13,6 +13,7 @@ import com.pte.scoretemplate.internal.exception.ScoreTemplateNotDraftException;
 import com.pte.scoretemplate.internal.exception.ScoreTemplateValidationException;
 import com.pte.scoretemplate.internal.repository.ScoreTemplateRepository;
 import com.pte.itembank.QuestionTypeService;
+import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
@@ -87,7 +88,7 @@ class ScoreTemplateAdminServiceTest {
             item.setMaxCount(2);
             item.setPrepSeconds(0);
             item.setResponseSeconds(30);
-            item.setScoringMethod(ScoringMethod.AI_SPEECH);
+            item.setScoringMethod(scoringMethodFor(taskTypes.get(i)));
             item.setOverallWeight(weight);
             item.setSpeakingWeight(weight);
             item.setWritingWeight(weight);
@@ -96,6 +97,16 @@ class ScoreTemplateAdminServiceTest {
             template.addItem(item);
         }
         return template;
+    }
+
+    private ScoringMethod scoringMethodFor(String taskType) {
+        return switch (TaskRuntimeProfileRegistry.descriptorFor(taskType).scoringProfileKey()) {
+            case "AI_SPEECH" -> ScoringMethod.AI_SPEECH;
+            case "AI_TEXT" -> ScoringMethod.AI_TEXT;
+            case "OBJECTIVE" -> ScoringMethod.OBJECTIVE;
+            case "UNSCORED" -> ScoringMethod.UNSCORED;
+            default -> throw new IllegalArgumentException("Unknown scoring profile");
+        };
     }
 
     @Test

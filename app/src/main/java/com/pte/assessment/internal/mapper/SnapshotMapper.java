@@ -42,7 +42,7 @@ public final class SnapshotMapper {
                 .toList();
         return new SnapshotContentResponse(
                 snapshot.getPublicId(), snapshot.getName(), snapshot.getVersion(),
-                snapshot.getScoreTemplatePublicId(), snapshot.getTenantId(), items);
+                snapshot.getScoreTemplatePublicId(), snapshot.getScoreTemplateVersion(), snapshot.getTenantId(), items);
     }
 
     private static SnapshotContentResponse.Item toContentItem(SnapshotItem item) {

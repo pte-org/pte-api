@@ -93,6 +93,8 @@ public class SnapshotPinService {
         pinned.setSourceSnapshotPublicId(content.publicId());
         pinned.setSourceSessionPublicId(sessionPublicId);
         pinned.setScoreTemplatePublicId(content.scoreTemplatePublicId());
+        pinned.setScoreTemplateVersion(content.scoreTemplateVersion() == null
+                ? scoreTemplate.version() : content.scoreTemplateVersion());
         pinned.setTenantId(entitlement.tenantId());
         pinned.setReplayPolicyType(entitlement.policy().replayPolicyType());
         pinned.setReplayPolicyLimit(entitlement.policy().replayPolicyLimit());

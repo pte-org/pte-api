@@ -357,6 +357,7 @@ class SnapshotPinServiceTest {
         PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
 
         assertThat(pinned.getScoreTemplatePublicId()).isEqualTo(SCORE_TEMPLATE_ID);
+        assertThat(pinned.getScoreTemplateVersion()).isEqualTo(1);
     }
 
     @Test

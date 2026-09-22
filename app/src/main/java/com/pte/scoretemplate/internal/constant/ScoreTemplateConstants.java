@@ -14,6 +14,8 @@ public final class ScoreTemplateConstants {
     public static final String TEMPLATE_TASK_TYPE_INVALID = "Template contains an unknown or inactive task type: ";
     public static final String TEMPLATE_SECTION_INVALID = "Template section does not match task type: ";
     public static final String TEMPLATE_PROFILE_INVALID = "Runtime profile is missing or not supported for task type: ";
+    public static final String TEMPLATE_SCORING_PROFILE_INVALID =
+            "Runtime scoring profile does not match the task type: ";
     public static final String RUNTIME_PROFILE_NOT_PINNED = "RUNTIME_PROFILE_NOT_PINNED";
     public static final String RUNTIME_PROFILE_INVALID = "RUNTIME_PROFILE_INVALID";
     public static final String UNKNOWN_TASK_TYPE = "UNKNOWN_TASK_TYPE";

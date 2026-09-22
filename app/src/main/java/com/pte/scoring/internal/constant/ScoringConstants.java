@@ -48,6 +48,10 @@ public final class ScoringConstants {
     public static final String ANSWER_NOT_FOUND = "ANSWER_NOT_FOUND";
     public static final String INVALID_ANSWER_STATUS = "INVALID_ANSWER_STATUS";
     public static final String UNSUPPORTED_TASK_TYPE = "UNSUPPORTED_TASK_TYPE";
+    public static final String SCORING_PROFILE_INVALID = "SCORING_PROFILE_INVALID";
+    public static final String SCORING_PROFILE_INVALID_MESSAGE =
+            "This exam uses a scoring configuration that is no longer supported. "
+                    + "Please ask an administrator to publish a compatible template.";
     public static final String AI_PROVIDER_INVALID = "scoring.ai.provider must be stub or openai-compatible";
     public static final String AI_SCORING_RETRIES_EXHAUSTED = "AI scoring retries exhausted";
     public static final String UNSUPPORTED_AI_TASK_TYPE = "Unsupported AI task type: %s";

@@ -377,6 +377,14 @@ public class ScoreTemplateAdminService {
         for (ScoreTemplateItem item : profileItems) {
             if (item.pinnedRuntimeProfile() == null || invalidProfiles.contains(item.pinnedRuntimeProfile())) {
                 errors.add(ScoreTemplateConstants.TEMPLATE_PROFILE_INVALID + item.getTaskType());
+                continue;
+            }
+            try {
+                if (item.getScoringMethod() != TaskTypeScoringMethods.resolve(item.pinnedRuntimeProfile())) {
+                    errors.add(ScoreTemplateConstants.TEMPLATE_SCORING_PROFILE_INVALID + item.getTaskType());
+                }
+            } catch (RuntimeException ex) {
+                errors.add(ScoreTemplateConstants.TEMPLATE_SCORING_PROFILE_INVALID + item.getTaskType());
             }
         }
         if (!errors.isEmpty()) {
@@ -385,11 +393,7 @@ public class ScoreTemplateAdminService {
     }
 
     private boolean isAllowlistedProfile(TaskRuntimeProfileDescriptor profile) {
-        try {
-            return TaskRuntimeProfileRegistry.descriptorFor(profile.taskTypeCode()).equals(profile);
-        } catch (RuntimeException ex) {
-            return false;
-        }
+        return TaskRuntimeProfileRegistry.isAllowlistedContract(profile);
     }
 
     private void audit(CurrentUser caller, String action, ScoreTemplate template, String summary) {
@@ -434,14 +438,15 @@ public class ScoreTemplateAdminService {
         copy.setMaxCount(source.getMaxCount());
         copy.setPrepSeconds(source.getPrepSeconds());
         copy.setResponseSeconds(source.getResponseSeconds());
-        copy.setScoringMethod(source.getScoringMethod());
         copy.setOverallWeight(source.getOverallWeight());
         copy.setSpeakingWeight(source.getSpeakingWeight());
         copy.setWritingWeight(source.getWritingWeight());
         copy.setReadingWeight(source.getReadingWeight());
         copy.setListeningWeight(source.getListeningWeight());
         TaskRuntimeProfileDescriptor pinned = source.pinnedRuntimeProfile();
-        copy.pinRuntimeProfile(pinned == null ? resolveActiveProfile(copy.getTaskType()) : pinned);
+        pinned = pinned == null ? resolveActiveProfile(copy.getTaskType()) : pinned;
+        copy.pinRuntimeProfile(pinned);
+        copy.setScoringMethod(TaskTypeScoringMethods.resolve(pinned));
         return copy;
     }
 
@@ -455,8 +460,10 @@ public class ScoreTemplateAdminService {
                     ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + request.taskType());
         }
         item.setTaskType(canonicalTaskType);
+        final TaskRuntimeProfileDescriptor runtimeProfile;
         try {
-            item.pinRuntimeProfile(resolveActiveProfile(canonicalTaskType));
+            runtimeProfile = resolveActiveProfile(canonicalTaskType);
+            item.pinRuntimeProfile(runtimeProfile);
         } catch (RuntimeException ex) {
             throw new ScoreTemplateValidationException(
                     ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + request.taskType());
@@ -467,7 +474,7 @@ public class ScoreTemplateAdminService {
         item.setMaxCount(request.maxCount());
         item.setPrepSeconds(request.prepSeconds());
         item.setResponseSeconds(request.responseSeconds());
-        item.setScoringMethod(TaskTypeScoringMethods.resolve(canonicalTaskType));
+        item.setScoringMethod(TaskTypeScoringMethods.resolve(runtimeProfile));
         item.setSpeakingWeight(request.speakingWeight());
         item.setWritingWeight(request.writingWeight());
         item.setReadingWeight(request.readingWeight());
