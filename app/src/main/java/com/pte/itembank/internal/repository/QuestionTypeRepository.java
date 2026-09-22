@@ -19,6 +19,17 @@ public interface QuestionTypeRepository extends JpaRepository<QuestionTypeDefini
     /** Includes soft-deleted rows so a deleted standard type can be restored. */
     Optional<QuestionTypeDefinition> findByCode(String code);
 
+    Optional<QuestionTypeDefinition> findByTaskTypeKey(String taskTypeKey);
+
+    /** Includes retired/soft-deleted rows because display names are never reusable. */
+    Optional<QuestionTypeDefinition> findByNormalizedDisplayName(String normalizedDisplayName);
+
+    Optional<QuestionTypeDefinition> findByTaskTypeKeyAndDeletedFalse(String taskTypeKey);
+
+    boolean existsByTaskTypeKey(String taskTypeKey);
+
+    boolean existsByNormalizedDisplayName(String normalizedDisplayName);
+
     Optional<QuestionTypeDefinition> findByPublicIdAndDeletedFalse(UUID publicId);
 
     @Query("SELECT COALESCE(MAX(q.displayOrder), 0) FROM QuestionTypeDefinition q WHERE q.deleted = false")

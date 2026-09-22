@@ -11,6 +11,8 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Persisted catalog metadata for one PTE question type.
@@ -32,8 +34,15 @@ public class QuestionTypeDefinition extends BaseEntity {
     @Column(nullable = false, length = 64, unique = true)
     private String code;
 
+    /** Canonical logical identity; standard rows equal their canonical code. */
+    @Column(name = "task_type_key", nullable = false, length = 64, unique = true)
+    private String taskTypeKey;
+
     @Column(name = "display_name", nullable = false, length = 128)
     private String displayName;
+
+    @Column(name = "normalized_display_name", nullable = false, length = 128, unique = true)
+    private String normalizedDisplayName;
 
     @Column(name = "short_name", nullable = false, length = 32)
     private String shortName;
@@ -76,4 +85,53 @@ public class QuestionTypeDefinition extends BaseEntity {
     /** True when option order represents the authored correct position. */
     @Column(name = "uses_option_order_as_correct_position", nullable = false)
     private boolean usesOptionOrderAsCorrectPosition;
+
+    @Column(name = "screen_key", length = 96)
+    private String screenKey;
+
+    @Column(name = "runtime_profile_key", length = 96)
+    private String runtimeProfileKey;
+
+    @Column(name = "runtime_profile_version")
+    private Integer runtimeProfileVersion;
+
+    @Column(name = "runtime_behavior_key", length = 64)
+    private String runtimeBehaviorKey;
+
+    @Column(name = "runtime_renderer_key", length = 96)
+    private String runtimeRendererKey;
+
+    @Column(name = "runtime_answer_schema_version")
+    private Integer runtimeAnswerSchemaVersion;
+
+    @Column(name = "runtime_scoring_profile_key", length = 64)
+    private String runtimeScoringProfileKey;
+
+    @Column(name = "runtime_scoring_profile_version")
+    private Integer runtimeScoringProfileVersion;
+
+    @Column(name = "runtime_scoring_mode", length = 16)
+    private String runtimeScoringMode;
+
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "runtime_required_capabilities", columnDefinition = "text[]", nullable = false)
+    private String[] runtimeRequiredCapabilities = new String[0];
+
+    @Column(name = "runtime_min_app_version", length = 32)
+    private String runtimeMinAppVersion;
+
+    @Column(name = "authoring_contract_key", length = 96)
+    private String authoringContractKey;
+
+    @Column(name = "authoring_contract_version")
+    private Integer authoringContractVersion;
+
+    @Column(name = "lifecycle_status", nullable = false, length = 16)
+    private String lifecycleStatus = "ACTIVE";
+
+    @Column(name = "first_published_at")
+    private java.time.Instant firstPublishedAt;
+
+    @Column(name = "runtime_locked_at")
+    private java.time.Instant runtimeLockedAt;
 }

@@ -19,8 +19,9 @@ public final class QuestionMapper {
                 .toList();
         return new QuestionResponse(
                 question.getPublicId(),
-                question.getPteTaskType().name(),
-                question.getPteTaskType().getSection().name(),
+                question.getPteTaskType() == null ? null : question.getPteTaskType().name(),
+                question.getPteTaskType() == null ? question.getTaskTypeSection()
+                        : question.getPteTaskType().getSection().name(),
                 question.getVisibility().name(),
                 question.getTenantId(),
                 question.getStatus().name(),
@@ -38,7 +39,9 @@ public final class QuestionMapper {
                 question.getSupersedesPublicId(),
                 question.isCurrent(),
                 question.getVersion(),
-                question.getRejectionReason());
+                question.getRejectionReason(),
+                question.getTaskTypeKey() == null && question.getPteTaskType() != null
+                        ? question.getPteTaskType().name() : question.getTaskTypeKey());
     }
 
     private static OptionResponse toOption(QuestionOption option) {

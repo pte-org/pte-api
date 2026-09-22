@@ -7,6 +7,8 @@ import com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.scoretemplate.internal.service.ScoreTemplateAdminService;
 import com.pte.scoretemplate.ScoreTemplateService;
+import com.pte.itembank.TaskTypeRolloutProperties;
+import com.pte.scoretemplate.internal.exception.CustomTemplateActivationDisabledException;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -36,12 +38,14 @@ public class ScoreTemplateController {
 
     private final ScoreTemplateAdminService adminService;
     private final ScoreTemplateService scoreTemplateService;
+    private final TaskTypeRolloutProperties rolloutProperties;
 
     @Autowired
     public ScoreTemplateController(ScoreTemplateAdminService adminService,
-            ScoreTemplateService scoreTemplateService) {
+            ScoreTemplateService scoreTemplateService, TaskTypeRolloutProperties rolloutProperties) {
         this.adminService = adminService;
         this.scoreTemplateService = scoreTemplateService;
+        this.rolloutProperties = rolloutProperties;
     }
 
     @GetMapping
@@ -86,6 +90,10 @@ public class ScoreTemplateController {
     @PostMapping("/{publicId}/activate")
     @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<ScoreTemplateResponse> activate(@PathVariable UUID publicId) {
+        if (!rolloutProperties.isCustomTemplateActivationEnabled()
+                && adminService.isCustomTemplate(publicId)) {
+            throw new CustomTemplateActivationDisabledException();
+        }
         return ApiResponse.success(adminService.activate(publicId, currentUser()));
     }
 

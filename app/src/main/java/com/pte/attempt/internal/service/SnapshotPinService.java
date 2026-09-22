@@ -85,7 +85,8 @@ public class SnapshotPinService {
         // was published under even after a later template is activated.
         ScoreTemplateResponse scoreTemplate = scoreTemplateService.getByPublicId(content.scoreTemplatePublicId());
         Map<String, ScoreTemplateItemResponse> templateItemsByTaskType = scoreTemplate.items().stream()
-                .collect(Collectors.toMap(item -> TaskTypeCodeCompatibility.normalizeForLookup(item.taskType()),
+                .collect(Collectors.toMap(item -> TaskTypeCodeCompatibility.normalizeTaskTypeKey(
+                        item.taskTypeKey() == null ? item.taskType() : item.taskTypeKey()),
                         Function.identity(), (a, b) -> a));
 
         PinnedExamSnapshot pinned = new PinnedExamSnapshot();
@@ -130,15 +131,23 @@ public class SnapshotPinService {
     private PinnedItem toPinnedItem(SnapshotContentResponse.Item source,
                                     Map<String, ScoreTemplateItemResponse> templateItemsByTaskType,
                                     long audioUrlTtlSeconds, UUID tenantId) {
-        String taskTypeCode = source.taskTypeCode() == null
-                ? TaskTypeCodeCompatibility.normalizeForLookup(source.taskType())
-                : TaskTypeCodeCompatibility.normalizeForLookup(source.taskTypeCode());
+        String taskTypeCode = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
+                source.taskTypeKey() == null
+                        ? source.taskTypeCode() == null ? source.taskType() : source.taskTypeCode()
+                        : source.taskTypeKey());
         try {
-            if (!taskTypeCode.equals(TaskTypeCodeCompatibility.normalizeForLookup(source.taskType()))) {
-                throw new IllegalArgumentException("task type code does not match the frozen task type");
+            if (source.taskTypeKey() != null && !taskTypeCode.equals(
+                    TaskTypeCodeCompatibility.normalizeTaskTypeKey(source.taskTypeKey()))) {
+                throw new IllegalArgumentException("task type key does not match the frozen task type");
             }
-            if (!TaskTypeCodeCompatibility.parse(taskTypeCode).getSection().name().equals(source.section())) {
-                throw new IllegalArgumentException("task type section does not match the frozen snapshot section");
+            try {
+                if (!TaskTypeCodeCompatibility.parse(taskTypeCode).getSection().name().equals(source.section())) {
+                    throw new IllegalArgumentException("task type section does not match the frozen snapshot section");
+                }
+            } catch (RuntimeException customKey) {
+                if (source.section() == null || source.section().isBlank()) {
+                    throw new IllegalArgumentException("custom task type section is missing");
+                }
             }
         } catch (RuntimeException ex) {
             throw new ExamCapabilityException(AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE, List.of());
@@ -160,6 +169,8 @@ public class SnapshotPinService {
         item.setOrderIndex(source.orderIndex());
         item.setSection(source.section());
         item.setTaskType(source.taskType());
+        item.setTaskTypeKey(taskTypeCode);
+        item.setTaskTypeDisplayName(source.taskTypeDisplayName() == null ? taskTypeCode : source.taskTypeDisplayName());
         item.setTaskTypeCode(taskTypeCode);
         copyRuntimeContract(source, item, taskTypeCode);
         item.setTitle(source.title());
@@ -265,9 +276,18 @@ public class SnapshotPinService {
             throw new ExamCapabilityException(AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE, List.of());
         }
         try {
-            if (!taskTypeCode.equals(runtime.taskTypeCode())
-                    || !TaskRuntimeProfileRegistry.descriptorFor(taskTypeCode).equals(runtime)) {
+            if (!taskTypeCode.equals(runtime.taskTypeCode())) {
                 throw new IllegalArgumentException("runtime profile is not an allowlisted match");
+            }
+            if (TaskTypeCodeCompatibility.isStandard(taskTypeCode)) {
+                if (!TaskRuntimeProfileRegistry.isAllowlistedContract(runtime)) {
+                    throw new IllegalArgumentException("standard runtime profile differs from the allowlisted match");
+                }
+            } else if (!("ACTIVE".equals(runtime.status()) || "RETIRED".equals(runtime.status()))
+                    || runtime.screenKey() == null || runtime.contractVersion() < 1
+                    || runtime.answerSchemaVersion() < 1 || runtime.scoringProfileKey() == null
+                    || runtime.scoringMode() == null) {
+                throw new IllegalArgumentException("custom runtime profile is incomplete");
             }
         } catch (RuntimeException ex) {
             throw new ExamCapabilityException(AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE, List.of());

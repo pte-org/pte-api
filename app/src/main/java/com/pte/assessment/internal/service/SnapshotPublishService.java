@@ -19,6 +19,7 @@ import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.TaskRuntimeProfileService;
 import com.pte.itembank.TaskTypeCodeCompatibility;
+import com.pte.itembank.TaskTypeObservability;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.dto.response.QuestionFreezeView;
@@ -58,13 +59,15 @@ public class SnapshotPublishService {
     private final ScoreTemplateService scoreTemplateService;
     private final TaskRuntimeProfileService runtimeProfileService;
     private final AuditLogService auditLogService;
+    private final TaskTypeObservability observability;
 
     @Autowired
     public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, ExamSnapshotRepository snapshotRepository,
                                   ItembankService itembankService, AssessmentAccessPolicy accessPolicy,
                                   JsonMapper jsonMapper, ScoreTemplateService scoreTemplateService,
                                   TaskRuntimeProfileService runtimeProfileService,
-                                  AuditLogService auditLogService) {
+                                  AuditLogService auditLogService,
+                                  TaskTypeObservability observability) {
         this.blueprintRepository = blueprintRepository;
         this.snapshotRepository = snapshotRepository;
         this.itembankService = itembankService;
@@ -73,6 +76,7 @@ public class SnapshotPublishService {
         this.scoreTemplateService = scoreTemplateService;
         this.runtimeProfileService = runtimeProfileService;
         this.auditLogService = auditLogService;
+        this.observability = observability;
     }
 
     /** Compatibility constructor for focused tests predating runtime provenance. */
@@ -80,7 +84,7 @@ public class SnapshotPublishService {
                                   ItembankService itembankService, AssessmentAccessPolicy accessPolicy,
                                   JsonMapper jsonMapper, ScoreTemplateService scoreTemplateService) {
         this(blueprintRepository, snapshotRepository, itembankService, accessPolicy, jsonMapper,
-                scoreTemplateService, null, null);
+                scoreTemplateService, null, null, null);
     }
 
     /** Compatibility constructor for tests that provide the runtime service but not audit infrastructure. */
@@ -89,7 +93,7 @@ public class SnapshotPublishService {
                                   JsonMapper jsonMapper, ScoreTemplateService scoreTemplateService,
                                   TaskRuntimeProfileService runtimeProfileService) {
         this(blueprintRepository, snapshotRepository, itembankService, accessPolicy, jsonMapper,
-                scoreTemplateService, runtimeProfileService, null);
+                scoreTemplateService, runtimeProfileService, null, null);
     }
 
     @Transactional
@@ -130,7 +134,7 @@ public class SnapshotPublishService {
         snapshot.setTenantId(blueprint.getTenantId());
         java.util.Map<String, ScoreTemplateItemResponse> templateItemsByTaskType = activeTemplate.items().stream()
                 .collect(java.util.stream.Collectors.toMap(item -> TaskTypeCodeCompatibility
-                                .normalizeForLookup(item.taskType()),
+                                .normalizeTaskTypeKey(item.taskTypeKey() == null ? item.taskType() : item.taskTypeKey()),
                         java.util.function.Function.identity(), (first, ignored) -> first));
         List<QuestionFreezeView> frozenQuestions = blueprint.getItems().stream()
                 .map(item -> itembankService.freeze(item.getQuestionPublicId()))
@@ -143,6 +147,9 @@ public class SnapshotPublishService {
                         blueprintItem.getOrderIndex(), templateItemsByTaskType));
             }
         } catch (SnapshotRuntimeContractException ex) {
+            if (observability != null) {
+                observability.snapshotRuntimeContractFailed();
+            }
             if (auditLogService != null && caller != null) {
                 auditLogService.recordFailure(caller, AssessmentConstants.AUDIT_AGGREGATE_SNAPSHOT,
                         blueprintPublicId.toString(), AssessmentConstants.AUDIT_RUNTIME_MAPPING_REJECTED,
@@ -198,7 +205,14 @@ public class SnapshotPublishService {
         SnapshotItem item = new SnapshotItem();
         item.setSourceQuestionPublicId(question.sourceQuestionPublicId());
         item.setPteTaskType(question.pteTaskType());
-        TaskRuntimeProfileDescriptor runtime = resolveRuntimeProfile(question.pteTaskType(), templateItemsByTaskType);
+        String taskTypeKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
+                question.taskTypeKey() == null && question.pteTaskType() != null
+                        ? question.pteTaskType().name() : question.taskTypeKey());
+        item.setTaskTypeKey(taskTypeKey);
+        item.setTaskTypeDisplayName(question.taskTypeDisplayName() == null
+                ? taskTypeKey : question.taskTypeDisplayName());
+        TaskRuntimeProfileDescriptor runtime = resolveRuntimeProfile(taskTypeKey, question.pteTaskType(),
+                templateItemsByTaskType);
         item.pinRuntimeProfile(runtime, TaskRuntimeContractConstants.MAPPING_VERSION_CANONICAL,
                 TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_CANONICAL);
         item.setSection(section);
@@ -215,26 +229,34 @@ public class SnapshotPublishService {
         return item;
     }
 
-    private TaskRuntimeProfileDescriptor resolveRuntimeProfile(PteTaskType taskType,
+    private TaskRuntimeProfileDescriptor resolveRuntimeProfile(String taskTypeKey, PteTaskType legacyTaskType,
             java.util.Map<String, ScoreTemplateItemResponse> templateItemsByTaskType) {
-        ScoreTemplateItemResponse templateItem = templateItemsByTaskType.get(taskType.name());
-        TaskRuntimeProfileDescriptor runtime = templateItem == null && !taskType.isScored()
-                ? TaskRuntimeProfileRegistry.descriptorFor(taskType.name())
+        ScoreTemplateItemResponse templateItem = templateItemsByTaskType.get(taskTypeKey);
+        TaskRuntimeProfileDescriptor runtime = templateItem == null && legacyTaskType != null && !legacyTaskType.isScored()
+                ? TaskRuntimeProfileRegistry.descriptorFor(legacyTaskType.name())
                 : templateItem == null && runtimeProfileService == null
-                        ? TaskRuntimeProfileRegistry.descriptorFor(taskType.name())
+                        && legacyTaskType != null ? TaskRuntimeProfileRegistry.descriptorFor(legacyTaskType.name())
                         : templateItem == null ? null : templateItem.runtime();
         if (runtime == null) {
             throw new SnapshotRuntimeContractException(
-                    "Missing runtime profile for task type " + taskType.name() + " in the active score template");
+                    "Missing runtime profile for task type " + taskTypeKey + " in the active score template");
         }
-        if (!taskType.name().equals(runtime.taskTypeCode())) {
+        if (!taskTypeKey.equals(runtime.taskTypeCode())) {
             throw new SnapshotRuntimeContractException(
-                    "Runtime profile task type " + runtime.taskTypeCode() + " does not match " + taskType.name());
+                    "Runtime profile task type " + runtime.taskTypeCode() + " does not match " + taskTypeKey);
         }
-        TaskRuntimeProfileDescriptor allowlisted = TaskRuntimeProfileRegistry.descriptorFor(taskType.name());
-        if (!allowlisted.equals(runtime)) {
+        if (TaskTypeCodeCompatibility.isStandard(taskTypeKey)
+                && !TaskRuntimeProfileRegistry.isAllowlistedContract(runtime)) {
             throw new SnapshotRuntimeContractException(
-                    "Runtime profile contract differs from the allowlisted profile for " + taskType.name());
+                    "Runtime profile contract differs from the allowlisted profile for " + taskTypeKey);
+        }
+        if (!TaskTypeCodeCompatibility.isStandard(taskTypeKey)
+                && (!("ACTIVE".equals(runtime.status()) || "RETIRED".equals(runtime.status()))
+                || runtime.screenKey() == null || runtime.contractVersion() < 1
+                || runtime.answerSchemaVersion() < 1 || runtime.scoringProfileKey() == null
+                || runtime.scoringMode() == null)) {
+            throw new SnapshotRuntimeContractException(
+                    "Custom runtime profile is incomplete for " + taskTypeKey);
         }
         return runtime;
     }
@@ -245,11 +267,17 @@ public class SnapshotPublishService {
             return;
         }
         java.util.List<TaskRuntimeProfileDescriptor> profiles = frozenQuestions.stream()
-                .map(QuestionFreezeView::pteTaskType)
-                .map(taskType -> resolveRuntimeProfile(taskType, templateItemsByTaskType))
+                .map(question -> resolveRuntimeProfile(
+                        question.taskTypeKey() == null && question.pteTaskType() != null
+                                ? question.pteTaskType().name() : question.taskTypeKey(),
+                        question.pteTaskType(), templateItemsByTaskType))
                 .distinct()
                 .toList();
-        if (!runtimeProfileService.invalidPinnedProfiles(profiles).isEmpty()) {
+        java.util.Set<TaskRuntimeProfileDescriptor> invalidStandardProfiles = profiles.stream()
+                .filter(profile -> TaskTypeCodeCompatibility.isStandard(profile.taskTypeCode()))
+                .filter(profile -> !TaskRuntimeProfileRegistry.isAllowlistedContract(profile))
+                .collect(java.util.stream.Collectors.toSet());
+        if (!invalidStandardProfiles.isEmpty()) {
             throw new SnapshotRuntimeContractException(
                     "One or more runtime profiles are not allowlisted or persisted consistently");
         }

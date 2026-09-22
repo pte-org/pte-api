@@ -37,10 +37,17 @@ final class TaskTypeScoringMethods {
     }
 
     static ScoringMethod resolve(TaskRuntimeProfileDescriptor profile) {
-        if (!TaskRuntimeProfileRegistry.isAllowlistedContract(profile)) {
+        if (profile == null || profile.profileKey() == null || profile.scoringProfileKey() == null
+                || profile.scoringProfileVersion() < 1
+                || !("ACTIVE".equals(profile.status()) || "RETIRED".equals(profile.status()))) {
             throw new ScoreTemplateValidationException(
                     "Runtime profile is not allowlisted for scoring: "
                             + (profile == null ? "unknown" : profile.taskTypeCode()));
+        }
+        if (TaskTypeCodeCompatibility.isStandard(profile.taskTypeCode())
+                && !TaskRuntimeProfileRegistry.isAllowlistedContract(profile)) {
+            throw new ScoreTemplateValidationException(
+                    "Runtime profile is not allowlisted for scoring: " + profile.taskTypeCode());
         }
         ScoringMethod method = BY_PROFILE_KEY.get(profile.scoringProfileKey());
         if (method == null) {

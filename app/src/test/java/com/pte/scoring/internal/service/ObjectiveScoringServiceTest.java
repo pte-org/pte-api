@@ -2,6 +2,8 @@ package com.pte.scoring.internal.service;
 
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.enums.ScoringMethod;
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
+import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -61,6 +63,23 @@ class ObjectiveScoringServiceTest {
     void mcReadingSingle_incorrectSelection_scoresZero() {
         int score = service.score(answer(ScoringConstants.TASK_TYPE_MC_READING_SINGLE, MC_SINGLE_OPTIONS, "0"));
         assertThat(score).isZero();
+    }
+
+    @Test
+    void customTaskKey_reusesThePinnedScreenRenderer() {
+        TaskRuntimeProfileDescriptor standard = TaskRuntimeProfileRegistry.descriptorFor("MC_READING_SINGLE");
+        TaskRuntimeProfileDescriptor custom = new TaskRuntimeProfileDescriptor(
+                "MC_READING_SINGLE_PLUS", standard.profileKey(), standard.profileVersion(),
+                standard.behaviorKey(), standard.rendererKey(), standard.answerSchemaVersion(),
+                standard.scoringProfileKey(), standard.scoringProfileVersion(),
+                standard.requiredClientCapabilities(), standard.status(), standard.screenKey(),
+                standard.contractVersion(), standard.scoringMode(), standard.minSupportedAppVersion(),
+                "PTE.MC_READING_SINGLE_PLUS_AUTHORING", 1);
+
+        int score = service.score(
+                answer("MC_READING_SINGLE_PLUS", MC_SINGLE_OPTIONS, "1"), custom);
+
+        assertThat(score).isEqualTo(100);
     }
 
     // ---- Option-based Listening single-answer types ----

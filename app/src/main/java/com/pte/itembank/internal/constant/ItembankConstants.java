@@ -7,6 +7,38 @@ public final class ItembankConstants {
     public static final String INVALID_QUESTION_FIELDS = "INVALID_QUESTION_FIELDS";
     public static final String INVALID_QUESTION_TYPE = "INVALID_QUESTION_TYPE";
     public static final String UNKNOWN_TASK_TYPE = "UNKNOWN_TASK_TYPE";
+    public static final String TASK_TYPE_KEY_INVALID = "TASK_TYPE_KEY_INVALID";
+    public static final String TASK_TYPE_KEY_ALREADY_USED = "TASK_TYPE_KEY_ALREADY_USED";
+    public static final String TASK_TYPE_DISPLAY_NAME_ALREADY_USED = "TASK_TYPE_DISPLAY_NAME_ALREADY_USED";
+    public static final String TASK_TYPE_DISPLAY_NAME_INVALID = "TASK_TYPE_DISPLAY_NAME_INVALID";
+    public static final String TASK_TYPE_CAPABILITY_NOT_FOUND = "TASK_TYPE_CAPABILITY_NOT_FOUND";
+    public static final String TASK_TYPE_RUNTIME_LOCKED = "TASK_TYPE_RUNTIME_LOCKED";
+    public static final String TASK_TYPE_CUSTOM_CREATION_DISABLED = "TASK_TYPE_CUSTOM_CREATION_DISABLED";
+    public static final String UNSUPPORTED_RUNTIME_CONTRACT = "UNSUPPORTED_RUNTIME_CONTRACT";
+
+    public static final String TASK_TYPE_KEY_INVALID_MESSAGE =
+            "Use a key with letters, numbers, and underscores, beginning with a letter.";
+    public static final String TASK_TYPE_KEY_ALREADY_USED_MESSAGE =
+            "That task type key is already in use.";
+    public static final String TASK_TYPE_DISPLAY_NAME_ALREADY_USED_MESSAGE =
+            "That display name is already used. Choose a different name.";
+    public static final String TASK_TYPE_DISPLAY_NAME_INVALID_MESSAGE =
+            "Enter a display name between 1 and 128 characters.";
+    public static final String TASK_TYPE_CAPABILITY_NOT_FOUND_MESSAGE =
+            "The selected task screen is no longer available for new configuration.";
+    public static final String TASK_TYPE_RUNTIME_LOCKED_MESSAGE =
+            "This task type is used by a published template, so its runtime contract is locked.";
+    public static final String TASK_TYPE_CUSTOM_CREATION_DISABLED_MESSAGE =
+            "Custom task types are temporarily unavailable while the platform rollout is being verified.";
+
+    public static final String TASK_TYPE_AUDIT_AGGREGATE = "TASK_TYPE";
+    public static final String TASK_TYPE_CREATED = "CREATED";
+    public static final String TASK_TYPE_UPDATED = "UPDATED";
+    public static final String TASK_TYPE_RUNTIME_UPDATED = "RUNTIME_CONTRACT_UPDATED";
+    public static final String TASK_TYPE_RETIRED = "RETIRED";
+    public static final String TASK_TYPE_DUPLICATE_REJECTED = "DUPLICATE_REJECTED";
+    public static final String TASK_TYPE_RUNTIME_LOCK_CONFLICT = "RUNTIME_LOCK_CONFLICT";
+    public static final String TASK_TYPE_LEGACY_ADAPTER_USED = "LEGACY_ADAPTER_USED";
 
     // Task-type-specific validation codes
     public static final String AUDIO_PROMPT_REQUIRED = "AUDIO_PROMPT_REQUIRED";

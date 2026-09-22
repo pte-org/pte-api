@@ -1,6 +1,7 @@
 package com.pte.itembank.dto.response;
 
 import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.itembank.TaskRuntimeContractDescriptor;
 
 import java.util.List;
 import java.util.UUID;
@@ -24,7 +25,32 @@ public record QuestionFreezeView(
         String correctAnswerText,
         Integer minWordCount,
         Integer maxWordCount,
-        List<Option> options) {
+        List<Option> options,
+        String taskTypeKey,
+        String section,
+        TaskRuntimeContractDescriptor runtime,
+        String taskTypeDisplayName) {
+
+    /** Compatibility constructor for assessment fixtures created before dynamic keys. */
+    public QuestionFreezeView(UUID sourceQuestionPublicId, PteTaskType pteTaskType, String title,
+            String promptText, UUID audioPromptRef, UUID imagePromptRef, String referenceAnswerText,
+            String correctAnswerText, Integer minWordCount, Integer maxWordCount, List<Option> options) {
+        this(sourceQuestionPublicId, pteTaskType, title, promptText, audioPromptRef, imagePromptRef,
+                referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, options,
+                pteTaskType == null ? null : pteTaskType.name(),
+                pteTaskType == null ? null : pteTaskType.getSection().name(), null,
+                pteTaskType == null ? null : pteTaskType.name());
+    }
+
+    /** Compatibility constructor for callers that already provide the runtime contract. */
+    public QuestionFreezeView(UUID sourceQuestionPublicId, PteTaskType pteTaskType, String title,
+            String promptText, UUID audioPromptRef, UUID imagePromptRef, String referenceAnswerText,
+            String correctAnswerText, Integer minWordCount, Integer maxWordCount, List<Option> options,
+            String taskTypeKey, String section, TaskRuntimeContractDescriptor runtime) {
+        this(sourceQuestionPublicId, pteTaskType, title, promptText, audioPromptRef, imagePromptRef,
+                referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, options, taskTypeKey,
+                section, runtime, taskTypeKey);
+    }
 
     public record Option(String text, boolean correct, int orderIndex, Integer blankIndex, Integer correctGapIndex) {
     }

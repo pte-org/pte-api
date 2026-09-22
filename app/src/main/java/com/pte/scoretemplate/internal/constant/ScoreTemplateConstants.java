@@ -31,6 +31,19 @@ public final class ScoreTemplateConstants {
     public static final String DUPLICATE_SEQUENCES = "Duplicate template sequence values: ";
     public static final String INVALID_SEQUENCE = "Template sequence must be non-negative: ";
     public static final String TEMPLATE_VALIDATION_FAILED = "SCORE_TEMPLATE_VALIDATION_FAILED";
+    public static final String TEMPLATE_RUNTIME_NOT_READY = "TEMPLATE_RUNTIME_NOT_READY";
+    public static final String TEMPLATE_STANDARD_TASK_TYPES_MISSING = "TEMPLATE_STANDARD_TASK_TYPES_MISSING";
+    public static final String TEMPLATE_NO_SCORED_TASKS = "TEMPLATE_NO_SCORED_TASKS";
+    public static final String TEMPLATE_QUESTION_BANK_INSUFFICIENT =
+            "Not enough approved questions are available for task type: ";
+    public static final String CUSTOM_TEMPLATE_ACTIVATION_DISABLED = "CUSTOM_TEMPLATE_ACTIVATION_DISABLED";
+    public static final String CUSTOM_TEMPLATE_ACTIVATION_DISABLED_MESSAGE =
+            "Custom exam templates are temporarily unavailable while the platform rollout is being verified.";
+    public static final String TEMPLATE_UNSCORED_WEIGHT = "Unscored task must have zero weight: ";
+    public static final String TEMPLATE_WEIGHT_OUT_OF_RANGE = "Weight must be between 0 and 100: ";
+    public static final String TEMPLATE_WEIGHT_PRECISION = "Weight can have at most two decimal places: ";
+    public static final String TEMPLATE_RUNTIME_NOT_READY_MESSAGE =
+            "This template is saved as a draft, but it cannot be activated yet.";
 
     public static final String AUDIT_AGGREGATE_TYPE = "SCORE_TEMPLATE";
     public static final String AUDIT_CREATED = "CREATED";
@@ -41,6 +54,7 @@ public final class ScoreTemplateConstants {
     public static final String AUDIT_ACTIVATED = "ACTIVATED";
     public static final String AUDIT_RETIRED = "RETIRED";
     public static final String AUDIT_VALIDATION_FAILED = "VALIDATION_FAILED";
+    public static final String AUDIT_PUBLICATION_USAGE_RECORDED = "TASK_TYPE_PUBLICATION_USAGE_RECORDED";
 
     private ScoreTemplateConstants() {
     }

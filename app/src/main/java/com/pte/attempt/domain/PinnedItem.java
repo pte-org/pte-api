@@ -41,12 +41,18 @@ public class PinnedItem extends BaseEntity {
     @Column(nullable = false)
     private String section;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private String taskType;
+
+    @Column(name = "task_type_key", nullable = false, length = 64)
+    private String taskTypeKey;
 
     /** Additive canonical code; {@link #taskType} remains for old clients and historical rows. */
     @Column(name = "task_type_code", length = 64)
     private String taskTypeCode;
+
+    @Column(name = "task_type_display_name", length = 128)
+    private String taskTypeDisplayName;
 
     @Column(nullable = false)
     private String title;
@@ -146,6 +152,30 @@ public class PinnedItem extends BaseEntity {
     @Column(name = "runtime_profile_status", length = 16)
     private String runtimeProfileStatus;
 
+    @Column(name = "runtime_screen_key", length = 96)
+    private String runtimeScreenKey;
+
+    @Column(name = "runtime_contract_version")
+    private Integer runtimeContractVersion;
+
+    @Column(name = "runtime_scoring_mode", length = 16)
+    private String runtimeScoringMode;
+
+    @Column(name = "runtime_min_supported_app_version", length = 32)
+    private String runtimeMinSupportedAppVersion;
+
+    @Column(name = "runtime_authoring_contract_key", length = 96)
+    private String runtimeAuthoringContractKey;
+
+    @Column(name = "runtime_authoring_contract_version")
+    private Integer runtimeAuthoringContractVersion;
+
+    @Column(name = "runtime_scoring_implementation_version", length = 96)
+    private String runtimeScoringImplementationVersion;
+
+    @Column(name = "runtime_scoring_configuration_digest", length = 128)
+    private String runtimeScoringConfigurationDigest;
+
     @Column(name = "runtime_mapping_version", length = 32)
     private String runtimeMappingVersion;
 
@@ -154,7 +184,7 @@ public class PinnedItem extends BaseEntity {
 
     public void pinRuntimeProfile(TaskRuntimeProfileDescriptor profile, String mappingVersion,
             String mappingStatus) {
-        this.taskTypeCode = profile.taskTypeCode();
+        this.taskTypeCode = this.taskTypeKey == null ? profile.taskTypeCode() : this.taskTypeKey;
         this.runtimeProfileKey = profile.profileKey();
         this.runtimeProfileVersion = profile.profileVersion();
         this.runtimeBehaviorKey = profile.behaviorKey();
@@ -164,6 +194,15 @@ public class PinnedItem extends BaseEntity {
         this.runtimeScoringProfileVersion = profile.scoringProfileVersion();
         this.runtimeRequiredClientCapabilities = String.join(",", profile.requiredClientCapabilities());
         this.runtimeProfileStatus = profile.status();
+        this.runtimeScreenKey = profile.screenKey();
+        this.runtimeContractVersion = profile.contractVersion();
+        this.runtimeScoringMode = profile.scoringMode();
+        this.runtimeMinSupportedAppVersion = profile.minSupportedAppVersion();
+        this.runtimeAuthoringContractKey = profile.authoringContractKey();
+        this.runtimeAuthoringContractVersion = profile.authoringContractVersion();
+        this.runtimeScoringImplementationVersion = profile.scoringProfileKey() + ":v"
+                + profile.scoringProfileVersion();
+        this.runtimeScoringConfigurationDigest = configurationDigest(profile);
         this.runtimeMappingVersion = mappingVersion;
         this.runtimeMappingStatus = mappingStatus;
     }
@@ -182,7 +221,16 @@ public class PinnedItem extends BaseEntity {
         return new TaskRuntimeProfileDescriptor(
                 taskTypeCode, runtimeProfileKey, runtimeProfileVersion,
                 runtimeBehaviorKey, runtimeRendererKey, runtimeAnswerSchemaVersion, runtimeScoringProfileKey,
-                runtimeScoringProfileVersion, capabilities, runtimeProfileStatus);
+                runtimeScoringProfileVersion, capabilities, runtimeProfileStatus,
+                runtimeScreenKey == null ? runtimeRendererKey : runtimeScreenKey,
+                runtimeContractVersion == null ? runtimeProfileVersion : runtimeContractVersion,
+                runtimeScoringMode == null
+                        ? ("UNSCORED".equals(runtimeScoringProfileKey) ? "NONE" : "SCORED")
+                        : runtimeScoringMode,
+                runtimeMinSupportedAppVersion,
+                runtimeAuthoringContractKey == null ? "PTE." + taskTypeCode + "_AUTHORING"
+                        : runtimeAuthoringContractKey,
+                runtimeAuthoringContractVersion == null ? 1 : runtimeAuthoringContractVersion);
     }
 
     /** A partially populated new contract is unsafe to reinterpret as legacy. */
@@ -191,7 +239,23 @@ public class PinnedItem extends BaseEntity {
                 || runtimeBehaviorKey != null || runtimeRendererKey != null
                 || runtimeAnswerSchemaVersion != null || runtimeScoringProfileKey != null
                 || runtimeScoringProfileVersion != null || runtimeRequiredClientCapabilities != null
-                || runtimeProfileStatus != null;
+                || runtimeProfileStatus != null || runtimeScreenKey != null || runtimeContractVersion != null
+                || runtimeScoringMode != null || runtimeScoringImplementationVersion != null
+                || runtimeScoringConfigurationDigest != null;
         return anyRuntimeField && runtimeProfile() == null;
+    }
+
+    private String configurationDigest(TaskRuntimeProfileDescriptor profile) {
+        String value = String.join("|", profile.screenKey(), Integer.toString(profile.contractVersion()),
+                profile.behaviorKey(), Integer.toString(profile.answerSchemaVersion()), profile.scoringProfileKey(),
+                Integer.toString(profile.scoringProfileVersion()), profile.scoringMode(),
+                String.join(",", profile.requiredClientCapabilities()));
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is unavailable", ex);
+        }
     }
 }

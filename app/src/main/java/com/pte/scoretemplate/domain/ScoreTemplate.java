@@ -1,6 +1,7 @@
 package com.pte.scoretemplate.domain;
 
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
+import com.pte.scoretemplate.domain.enums.TemplatePolicy;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -52,6 +53,10 @@ public class ScoreTemplate extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ScoreTemplateStatus status = ScoreTemplateStatus.DRAFT;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "template_policy", nullable = false, length = 16)
+    private TemplatePolicy templatePolicy = TemplatePolicy.STANDARD_PTE;
 
     @Column(name = "rejection_reason", length = 1000)
     private String rejectionReason;

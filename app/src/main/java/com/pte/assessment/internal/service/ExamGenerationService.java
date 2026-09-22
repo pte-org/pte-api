@@ -100,7 +100,7 @@ public class ExamGenerationService {
         List<Requirement> requirements = buildRequirements(template, Set.of(
                 PteSection.SPEAKING, PteSection.WRITING, PteSection.READING, PteSection.LISTENING));
         List<RolledRequirement> rolled = requirements.stream()
-                .map(requirement -> roll(requirement, new Random(seed ^ requirement.taskType().name().hashCode())))
+                .map(requirement -> roll(requirement, new Random(seed ^ requirement.taskTypeKey().hashCode())))
                 .toList();
         checkStockOrThrow(rolled);
         List<PickedItem> picked = drawDeterministic(rolled, seed);
@@ -147,12 +147,18 @@ public class ExamGenerationService {
                 continue;
             }
             if (section == PteSection.SPEAKING) {
-                requirements.add(new Requirement(PteTaskType.PERSONAL_INTRODUCTION, section, 1, 1));
+                    requirements.add(new Requirement(PteTaskType.PERSONAL_INTRODUCTION.name(),
+                            PteTaskType.PERSONAL_INTRODUCTION, section, 1, 1));
             }
             itemsBySection.getOrDefault(section, List.of()).stream()
                     .sorted(Comparator.comparingInt(ScoreTemplateItemResponse::sequence))
-                    .forEach(i -> requirements.add(new Requirement(
-                            TaskTypeCodeCompatibility.parse(i.taskType()), section, i.minCount(), i.maxCount())));
+                    .forEach(i -> {
+                        String taskTypeKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
+                                i.taskTypeKey() == null ? i.taskType() : i.taskTypeKey());
+                        PteTaskType standard = TaskTypeCodeCompatibility.isStandard(taskTypeKey)
+                                ? TaskTypeCodeCompatibility.parse(taskTypeKey) : null;
+                        requirements.add(new Requirement(taskTypeKey, standard, section, i.minCount(), i.maxCount()));
+                    });
         }
         return requirements;
     }
@@ -165,7 +171,8 @@ public class ExamGenerationService {
         int n = requirement.minCount() == requirement.maxCount()
                 ? requirement.minCount()
                 : requirement.minCount() + source.nextInt(requirement.maxCount() - requirement.minCount() + 1);
-        return new RolledRequirement(requirement.taskType(), requirement.section(), n);
+        return new RolledRequirement(requirement.taskTypeKey(), requirement.standardTaskType(),
+                requirement.section(), n);
     }
 
     private List<PickedItem> drawDeterministic(List<RolledRequirement> rolled, long seed) {
@@ -173,8 +180,8 @@ public class ExamGenerationService {
         Set<UUID> used = new HashSet<>();
         List<Shortage> shortages = new ArrayList<>();
         for (RolledRequirement requirement : rolled) {
-            List<UUID> candidates = new ArrayList<>(itembankService.publishedQuestionIds(requirement.taskType()));
-            Collections.shuffle(candidates, new Random(seed ^ requirement.taskType().name().hashCode()
+            List<UUID> candidates = new ArrayList<>(publishedQuestionIds(requirement));
+            Collections.shuffle(candidates, new Random(seed ^ requirement.taskTypeKey().hashCode()
                     ^ requirement.section().name().hashCode()));
             int selected = 0;
             for (UUID candidate : candidates) {
@@ -187,7 +194,7 @@ public class ExamGenerationService {
                 }
             }
             if (selected < requirement.n()) {
-                shortages.add(new Shortage(requirement.taskType().name(), requirement.n(), selected));
+                shortages.add(new Shortage(requirement.taskTypeKey(), requirement.n(), selected));
             }
         }
         if (!shortages.isEmpty()) {
@@ -197,13 +204,21 @@ public class ExamGenerationService {
     }
 
     private void checkStockOrThrow(List<RolledRequirement> rolled) {
-        Set<PteTaskType> taskTypes = rolled.stream().map(RolledRequirement::taskType).collect(Collectors.toSet());
-        Map<PteTaskType, Long> counts = itembankService.countPublishedByTaskTypes(taskTypes);
+        boolean allStandard = rolled.stream().allMatch(requirement -> requirement.standardTaskType() != null);
+        Map<PteTaskType, Long> standardCounts = allStandard
+                ? itembankService.countPublishedByTaskTypes(rolled.stream()
+                        .map(RolledRequirement::standardTaskType).collect(Collectors.toSet()))
+                : Map.of();
+        Map<String, Long> dynamicCounts = allStandard ? Map.of()
+                : itembankService.countPublishedByTaskTypeKeys(rolled.stream()
+                        .map(RolledRequirement::taskTypeKey).collect(Collectors.toSet()));
         List<Shortage> shortages = new ArrayList<>();
         for (RolledRequirement r : rolled) {
-            long available = counts.getOrDefault(r.taskType(), 0L);
+            long available = r.standardTaskType() == null
+                    ? dynamicCounts.getOrDefault(r.taskTypeKey(), 0L)
+                    : standardCounts.getOrDefault(r.standardTaskType(), 0L);
             if (available < r.n()) {
-                shortages.add(new Shortage(r.taskType().name(), r.n(), (int) available));
+                shortages.add(new Shortage(r.taskTypeKey(), r.n(), (int) available));
             }
         }
         if (!shortages.isEmpty()) {
@@ -221,9 +236,11 @@ public class ExamGenerationService {
         List<PickedItem> picked = new ArrayList<>();
         List<Shortage> shortages = new ArrayList<>();
         for (RolledRequirement r : rolled) {
-            List<UUID> ids = itembankService.randomPublishedQuestionIds(r.taskType(), r.n());
+            List<UUID> ids = r.standardTaskType() == null
+                    ? itembankService.randomPublishedQuestionIdsByTaskTypeKey(r.taskTypeKey(), r.n())
+                    : itembankService.randomPublishedQuestionIds(r.standardTaskType(), r.n());
             if (ids.size() != r.n()) {
-                shortages.add(new Shortage(r.taskType().name(), r.n(), ids.size()));
+                shortages.add(new Shortage(r.taskTypeKey(), r.n(), ids.size()));
                 continue;
             }
             for (UUID id : ids) {
@@ -236,10 +253,17 @@ public class ExamGenerationService {
         return picked;
     }
 
-    private record Requirement(PteTaskType taskType, PteSection section, int minCount, int maxCount) {
+    private List<UUID> publishedQuestionIds(RolledRequirement requirement) {
+        return requirement.standardTaskType() == null
+                ? itembankService.publishedQuestionIdsByTaskTypeKey(requirement.taskTypeKey())
+                : itembankService.publishedQuestionIds(requirement.standardTaskType());
     }
 
-    private record RolledRequirement(PteTaskType taskType, PteSection section, int n) {
+    private record Requirement(String taskTypeKey, PteTaskType standardTaskType, PteSection section,
+            int minCount, int maxCount) {
+    }
+
+    private record RolledRequirement(String taskTypeKey, PteTaskType standardTaskType, PteSection section, int n) {
     }
 
     private record PickedItem(UUID questionPublicId, PteSection section) {

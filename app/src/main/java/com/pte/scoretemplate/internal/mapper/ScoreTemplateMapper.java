@@ -19,12 +19,13 @@ public final class ScoreTemplateMapper {
                 template.getName(),
                 template.getStatus().name(),
                 template.getRejectionReason(),
-                template.getItems().stream().map(ScoreTemplateMapper::toItemResponse).toList());
+                template.getItems().stream().map(ScoreTemplateMapper::toItemResponse).toList(),
+                template.getTemplatePolicy() == null ? "STANDARD_PTE" : template.getTemplatePolicy().name());
     }
 
     private static ScoreTemplateItemResponse toItemResponse(ScoreTemplateItem item) {
         return new ScoreTemplateItemResponse(
-                TaskTypeCodeCompatibility.normalizeForLookup(item.getTaskType()),
+                item.getTaskType() == null ? null : TaskTypeCodeCompatibility.normalizeForLookup(item.getTaskType()),
                 item.getSection(),
                 item.getSequence(),
                 item.getMinCount(),
@@ -37,6 +38,7 @@ public final class ScoreTemplateMapper {
                 item.getWritingWeight(),
                 item.getReadingWeight(),
                 item.getListeningWeight(),
-                item.pinnedRuntimeProfile());
+                item.pinnedRuntimeProfile(), item.getTaskTypeKey() == null
+                        ? item.getTaskType() : item.getTaskTypeKey());
     }
 }

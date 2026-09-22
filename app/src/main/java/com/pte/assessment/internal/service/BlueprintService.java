@@ -15,6 +15,7 @@ import com.pte.assessment.internal.exception.BlueprintVersionConflictException;
 import com.pte.assessment.internal.mapper.BlueprintMapper;
 import com.pte.assessment.internal.repository.ExamBlueprintRepository;
 import com.pte.itembank.ItembankService;
+import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.scoretemplate.ScoreTemplateService;
@@ -170,7 +171,9 @@ public class BlueprintService {
             boolean preserveOrder) {
         ScoreTemplateResponse template = scoreTemplateService.getActive();
         Map<String, ScoreTemplateItemResponse> templateByTaskType = new HashMap<>();
-        template.items().forEach(item -> templateByTaskType.put(item.taskType(), item));
+        template.items().forEach(item -> templateByTaskType.put(
+                TaskTypeCodeCompatibility.normalizeTaskTypeKey(
+                        item.taskTypeKey() == null ? item.taskType() : item.taskTypeKey()), item));
         Set<UUID> seen = new HashSet<>();
         List<SortableItem> normalized = new ArrayList<>();
 
@@ -180,7 +183,10 @@ public class BlueprintService {
                 throw new BlueprintValidationException(AssessmentConstants.BLUEPRINT_DUPLICATE_QUESTION);
             }
             QuestionFreezeView question = itembankService.freeze(requested.questionPublicId());
-            ScoreTemplateItemResponse templateItem = templateByTaskType.get(question.pteTaskType().name());
+            String taskTypeKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
+                    question.taskTypeKey() == null && question.pteTaskType() != null
+                            ? question.pteTaskType().name() : question.taskTypeKey());
+            ScoreTemplateItemResponse templateItem = templateByTaskType.get(taskTypeKey);
             if (templateItem == null) {
                 throw new BlueprintValidationException(AssessmentConstants.BLUEPRINT_ITEM_INVALID);
             }
@@ -221,11 +227,16 @@ public class BlueprintService {
         Map<String, Integer> counts = new HashMap<>();
         blueprint.getItems().forEach(item -> {
             QuestionFreezeView question = itembankService.freeze(item.getQuestionPublicId());
-            counts.merge(question.pteTaskType().name(), 1, Integer::sum);
+            String taskTypeKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
+                    question.taskTypeKey() == null && question.pteTaskType() != null
+                            ? question.pteTaskType().name() : question.taskTypeKey());
+            counts.merge(taskTypeKey, 1, Integer::sum);
         });
         ScoreTemplateResponse template = scoreTemplateService.getActive();
         for (ScoreTemplateItemResponse templateItem : template.items()) {
-            int count = counts.getOrDefault(templateItem.taskType(), 0);
+            String taskTypeKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
+                    templateItem.taskTypeKey() == null ? templateItem.taskType() : templateItem.taskTypeKey());
+            int count = counts.getOrDefault(taskTypeKey, 0);
             if (count < templateItem.minCount() || count > templateItem.maxCount()) {
                 throw new BlueprintValidationException(AssessmentConstants.BLUEPRINT_TEMPLATE_COMPLIANCE_INVALID);
             }

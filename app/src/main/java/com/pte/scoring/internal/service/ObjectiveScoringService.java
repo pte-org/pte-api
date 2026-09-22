@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.service;
 
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.constant.ScoringConstants;
@@ -48,7 +49,17 @@ public class ObjectiveScoringService {
      * contributing rawScores / 100), so every scorer must share one scale.
      */
     public int score(ScoringAnswer answer) {
-        return switch (answer.getTaskType()) {
+        return score(answer, null);
+    }
+
+    /**
+     * Scores by the pinned runtime renderer when one is available. A custom
+     * task key may reuse an existing renderer, so dispatching by the logical
+     * key alone would incorrectly reject a valid custom task.
+     */
+    public int score(ScoringAnswer answer, TaskRuntimeProfileDescriptor runtime) {
+        String route = runtime == null ? answer.getTaskType() : runtime.rendererKey();
+        return switch (route) {
             case ScoringConstants.TASK_TYPE_MC_READING_SINGLE -> scoreSingleChoice(answer);
             case ScoringConstants.TASK_TYPE_MC_READING_MULTIPLE -> scoreMultipleChoice(answer);
             case ScoringConstants.TASK_TYPE_MC_LISTENING_SINGLE,
@@ -61,6 +72,15 @@ public class ObjectiveScoringService {
             case ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_TYPE_IN -> scoreListeningFillBlanks(answer);
             case ScoringConstants.TASK_TYPE_HIGHLIGHT_INCORRECT_WORDS -> scoreHighlightIncorrectWords(answer);
             case ScoringConstants.TASK_TYPE_WRITE_FROM_DICTATION -> scoreWriteFromDictation(answer);
+            case "MC_READING_SINGLE_V1", "MC_LISTENING_SINGLE_V1", "HIGHLIGHT_CORRECT_SUMMARY_V1",
+                    "SELECT_MISSING_WORD_V1" -> scoreSingleChoice(answer);
+            case "MC_READING_MULTIPLE_V1", "MC_LISTENING_MULTIPLE_V1" -> scoreMultipleChoice(answer);
+            case "RE_ORDER_PARAGRAPHS_V1" -> scoreReorderParagraphs(answer);
+            case "FILL_IN_THE_BLANKS_DRAG_AND_DROP_V1", "FILL_IN_THE_BLANKS_DROPDOWN_V1" ->
+                    scoreFillBlanks(answer);
+            case "FILL_IN_THE_BLANKS_TYPE_IN_V1" -> scoreListeningFillBlanks(answer);
+            case "HIGHLIGHT_INCORRECT_WORDS_V1" -> scoreHighlightIncorrectWords(answer);
+            case "WRITE_FROM_DICTATION_V1" -> scoreWriteFromDictation(answer);
             default -> throw new UnsupportedTaskTypeException();
         };
     }

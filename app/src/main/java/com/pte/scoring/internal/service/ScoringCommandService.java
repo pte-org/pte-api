@@ -3,6 +3,7 @@ package com.pte.scoring.internal.service;
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.domain.enums.ScoringMethod;
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,13 +53,15 @@ public class ScoringCommandService {
         List<ScoringAnswer> pending = scoringAnswerRepository
                 .findBySessionPublicIdAndTenantIdAndStatus(sessionPublicId, tenantId, ScoringAnswerStatus.PENDING);
         for (ScoringAnswer answer : pending) {
-            Optional<ScoringMethod> method =
-                    scoringMethodResolver.resolve(answer.getScoreTemplatePublicId(), answer.getTaskType());
+            Optional<TaskRuntimeProfileDescriptor> runtime = scoringMethodResolver.resolveProfile(
+                    answer.getScoreTemplatePublicId(), answer.getTaskType());
+            Optional<ScoringMethod> method = runtime.map(this::methodFor)
+                    .or(() -> scoringMethodResolver.resolve(answer.getScoreTemplatePublicId(), answer.getTaskType()));
             if (method.isEmpty()) {
                 continue; // Task type absent from the pinned template (e.g. PERSONAL_INTRODUCTION) — stays PENDING.
             }
             if (objectiveScoringService.supports(method.get())) {
-                scoreObjectively(answer);
+                scoreObjectively(answer, runtime.orElse(null));
             } else if (aiScoringDispatcher.supports(method.get())) {
                 aiScoringDispatcher.dispatch(answer, method.get());
             }
@@ -66,8 +69,20 @@ public class ScoringCommandService {
         }
     }
 
-    private void scoreObjectively(ScoringAnswer answer) {
-        int rawScore = objectiveScoringService.score(answer);
+    private ScoringMethod methodFor(TaskRuntimeProfileDescriptor runtime) {
+        return switch (runtime.scoringProfileKey()) {
+            case "AI_SPEECH" -> ScoringMethod.AI_SPEECH;
+            case "AI_TEXT" -> ScoringMethod.AI_TEXT;
+            case "OBJECTIVE" -> ScoringMethod.OBJECTIVE;
+            case "UNSCORED" -> ScoringMethod.UNSCORED;
+            default -> throw new IllegalStateException("Unsupported scoring profile: " + runtime.scoringProfileKey());
+        };
+    }
+
+    private void scoreObjectively(ScoringAnswer answer, TaskRuntimeProfileDescriptor runtime) {
+        int rawScore = runtime == null
+                ? objectiveScoringService.score(answer)
+                : objectiveScoringService.score(answer, runtime);
         answer.markScored(rawScore);
         scoringAnswerRepository.save(answer);
     }

@@ -3,11 +3,17 @@ package com.pte.scoretemplate.internal.service;
 import com.pte.scoretemplate.domain.ScoreTemplate;
 import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
+import com.pte.scoretemplate.domain.enums.TemplatePolicy;
+import com.pte.itembank.ItembankService;
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.TaskRuntimeProfileService;
+import com.pte.itembank.TaskRuntimeContractDescriptor;
+import com.pte.itembank.TaskRuntimeContractService;
+import com.pte.itembank.TaskTypeObservability;
+import com.pte.itembank.TaskTypePublicationUsageService;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.scoretemplate.dto.request.CreateScoreTemplateRequest;
 import com.pte.scoretemplate.dto.request.RejectScoreTemplateRequest;
@@ -48,30 +54,47 @@ public class ScoreTemplateAdminService {
     private final ScoreTemplateRepository repository;
     private final QuestionTypeService questionTypeService;
     private final TaskRuntimeProfileService runtimeProfileService;
+    private final TaskRuntimeContractService runtimeContractService;
+    private final TaskTypePublicationUsageService publicationUsageService;
     private final AuditLogService auditLogService;
+    private final TaskTypeObservability observability;
+    private final ItembankService itembankService;
 
     public ScoreTemplateAdminService(ScoreTemplateRepository repository, QuestionTypeService questionTypeService) {
-        this(repository, questionTypeService, null, null);
+        this(repository, questionTypeService, null, null, null, null, null, null);
     }
 
     @Autowired
     public ScoreTemplateAdminService(ScoreTemplateRepository repository, QuestionTypeService questionTypeService,
-            TaskRuntimeProfileService runtimeProfileService, AuditLogService auditLogService) {
+            TaskRuntimeProfileService runtimeProfileService, AuditLogService auditLogService,
+            TaskRuntimeContractService runtimeContractService,
+            TaskTypePublicationUsageService publicationUsageService,
+            TaskTypeObservability observability, ItembankService itembankService) {
         this.repository = repository;
         this.questionTypeService = questionTypeService;
         this.runtimeProfileService = runtimeProfileService;
+        this.runtimeContractService = runtimeContractService;
+        this.publicationUsageService = publicationUsageService;
         this.auditLogService = auditLogService;
+        this.observability = observability;
+        this.itembankService = itembankService;
+    }
+
+    /** Compatibility constructor for existing focused tests/callers. */
+    public ScoreTemplateAdminService(ScoreTemplateRepository repository, QuestionTypeService questionTypeService,
+            TaskRuntimeProfileService runtimeProfileService, AuditLogService auditLogService) {
+        this(repository, questionTypeService, runtimeProfileService, auditLogService, null, null, null, null);
     }
 
     /** Compatibility constructor used by focused tests and legacy in-process callers. */
     public ScoreTemplateAdminService(ScoreTemplateRepository repository, QuestionTypeService questionTypeService,
             TaskRuntimeProfileService runtimeProfileService) {
-        this(repository, questionTypeService, runtimeProfileService, null);
+        this(repository, questionTypeService, runtimeProfileService, null, null, null, null, null);
     }
 
     /** Compatibility constructor used by focused unit tests. */
     public ScoreTemplateAdminService(ScoreTemplateRepository repository) {
-        this(repository, null, null, null);
+        this(repository, null, null, null, null, null, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -82,6 +105,11 @@ public class ScoreTemplateAdminService {
     @Transactional(readOnly = true)
     public ScoreTemplateResponse getForEdit(UUID publicId) {
         return ScoreTemplateMapper.toResponse(findByPublicId(publicId));
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isCustomTemplate(UUID publicId) {
+        return findByPublicId(publicId).getTemplatePolicy() == TemplatePolicy.CUSTOM;
     }
 
     /** Creates an empty DRAFT in the next version of a template code family. */
@@ -101,6 +129,7 @@ public class ScoreTemplateAdminService {
         draft.setVersion(nextVersion);
         draft.setName(request.name().trim());
         draft.setStatus(ScoreTemplateStatus.DRAFT);
+        draft.setTemplatePolicy(parsePolicy(request.templatePolicy()));
 
         ScoreTemplate saved = saveOrTranslateConflict(draft);
         audit(caller, ScoreTemplateConstants.AUDIT_CREATED, saved,
@@ -127,6 +156,7 @@ public class ScoreTemplateAdminService {
         draft.setVersion(nextVersion);
         draft.setName(source.getName());
         draft.setStatus(ScoreTemplateStatus.DRAFT);
+        draft.setTemplatePolicy(source.getTemplatePolicy());
         source.getItems().forEach(item -> draft.addItem(copyItem(item)));
 
         ScoreTemplate saved = saveOrTranslateConflict(draft);
@@ -155,10 +185,21 @@ public class ScoreTemplateAdminService {
         requireDraft(template);
         try {
             template.setName(request.name());
+            if (request.templatePolicy() != null) {
+                template.setTemplatePolicy(parsePolicy(request.templatePolicy()));
+            }
             template.getItems().clear();
             request.items().forEach(itemRequest -> template.addItem(toEntity(itemRequest)));
-            ScoreTemplateActivationValidator.validateSkillWeightTotals(template);
-            validateCatalog(template);
+            // Draft authoring is intentionally non-blocking for runtime
+            // readiness. Valid profiles are pinned immediately, while a
+            // missing/retired contract is retained as an unpinned item so the
+            // response can show the actionable readiness problem. Preserve
+            // the historical eager standard-weight check, but let CUSTOM
+            // drafts be assembled incrementally.
+            if (!isCustom(template)) {
+                ScoreTemplateActivationValidator.validateSkillWeightTotals(template);
+            }
+            validateCatalog(template, false);
             return ScoreTemplateMapper.toResponse(repository.save(template));
         } catch (ScoreTemplateValidationException ex) {
             auditValidationFailure(caller, template, ex);
@@ -179,6 +220,7 @@ public class ScoreTemplateAdminService {
         try {
             validateCatalog(template);
             ScoreTemplateActivationValidator.validate(template);
+            validateQuestionBank(template);
         } catch (ScoreTemplateValidationException ex) {
             auditValidationFailure(caller, template, ex);
             throw ex;
@@ -204,6 +246,7 @@ public class ScoreTemplateAdminService {
         try {
             validateCatalog(template);
             ScoreTemplateActivationValidator.validate(template);
+            validateQuestionBank(template);
         } catch (ScoreTemplateValidationException ex) {
             auditValidationFailure(caller, template, ex);
             throw ex;
@@ -268,6 +311,7 @@ public class ScoreTemplateAdminService {
         try {
             validateCatalog(target);
             ScoreTemplateActivationValidator.validate(target);
+            validateQuestionBank(target);
         } catch (ScoreTemplateValidationException ex) {
             auditValidationFailure(caller, target, ex);
             throw ex;
@@ -286,6 +330,15 @@ public class ScoreTemplateAdminService {
         target.setStatus(ScoreTemplateStatus.ACTIVE);
 
         ScoreTemplate saved = saveOrTranslateConflict(target);
+        if (publicationUsageService != null) {
+            publicationUsageService.recordPublishedUse(
+                    target.getItems().stream().map(this::logicalTaskKey).distinct().toList(),
+                    target.getPublicId(), target.getPublicId(), caller == null ? null : caller.userId(),
+                    "SCORE_TEMPLATE:" + target.getPublicId() + ":" + target.getVersion());
+            audit(caller, ScoreTemplateConstants.AUDIT_PUBLICATION_USAGE_RECORDED, target,
+                    "Recorded runtime lock usage for " + target.getItems().stream()
+                            .map(this::logicalTaskKey).distinct().sorted().toList());
+        }
         audit(caller, ScoreTemplateConstants.AUDIT_ACTIVATED, saved,
                 "Activated version " + saved.getVersion());
         return ScoreTemplateMapper.toResponse(saved);
@@ -307,34 +360,57 @@ public class ScoreTemplateAdminService {
         }
     }
 
+    private boolean isCustom(ScoreTemplate template) {
+        return template.getTemplatePolicy() == TemplatePolicy.CUSTOM;
+    }
+
     private void validateCatalog(ScoreTemplate template) {
+        validateCatalog(template, true);
+    }
+
+    private void validateCatalog(ScoreTemplate template, boolean strict) {
         if (questionTypeService == null) {
             return;
         }
+        boolean customPolicy = template.getTemplatePolicy() == TemplatePolicy.CUSTOM;
         List<String> errors = new ArrayList<>();
         List<ScoreTemplateItem> profileItems = new ArrayList<>();
         List<String> missingProfileCodes = new ArrayList<>();
         for (ScoreTemplateItem item : template.getItems()) {
-            final PteTaskType taskType;
+            String logicalKey;
             try {
-                String canonicalCode = TaskTypeCodeCompatibility.canonicalize(item.getTaskType());
-                item.setTaskType(canonicalCode);
-                taskType = TaskTypeCodeCompatibility.parse(canonicalCode);
+                logicalKey = logicalTaskKey(item);
+                if (logicalKey == null || logicalKey.isBlank()) {
+                    throw new IllegalArgumentException("missing task type key");
+                }
+                logicalKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(logicalKey);
+                item.setTaskTypeKey(logicalKey);
+                if (TaskTypeCodeCompatibility.isStandard(logicalKey)) {
+                    item.setTaskType(logicalKey);
+                } else {
+                    item.setTaskType(null);
+                }
             } catch (RuntimeException ex) {
-                errors.add(ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + item.getTaskType());
+                errors.add(ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + logicalTaskKey(item));
                 continue;
             }
-            if (!questionTypeService.isActive(taskType.name())) {
-                errors.add(ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + item.getTaskType());
+            if (!questionTypeService.isActive(logicalKey)) {
+                errors.add(ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + logicalKey);
                 continue;
             }
-            if (!taskType.getSection().name().equals(item.getSection())) {
-                errors.add(ScoreTemplateConstants.TEMPLATE_SECTION_INVALID + item.getTaskType());
+            String expectedSection = questionTypeService.findSectionByTaskTypeKey(logicalKey)
+                    .orElse(standardSection(logicalKey));
+            if (expectedSection == null || !expectedSection.equals(item.getSection())) {
+                errors.add(ScoreTemplateConstants.TEMPLATE_SECTION_INVALID + logicalKey);
+                continue;
+            }
+            if (!customPolicy && !TaskTypeCodeCompatibility.isStandard(logicalKey)) {
+                errors.add(ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + logicalKey);
                 continue;
             }
             profileItems.add(item);
             if (item.pinnedRuntimeProfile() == null) {
-                missingProfileCodes.add(taskType.name());
+                missingProfileCodes.add(logicalKey);
             }
         }
 
@@ -344,10 +420,12 @@ public class ScoreTemplateAdminService {
             try {
                 if (runtimeProfileService == null) {
                     for (String code : missingProfileCodes) {
-                        activeProfiles.put(code, TaskRuntimeProfileRegistry.descriptorFor(code));
+                        activeProfiles.put(code, resolveActiveProfile(code));
                     }
                 } else {
-                    activeProfiles.putAll(runtimeProfileService.resolveActiveByTaskTypeCodes(missingProfileCodes));
+                    for (String code : missingProfileCodes) {
+                        activeProfiles.put(code, resolveActiveProfile(code));
+                    }
                 }
             } catch (RuntimeException ex) {
                 activeProfileLookupFailed = true;
@@ -356,7 +434,7 @@ public class ScoreTemplateAdminService {
 
         for (ScoreTemplateItem item : profileItems) {
             if (item.pinnedRuntimeProfile() == null) {
-                TaskRuntimeProfileDescriptor active = activeProfiles.get(item.getTaskType());
+                TaskRuntimeProfileDescriptor active = activeProfiles.get(logicalTaskKey(item));
                 if (!activeProfileLookupFailed && active != null) {
                     item.pinRuntimeProfile(active);
                 }
@@ -367,33 +445,62 @@ public class ScoreTemplateAdminService {
                 .map(ScoreTemplateItem::pinnedRuntimeProfile)
                 .filter(java.util.Objects::nonNull)
                 .toList();
-        Set<TaskRuntimeProfileDescriptor> invalidProfiles = runtimeProfileService == null
-                ? profileItems.stream()
-                        .map(ScoreTemplateItem::pinnedRuntimeProfile)
-                        .filter(java.util.Objects::nonNull)
-                        .filter(profile -> !isAllowlistedProfile(profile))
-                        .collect(java.util.stream.Collectors.toSet())
-                : runtimeProfileService.invalidPinnedProfiles(pinnedProfiles);
+        Set<TaskRuntimeProfileDescriptor> invalidProfiles = profileItems.stream()
+                .filter(item -> !customPolicy || TaskTypeCodeCompatibility.isStandard(logicalTaskKey(item)))
+                .map(ScoreTemplateItem::pinnedRuntimeProfile)
+                .filter(java.util.Objects::nonNull)
+                .filter(profile -> !isAllowlistedProfile(profile))
+                .collect(java.util.stream.Collectors.toSet());
         for (ScoreTemplateItem item : profileItems) {
             if (item.pinnedRuntimeProfile() == null || invalidProfiles.contains(item.pinnedRuntimeProfile())) {
-                errors.add(ScoreTemplateConstants.TEMPLATE_PROFILE_INVALID + item.getTaskType());
+                errors.add(ScoreTemplateConstants.TEMPLATE_PROFILE_INVALID + logicalTaskKey(item));
                 continue;
             }
             try {
                 if (item.getScoringMethod() != TaskTypeScoringMethods.resolve(item.pinnedRuntimeProfile())) {
-                    errors.add(ScoreTemplateConstants.TEMPLATE_SCORING_PROFILE_INVALID + item.getTaskType());
+                    errors.add(ScoreTemplateConstants.TEMPLATE_SCORING_PROFILE_INVALID + logicalTaskKey(item));
                 }
             } catch (RuntimeException ex) {
-                errors.add(ScoreTemplateConstants.TEMPLATE_SCORING_PROFILE_INVALID + item.getTaskType());
+                errors.add(ScoreTemplateConstants.TEMPLATE_SCORING_PROFILE_INVALID + logicalTaskKey(item));
             }
         }
-        if (!errors.isEmpty()) {
+        if (strict && !errors.isEmpty()) {
             throw new ScoreTemplateValidationException(String.join("; ", errors));
+        }
+    }
+
+    private void validateQuestionBank(ScoreTemplate template) {
+        if (itembankService == null) {
+            return;
+        }
+        Set<String> taskTypeKeys = template.getItems().stream()
+                .map(this::logicalTaskKey)
+                .filter(key -> key != null && !key.isBlank())
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        Map<String, Long> available = itembankService.countPublishedByTaskTypeKeys(taskTypeKeys);
+        List<String> shortages = template.getItems().stream()
+                .filter(item -> available.getOrDefault(logicalTaskKey(item), 0L) < item.getMaxCount())
+                .map(item -> ScoreTemplateConstants.TEMPLATE_QUESTION_BANK_INSUFFICIENT
+                        + logicalTaskKey(item) + " (required " + item.getMaxCount() + ", available "
+                        + available.getOrDefault(logicalTaskKey(item), 0L) + ")")
+                .toList();
+        if (!shortages.isEmpty()) {
+            throw new ScoreTemplateValidationException(String.join("; ", shortages));
         }
     }
 
     private boolean isAllowlistedProfile(TaskRuntimeProfileDescriptor profile) {
         return TaskRuntimeProfileRegistry.isAllowlistedContract(profile);
+    }
+
+    private String standardSection(String logicalKey) {
+        try {
+            return TaskTypeCodeCompatibility.isStandard(logicalKey)
+                    ? PteTaskType.valueOf(logicalKey).getSection().name()
+                    : null;
+        } catch (RuntimeException ex) {
+            return null;
+        }
     }
 
     private void audit(CurrentUser caller, String action, ScoreTemplate template, String summary) {
@@ -406,6 +513,9 @@ public class ScoreTemplateAdminService {
 
     private void auditValidationFailure(CurrentUser caller, ScoreTemplate template,
             ScoreTemplateValidationException exception) {
+        if (observability != null) {
+            observability.templateReadinessFailed();
+        }
         if (auditLogService == null || caller == null || template == null) {
             return;
         }
@@ -431,7 +541,9 @@ public class ScoreTemplateAdminService {
 
     private ScoreTemplateItem copyItem(ScoreTemplateItem source) {
         ScoreTemplateItem copy = new ScoreTemplateItem();
-        copy.setTaskType(TaskTypeCodeCompatibility.normalizeForLookup(source.getTaskType()));
+        copy.setTaskType(source.getTaskType() == null ? null
+                : TaskTypeCodeCompatibility.normalizeForLookup(source.getTaskType()));
+        copy.setTaskTypeKey(logicalTaskKey(source));
         copy.setSection(source.getSection());
         copy.setSequence(source.getSequence());
         copy.setMinCount(source.getMinCount());
@@ -444,7 +556,7 @@ public class ScoreTemplateAdminService {
         copy.setReadingWeight(source.getReadingWeight());
         copy.setListeningWeight(source.getListeningWeight());
         TaskRuntimeProfileDescriptor pinned = source.pinnedRuntimeProfile();
-        pinned = pinned == null ? resolveActiveProfile(copy.getTaskType()) : pinned;
+        pinned = pinned == null ? resolveActiveProfile(copy.getTaskTypeKey()) : pinned;
         copy.pinRuntimeProfile(pinned);
         copy.setScoringMethod(TaskTypeScoringMethods.resolve(pinned));
         return copy;
@@ -454,19 +566,39 @@ public class ScoreTemplateAdminService {
         ScoreTemplateItem item = new ScoreTemplateItem();
         final String canonicalTaskType;
         try {
-            canonicalTaskType = TaskTypeCodeCompatibility.canonicalize(request.taskType());
+            String rawKey = request.taskTypeKey() == null || request.taskTypeKey().isBlank()
+                    ? request.taskType() : request.taskTypeKey();
+            canonicalTaskType = TaskTypeCodeCompatibility.normalizeTaskTypeKey(rawKey);
         } catch (RuntimeException ex) {
             throw new ScoreTemplateValidationException(
-                    ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + request.taskType());
+                    ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + (request.taskTypeKey() == null
+                            ? request.taskType() : request.taskTypeKey()));
         }
-        item.setTaskType(canonicalTaskType);
+        item.setTaskType(TaskTypeCodeCompatibility.isStandard(canonicalTaskType) ? canonicalTaskType : null);
+        item.setTaskTypeKey(canonicalTaskType);
         final TaskRuntimeProfileDescriptor runtimeProfile;
         try {
             runtimeProfile = resolveActiveProfile(canonicalTaskType);
             item.pinRuntimeProfile(runtimeProfile);
         } catch (RuntimeException ex) {
-            throw new ScoreTemplateValidationException(
-                    ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + request.taskType());
+            // A DRAFT can be saved before the selected task type has an
+            // active runtime contract. Keep the row persistable and let the
+            // strict submit/activation validation report the missing profile.
+            item.setScoringMethod(com.pte.scoretemplate.domain.enums.ScoringMethod.UNSCORED);
+            item.setSection(request.section());
+            item.setSequence(request.sequence());
+            item.setMinCount(request.minCount());
+            item.setMaxCount(request.maxCount());
+            item.setPrepSeconds(request.prepSeconds());
+            item.setResponseSeconds(request.responseSeconds());
+            item.setSpeakingWeight(request.speakingWeight());
+            item.setWritingWeight(request.writingWeight());
+            item.setReadingWeight(request.readingWeight());
+            item.setListeningWeight(request.listeningWeight());
+            item.setOverallWeight(computeOverallWeight(
+                    request.speakingWeight(), request.writingWeight(), request.readingWeight(),
+                    request.listeningWeight()));
+            return item;
         }
         item.setSection(request.section());
         item.setSequence(request.sequence());
@@ -485,9 +617,26 @@ public class ScoreTemplateAdminService {
     }
 
     private TaskRuntimeProfileDescriptor resolveActiveProfile(String taskTypeCode) {
-        return runtimeProfileService == null
-                ? TaskRuntimeProfileRegistry.descriptorFor(taskTypeCode)
-                : runtimeProfileService.resolveActive(taskTypeCode);
+        if (TaskTypeCodeCompatibility.isStandard(taskTypeCode)) {
+            return runtimeProfileService == null
+                    ? TaskRuntimeProfileRegistry.descriptorFor(taskTypeCode)
+                    : runtimeProfileService.resolveActive(taskTypeCode);
+        }
+        if (questionTypeService == null) {
+            throw new ScoreTemplateValidationException(ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + taskTypeCode);
+        }
+        TaskRuntimeContractDescriptor contract = questionTypeService.resolveRuntimeContract(taskTypeCode);
+        return new TaskRuntimeProfileDescriptor(taskTypeCode, contract.profileKey(), contract.profileVersion(),
+                contract.behaviorKey(), contract.rendererKey(), contract.answerSchemaVersion(),
+                contract.scoringProfileKey(), contract.scoringProfileVersion(),
+                contract.requiredClientCapabilities(), contract.status(), contract.screenKey(),
+                contract.contractVersion(), contract.scoringMode(), contract.minSupportedAppVersion(),
+                contract.authoringContractKey(), contract.authoringContractVersion());
+    }
+
+    private String logicalTaskKey(ScoreTemplateItem item) {
+        return item.getTaskTypeKey() == null ? TaskTypeCodeCompatibility.normalizeForLookup(item.getTaskType())
+                : TaskTypeCodeCompatibility.normalizeTaskTypeKey(item.getTaskTypeKey());
     }
 
     /**
@@ -507,5 +656,16 @@ public class ScoreTemplateAdminService {
             BigDecimal speakingWeight, BigDecimal writingWeight, BigDecimal readingWeight, BigDecimal listeningWeight) {
         BigDecimal sum = speakingWeight.add(writingWeight).add(readingWeight).add(listeningWeight);
         return sum.divide(BigDecimal.valueOf(4), 2, RoundingMode.HALF_UP);
+    }
+
+    private TemplatePolicy parsePolicy(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return TemplatePolicy.STANDARD_PTE;
+        }
+        try {
+            return TemplatePolicy.valueOf(raw.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new ScoreTemplateValidationException("Unknown template policy: " + raw);
+        }
     }
 }

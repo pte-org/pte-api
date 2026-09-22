@@ -70,4 +70,34 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
             ORDER BY public_id
             """, nativeQuery = true)
     List<UUID> publishedSharedIdsByTaskType(@Param("taskType") String taskType);
+
+    @Query(value = """
+            SELECT task_type_key AS taskType, COUNT(*) AS count
+            FROM questions
+            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+              AND task_type_key IN (:taskTypeKeys)
+            GROUP BY task_type_key
+            """, nativeQuery = true)
+    List<TaskTypeCountProjection> countPublishedSharedGroupedByTaskTypeKey(
+            @Param("taskTypeKeys") Set<String> taskTypeKeys);
+
+    @Query(value = """
+            SELECT public_id
+            FROM questions
+            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+              AND task_type_key = :taskTypeKey
+            ORDER BY random()
+            LIMIT :n
+            """, nativeQuery = true)
+    List<UUID> randomPublishedSharedIdsByTaskTypeKey(@Param("taskTypeKey") String taskTypeKey,
+            @Param("n") int n);
+
+    @Query(value = """
+            SELECT public_id
+            FROM questions
+            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+              AND task_type_key = :taskTypeKey
+            ORDER BY public_id
+            """, nativeQuery = true)
+    List<UUID> publishedSharedIdsByTaskTypeKey(@Param("taskTypeKey") String taskTypeKey);
 }

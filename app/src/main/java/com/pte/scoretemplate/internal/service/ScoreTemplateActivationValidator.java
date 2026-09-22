@@ -71,12 +71,22 @@ public final class ScoreTemplateActivationValidator {
         }
 
         List<String> errors = new ArrayList<>();
-        collectTaskTypeErrors(items, errors);
+        boolean custom = template.getTemplatePolicy() != null
+                && "CUSTOM".equals(template.getTemplatePolicy().name());
+        if (custom) {
+            collectCustomTaskTypeErrors(items, errors);
+        } else {
+            collectTaskTypeErrors(items, errors);
+        }
         collectSequenceErrors(items, errors);
         items.forEach(item -> collectCountError(item, errors));
         items.forEach(item -> collectWeightErrors(item, errors));
-        collectPositiveWeightErrors(items, errors);
-        collectSkillWeightTotalErrors(items, errors);
+        if (custom) {
+            collectCustomScoringErrors(items, errors);
+        } else {
+            collectPositiveWeightErrors(items, errors);
+            collectSkillWeightTotalErrors(items, errors);
+        }
         if (!errors.isEmpty()) {
             throw new ScoreTemplateValidationException(String.join("; ", errors));
         }
@@ -98,7 +108,11 @@ public final class ScoreTemplateActivationValidator {
             return;
         }
         List<String> errors = new ArrayList<>();
-        collectSkillWeightTotalErrors(items, errors);
+        if (template.getTemplatePolicy() != null && "CUSTOM".equals(template.getTemplatePolicy().name())) {
+            collectCustomScoringErrors(items, errors);
+        } else {
+            collectSkillWeightTotalErrors(items, errors);
+        }
         if (!errors.isEmpty()) {
             throw new ScoreTemplateValidationException(String.join("; ", errors));
         }
@@ -106,7 +120,7 @@ public final class ScoreTemplateActivationValidator {
 
     private static void collectTaskTypeErrors(List<ScoreTemplateItem> items, List<String> errors) {
         Set<String> present = new LinkedHashSet<>();
-        items.forEach(item -> present.add(item.getTaskType()));
+        items.forEach(item -> present.add(logicalTaskKey(item)));
         Set<String> missing = new LinkedHashSet<>(REQUIRED_TASK_TYPES);
         missing.removeAll(present);
         if (!missing.isEmpty()) {
@@ -116,9 +130,25 @@ public final class ScoreTemplateActivationValidator {
         Set<String> seen = new LinkedHashSet<>();
         items.forEach(item -> {
             if (!seen.add(item.getTaskType())) {
-                duplicates.add(item.getTaskType());
+                duplicates.add(logicalTaskKey(item));
             }
         });
+        if (!duplicates.isEmpty()) {
+            errors.add(ScoreTemplateConstants.DUPLICATE_TASK_TYPES + duplicates);
+        }
+    }
+
+    private static void collectCustomTaskTypeErrors(List<ScoreTemplateItem> items, List<String> errors) {
+        Set<String> seen = new LinkedHashSet<>();
+        Set<String> duplicates = new LinkedHashSet<>();
+        for (ScoreTemplateItem item : items) {
+            String key = logicalTaskKey(item);
+            if (key == null || key.isBlank()) {
+                errors.add(ScoreTemplateConstants.TEMPLATE_TASK_TYPE_INVALID + "(missing key)");
+            } else if (!seen.add(key)) {
+                duplicates.add(key);
+            }
+        }
         if (!duplicates.isEmpty()) {
             errors.add(ScoreTemplateConstants.DUPLICATE_TASK_TYPES + duplicates);
         }
@@ -149,10 +179,63 @@ public final class ScoreTemplateActivationValidator {
         for (Function<ScoreTemplateItem, BigDecimal> accessor : WEIGHT_COLUMNS.values()) {
             BigDecimal value = accessor.apply(item);
             if (value == null || value.signum() < 0) {
-                errors.add(ScoreTemplateConstants.NEGATIVE_WEIGHT + item.getTaskType());
+                errors.add(ScoreTemplateConstants.NEGATIVE_WEIGHT + logicalTaskKey(item));
                 return;
             }
+            if (value.compareTo(BigDecimal.valueOf(100)) > 0) {
+                errors.add(ScoreTemplateConstants.TEMPLATE_WEIGHT_OUT_OF_RANGE + logicalTaskKey(item));
+            }
+            if (value.scale() > 2) {
+                errors.add(ScoreTemplateConstants.TEMPLATE_WEIGHT_PRECISION + logicalTaskKey(item));
+            }
         }
+    }
+
+    private static void collectCustomScoringErrors(List<ScoreTemplateItem> items, List<String> errors) {
+        boolean anyScored = false;
+        for (ScoreTemplateItem item : items) {
+            var profile = item.pinnedRuntimeProfile();
+            boolean scored = profile != null && profile.scoringEnabled();
+            anyScored |= scored;
+            if (!scored && hasPositiveSkillWeight(item)) {
+                errors.add(ScoreTemplateConstants.TEMPLATE_UNSCORED_WEIGHT + logicalTaskKey(item));
+            }
+        }
+        if (!anyScored) {
+            errors.add(ScoreTemplateConstants.TEMPLATE_NO_SCORED_TASKS);
+            return;
+        }
+        Map<String, Function<ScoreTemplateItem, BigDecimal>> columns = SKILL_WEIGHT_COLUMNS;
+        columns.forEach((skill, accessor) -> {
+            BigDecimal total = items.stream()
+                    .filter(item -> item.pinnedRuntimeProfile() != null
+                            && item.pinnedRuntimeProfile().scoringEnabled())
+                    .map(accessor).map(value -> value == null ? BigDecimal.ZERO : value)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            boolean represented = items.stream()
+                    .filter(item -> item.pinnedRuntimeProfile() != null
+                            && item.pinnedRuntimeProfile().scoringEnabled())
+                    .map(accessor).anyMatch(value -> value != null && value.signum() > 0);
+            if (represented && total.compareTo(REQUIRED_SKILL_TOTAL) != 0) {
+                errors.add(ScoreTemplateConstants.SKILL_WEIGHT_NOT_100 + skill + " (current total: " + total + ")");
+            } else if (!represented && total.signum() != 0) {
+                errors.add(ScoreTemplateConstants.SKILL_WITH_NO_WEIGHT + skill);
+            }
+        });
+        BigDecimal overall = sum(items, ScoreTemplateItem::getOverallWeight);
+        if (overall.signum() <= 0) {
+            errors.add(ScoreTemplateConstants.SKILL_WITH_NO_WEIGHT + "OVERALL");
+        }
+    }
+
+    private static boolean hasPositiveSkillWeight(ScoreTemplateItem item) {
+        return item.getSpeakingWeight().signum() > 0 || item.getWritingWeight().signum() > 0
+                || item.getReadingWeight().signum() > 0 || item.getListeningWeight().signum() > 0
+                || item.getOverallWeight().signum() > 0;
+    }
+
+    private static String logicalTaskKey(ScoreTemplateItem item) {
+        return item.getTaskTypeKey() == null ? item.getTaskType() : item.getTaskTypeKey();
     }
 
     private static void collectPositiveWeightErrors(List<ScoreTemplateItem> items, List<String> errors) {

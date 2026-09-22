@@ -66,4 +66,5 @@ public class QuestionTypeController {
         service.delete(publicId);
         return ApiResponse.success(null);
     }
+
 }

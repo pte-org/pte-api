@@ -37,11 +37,11 @@ public class QuestionValidationHelper {
 
     public void validate(Question question) {
         PteTaskType type = question.getPteTaskType();
-        QuestionTypeDefinition definition = definitionFor(type);
-        boolean requiresAudioPrompt = definition == null ? type.requiresAudioPrompt() : definition.isRequiresAudioPrompt();
-        boolean requiresImagePrompt = definition == null ? type.requiresImagePrompt() : definition.isRequiresImagePrompt();
-        boolean requiresPromptText = definition == null ? type.requiresPromptText() : definition.isRequiresPromptText();
-        boolean requiresWordCount = definition == null ? type.requiresWordCount() : definition.isRequiresWordCount();
+        QuestionTypeDefinition definition = definitionFor(question);
+        boolean requiresAudioPrompt = definition == null ? type != null && type.requiresAudioPrompt() : definition.isRequiresAudioPrompt();
+        boolean requiresImagePrompt = definition == null ? type != null && type.requiresImagePrompt() : definition.isRequiresImagePrompt();
+        boolean requiresPromptText = definition == null ? type != null && type.requiresPromptText() : definition.isRequiresPromptText();
+        boolean requiresWordCount = definition == null ? type != null && type.requiresWordCount() : definition.isRequiresWordCount();
 
         if (!StringUtils.hasText(question.getTitle())) {
             throw new QuestionValidationException(ItembankConstants.TITLE_REQUIRED);
@@ -67,8 +67,8 @@ public class QuestionValidationHelper {
     }
 
     private void validateAnswers(Question question, PteTaskType type, QuestionTypeDefinition definition) {
-        boolean requiresOptions = definition == null ? type.requiresOptions() : definition.isRequiresOptions();
-        boolean requiresCorrectAnswer = definition == null ? type.requiresCorrectAnswer() : definition.isRequiresCorrectAnswer();
+        boolean requiresOptions = definition == null ? type != null && type.requiresOptions() : definition.isRequiresOptions();
+        boolean requiresCorrectAnswer = definition == null ? type != null && type.requiresCorrectAnswer() : definition.isRequiresCorrectAnswer();
         boolean requiresSingleCorrectOption = definition == null
                 ? type == PteTaskType.MC_READING_SINGLE || type == PteTaskType.MC_LISTENING_SINGLE
                 : definition.isRequiresSingleCorrectOption();
@@ -99,14 +99,17 @@ public class QuestionValidationHelper {
         }
     }
 
-    private QuestionTypeDefinition definitionFor(PteTaskType type) {
-        if (type == null) {
-            throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);
-        }
+    private QuestionTypeDefinition definitionFor(Question question) {
+        PteTaskType type = question.getPteTaskType();
         if (questionTypeService == null) {
+            if (type == null) throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);
             return null;
         }
-        return questionTypeService.findDefinitionByCode(type.name())
+        String key = question.getTaskTypeKey() == null && type != null ? type.name() : question.getTaskTypeKey();
+        if (key == null) {
+            throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);
+        }
+        return questionTypeService.findDefinitionByCode(key)
                 .orElseThrow(() -> new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE));
     }
 }

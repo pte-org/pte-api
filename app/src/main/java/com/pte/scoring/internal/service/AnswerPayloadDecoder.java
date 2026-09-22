@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.service;
 
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.dto.response.AnswerOptionView;
@@ -60,29 +61,56 @@ public class AnswerPayloadDecoder {
             ScoringConstants.TASK_TYPE_HIGHLIGHT_INCORRECT_WORDS);
 
     private final JsonMapper jsonMapper;
+    private final ScoringMethodResolver scoringMethodResolver;
 
     public AnswerPayloadDecoder(JsonMapper jsonMapper) {
+        this(jsonMapper, null);
+    }
+
+    public AnswerPayloadDecoder(JsonMapper jsonMapper, ScoringMethodResolver scoringMethodResolver) {
         this.jsonMapper = jsonMapper;
+        this.scoringMethodResolver = scoringMethodResolver;
     }
 
     public DecodedAnswerPayload decode(ScoringAnswer answer) {
-        if (answer.getTaskType() != null && AUDIO_ANSWER_TASK_TYPES.contains(answer.getTaskType())) {
+        String route = runtimeRoute(answer);
+        if (route != null && (AUDIO_ANSWER_TASK_TYPES.contains(route) || route.endsWith("_V1")
+                && Set.of("PERSONAL_INTRODUCTION_V1", "READ_ALOUD_V1", "REPEAT_SENTENCE_V1",
+                        "DESCRIBE_IMAGE_V1", "RE_TELL_LECTURE_V1", "ANSWER_SHORT_QUESTION_V1",
+                        "RESPOND_TO_A_SITUATION_V1", "SUMMARIZE_GROUP_DISCUSSION_V1").contains(route))) {
             return decodeAudio(answer);
         }
-        if (answer.getTaskType() != null
-                && FILL_IN_THE_BLANKS_TYPE_IN_TASK_TYPES.contains(answer.getTaskType())
+        if (route != null
+                && (FILL_IN_THE_BLANKS_TYPE_IN_TASK_TYPES.contains(route)
+                        || "FILL_IN_THE_BLANKS_TYPE_IN_V1".equals(route))
                 && answer.getOptionsJson() == null) {
             return decodePositionalSelection(answer);
         }
         if (answer.getOptionsJson() != null && !answer.getOptionsJson().isBlank()) {
             return decodeSelection(answer);
         }
-        if (answer.getTaskType() != null
-                && HIGHLIGHT_INCORRECT_WORDS_TASK_TYPES.contains(answer.getTaskType())
+        if (route != null
+                && (HIGHLIGHT_INCORRECT_WORDS_TASK_TYPES.contains(route)
+                        || "HIGHLIGHT_INCORRECT_WORDS_V1".equals(route))
                 && answer.getOptionsJson() == null) {
             return decodeWordIndices(answer);
         }
         return new DecodedAnswerPayload(AnswerPayloadKind.TEXT, answer.getPayload(), null, null, null, null, null);
+    }
+
+    private String runtimeRoute(ScoringAnswer answer) {
+        if (scoringMethodResolver != null && answer.getScoreTemplatePublicId() != null
+                && answer.getTaskType() != null) {
+            try {
+                return scoringMethodResolver.resolveProfile(answer.getScoreTemplatePublicId(), answer.getTaskType())
+                        .map(TaskRuntimeProfileDescriptor::rendererKey)
+                        .orElse(answer.getTaskType());
+            } catch (RuntimeException ignored) {
+                // Keep legacy review decoding available if a historical
+                // template cannot be resolved; the scoring path remains strict.
+            }
+        }
+        return answer.getTaskType();
     }
 
     private DecodedAnswerPayload decodeAudio(ScoringAnswer answer) {

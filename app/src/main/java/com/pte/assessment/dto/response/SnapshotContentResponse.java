@@ -40,6 +40,8 @@ public record SnapshotContentResponse(
             Integer minWordCount,
             Integer maxWordCount,
             String optionsJson,
+            String taskTypeKey,
+            String taskTypeDisplayName,
             String taskTypeCode,
             TaskRuntimeProfileDescriptor runtime,
             String runtimeMappingVersion,
@@ -47,11 +49,21 @@ public record SnapshotContentResponse(
 
         public Item(int orderIndex, String section, String taskType, String title, String promptText,
                 UUID audioPromptRef, UUID imagePromptRef, String referenceAnswerText,
-                String correctAnswerText, Integer minWordCount, Integer maxWordCount, String optionsJson,
+                    String correctAnswerText, Integer minWordCount, Integer maxWordCount, String optionsJson,
                 String taskTypeCode, TaskRuntimeProfileDescriptor runtime) {
             this(orderIndex, section, taskType, title, promptText, audioPromptRef, imagePromptRef,
                     referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson,
-                    taskTypeCode, runtime, null, null);
+                    taskTypeCode, title, taskTypeCode, runtime, null, null);
+        }
+
+        public Item(int orderIndex, String section, String taskType, String title, String promptText,
+                UUID audioPromptRef, UUID imagePromptRef, String referenceAnswerText,
+                String correctAnswerText, Integer minWordCount, Integer maxWordCount, String optionsJson,
+                String taskTypeCode, TaskRuntimeProfileDescriptor runtime,
+                String runtimeMappingVersion, String runtimeMappingStatus) {
+            this(orderIndex, section, taskType, title, promptText, audioPromptRef, imagePromptRef,
+                    referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson,
+                    taskTypeCode, title, taskTypeCode, runtime, runtimeMappingVersion, runtimeMappingStatus);
         }
 
         public Item(int orderIndex, String section, String taskType, String title, String promptText,
@@ -59,7 +71,33 @@ public record SnapshotContentResponse(
                 String correctAnswerText, Integer minWordCount, Integer maxWordCount, String optionsJson) {
             this(orderIndex, section, taskType, title, promptText, audioPromptRef, imagePromptRef,
                     referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson,
-                    taskType, null, null, null);
+                    taskType, title, taskType, null, null, null);
+        }
+
+        public Item(int orderIndex, String section, String taskType, String title,
+                String promptText, UUID audioPromptRef, UUID imagePromptRef,
+                String referenceAnswerText, String correctAnswerText, Integer minWordCount,
+                Integer maxWordCount, String optionsJson, String taskTypeKey,
+                String taskTypeDisplayName, String taskTypeCode, TaskRuntimeProfileDescriptor runtime,
+                String runtimeMappingVersion, String runtimeMappingStatus) {
+            this.orderIndex = orderIndex;
+            this.section = section;
+            this.taskType = taskType;
+            this.title = title;
+            this.promptText = promptText;
+            this.audioPromptRef = audioPromptRef;
+            this.imagePromptRef = imagePromptRef;
+            this.referenceAnswerText = referenceAnswerText;
+            this.correctAnswerText = correctAnswerText;
+            this.minWordCount = minWordCount;
+            this.maxWordCount = maxWordCount;
+            this.optionsJson = optionsJson;
+            this.taskTypeKey = taskTypeKey;
+            this.taskTypeDisplayName = taskTypeDisplayName;
+            this.taskTypeCode = taskTypeCode;
+            this.runtime = runtime;
+            this.runtimeMappingVersion = runtimeMappingVersion;
+            this.runtimeMappingStatus = runtimeMappingStatus;
         }
     }
 }

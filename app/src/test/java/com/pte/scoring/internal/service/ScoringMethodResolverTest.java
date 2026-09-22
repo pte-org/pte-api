@@ -127,4 +127,24 @@ class ScoringMethodResolverTest {
 
         assertThat(resolver.resolve(TEMPLATE_ID, "READ_ALOUD")).contains(ScoringMethod.AI_SPEECH);
     }
+
+    @Test
+    void resolve_customTaskKey_reusesThePinnedSemanticScoringProfile() {
+        TaskRuntimeProfileDescriptor standard = TaskRuntimeProfileRegistry.descriptorFor("MC_READING_SINGLE");
+        TaskRuntimeProfileDescriptor custom = new TaskRuntimeProfileDescriptor(
+                "MC_READING_SINGLE_PLUS", standard.profileKey(), standard.profileVersion(),
+                standard.behaviorKey(), standard.rendererKey(), standard.answerSchemaVersion(),
+                standard.scoringProfileKey(), standard.scoringProfileVersion(),
+                standard.requiredClientCapabilities(), standard.status(), standard.screenKey(),
+                standard.contractVersion(), standard.scoringMode(), standard.minSupportedAppVersion(),
+                "PTE.MC_READING_SINGLE_PLUS_AUTHORING", 1);
+        when(scoreTemplateService.getByPublicId(TEMPLATE_ID)).thenReturn(new ScoreTemplateResponse(
+                TEMPLATE_ID, "CUSTOM", 1, "Custom", "ACTIVE",
+                List.of(item("MC_READING_SINGLE_PLUS", "OBJECTIVE", custom))));
+
+        assertThat(resolver.resolve(TEMPLATE_ID, "MC_READING_SINGLE_PLUS"))
+                .contains(ScoringMethod.OBJECTIVE);
+        assertThat(resolver.resolveProfile(TEMPLATE_ID, "MC_READING_SINGLE_PLUS"))
+                .contains(custom);
+    }
 }

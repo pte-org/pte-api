@@ -3,7 +3,6 @@ package com.pte.itembank;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.internal.exception.InvalidQuestionTypeException;
 
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -58,8 +57,23 @@ public final class TaskTypeCodeCompatibility {
 
     /** Returns an upper-case lookup value without rejecting an unknown persisted code. */
     public static String normalizeForLookup(String rawCode) {
-        String normalized = normalize(rawCode);
+        String normalized = TaskTypeKeyNormalizer.normalizeKey(rawCode);
         return LEGACY_TO_CANONICAL.getOrDefault(normalized, normalized);
+    }
+
+    /** Returns a canonical logical key without forcing it through PteTaskType. */
+    public static String normalizeTaskTypeKey(String rawTaskTypeKey) {
+        String normalized = TaskTypeKeyNormalizer.normalizeKey(rawTaskTypeKey);
+        return LEGACY_TO_CANONICAL.getOrDefault(normalized, normalized);
+    }
+
+    public static boolean isStandard(String rawTaskTypeKey) {
+        try {
+            PteTaskType.valueOf(normalizeTaskTypeKey(rawTaskTypeKey));
+            return true;
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
     }
 
     public static boolean isLegacyAlias(String rawCode) {
@@ -70,6 +84,6 @@ public final class TaskTypeCodeCompatibility {
         if (rawCode == null || rawCode.isBlank()) {
             throw new InvalidQuestionTypeException();
         }
-        return rawCode.trim().toUpperCase(Locale.ROOT);
+        return TaskTypeKeyNormalizer.normalizeKey(rawCode);
     }
 }

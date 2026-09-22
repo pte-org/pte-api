@@ -17,6 +17,8 @@ import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.TaskRuntimeContractConstants;
 import com.pte.itembank.TaskTypeCodeCompatibility;
+import com.pte.itembank.SemanticVersion;
+import com.pte.itembank.TaskTypeObservability;
 import com.pte.session.SessionService;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
@@ -29,6 +31,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.ArrayList;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 /**
@@ -46,15 +50,18 @@ public class CapabilityNegotiationService {
     private final AssessmentService assessmentService;
     private final CapabilityProperties properties;
     private final AuditLogService auditLogService;
+    private final TaskTypeObservability observability;
     private final Set<String> allowlistedCapabilities;
 
     @Autowired
     public CapabilityNegotiationService(SessionService sessionService, AssessmentService assessmentService,
-            CapabilityProperties properties, AuditLogService auditLogService) {
+            CapabilityProperties properties, AuditLogService auditLogService,
+            TaskTypeObservability observability) {
         this.sessionService = sessionService;
         this.assessmentService = assessmentService;
         this.properties = properties;
         this.auditLogService = auditLogService;
+        this.observability = observability;
         this.allowlistedCapabilities = TaskRuntimeProfileRegistry.all().stream()
                 .map(TaskRuntimeProfileDescriptor::requiredClientCapabilities)
                 .flatMap(Collection::stream)
@@ -64,8 +71,14 @@ public class CapabilityNegotiationService {
 
     /** Compatibility constructor for focused negotiation tests. */
     public CapabilityNegotiationService(SessionService sessionService, AssessmentService assessmentService,
+            CapabilityProperties properties, AuditLogService auditLogService) {
+        this(sessionService, assessmentService, properties, auditLogService, null);
+    }
+
+    /** Compatibility constructor for focused negotiation tests. */
+    public CapabilityNegotiationService(SessionService sessionService, AssessmentService assessmentService,
             CapabilityProperties properties) {
-        this(sessionService, assessmentService, properties, null);
+        this(sessionService, assessmentService, properties, null, null);
     }
 
     /** Answer-free and side-effect-free preflight. */
@@ -237,14 +250,30 @@ public class CapabilityNegotiationService {
     private CapabilityCheck evaluateProfiles(List<TaskRuntimeProfileDescriptor> profiles,
             NormalizedCapabilities provided) {
         Set<String> required = new TreeSet<>();
+        List<AttemptPreflightResponse.UnsupportedTask> unsupportedTasks = new ArrayList<>();
         for (TaskRuntimeProfileDescriptor profile : profiles) {
             if (!isAllowlistedProfile(profile)) {
-                return CapabilityCheck.configuration();
+                unsupportedTasks.add(unsupportedTask(profile, AttemptConstants.UNSUPPORTED_RUNTIME_CONTRACT));
+                continue;
+            }
+            if (!supportsRuntimeContract(profile, provided)) {
+                unsupportedTasks.add(unsupportedTask(profile, AttemptConstants.UNSUPPORTED_RUNTIME_CONTRACT));
             }
             profile.requiredClientCapabilities().stream().map(this::canonicalCapability).forEach(required::add);
         }
         Set<String> missing = new TreeSet<>(required);
         missing.removeAll(provided.values());
+        if (!unsupportedTasks.isEmpty()) {
+            if (observability != null) {
+                observability.unsupportedRuntimePreflight();
+            }
+            boolean customOnly = unsupportedTasks.stream().allMatch(task ->
+                    task.taskTypeKey() != null && !TaskTypeCodeCompatibility.isStandard(task.taskTypeKey()));
+            if (customOnly && !properties.isStrictPreflightEnabled()) {
+                return CapabilityCheck.compatible(provided.fingerprint());
+            }
+            return CapabilityCheck.unsupported(missing.stream().map(this::displayCapability).toList(), unsupportedTasks);
+        }
         if (!missing.isEmpty()) {
             return CapabilityCheck.missing(missing.stream().map(this::displayCapability).toList());
         }
@@ -253,10 +282,58 @@ public class CapabilityNegotiationService {
 
     private boolean isAllowlistedProfile(TaskRuntimeProfileDescriptor profile) {
         try {
-            return TaskRuntimeProfileRegistry.descriptorFor(profile.taskTypeCode()).equals(profile);
+            if (profile == null || profile.taskTypeCode() == null || profile.screenKey() == null
+                    || profile.contractVersion() < 1 || profile.answerSchemaVersion() < 1
+                    || profile.scoringProfileVersion() < 1
+                    || !("SCORED".equals(profile.scoringMode()) || "NONE".equals(profile.scoringMode()))) {
+                return false;
+            }
+            if (TaskTypeCodeCompatibility.isStandard(profile.taskTypeCode())) {
+                return TaskRuntimeProfileRegistry.isAllowlistedContract(profile);
+            }
+            // Custom task keys are allowed to reuse a release-owned contract;
+            // the key itself is not required to be present in the app enum.
+            return ("ACTIVE".equals(profile.status()) || "RETIRED".equals(profile.status()))
+                    && profile.behaviorKey() != null && !profile.behaviorKey().isBlank()
+                    && profile.rendererKey() != null && !profile.rendererKey().isBlank()
+                    && profile.scoringProfileKey() != null && !profile.scoringProfileKey().isBlank();
         } catch (RuntimeException ex) {
             return false;
         }
+    }
+
+    private boolean supportsRuntimeContract(TaskRuntimeProfileDescriptor profile,
+            NormalizedCapabilities provided) {
+        if (provided.appVersion() == null && provided.supportedContracts().isEmpty()) {
+            return true;
+        }
+        try {
+            if (provided.appVersion() != null && profile.minSupportedAppVersion() != null
+                    && !SemanticVersion.parse(provided.appVersion())
+                            .satisfiesMinimum(profile.minSupportedAppVersion())) {
+                return false;
+            }
+            if (!provided.supportedContracts().isEmpty()) {
+                return provided.supportedContracts().stream().anyMatch(contract ->
+                        Objects.equals(contract.screenKey(), profile.screenKey())
+                                && Objects.equals(contract.contractVersion(), profile.contractVersion())
+                                && Objects.equals(contract.answerSchemaVersion(), profile.answerSchemaVersion())
+                                && Objects.equals(contract.scoringProfileVersion(), profile.scoringProfileVersion()));
+            }
+            return true;
+        } catch (RuntimeException ex) {
+            return false;
+        }
+    }
+
+    private AttemptPreflightResponse.UnsupportedTask unsupportedTask(TaskRuntimeProfileDescriptor profile,
+            String reasonCode) {
+        return new AttemptPreflightResponse.UnsupportedTask(
+                profile == null ? null : profile.taskTypeCode(),
+                profile == null ? null : profile.screenKey(),
+                profile == null ? null : profile.contractVersion(),
+                reasonCode,
+                AttemptConstants.UNSUPPORTED_RUNTIME_CONTRACT_MESSAGE);
     }
 
     private boolean hasInvalidMapping(SnapshotResponse.Item item) {
@@ -302,15 +379,26 @@ public class CapabilityNegotiationService {
     private boolean hasConsistentTaskTypeMapping(String taskType, String taskTypeCode, String section,
             String runtimeTaskTypeCode) {
         try {
-            String normalizedTaskType = TaskTypeCodeCompatibility.normalizeForLookup(taskType);
+            String normalizedTaskType = TaskTypeCodeCompatibility.normalizeForLookup(
+                    taskType == null ? taskTypeCode : taskType);
             String normalizedCode = taskTypeCode == null
                     ? normalizedTaskType
                     : TaskTypeCodeCompatibility.normalizeForLookup(taskTypeCode);
-            if (!normalizedTaskType.equals(normalizedCode)
-                    || !TaskTypeCodeCompatibility.parse(normalizedCode).getSection().name().equals(section)) {
+            if (normalizedTaskType == null || normalizedCode == null
+                    || !normalizedTaskType.equals(normalizedCode)) {
                 return false;
             }
-            return runtimeTaskTypeCode == null || normalizedCode.equals(runtimeTaskTypeCode);
+            try {
+                if (!TaskTypeCodeCompatibility.parse(normalizedCode).getSection().name().equals(section)) {
+                    return false;
+                }
+            } catch (RuntimeException customKey) {
+                if (section == null || section.isBlank()) {
+                    return false;
+                }
+            }
+            return runtimeTaskTypeCode == null
+                    || normalizedCode.equals(TaskTypeCodeCompatibility.normalizeForLookup(runtimeTaskTypeCode));
         } catch (RuntimeException ex) {
             return false;
         }
@@ -318,7 +406,7 @@ public class CapabilityNegotiationService {
 
     private NormalizedCapabilities normalize(ClientCapabilityManifest manifest) {
         if (manifest == null || manifest.capabilities() == null) {
-            return new NormalizedCapabilities(Set.of(), "");
+            return new NormalizedCapabilities(Set.of(), "", null, List.of());
         }
         Set<String> normalized = new TreeSet<>();
         for (String raw : manifest.capabilities()) {
@@ -336,12 +424,30 @@ public class CapabilityNegotiationService {
                 normalized.add(canonical);
             }
         }
-        return new NormalizedCapabilities(Set.copyOf(normalized), fingerprint(normalized));
+        String appVersion = manifest.appVersion();
+        if (appVersion != null) {
+            try {
+                SemanticVersion.parse(appVersion);
+            } catch (RuntimeException ex) {
+                throw new CapabilityManifestInvalidException();
+            }
+        }
+        List<ClientCapabilityManifest.SupportedRuntimeContract> contracts = manifest.supportedContracts() == null
+                ? List.of() : manifest.supportedContracts();
+        for (ClientCapabilityManifest.SupportedRuntimeContract contract : contracts) {
+            if (contract == null || contract.screenKey() == null || contract.screenKey().isBlank()
+                    || contract.contractVersion() == null || contract.contractVersion() < 1
+                    || contract.answerSchemaVersion() == null || contract.answerSchemaVersion() < 1
+                    || contract.scoringProfileVersion() == null || contract.scoringProfileVersion() < 1) {
+                throw new CapabilityManifestInvalidException();
+            }
+        }
+        return new NormalizedCapabilities(Set.copyOf(normalized), fingerprint(normalized), appVersion, contracts);
     }
 
     private NormalizedCapabilities normalizeFingerprint(String fingerprint) {
         if (isBlank(fingerprint)) {
-            return new NormalizedCapabilities(Set.of(), "");
+            return new NormalizedCapabilities(Set.of(), "", null, List.of());
         }
         if (fingerprint.length() > MAX_FINGERPRINT_LENGTH) {
             throw new CapabilityManifestInvalidException();
@@ -353,7 +459,7 @@ public class CapabilityNegotiationService {
             }
             normalized.add(raw);
         }
-        return new NormalizedCapabilities(Set.copyOf(normalized), fingerprint(normalized));
+        return new NormalizedCapabilities(Set.copyOf(normalized), fingerprint(normalized), null, List.of());
     }
 
     private String canonicalCapability(String raw) {
@@ -405,30 +511,39 @@ public class CapabilityNegotiationService {
         return value == null || value.isBlank();
     }
 
-    private record NormalizedCapabilities(Set<String> values, String fingerprint) {
+    private record NormalizedCapabilities(Set<String> values, String fingerprint, String appVersion,
+            List<ClientCapabilityManifest.SupportedRuntimeContract> supportedContracts) {
     }
 
-    private record CapabilityCheck(boolean canStart, List<String> missingCapabilities, String code,
+    private record CapabilityCheck(boolean canStart, List<String> missingCapabilities,
+            List<AttemptPreflightResponse.UnsupportedTask> unsupportedTasks, String code,
             String userMessage, String fingerprint) {
 
         private static CapabilityCheck compatible(String fingerprint) {
-            return new CapabilityCheck(true, List.of(), null, null, fingerprint);
+            return new CapabilityCheck(true, List.of(), List.of(), null, null, fingerprint);
         }
 
         private static CapabilityCheck missing(List<String> missingCapabilities) {
-            return new CapabilityCheck(false, List.copyOf(missingCapabilities),
+            return new CapabilityCheck(false, List.copyOf(missingCapabilities), List.of(),
                     AttemptConstants.EXAM_REQUIRES_APP_UPDATE,
                     AttemptConstants.EXAM_REQUIRES_APP_UPDATE_MESSAGE, "");
         }
 
+        private static CapabilityCheck unsupported(List<String> missingCapabilities,
+                List<AttemptPreflightResponse.UnsupportedTask> unsupportedTasks) {
+            return new CapabilityCheck(false, List.copyOf(missingCapabilities), List.copyOf(unsupportedTasks),
+                    AttemptConstants.UNSUPPORTED_RUNTIME_CONTRACT,
+                    AttemptConstants.UNSUPPORTED_RUNTIME_CONTRACT_MESSAGE, "");
+        }
+
         private static CapabilityCheck configuration() {
-            return new CapabilityCheck(false, List.of(),
+            return new CapabilityCheck(false, List.of(), List.of(),
                     AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE,
                     AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE_MESSAGE, "");
         }
 
         private AttemptPreflightResponse toResponse() {
-            return new AttemptPreflightResponse(canStart, missingCapabilities, code, userMessage);
+            return new AttemptPreflightResponse(canStart, missingCapabilities, unsupportedTasks, code, userMessage);
         }
     }
 }

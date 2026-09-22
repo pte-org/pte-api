@@ -49,7 +49,8 @@ public record TaskView(
          */
         String imageUrl,
         String taskTypeCode,
-        TaskRuntimeProfileDescriptor runtime) {
+        TaskRuntimeProfileDescriptor runtime,
+        String taskTypeDisplayName) {
 
     public TaskView(UUID pinnedItemPublicId, int orderIndex, int totalTasks, String section,
             String taskType, String title, String promptText, UUID audioPromptRef, UUID imagePromptRef,
@@ -59,5 +60,16 @@ public record TaskView(
         this(pinnedItemPublicId, orderIndex, totalTasks, section, taskType, title, promptText, audioPromptRef,
                 imagePromptRef, minWordCount, maxWordCount, options, blankGroups, prepSeconds, responseSeconds,
                 examEndTime, preListenSeconds, preRecordSeconds, imageUrl, taskType, null);
+    }
+
+    public TaskView(UUID pinnedItemPublicId, int orderIndex, int totalTasks, String section,
+            String taskType, String title, String promptText, UUID audioPromptRef, UUID imagePromptRef,
+            Integer minWordCount, Integer maxWordCount, List<OptionView> options,
+            List<BlankGroupView> blankGroups, int prepSeconds, int responseSeconds, Instant examEndTime,
+            Integer preListenSeconds, Integer preRecordSeconds, String imageUrl, String taskTypeCode,
+            TaskRuntimeProfileDescriptor runtime) {
+        this(pinnedItemPublicId, orderIndex, totalTasks, section, taskType, title, promptText, audioPromptRef,
+                imagePromptRef, minWordCount, maxWordCount, options, blankGroups, prepSeconds, responseSeconds,
+                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, taskTypeCode, runtime, title);
     }
 }

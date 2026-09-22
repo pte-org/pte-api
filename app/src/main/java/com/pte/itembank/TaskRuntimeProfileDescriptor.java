@@ -18,7 +18,23 @@ public record TaskRuntimeProfileDescriptor(
         String scoringProfileKey,
         int scoringProfileVersion,
         List<String> requiredClientCapabilities,
-        String status) {
+        String status,
+        String screenKey,
+        int contractVersion,
+        String scoringMode,
+        String minSupportedAppVersion,
+        String authoringContractKey,
+        Integer authoringContractVersion) {
+
+    /** Compatibility constructor for the V45 standard profile shape. */
+    public TaskRuntimeProfileDescriptor(String taskTypeCode, String profileKey, int profileVersion,
+            String behaviorKey, String rendererKey, int answerSchemaVersion, String scoringProfileKey,
+            int scoringProfileVersion, List<String> requiredClientCapabilities, String status) {
+        this(taskTypeCode, profileKey, profileVersion, behaviorKey, rendererKey, answerSchemaVersion,
+                scoringProfileKey, scoringProfileVersion, requiredClientCapabilities, status,
+                rendererKey, profileVersion, "UNSCORED".equals(scoringProfileKey) ? "NONE" : "SCORED",
+                "1.0.0", "PTE." + taskTypeCode + "_AUTHORING", 1);
+    }
 
     public TaskRuntimeProfileDescriptor {
         requiredClientCapabilities = requiredClientCapabilities == null
@@ -28,5 +44,9 @@ public record TaskRuntimeProfileDescriptor(
 
     public boolean active() {
         return "ACTIVE".equals(status);
+    }
+
+    public boolean scoringEnabled() {
+        return "SCORED".equals(scoringMode);
     }
 }

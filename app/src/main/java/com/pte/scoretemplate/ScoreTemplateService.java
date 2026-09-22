@@ -22,7 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -98,33 +97,37 @@ public class ScoreTemplateService {
             throw new IllegalStateException("Template feasibility dependencies are not configured");
         }
         ScoreTemplateResponse template = getByPublicId(templatePublicId);
-        EnumSet<PteTaskType> taskTypes = EnumSet.noneOf(PteTaskType.class);
+        Set<String> taskTypeKeys = new java.util.LinkedHashSet<>();
         List<ScoreTemplateSlotFeasibilityResponse> slots = new ArrayList<>();
         for (ScoreTemplateItemResponse item : template.items()) {
             try {
-                PteTaskType taskType = TaskTypeCodeCompatibility.parse(item.taskType());
-                taskTypes.add(taskType);
+                String taskTypeKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
+                        item.taskTypeKey() == null ? item.taskType() : item.taskTypeKey());
+                taskTypeKeys.add(taskTypeKey);
             } catch (RuntimeException ex) {
-                slots.add(new ScoreTemplateSlotFeasibilityResponse(item.taskType(), item.section(),
+                slots.add(new ScoreTemplateSlotFeasibilityResponse(item.taskTypeKey(), item.section(),
                         item.maxCount(), 0, false, ScoreTemplateConstants.UNKNOWN_TASK_TYPE));
             }
         }
-        Map<PteTaskType, Long> availability = itembankService.countPublishedByTaskTypes(taskTypes);
+        Map<String, Long> availability = itembankService.countPublishedByTaskTypeKeys(taskTypeKeys);
         Set<TaskRuntimeProfileDescriptor> invalidProfiles = runtimeProfileService == null ? Set.of()
                 : runtimeProfileService.invalidPinnedProfiles(template.items().stream()
+                        .filter(item -> item.taskTypeKey() == null
+                                || TaskTypeCodeCompatibility.isStandard(item.taskTypeKey()))
                         .map(ScoreTemplateItemResponse::runtime)
                         .filter(java.util.Objects::nonNull)
                         .toList());
         for (ScoreTemplateItemResponse item : template.items()) {
             try {
-                PteTaskType taskType = TaskTypeCodeCompatibility.parse(item.taskType());
-                long available = availability.getOrDefault(taskType, 0L);
-                boolean sectionMatches = taskType.getSection().name().equals(item.section());
+                String taskTypeKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
+                        item.taskTypeKey() == null ? item.taskType() : item.taskTypeKey());
+                long available = availability.getOrDefault(taskTypeKey, 0L);
+                boolean sectionMatches = item.section() != null && !item.section().isBlank();
                 String profileReason = runtimeProfileReason(item, invalidProfiles);
                 boolean ready = profileReason == null && sectionMatches && available >= item.maxCount();
                 String reason = profileReason != null ? profileReason
                         : !sectionMatches ? "SECTION_MISMATCH" : ready ? null : "INSUFFICIENT_POOL";
-                slots.add(new ScoreTemplateSlotFeasibilityResponse(item.taskType(), item.section(),
+                slots.add(new ScoreTemplateSlotFeasibilityResponse(taskTypeKey, item.section(),
                         item.maxCount(), available, ready, reason));
             } catch (RuntimeException ignored) {
                 // The invalid slot was already added above with a stable reason.
@@ -138,6 +141,11 @@ public class ScoreTemplateService {
             Set<TaskRuntimeProfileDescriptor> invalidProfiles) {
         if (item.runtime() == null) {
             return ScoreTemplateConstants.RUNTIME_PROFILE_NOT_PINNED;
+        }
+        if (item.taskTypeKey() != null && !TaskTypeCodeCompatibility.isStandard(item.taskTypeKey())
+                && (item.runtime().screenKey() == null || item.runtime().contractVersion() < 1
+                || item.runtime().answerSchemaVersion() < 1 || item.runtime().scoringMode() == null)) {
+            return ScoreTemplateConstants.RUNTIME_PROFILE_INVALID;
         }
         if (invalidProfiles.contains(item.runtime())) {
             return ScoreTemplateConstants.RUNTIME_PROFILE_INVALID;

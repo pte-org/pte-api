@@ -40,8 +40,15 @@ import java.util.UUID;
 public class Question extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = true)
     private PteTaskType pteTaskType;
+
+    /** Canonical identity for standard and custom authored questions. */
+    @Column(name = "task_type_key", nullable = false, length = 64)
+    private String taskTypeKey;
+
+    @Column(name = "task_type_section", nullable = false, length = 16)
+    private String taskTypeSection;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

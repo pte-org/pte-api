@@ -34,7 +34,8 @@ public record PinnedItemView(
         Integer preRecordSeconds,
         String imageUrl,
         String taskTypeCode,
-        TaskRuntimeProfileDescriptor runtime) {
+        TaskRuntimeProfileDescriptor runtime,
+        String taskTypeDisplayName) {
 
     public PinnedItemView(UUID publicId, int orderIndex, String section, String taskType, String title,
             String promptText, UUID audioPromptRef, UUID imagePromptRef, String referenceAnswerText,
@@ -44,5 +45,15 @@ public record PinnedItemView(
         this(publicId, orderIndex, section, taskType, title, promptText, audioPromptRef, imagePromptRef,
                 referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson, prepSeconds,
                 responseSeconds, preListenSeconds, preRecordSeconds, imageUrl, taskType, null);
+    }
+
+    public PinnedItemView(UUID publicId, int orderIndex, String section, String taskType, String title,
+            String promptText, UUID audioPromptRef, UUID imagePromptRef, String referenceAnswerText,
+            String correctAnswerText, Integer minWordCount, Integer maxWordCount, String optionsJson,
+            int prepSeconds, int responseSeconds, Integer preListenSeconds, Integer preRecordSeconds,
+            String imageUrl, String taskTypeCode, TaskRuntimeProfileDescriptor runtime) {
+        this(publicId, orderIndex, section, taskType, title, promptText, audioPromptRef, imagePromptRef,
+                referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson, prepSeconds,
+                responseSeconds, preListenSeconds, preRecordSeconds, imageUrl, taskTypeCode, runtime, title);
     }
 }

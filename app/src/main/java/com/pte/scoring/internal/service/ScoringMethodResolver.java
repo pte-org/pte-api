@@ -31,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ScoringMethodResolver {
 
     private final ScoreTemplateService scoreTemplateService;
-    private final Map<UUID, Map<String, ScoringMethod>> cacheByTemplate = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<String, ResolvedTaskProfile>> cacheByTemplate = new ConcurrentHashMap<>();
 
     public ScoringMethodResolver(ScoreTemplateService scoreTemplateService) {
         this.scoreTemplateService = scoreTemplateService;
@@ -39,29 +39,41 @@ public class ScoringMethodResolver {
 
     /** Empty when {@code taskType} has no row in this template (e.g. PERSONAL_INTRODUCTION) — callers treat that the same as UNSCORED: leave the answer PENDING. */
     public Optional<ScoringMethod> resolve(UUID scoreTemplatePublicId, String taskType) {
-        Map<String, ScoringMethod> byTaskType = cacheByTemplate.computeIfAbsent(scoreTemplatePublicId, this::loadTemplate);
-        return Optional.ofNullable(byTaskType.get(TaskTypeCodeCompatibility.normalizeForLookup(taskType)));
+        return findResolvedProfile(scoreTemplatePublicId, taskType).map(ResolvedTaskProfile::method);
     }
 
-    private Map<String, ScoringMethod> loadTemplate(UUID scoreTemplatePublicId) {
-        Map<String, ScoringMethod> resolved = new LinkedHashMap<>();
+    Optional<TaskRuntimeProfileDescriptor> resolveProfile(UUID scoreTemplatePublicId, String taskType) {
+        return findResolvedProfile(scoreTemplatePublicId, taskType).map(ResolvedTaskProfile::runtime);
+    }
+
+    private Optional<ResolvedTaskProfile> findResolvedProfile(UUID scoreTemplatePublicId, String taskType) {
+        String key = TaskTypeCodeCompatibility.normalizeTaskTypeKey(taskType);
+        return Optional.ofNullable(cacheByTemplate.computeIfAbsent(scoreTemplatePublicId, this::loadTemplate)
+                .get(key));
+    }
+
+    private Map<String, ResolvedTaskProfile> loadTemplate(UUID scoreTemplatePublicId) {
+        Map<String, ResolvedTaskProfile> resolved = new LinkedHashMap<>();
         for (ScoreTemplateItemResponse item : scoreTemplateService.getByPublicId(scoreTemplatePublicId).items()) {
-            String taskType = TaskTypeCodeCompatibility.normalizeForLookup(item.taskType());
+            String taskType = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
+                    item.taskTypeKey() == null ? item.taskType() : item.taskTypeKey());
             resolved.put(taskType, resolveItem(taskType, item));
         }
         return Map.copyOf(resolved);
     }
 
-    private ScoringMethod resolveItem(String canonicalTaskType, ScoreTemplateItemResponse item) {
+    private ResolvedTaskProfile resolveItem(String canonicalTaskType, ScoreTemplateItemResponse item) {
         TaskRuntimeProfileDescriptor runtime = item.runtime();
         if (runtime == null) {
             // Compatibility adapter for templates created before the runtime
             // contract was added. New templates always carry a profile and
             // therefore take the strict branch below.
-            return parseLegacyScoringMethod(canonicalTaskType, item.scoringMethod());
+            ScoringMethod method = parseLegacyScoringMethod(canonicalTaskType, item.scoringMethod());
+            TaskRuntimeProfileDescriptor legacyRuntime = TaskTypeCodeCompatibility.isStandard(canonicalTaskType)
+                    ? TaskRuntimeProfileRegistry.descriptorFor(canonicalTaskType) : null;
+            return new ResolvedTaskProfile(legacyRuntime, method);
         }
-        if (!canonicalTaskType.equals(TaskTypeCodeCompatibility.normalizeForLookup(runtime.taskTypeCode()))
-                || !TaskRuntimeProfileRegistry.isAllowlistedContract(runtime)) {
+        if (!canonicalTaskType.equals(TaskTypeCodeCompatibility.normalizeTaskTypeKey(runtime.taskTypeCode()))) {
             throw invalidProfile(canonicalTaskType, "Runtime profile does not match the allowlisted task contract");
         }
         ScoringMethod method = ScoringProfileRegistry.resolve(runtime)
@@ -71,7 +83,7 @@ public class ScoringMethodResolver {
         if (persistedMethod != method) {
             throw invalidProfile(canonicalTaskType, "Template scoring method disagrees with the pinned profile");
         }
-        return method;
+        return new ResolvedTaskProfile(runtime, method);
     }
 
     private ScoringMethod parseLegacyScoringMethod(String taskType, String rawMethod) {
@@ -84,5 +96,8 @@ public class ScoringMethodResolver {
 
     private InvalidScoringProfileException invalidProfile(String taskType, String reason) {
         return new InvalidScoringProfileException(taskType, reason);
+    }
+
+    private record ResolvedTaskProfile(TaskRuntimeProfileDescriptor runtime, ScoringMethod method) {
     }
 }

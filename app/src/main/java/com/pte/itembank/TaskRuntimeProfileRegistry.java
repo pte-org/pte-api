@@ -30,6 +30,15 @@ public final class TaskRuntimeProfileRegistry {
         return Arrays.stream(PteTaskType.values()).map(PROFILES::get).toList();
     }
 
+    /** Resolves a standard profile by its semantic screen key and version. */
+    public static TaskRuntimeProfileDescriptor descriptorForScreen(String screenKey, int profileVersion) {
+        return all().stream()
+                .filter(profile -> profile.rendererKey().equals(screenKey)
+                        && profile.profileVersion() == profileVersion)
+                .findFirst()
+                .orElse(null);
+    }
+
     /**
      * Checks the immutable, code-owned part of a persisted/profile response.
      * The lifecycle status is deliberately excluded from this comparison so a
@@ -51,7 +60,12 @@ public final class TaskRuntimeProfileRegistry {
                     && expected.answerSchemaVersion() == actual.answerSchemaVersion()
                     && expected.scoringProfileKey().equals(actual.scoringProfileKey())
                     && expected.scoringProfileVersion() == actual.scoringProfileVersion()
-                    && expected.requiredClientCapabilities().equals(actual.requiredClientCapabilities());
+                    && expected.requiredClientCapabilities().equals(actual.requiredClientCapabilities())
+                    && expected.screenKey().equals(actual.screenKey())
+                    && expected.contractVersion() == actual.contractVersion()
+                    && expected.scoringMode().equals(actual.scoringMode())
+                    && expected.authoringContractKey().equals(actual.authoringContractKey())
+                    && expected.authoringContractVersion().equals(actual.authoringContractVersion());
         } catch (RuntimeException ex) {
             return false;
         }

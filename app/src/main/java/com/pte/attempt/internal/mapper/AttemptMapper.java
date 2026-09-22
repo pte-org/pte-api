@@ -61,7 +61,8 @@ public class AttemptMapper {
                 item.promptText(), item.audioPromptRef(), item.imagePromptRef(), item.minWordCount(),
                 item.maxWordCount(), toFlatOptions(parsedOptions), toBlankGroups(parsedOptions), effectivePrepSeconds,
                 effectiveResponseSeconds, attempt.getExamEndTime(), item.preListenSeconds(), item.preRecordSeconds(),
-                item.imageUrl(), item.taskTypeCode() != null ? item.taskTypeCode() : item.taskType(), item.runtime());
+                item.imageUrl(), item.taskTypeCode() != null ? item.taskTypeCode() : item.taskType(), item.runtime(),
+                item.taskTypeDisplayName());
         // pinnedSnapshot is an optional lazy @OneToOne — null for an attempt whose pin row is
         // absent. Null lockdownMode is the client's "no lockdown" contract, same as toCompletedResponse.
         PinnedExamSnapshot pinned = attempt.getPinnedSnapshot();

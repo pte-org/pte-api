@@ -29,9 +29,13 @@ public final class SnapshotMapper {
     }
 
     private static SnapshotResponse.Item toItem(SnapshotItem item) {
+        String taskTypeKey = item.getTaskTypeKey() != null ? item.getTaskTypeKey()
+                : item.getPteTaskType() == null ? item.getTaskTypeCode() : item.getPteTaskType().name();
+        String legacyTaskType = item.getPteTaskType() == null ? null : item.getPteTaskType().name();
         return new SnapshotResponse.Item(
-                item.getOrderIndex(), item.getSection().name(), item.getPteTaskType().name(), item.getTitle(),
-                item.getTaskTypeCode() != null ? item.getTaskTypeCode() : item.getPteTaskType().name(),
+                item.getOrderIndex(), item.getSection().name(), legacyTaskType, item.getTitle(), taskTypeKey,
+                item.getTaskTypeDisplayName(),
+                item.getTaskTypeCode() != null ? item.getTaskTypeCode() : taskTypeKey,
                 item.runtimeProfile(), item.getRuntimeMappingVersion(), runtimeMappingStatus(item));
     }
 
@@ -46,10 +50,13 @@ public final class SnapshotMapper {
     }
 
     private static SnapshotContentResponse.Item toContentItem(SnapshotItem item) {
+        String taskTypeKey = item.getTaskTypeKey() != null ? item.getTaskTypeKey()
+                : item.getPteTaskType() == null ? item.getTaskTypeCode() : item.getPteTaskType().name();
+        String legacyTaskType = item.getPteTaskType() == null ? null : item.getPteTaskType().name();
         return new SnapshotContentResponse.Item(
                 item.getOrderIndex(),
                 item.getSection().name(),
-                item.getPteTaskType().name(),
+                legacyTaskType,
                 item.getTitle(),
                 item.getPromptText(),
                 item.getAudioPromptRef(),
@@ -59,7 +66,9 @@ public final class SnapshotMapper {
                 item.getMinWordCount(),
                 item.getMaxWordCount(),
                 item.getOptionsJson(),
-                item.getTaskTypeCode() != null ? item.getTaskTypeCode() : item.getPteTaskType().name(),
+                taskTypeKey,
+                item.getTaskTypeDisplayName(),
+                item.getTaskTypeCode() != null ? item.getTaskTypeCode() : taskTypeKey,
                 item.runtimeProfile(), item.getRuntimeMappingVersion(), runtimeMappingStatus(item));
     }
 

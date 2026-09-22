@@ -79,13 +79,19 @@ public class ItembankService {
             throw new AccessDeniedException("Only platform users may write the shared question bank");
         }
 
-        PteTaskType taskType = parseTaskType(request.pteTaskType());
-        if (questionTypeService != null && !questionTypeService.isActive(taskType.name())) {
+        String taskTypeKey = resolveTaskTypeKey(request);
+        PteTaskType taskType = parseStandardTaskTypeOrNull(taskTypeKey);
+        if (questionTypeService != null && !questionTypeService.isActive(taskTypeKey)) {
+            throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);
+        }
+        if (taskType == null && questionTypeService == null) {
             throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);
         }
 
         Question question = new Question();
         question.setPteTaskType(taskType);
+        question.setTaskTypeKey(taskTypeKey);
+        question.setTaskTypeSection(resolveTaskTypeSection(taskTypeKey, taskType));
         question.setVisibility(Visibility.SHARED);
         question.setTenantId(null);
         question.setStatus(QuestionStatus.DRAFT);
@@ -129,13 +135,17 @@ public class ItembankService {
     @Transactional(readOnly = true)
     public List<QuestionResponse> listAccessible(CurrentUser caller, String taskType, String section, String status,
             String query) {
-        PteTaskType requestedTaskType = parseOptionalTaskType(taskType);
+        String requestedTaskTypeKey = parseOptionalTaskTypeKey(taskType);
         PteSection requestedSection = parseOptionalSection(section);
         QuestionStatus requestedStatus = parseOptionalStatus(status);
         String normalizedQuery = query == null ? "" : query.trim().toLowerCase();
         return questionRepository.findAllWithOptions().stream()
-                .filter(question -> requestedTaskType == null || question.getPteTaskType() == requestedTaskType)
-                .filter(question -> requestedSection == null || question.getPteTaskType().getSection() == requestedSection)
+                .filter(question -> requestedTaskTypeKey == null || requestedTaskTypeKey.equals(
+                        question.getTaskTypeKey() == null && question.getPteTaskType() != null
+                                ? question.getPteTaskType().name() : question.getTaskTypeKey()))
+                .filter(question -> requestedSection == null || requestedSection.name().equals(
+                        question.getTaskTypeSection() == null && question.getPteTaskType() != null
+                                ? question.getPteTaskType().getSection().name() : question.getTaskTypeSection()))
                 .filter(question -> requestedStatus == null || question.getStatus() == requestedStatus)
                 .filter(question -> normalizedQuery.isBlank()
                         || question.getTitle().toLowerCase().contains(normalizedQuery)
@@ -170,6 +180,10 @@ public class ItembankService {
         }
         Question revision = new Question();
         revision.setPteTaskType(source.getPteTaskType());
+        revision.setTaskTypeKey(source.getTaskTypeKey() == null && source.getPteTaskType() != null
+                ? source.getPteTaskType().name() : source.getTaskTypeKey());
+        revision.setTaskTypeSection(source.getTaskTypeSection() == null && source.getPteTaskType() != null
+                ? source.getPteTaskType().getSection().name() : source.getTaskTypeSection());
         revision.setVisibility(source.getVisibility());
         revision.setTenantId(source.getTenantId());
         revision.setStatus(QuestionStatus.DRAFT);
@@ -318,6 +332,30 @@ public class ItembankService {
         return questionRepository.publishedSharedIdsByTaskType(taskType.name());
     }
 
+    /** Logical-key generation facade used by custom templates. */
+    @Transactional(readOnly = true)
+    public Map<String, Long> countPublishedByTaskTypeKeys(Set<String> taskTypeKeys) {
+        Set<String> normalized = taskTypeKeys.stream()
+                .map(this::normalizeTaskTypeKey)
+                .collect(Collectors.toSet());
+        Map<String, Long> counts = normalized.stream()
+                .collect(Collectors.toMap(key -> key, key -> 0L, (left, right) -> left, java.util.LinkedHashMap::new));
+        for (TaskTypeCountProjection row : questionRepository.countPublishedSharedGroupedByTaskTypeKey(normalized)) {
+            counts.put(row.getTaskType(), row.getCount());
+        }
+        return counts;
+    }
+
+    @Transactional(readOnly = true)
+    public List<UUID> randomPublishedQuestionIdsByTaskTypeKey(String taskTypeKey, int n) {
+        return questionRepository.randomPublishedSharedIdsByTaskTypeKey(normalizeTaskTypeKey(taskTypeKey), n);
+    }
+
+    @Transactional(readOnly = true)
+    public List<UUID> publishedQuestionIdsByTaskTypeKey(String taskTypeKey) {
+        return questionRepository.publishedSharedIdsByTaskTypeKey(normalizeTaskTypeKey(taskTypeKey));
+    }
+
     private Question loadForPlatformWrite(UUID publicId, CurrentUser caller) {
         Question question = questionRepository.findWithOptionsByPublicId(publicId)
                 .orElseThrow(QuestionNotFoundException::new);
@@ -364,7 +402,9 @@ public class ItembankService {
         List<QuestionOption> natural = question.getOptions();
         boolean usesOptionOrderAsCorrectPosition = questionTypeService == null
                 ? question.getPteTaskType() == PteTaskType.RE_ORDER_PARAGRAPHS
-                : questionTypeService.findDefinitionByCode(question.getPteTaskType().name())
+                : questionTypeService.findDefinitionByCode(question.getTaskTypeKey() == null
+                        && question.getPteTaskType() != null ? question.getPteTaskType().name()
+                                : question.getTaskTypeKey())
                         .map(definition -> definition.isUsesOptionOrderAsCorrectPosition())
                         .orElse(false);
         if (!usesOptionOrderAsCorrectPosition || natural.size() < 2) {
@@ -417,11 +457,15 @@ public class ItembankService {
         }
     }
 
-    private PteTaskType parseOptionalTaskType(String value) {
+    private String parseOptionalTaskTypeKey(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }
-        return parseTaskType(value);
+        try {
+            return TaskTypeCodeCompatibility.normalizeTaskTypeKey(value);
+        } catch (RuntimeException ex) {
+            throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);
+        }
     }
 
     private QuestionStatus parseOptionalStatus(String value) {
@@ -463,9 +507,60 @@ public class ItembankService {
                 .map(o -> new QuestionFreezeView.Option(
                         o.getText(), o.isCorrect(), o.getOrderIndex(), o.getBlankIndex(), o.getCorrectGapIndex()))
                 .toList();
+        String taskTypeKey = question.getTaskTypeKey() == null && question.getPteTaskType() != null
+                ? question.getPteTaskType().name() : question.getTaskTypeKey();
+        String displayName = questionTypeService == null ? taskTypeKey
+                : questionTypeService.findDefinitionByCode(taskTypeKey)
+                        .map(definition -> definition.getDisplayName())
+                        .orElse(taskTypeKey);
         return new QuestionFreezeView(
                 question.getPublicId(), question.getPteTaskType(), question.getTitle(), question.getPromptText(),
                 question.getAudioPromptRef(), question.getImagePromptRef(), question.getReferenceAnswerText(),
-                question.getCorrectAnswerText(), question.getMinWordCount(), question.getMaxWordCount(), options);
+                question.getCorrectAnswerText(), question.getMinWordCount(), question.getMaxWordCount(), options,
+                taskTypeKey,
+                question.getTaskTypeSection() == null && question.getPteTaskType() != null
+                        ? question.getPteTaskType().getSection().name() : question.getTaskTypeSection(), null,
+                displayName);
+    }
+
+    private String resolveTaskTypeKey(CreateQuestionRequest request) {
+        String raw = request.taskTypeKey() == null || request.taskTypeKey().isBlank()
+                ? request.pteTaskType() : request.taskTypeKey();
+        if (raw == null || raw.isBlank()) {
+            throw new QuestionValidationException(ItembankConstants.TASK_TYPE_REQUIRED);
+        }
+        try {
+            return TaskTypeCodeCompatibility.normalizeTaskTypeKey(raw);
+        } catch (RuntimeException ex) {
+            throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);
+        }
+    }
+
+    private PteTaskType parseStandardTaskTypeOrNull(String taskTypeKey) {
+        try {
+            return PteTaskType.valueOf(taskTypeKey);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
+    private String resolveTaskTypeSection(String taskTypeKey, PteTaskType taskType) {
+        if (taskType != null) {
+            return taskType.getSection().name();
+        }
+        if (questionTypeService != null) {
+            return questionTypeService.findDefinitionByCode(taskTypeKey)
+                    .map(definition -> definition.getSection().name())
+                    .orElseThrow(() -> new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE));
+        }
+        throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);
+    }
+
+    private String normalizeTaskTypeKey(String raw) {
+        try {
+            return TaskTypeCodeCompatibility.normalizeTaskTypeKey(raw);
+        } catch (RuntimeException ex) {
+            throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);
+        }
     }
 }
