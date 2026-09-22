@@ -9,6 +9,11 @@ import com.pte.enrollment.EnrollmentModuleService;
 import com.pte.identity.IdentityService;
 import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.session.domain.ExamAudienceMember;
+import com.pte.session.domain.ExamAudienceSource;
+import com.pte.session.domain.ExamSession;
+import com.pte.session.domain.enums.AudienceMemberStatus;
+import com.pte.session.domain.enums.AudienceSourceType;
 import com.pte.session.domain.enums.ExamMode;
 import com.pte.session.domain.enums.FormMode;
 import com.pte.session.domain.enums.ReusePolicy;
@@ -44,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -177,6 +183,48 @@ class ExamOrchestrationServiceTest {
                 .isInstanceOf(ExamDraftVersionConflictException.class);
 
         verify(sessionRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void previewAudience_reusesPersistedMembersWhenPreflightRunsRepeatedly() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID classPublicId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        ExamSession session = new ExamSession();
+        session.setId(20L);
+        session.setPublicId(sessionPublicId);
+        session.setTenantId(tenantId);
+        session.setStatus(SessionStatus.DRAFT);
+        session.setCapacity(10);
+
+        ExamAudienceSource source = new ExamAudienceSource();
+        source.setSession(session);
+        source.setTenantId(tenantId);
+        source.setSourceType(AudienceSourceType.CLASS);
+        source.setSourcePublicId(classPublicId);
+
+        ExamAudienceMember existing = new ExamAudienceMember();
+        existing.setSession(session);
+        existing.setTenantId(tenantId);
+        existing.setStudentPublicId(studentPublicId);
+        existing.setStatus(AudienceMemberStatus.EXCLUDED);
+        existing.setSourceSummary("stale source");
+
+        when(sessionRepository.findByPublicIdAndTenantId(sessionPublicId, tenantId)).thenReturn(Optional.of(session));
+        when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(20L)).thenReturn(List.of(source));
+        when(enrollmentModuleService.findActiveStudentPublicIds(tenantId, classPublicId))
+                .thenReturn(List.of(studentPublicId));
+        when(enrollmentRepository.findByTenantIdAndStudentPublicIdIn(tenantId, List.of(studentPublicId)))
+                .thenReturn(List.of());
+        when(memberRepository.findBySessionIdOrderByStudentPublicIdAsc(20L)).thenReturn(List.of(existing));
+
+        service.previewAudience(sessionPublicId, hostAdmin);
+        service.previewAudience(sessionPublicId, hostAdmin);
+
+        assertThat(existing.getStatus()).isEqualTo(AudienceMemberStatus.ELIGIBLE);
+        assertThat(existing.getSourceSummary()).isEqualTo("CLASS:" + classPublicId);
+        verify(memberRepository, times(2)).saveAll(any());
+        verify(memberRepository, never()).deleteBySessionId(20L);
     }
 
     private void stubTemplateAndSubscription() {

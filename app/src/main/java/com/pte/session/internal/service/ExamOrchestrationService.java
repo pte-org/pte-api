@@ -529,8 +529,24 @@ public class ExamOrchestrationService {
             }
         }
         if (persist) {
-            memberRepository.deleteBySessionId(session.getId());
-            memberRepository.saveAll(members);
+            // Preflight is intentionally repeatable: the UI calls it before generation and
+            // generation calls it again. Replacing every row with a new entity instance can
+            // make Hibernate execute the INSERT before the pending DELETE and violate the
+            // session/student unique constraint. Reuse the existing rows and only add/remove
+            // the delta so repeated preflight/generate requests are idempotent.
+            List<ExamAudienceMember> existingMembers = memberRepository
+                    .findBySessionIdOrderByStudentPublicIdAsc(session.getId());
+            Map<UUID, ExamAudienceMember> existingByStudent = existingMembers.stream()
+                    .collect(Collectors.toMap(ExamAudienceMember::getStudentPublicId, member -> member,
+                            (first, ignored) -> first, LinkedHashMap::new));
+            List<ExamAudienceMember> persistedMembers = members.stream()
+                    .map(computed -> mergeAudienceMember(existingByStudent.get(computed.getStudentPublicId()), computed))
+                    .toList();
+            existingMembers.stream()
+                    .filter(existing -> !provenance.containsKey(existing.getStudentPublicId()))
+                    .forEach(memberRepository::delete);
+            memberRepository.saveAll(persistedMembers);
+            members = persistedMembers;
         }
         int eligibleCount = (int) members.stream().filter(member -> member.getStatus() == AudienceMemberStatus.ELIGIBLE).count();
         int excludedCount = (int) members.stream().filter(member -> member.getStatus() == AudienceMemberStatus.EXCLUDED).count();
@@ -539,6 +555,20 @@ public class ExamOrchestrationService {
         return new AudiencePreviewResponse(studentIds.size(), Math.max(0, totalResolved - studentIds.size()),
                 eligibleCount, excludedCount, blockedCount, session.getCapacity(),
                 blockedCount == 0 && capacityReady, responses);
+    }
+
+    private ExamAudienceMember mergeAudienceMember(ExamAudienceMember existing, ExamAudienceMember computed) {
+        if (existing == null) return computed;
+        existing.setTenantId(computed.getTenantId());
+        existing.setStudentPublicId(computed.getStudentPublicId());
+        existing.setStatus(computed.getStatus());
+        existing.setReason(computed.getReason());
+        existing.setSourceSummary(computed.getSourceSummary());
+        existing.setPriorSessionPublicId(computed.getPriorSessionPublicId());
+        existing.setPriorSessionName(computed.getPriorSessionName());
+        existing.setPriorStatus(computed.getPriorStatus());
+        existing.setPublishedAt(computed.getPublishedAt());
+        return existing;
     }
 
     private List<UUID> resolveSource(ExamAudienceSource source, UUID tenantId) {

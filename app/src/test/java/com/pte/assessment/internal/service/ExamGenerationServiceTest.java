@@ -353,7 +353,8 @@ class ExamGenerationServiceTest {
                 null,
                 List.of(new ScoreTemplateItemResponse(
                         "READ_ALOUD", "SPEAKING", 1, 2, 2, 0, 30, "AI_SPEECH", BigDecimal.ONE,
-                        BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)));
+                        BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)),
+                "CUSTOM");
         when(scoreTemplateService.findActiveByPublicId(templateId)).thenReturn(Optional.of(template));
         when(itembankService.countPublishedByTaskTypes(anySet())).thenAnswer(invocation -> {
             Set<PteTaskType> requested = invocation.getArgument(0);
@@ -388,5 +389,7 @@ class ExamGenerationServiceTest {
         assertThat(first).containsExactlyElementsOf(second);
         verify(snapshotPublishService, org.mockito.Mockito.times(2)).publish(any(UUID.class), any(CurrentUser.class),
                 eq(template), eq(seed), eq("PTE_SEEDED_V1"), eq(templateId + ":4"));
+        verify(itembankService, org.mockito.Mockito.never())
+                .publishedQuestionIds(PteTaskType.PERSONAL_INTRODUCTION);
     }
 }

@@ -69,7 +69,7 @@ public class ExamGenerationService {
     public SnapshotResponse generate(String name, Set<String> skills, CurrentUser caller) {
         Set<PteSection> selectedSections = parseSkills(skills);
         ScoreTemplateResponse template = scoreTemplateService.getActive();
-        List<Requirement> requirements = buildRequirements(template, selectedSections);
+        List<Requirement> requirements = buildRequirements(template, selectedSections, true);
         List<RolledRequirement> rolled = requirements.stream().map(this::roll).toList();
 
         checkStockOrThrow(rolled);
@@ -98,7 +98,8 @@ public class ExamGenerationService {
         ScoreTemplateResponse template = scoreTemplateService.findActiveByPublicId(templatePublicId)
                 .orElseThrow(TemplateNotActiveException::new);
         List<Requirement> requirements = buildRequirements(template, Set.of(
-                PteSection.SPEAKING, PteSection.WRITING, PteSection.READING, PteSection.LISTENING));
+                PteSection.SPEAKING, PteSection.WRITING, PteSection.READING, PteSection.LISTENING),
+                !"CUSTOM".equalsIgnoreCase(template.templatePolicy()));
         List<RolledRequirement> rolled = requirements.stream()
                 .map(requirement -> roll(requirement, new Random(seed ^ requirement.taskTypeKey().hashCode())))
                 .toList();
@@ -137,7 +138,8 @@ public class ExamGenerationService {
         }
     }
 
-    private List<Requirement> buildRequirements(ScoreTemplateResponse template, Set<PteSection> selectedSections) {
+    private List<Requirement> buildRequirements(ScoreTemplateResponse template, Set<PteSection> selectedSections,
+            boolean includeImplicitPersonalIntroduction) {
         Map<PteSection, List<ScoreTemplateItemResponse>> itemsBySection = template.items().stream()
                 .collect(Collectors.groupingBy(i -> PteSection.valueOf(i.section())));
 
@@ -146,9 +148,9 @@ public class ExamGenerationService {
             if (!selectedSections.contains(section)) {
                 continue;
             }
-            if (section == PteSection.SPEAKING) {
-                    requirements.add(new Requirement(PteTaskType.PERSONAL_INTRODUCTION.name(),
-                            PteTaskType.PERSONAL_INTRODUCTION, section, 1, 1));
+            if (includeImplicitPersonalIntroduction && section == PteSection.SPEAKING) {
+                requirements.add(new Requirement(PteTaskType.PERSONAL_INTRODUCTION.name(),
+                        PteTaskType.PERSONAL_INTRODUCTION, section, 1, 1));
             }
             itemsBySection.getOrDefault(section, List.of()).stream()
                     .sorted(Comparator.comparingInt(ScoreTemplateItemResponse::sequence))

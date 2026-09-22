@@ -18,11 +18,13 @@ import java.util.UUID;
  * {@code session}'s own controller) for the same reason as scoring's
  * command controller — dependency order runs session ──> attempt ──>
  * reporting: reporting is allowed to call session/attempt, never the
- * reverse. Route stays {@code POST /sessions/{id}/publish} to preserve the
- * pre-migration public API contract.
+ * reverse. The scheduling module now owns {@code POST
+ * /api/v1/sessions/{id}/publish} for generating and scheduling an exam, so
+ * this report-visibility command uses an explicit reporting namespace to keep
+ * both commands unambiguous.
  */
 @RestController
-@RequestMapping("/api/v1/sessions")
+@RequestMapping("/api/v1/reporting/sessions")
 @PreAuthorize("hasRole('HOST_ADMIN')")
 public class ReportPublishController {
 
