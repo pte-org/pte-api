@@ -1,6 +1,7 @@
 package com.pte.reporting.internal.controller;
 
 import com.pte.reporting.internal.dto.response.ReportResponse;
+import com.pte.reporting.internal.constant.ReportingConstants;
 import com.pte.reporting.internal.service.ReportService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import java.util.List;
 
 /**
  * Student sees a report only once published (and only their own); host sees
@@ -35,8 +37,14 @@ public class ReportController {
         return ApiResponse.success(reportService.getReport(attemptPublicId, currentUser()));
     }
 
+    @GetMapping
+    @PreAuthorize("hasRole('STUDENT')")
+    public ApiResponse<List<ReportResponse>> listMyReports() {
+        return ApiResponse.success(reportService.getMyPublishedReports(currentUser()));
+    }
+
     private CurrentUser currentUser() {
         return CurrentUserContext.current()
-                .orElseThrow(() -> new IllegalStateException("No authenticated principal"));
+                .orElseThrow(() -> new IllegalStateException(ReportingConstants.AUTHENTICATED_PRINCIPAL_REQUIRED));
     }
 }

@@ -25,6 +25,8 @@ import com.pte.session.internal.exception.PolicyLockedException;
 import com.pte.session.internal.exception.SessionCapacityInvalidException;
 import com.pte.session.internal.exception.SessionCapacityRequiredException;
 import com.pte.session.internal.exception.SessionNotFoundException;
+import com.pte.session.internal.exception.NotEntitledException;
+import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
 import com.pte.session.internal.exception.SessionNotReadyToOpenException;
 import com.pte.session.internal.exception.SessionSubscriptionCapacityException;
 import com.pte.session.internal.exception.SessionSubscriptionNotFoundException;
@@ -220,7 +222,7 @@ public class SessionLifecycleService {
 
     @Transactional
     public SessionResponse close(UUID publicId, CurrentUser caller) {
-        ExamSession session = findOwned(publicId, caller);
+        ExamSession session = findOwnedWithLock(publicId, caller);
         session.close();
         return SessionMapper.toResponse(session);
     }
@@ -257,9 +259,43 @@ public class SessionLifecycleService {
                 .orElseThrow(SessionNotFoundException::new);
     }
 
+    @Transactional
+    public void lockForScoreReviewMutation(UUID publicId, UUID tenantId) {
+        if (tenantId == null) {
+            throw new HostContextRequiredException();
+        }
+        sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(SessionNotFoundException::new);
+    }
+
+    @Transactional
+    public void lockOpenForAttemptOperation(UUID publicId, UUID tenantId) {
+        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(NotEntitledException::new);
+        if (session.getStatus() != SessionStatus.OPEN) {
+            throw new NotEntitledException();
+        }
+    }
+
+    @Transactional
+    public void lockClosedForReportPublication(UUID publicId, UUID tenantId) {
+        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(SessionNotFoundException::new);
+        if (session.getStatus() != SessionStatus.CLOSED) {
+            throw new SessionNotClosedForReportPublicationException();
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isSessionClosed(UUID publicId, UUID tenantId) {
+        ExamSession session = sessionRepository.findByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(SessionNotFoundException::new);
+        return session.getStatus() == SessionStatus.CLOSED;
+    }
+
     private SubscriptionView activeSubscription(UUID subscriptionId, UUID tenantId) {
         if (billingService == null) {
-            throw new IllegalStateException("BillingService is required for session creation");
+            throw new IllegalStateException(SessionConstants.BILLING_SERVICE_REQUIRED);
         }
         return billingService.getActiveSubscription(subscriptionId, tenantId)
                 .orElseThrow(SessionSubscriptionNotFoundException::new);

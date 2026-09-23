@@ -4,7 +4,6 @@ import com.pte.assessment.AssessmentService;
 import com.pte.assessment.dto.response.ExaminerQuestionPromptView;
 import com.pte.identity.IdentityService;
 import com.pte.media.MediaService;
-import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.scoring.domain.ExaminerAnswerScore;
 import com.pte.scoring.domain.ExaminerAttemptAssignment;
 import com.pte.scoring.domain.ScoringAnswer;
@@ -44,9 +43,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -130,10 +132,36 @@ public class ExaminerScoringService {
                 .map(ScoringAnswer::getPinnedItemPublicId).filter(Objects::nonNull).distinct().toList();
         Map<UUID, ExaminerQuestionPromptView> promptsByItem = assessmentService
                 .getExaminerPrompts(pinnedItemPublicIds, examiner.tenantId());
+
+        Map<UUID, DecodedAnswerPayload> decodedByAnswer = new HashMap<>();
+        Set<UUID> mediaPublicIds = new LinkedHashSet<>();
+        for (ScoringAnswer answer : eligibleAnswers) {
+            ExaminerQuestionPromptView prompt = answer.getPinnedItemPublicId() == null
+                    ? null : promptsByItem.get(answer.getPinnedItemPublicId());
+            if (prompt == null) {
+                throw new ExaminerWorkNotFoundException();
+            }
+            DecodedAnswerPayload decoded = answerPayloadDecoder.decode(answer);
+            decodedByAnswer.put(answer.getAnswerPublicId(), decoded);
+            if (decoded.kind() == AnswerPayloadKind.AUDIO && decoded.mediaPublicId() != null) {
+                mediaPublicIds.add(decoded.mediaPublicId());
+            }
+            if (prompt.audioPromptRef() != null) {
+                mediaPublicIds.add(prompt.audioPromptRef());
+            }
+            if (prompt.imagePromptRef() != null) {
+                mediaPublicIds.add(prompt.imagePromptRef());
+            }
+        }
+        Map<UUID, String> mediaUrls = mediaPublicIds.isEmpty() ? Map.of()
+                : mediaService.presignGetAll(mediaPublicIds, ExaminerScoringConstants.MEDIA_URL_TTL_SECONDS,
+                        examiner.tenantId()).entrySet().stream()
+                        .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> entry.getValue().url()));
+
         List<ExaminerAnswerDetailResponse> details = eligibleAnswers.stream()
                 .map(answer -> toAnswerDetail(answer, scoresByAnswer.get(answer.getAnswerPublicId()),
-                        answer.getPinnedItemPublicId() == null ? null
-                                : promptsByItem.get(answer.getPinnedItemPublicId()), examiner))
+                        promptsByItem.get(answer.getPinnedItemPublicId()),
+                        decodedByAnswer.get(answer.getAnswerPublicId()), mediaUrls, examiner))
                 .sorted(Comparator.comparingInt(answer -> answer.prompt().orderIndex()))
                 .toList();
         int submittedCount = (int) details.stream().filter(answer -> "SUBMITTED".equals(answer.status())).count();
@@ -158,8 +186,9 @@ public class ExaminerScoringService {
             throw new ExaminerWorkNotFoundException();
         }
 
-        lockSessionPublicationIfPresent(answer.getTenantId(), answer.getSessionPublicId());
         entityManager.lock(answer, LockModeType.PESSIMISTIC_WRITE);
+        entityManager.refresh(answer, LockModeType.PESSIMISTIC_WRITE);
+        lockSessionPublicationIfPresent(answer.getTenantId(), answer.getSessionPublicId());
 
         ExaminerAnswerScore existing = examinerAnswerScoreRepository
                 .findByAnswerPublicIdAndTenantId(answerPublicId, examiner.tenantId()).orElse(null);
@@ -177,20 +206,20 @@ public class ExaminerScoringService {
     }
 
     private ExaminerAnswerDetailResponse toAnswerDetail(ScoringAnswer answer, ExaminerAnswerScore savedScore,
-            ExaminerQuestionPromptView prompt, CurrentUser examiner) {
+            ExaminerQuestionPromptView prompt, DecodedAnswerPayload decoded, Map<UUID, String> mediaUrls,
+            CurrentUser examiner) {
         if (savedScore != null && !savedScore.getExaminerPublicId().equals(examiner.userId())) {
             throw new ExaminerWorkNotFoundException();
         }
-        if (prompt == null) {
+        if (prompt == null || decoded == null) {
             throw new ExaminerWorkNotFoundException();
         }
-        DecodedAnswerPayload decoded = answerPayloadDecoder.decode(answer);
         String answerMediaUrl = decoded.kind() == AnswerPayloadKind.AUDIO
-                ? presign(decoded.mediaPublicId(), examiner.tenantId()) : null;
+                ? mediaUrl(mediaUrls, decoded.mediaPublicId()) : null;
         ExaminerPromptResponse safePrompt = new ExaminerPromptResponse(prompt.orderIndex(), prompt.section(),
                 prompt.taskType(), prompt.title(), prompt.promptText(),
-                presign(prompt.audioPromptRef(), examiner.tenantId()),
-                presign(prompt.imagePromptRef(), examiner.tenantId()), prompt.minWordCount(), prompt.maxWordCount(),
+                mediaUrl(mediaUrls, prompt.audioPromptRef()), mediaUrl(mediaUrls, prompt.imagePromptRef()),
+                prompt.minWordCount(), prompt.maxWordCount(),
                 prompt.options().stream().map(option -> new ExaminerPromptOptionResponse(
                         option.orderIndex(), option.text(), option.blankIndex())).toList());
         ExaminerAnswerPayloadResponse safeResponse = new ExaminerAnswerPayloadResponse(
@@ -206,13 +235,8 @@ public class ExaminerScoringService {
                 savedScore == null ? null : savedScore.getSubmittedAt());
     }
 
-    private String presign(UUID mediaPublicId, UUID tenantId) {
-        if (mediaPublicId == null) {
-            return null;
-        }
-        PresignedDownloadResponse presigned = mediaService.presignGet(mediaPublicId,
-                ExaminerScoringConstants.MEDIA_URL_TTL_SECONDS, tenantId);
-        return presigned.url();
+    private String mediaUrl(Map<UUID, String> mediaUrls, UUID mediaPublicId) {
+        return mediaPublicId == null ? null : mediaUrls.get(mediaPublicId);
     }
 
     private void lockSessionPublicationIfPresent(UUID tenantId, UUID sessionPublicId) {
@@ -244,7 +268,7 @@ public class ExaminerScoringService {
     private CurrentUser requireActiveExaminer(CurrentUser caller) {
         if (caller == null || caller.userId() == null || caller.tenantId() == null
                 || !caller.hasRole("EXAMINER")) {
-            throw new AccessDeniedException("An authenticated tenant Examiner is required");
+            throw new AccessDeniedException(ExaminerScoringConstants.AUTHENTICATED_TENANT_EXAMINER_REQUIRED);
         }
         if (identityService.findActiveExaminers(caller.tenantId(), List.of(caller.userId())).isEmpty()) {
             throw new ExaminerWorkNotFoundException();

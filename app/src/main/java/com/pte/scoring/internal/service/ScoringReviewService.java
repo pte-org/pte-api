@@ -12,9 +12,16 @@ import com.pte.scoring.internal.dto.response.DecodedAnswerPayload;
 import com.pte.scoring.internal.dto.response.ScoringAnswerResponse;
 import com.pte.scoring.internal.exception.AnswerNotFoundException;
 import com.pte.scoring.internal.exception.InvalidAnswerStatusException;
+import com.pte.scoring.internal.exception.ScoreSourceSelectionException;
+import com.pte.scoring.internal.constant.ScoreReviewConstants;
 import com.pte.scoring.internal.mapper.ScoringAnswerMapper;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
 import com.pte.shared.security.CurrentUser;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -47,12 +54,23 @@ public class ScoringReviewService {
     private final ScoringAnswerRepository scoringAnswerRepository;
     private final AnswerPayloadDecoder answerPayloadDecoder;
     private final MediaService mediaService;
+    private final ScoringSessionStateRepository sessionStateRepository;
+    private final EntityManager entityManager;
 
+    @Autowired
     public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
-                                AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService) {
+            AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService,
+            ScoringSessionStateRepository sessionStateRepository, EntityManager entityManager) {
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.answerPayloadDecoder = answerPayloadDecoder;
         this.mediaService = mediaService;
+        this.sessionStateRepository = sessionStateRepository;
+        this.entityManager = entityManager;
+    }
+
+    public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
+            AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService) {
+        this(scoringAnswerRepository, answerPayloadDecoder, mediaService, null, null);
     }
 
     /**
@@ -104,6 +122,20 @@ public class ScoringReviewService {
     @Transactional
     public ScoringAnswerResponse submitTeacherScore(UUID answerPublicId, int score, CurrentUser caller) {
         ScoringAnswer answer = findOwned(answerPublicId, caller);
+        if (entityManager != null) {
+            entityManager.lock(answer, LockModeType.PESSIMISTIC_WRITE);
+            entityManager.refresh(answer, LockModeType.PESSIMISTIC_WRITE);
+            sessionStateRepository.findByTenantIdAndSessionPublicId(caller.tenantId(), answer.getSessionPublicId())
+                    .ifPresent(state -> {
+                        entityManager.lock(state, LockModeType.PESSIMISTIC_WRITE);
+                        entityManager.refresh(state, LockModeType.PESSIMISTIC_WRITE);
+                        if (state.getPublicationPublicId() != null) {
+                            throw new ScoreSourceSelectionException(HttpStatus.CONFLICT,
+                                    ScoreReviewConstants.PUBLISHED_LOCK, null,
+                                    ScoreReviewConstants.PUBLISHED_LOCK_MESSAGE);
+                        }
+                    });
+        }
         answer.setTeacherScore(score);
         answer.setTeacherScoredAt(Instant.now());
         scoringAnswerRepository.save(answer);

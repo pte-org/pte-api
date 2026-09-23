@@ -1,6 +1,7 @@
 package com.pte.scoring.internal.vendor;
 
 import com.pte.scoring.internal.constant.ScoringConstants;
+import com.pte.scoring.domain.ScoringDomainConstants;
 import com.pte.scoring.domain.enums.AiProviderCategory;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -22,14 +23,14 @@ public record AiScoreResult(int rawScore, Map<String, Integer> subScores, String
             throw new IllegalArgumentException(ScoringConstants.RAW_SCORE_RANGE_INVALID);
         }
         if (providerCategory == null || provider == null || provider.isBlank()) {
-            throw new IllegalArgumentException("AI score provenance must identify its provider category and provider");
+            throw new IllegalArgumentException(ScoringDomainConstants.AI_SCORE_PROVIDER_REQUIRED);
         }
-        requireLength(provider, 64, "AI provider");
+        requireLength(provider, 64, ScoringDomainConstants.AI_PROVIDER_FIELD);
         if (model != null) {
-            requireLength(model, 160, "AI model");
+            requireLength(model, 160, ScoringDomainConstants.AI_MODEL_FIELD);
         }
         if (providerVersion != null) {
-            requireLength(providerVersion, 100, "AI provider version");
+            requireLength(providerVersion, 100, ScoringDomainConstants.AI_PROVIDER_VERSION_FIELD);
         }
         Map<String, Integer> safeSubScores = new LinkedHashMap<>();
         if (subScores != null) {
@@ -49,7 +50,8 @@ public record AiScoreResult(int rawScore, Map<String, Integer> subScores, String
 
     private static void requireLength(String value, int maxLength, String field) {
         if (value.length() > maxLength) {
-            throw new IllegalArgumentException(field + " exceeds its maximum length of " + maxLength);
+            throw new IllegalArgumentException(String.format(
+                    ScoringDomainConstants.AI_PROVENANCE_VALUE_TOO_LONG, field, maxLength));
         }
     }
 }

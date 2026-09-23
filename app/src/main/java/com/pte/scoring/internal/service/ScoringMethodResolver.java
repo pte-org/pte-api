@@ -6,6 +6,7 @@ import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoring.domain.enums.ScoringMethod;
+import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.exception.InvalidScoringProfileException;
 import org.springframework.stereotype.Service;
 
@@ -42,6 +43,10 @@ public class ScoringMethodResolver {
         return findResolvedProfile(scoreTemplatePublicId, taskType).map(ResolvedTaskProfile::method);
     }
 
+    public Optional<String> resolveSection(UUID scoreTemplatePublicId, String taskType) {
+        return findResolvedProfile(scoreTemplatePublicId, taskType).map(ResolvedTaskProfile::section);
+    }
+
     Optional<TaskRuntimeProfileDescriptor> resolveProfile(UUID scoreTemplatePublicId, String taskType) {
         return findResolvedProfile(scoreTemplatePublicId, taskType).map(ResolvedTaskProfile::runtime);
     }
@@ -71,26 +76,26 @@ public class ScoringMethodResolver {
             ScoringMethod method = parseLegacyScoringMethod(canonicalTaskType, item.scoringMethod());
             TaskRuntimeProfileDescriptor legacyRuntime = TaskTypeCodeCompatibility.isStandard(canonicalTaskType)
                     ? TaskRuntimeProfileRegistry.descriptorFor(canonicalTaskType) : null;
-            return new ResolvedTaskProfile(legacyRuntime, method);
+            return new ResolvedTaskProfile(legacyRuntime, method, item.section());
         }
         if (!canonicalTaskType.equals(TaskTypeCodeCompatibility.normalizeTaskTypeKey(runtime.taskTypeCode()))) {
-            throw invalidProfile(canonicalTaskType, "Runtime profile does not match the allowlisted task contract");
+            throw invalidProfile(canonicalTaskType, ScoringConstants.RUNTIME_PROFILE_TASK_TYPE_MISMATCH);
         }
         ScoringMethod method = ScoringProfileRegistry.resolve(runtime)
                 .orElseThrow(() -> invalidProfile(canonicalTaskType,
-                        "No executable strategy is registered for the pinned scoring profile"));
+                        ScoringConstants.EXECUTABLE_SCORING_STRATEGY_MISSING));
         ScoringMethod persistedMethod = parseLegacyScoringMethod(canonicalTaskType, item.scoringMethod());
         if (persistedMethod != method) {
-            throw invalidProfile(canonicalTaskType, "Template scoring method disagrees with the pinned profile");
+            throw invalidProfile(canonicalTaskType, ScoringConstants.TEMPLATE_SCORING_METHOD_MISMATCH);
         }
-        return new ResolvedTaskProfile(runtime, method);
+        return new ResolvedTaskProfile(runtime, method, item.section());
     }
 
     private ScoringMethod parseLegacyScoringMethod(String taskType, String rawMethod) {
         try {
             return ScoringMethod.valueOf(rawMethod);
         } catch (RuntimeException ex) {
-            throw invalidProfile(taskType, "Template contains an unknown scoring method");
+            throw invalidProfile(taskType, ScoringConstants.TEMPLATE_SCORING_METHOD_UNKNOWN);
         }
     }
 
@@ -98,6 +103,6 @@ public class ScoringMethodResolver {
         return new InvalidScoringProfileException(taskType, reason);
     }
 
-    private record ResolvedTaskProfile(TaskRuntimeProfileDescriptor runtime, ScoringMethod method) {
+    private record ResolvedTaskProfile(TaskRuntimeProfileDescriptor runtime, ScoringMethod method, String section) {
     }
 }

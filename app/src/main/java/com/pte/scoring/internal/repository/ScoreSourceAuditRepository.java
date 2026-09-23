@@ -10,4 +10,10 @@ public interface ScoreSourceAuditRepository extends JpaRepository<ScoreSourceAud
 
     List<ScoreSourceAudit> findByTenantIdAndSessionPublicIdOrderByOccurredAtDesc(
             UUID tenantId, UUID sessionPublicId);
+
+    List<ScoreSourceAudit> findTop50ByTenantIdAndSessionPublicIdOrderByOccurredAtDesc(
+            UUID tenantId, UUID sessionPublicId);
+
+    java.util.Optional<ScoreSourceAudit> findByTenantIdAndSessionPublicIdAndRequestPublicId(
+            UUID tenantId, UUID sessionPublicId, UUID requestPublicId);
 }

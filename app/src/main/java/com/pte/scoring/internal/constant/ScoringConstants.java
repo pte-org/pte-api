@@ -46,16 +46,26 @@ public final class ScoringConstants {
     public static final String AI_SCORING_ROUTING_KEY = "ai-scoring-job";
 
     public static final String ANSWER_NOT_FOUND = "ANSWER_NOT_FOUND";
+    public static final String AUTHENTICATED_PRINCIPAL_REQUIRED = "No authenticated principal";
     public static final String INVALID_ANSWER_STATUS = "INVALID_ANSWER_STATUS";
     public static final String UNSUPPORTED_TASK_TYPE = "UNSUPPORTED_TASK_TYPE";
     public static final String SCORING_PROFILE_INVALID = "SCORING_PROFILE_INVALID";
     public static final String SCORING_PROFILE_INVALID_MESSAGE =
             "This exam uses a scoring configuration that is no longer supported. "
                     + "Please ask an administrator to publish a compatible template.";
+    public static final String RUNTIME_PROFILE_TASK_TYPE_MISMATCH =
+            "Runtime profile does not match the allowlisted task contract";
+    public static final String EXECUTABLE_SCORING_STRATEGY_MISSING =
+            "No executable strategy is registered for the pinned scoring profile";
+    public static final String TEMPLATE_SCORING_METHOD_MISMATCH =
+            "Template scoring method disagrees with the pinned profile";
+    public static final String TEMPLATE_SCORING_METHOD_UNKNOWN = "Template contains an unknown scoring method";
     public static final String AI_PROVIDER_INVALID = "scoring.ai.provider must be stub or openai-compatible";
     public static final String AI_SCORING_RETRIES_EXHAUSTED = "AI scoring retries exhausted";
     public static final String UNSUPPORTED_AI_TASK_TYPE = "Unsupported AI task type: %s";
     public static final String RAW_SCORE_RANGE_INVALID = "rawScore must be between 0 and 100";
+    public static final String REVIEW_VERSION_HASH_UNAVAILABLE = "SHA-256 is required by the runtime";
+    public static final String UNSUPPORTED_SCORING_PROFILE = "Unsupported scoring profile: %s";
     public static final String SUBSCORE_NAME_BLANK = "subScore names must not be blank";
     public static final String SUBSCORES_RANGE_INVALID = "subScores must be between 0 and 100";
     public static final String AI_MODEL_NOT_CONFIGURED = "AI model is not configured";

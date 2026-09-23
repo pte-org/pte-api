@@ -6,6 +6,7 @@ import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.service.AiScoringResultPersistenceService;
 import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.EssayScoringClient;
 import com.pte.scoring.internal.vendor.SpeechScoringClient;
@@ -14,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -44,12 +45,15 @@ class AiScoringWorkerTest {
     private SpeechScoringClient speechScoringClient;
     @Mock
     private EssayScoringClient essayScoringClient;
+    @Mock
+    private AiScoringResultPersistenceService resultPersistenceService;
 
     private AiScoringWorker worker;
 
     @BeforeEach
     void setUp() {
-        worker = new AiScoringWorker(scoringAnswerRepository, speechScoringClient, essayScoringClient);
+        worker = new AiScoringWorker(scoringAnswerRepository, speechScoringClient, essayScoringClient,
+                resultPersistenceService);
     }
 
     @Test
@@ -61,9 +65,8 @@ class AiScoringWorkerTest {
 
         worker.onAiScoringJob(job(answer, "AI_SPEECH"));
 
-        assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
-        assertThat(answer.getAiProviderCategory()).isEqualTo(AiProviderCategory.STUB);
-        assertThat(answer.getAiProvider()).isEqualTo("STUB");
+        verify(resultPersistenceService).persistAiScore(eq(answer.getAnswerPublicId()), eq(answer.getAttemptPublicId()),
+                eq(answer.getTenantId()), eq(answer.getSessionPublicId()), any(AiScoreResult.class));
         verify(speechScoringClient).score(answer.getPayload(), answer.getCorrectAnswerText(), answer.getTenantId());
         verifyNoInteractions(essayScoringClient);
     }
@@ -77,10 +80,8 @@ class AiScoringWorkerTest {
 
         worker.onAiScoringJob(job(answer, "AI_TEXT"));
 
-        assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
-        assertThat(answer.getAiProviderCategory()).isEqualTo(AiProviderCategory.REAL);
-        assertThat(answer.getAiProvider()).isEqualTo("OPENAI_COMPATIBLE");
-        assertThat(answer.getAiModel()).isEqualTo("test-model");
+        verify(resultPersistenceService).persistAiScore(eq(answer.getAnswerPublicId()), eq(answer.getAttemptPublicId()),
+                eq(answer.getTenantId()), eq(answer.getSessionPublicId()), any(AiScoreResult.class));
         verify(essayScoringClient).score(answer.getPayload(), answer.getCorrectAnswerText());
         verifyNoInteractions(speechScoringClient);
     }
@@ -110,8 +111,35 @@ class AiScoringWorkerTest {
 
         assertThat(answer.getRawScore()).isEqualTo(80);
         assertThat(answer.getAiProviderCategory()).isNull();
+        verifyNoInteractions(resultPersistenceService);
         verify(speechScoringClient, never()).score(anyString(), anyString(), any(UUID.class));
         verifyNoInteractions(essayScoringClient);
+    }
+
+    @Test
+    void worker_doesNotWriteAiScoreAfterPublicationBarrier() {
+        ScoringAnswer answer = answer(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
+                .thenReturn(Optional.of(answer));
+        when(resultPersistenceService.isPublicationLocked(answer.getTenantId(), answer.getSessionPublicId()))
+                .thenReturn(true);
+
+        worker.onAiScoringJob(job(answer, "AI_SPEECH"));
+
+        assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.PENDING);
+        verify(speechScoringClient, never()).score(anyString(), anyString(), any(UUID.class));
+        verify(resultPersistenceService, never()).persistAiScore(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void worker_deadLetterDelegatesFailureTransitionToTransactionalPersistence() {
+        ScoringAnswer answer = answer(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiScoringJob job = job(answer, "AI_SPEECH");
+
+        worker.onDeadLettered(job);
+
+        verify(resultPersistenceService).markScoringFailed(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
+                answer.getTenantId(), answer.getSessionPublicId());
     }
 
     private ScoringAnswer answer(String taskType) {

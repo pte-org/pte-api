@@ -7,7 +7,7 @@ import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.scoring.ScoringService;
-import com.pte.scoring.dto.response.ScoredAnswerView;
+import com.pte.scoring.dto.response.ReportScoringAnswerView;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -61,8 +61,20 @@ class ScoreAggregationServiceTest {
                 .thenReturn(new ScoreTemplateResponse(TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "ACTIVE", List.of(items)));
     }
 
-    private void stubAnswers(ScoredAnswerView... answers) {
-        when(scoringService.getScoredAnswersForAttempt(ATTEMPT_ID, TENANT_ID)).thenReturn(List.of(answers));
+    private void stubAnswers(ReportScoringAnswerView... answers) {
+        when(scoringService.getReportScoringInputsForAttempt(TENANT_ID, ATTEMPT_ID)).thenReturn(List.of(answers));
+    }
+
+    private ReportScoringAnswerView answer(String taskType, int aiScore, int examinerScore,
+            String selectedSource, Integer selectedScore) {
+        String method = selectedSource == null ? "OBJECTIVE" : "AI_TEXT";
+        return new ReportScoringAnswerView(UUID.randomUUID(), ATTEMPT_ID, TEMPLATE_ID, taskType, "READING",
+                method, aiScore, "REAL", "test-provider", "test-model", "v1", examinerScore,
+                selectedSource, selectedScore, true, null, 0);
+    }
+
+    private ReportScoringAnswerView answer(String taskType, int selectedScore) {
+        return answer(taskType, selectedScore, selectedScore, null, selectedScore);
     }
 
     /** One row, only the given skill's weight column set to a non-zero value; every other weight column is 0. */
@@ -81,7 +93,7 @@ class ScoreAggregationServiceTest {
         // weight=10, avgRaw=50 -> 10 + 80*(10*50/100)/10 = 10 + 80*0.5 = 50
         stubTestedSections("READING");
         stubTemplate(item("MC_READING_SINGLE", bd(0), bd(0), bd(0), bd(10), bd(0)));
-        stubAnswers(new ScoredAnswerView("MC_READING_SINGLE", 50));
+        stubAnswers(answer("MC_READING_SINGLE", 50));
 
         AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
 
@@ -99,7 +111,7 @@ class ScoreAggregationServiceTest {
         stubTemplate(
                 item("MC_READING_SINGLE", bd(0), bd(0), bd(0), bd(20), bd(0)),
                 item("MC_READING_MULTIPLE", bd(0), bd(0), bd(0), bd(5), bd(0)));
-        stubAnswers(new ScoredAnswerView("MC_READING_SINGLE", 100), new ScoredAnswerView("MC_READING_MULTIPLE", 0));
+        stubAnswers(answer("MC_READING_SINGLE", 100), answer("MC_READING_MULTIPLE", 0));
 
         AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
 
@@ -114,7 +126,7 @@ class ScoreAggregationServiceTest {
         stubTemplate(
                 item("MC_READING_SINGLE", bd(0), bd(0), bd(0), bd(10), bd(0)),
                 item("MC_READING_MULTIPLE", bd(0), bd(0), bd(0), bd(90), bd(0)));
-        stubAnswers(new ScoredAnswerView("MC_READING_SINGLE", 50));
+        stubAnswers(answer("MC_READING_SINGLE", 50));
 
         AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
 
@@ -141,7 +153,7 @@ class ScoreAggregationServiceTest {
         stubTestedSections("SPEAKING", "WRITING", "READING", "LISTENING");
         // overallWeight left at 0 for the only item — every skill has data, but Overall's own column doesn't.
         stubTemplate(item("READ_ALOUD", bd(0), bd(9), bd(0), bd(0), bd(0)));
-        stubAnswers(new ScoredAnswerView("READ_ALOUD", 100));
+        stubAnswers(answer("READ_ALOUD", 100));
 
         AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
 
@@ -155,10 +167,10 @@ class ScoreAggregationServiceTest {
         stubTestedSections("READING");
         stubTemplate(item("MC_READING_SINGLE", bd(0), bd(0), bd(0), bd(1), bd(0)));
         stubAnswers(
-                new ScoredAnswerView("MC_READING_SINGLE", 50), new ScoredAnswerView("MC_READING_SINGLE", 50),
-                new ScoredAnswerView("MC_READING_SINGLE", 50), new ScoredAnswerView("MC_READING_SINGLE", 50),
-                new ScoredAnswerView("MC_READING_SINGLE", 50), new ScoredAnswerView("MC_READING_SINGLE", 50),
-                new ScoredAnswerView("MC_READING_SINGLE", 50), new ScoredAnswerView("MC_READING_SINGLE", 55));
+                answer("MC_READING_SINGLE", 50), answer("MC_READING_SINGLE", 50),
+                answer("MC_READING_SINGLE", 50), answer("MC_READING_SINGLE", 50),
+                answer("MC_READING_SINGLE", 50), answer("MC_READING_SINGLE", 50),
+                answer("MC_READING_SINGLE", 50), answer("MC_READING_SINGLE", 55));
 
         AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
 
@@ -173,7 +185,7 @@ class ScoreAggregationServiceTest {
                 // LISTENING must NOT appear in the result even though this row has data for it.
                 item("REPEAT_SENTENCE", bd(7), bd(16), bd(0), bd(0), bd(17)),
                 item("MC_READING_SINGLE", bd(0), bd(0), bd(0), bd(3), bd(0)));
-        stubAnswers(new ScoredAnswerView("REPEAT_SENTENCE", 80), new ScoredAnswerView("MC_READING_SINGLE", 60));
+        stubAnswers(answer("REPEAT_SENTENCE", 80), answer("MC_READING_SINGLE", 60));
 
         AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
 
@@ -184,7 +196,7 @@ class ScoreAggregationServiceTest {
     void aggregate_allFourSkillsTested_overallUsesOverallWeight() {
         stubTestedSections("SPEAKING", "WRITING", "READING", "LISTENING");
         stubTemplate(item("READ_ALOUD", bd(4), bd(9), bd(0), bd(0), bd(0)));
-        stubAnswers(new ScoredAnswerView("READ_ALOUD", 100));
+        stubAnswers(answer("READ_ALOUD", 100));
 
         AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
 
@@ -198,7 +210,7 @@ class ScoreAggregationServiceTest {
     void aggregate_fewerThanFourSkillsTested_overallIsNull() {
         stubTestedSections("SPEAKING", "READING", "LISTENING");
         stubTemplate(item("READ_ALOUD", bd(4), bd(9), bd(0), bd(0), bd(0)));
-        stubAnswers(new ScoredAnswerView("READ_ALOUD", 100));
+        stubAnswers(answer("READ_ALOUD", 100));
 
         AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
 
@@ -212,7 +224,7 @@ class ScoreAggregationServiceTest {
         stubTemplate(
                 item("READ_ALOUD", bd(4), bd(9), bd(0), bd(0), bd(0)),
                 item("DESCRIBE_IMAGE", bd(15), bd(31), bd(0), bd(0), bd(0)));
-        stubAnswers(new ScoredAnswerView("READ_ALOUD", 100), new ScoredAnswerView("DESCRIBE_IMAGE", 50));
+        stubAnswers(answer("READ_ALOUD", 100), answer("DESCRIBE_IMAGE", 50));
 
         AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
 
@@ -225,13 +237,50 @@ class ScoreAggregationServiceTest {
     void aggregate_oneTaskTypeContributesToTwoSkills_computesEachIndependently() {
         stubTestedSections("SPEAKING", "LISTENING");
         stubTemplate(item("REPEAT_SENTENCE", bd(7), bd(16), bd(0), bd(0), bd(17)));
-        stubAnswers(new ScoredAnswerView("REPEAT_SENTENCE", 100));
+        stubAnswers(answer("REPEAT_SENTENCE", 100));
 
         AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
 
         // Speaking: weight 16, avgRaw 100 -> 10+80 = 90. Listening: weight 17, avgRaw 100 -> 10+80 = 90.
         assertThat(summary.skillScores().get(Skill.SPEAKING).score()).isEqualTo(90);
         assertThat(summary.skillScores().get(Skill.LISTENING).score()).isEqualTo(90);
+    }
+
+    @Test
+    void aggregate_usesSelectedExaminerScoreInsteadOfAiScore() {
+        stubTestedSections("READING");
+        stubTemplate(item("MC_READING_SINGLE", bd(0), bd(0), bd(0), bd(100), bd(0)));
+        stubAnswers(answer("MC_READING_SINGLE", 20, 90, "EXAMINER", 90));
+
+        AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
+
+        assertThat(summary.skillScores().get(Skill.READING).score()).isEqualTo(82);
+    }
+
+    @Test
+    void aggregate_mixedObjectiveAndAiSelectedScoresUsesBothInputs() {
+        stubTestedSections("READING");
+        stubTemplate(
+                item("MC_READING_SINGLE", bd(0), bd(0), bd(0), bd(50), bd(0)),
+                item("FILL_BLANKS_READING", bd(0), bd(0), bd(0), bd(50), bd(0)));
+        stubAnswers(
+                answer("MC_READING_SINGLE", 75, 75, null, 75),
+                answer("FILL_BLANKS_READING", 90, 20, "AI", 90));
+
+        AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
+
+        assertThat(summary.skillScores().get(Skill.READING).score()).isEqualTo(76);
+    }
+
+    @Test
+    void aggregate_normalizesLegacyTemplateTaskTypeAlias() {
+        stubTestedSections("READING");
+        stubTemplate(item("FILL_BLANKS_READING", bd(0), bd(0), bd(0), bd(100), bd(0)));
+        stubAnswers(answer("FILL_IN_THE_BLANKS_DRAG_AND_DROP", 80));
+
+        AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
+
+        assertThat(summary.skillScores().get(Skill.READING).score()).isEqualTo(74);
     }
 
 }

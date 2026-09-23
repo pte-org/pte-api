@@ -5,12 +5,12 @@ import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.service.AiScoringResultPersistenceService;
 import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.EssayScoringClient;
 import com.pte.scoring.internal.vendor.SpeechScoringClient;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
@@ -33,16 +33,18 @@ public class AiScoringWorker {
     private final ScoringAnswerRepository scoringAnswerRepository;
     private final SpeechScoringClient speechScoringClient;
     private final EssayScoringClient essayScoringClient;
+    private final AiScoringResultPersistenceService resultPersistenceService;
 
     public AiScoringWorker(ScoringAnswerRepository scoringAnswerRepository, SpeechScoringClient speechScoringClient,
-                           EssayScoringClient essayScoringClient) {
+                           EssayScoringClient essayScoringClient,
+                           AiScoringResultPersistenceService resultPersistenceService) {
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.speechScoringClient = speechScoringClient;
         this.essayScoringClient = essayScoringClient;
+        this.resultPersistenceService = resultPersistenceService;
     }
 
     @RabbitListener(queues = ScoringConstants.AI_SCORING_QUEUE, containerFactory = "scoringRabbitListenerContainerFactory")
-    @Transactional
     public void onAiScoringJob(AiScoringJob job) {
         Optional<ScoringAnswer> maybeAnswer = scoringAnswerRepository.findByAnswerPublicId(job.answerPublicId());
         if (maybeAnswer.isEmpty()) {
@@ -53,21 +55,28 @@ public class AiScoringWorker {
                 || answer.getStatus() == ScoringAnswerStatus.SCORING_FAILED) {
             return; // Already terminal — redelivery no-op, do not re-call the vendor.
         }
+        if (!matchesJob(answer, job)) {
+            return;
+        }
+        if (resultPersistenceService.isPublicationLocked(job.tenantId(), job.sessionPublicId())) {
+            return;
+        }
 
         AiScoreResult result = callVendor(job);
-
-        answer.markAiScored(result.rawScore(), result.providerCategory(), result.provider(),
-                result.model(), result.providerVersion());
-        scoringAnswerRepository.save(answer);
+        resultPersistenceService.persistAiScore(job.answerPublicId(), job.attemptPublicId(), job.tenantId(),
+                job.sessionPublicId(), result);
     }
 
     @RabbitListener(queues = ScoringConstants.AI_SCORING_DLQ, containerFactory = "scoringRabbitListenerContainerFactory")
-    @Transactional
     public void onDeadLettered(AiScoringJob job) {
-        scoringAnswerRepository.findByAnswerPublicId(job.answerPublicId()).ifPresent(answer -> {
-            answer.setStatus(ScoringAnswerStatus.SCORING_FAILED);
-            scoringAnswerRepository.save(answer);
-        });
+        resultPersistenceService.markScoringFailed(job.answerPublicId(), job.attemptPublicId(), job.tenantId(),
+                job.sessionPublicId());
+    }
+
+    private boolean matchesJob(ScoringAnswer answer, AiScoringJob job) {
+        return answer.getTenantId().equals(job.tenantId())
+                && answer.getSessionPublicId().equals(job.sessionPublicId())
+                && answer.getAttemptPublicId().equals(job.attemptPublicId());
     }
 
     /** Switches on {@code job.scoringMethod()} — resolved once at dispatch time from the pinned ScoreTemplate (spec FR-07), not re-derived from task type here. */

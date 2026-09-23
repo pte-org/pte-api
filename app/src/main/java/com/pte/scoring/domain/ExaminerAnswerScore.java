@@ -66,33 +66,38 @@ public class ExaminerAnswerScore extends BaseEntity {
 
     public ExaminerAnswerScore(UUID answerPublicId, UUID attemptPublicId, UUID sessionPublicId,
             UUID tenantId, UUID examinerPublicId, int score, Instant submittedAt) {
-        this.answerPublicId = Objects.requireNonNull(answerPublicId, "answerPublicId is required");
-        this.attemptPublicId = Objects.requireNonNull(attemptPublicId, "attemptPublicId is required");
-        this.sessionPublicId = Objects.requireNonNull(sessionPublicId, "sessionPublicId is required");
-        this.tenantId = Objects.requireNonNull(tenantId, "tenantId is required");
-        this.examinerPublicId = Objects.requireNonNull(examinerPublicId, "examinerPublicId is required");
+        this.answerPublicId = Objects.requireNonNull(answerPublicId,
+                ScoringDomainConstants.EXAMINER_SCORE_ANSWER_REQUIRED);
+        this.attemptPublicId = Objects.requireNonNull(attemptPublicId,
+                ScoringDomainConstants.EXAMINER_SCORE_ATTEMPT_REQUIRED);
+        this.sessionPublicId = Objects.requireNonNull(sessionPublicId,
+                ScoringDomainConstants.EXAMINER_SCORE_SESSION_REQUIRED);
+        this.tenantId = Objects.requireNonNull(tenantId, ScoringDomainConstants.EXAMINER_SCORE_TENANT_REQUIRED);
+        this.examinerPublicId = Objects.requireNonNull(examinerPublicId,
+                ScoringDomainConstants.EXAMINER_SCORE_EXAMINER_REQUIRED);
         if (score < 0 || score > 100) {
-            throw new IllegalArgumentException("Examiner score must be between 0 and 100");
+            throw new IllegalArgumentException(ScoringDomainConstants.EXAMINER_SCORE_RANGE_INVALID);
         }
         this.score = score;
         this.status = ExaminerAnswerScoreStatus.SUBMITTED;
-        this.submittedAt = Objects.requireNonNull(submittedAt, "submittedAt is required");
+        this.submittedAt = Objects.requireNonNull(submittedAt,
+                ScoringDomainConstants.EXAMINER_SCORE_SUBMISSION_TIME_REQUIRED);
     }
 
     /** Identical retries are safe; a different score or examiner is a conflict, not an update. */
     public void requireIdenticalRetry(UUID retryingExaminerPublicId, int retryingScore) {
         if (!examinerPublicId.equals(retryingExaminerPublicId) || score != retryingScore) {
-            throw new IllegalStateException("Submitted Examiner score is immutable");
+            throw new IllegalStateException(ScoringDomainConstants.EXAMINER_SCORE_IMMUTABLE);
         }
     }
 
     @PreUpdate
     private void preventUpdate() {
-        throw new IllegalStateException("Submitted Examiner scores are immutable");
+        throw new IllegalStateException(ScoringDomainConstants.EXAMINER_SCORES_IMMUTABLE);
     }
 
     @PreRemove
     private void preventDelete() {
-        throw new IllegalStateException("Submitted Examiner scores are immutable");
+        throw new IllegalStateException(ScoringDomainConstants.EXAMINER_SCORES_IMMUTABLE);
     }
 }

@@ -20,6 +20,7 @@ import com.pte.scoring.dto.response.ExaminerAssignmentPreviewResponse;
 import com.pte.scoring.dto.response.ExaminerAssignmentScopeReferenceResponse;
 import com.pte.scoring.internal.exception.InvalidExaminerAssignmentException;
 import com.pte.scoring.internal.exception.StaleExaminerAssignmentPreviewException;
+import com.pte.scoring.internal.constant.ExaminerAssignmentConstants;
 import com.pte.scoring.internal.repository.ExaminerAssignmentBatchRepository;
 import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
 import com.pte.session.SessionService;
@@ -199,7 +200,7 @@ public class ExaminerAssignmentService {
     public ExaminerAssignmentOverviewResponse overview(UUID sessionPublicId, CurrentUser caller, int page, int size) {
         UUID tenantId = requireHost(caller);
         if (page < 0 || size < 1 || size > MAX_BATCH_PAGE_SIZE) {
-            throw new InvalidExaminerAssignmentException("Batch history page/size is outside the allowed range.");
+            throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.INVALID_BATCH_PAGE);
         }
         sessionService.verifyHostAccess(sessionPublicId, tenantId);
         batchRepository.expireOverduePreviews(tenantId, sessionPublicId,
@@ -273,22 +274,22 @@ public class ExaminerAssignmentService {
 
     private NormalizedRequest normalize(CreateExaminerAssignmentPreviewRequest request) {
         if (request == null || request.mode() == null || request.scopes() == null || request.scopes().isEmpty()) {
-            throw new InvalidExaminerAssignmentException("At least one scope and an assignment mode are required.");
+            throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.SCOPE_AND_MODE_REQUIRED);
         }
         Map<AssignmentScopeKey, AssignmentScopeRequest> uniqueScopes = new LinkedHashMap<>();
         for (AssignmentScopeRequest scope : request.scopes()) {
             if (scope == null || scope.type() == null || scope.scopePublicId() == null) {
-                throw new InvalidExaminerAssignmentException("Each scope must specify its type and public ID.");
+                throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.SCOPE_TYPE_AND_ID_REQUIRED);
             }
             if (request.mode() == AssignmentBatchMode.MANUAL && scope.examinerPublicId() == null) {
-                throw new InvalidExaminerAssignmentException("Manual mode requires an Examiner for every scope.");
+                throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.MANUAL_EXAMINER_REQUIRED);
             }
             if (request.mode() == AssignmentBatchMode.RANDOM && scope.examinerPublicId() != null) {
-                throw new InvalidExaminerAssignmentException("Random mode uses one pooled Examiner list, not per-scope mappings.");
+                throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.RANDOM_SCOPE_EXAMINER_FORBIDDEN);
             }
             AssignmentScopeKey key = new AssignmentScopeKey(scope.type(), scope.scopePublicId());
             if (uniqueScopes.putIfAbsent(key, scope) != null) {
-                throw new InvalidExaminerAssignmentException("Duplicate scope in assignment request.");
+                throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.DUPLICATE_SCOPE);
             }
         }
         List<UUID> examinerIds;
@@ -296,11 +297,11 @@ public class ExaminerAssignmentService {
             examinerIds = distinctIds(request.examinerPublicIds());
             int requestedCount = request.examinerPublicIds() == null ? 0 : request.examinerPublicIds().size();
             if (examinerIds.isEmpty() || examinerIds.size() != requestedCount) {
-                throw new InvalidExaminerAssignmentException("Random mode requires unique active Examiner IDs.");
+                throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.RANDOM_EXAMINERS_REQUIRED);
             }
         } else {
             if (request.examinerPublicIds() != null && !request.examinerPublicIds().isEmpty()) {
-                throw new InvalidExaminerAssignmentException("Manual mode takes its Examiner from each scope mapping.");
+                throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.MANUAL_EXAMINER_LIST_FORBIDDEN);
             }
             examinerIds = uniqueScopes.values().stream().map(AssignmentScopeRequest::examinerPublicId)
                     .distinct().toList();
@@ -319,7 +320,8 @@ public class ExaminerAssignmentService {
         List<ExaminerIdentityView> active = identityService.findActiveExaminers(tenantId, requestedIds);
         Set<UUID> activeIds = active.stream().map(ExaminerIdentityView::publicId).collect(Collectors.toSet());
         if (activeIds.size() != requestedIds.size() || !activeIds.containsAll(requestedIds)) {
-            throw new InvalidExaminerAssignmentException("Every selected Examiner must be active and belong to this tenant.");
+            throw new InvalidExaminerAssignmentException(
+                    ExaminerAssignmentConstants.EXAMINERS_MUST_BE_ACTIVE_AND_TENANT_SCOPED);
         }
     }
 
@@ -396,7 +398,7 @@ public class ExaminerAssignmentService {
 
     private UUID requireHost(CurrentUser caller) {
         if (caller == null || caller.tenantId() == null || !caller.hasRole("HOST_ADMIN")) {
-            throw new InvalidExaminerAssignmentException("A tenant HOST_ADMIN is required.");
+            throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.HOST_REQUIRED);
         }
         return caller.tenantId();
     }
@@ -405,7 +407,7 @@ public class ExaminerAssignmentService {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JacksonException exception) {
-            throw new IllegalStateException("Could not persist the assignment snapshot", exception);
+            throw new IllegalStateException(ExaminerAssignmentConstants.SNAPSHOT_WRITE_FAILED, exception);
         }
     }
 
@@ -413,7 +415,7 @@ public class ExaminerAssignmentService {
         try {
             return objectMapper.readValue(value, type);
         } catch (JacksonException exception) {
-            throw new IllegalStateException("Could not read the assignment scope snapshot", exception);
+            throw new IllegalStateException(ExaminerAssignmentConstants.SCOPE_SNAPSHOT_READ_FAILED, exception);
         }
     }
 
@@ -421,7 +423,7 @@ public class ExaminerAssignmentService {
         try {
             return objectMapper.readValue(value, type);
         } catch (JacksonException exception) {
-            throw new IllegalStateException("Could not read the assignment allocation snapshot", exception);
+            throw new IllegalStateException(ExaminerAssignmentConstants.ALLOCATION_SNAPSHOT_READ_FAILED, exception);
         }
     }
 

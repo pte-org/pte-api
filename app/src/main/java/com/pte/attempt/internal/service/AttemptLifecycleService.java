@@ -30,6 +30,7 @@ import com.pte.attempt.internal.repository.PinnedItemRepository;
 import com.pte.attempt.internal.service.cache.PinnedItemView;
 import com.pte.attempt.internal.service.cache.PinnedSnapshotCacheService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.session.SessionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -60,6 +61,7 @@ public class AttemptLifecycleService {
     private final SubmissionDecryptionService submissionDecryptionService;
     private final HeartbeatService heartbeatService;
     private final CapabilityNegotiationService capabilityNegotiationService;
+    private final SessionService sessionService;
 
     @Autowired
     public AttemptLifecycleService(ExamAttemptRepository attemptRepository, PinnedItemRepository pinnedItemRepository,
@@ -68,7 +70,8 @@ public class AttemptLifecycleService {
                           AnswerSubmitService answerSubmitService, AttemptMapper attemptMapper,
                           EncryptionKeyProvider encryptionKeyProvider,
                           SubmissionDecryptionService submissionDecryptionService, HeartbeatService heartbeatService,
-                          CapabilityNegotiationService capabilityNegotiationService) {
+                          CapabilityNegotiationService capabilityNegotiationService,
+                          SessionService sessionService) {
         this.attemptRepository = attemptRepository;
         this.pinnedItemRepository = pinnedItemRepository;
         this.snapshotPinService = snapshotPinService;
@@ -80,6 +83,20 @@ public class AttemptLifecycleService {
         this.submissionDecryptionService = submissionDecryptionService;
         this.heartbeatService = heartbeatService;
         this.capabilityNegotiationService = capabilityNegotiationService;
+        this.sessionService = sessionService;
+    }
+
+    /** Compatibility constructor for tests and integrations predating the explicit session cutoff lock. */
+    public AttemptLifecycleService(ExamAttemptRepository attemptRepository, PinnedItemRepository pinnedItemRepository,
+                          SnapshotPinService snapshotPinService,
+                          PinnedSnapshotCacheService cacheService, TimerService timerService,
+                          AnswerSubmitService answerSubmitService, AttemptMapper attemptMapper,
+                          EncryptionKeyProvider encryptionKeyProvider,
+                          SubmissionDecryptionService submissionDecryptionService, HeartbeatService heartbeatService,
+                          CapabilityNegotiationService capabilityNegotiationService) {
+        this(attemptRepository, pinnedItemRepository, snapshotPinService, cacheService, timerService,
+                answerSubmitService, attemptMapper, encryptionKeyProvider, submissionDecryptionService,
+                heartbeatService, capabilityNegotiationService, null);
     }
 
     /** Compatibility constructor for focused lifecycle tests predating Phase 4. */
@@ -91,7 +108,7 @@ public class AttemptLifecycleService {
                           SubmissionDecryptionService submissionDecryptionService, HeartbeatService heartbeatService) {
         this(attemptRepository, pinnedItemRepository, snapshotPinService, cacheService, timerService,
                 answerSubmitService, attemptMapper, encryptionKeyProvider, submissionDecryptionService,
-                heartbeatService, null);
+                heartbeatService, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -110,6 +127,7 @@ public class AttemptLifecycleService {
         ExamAttempt attempt = attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, caller.userId())
                 .orElseThrow(AttemptNotFoundException::new);
         requireTenantOwnership(attempt, caller);
+        lockOpenSession(attempt);
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
             throw new AttemptAlreadyCompleteException();
         }
@@ -118,6 +136,9 @@ public class AttemptLifecycleService {
 
     @Transactional
     public AttemptTaskResponse startAttempt(StartAttemptRequest request, CurrentUser caller) {
+        if (sessionService != null) {
+            sessionService.lockOpenForAttemptOperation(request.sessionPublicId(), caller.tenantId());
+        }
         UUID studentPublicId = caller.userId();
         var existing = attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicId(request.sessionPublicId(),
                 studentPublicId);
@@ -138,6 +159,7 @@ public class AttemptLifecycleService {
     @Transactional
     public AttemptTaskResponse getNextTask(UUID attemptPublicId, CurrentUser caller) {
         ExamAttempt attempt = findOwned(attemptPublicId, caller);
+        lockOpenSession(attempt);
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
             return attemptMapper.toCompletedResponse(attempt);
         }
@@ -148,6 +170,7 @@ public class AttemptLifecycleService {
     @Transactional
     public AttemptTaskResponse submitAnswer(UUID attemptPublicId, SubmitAnswerRequest request, CurrentUser caller) {
         ExamAttempt attempt = findOwned(attemptPublicId, caller);
+        lockOpenSession(attempt);
         requireIntegrityLevel(attempt, "STANDARD");
         return processAnswer(attempt, request.pinnedItemPublicId(), request.payload(), caller);
     }
@@ -163,6 +186,7 @@ public class AttemptLifecycleService {
     public AttemptTaskResponse submitEncryptedAnswer(UUID attemptPublicId, EncryptedSubmissionRequest request,
                                                       CurrentUser caller) {
         ExamAttempt attempt = findOwned(attemptPublicId, caller);
+        lockOpenSession(attempt);
         requireIntegrityLevel(attempt, "STRICT");
         String payload = submissionDecryptionService.decrypt(request, encryptionKeyProvider.getPrivateKey());
         return processAnswer(attempt, request.pinnedItemPublicId(), payload, caller);
@@ -202,6 +226,7 @@ public class AttemptLifecycleService {
     @Transactional
     public AttemptTaskResponse submitAttempt(UUID attemptPublicId, CurrentUser caller) {
         ExamAttempt attempt = findOwned(attemptPublicId, caller);
+        lockOpenSession(attempt);
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
             throw new AttemptAlreadyCompleteException();
         }
@@ -228,6 +253,7 @@ public class AttemptLifecycleService {
     public AudioPlayResponse playAudio(UUID attemptPublicId, UUID pinnedItemPublicId, String playRequestId,
                                        CurrentUser caller) {
         ExamAttempt attempt = findOwned(attemptPublicId, caller);
+        lockOpenSession(attempt);
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
             throw new AttemptAlreadyCompleteException();
         }
@@ -422,6 +448,12 @@ public class AttemptLifecycleService {
         ExamAttempt attempt = findOwned(publicId, caller.userId());
         requireTenantOwnership(attempt, caller);
         return attempt;
+    }
+
+    private void lockOpenSession(ExamAttempt attempt) {
+        if (sessionService != null) {
+            sessionService.lockOpenForAttemptOperation(attempt.getSessionPublicId(), attempt.getTenantId());
+        }
     }
 
     private void requireTenantOwnership(ExamAttempt attempt, CurrentUser caller) {

@@ -5,7 +5,6 @@ import com.pte.assessment.dto.response.ExaminerQuestionPromptView;
 import com.pte.identity.IdentityService;
 import com.pte.identity.dto.response.ExaminerIdentityView;
 import com.pte.media.MediaService;
-import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.scoring.domain.ExaminerAnswerScore;
 import com.pte.scoring.domain.ExaminerAttemptAssignment;
 import com.pte.scoring.domain.ScoringAnswer;
@@ -46,6 +45,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,6 +55,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -162,9 +163,13 @@ class ExaminerScoringServiceTest {
                 .thenReturn(Map.of(answer.getPinnedItemPublicId(), prompt));
         when(answerPayloadDecoder.decode(answer)).thenReturn(new DecodedAnswerPayload(
                 AnswerPayloadKind.AUDIO, null, answerMediaId, null, null, null, null));
-        when(mediaService.presignGet(any(UUID.class), anyLong(), eq(examiner.tenantId())))
-                .thenAnswer(invocation -> new PresignedDownloadResponse(
-                        "https://media.test/" + invocation.getArgument(0), 60, null));
+        when(mediaService.presignGetAll(any(), anyLong(), eq(examiner.tenantId())))
+                .thenReturn(Map.of(answerMediaId,
+                        new com.pte.media.dto.response.PresignedDownloadResponse(
+                                "https://media.test/" + answerMediaId, 60, null),
+                        promptMediaId,
+                        new com.pte.media.dto.response.PresignedDownloadResponse(
+                                "https://media.test/" + promptMediaId, 60, null)));
 
         ExaminerAttemptDetailResponse detail = service.getAttempt(sessionId, attemptId, examiner);
 
@@ -182,12 +187,52 @@ class ExaminerScoringServiceTest {
         authorizedReadOrder.verify(assessmentService)
                 .getExaminerPrompts(List.of(answer.getPinnedItemPublicId()), examiner.tenantId());
         authorizedReadOrder.verify(answerPayloadDecoder).decode(answer);
-        authorizedReadOrder.verify(mediaService).presignGet(answerMediaId,
-                com.pte.scoring.internal.constant.ExaminerScoringConstants.MEDIA_URL_TTL_SECONDS,
-                examiner.tenantId());
-        authorizedReadOrder.verify(mediaService).presignGet(promptMediaId,
-                com.pte.scoring.internal.constant.ExaminerScoringConstants.MEDIA_URL_TTL_SECONDS,
-                examiner.tenantId());
+        authorizedReadOrder.verify(mediaService).presignGetAll(eq(Set.of(answerMediaId, promptMediaId)),
+                eq(com.pte.scoring.internal.constant.ExaminerScoringConstants.MEDIA_URL_TTL_SECONDS),
+                eq(examiner.tenantId()));
+    }
+
+    @Test
+    void loadsSeveralAnswersThroughOneBulkPromptCallWithDuplicatePinnedItemsDeduplicated() {
+        CurrentUser examiner = examiner();
+        UUID sessionId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        UUID firstItemId = UUID.randomUUID();
+        UUID secondItemId = UUID.randomUUID();
+        ScoringAnswer firstAnswer = answer(examiner.tenantId(), sessionId, attemptId, UUID.randomUUID());
+        firstAnswer.setPinnedItemPublicId(firstItemId);
+        ScoringAnswer secondAnswer = answer(examiner.tenantId(), sessionId, attemptId, UUID.randomUUID());
+        secondAnswer.setPinnedItemPublicId(secondItemId);
+        ScoringAnswer repeatedItemAnswer = answer(examiner.tenantId(), sessionId, attemptId, UUID.randomUUID());
+        repeatedItemAnswer.setPinnedItemPublicId(firstItemId);
+        givenActiveExaminer(examiner);
+        when(workQueueRepository.findOwnedAttempt(examiner.tenantId(), sessionId, attemptId, examiner.userId()))
+                .thenReturn(Optional.of(new ExaminerAttemptAssignment(UUID.randomUUID(), examiner.tenantId(),
+                        sessionId, attemptId, examiner.userId(), 3, UUID.randomUUID(), Instant.now())));
+        when(scoringAnswerRepository.findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(sessionId,
+                examiner.tenantId(), List.of(attemptId))).thenReturn(List.of(firstAnswer, secondAnswer, repeatedItemAnswer));
+        when(eligibilityQueryService.isAiEligible(firstAnswer)).thenReturn(true);
+        when(eligibilityQueryService.isAiEligible(secondAnswer)).thenReturn(true);
+        when(eligibilityQueryService.isAiEligible(repeatedItemAnswer)).thenReturn(true);
+        when(examinerAnswerScoreRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicId(
+                examiner.tenantId(), sessionId, attemptId)).thenReturn(List.of());
+        ExaminerQuestionPromptView firstPrompt = new ExaminerQuestionPromptView(1, "SPEAKING", "READ_ALOUD",
+                "Prompt one", "First prompt text", null, null, null, null, List.of());
+        ExaminerQuestionPromptView secondPrompt = new ExaminerQuestionPromptView(2, "WRITING", "WRITE_ESSAY",
+                "Prompt two", "Second prompt text", null, null, null, null, List.of());
+        when(assessmentService.getExaminerPrompts(List.of(firstItemId, secondItemId), examiner.tenantId()))
+                .thenReturn(Map.of(firstItemId, firstPrompt, secondItemId, secondPrompt));
+        when(answerPayloadDecoder.decode(firstAnswer)).thenReturn(textAnswer("first response"));
+        when(answerPayloadDecoder.decode(secondAnswer)).thenReturn(textAnswer("second response"));
+        when(answerPayloadDecoder.decode(repeatedItemAnswer)).thenReturn(textAnswer("repeated-item response"));
+
+        ExaminerAttemptDetailResponse detail = service.getAttempt(sessionId, attemptId, examiner);
+
+        assertThat(detail.answers()).hasSize(3);
+        assertThat(detail.answers()).extracting(answer -> answer.prompt().title())
+                .containsExactly("Prompt one", "Prompt one", "Prompt two");
+        verify(assessmentService, times(1))
+                .getExaminerPrompts(List.of(firstItemId, secondItemId), examiner.tenantId());
     }
 
     @Test
@@ -214,9 +259,9 @@ class ExaminerScoringServiceTest {
                 .thenReturn(Map.of(answer.getPinnedItemPublicId(), prompt));
         when(answerPayloadDecoder.decode(answer)).thenReturn(new DecodedAnswerPayload(
                 AnswerPayloadKind.AUDIO, null, answerMediaId, null, null, null, null));
-        when(mediaService.presignGet(answerMediaId,
-                com.pte.scoring.internal.constant.ExaminerScoringConstants.MEDIA_URL_TTL_SECONDS,
-                examiner.tenantId())).thenThrow(new IllegalStateException("temporary signing failure"));
+        when(mediaService.presignGetAll(eq(Set.of(answerMediaId)),
+                eq(com.pte.scoring.internal.constant.ExaminerScoringConstants.MEDIA_URL_TTL_SECONDS),
+                eq(examiner.tenantId()))).thenThrow(new IllegalStateException("temporary signing failure"));
 
         assertThatThrownBy(() -> service.getAttempt(sessionId, attemptId, examiner))
                 .isInstanceOf(IllegalStateException.class)
@@ -440,6 +485,10 @@ class ExaminerScoringServiceTest {
         answer.setTaskType("READ_ALOUD");
         answer.setPayload("student answer");
         return answer;
+    }
+
+    private DecodedAnswerPayload textAnswer(String text) {
+        return new DecodedAnswerPayload(AnswerPayloadKind.TEXT, text, null, null, null, null, null);
     }
 
     private record SubmissionFixture(ScoringAnswer answer, ExaminerAnswerScore existingScore) {

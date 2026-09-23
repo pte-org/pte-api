@@ -3,30 +3,20 @@ package com.pte.reporting.internal.service;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.reporting.domain.AttemptReport;
-import com.pte.reporting.internal.exception.ReportNotFoundException;
 import com.pte.reporting.internal.dto.response.ReportResponse;
+import com.pte.reporting.internal.exception.ReportNotFoundException;
 import com.pte.reporting.internal.mapper.ReportMapper;
 import com.pte.reporting.internal.repository.AttemptReportRepository;
+import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
-import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
-/**
- * Visibility rule: a STUDENT sees a report only if it's {@code published}
- * AND they own the attempt; a host sees any time, scoped to their own
- * tenant (review-before-publish). Both denial paths throw {@link
- * ReportNotFoundException} (404) — never a 403 that would leak whether the
- * attempt exists.
- *
- * <p>{@link AttemptReport} rows are created lazily here on first access, not
- * eagerly at attempt-submit time — attempt has no outbound dependency on
- * reporting (dependency order: attempt ──> reporting, not the reverse), so
- * reporting pulls from {@code attempt}'s public API instead of attempt
- * pushing an event.
- */
+/** Students read immutable published snapshots; Hosts may still inspect live pre-publication scores. */
 @Service
 public class ReportService {
 
@@ -35,39 +25,62 @@ public class ReportService {
     private final AttemptReportRepository attemptReportRepository;
     private final ScoreAggregationService scoreAggregationService;
     private final AttemptService attemptService;
+    private final ReportSnapshotCodec snapshotCodec;
+    private final SessionService sessionService;
 
+    @Autowired
     public ReportService(AttemptReportRepository attemptReportRepository,
-                         ScoreAggregationService scoreAggregationService, AttemptService attemptService) {
+            ScoreAggregationService scoreAggregationService,
+            AttemptService attemptService,
+            ReportSnapshotCodec snapshotCodec,
+            SessionService sessionService) {
         this.attemptReportRepository = attemptReportRepository;
         this.scoreAggregationService = scoreAggregationService;
         this.attemptService = attemptService;
+        this.snapshotCodec = snapshotCodec;
+        this.sessionService = sessionService;
     }
 
     @Transactional
     public ReportResponse getReport(UUID attemptPublicId, CurrentUser caller) {
-        AttemptReport report = attemptReportRepository.findByAttemptPublicId(attemptPublicId)
-                .orElseGet(() -> createFromAttempt(attemptPublicId));
+        AttemptReport report = attemptReportRepository.findByAttemptPublicId(attemptPublicId).orElse(null);
+        if (report == null) {
+            AttemptSummaryView attempt = attemptService.getSubmittedAttempt(attemptPublicId);
+            if (!canViewAttempt(attempt, caller)) {
+                throw new ReportNotFoundException();
+            }
+            sessionService.lockForScoreReviewMutation(attempt.sessionPublicId(), attempt.tenantId());
+            report = attemptReportRepository.findByAttemptPublicId(attemptPublicId)
+                    .orElseGet(() -> attemptReportRepository.save(newReport(attempt)));
+        }
         if (!canView(report, caller)) {
             throw new ReportNotFoundException();
         }
-        AttemptScoreSummary summary = scoreAggregationService.aggregate(attemptPublicId, report.getTenantId());
-        return ReportMapper.toResponse(report, summary);
+        if (report.isPublished()) {
+            if (report.getReportSnapshotJson() == null) {
+                throw new ReportNotFoundException();
+            }
+            return ReportMapper.toResponse(report, snapshotCodec.decode(report.getReportSnapshotJson()).scoreSummary());
+        }
+        if (caller.hasRole(ROLE_STUDENT)) {
+            throw new ReportNotFoundException();
+        }
+        AttemptScoreSummary liveSummary = scoreAggregationService.aggregate(attemptPublicId, report.getTenantId());
+        return ReportMapper.toResponse(report, liveSummary);
     }
 
-    /**
-     * Propagates attempt's own not-found/not-submitted exception unmodified
-     * (same 404 shape) when the attempt doesn't exist yet — a report simply
-     * can't exist before the attempt does.
-     */
-    private AttemptReport createFromAttempt(UUID attemptPublicId) {
-        AttemptSummaryView summary = attemptService.getSubmittedAttempt(attemptPublicId);
-        AttemptReport report = newReport(summary);
-        try {
-            return attemptReportRepository.save(report);
-        } catch (DataIntegrityViolationException ex) {
-            // Concurrent first-access race — the unique constraint on attemptPublicId already dedups it.
-            return attemptReportRepository.findByAttemptPublicId(attemptPublicId).orElseThrow(ReportNotFoundException::new);
+    @Transactional(readOnly = true)
+    public List<ReportResponse> getMyPublishedReports(CurrentUser caller) {
+        if (caller == null || !caller.hasRole(ROLE_STUDENT) || caller.tenantId() == null) {
+            return List.of();
         }
+        return attemptReportRepository
+                .findByStudentPublicIdAndTenantIdAndPublishedTrueAndReportSnapshotJsonIsNotNullOrderByPublishedAtDesc(
+                        caller.userId(), caller.tenantId())
+                .stream()
+                .map(report -> ReportMapper.toResponse(report,
+                        snapshotCodec.decode(report.getReportSnapshotJson()).scoreSummary()))
+                .toList();
     }
 
     static AttemptReport newReport(AttemptSummaryView summary) {
@@ -81,9 +94,18 @@ public class ReportService {
     }
 
     private boolean canView(AttemptReport report, CurrentUser caller) {
+        if (caller == null) {
+            return false;
+        }
         if (caller.hasRole(ROLE_STUDENT)) {
-            return report.isPublished() && report.getStudentPublicId().equals(caller.userId());
+            return report.isPublished() && report.getStudentPublicId().equals(caller.userId())
+                    && report.getTenantId().equals(caller.tenantId());
         }
         return caller.isPlatformUser() || report.getTenantId().equals(caller.tenantId());
+    }
+
+    private boolean canViewAttempt(AttemptSummaryView attempt, CurrentUser caller) {
+        return caller != null && !caller.hasRole(ROLE_STUDENT)
+                && (caller.isPlatformUser() || attempt.tenantId().equals(caller.tenantId()));
     }
 }

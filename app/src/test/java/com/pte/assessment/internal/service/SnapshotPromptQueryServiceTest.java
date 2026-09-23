@@ -18,6 +18,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -71,6 +72,25 @@ class SnapshotPromptQueryServiceTest {
     }
 
     @Test
+    void deduplicatesItemIdsAndFetchesAllPromptsInOneTenantScopedRepositoryCall() {
+        UUID firstItemId = UUID.randomUUID();
+        UUID secondItemId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        SnapshotItem firstItem = promptItem(firstItemId, 1, "READ_ALOUD");
+        SnapshotItem secondItem = promptItem(secondItemId, 2, "WRITE_ESSAY");
+        when(snapshotItemRepository.findAllForTenant(List.of(firstItemId, secondItemId), tenantId))
+                .thenReturn(List.of(firstItem, secondItem));
+
+        Map<UUID, ExaminerQuestionPromptView> prompts = service.findForExaminer(
+                List.of(firstItemId, firstItemId, secondItemId, firstItemId), tenantId);
+
+        assertThat(prompts).containsOnlyKeys(firstItemId, secondItemId);
+        assertThat(prompts.get(firstItemId).taskType()).isEqualTo("READ_ALOUD");
+        assertThat(prompts.get(secondItemId).taskType()).isEqualTo("WRITE_ESSAY");
+        verify(snapshotItemRepository, times(1)).findAllForTenant(List.of(firstItemId, secondItemId), tenantId);
+    }
+
+    @Test
     void nullItemOrTenantDoesNotQueryAcrossTenantBoundary() {
         assertThat(service.findForExaminer(null, UUID.randomUUID())).isEmpty();
         assertThat(service.findForExaminer(List.of(UUID.randomUUID()), null)).isEmpty();
@@ -99,5 +119,16 @@ class SnapshotPromptQueryServiceTest {
     private void verifyNoPromptLookup() {
         verify(snapshotItemRepository, never()).findAllForTenant(org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any());
+    }
+
+    private SnapshotItem promptItem(UUID itemId, int orderIndex, String taskType) {
+        SnapshotItem item = new SnapshotItem();
+        item.setPublicId(itemId);
+        item.setTaskTypeKey(taskType);
+        item.setSection(PteSection.SPEAKING);
+        item.setOrderIndex(orderIndex);
+        item.setTitle("Prompt " + orderIndex);
+        item.setPromptText("Prompt text " + orderIndex);
+        return item;
     }
 }

@@ -22,7 +22,13 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -147,7 +153,43 @@ public class CloudinaryMediaService {
     @Transactional(readOnly = true)
     public PresignedDownloadResponse resolveForTrustedCaller(UUID mediaPublicId, long requestedTtlSeconds,
             UUID tenantId) {
-        MediaObject media = repository.findByPublicId(mediaPublicId).orElseThrow(MediaNotFoundException::new);
+        if (mediaPublicId == null) {
+            throw new MediaNotFoundException();
+        }
+        return resolveForTrustedCallers(List.of(mediaPublicId), requestedTtlSeconds, tenantId).get(mediaPublicId);
+    }
+
+    /** Resolves an authorized caller's media set with one repository query. */
+    @Transactional(readOnly = true)
+    public Map<UUID, PresignedDownloadResponse> resolveForTrustedCallers(
+            Collection<UUID> mediaPublicIds, long requestedTtlSeconds, UUID tenantId) {
+        if (mediaPublicIds == null || mediaPublicIds.isEmpty()) {
+            return Map.of();
+        }
+        if (tenantId == null) {
+            throw new MediaNotFoundException();
+        }
+        List<UUID> requestedIds = mediaPublicIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (requestedIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<UUID, MediaObject> mediaByPublicId = new HashMap<>();
+        repository.findAllForTrustedTenant(requestedIds, tenantId)
+                .forEach(media -> mediaByPublicId.put(media.getPublicId(), media));
+        Map<UUID, PresignedDownloadResponse> resolved = new HashMap<>();
+        for (UUID mediaPublicId : requestedIds) {
+            MediaObject media = mediaByPublicId.get(mediaPublicId);
+            if (media == null) {
+                throw new MediaNotFoundException();
+            }
+            resolved.put(mediaPublicId, toTrustedDownloadResponse(media, requestedTtlSeconds, tenantId));
+        }
+        return Map.copyOf(resolved);
+    }
+
+    private PresignedDownloadResponse toTrustedDownloadResponse(
+            MediaObject media, long requestedTtlSeconds, UUID tenantId) {
         if (media.getCloudinaryPublicId() == null) {
             throw new MediaNotFoundException();
         }

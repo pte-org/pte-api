@@ -40,15 +40,15 @@ public class ScoringSessionState extends BaseEntity {
     private long lockVersion;
 
     public ScoringSessionState(UUID tenantId, UUID sessionPublicId) {
-        this.tenantId = Objects.requireNonNull(tenantId, "tenantId is required");
-        this.sessionPublicId = Objects.requireNonNull(sessionPublicId, "sessionPublicId is required");
+        this.tenantId = Objects.requireNonNull(tenantId, ScoringDomainConstants.SCORING_TENANT_REQUIRED);
+        this.sessionPublicId = Objects.requireNonNull(sessionPublicId, ScoringDomainConstants.SCORING_SESSION_REQUIRED);
     }
 
     public void lockForPublication(UUID publicationPublicId, Instant lockedAt) {
-        Objects.requireNonNull(publicationPublicId, "publicationPublicId is required");
-        Objects.requireNonNull(lockedAt, "lockedAt is required");
+        Objects.requireNonNull(publicationPublicId, ScoringDomainConstants.PUBLICATION_ID_REQUIRED);
+        Objects.requireNonNull(lockedAt, ScoringDomainConstants.PUBLICATION_LOCK_TIME_REQUIRED);
         if (this.publicationPublicId != null && !this.publicationPublicId.equals(publicationPublicId)) {
-            throw new IllegalStateException("Session scoring is already locked by another publication");
+            throw new IllegalStateException(ScoringDomainConstants.SCORING_PUBLICATION_ALREADY_LOCKED);
         }
         if (this.publicationPublicId != null) {
             return;
@@ -59,6 +59,6 @@ public class ScoringSessionState extends BaseEntity {
 
     @PreRemove
     private void preventDelete() {
-        throw new IllegalStateException("Scoring publication locks cannot be removed");
+        throw new IllegalStateException(ScoringDomainConstants.SCORING_PUBLICATION_LOCK_IMMUTABLE);
     }
 }

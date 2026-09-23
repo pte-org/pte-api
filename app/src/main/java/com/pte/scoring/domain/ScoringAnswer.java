@@ -140,7 +140,7 @@ public class ScoringAnswer extends BaseEntity {
 
     public void markScored(int rawScore) {
         if (rawScore < 0 || rawScore > 100) {
-            throw new IllegalArgumentException("Raw score must be between 0 and 100");
+            throw new IllegalArgumentException(ScoringDomainConstants.RAW_SCORE_RANGE_INVALID);
         }
         this.status = ScoringAnswerStatus.SCORED;
         this.rawScore = rawScore;
@@ -150,7 +150,7 @@ public class ScoringAnswer extends BaseEntity {
     public void markAiScored(int rawScore, AiProviderCategory providerCategory, String provider,
             String model, String providerVersion) {
         if (providerCategory == null || provider == null || provider.isBlank()) {
-            throw new IllegalArgumentException("AI score provenance must identify its provider category and provider");
+            throw new IllegalArgumentException(ScoringDomainConstants.AI_SCORE_PROVENANCE_REQUIRED);
         }
         markScored(rawScore);
         this.aiProviderCategory = providerCategory;
@@ -162,13 +162,13 @@ public class ScoringAnswer extends BaseEntity {
     public void selectScoreSource(ScoreSource source, UUID actorPublicId, Instant selectedAt,
             ExaminerAnswerScore submittedExaminerScore) {
         if (source == null || actorPublicId == null || selectedAt == null) {
-            throw new IllegalArgumentException("Score source selection requires source, actor, and timestamp");
+            throw new IllegalArgumentException(ScoringDomainConstants.SCORE_SOURCE_SELECTION_FIELDS_REQUIRED);
         }
         if (source == ScoreSource.AI && (rawScore == null || aiProviderCategory != AiProviderCategory.REAL)) {
-            throw new IllegalStateException("Only a real AI score with provenance can be selected");
+            throw new IllegalStateException(ScoringDomainConstants.REAL_AI_SCORE_REQUIRED_FOR_SELECTION);
         }
         if (source == ScoreSource.EXAMINER && !isSubmittedExaminerScoreForThisAnswer(submittedExaminerScore)) {
-            throw new IllegalStateException("An Examiner score for this answer must be submitted before selection");
+            throw new IllegalStateException(ScoringDomainConstants.SUBMITTED_EXAMINER_SCORE_REQUIRED_FOR_SELECTION);
         }
         this.selectedScoreSource = source;
         this.selectedScoreSourceByPublicId = actorPublicId;

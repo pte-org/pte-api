@@ -67,21 +67,26 @@ public class ExaminerAssignmentBatch extends BaseEntity {
     public ExaminerAssignmentBatch(UUID tenantId, UUID sessionPublicId, UUID createdByPublicId,
             AssignmentBatchMode mode, String scopeSnapshotJson, String assignmentSnapshotJson,
             UUID randomSeed, Instant previewExpiresAt) {
-        this.tenantId = Objects.requireNonNull(tenantId, "tenantId is required");
-        this.sessionPublicId = Objects.requireNonNull(sessionPublicId, "sessionPublicId is required");
-        this.createdByPublicId = Objects.requireNonNull(createdByPublicId, "createdByPublicId is required");
-        this.mode = Objects.requireNonNull(mode, "mode is required");
-        this.scopeSnapshotJson = Objects.requireNonNull(scopeSnapshotJson, "scope snapshot is required");
-        this.assignmentSnapshotJson = Objects.requireNonNull(assignmentSnapshotJson, "assignment snapshot is required");
+        this.tenantId = Objects.requireNonNull(tenantId, ScoringDomainConstants.ASSIGNMENT_BATCH_TENANT_REQUIRED);
+        this.sessionPublicId = Objects.requireNonNull(sessionPublicId,
+                ScoringDomainConstants.ASSIGNMENT_BATCH_SESSION_REQUIRED);
+        this.createdByPublicId = Objects.requireNonNull(createdByPublicId,
+                ScoringDomainConstants.ASSIGNMENT_BATCH_CREATOR_REQUIRED);
+        this.mode = Objects.requireNonNull(mode, ScoringDomainConstants.ASSIGNMENT_BATCH_MODE_REQUIRED);
+        this.scopeSnapshotJson = Objects.requireNonNull(scopeSnapshotJson,
+                ScoringDomainConstants.ASSIGNMENT_SCOPE_SNAPSHOT_REQUIRED);
+        this.assignmentSnapshotJson = Objects.requireNonNull(assignmentSnapshotJson,
+                ScoringDomainConstants.ASSIGNMENT_ALLOCATION_SNAPSHOT_REQUIRED);
         this.randomSeed = randomSeed;
-        this.previewExpiresAt = Objects.requireNonNull(previewExpiresAt, "preview expiry is required");
+        this.previewExpiresAt = Objects.requireNonNull(previewExpiresAt,
+                ScoringDomainConstants.ASSIGNMENT_PREVIEW_EXPIRY_REQUIRED);
         this.status = AssignmentBatchStatus.PREVIEWED;
     }
 
     public boolean commit(Instant committedAt) {
-        Objects.requireNonNull(committedAt, "commit timestamp is required");
+        Objects.requireNonNull(committedAt, ScoringDomainConstants.ASSIGNMENT_COMMIT_TIME_REQUIRED);
         if (status != AssignmentBatchStatus.PREVIEWED) {
-            throw new IllegalStateException("Only a previewed assignment batch can be committed");
+            throw new IllegalStateException(ScoringDomainConstants.ASSIGNMENT_BATCH_PREVIEW_REQUIRED);
         }
         if (!committedAt.isBefore(previewExpiresAt)) {
             status = AssignmentBatchStatus.EXPIRED;

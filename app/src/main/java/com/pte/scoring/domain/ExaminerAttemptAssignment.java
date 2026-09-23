@@ -59,26 +59,29 @@ public class ExaminerAttemptAssignment extends BaseEntity {
     public ExaminerAttemptAssignment(UUID batchPublicId, UUID tenantId, UUID sessionPublicId,
             UUID attemptPublicId, UUID examinerPublicId, int eligibleAnswerCount, UUID assignedByPublicId,
             Instant assignedAt) {
-        this.batchPublicId = Objects.requireNonNull(batchPublicId, "batchPublicId is required");
-        this.tenantId = Objects.requireNonNull(tenantId, "tenantId is required");
-        this.sessionPublicId = Objects.requireNonNull(sessionPublicId, "sessionPublicId is required");
-        this.attemptPublicId = Objects.requireNonNull(attemptPublicId, "attemptPublicId is required");
-        this.examinerPublicId = Objects.requireNonNull(examinerPublicId, "examinerPublicId is required");
+        this.batchPublicId = Objects.requireNonNull(batchPublicId, ScoringDomainConstants.ASSIGNMENT_REFERENCE_REQUIRED);
+        this.tenantId = Objects.requireNonNull(tenantId, ScoringDomainConstants.ASSIGNMENT_BATCH_TENANT_REQUIRED);
+        this.sessionPublicId = Objects.requireNonNull(sessionPublicId,
+                ScoringDomainConstants.ASSIGNMENT_BATCH_SESSION_REQUIRED);
+        this.attemptPublicId = Objects.requireNonNull(attemptPublicId, ScoringDomainConstants.ASSIGNMENT_ATTEMPT_REQUIRED);
+        this.examinerPublicId = Objects.requireNonNull(examinerPublicId,
+                ScoringDomainConstants.ASSIGNMENT_EXAMINER_REQUIRED);
         if (eligibleAnswerCount < 0) {
-            throw new IllegalArgumentException("eligibleAnswerCount cannot be negative");
+            throw new IllegalArgumentException(ScoringDomainConstants.ASSIGNMENT_ANSWER_COUNT_NEGATIVE);
         }
         this.eligibleAnswerCount = eligibleAnswerCount;
-        this.assignedByPublicId = Objects.requireNonNull(assignedByPublicId, "assignedByPublicId is required");
-        this.assignedAt = Objects.requireNonNull(assignedAt, "assignedAt is required");
+        this.assignedByPublicId = Objects.requireNonNull(assignedByPublicId,
+                ScoringDomainConstants.ASSIGNMENT_ACTOR_REQUIRED);
+        this.assignedAt = Objects.requireNonNull(assignedAt, ScoringDomainConstants.ASSIGNMENT_TIME_REQUIRED);
     }
 
     @PreUpdate
     private void preventUpdate() {
-        throw new IllegalStateException("Committed Examiner assignments are immutable");
+        throw new IllegalStateException(ScoringDomainConstants.COMMITTED_ASSIGNMENT_IMMUTABLE);
     }
 
     @PreRemove
     private void preventDelete() {
-        throw new IllegalStateException("Committed Examiner assignments are immutable");
+        throw new IllegalStateException(ScoringDomainConstants.COMMITTED_ASSIGNMENT_IMMUTABLE);
     }
 }

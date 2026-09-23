@@ -23,6 +23,8 @@ import com.pte.session.internal.exception.PolicyLockedException;
 import com.pte.session.internal.exception.SessionSubscriptionCapacityException;
 import com.pte.session.internal.exception.SessionSubscriptionNotFoundException;
 import com.pte.session.internal.exception.SessionTimeConflictException;
+import com.pte.session.internal.exception.NotEntitledException;
+import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
 import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionException;
 import com.pte.session.internal.mapper.SessionMapper;
 import com.pte.session.internal.repository.EnrollmentRepository;
@@ -468,6 +470,38 @@ class SessionLifecycleServiceTest {
         assertThatThrownBy(() -> SessionMapper.toPolicy(incomplete))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("incomplete");
+    }
+
+    @Test
+    void closeLocksOwnedSessionRowBeforeEstablishingAttemptCutoff() {
+        ExamSession session = existingSession(SessionStatus.OPEN, 100);
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+
+        service.close(session.getPublicId(), hostAdmin);
+
+        assertThat(session.getStatus()).isEqualTo(SessionStatus.CLOSED);
+        verify(sessionRepository).findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId);
+    }
+
+    @Test
+    void attemptMutationLockRejectsClosedSession() {
+        ExamSession session = existingSession(SessionStatus.CLOSED, 100);
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> service.lockOpenForAttemptOperation(session.getPublicId(), tenantId))
+                .isInstanceOf(NotEntitledException.class);
+    }
+
+    @Test
+    void reportPublicationLockRequiresClosedSession() {
+        ExamSession session = existingSession(SessionStatus.OPEN, 100);
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> service.lockClosedForReportPublication(session.getPublicId(), tenantId))
+                .isInstanceOf(SessionNotClosedForReportPublicationException.class);
     }
 
     // ------------------------------------------------------------------

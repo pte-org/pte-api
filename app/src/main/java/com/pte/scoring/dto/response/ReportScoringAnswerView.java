@@ -8,9 +8,17 @@ public record ReportScoringAnswerView(
         UUID attemptPublicId,
         UUID scoreTemplatePublicId,
         String taskType,
+        String section,
         String scoringMethod,
         Integer aiRawScore,
         String aiProviderCategory,
+        String aiProvider,
+        String aiModel,
+        String aiProviderVersion,
         Integer examinerScore,
-        String selectedScoreSource) {
+        String selectedScoreSource,
+        Integer selectedScore,
+        boolean publishable,
+        String blockingReason,
+        long lockVersion) {
 }

@@ -5,6 +5,7 @@ import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.media.MediaService;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.internal.dto.response.ExamPreviewResponse;
+import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.exception.GenerationNotReadyException;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
@@ -102,7 +103,7 @@ public class SessionExamPreviewService {
             }
             return List.copyOf(options);
         } catch (JacksonException exception) {
-            throw new IllegalStateException("Published exam options could not be read", exception);
+            throw new IllegalStateException(SessionConstants.PUBLISHED_EXAM_OPTIONS_READ_FAILED, exception);
         }
     }
 }

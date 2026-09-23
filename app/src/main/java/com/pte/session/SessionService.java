@@ -54,6 +54,29 @@ public class SessionService {
         sessionLifecycleService.lockForExaminerAssignment(sessionPublicId, tenantId);
     }
 
+    /** Serializes Host source selection with report publication for a session. */
+    @Transactional
+    public void lockForScoreReviewMutation(UUID sessionPublicId, UUID tenantId) {
+        sessionLifecycleService.lockForScoreReviewMutation(sessionPublicId, tenantId);
+    }
+
+    /** Locks the session row and rejects student task operations after the cutoff. */
+    @Transactional
+    public void lockOpenForAttemptOperation(UUID sessionPublicId, UUID tenantId) {
+        sessionLifecycleService.lockOpenForAttemptOperation(sessionPublicId, tenantId);
+    }
+
+    /** Holds the session row lock while Reporting validates CLOSED and publishes the cohort. */
+    @Transactional
+    public void lockClosedForReportPublication(UUID sessionPublicId, UUID tenantId) {
+        sessionLifecycleService.lockClosedForReportPublication(sessionPublicId, tenantId);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isSessionClosed(UUID sessionPublicId, UUID tenantId) {
+        return sessionLifecycleService.isSessionClosed(sessionPublicId, tenantId);
+    }
+
     /** Cancels scheduled sessions for a revoked subscription; open/closed sessions are untouched. */
     public void cancelScheduledSessionsBySubscription(UUID subscriptionId) {
         sessionLifecycleService.cancelScheduledSessionsBySubscription(subscriptionId);
