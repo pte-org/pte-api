@@ -114,6 +114,39 @@ class UserServiceTest {
     }
 
     @Test
+    void suspendLocksTheUserAggregateBeforeChangingExaminerEligibility() {
+        UUID userPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        User examiner = userWithId(1L, userPublicId, tenantId);
+        examiner.setRoles(Set.of(Role.EXAMINER));
+        when(userRepository.findWithLockByPublicIdAndTenantId(userPublicId, tenantId))
+                .thenReturn(Optional.of(examiner));
+
+        UserResponse response = userService.suspend(userPublicId,
+                new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN")));
+
+        assertThat(response.status()).isEqualTo("SUSPENDED");
+        verify(userRepository).findWithLockByPublicIdAndTenantId(userPublicId, tenantId);
+    }
+
+    @Test
+    void reactivateAlsoLocksTheUserAggregateBeforeChangingExaminerEligibility() {
+        UUID userPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        User examiner = userWithId(1L, userPublicId, tenantId);
+        examiner.setRoles(Set.of(Role.EXAMINER));
+        examiner.suspend();
+        when(userRepository.findWithLockByPublicIdAndTenantId(userPublicId, tenantId))
+                .thenReturn(Optional.of(examiner));
+
+        UserResponse response = userService.reactivate(userPublicId,
+                new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN")));
+
+        assertThat(response.status()).isEqualTo("ACTIVE");
+        verify(userRepository).findWithLockByPublicIdAndTenantId(userPublicId, tenantId);
+    }
+
+    @Test
     void resetPassword_overwritesHash_soOldPasswordNoLongerMatchesAndNewOneDoes() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();

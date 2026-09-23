@@ -247,6 +247,16 @@ public class SessionLifecycleService {
                 .orElseThrow(SessionNotFoundException::new);
     }
 
+    /** Serializes scoring-owned assignment commits with other session-scoped lifecycle changes. */
+    @Transactional
+    public void lockForExaminerAssignment(UUID publicId, UUID tenantId) {
+        if (tenantId == null) {
+            throw new HostContextRequiredException();
+        }
+        sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(SessionNotFoundException::new);
+    }
+
     private SubscriptionView activeSubscription(UUID subscriptionId, UUID tenantId) {
         if (billingService == null) {
             throw new IllegalStateException("BillingService is required for session creation");

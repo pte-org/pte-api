@@ -8,6 +8,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -18,7 +19,9 @@ import java.util.UUID;
 
 /** Durable, session-scoped assignment preview/commit snapshot. Cross-module IDs intentionally have no FK. */
 @Entity
-@Table(name = "examiner_assignment_batches")
+@Table(name = "examiner_assignment_batches",
+        uniqueConstraints = @UniqueConstraint(name = "uq_examiner_batch_public_scope",
+                columnNames = {"public_id", "tenant_id", "session_public_id"}))
 @Getter
 @NoArgsConstructor
 public class ExaminerAssignmentBatch extends BaseEntity {
@@ -92,6 +95,12 @@ public class ExaminerAssignmentBatch extends BaseEntity {
     public void expire() {
         if (status == AssignmentBatchStatus.PREVIEWED) {
             status = AssignmentBatchStatus.EXPIRED;
+        }
+    }
+
+    public void markStale() {
+        if (status == AssignmentBatchStatus.PREVIEWED) {
+            status = AssignmentBatchStatus.STALE;
         }
     }
 }

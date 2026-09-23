@@ -4,6 +4,7 @@ import com.pte.identity.domain.HostAdminCreated;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
+import com.pte.identity.dto.response.ExaminerIdentityView;
 import com.pte.identity.internal.domain.LoginHash;
 import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
@@ -11,6 +12,8 @@ import com.pte.tenancy.StudentCountProvider;
 import com.pte.identity.internal.util.PasswordGenerator;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -56,6 +59,34 @@ public class IdentityService implements StudentCountProvider {
 
     public List<User> findByTenantIdAndRole(UUID tenantId, Role role) {
         return userRepository.findByTenantIdAndRolesContaining(tenantId, role);
+    }
+
+    /** Returns only active EXAMINER identities in the supplied tenant; invalid IDs are omitted. */
+    public List<ExaminerIdentityView> findActiveExaminers(UUID tenantId, List<UUID> examinerPublicIds) {
+        if (tenantId == null || examinerPublicIds == null || examinerPublicIds.isEmpty()) {
+            return List.of();
+        }
+        return userRepository.findByPublicIdInAndTenantIdAndDeletedFalse(examinerPublicIds, tenantId).stream()
+                .filter(user -> user.getStatus() == UserStatus.ACTIVE && user.getRoles().contains(Role.EXAMINER))
+                .map(user -> new ExaminerIdentityView(user.getPublicId(), user.getFullName(), user.getEmail()))
+                .toList();
+    }
+
+    /**
+     * Locks the selected tenant-owned user rows and returns only active Examiner identities.
+     * The caller must hold one transaction through the protected write so suspension or role
+     * changes cannot race an assignment commit.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public List<ExaminerIdentityView> lockActiveExaminers(UUID tenantId, List<UUID> examinerPublicIds) {
+        if (tenantId == null || examinerPublicIds == null || examinerPublicIds.isEmpty()) {
+            return List.of();
+        }
+        List<UUID> orderedIds = examinerPublicIds.stream().distinct().sorted().toList();
+        return userRepository.findWithLockByPublicIdsAndTenantId(orderedIds, tenantId).stream()
+                .filter(user -> user.getStatus() == UserStatus.ACTIVE && user.getRoles().contains(Role.EXAMINER))
+                .map(user -> new ExaminerIdentityView(user.getPublicId(), user.getFullName(), user.getEmail()))
+                .toList();
     }
 
     @Override

@@ -256,7 +256,7 @@ public class UserService {
 
     @Transactional
     public UserResponse suspend(UUID publicId, CurrentUser caller) {
-        User user = findScoped(publicId, caller);
+        User user = findScopedWithLock(publicId, caller);
         user.suspend();
         return UserMapper.toResponse(user);
     }
@@ -264,7 +264,7 @@ public class UserService {
     /** Reactivation is idempotent. */
     @Transactional
     public UserResponse reactivate(UUID publicId, CurrentUser caller) {
-        User user = findScoped(publicId, caller);
+        User user = findScopedWithLock(publicId, caller);
         if (user.isSuspended()) {
             user.reactivate();
         }
@@ -374,6 +374,16 @@ public class UserService {
         User user = caller.isPlatformUser()
                 ? userRepository.findByPublicId(publicId).orElseThrow(UserNotFoundException::new)
                 : userRepository.findByPublicIdAndTenantId(publicId, caller.tenantId())
+                        .orElseThrow(UserNotFoundException::new);
+        provisioningHelper.authorizeTarget(caller, user.getRoles());
+        return user;
+    }
+
+    /** Serializes eligibility-changing identity operations with assignment commits. */
+    private User findScopedWithLock(UUID publicId, CurrentUser caller) {
+        User user = caller.isPlatformUser()
+                ? userRepository.findWithLockByPublicId(publicId).orElseThrow(UserNotFoundException::new)
+                : userRepository.findWithLockByPublicIdAndTenantId(publicId, caller.tenantId())
                         .orElseThrow(UserNotFoundException::new);
         provisioningHelper.authorizeTarget(caller, user.getRoles());
         return user;

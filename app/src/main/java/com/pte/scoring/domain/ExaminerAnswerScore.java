@@ -22,7 +22,11 @@ import java.util.UUID;
 /** Immutable 0-100 Examiner score; distinct from AI rawScore and Host teacherScore. */
 @Entity
 @Table(name = "examiner_answer_scores",
-        uniqueConstraints = @UniqueConstraint(name = "uq_examiner_answer_score_answer", columnNames = "answer_public_id"),
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uq_examiner_answer_score_answer", columnNames = "answer_public_id"),
+                @UniqueConstraint(name = "uq_examiner_score_source_reference",
+                        columnNames = {"public_id", "answer_public_id", "tenant_id", "session_public_id", "attempt_public_id"})
+        },
         indexes = {
                 @Index(name = "idx_examiner_score_attempt", columnList = "tenant_id, session_public_id, attempt_public_id"),
                 @Index(name = "idx_examiner_score_examiner", columnList = "tenant_id, session_public_id, examiner_public_id")

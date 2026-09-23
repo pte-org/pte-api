@@ -5,6 +5,7 @@ import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
 import com.pte.session.internal.service.EntitlementService;
 import com.pte.session.internal.service.SessionLifecycleService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
@@ -45,6 +46,12 @@ public class SessionService {
     /** Throws if the session doesn't exist in the caller's tenant. */
     public void verifyHostAccess(UUID sessionPublicId, UUID tenantId) {
         entitlementService.verifyHostAccess(sessionPublicId, tenantId);
+    }
+
+    /** Locks an owned session row for the duration of a caller's assignment transaction. */
+    @Transactional
+    public void lockForExaminerAssignment(UUID sessionPublicId, UUID tenantId) {
+        sessionLifecycleService.lockForExaminerAssignment(sessionPublicId, tenantId);
     }
 
     /** Cancels scheduled sessions for a revoked subscription; open/closed sessions are untouched. */

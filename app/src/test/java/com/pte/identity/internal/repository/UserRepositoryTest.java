@@ -147,4 +147,31 @@ class UserRepositoryTest {
                 .containsExactly("examiner@example.test");
         assertThat(result.getTotalElements()).isEqualTo(1);
     }
+
+    @Test
+    void examinerAssignmentQueryLocksOnlyRequestedTenantUsersInStableOrder() {
+        Tenant tenant = persistTenant("tenant-lock-" + UUID.randomUUID());
+        User examinerA = createUser(tenant, "examiner-a-" + UUID.randomUUID(), Role.EXAMINER);
+        User examinerB = createUser(tenant, "examiner-b-" + UUID.randomUUID(), Role.EXAMINER);
+        Tenant otherTenant = persistTenant("tenant-lock-other-" + UUID.randomUUID());
+        User otherExaminer = createUser(otherTenant, "examiner-other-" + UUID.randomUUID(), Role.EXAMINER);
+
+        List<User> locked = userRepository.findWithLockByPublicIdsAndTenantId(
+                List.of(examinerB.getPublicId(), otherExaminer.getPublicId(), examinerA.getPublicId()),
+                tenant.getPublicId());
+
+        assertThat(locked).extracting(User::getPublicId)
+                .containsExactly(examinerA.getPublicId(), examinerB.getPublicId());
+    }
+
+    private User createUser(Tenant tenant, String username, Role role) {
+        User user = new User();
+        user.setUsername(username);
+        user.setEmail(username);
+        user.setFullName(username);
+        user.setTenantId(tenant.getPublicId());
+        user.setStatus(UserStatus.ACTIVE);
+        user.setRoles(Set.of(role));
+        return userRepository.saveAndFlush(user);
+    }
 }

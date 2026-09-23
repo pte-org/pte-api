@@ -18,8 +18,12 @@ import java.util.UUID;
 /** One immutable examiner owner for a submitted attempt in a session. */
 @Entity
 @Table(name = "examiner_attempt_assignments",
-        uniqueConstraints = @UniqueConstraint(name = "uq_examiner_assignment_session_attempt",
-                columnNames = {"session_public_id", "attempt_public_id"}),
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uq_examiner_assignment_session_attempt",
+                        columnNames = {"session_public_id", "attempt_public_id"}),
+                @UniqueConstraint(name = "uq_examiner_assignment_owner_scope",
+                        columnNames = {"tenant_id", "session_public_id", "attempt_public_id", "examiner_public_id"})
+        },
         indexes = {
                 @Index(name = "idx_examiner_assignment_examiner", columnList = "tenant_id, session_public_id, examiner_public_id"),
                 @Index(name = "idx_examiner_assignment_batch", columnList = "batch_public_id")
@@ -44,18 +48,26 @@ public class ExaminerAttemptAssignment extends BaseEntity {
     private UUID examinerPublicId;
 
     @Column(nullable = false)
+    private int eligibleAnswerCount;
+
+    @Column(nullable = false)
     private UUID assignedByPublicId;
 
     @Column(nullable = false, updatable = false)
     private Instant assignedAt;
 
     public ExaminerAttemptAssignment(UUID batchPublicId, UUID tenantId, UUID sessionPublicId,
-            UUID attemptPublicId, UUID examinerPublicId, UUID assignedByPublicId, Instant assignedAt) {
+            UUID attemptPublicId, UUID examinerPublicId, int eligibleAnswerCount, UUID assignedByPublicId,
+            Instant assignedAt) {
         this.batchPublicId = Objects.requireNonNull(batchPublicId, "batchPublicId is required");
         this.tenantId = Objects.requireNonNull(tenantId, "tenantId is required");
         this.sessionPublicId = Objects.requireNonNull(sessionPublicId, "sessionPublicId is required");
         this.attemptPublicId = Objects.requireNonNull(attemptPublicId, "attemptPublicId is required");
         this.examinerPublicId = Objects.requireNonNull(examinerPublicId, "examinerPublicId is required");
+        if (eligibleAnswerCount < 0) {
+            throw new IllegalArgumentException("eligibleAnswerCount cannot be negative");
+        }
+        this.eligibleAnswerCount = eligibleAnswerCount;
         this.assignedByPublicId = Objects.requireNonNull(assignedByPublicId, "assignedByPublicId is required");
         this.assignedAt = Objects.requireNonNull(assignedAt, "assignedAt is required");
     }

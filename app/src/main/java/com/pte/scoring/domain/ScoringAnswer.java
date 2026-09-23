@@ -2,6 +2,7 @@ package com.pte.scoring.domain;
 
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.domain.enums.AiProviderCategory;
+import com.pte.scoring.domain.enums.ExaminerAnswerScoreStatus;
 import com.pte.scoring.domain.enums.ScoreSource;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
@@ -10,6 +11,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -17,6 +19,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -33,7 +36,8 @@ import java.util.UUID;
         @Index(name = "idx_scoring_answers_attempt", columnList = "attempt_public_id"),
         @Index(name = "idx_scoring_answers_status", columnList = "status"),
         @Index(name = "idx_scoring_answers_tenant_review", columnList = "tenant_id, session_public_id, status, created_at")
-})
+}, uniqueConstraints = @UniqueConstraint(name = "uq_scoring_answer_owner_scope",
+        columnNames = {"answer_public_id", "tenant_id", "session_public_id", "attempt_public_id"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -115,6 +119,10 @@ public class ScoringAnswer extends BaseEntity {
     private UUID selectedScoreSourceByPublicId;
 
     @Setter(AccessLevel.NONE)
+    @Column(name = "selected_examiner_score_public_id")
+    private UUID selectedExaminerScorePublicId;
+
+    @Setter(AccessLevel.NONE)
     @Version
     @Column(name = "lock_version", nullable = false)
     private long lockVersion;
@@ -151,15 +159,33 @@ public class ScoringAnswer extends BaseEntity {
         this.aiProviderVersion = providerVersion;
     }
 
-    public void selectScoreSource(ScoreSource source, UUID actorPublicId, Instant selectedAt) {
+    public void selectScoreSource(ScoreSource source, UUID actorPublicId, Instant selectedAt,
+            ExaminerAnswerScore submittedExaminerScore) {
         if (source == null || actorPublicId == null || selectedAt == null) {
             throw new IllegalArgumentException("Score source selection requires source, actor, and timestamp");
         }
         if (source == ScoreSource.AI && (rawScore == null || aiProviderCategory != AiProviderCategory.REAL)) {
             throw new IllegalStateException("Only a real AI score with provenance can be selected");
         }
+        if (source == ScoreSource.EXAMINER && !isSubmittedExaminerScoreForThisAnswer(submittedExaminerScore)) {
+            throw new IllegalStateException("An Examiner score for this answer must be submitted before selection");
+        }
         this.selectedScoreSource = source;
         this.selectedScoreSourceByPublicId = actorPublicId;
         this.selectedScoreSourceAt = selectedAt;
+        this.selectedExaminerScorePublicId = source == ScoreSource.EXAMINER
+                ? submittedExaminerScore.getPublicId()
+                : null;
+    }
+
+    private boolean isSubmittedExaminerScoreForThisAnswer(ExaminerAnswerScore examinerScore) {
+        return examinerScore != null
+                && examinerScore.getId() != null
+                && examinerScore.getPublicId() != null
+                && examinerScore.getStatus() == ExaminerAnswerScoreStatus.SUBMITTED
+                && Objects.equals(examinerScore.getAnswerPublicId(), answerPublicId)
+                && Objects.equals(examinerScore.getAttemptPublicId(), attemptPublicId)
+                && Objects.equals(examinerScore.getSessionPublicId(), sessionPublicId)
+                && Objects.equals(examinerScore.getTenantId(), tenantId);
     }
 }
