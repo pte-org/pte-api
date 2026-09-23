@@ -19,6 +19,11 @@ public interface ScoringAnswerRepository extends JpaRepository<ScoringAnswer, Lo
     List<ScoringAnswer> findBySessionPublicIdAndTenantIdAndStatus(UUID sessionPublicId, UUID tenantId,
             ScoringAnswerStatus status);
 
+    List<ScoringAnswer> findBySessionPublicIdAndTenantId(UUID sessionPublicId, UUID tenantId);
+
+    List<ScoringAnswer> findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(
+            UUID sessionPublicId, UUID tenantId, List<UUID> attemptPublicIds);
+
     /** Reporting's skill-aggregation pull (Phase 10) — every scored answer for one attempt. */
     List<ScoringAnswer> findByAttemptPublicIdAndTenantIdAndStatus(UUID attemptPublicId, UUID tenantId,
             ScoringAnswerStatus status);

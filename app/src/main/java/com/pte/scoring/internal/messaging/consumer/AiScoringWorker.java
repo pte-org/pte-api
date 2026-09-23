@@ -56,7 +56,8 @@ public class AiScoringWorker {
 
         AiScoreResult result = callVendor(job);
 
-        answer.markScored(result.rawScore());
+        answer.markAiScored(result.rawScore(), result.providerCategory(), result.provider(),
+                result.model(), result.providerVersion());
         scoringAnswerRepository.save(answer);
     }
 

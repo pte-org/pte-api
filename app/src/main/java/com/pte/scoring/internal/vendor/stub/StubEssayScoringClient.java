@@ -2,6 +2,7 @@ package com.pte.scoring.internal.vendor.stub;
 
 import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.EssayScoringClient;
+import com.pte.scoring.domain.enums.AiProviderCategory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -27,6 +28,6 @@ public class StubEssayScoringClient implements EssayScoringClient {
         return new AiScoreResult(PLACEHOLDER_SCORE,
                 Map.of("GRAMMAR", PLACEHOLDER_SCORE, "VOCABULARY", PLACEHOLDER_SCORE,
                         "SPELLING", PLACEHOLDER_SCORE, "WRITTEN_DISCOURSE", PLACEHOLDER_SCORE),
-                "STUB: no real vendor configured yet.");
+                "STUB: no real vendor configured yet.", AiProviderCategory.STUB, "STUB", null, null);
     }
 }

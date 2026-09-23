@@ -1,6 +1,8 @@
 package com.pte.scoring.domain;
 
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
+import com.pte.scoring.domain.enums.AiProviderCategory;
+import com.pte.scoring.domain.enums.ScoreSource;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -8,6 +10,8 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -79,6 +83,42 @@ public class ScoringAnswer extends BaseEntity {
     @Column
     private Instant scoredAt;
 
+    /** Provider identity emitted alongside this exact result. Null means legacy or unknown provenance. */
+    @Setter(AccessLevel.NONE)
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private AiProviderCategory aiProviderCategory;
+
+    @Setter(AccessLevel.NONE)
+    @Column(length = 64)
+    private String aiProvider;
+
+    @Setter(AccessLevel.NONE)
+    @Column(length = 160)
+    private String aiModel;
+
+    @Setter(AccessLevel.NONE)
+    @Column(length = 100)
+    private String aiProviderVersion;
+
+    @Setter(AccessLevel.NONE)
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private ScoreSource selectedScoreSource;
+
+    @Setter(AccessLevel.NONE)
+    @Column
+    private Instant selectedScoreSourceAt;
+
+    @Setter(AccessLevel.NONE)
+    @Column
+    private UUID selectedScoreSourceByPublicId;
+
+    @Setter(AccessLevel.NONE)
+    @Version
+    @Column(name = "lock_version", nullable = false)
+    private long lockVersion;
+
     /**
      * A host's own independent score — parallel to {@link #rawScore}, never
      * derived from it and never gating it. Which of the two counts as
@@ -91,8 +131,35 @@ public class ScoringAnswer extends BaseEntity {
     private Instant teacherScoredAt;
 
     public void markScored(int rawScore) {
+        if (rawScore < 0 || rawScore > 100) {
+            throw new IllegalArgumentException("Raw score must be between 0 and 100");
+        }
         this.status = ScoringAnswerStatus.SCORED;
         this.rawScore = rawScore;
         this.scoredAt = Instant.now();
+    }
+
+    public void markAiScored(int rawScore, AiProviderCategory providerCategory, String provider,
+            String model, String providerVersion) {
+        if (providerCategory == null || provider == null || provider.isBlank()) {
+            throw new IllegalArgumentException("AI score provenance must identify its provider category and provider");
+        }
+        markScored(rawScore);
+        this.aiProviderCategory = providerCategory;
+        this.aiProvider = provider;
+        this.aiModel = model;
+        this.aiProviderVersion = providerVersion;
+    }
+
+    public void selectScoreSource(ScoreSource source, UUID actorPublicId, Instant selectedAt) {
+        if (source == null || actorPublicId == null || selectedAt == null) {
+            throw new IllegalArgumentException("Score source selection requires source, actor, and timestamp");
+        }
+        if (source == ScoreSource.AI && (rawScore == null || aiProviderCategory != AiProviderCategory.REAL)) {
+            throw new IllegalStateException("Only a real AI score with provenance can be selected");
+        }
+        this.selectedScoreSource = source;
+        this.selectedScoreSourceByPublicId = actorPublicId;
+        this.selectedScoreSourceAt = selectedAt;
     }
 }

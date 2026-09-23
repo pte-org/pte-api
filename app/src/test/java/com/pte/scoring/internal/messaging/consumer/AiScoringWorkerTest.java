@@ -1,6 +1,7 @@
 package com.pte.scoring.internal.messaging.consumer;
 
 import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.enums.AiProviderCategory;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
@@ -61,6 +62,8 @@ class AiScoringWorkerTest {
         worker.onAiScoringJob(job(answer, "AI_SPEECH"));
 
         assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
+        assertThat(answer.getAiProviderCategory()).isEqualTo(AiProviderCategory.STUB);
+        assertThat(answer.getAiProvider()).isEqualTo("STUB");
         verify(speechScoringClient).score(answer.getPayload(), answer.getCorrectAnswerText(), answer.getTenantId());
         verifyNoInteractions(essayScoringClient);
     }
@@ -75,6 +78,9 @@ class AiScoringWorkerTest {
         worker.onAiScoringJob(job(answer, "AI_TEXT"));
 
         assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
+        assertThat(answer.getAiProviderCategory()).isEqualTo(AiProviderCategory.REAL);
+        assertThat(answer.getAiProvider()).isEqualTo("OPENAI_COMPATIBLE");
+        assertThat(answer.getAiModel()).isEqualTo("test-model");
         verify(essayScoringClient).score(answer.getPayload(), answer.getCorrectAnswerText());
         verifyNoInteractions(speechScoringClient);
     }
@@ -102,6 +108,8 @@ class AiScoringWorkerTest {
 
         worker.onAiScoringJob(job(answer, "AI_SPEECH"));
 
+        assertThat(answer.getRawScore()).isEqualTo(80);
+        assertThat(answer.getAiProviderCategory()).isNull();
         verify(speechScoringClient, never()).score(anyString(), anyString(), any(UUID.class));
         verifyNoInteractions(essayScoringClient);
     }
@@ -127,11 +135,13 @@ class AiScoringWorkerTest {
 
     private void stubSpeechClient() {
         when(speechScoringClient.score(anyString(), anyString(), any(UUID.class)))
-                .thenReturn(new AiScoreResult(65, Map.of(), "speech stub"));
+                .thenReturn(new AiScoreResult(65, Map.of(), "speech stub",
+                        AiProviderCategory.STUB, "STUB", null, null));
     }
 
     private void stubEssayClient() {
         when(essayScoringClient.score(anyString(), anyString()))
-                .thenReturn(new AiScoreResult(60, Map.of(), "text stub"));
+                .thenReturn(new AiScoreResult(60, Map.of(), "text result",
+                        AiProviderCategory.REAL, "OPENAI_COMPATIBLE", "test-model", null));
     }
 }

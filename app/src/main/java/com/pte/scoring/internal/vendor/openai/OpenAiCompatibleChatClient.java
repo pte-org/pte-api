@@ -4,6 +4,7 @@ import com.pte.scoring.internal.config.AiProviderProperties;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.vendor.AiProviderException;
 import com.pte.scoring.internal.vendor.AiScoreResult;
+import com.pte.scoring.domain.enums.AiProviderCategory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -71,10 +72,10 @@ public class OpenAiCompatibleChatClient {
         if (responseJson == null || responseJson.isBlank()) {
             throw new AiProviderException(ScoringConstants.AI_EMPTY_RESPONSE);
         }
-        return parseScore(responseJson);
+        return parseScore(responseJson, model);
     }
 
-    private AiScoreResult parseScore(String responseJson) {
+    private AiScoreResult parseScore(String responseJson, String requestedModel) {
         try {
             JsonNode root = jsonMapper.readTree(responseJson);
             JsonNode content = root.path("choices").path(0).path("message").path("content");
@@ -92,7 +93,12 @@ public class OpenAiCompatibleChatClient {
                     ? scoreEnvelope.path("feedback").asText()
                     : "";
             try {
-                return new AiScoreResult(rawScore.asInt(), subScores, feedback);
+                String reportedModel = root.path("model").asText();
+                if (reportedModel == null || reportedModel.isBlank()) {
+                    reportedModel = requestedModel;
+                }
+                return new AiScoreResult(rawScore.asInt(), subScores, feedback,
+                        AiProviderCategory.REAL, "OPENAI_COMPATIBLE", reportedModel, null);
             } catch (IllegalArgumentException ex) {
                 throw invalidResponse(ex.getMessage(), ex);
             }

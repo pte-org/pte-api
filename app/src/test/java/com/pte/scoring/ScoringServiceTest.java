@@ -1,6 +1,10 @@
 package com.pte.scoring;
 
+import com.pte.scoring.dto.response.AiEligibleAttemptView;
 import com.pte.scoring.dto.response.ScoredAnswerView;
+import com.pte.scoring.internal.service.ExaminerWorkQueryService;
+import com.pte.scoring.internal.service.ScoringEligibilityQueryService;
+import com.pte.scoring.internal.service.ScoringReviewReadQueryService;
 import com.pte.scoring.internal.service.ScoredAnswerQueryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,11 +25,21 @@ class ScoringServiceTest {
     @Mock
     private ScoredAnswerQueryService scoredAnswerQueryService;
 
+    @Mock
+    private ScoringEligibilityQueryService scoringEligibilityQueryService;
+
+    @Mock
+    private ExaminerWorkQueryService examinerWorkQueryService;
+
+    @Mock
+    private ScoringReviewReadQueryService scoringReviewReadQueryService;
+
     private ScoringService service;
 
     @BeforeEach
     void setUp() {
-        service = new ScoringService(scoredAnswerQueryService);
+        service = new ScoringService(scoredAnswerQueryService, scoringEligibilityQueryService,
+                examinerWorkQueryService, scoringReviewReadQueryService);
     }
 
     @Test
@@ -71,5 +85,18 @@ class ScoringServiceTest {
         service.getScoredAnswersForAttempt(attemptPublicId, tenantId);
 
         verify(scoredAnswerQueryService).findScoredForAttempt(attemptPublicId, tenantId);
+    }
+
+    @Test
+    void findAiEligibleAttempts_delegatesPinnedEligibilityQuery() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        List<UUID> attemptIds = List.of(UUID.randomUUID());
+        List<AiEligibleAttemptView> expected = List.of(new AiEligibleAttemptView(attemptIds.getFirst(), 4));
+        when(scoringEligibilityQueryService.findEligibleAttempts(sessionPublicId, tenantId, attemptIds))
+                .thenReturn(expected);
+
+        assertThat(service.findAiEligibleAttempts(sessionPublicId, tenantId, attemptIds)).isEqualTo(expected);
+        verify(scoringEligibilityQueryService).findEligibleAttempts(sessionPublicId, tenantId, attemptIds);
     }
 }
