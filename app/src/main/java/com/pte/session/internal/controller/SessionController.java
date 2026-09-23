@@ -10,11 +10,13 @@ import com.pte.session.internal.dto.request.PatchExamPolicyRequest;
 import com.pte.session.internal.dto.response.AudiencePreviewResponse;
 import com.pte.session.internal.dto.response.AudienceSourceResponse;
 import com.pte.session.internal.dto.response.ExamPreflightResponse;
+import com.pte.session.internal.dto.response.ExamPreviewResponse;
 import com.pte.session.internal.dto.response.GenerationJobResponse;
 import com.pte.session.internal.dto.response.SessionResponse;
 import com.pte.session.internal.exception.LegacySessionCreateRequiresNewWorkflowException;
 import com.pte.session.internal.service.SessionLifecycleService;
 import com.pte.session.internal.service.ExamOrchestrationService;
+import com.pte.session.internal.service.SessionExamPreviewService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -48,11 +50,14 @@ public class SessionController {
 
     private final SessionLifecycleService sessionLifecycleService;
     private final ExamOrchestrationService examOrchestrationService;
+    private final SessionExamPreviewService sessionExamPreviewService;
 
     public SessionController(SessionLifecycleService sessionLifecycleService,
-            ExamOrchestrationService examOrchestrationService) {
+            ExamOrchestrationService examOrchestrationService,
+            SessionExamPreviewService sessionExamPreviewService) {
         this.sessionLifecycleService = sessionLifecycleService;
         this.examOrchestrationService = examOrchestrationService;
+        this.sessionExamPreviewService = sessionExamPreviewService;
     }
 
     @PostMapping
@@ -126,6 +131,11 @@ public class SessionController {
     @GetMapping("/{publicId}")
     public ApiResponse<SessionResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(sessionLifecycleService.get(publicId, currentUser()));
+    }
+
+    @GetMapping("/{publicId}/exam-preview")
+    public ApiResponse<ExamPreviewResponse> examPreview(@PathVariable UUID publicId) {
+        return ApiResponse.success(sessionExamPreviewService.preview(publicId, currentUser()));
     }
 
     @GetMapping
