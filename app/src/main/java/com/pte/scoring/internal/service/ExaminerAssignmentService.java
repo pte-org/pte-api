@@ -1,8 +1,5 @@
 package com.pte.scoring.internal.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.enrollment.EnrollmentModuleService;
@@ -32,6 +29,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -404,7 +404,7 @@ public class ExaminerAssignmentService {
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Could not persist the assignment snapshot", exception);
         }
     }
@@ -412,7 +412,7 @@ public class ExaminerAssignmentService {
     private <T> T readJson(String value, Class<T> type) {
         try {
             return objectMapper.readValue(value, type);
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Could not read the assignment scope snapshot", exception);
         }
     }
@@ -420,7 +420,7 @@ public class ExaminerAssignmentService {
     private <T> T readJson(String value, TypeReference<T> type) {
         try {
             return objectMapper.readValue(value, type);
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Could not read the assignment allocation snapshot", exception);
         }
     }

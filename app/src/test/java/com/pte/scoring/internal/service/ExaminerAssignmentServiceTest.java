@@ -1,6 +1,5 @@
 package com.pte.scoring.internal.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.enrollment.EnrollmentModuleService;
@@ -27,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -66,7 +66,7 @@ class ExaminerAssignmentServiceTest {
     @BeforeEach
     void setUp() {
         service = new ExaminerAssignmentService(sessionService, enrollmentService, attemptService, eligibilityService,
-                identityService, batchRepository, assignmentRepository, new ObjectMapper());
+                identityService, batchRepository, assignmentRepository, JsonMapper.builder().build());
     }
 
     @Test
@@ -254,7 +254,7 @@ class ExaminerAssignmentServiceTest {
 
     @Test
     void overviewReturnsOnlyRequestedHistoryPageAndPersistsPreviewExpiry() throws Exception {
-        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        JsonMapper mapper = JsonMapper.builder().findAndAddModules().build();
         UUID attemptId = UUID.randomUUID();
         var scopeSnapshot = new ExaminerAssignmentService.ScopeSnapshotEnvelope(List.of(
                 new ExaminerAssignmentService.ScopeSnapshot(AssignmentScopeType.CLASS, classId, examiner1,
