@@ -47,6 +47,7 @@ services:
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:?set CLOUDINARY_API_KEY in the env file}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:?set CLOUDINARY_API_SECRET in the env file}
       CLOUDINARY_AUTHORING_FOLDER: ${CLOUDINARY_AUTHORING_FOLDER:-pte/authoring}
+      CLOUDINARY_SUBMISSION_FOLDER: ${CLOUDINARY_SUBMISSION_FOLDER:-pte/submissions}
       # com.pte.notification (Phase 09) — Mailpit's SMTP port on the docker network.
       MAIL_HOST: ${MAIL_HOST:-mailpit}
       MAIL_PORT: ${MAIL_PORT:-1025}

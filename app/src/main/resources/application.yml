@@ -99,6 +99,7 @@ media:
     api-key: ${CLOUDINARY_API_KEY:}
     api-secret: ${CLOUDINARY_API_SECRET:}
     authoring-folder: ${CLOUDINARY_AUTHORING_FOLDER:pte/authoring}
+    submission-folder: ${CLOUDINARY_SUBMISSION_FOLDER:pte/submissions}
 
 attempt:
   capability:

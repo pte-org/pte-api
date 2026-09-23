@@ -4,6 +4,7 @@ import java.util.UUID;
 
 public record CloudinaryUploadResponse(
         UUID mediaPublicId,
+        String publicId,
         String uploadUrl,
         String apiKey,
         String timestamp,

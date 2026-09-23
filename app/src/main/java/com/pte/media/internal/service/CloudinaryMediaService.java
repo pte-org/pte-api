@@ -7,7 +7,6 @@ import com.pte.media.internal.dto.request.CloudinaryUploadRequest;
 import com.pte.media.internal.dto.response.CloudinaryUploadResponse;
 import com.pte.media.internal.dto.response.MediaPreviewResponse;
 import com.pte.media.dto.response.PresignedDownloadResponse;
-import com.pte.media.internal.exception.MediaAlreadyUploadedException;
 import com.pte.media.internal.exception.MediaNotFoundException;
 import com.pte.media.internal.exception.MediaNotYetUploadedException;
 import com.pte.media.internal.exception.UnsupportedContentTypeException;
@@ -27,7 +26,7 @@ import java.util.HexFormat;
 import java.util.Set;
 import java.util.UUID;
 
-/** Cloudinary direct-upload adapter for platform authoring media. */
+/** Cloudinary direct-upload adapter for authoring media and student responses. */
 @Service
 public class CloudinaryMediaService {
 
@@ -39,34 +38,47 @@ public class CloudinaryMediaService {
     private final String cloudName;
     private final String apiKey;
     private final String apiSecret;
-    private final String folder;
+    private final String authoringFolder;
+    private final String submissionFolder;
 
     public CloudinaryMediaService(MediaObjectRepository repository,
             @Value("${cloudinary.cloud-name:}") String cloudName,
             @Value("${cloudinary.api-key:}") String apiKey,
             @Value("${cloudinary.api-secret:}") String apiSecret,
-            @Value("${cloudinary.authoring-folder:pte/authoring}") String folder) {
+            @Value("${cloudinary.authoring-folder:pte/authoring}") String authoringFolder,
+            @Value("${cloudinary.submission-folder:pte/submissions}") String submissionFolder) {
         this.repository = repository;
         this.cloudName = cloudName;
         this.apiKey = apiKey;
         this.apiSecret = apiSecret;
-        this.folder = folder;
+        this.authoringFolder = authoringFolder;
+        this.submissionFolder = submissionFolder;
     }
 
     @Transactional
     public CloudinaryUploadResponse requestUpload(CloudinaryUploadRequest request, CurrentUser caller) {
-        if (!caller.hasRole("PLATFORM_ADMIN") && !caller.hasRole("PLATFORM_AUTHOR")) {
+        boolean authoringMedia = isAuthoringAssetKind(request.assetKind());
+        boolean studentResponse = MediaConstants.STUDENT_RESPONSE_AUDIO.equals(request.assetKind());
+        if (authoringMedia && !isPlatformAuthor(caller)) {
             throw new AccessDeniedException("Only platform authors may upload question media");
         }
+        if (studentResponse && !caller.hasRole("STUDENT")) {
+            throw new AccessDeniedException("Only students may upload response audio");
+        }
+        if (!authoringMedia && !studentResponse) {
+            throw new UnsupportedContentTypeException();
+        }
         validateContentType(request.contentType(), request.assetKind());
+        long maxBytes = studentResponse ? MediaConstants.MAX_SUBMISSION_BYTES : MediaConstants.MAX_AUTHORING_BYTES;
         if (request.sizeBytes() == null || request.sizeBytes() <= 0
-                || request.sizeBytes() > MediaConstants.MAX_AUTHORING_BYTES) {
+                || request.sizeBytes() > maxBytes) {
             throw new UnsupportedContentTypeException();
         }
         long timestamp = Instant.now().getEpochSecond();
         String resourceType = IMAGE_TYPES.contains(request.contentType()) ? "image" : "video";
         UUID mediaPublicId = UUID.randomUUID();
         String publicId = mediaPublicId.toString();
+        String folder = studentResponse ? submissionFolder : authoringFolder;
         String cloudinaryPublicId = folder + "/" + publicId;
         String signature = sign("folder=" + folder + "&public_id=" + publicId + "&timestamp=" + timestamp);
 
@@ -75,7 +87,7 @@ public class CloudinaryMediaService {
         media.setTenantId(caller.tenantId());
         media.setOwnerPublicId(caller.userId());
         media.setContentType(request.contentType());
-        media.setAudioPrompt("AUDIO_PROMPT".equals(request.assetKind()));
+        media.setAudioPrompt(MediaConstants.AUDIO_PROMPT.equals(request.assetKind()));
         media.setStorageKey(cloudinaryPublicId);
         media.setCloudinaryPublicId(cloudinaryPublicId);
         media.setCloudinaryResourceType(resourceType);
@@ -83,7 +95,8 @@ public class CloudinaryMediaService {
         repository.save(media);
 
         String uploadUrl = "https://api.cloudinary.com/v1_1/%s/%s/upload".formatted(cloudName, resourceType);
-        return new CloudinaryUploadResponse(media.getPublicId(), uploadUrl, apiKey, String.valueOf(timestamp),
+        return new CloudinaryUploadResponse(media.getPublicId(), cloudinaryPublicId, uploadUrl, apiKey,
+                String.valueOf(timestamp),
                 signature, folder, resourceType, SIGNATURE_TTL_SECONDS);
     }
 
@@ -93,7 +106,10 @@ public class CloudinaryMediaService {
                 .filter(candidate -> candidate.getOwnerPublicId().equals(caller.userId()))
                 .orElseThrow(MediaNotFoundException::new);
         if (media.getStatus() == MediaStatus.UPLOADED) {
-            throw new MediaAlreadyUploadedException();
+            // Completion is intentionally idempotent. A mobile process may
+            // be killed after pte-api commits the completion but before the
+            // local upload row can be marked ready.
+            return;
         }
         if (!request.publicId().equals(media.getCloudinaryPublicId())
                 || !request.resourceType().equals(media.getCloudinaryResourceType())
@@ -150,9 +166,9 @@ public class CloudinaryMediaService {
         if (media.getCloudinaryPublicId() == null || media.getStatus() != MediaStatus.UPLOADED) {
             throw new MediaNotYetUploadedException();
         }
-        boolean audio = "AUDIO_PROMPT".equals(assetKind);
+        boolean audio = MediaConstants.AUDIO_PROMPT.equals(assetKind);
         boolean contentTypeAllowed = audio ? AUDIO_TYPES.contains(media.getContentType())
-                : "IMAGE_PROMPT".equals(assetKind) && IMAGE_TYPES.contains(media.getContentType());
+                : MediaConstants.IMAGE_PROMPT.equals(assetKind) && IMAGE_TYPES.contains(media.getContentType());
         if (!contentTypeAllowed || media.isAudioPrompt() != audio) {
             throw new UnsupportedContentTypeException();
         }
@@ -162,11 +178,21 @@ public class CloudinaryMediaService {
     }
 
     private void validateContentType(String contentType, String assetKind) {
-        boolean allowed = "IMAGE_PROMPT".equals(assetKind) ? IMAGE_TYPES.contains(contentType)
-                : "AUDIO_PROMPT".equals(assetKind) && AUDIO_TYPES.contains(contentType);
+        boolean allowed = MediaConstants.IMAGE_PROMPT.equals(assetKind) ? IMAGE_TYPES.contains(contentType)
+                : (MediaConstants.AUDIO_PROMPT.equals(assetKind)
+                        || MediaConstants.STUDENT_RESPONSE_AUDIO.equals(assetKind))
+                                && AUDIO_TYPES.contains(contentType);
         if (!allowed) {
             throw new UnsupportedContentTypeException();
         }
+    }
+
+    private boolean isAuthoringAssetKind(String assetKind) {
+        return MediaConstants.IMAGE_PROMPT.equals(assetKind) || MediaConstants.AUDIO_PROMPT.equals(assetKind);
+    }
+
+    private boolean isPlatformAuthor(CurrentUser caller) {
+        return caller.hasRole("PLATFORM_ADMIN") || caller.hasRole("PLATFORM_AUTHOR");
     }
 
     private String sign(String payload) {
