@@ -12,4 +12,7 @@ public interface ExaminerAnswerScoreRepository extends JpaRepository<ExaminerAns
     Optional<ExaminerAnswerScore> findByAnswerPublicIdAndTenantId(UUID answerPublicId, UUID tenantId);
 
     List<ExaminerAnswerScore> findByTenantIdAndSessionPublicId(UUID tenantId, UUID sessionPublicId);
+
+    List<ExaminerAnswerScore> findByTenantIdAndSessionPublicIdAndAttemptPublicId(
+            UUID tenantId, UUID sessionPublicId, UUID attemptPublicId);
 }

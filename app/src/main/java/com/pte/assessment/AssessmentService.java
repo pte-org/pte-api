@@ -3,7 +3,9 @@ package com.pte.assessment;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.dto.response.SnapshotResponse;
 import com.pte.assessment.internal.service.ExamGenerationService;
+import com.pte.assessment.internal.service.SnapshotPromptQueryService;
 import com.pte.assessment.internal.service.SnapshotPublishService;
+import com.pte.assessment.dto.response.ExaminerQuestionPromptView;
 import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse;
 import com.pte.shared.security.CurrentUser;
@@ -12,6 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -32,20 +37,26 @@ public class AssessmentService {
     private final SnapshotPublishService snapshotPublishService;
     private final ExamGenerationService examGenerationService;
     private final ScoreTemplateService scoreTemplateService;
+    private final SnapshotPromptQueryService snapshotPromptQueryService;
 
     @Autowired
     public AssessmentService(SnapshotPublishService snapshotPublishService, ExamGenerationService examGenerationService,
-            ScoreTemplateService scoreTemplateService) {
+            ScoreTemplateService scoreTemplateService, SnapshotPromptQueryService snapshotPromptQueryService) {
         this.snapshotPublishService = snapshotPublishService;
         this.examGenerationService = examGenerationService;
         this.scoreTemplateService = scoreTemplateService;
+        this.snapshotPromptQueryService = snapshotPromptQueryService;
+    }
+
+    /** Compatibility constructor for callers/tests that do not use Examiner prompt retrieval. */
+    public AssessmentService(SnapshotPublishService snapshotPublishService, ExamGenerationService examGenerationService,
+            ScoreTemplateService scoreTemplateService) {
+        this(snapshotPublishService, examGenerationService, scoreTemplateService, null);
     }
 
     /** Compatibility constructor for focused assessment unit tests. */
     public AssessmentService(SnapshotPublishService snapshotPublishService, ExamGenerationService examGenerationService) {
-        this.snapshotPublishService = snapshotPublishService;
-        this.examGenerationService = examGenerationService;
-        this.scoreTemplateService = null;
+        this(snapshotPublishService, examGenerationService, null, null);
     }
 
     /** Answer-stripped summary - safe for {@code session} to validate composition against. */
@@ -56,6 +67,15 @@ public class AssessmentService {
     /** Full-fidelity content including answer keys - trusted application call only. */
     public SnapshotContentResponse getFullContent(UUID snapshotPublicId) {
         return snapshotPublishService.getContent(snapshotPublicId);
+    }
+
+    /** Answer-key-free, batched prompt access after scoring verifies assignment ownership. */
+    public Map<UUID, ExaminerQuestionPromptView> getExaminerPrompts(
+            Collection<UUID> pinnedItemPublicIds, UUID tenantId) {
+        if (snapshotPromptQueryService == null) {
+            throw new IllegalStateException("Examiner prompt dependencies are not configured");
+        }
+        return snapshotPromptQueryService.findForExaminer(pinnedItemPublicIds, tenantId);
     }
 
     /**
