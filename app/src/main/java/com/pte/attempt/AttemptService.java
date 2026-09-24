@@ -2,10 +2,12 @@ package com.pte.attempt;
 
 import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.attempt.dto.response.AttemptSummaryView;
+import com.pte.attempt.dto.response.AttemptExaminerPromptView;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import com.pte.attempt.internal.service.AttemptSummaryQueryService;
+import com.pte.attempt.internal.service.AttemptExaminerPromptQueryService;
 import com.pte.attempt.internal.service.ProctorCommandService;
 import com.pte.attempt.internal.service.SubmittedAnswerQueryService;
 import com.pte.shared.StartedAttemptLookup;
@@ -37,15 +39,18 @@ public class AttemptService implements StartedAttemptLookup {
     private final ProctorCommandService proctorCommandService;
     private final SubmittedAnswerQueryService submittedAnswerQueryService;
     private final AttemptSummaryQueryService attemptSummaryQueryService;
+    private final AttemptExaminerPromptQueryService attemptExaminerPromptQueryService;
     private final ExamAttemptRepository examAttemptRepository;
 
     public AttemptService(ProctorCommandService proctorCommandService,
                           SubmittedAnswerQueryService submittedAnswerQueryService,
                           AttemptSummaryQueryService attemptSummaryQueryService,
+                          AttemptExaminerPromptQueryService attemptExaminerPromptQueryService,
                           ExamAttemptRepository examAttemptRepository) {
         this.proctorCommandService = proctorCommandService;
         this.submittedAnswerQueryService = submittedAnswerQueryService;
         this.attemptSummaryQueryService = attemptSummaryQueryService;
+        this.attemptExaminerPromptQueryService = attemptExaminerPromptQueryService;
         this.examAttemptRepository = examAttemptRepository;
     }
 
@@ -77,6 +82,16 @@ public class AttemptService implements StartedAttemptLookup {
     /** Batch pinned scoring contexts for report publication; attempt contents stay inside this module. */
     public Map<UUID, AttemptScoreContextView> getScoreContexts(Collection<UUID> attemptPublicIds) {
         return attemptSummaryQueryService.getScoreContexts(attemptPublicIds);
+    }
+
+    /**
+     * Reads answer-key-free prompts from the attempt's immutable pinned items
+     * for an already assignment-authorized Examiner workflow.
+     */
+    public Map<UUID, AttemptExaminerPromptView> getExaminerPrompts(UUID attemptPublicId, UUID sessionPublicId,
+            UUID tenantId, Collection<UUID> pinnedItemPublicIds) {
+        return attemptExaminerPromptQueryService.findForExaminer(attemptPublicId, sessionPublicId, tenantId,
+                pinnedItemPublicIds);
     }
 
     /** Batch conflict read for session publish; no attempt content crosses the module boundary. */

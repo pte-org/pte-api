@@ -1,7 +1,7 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.assessment.AssessmentService;
-import com.pte.assessment.dto.response.ExaminerQuestionPromptView;
+import com.pte.attempt.AttemptService;
+import com.pte.attempt.dto.response.AttemptExaminerPromptView;
 import com.pte.identity.IdentityService;
 import com.pte.identity.dto.response.ExaminerIdentityView;
 import com.pte.media.MediaService;
@@ -82,7 +82,7 @@ class ExaminerScoringServiceTest {
     @Mock
     private IdentityService identityService;
     @Mock
-    private AssessmentService assessmentService;
+    private AttemptService attemptService;
     @Mock
     private MediaService mediaService;
     @Mock
@@ -94,7 +94,7 @@ class ExaminerScoringServiceTest {
     void setUp() {
         service = new ExaminerScoringService(workQueueRepository, assignmentRepository, scoringAnswerRepository,
                 examinerAnswerScoreRepository, sessionStateRepository, eligibilityQueryService, answerPayloadDecoder,
-                identityService, assessmentService, mediaService, entityManager);
+                identityService, attemptService, mediaService, entityManager);
     }
 
     @Test
@@ -104,7 +104,7 @@ class ExaminerScoringServiceTest {
         assertThatThrownBy(() -> service.getAttempt(UUID.randomUUID(), UUID.randomUUID(), host))
                 .isInstanceOf(AccessDeniedException.class);
 
-        verifyNoInteractions(identityService, workQueueRepository, scoringAnswerRepository, assessmentService,
+        verifyNoInteractions(identityService, workQueueRepository, scoringAnswerRepository, attemptService,
                 answerPayloadDecoder, mediaService);
     }
 
@@ -122,7 +122,7 @@ class ExaminerScoringServiceTest {
                 .isInstanceOf(ExaminerWorkNotFoundException.class);
 
         verify(workQueueRepository, never()).findOwnedAttempt(any(), any(), any(), any());
-        verifyNoInteractions(assessmentService, mediaService, answerPayloadDecoder);
+        verifyNoInteractions(attemptService, mediaService, answerPayloadDecoder);
     }
 
     @Test
@@ -134,7 +134,7 @@ class ExaminerScoringServiceTest {
         assertThatThrownBy(() -> service.getAttempt(UUID.randomUUID(), UUID.randomUUID(), examiner))
                 .isInstanceOf(ExaminerWorkNotFoundException.class);
 
-        verifyNoInteractions(workQueueRepository, scoringAnswerRepository, assessmentService,
+        verifyNoInteractions(workQueueRepository, scoringAnswerRepository, attemptService,
                 answerPayloadDecoder, mediaService);
     }
 
@@ -151,7 +151,7 @@ class ExaminerScoringServiceTest {
                 .isInstanceOf(ExaminerWorkNotFoundException.class);
 
         verify(workQueueRepository).findOwnedAttempt(examiner.tenantId(), sessionId, attemptId, examiner.userId());
-        verifyNoInteractions(scoringAnswerRepository, assessmentService, answerPayloadDecoder, mediaService);
+        verifyNoInteractions(scoringAnswerRepository, attemptService, answerPayloadDecoder, mediaService);
     }
 
     @Test
@@ -165,7 +165,7 @@ class ExaminerScoringServiceTest {
         ScoringAnswer answer = answer(examiner.tenantId(), sessionId, attemptId, answerId);
         ExaminerAttemptAssignment assignment = new ExaminerAttemptAssignment(UUID.randomUUID(), examiner.tenantId(),
                 sessionId, attemptId, examiner.userId(), 1, UUID.randomUUID(), Instant.parse("2026-01-01T00:00:00Z"));
-        ExaminerQuestionPromptView prompt = new ExaminerQuestionPromptView(1, "SPEAKING", "READ_ALOUD", "Prompt",
+        AttemptExaminerPromptView prompt = new AttemptExaminerPromptView(answer.getPinnedItemPublicId(), 1, "SPEAKING", "READ_ALOUD", "Prompt",
                 "Read the passage", promptMediaId, null, null, null, List.of());
         givenActiveExaminer(examiner);
         when(workQueueRepository.findOwnedAttempt(examiner.tenantId(), sessionId, attemptId, examiner.userId()))
@@ -176,7 +176,8 @@ class ExaminerScoringServiceTest {
         when(examinerAnswerScoreRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicId(
                 examiner.tenantId(), sessionId, attemptId))
                 .thenReturn(List.of());
-        when(assessmentService.getExaminerPrompts(List.of(answer.getPinnedItemPublicId()), examiner.tenantId()))
+        when(attemptService.getExaminerPrompts(attemptId, sessionId, examiner.tenantId(),
+                List.of(answer.getPinnedItemPublicId())))
                 .thenReturn(Map.of(answer.getPinnedItemPublicId(), prompt));
         when(answerPayloadDecoder.decode(answer)).thenReturn(new DecodedAnswerPayload(
                 AnswerPayloadKind.AUDIO, null, answerMediaId, null, null, null, null));
@@ -193,7 +194,7 @@ class ExaminerScoringServiceTest {
         assertThat(detail.answers()).hasSize(1);
         assertThat(detail.answers().getFirst().response().mediaUrl()).contains(answerMediaId.toString());
         InOrder authorizedReadOrder = inOrder(identityService, workQueueRepository, scoringAnswerRepository,
-                eligibilityQueryService, assessmentService, answerPayloadDecoder, mediaService);
+                eligibilityQueryService, attemptService, answerPayloadDecoder, mediaService);
         authorizedReadOrder.verify(identityService)
                 .findActiveExaminers(examiner.tenantId(), List.of(examiner.userId()));
         authorizedReadOrder.verify(workQueueRepository)
@@ -201,8 +202,9 @@ class ExaminerScoringServiceTest {
         authorizedReadOrder.verify(scoringAnswerRepository)
                 .findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(sessionId, examiner.tenantId(), List.of(attemptId));
         authorizedReadOrder.verify(eligibilityQueryService).isAiEligible(answer);
-        authorizedReadOrder.verify(assessmentService)
-                .getExaminerPrompts(List.of(answer.getPinnedItemPublicId()), examiner.tenantId());
+        authorizedReadOrder.verify(attemptService)
+                .getExaminerPrompts(attemptId, sessionId, examiner.tenantId(),
+                        List.of(answer.getPinnedItemPublicId()));
         authorizedReadOrder.verify(answerPayloadDecoder).decode(answer);
         authorizedReadOrder.verify(mediaService).presignGetAll(eq(Set.of(answerMediaId, promptMediaId)),
                 eq(com.pte.scoring.internal.constant.ExaminerScoringConstants.MEDIA_URL_TTL_SECONDS),
@@ -233,11 +235,12 @@ class ExaminerScoringServiceTest {
         when(eligibilityQueryService.isAiEligible(repeatedItemAnswer)).thenReturn(true);
         when(examinerAnswerScoreRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicId(
                 examiner.tenantId(), sessionId, attemptId)).thenReturn(List.of());
-        ExaminerQuestionPromptView firstPrompt = new ExaminerQuestionPromptView(1, "SPEAKING", "READ_ALOUD",
+        AttemptExaminerPromptView firstPrompt = new AttemptExaminerPromptView(firstItemId, 1, "SPEAKING", "READ_ALOUD",
                 "Prompt one", "First prompt text", null, null, null, null, List.of());
-        ExaminerQuestionPromptView secondPrompt = new ExaminerQuestionPromptView(2, "WRITING", "WRITE_ESSAY",
+        AttemptExaminerPromptView secondPrompt = new AttemptExaminerPromptView(secondItemId, 2, "WRITING", "WRITE_ESSAY",
                 "Prompt two", "Second prompt text", null, null, null, null, List.of());
-        when(assessmentService.getExaminerPrompts(List.of(firstItemId, secondItemId), examiner.tenantId()))
+        when(attemptService.getExaminerPrompts(attemptId, sessionId, examiner.tenantId(),
+                List.of(firstItemId, secondItemId)))
                 .thenReturn(Map.of(firstItemId, firstPrompt, secondItemId, secondPrompt));
         when(answerPayloadDecoder.decode(firstAnswer)).thenReturn(textAnswer("first response"));
         when(answerPayloadDecoder.decode(secondAnswer)).thenReturn(textAnswer("second response"));
@@ -248,8 +251,8 @@ class ExaminerScoringServiceTest {
         assertThat(detail.answers()).hasSize(3);
         assertThat(detail.answers()).extracting(answer -> answer.prompt().title())
                 .containsExactly("Prompt one", "Prompt one", "Prompt two");
-        verify(assessmentService, times(1))
-                .getExaminerPrompts(List.of(firstItemId, secondItemId), examiner.tenantId());
+        verify(attemptService, times(1))
+                .getExaminerPrompts(attemptId, sessionId, examiner.tenantId(), List.of(firstItemId, secondItemId));
     }
 
     @Test
@@ -262,7 +265,7 @@ class ExaminerScoringServiceTest {
         ScoringAnswer answer = answer(examiner.tenantId(), sessionId, attemptId, answerId);
         ExaminerAttemptAssignment assignment = new ExaminerAttemptAssignment(UUID.randomUUID(), examiner.tenantId(),
                 sessionId, attemptId, examiner.userId(), 1, UUID.randomUUID(), Instant.now());
-        ExaminerQuestionPromptView prompt = new ExaminerQuestionPromptView(1, "SPEAKING", "READ_ALOUD", "Prompt",
+        AttemptExaminerPromptView prompt = new AttemptExaminerPromptView(answer.getPinnedItemPublicId(), 1, "SPEAKING", "READ_ALOUD", "Prompt",
                 "Read the passage", null, null, null, null, List.of());
         givenActiveExaminer(examiner);
         when(workQueueRepository.findOwnedAttempt(examiner.tenantId(), sessionId, attemptId, examiner.userId()))
@@ -272,7 +275,8 @@ class ExaminerScoringServiceTest {
         when(eligibilityQueryService.isAiEligible(answer)).thenReturn(true);
         when(examinerAnswerScoreRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicId(
                 examiner.tenantId(), sessionId, attemptId)).thenReturn(List.of());
-        when(assessmentService.getExaminerPrompts(List.of(answer.getPinnedItemPublicId()), examiner.tenantId()))
+        when(attemptService.getExaminerPrompts(attemptId, sessionId, examiner.tenantId(),
+                List.of(answer.getPinnedItemPublicId())))
                 .thenReturn(Map.of(answer.getPinnedItemPublicId(), prompt));
         when(answerPayloadDecoder.decode(answer)).thenReturn(new DecodedAnswerPayload(
                 AnswerPayloadKind.AUDIO, null, answerMediaId, null, null, null, null));
@@ -309,8 +313,10 @@ class ExaminerScoringServiceTest {
         when(examinerAnswerScoreRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicId(
                 examiner.tenantId(), sessionId, attemptId))
                 .thenReturn(List.of());
-        when(assessmentService.getExaminerPrompts(List.of(answer.getPinnedItemPublicId()), examiner.tenantId()))
-                .thenReturn(Map.of(answer.getPinnedItemPublicId(), new ExaminerQuestionPromptView(1, "SPEAKING",
+        when(attemptService.getExaminerPrompts(attemptId, sessionId, examiner.tenantId(),
+                List.of(answer.getPinnedItemPublicId())))
+                .thenReturn(Map.of(answer.getPinnedItemPublicId(), new AttemptExaminerPromptView(
+                        answer.getPinnedItemPublicId(), 1, "SPEAKING",
                         "READ_ALOUD", "Prompt", "Text", null, null, null, null, List.of())));
         when(answerPayloadDecoder.decode(answer)).thenReturn(new DecodedAnswerPayload(
                 AnswerPayloadKind.TEXT, "student response", null, null, null, null, null));

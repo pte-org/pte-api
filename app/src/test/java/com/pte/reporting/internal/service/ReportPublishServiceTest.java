@@ -79,12 +79,13 @@ class ReportPublishServiceTest {
         AttemptScoreSummary summary = summary(74);
 
         when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(List.of(attempt));
-        when(attemptService.getScoreContext(attemptId)).thenReturn(
-                new AttemptScoreContextView(scoreTemplateId, scoreTemplateVersion, Set.of("SPEAKING")));
         when(scoringService.lockForReportPublication(eq(tenantId), eq(sessionId), any()))
                 .thenReturn(new ReportPublicationScoringView(publicationId, List.of(input)));
         when(attemptReportRepository.findByAttemptPublicId(attemptId)).thenReturn(Optional.of(report));
-        when(aggregationService.aggregateFromInputs(attemptId, tenantId, List.of(input))).thenReturn(summary);
+        when(aggregationService.aggregateBatchFromInputs(Set.of(attemptId), Map.of(attemptId, List.of(input))))
+                .thenReturn(Map.of(attemptId, new ReportScoreAggregation(
+                        new AttemptScoreContextView(scoreTemplateId, scoreTemplateVersion, Set.of("SPEAKING")),
+                        summary)));
         when(snapshotCodec.encode(eq(publicationId), eq(actorId), any(), eq(1), eq(examSnapshotId),
                 eq(scoreTemplateId), eq(scoreTemplateVersion), eq(summary), eq(List.of(input))))
                 .thenReturn("immutable-snapshot");

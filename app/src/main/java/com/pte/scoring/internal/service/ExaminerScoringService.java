@@ -1,7 +1,7 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.assessment.AssessmentService;
-import com.pte.assessment.dto.response.ExaminerQuestionPromptView;
+import com.pte.attempt.AttemptService;
+import com.pte.attempt.dto.response.AttemptExaminerPromptView;
 import com.pte.identity.IdentityService;
 import com.pte.media.MediaService;
 import com.pte.scoring.domain.ExaminerAnswerScore;
@@ -68,7 +68,7 @@ public class ExaminerScoringService {
     private final ScoringEligibilityQueryService eligibilityQueryService;
     private final AnswerPayloadDecoder answerPayloadDecoder;
     private final IdentityService identityService;
-    private final AssessmentService assessmentService;
+    private final AttemptService attemptService;
     private final MediaService mediaService;
     private final EntityManager entityManager;
 
@@ -79,7 +79,7 @@ public class ExaminerScoringService {
             ScoringSessionStateRepository sessionStateRepository,
             ScoringEligibilityQueryService eligibilityQueryService,
             AnswerPayloadDecoder answerPayloadDecoder, IdentityService identityService,
-            AssessmentService assessmentService, MediaService mediaService, EntityManager entityManager) {
+            AttemptService attemptService, MediaService mediaService, EntityManager entityManager) {
         this.workQueueRepository = workQueueRepository;
         this.assignmentRepository = assignmentRepository;
         this.scoringAnswerRepository = scoringAnswerRepository;
@@ -88,7 +88,7 @@ public class ExaminerScoringService {
         this.eligibilityQueryService = eligibilityQueryService;
         this.answerPayloadDecoder = answerPayloadDecoder;
         this.identityService = identityService;
-        this.assessmentService = assessmentService;
+        this.attemptService = attemptService;
         this.mediaService = mediaService;
         this.entityManager = entityManager;
     }
@@ -133,13 +133,13 @@ public class ExaminerScoringService {
                 .collect(Collectors.toMap(ExaminerAnswerScore::getAnswerPublicId, Function.identity()));
         List<UUID> pinnedItemPublicIds = eligibleAnswers.stream()
                 .map(ScoringAnswer::getPinnedItemPublicId).filter(Objects::nonNull).distinct().toList();
-        Map<UUID, ExaminerQuestionPromptView> promptsByItem = assessmentService
-                .getExaminerPrompts(pinnedItemPublicIds, examiner.tenantId());
+        Map<UUID, AttemptExaminerPromptView> promptsByItem = attemptService
+                .getExaminerPrompts(attemptPublicId, sessionPublicId, examiner.tenantId(), pinnedItemPublicIds);
 
         Map<UUID, DecodedAnswerPayload> decodedByAnswer = new HashMap<>();
         Set<UUID> mediaPublicIds = new LinkedHashSet<>();
         for (ScoringAnswer answer : eligibleAnswers) {
-            ExaminerQuestionPromptView prompt = answer.getPinnedItemPublicId() == null
+            AttemptExaminerPromptView prompt = answer.getPinnedItemPublicId() == null
                     ? null : promptsByItem.get(answer.getPinnedItemPublicId());
             if (prompt == null) {
                 throw new ExaminerWorkNotFoundException();
@@ -209,7 +209,7 @@ public class ExaminerScoringService {
     }
 
     private ExaminerAnswerDetailResponse toAnswerDetail(ScoringAnswer answer, ExaminerAnswerScore savedScore,
-            ExaminerQuestionPromptView prompt, DecodedAnswerPayload decoded, Map<UUID, String> mediaUrls,
+            AttemptExaminerPromptView prompt, DecodedAnswerPayload decoded, Map<UUID, String> mediaUrls,
             CurrentUser examiner) {
         if (savedScore != null && !savedScore.getExaminerPublicId().equals(examiner.userId())) {
             throw new ExaminerWorkNotFoundException();

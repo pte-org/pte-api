@@ -299,7 +299,11 @@ function Ensure-Subscription {
 
 function New-CapabilityManifest {
     return @{
-        capabilities = @("AUDIO_RECORDING", "OPTION_SELECTION")
+        # Keep this manifest aligned with the pte-app runtime registry. The
+        # MC_READING_SINGLE runtime contract currently requires option
+        # selection, while the registry also advertises audio playback for
+        # the listening/speaking screens shipped in the same app release.
+        capabilities = @("AUDIO_PLAYBACK", "AUDIO_RECORDING", "OPTION_SELECTION")
         appVersion = "1.0.0"
         supportedContracts = @(
             @{ screenKey = "READ_ALOUD_V1"; contractVersion = 1; answerSchemaVersion = 1; scoringProfileVersion = 1 },
