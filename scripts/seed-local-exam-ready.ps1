@@ -378,7 +378,7 @@ if ($null -eq $template) {
 Write-Host "== Creating or reusing a published/open exam =="
 $sessions = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/sessions" -Token $script:HostToken)
 $session = $sessions |
-    Where-Object { $_.name -eq $examName -and @("OPEN", "SCHEDULED") -contains "$($_.status)".ToUpperInvariant() } |
+    Where-Object { $_.name -eq $examName -and @("DRAFT", "OPEN", "SCHEDULED") -contains "$($_.status)".ToUpperInvariant() } |
     Select-Object -First 1
 
 if ($null -eq $session) {
@@ -397,17 +397,21 @@ if ($null -eq $session) {
         capacity             = 1
     }
 
-    # The create contract requires a future opening time. Move the draft back
-    # into the current window before generation so the pte-app can start now.
-    $openNow = (Get-Date).ToUniversalTime().AddMinutes(-1).ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $session = Invoke-SeedApi -Method PATCH -Path "/api/v1/sessions/$($session.publicId)" -Token $script:HostToken -Body @{
-        opensAt  = $openNow
-        closesAt = $closesAt
-    }
 }
 
 $sessionStatus = "$($session.status)".ToUpperInvariant()
 if ($sessionStatus -eq "DRAFT") {
+    # A subscription starts when its license is redeemed. Keep the opening
+    # time just ahead of the current instant so it remains inside that
+    # subscription window; using a time in the past is rejected by the
+    # subscription-window validation.
+    $openNow = (Get-Date).ToUniversalTime().AddSeconds(10).ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $closeNow = (Get-Date).ToUniversalTime().AddHours(2).ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $session = Invoke-SeedApi -Method PATCH -Path "/api/v1/sessions/$($session.publicId)" -Token $script:HostToken -Body @{
+        opensAt  = $openNow
+        closesAt = $closeNow
+    }
+
     $sources = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/sessions/$($session.publicId)/audience-sources" -Token $script:HostToken)
     $source = $sources | Where-Object { "$($_.sourceType)" -eq "CLASS" -and $_.sourcePublicId -eq $class.publicId } | Select-Object -First 1
     if ($null -eq $source) {

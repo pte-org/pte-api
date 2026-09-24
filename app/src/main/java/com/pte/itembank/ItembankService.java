@@ -12,6 +12,7 @@ import com.pte.itembank.dto.request.RejectQuestionRequest;
 import com.pte.itembank.dto.request.UpdateQuestionRequest;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.dto.response.QuestionResponse;
+import com.pte.itembank.dto.response.QuestionStatsResponse;
 import com.pte.itembank.internal.constant.ItembankConstants;
 import com.pte.itembank.internal.exception.InvalidQuestionStatusTransitionException;
 import com.pte.itembank.internal.exception.QuestionNotFoundException;
@@ -24,6 +25,12 @@ import com.pte.itembank.internal.service.ItembankAccessPolicy;
 import com.pte.itembank.internal.service.QuestionValidationHelper;
 import com.pte.media.MediaService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.web.PageMeta;
+import com.pte.shared.web.PagedResult;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +39,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -49,6 +58,10 @@ import java.util.stream.Collectors;
  */
 @Service
 public class ItembankService {
+
+    private static final int DEFAULT_PAGE = 0;
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final QuestionRepository questionRepository;
     private final QuestionValidationHelper validationHelper;
@@ -153,6 +166,62 @@ public class ItembankService {
                                 && question.getPromptText().toLowerCase().contains(normalizedQuery)))
                 .map(this::toResponse)
                 .toList();
+    }
+
+    /** Server-side question-bank search used by the common paginated UI. */
+    @Transactional(readOnly = true)
+    public PagedResult<QuestionResponse> listAccessible(CurrentUser caller, int requestedPage, int requestedSize,
+            String taskType, String section, String status, String query) {
+        int page = normalizePage(requestedPage);
+        int size = normalizePageSize(requestedSize);
+        String requestedTaskTypeKey = parseOptionalTaskTypeKey(taskType);
+        PteSection requestedSection = parseOptionalSection(section);
+        QuestionStatus requestedStatus = parseOptionalStatus(status);
+        String normalizedQuery = normalizeQuery(query);
+        UUID publicIdQuery = parsePublicIdQuery(query);
+        Pageable pageable = PageRequest.of(page, size,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+
+        Page<UUID> questionPage = questionRepository.findPagePublicIds(
+                requestedTaskTypeKey,
+                requestedSection == null ? null : requestedSection.name(),
+                requestedStatus,
+                normalizedQuery,
+                publicIdQuery,
+                pageable);
+
+        List<UUID> publicIds = questionPage.getContent();
+        Map<UUID, Question> questionsByPublicId = publicIds.isEmpty()
+                ? Map.of()
+                : questionRepository.findWithOptionsByPublicIdIn(publicIds).stream()
+                        .collect(Collectors.toMap(Question::getPublicId, question -> question,
+                                (first, ignored) -> first, HashMap::new));
+        List<QuestionResponse> responses = publicIds.stream()
+                .map(questionsByPublicId::get)
+                .filter(question -> question != null)
+                .map(this::toResponse)
+                .toList();
+
+        return new PagedResult<>(responses,
+                new PageMeta(questionPage.getNumber(), questionPage.getSize(), questionPage.getTotalElements(),
+                        questionPage.getTotalPages(), questionPage.isFirst(), questionPage.isLast(),
+                        questionPage.hasNext(), questionPage.hasPrevious()));
+    }
+
+    @Transactional(readOnly = true)
+    public QuestionStatsResponse stats(CurrentUser caller) {
+        Map<String, Long> sectionCounts = questionRepository.countBySectionAndVisibility(Visibility.SHARED).stream()
+                .collect(Collectors.toMap(row -> (String) row[0], row -> ((Number) row[1]).longValue()));
+        Map<QuestionStatus, Long> statusCounts = questionRepository.countByStatusAndVisibility(Visibility.SHARED)
+                .stream()
+                .collect(Collectors.toMap(row -> (QuestionStatus) row[0], row -> ((Number) row[1]).longValue()));
+        return new QuestionStatsResponse(
+                questionRepository.countByDeletedFalseAndVisibility(Visibility.SHARED),
+                sectionCounts.getOrDefault(PteSection.LISTENING.name(), 0L),
+                sectionCounts.getOrDefault(PteSection.READING.name(), 0L),
+                sectionCounts.getOrDefault(PteSection.WRITING.name(), 0L),
+                sectionCounts.getOrDefault(PteSection.SPEAKING.name(), 0L),
+                statusCounts.getOrDefault(QuestionStatus.DRAFT, 0L));
     }
 
     @Transactional
@@ -457,6 +526,32 @@ public class ItembankService {
         }
     }
 
+    private int normalizePage(int requestedPage) {
+        return Math.max(DEFAULT_PAGE, requestedPage);
+    }
+
+    private int normalizePageSize(int requestedSize) {
+        if (requestedSize <= 0) {
+            return DEFAULT_PAGE_SIZE;
+        }
+        return Math.min(requestedSize, MAX_PAGE_SIZE);
+    }
+
+    private String normalizeQuery(String query) {
+        return query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private UUID parsePublicIdQuery(String query) {
+        if (query == null || query.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(query.trim());
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
     private String parseOptionalTaskTypeKey(String value) {
         if (value == null || value.isBlank()) {
             return null;
@@ -473,7 +568,7 @@ public class ItembankService {
             return null;
         }
         try {
-            return QuestionStatus.valueOf(value.toUpperCase());
+            return QuestionStatus.valueOf(value.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             throw new QuestionValidationException(ItembankConstants.INVALID_QUESTION_FIELDS);
         }
@@ -484,7 +579,7 @@ public class ItembankService {
             return null;
         }
         try {
-            return PteSection.valueOf(value.toUpperCase());
+            return PteSection.valueOf(value.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             throw new QuestionValidationException(ItembankConstants.INVALID_QUESTION_FIELDS);
         }
