@@ -180,6 +180,7 @@ public class TaskRuntimeProfileService {
                 && expected.answerSchemaVersion() == actual.answerSchemaVersion()
                 && expected.scoringProfileKey().equals(actual.scoringProfileKey())
                 && expected.scoringProfileVersion() == actual.scoringProfileVersion()
-                && expected.requiredClientCapabilities().equals(actual.requiredClientCapabilities());
+                && TaskRuntimeProfileRegistry.sameCapabilities(expected.requiredClientCapabilities(),
+                        actual.requiredClientCapabilities());
     }
 }

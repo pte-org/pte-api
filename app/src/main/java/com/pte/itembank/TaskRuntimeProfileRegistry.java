@@ -60,7 +60,7 @@ public final class TaskRuntimeProfileRegistry {
                     && expected.answerSchemaVersion() == actual.answerSchemaVersion()
                     && expected.scoringProfileKey().equals(actual.scoringProfileKey())
                     && expected.scoringProfileVersion() == actual.scoringProfileVersion()
-                    && expected.requiredClientCapabilities().equals(actual.requiredClientCapabilities())
+                    && sameCapabilities(expected.requiredClientCapabilities(), actual.requiredClientCapabilities())
                     && expected.screenKey().equals(actual.screenKey())
                     && expected.contractVersion() == actual.contractVersion()
                     && expected.scoringMode().equals(actual.scoringMode())
@@ -69,6 +69,12 @@ public final class TaskRuntimeProfileRegistry {
         } catch (RuntimeException ex) {
             return false;
         }
+    }
+
+    /** Client capabilities are a set; their persisted CSV order is not contractual. */
+    static boolean sameCapabilities(List<String> left, List<String> right) {
+        return left != null && right != null && left.size() == right.size()
+                && left.stream().sorted().toList().equals(right.stream().sorted().toList());
     }
 
     /**
@@ -115,7 +121,7 @@ public final class TaskRuntimeProfileRegistry {
                 && profile.answerSchemaVersion() == actual.answerSchemaVersion()
                 && profile.scoringProfileKey().equals(actual.scoringProfileKey())
                 && profile.scoringProfileVersion() == actual.scoringProfileVersion()
-                && profile.requiredClientCapabilities().equals(actual.requiredClientCapabilities())
+                && sameCapabilities(profile.requiredClientCapabilities(), actual.requiredClientCapabilities())
                 && profile.scoringMode().equals(actual.scoringMode());
     }
 
