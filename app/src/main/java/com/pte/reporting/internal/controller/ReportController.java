@@ -23,7 +23,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v1/reports")
-@PreAuthorize("hasAnyRole('STUDENT','HOST_ADMIN','PLATFORM_ADMIN','PLATFORM_AUTHOR')")
+@PreAuthorize("hasAnyRole('STUDENT','HOST_ADMIN','PLATFORM_ADMIN')")
 public class ReportController {
 
     private final ReportService reportService;

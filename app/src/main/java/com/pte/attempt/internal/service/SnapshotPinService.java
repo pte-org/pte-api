@@ -138,15 +138,15 @@ public class SnapshotPinService {
         try {
             if (source.taskTypeKey() != null && !taskTypeCode.equals(
                     TaskTypeCodeCompatibility.normalizeTaskTypeKey(source.taskTypeKey()))) {
-                throw new IllegalArgumentException("task type key does not match the frozen task type");
+                throw new IllegalArgumentException(AttemptConstants.SNAPSHOT_TASK_TYPE_KEY_MISMATCH);
             }
             try {
                 if (!TaskTypeCodeCompatibility.parse(taskTypeCode).getSection().name().equals(source.section())) {
-                    throw new IllegalArgumentException("task type section does not match the frozen snapshot section");
+                    throw new IllegalArgumentException(AttemptConstants.SNAPSHOT_TASK_TYPE_SECTION_MISMATCH);
                 }
             } catch (RuntimeException customKey) {
                 if (source.section() == null || source.section().isBlank()) {
-                    throw new IllegalArgumentException("custom task type section is missing");
+                    throw new IllegalArgumentException(AttemptConstants.SNAPSHOT_CUSTOM_TASK_TYPE_SECTION_REQUIRED);
                 }
             }
         } catch (RuntimeException ex) {
@@ -277,17 +277,17 @@ public class SnapshotPinService {
         }
         try {
             if (!taskTypeCode.equals(runtime.taskTypeCode())) {
-                throw new IllegalArgumentException("runtime profile is not an allowlisted match");
+                throw new IllegalArgumentException(AttemptConstants.SNAPSHOT_RUNTIME_PROFILE_NOT_ALLOWLISTED);
             }
             if (TaskTypeCodeCompatibility.isStandard(taskTypeCode)) {
                 if (!TaskRuntimeProfileRegistry.isAllowlistedContract(runtime)) {
-                    throw new IllegalArgumentException("standard runtime profile differs from the allowlisted match");
+                    throw new IllegalArgumentException(AttemptConstants.SNAPSHOT_STANDARD_RUNTIME_PROFILE_MISMATCH);
                 }
             } else if (!("ACTIVE".equals(runtime.status()) || "RETIRED".equals(runtime.status()))
                     || runtime.screenKey() == null || runtime.contractVersion() < 1
                     || runtime.answerSchemaVersion() < 1 || runtime.scoringProfileKey() == null
                     || runtime.scoringMode() == null) {
-                throw new IllegalArgumentException("custom runtime profile is incomplete");
+                throw new IllegalArgumentException(AttemptConstants.SNAPSHOT_CUSTOM_RUNTIME_PROFILE_INCOMPLETE);
             }
         } catch (RuntimeException ex) {
             throw new ExamCapabilityException(AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE, List.of());

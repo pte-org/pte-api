@@ -6,6 +6,7 @@ import com.pte.scoretemplate.dto.request.ReplaceScoreTemplateItemsRequest;
 import com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.scoretemplate.internal.service.ScoreTemplateAdminService;
+import com.pte.scoretemplate.internal.constant.ScoreTemplateConstants;
 import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.itembank.TaskTypeRolloutProperties;
 import com.pte.scoretemplate.internal.exception.CustomTemplateActivationDisabledException;
@@ -101,7 +102,7 @@ public class ScoreTemplateController {
     @PreAuthorize("hasRole('HOST_ADMIN')")
     public ApiResponse<ScoreTemplateResponse> activeForHost() {
         if (scoreTemplateService == null) {
-            throw new IllegalStateException("Score template read service is not configured");
+            throw new IllegalStateException(ScoreTemplateConstants.TEMPLATE_READ_SERVICE_NOT_CONFIGURED);
         }
         return ApiResponse.success(scoreTemplateService.getActive());
     }

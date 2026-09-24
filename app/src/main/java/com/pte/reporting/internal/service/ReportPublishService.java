@@ -95,21 +95,25 @@ public class ReportPublishService {
         Set<UUID> attemptIds = attempts.stream().map(AttemptSummaryView::attemptPublicId).collect(Collectors.toSet());
         var inputsByAttempt = locked.answers().stream().filter(input -> attemptIds.contains(input.attemptPublicId()))
                 .collect(Collectors.groupingBy(ReportScoringAnswerView::attemptPublicId));
+        Map<UUID, ReportScoreAggregation> scoreAggregations =
+                aggregationService.aggregateBatchFromInputs(attemptIds, inputsByAttempt);
         Instant publishedAt = Instant.now();
         int cohortSize = attempts.size();
         for (AttemptSummaryView summary : attempts) {
-            List<ReportScoringAnswerView> attemptInputs = inputsByAttempt.getOrDefault(summary.attemptPublicId(), List.of());
+            List<ReportScoringAnswerView> attemptInputs =
+                    inputsByAttempt.getOrDefault(summary.attemptPublicId(), List.of());
             AttemptReport report = findOrCreate(summary);
             boolean newlyPublished = !report.isPublished();
             if (report.isPublished() && report.getReportSnapshotJson() != null) {
                 continue;
             }
-            AttemptScoreSummary scores = aggregationService.aggregateFromInputs(summary.attemptPublicId(), tenantId,
-                    attemptInputs);
-            var scoreContext = attemptService.getScoreContext(summary.attemptPublicId());
+            ReportScoreAggregation scoreAggregation = scoreAggregations.get(summary.attemptPublicId());
+            if (scoreAggregation == null) {
+                throw new IllegalStateException(ReportingConstants.SCORE_AGGREGATION_MISSING);
+            }
             String snapshotJson = snapshotCodec.encode(locked.publicationPublicId(), actorPublicId, publishedAt,
-                    cohortSize, summary.snapshotPublicId(), scoreContext.scoreTemplatePublicId(),
-                    scoreContext.scoreTemplateVersion(), scores, attemptInputs);
+                    cohortSize, summary.snapshotPublicId(), scoreAggregation.context().scoreTemplatePublicId(),
+                    scoreAggregation.context().scoreTemplateVersion(), scoreAggregation.summary(), attemptInputs);
             report.publishSnapshot(snapshotJson, locked.publicationPublicId(), actorPublicId, cohortSize, publishedAt);
             attemptReportRepository.save(report);
             if (newlyPublished) {

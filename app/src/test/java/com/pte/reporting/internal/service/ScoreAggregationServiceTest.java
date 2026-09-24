@@ -8,6 +8,7 @@ import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.scoring.ScoringService;
 import com.pte.scoring.dto.response.ReportScoringAnswerView;
+import com.pte.scoring.dto.response.ScoredAnswerView;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -279,6 +280,18 @@ class ScoreAggregationServiceTest {
         stubAnswers(answer("FILL_IN_THE_BLANKS_DRAG_AND_DROP", 80));
 
         AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
+
+        assertThat(summary.skillScores().get(Skill.READING).score()).isEqualTo(74);
+    }
+
+    @Test
+    void aggregateLegacyPublished_usesPreSelectionRawScores() {
+        stubTestedSections("READING");
+        stubTemplate(item("FILL_IN_THE_BLANKS_DRAG_AND_DROP", bd(0), bd(0), bd(0), bd(100), bd(0)));
+        when(scoringService.getScoredAnswersForAttempt(ATTEMPT_ID, TENANT_ID))
+                .thenReturn(List.of(new ScoredAnswerView("FILL_BLANKS_READING", 80)));
+
+        AttemptScoreSummary summary = service.aggregateLegacyPublished(ATTEMPT_ID, TENANT_ID);
 
         assertThat(summary.skillScores().get(Skill.READING).score()).isEqualTo(74);
     }

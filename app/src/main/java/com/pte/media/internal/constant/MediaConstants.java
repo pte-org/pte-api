@@ -7,6 +7,12 @@ public final class MediaConstants {
     public static final String UNSUPPORTED_CONTENT_TYPE = "UNSUPPORTED_CONTENT_TYPE";
     public static final String MEDIA_NOT_YET_UPLOADED = "MEDIA_NOT_YET_UPLOADED";
     public static final String CONTENT_TYPE_REQUIRED = "Content type is required";
+    public static final String PLATFORM_AUTHOR_REQUIRED_FOR_QUESTION_MEDIA =
+            "Only platform authors may upload question media";
+    public static final String STUDENT_REQUIRED_FOR_RESPONSE_AUDIO = "Only students may upload response audio";
+    public static final String MEDIA_ASSET_OWNED_BY_ANOTHER_AUTHOR = "The media asset is owned by another author";
+    public static final String CLOUDINARY_CREDENTIALS_NOT_CONFIGURED = "Cloudinary credentials are not configured";
+    public static final String SHA1_UNAVAILABLE = "SHA-1 is unavailable";
     public static final long MAX_AUTHORING_BYTES = 25L * 1024 * 1024;
     public static final long MAX_SUBMISSION_BYTES = 25L * 1024 * 1024;
 

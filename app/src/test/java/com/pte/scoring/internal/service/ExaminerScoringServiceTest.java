@@ -109,6 +109,23 @@ class ExaminerScoringServiceTest {
     }
 
     @Test
+    void publishedSessionDoesNotExposeExaminerAttemptOrMedia() {
+        CurrentUser examiner = examiner();
+        UUID sessionPublicId = UUID.randomUUID();
+        ScoringSessionState publicationLock = new ScoringSessionState(examiner.tenantId(), sessionPublicId);
+        publicationLock.lockForPublication(UUID.randomUUID(), Instant.parse("2026-01-03T00:00:00Z"));
+        givenActiveExaminer(examiner);
+        when(sessionStateRepository.findByTenantIdAndSessionPublicId(examiner.tenantId(), sessionPublicId))
+                .thenReturn(Optional.of(publicationLock));
+
+        assertThatThrownBy(() -> service.getAttempt(sessionPublicId, UUID.randomUUID(), examiner))
+                .isInstanceOf(ExaminerWorkNotFoundException.class);
+
+        verify(workQueueRepository, never()).findOwnedAttempt(any(), any(), any(), any());
+        verifyNoInteractions(assessmentService, mediaService, answerPayloadDecoder);
+    }
+
+    @Test
     void inactiveExaminerIsRejectedBeforeAssignmentAndMediaLookup() {
         CurrentUser examiner = examiner();
         when(identityService.findActiveExaminers(examiner.tenantId(), List.of(examiner.userId())))
@@ -399,9 +416,10 @@ class ExaminerScoringServiceTest {
         assertThatThrownBy(() -> service.submitScore(fixture.answer().getAnswerPublicId(),
                 new SubmitExaminerScoreRequest(80), examiner)).isInstanceOf(ExaminerScoreConflictException.class);
 
+        verify(entityManager).lock(fixture.answer(), LockModeType.PESSIMISTIC_WRITE);
+        verify(entityManager).refresh(fixture.answer(), LockModeType.PESSIMISTIC_WRITE);
         verify(entityManager).lock(publicationLock, LockModeType.PESSIMISTIC_WRITE);
         verify(entityManager).refresh(publicationLock, LockModeType.PESSIMISTIC_WRITE);
-        verify(entityManager, never()).lock(fixture.answer(), LockModeType.PESSIMISTIC_WRITE);
         verify(examinerAnswerScoreRepository, never()).findByAnswerPublicIdAndTenantId(any(), any());
         verify(examinerAnswerScoreRepository, never()).saveAndFlush(any());
     }

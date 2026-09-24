@@ -3,6 +3,8 @@ package com.pte.scoring;
 import com.pte.scoring.dto.response.AiEligibleAttemptView;
 import com.pte.scoring.dto.response.ScoredAnswerView;
 import com.pte.scoring.internal.service.ExaminerWorkQueryService;
+import com.pte.scoring.internal.service.ScorePublicationLockService;
+import com.pte.scoring.internal.service.ScoreSourceSelectionService;
 import com.pte.scoring.internal.service.ScoringEligibilityQueryService;
 import com.pte.scoring.internal.service.ScoringReviewReadQueryService;
 import com.pte.scoring.internal.service.ScoredAnswerQueryService;
@@ -34,12 +36,19 @@ class ScoringServiceTest {
     @Mock
     private ScoringReviewReadQueryService scoringReviewReadQueryService;
 
+    @Mock
+    private ScoreSourceSelectionService scoreSourceSelectionService;
+
+    @Mock
+    private ScorePublicationLockService scorePublicationLockService;
+
     private ScoringService service;
 
     @BeforeEach
     void setUp() {
         service = new ScoringService(scoredAnswerQueryService, scoringEligibilityQueryService,
-                examinerWorkQueryService, scoringReviewReadQueryService);
+                examinerWorkQueryService, scoringReviewReadQueryService,
+                scoreSourceSelectionService, scorePublicationLockService);
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.pte.media.domain;
 
 import com.pte.media.domain.enums.MediaStatus;
+import com.pte.media.domain.enums.CloudinaryDeliveryType;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -57,6 +58,10 @@ public class MediaObject extends BaseEntity {
 
     @Column(name = "cloudinary_resource_type")
     private String cloudinaryResourceType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cloudinary_delivery_type", nullable = false, length = 24)
+    private CloudinaryDeliveryType cloudinaryDeliveryType = CloudinaryDeliveryType.UPLOAD;
 
     @Column(name = "secure_url", columnDefinition = "text")
     private String secureUrl;

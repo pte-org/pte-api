@@ -2,6 +2,7 @@ package com.pte.assessment.internal.service;
 
 import com.pte.assessment.domain.SnapshotItem;
 import com.pte.assessment.dto.response.ExaminerQuestionPromptView;
+import com.pte.assessment.internal.constant.AssessmentConstants;
 import com.pte.assessment.internal.repository.SnapshotItemRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -64,7 +65,7 @@ public class SnapshotPromptQueryService {
                             option.orderIndex(), option.text(), option.blankIndex()))
                     .toList();
         } catch (JacksonException ex) {
-            throw new IllegalStateException("Pinned question options could not be decoded", ex);
+            throw new IllegalStateException(AssessmentConstants.PINNED_QUESTION_OPTIONS_DECODE_FAILED, ex);
         }
     }
 

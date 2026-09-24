@@ -3,6 +3,7 @@ package com.pte.assessment;
 import com.pte.assessment.dto.response.ExaminerQuestionPromptView;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.dto.response.SnapshotResponse;
+import com.pte.assessment.internal.constant.AssessmentConstants;
 import com.pte.assessment.internal.service.ExamGenerationService;
 import com.pte.assessment.internal.service.SnapshotPromptQueryService;
 import com.pte.assessment.internal.service.SnapshotPublishService;
@@ -73,7 +74,7 @@ public class AssessmentService {
     public Map<UUID, ExaminerQuestionPromptView> getExaminerPrompts(
             Collection<UUID> pinnedItemPublicIds, UUID tenantId) {
         if (snapshotPromptQueryService == null) {
-            throw new IllegalStateException("Examiner prompt dependencies are not configured");
+            throw new IllegalStateException(AssessmentConstants.EXAMINER_PROMPT_DEPENDENCIES_NOT_CONFIGURED);
         }
         return snapshotPromptQueryService.findForExaminer(pinnedItemPublicIds, tenantId);
     }
@@ -97,7 +98,7 @@ public class AssessmentService {
     @Transactional(readOnly = true)
     public ScoreTemplateFeasibilityResponse getTemplateFeasibility(UUID templatePublicId) {
         if (scoreTemplateService == null) {
-            throw new IllegalStateException("Template feasibility dependencies are not configured");
+            throw new IllegalStateException(AssessmentConstants.TEMPLATE_FEASIBILITY_DEPENDENCIES_NOT_CONFIGURED);
         }
         return scoreTemplateService.getTemplateFeasibility(templatePublicId);
     }

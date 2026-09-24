@@ -56,6 +56,18 @@ public final class AttemptConstants {
     public static final String MISSING_PINNED_ITEM_AT_INDEX = "Missing pinned item at index %s";
     public static final String ATTEMPT_DISAPPEARED_MID_TRANSACTION = "Attempt disappeared mid-transaction: %s";
     public static final String PINNED_SNAPSHOT_CACHE_SERIALIZATION_FAILED = "Failed to serialize pinned snapshot cache entry";
+    public static final String SNAPSHOT_TASK_TYPE_KEY_MISMATCH =
+            "task type key does not match the frozen task type";
+    public static final String SNAPSHOT_TASK_TYPE_SECTION_MISMATCH =
+            "task type section does not match the frozen snapshot section";
+    public static final String SNAPSHOT_CUSTOM_TASK_TYPE_SECTION_REQUIRED =
+            "custom task type section is missing";
+    public static final String SNAPSHOT_RUNTIME_PROFILE_NOT_ALLOWLISTED =
+            "runtime profile is not an allowlisted match";
+    public static final String SNAPSHOT_STANDARD_RUNTIME_PROFILE_MISMATCH =
+            "standard runtime profile differs from the allowlisted match";
+    public static final String SNAPSHOT_CUSTOM_RUNTIME_PROFILE_INCOMPLETE =
+            "custom runtime profile is incomplete";
 
     public static final String CACHE_KEY_PREFIX = "attempt:pinned-snapshot:";
     public static final String LOCK_KEY_PREFIX = "attempt:lock:pinned-snapshot:";

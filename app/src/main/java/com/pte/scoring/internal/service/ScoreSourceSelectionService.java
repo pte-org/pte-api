@@ -7,9 +7,6 @@ import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.ScoringSessionState;
 import com.pte.scoring.domain.enums.ScoreSource;
 import com.pte.scoring.domain.enums.ScoreSourceSelectionScope;
-import com.pte.scoring.domain.enums.AiProviderCategory;
-import com.pte.scoring.domain.enums.ExaminerAnswerScoreStatus;
-import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.dto.request.SelectScoreSourceRequest;
 import com.pte.scoring.dto.response.ScoreSourceSelectionPreviewResponse;
@@ -181,21 +178,12 @@ public class ScoreSourceSelectionService {
 
     private boolean isAiEligible(ScoringAnswer answer) {
         return methodResolver.resolve(answer.getScoreTemplatePublicId(), answer.getTaskType())
-                .map(method -> method == ScoringMethod.AI_SPEECH || method == ScoringMethod.AI_TEXT).orElse(false);
+                .map(ScoringMethod::isAiScored).orElse(false);
     }
 
     private boolean isAvailable(ScoringAnswer answer, ExaminerAnswerScore examinerScore, ScoreSource source) {
-        if (source == ScoreSource.AI) {
-            return answer.getStatus() == ScoringAnswerStatus.SCORED && inRange(answer.getRawScore())
-                    && answer.getAiProviderCategory() == AiProviderCategory.REAL
-                    && answer.getAiProvider() != null && !answer.getAiProvider().isBlank();
-        }
-        return examinerScore != null && examinerScore.getStatus() == ExaminerAnswerScoreStatus.SUBMITTED
-                && inRange(examinerScore.getScore());
-    }
-
-    private boolean inRange(Integer score) {
-        return score != null && score >= 0 && score <= 100;
+        return source == ScoreSource.AI ? answer.hasPublishableAiScore()
+                : examinerScore != null && examinerScore.isPublishable();
     }
 
     private boolean isPublicationLocked(UUID tenantId, UUID sessionPublicId) {

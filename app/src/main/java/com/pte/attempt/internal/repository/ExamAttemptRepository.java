@@ -49,4 +49,9 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long> 
     /** Mirrors {@link #findWithPinnedByPublicIdAndStudentPublicId} but no student filter — trusted internal caller (reporting's per-attempt scoring, Phase 5), not a student-facing read. */
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
     Optional<ExamAttempt> findWithPinnedByPublicId(UUID publicId);
+
+    /** Batch context read for report publication; loads each pinned section set with a single query. */
+    @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
+    @Query("SELECT DISTINCT a FROM ExamAttempt a WHERE a.publicId IN :publicIds")
+    List<ExamAttempt> findAllWithPinnedByPublicIds(@Param("publicIds") List<UUID> publicIds);
 }

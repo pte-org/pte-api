@@ -159,12 +159,17 @@ public class ScoringAnswer extends BaseEntity {
         this.aiProviderVersion = providerVersion;
     }
 
+    public boolean hasPublishableAiScore() {
+        return status == ScoringAnswerStatus.SCORED && rawScore != null && rawScore >= 0 && rawScore <= 100
+                && aiProviderCategory == AiProviderCategory.REAL && aiProvider != null && !aiProvider.isBlank();
+    }
+
     public void selectScoreSource(ScoreSource source, UUID actorPublicId, Instant selectedAt,
             ExaminerAnswerScore submittedExaminerScore) {
         if (source == null || actorPublicId == null || selectedAt == null) {
             throw new IllegalArgumentException(ScoringDomainConstants.SCORE_SOURCE_SELECTION_FIELDS_REQUIRED);
         }
-        if (source == ScoreSource.AI && (rawScore == null || aiProviderCategory != AiProviderCategory.REAL)) {
+        if (source == ScoreSource.AI && !hasPublishableAiScore()) {
             throw new IllegalStateException(ScoringDomainConstants.REAL_AI_SCORE_REQUIRED_FOR_SELECTION);
         }
         if (source == ScoreSource.EXAMINER && !isSubmittedExaminerScoreForThisAnswer(submittedExaminerScore)) {

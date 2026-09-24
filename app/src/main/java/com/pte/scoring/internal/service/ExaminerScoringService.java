@@ -110,6 +110,9 @@ public class ExaminerScoringService {
     @Transactional(readOnly = true)
     public ExaminerAttemptDetailResponse getAttempt(UUID sessionPublicId, UUID attemptPublicId, CurrentUser caller) {
         CurrentUser examiner = requireActiveExaminer(caller);
+        if (isSessionPublished(examiner.tenantId(), sessionPublicId)) {
+            throw new ExaminerWorkNotFoundException();
+        }
         ExaminerAttemptAssignment assignment = workQueueRepository
                 .findOwnedAttempt(examiner.tenantId(), sessionPublicId, attemptPublicId, examiner.userId())
                 .orElseThrow(ExaminerWorkNotFoundException::new);
@@ -247,6 +250,12 @@ public class ExaminerScoringService {
                 throw new ExaminerScoreConflictException();
             }
         });
+    }
+
+    private boolean isSessionPublished(UUID tenantId, UUID sessionPublicId) {
+        return sessionStateRepository.findByTenantIdAndSessionPublicId(tenantId, sessionPublicId)
+                .map(state -> state.getPublicationPublicId() != null)
+                .orElse(false);
     }
 
     private ExaminerScoreSubmissionResponse toSubmission(ExaminerAnswerScore score) {

@@ -39,7 +39,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -60,13 +62,15 @@ class ExaminerAssignmentServiceTest {
     @Mock private IdentityService identityService;
     @Mock private ExaminerAssignmentBatchRepository batchRepository;
     @Mock private ExaminerAttemptAssignmentRepository assignmentRepository;
+    @Mock private ScorePublicationLockService publicationLockService;
 
     private ExaminerAssignmentService service;
 
     @BeforeEach
     void setUp() {
         service = new ExaminerAssignmentService(sessionService, enrollmentService, attemptService, eligibilityService,
-                identityService, batchRepository, assignmentRepository, JsonMapper.builder().build());
+                identityService, batchRepository, assignmentRepository, publicationLockService,
+                JsonMapper.builder().build());
     }
 
     @Test
@@ -106,6 +110,22 @@ class ExaminerAssignmentServiceTest {
         assertThat(confirmRetry.status()).isEqualTo("COMMITTED");
         verify(assignmentRepository).saveAll(any());
         verify(assignmentRepository).flush();
+    }
+
+    @Test
+    void assignmentPreviewIsRejectedAfterSessionReportPublication() {
+        doThrow(new IllegalStateException("published")).when(publicationLockService)
+                .assertNotPublished(tenantId, sessionId);
+
+        assertThatThrownBy(() -> service.preview(sessionId,
+                new CreateExaminerAssignmentPreviewRequest(AssignmentBatchMode.RANDOM,
+                        List.of(new AssignmentScopeRequest(AssignmentScopeType.CLASS, classId, null)),
+                        List.of(examiner1)), host))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(sessionService).lockForExaminerAssignment(sessionId, tenantId);
+        verifyNoInteractions(enrollmentService, attemptService, eligibilityService, identityService,
+                batchRepository, assignmentRepository);
     }
 
     @Test

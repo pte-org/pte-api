@@ -202,7 +202,8 @@ class ExaminerAssignmentDatabaseIntegrationTest {
     private ExaminerAssignmentService newService(Dependencies dependencies) {
         return new ExaminerAssignmentService(dependencies.sessionService(), dependencies.enrollmentService(),
                 dependencies.attemptService(), dependencies.eligibilityService(), dependencies.identityService(),
-                batchRepository, assignmentRepository, JsonMapper.builder().build());
+                batchRepository, assignmentRepository, mock(ScorePublicationLockService.class),
+                JsonMapper.builder().build());
     }
 
     private <T> T inTransaction(Supplier<T> callback) {

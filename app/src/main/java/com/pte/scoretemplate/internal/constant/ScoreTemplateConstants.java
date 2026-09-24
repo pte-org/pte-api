@@ -19,6 +19,11 @@ public final class ScoreTemplateConstants {
     public static final String RUNTIME_PROFILE_NOT_PINNED = "RUNTIME_PROFILE_NOT_PINNED";
     public static final String RUNTIME_PROFILE_INVALID = "RUNTIME_PROFILE_INVALID";
     public static final String UNKNOWN_TASK_TYPE = "UNKNOWN_TASK_TYPE";
+    public static final String MISSING_TASK_TYPE_KEY = "missing task type key";
+    public static final String UNKNOWN_TEMPLATE_POLICY = "Unknown template policy: ";
+    public static final String TEMPLATE_FEASIBILITY_DEPENDENCIES_NOT_CONFIGURED =
+            "Template feasibility dependencies are not configured";
+    public static final String TEMPLATE_READ_SERVICE_NOT_CONFIGURED = "Score template read service is not configured";
 
     public static final String NAME_REQUIRED = "Template name is required";
     public static final String ITEMS_REQUIRED = "A template needs at least one item";

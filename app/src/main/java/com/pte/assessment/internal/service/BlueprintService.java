@@ -99,7 +99,7 @@ public class BlueprintService {
     @Transactional
     public SnapshotResponse approve(UUID publicId, CurrentUser caller) {
         if (!accessPolicy.canApprove(caller)) {
-            throw new AccessDeniedException("Only platform admins may approve blueprints");
+            throw new AccessDeniedException(AssessmentConstants.BLUEPRINT_APPROVAL_PLATFORM_ADMIN_REQUIRED);
         }
         ExamBlueprint blueprint = blueprintRepository.findWithItemsByPublicId(publicId)
                 .orElseThrow(BlueprintNotFoundException::new);
@@ -111,7 +111,7 @@ public class BlueprintService {
     @Transactional
     public BlueprintResponse reject(UUID publicId, RejectBlueprintRequest request, CurrentUser caller) {
         if (!accessPolicy.canApprove(caller)) {
-            throw new AccessDeniedException("Only platform admins may reject blueprints");
+            throw new AccessDeniedException(AssessmentConstants.BLUEPRINT_REJECTION_PLATFORM_ADMIN_REQUIRED);
         }
         ExamBlueprint blueprint = blueprintRepository.findWithItemsByPublicId(publicId)
                 .orElseThrow(BlueprintNotFoundException::new);
@@ -151,7 +151,7 @@ public class BlueprintService {
 
     private void requireAuthor(CurrentUser caller) {
         if (!accessPolicy.canAuthor(caller)) {
-            throw new AccessDeniedException("Only platform authors may manage blueprints");
+            throw new AccessDeniedException(AssessmentConstants.BLUEPRINT_AUTHOR_PLATFORM_AUTHOR_REQUIRED);
         }
     }
 

@@ -220,7 +220,7 @@ public class SnapshotItem extends BaseEntity {
                     .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             return java.util.HexFormat.of().formatHex(digest);
         } catch (java.security.NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("SHA-256 is unavailable", ex);
+            throw new IllegalStateException(AssessmentDomainConstants.SNAPSHOT_SHA256_UNAVAILABLE, ex);
         }
     }
 }

@@ -12,6 +12,8 @@ import com.pte.shared.StartedAttemptLookup;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -70,6 +72,11 @@ public class AttemptService implements StartedAttemptLookup {
     /** The pinned score template + tested sections for one attempt — reporting's weighted scoring (Phase 5). */
     public AttemptScoreContextView getScoreContext(UUID attemptPublicId) {
         return attemptSummaryQueryService.getScoreContext(attemptPublicId);
+    }
+
+    /** Batch pinned scoring contexts for report publication; attempt contents stay inside this module. */
+    public Map<UUID, AttemptScoreContextView> getScoreContexts(Collection<UUID> attemptPublicIds) {
+        return attemptSummaryQueryService.getScoreContexts(attemptPublicIds);
     }
 
     /** Batch conflict read for session publish; no attempt content crosses the module boundary. */

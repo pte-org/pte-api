@@ -1,6 +1,7 @@
 package com.pte.media.internal.service;
 
 import com.pte.media.domain.MediaObject;
+import com.pte.media.domain.enums.CloudinaryDeliveryType;
 import com.pte.media.domain.enums.MediaStatus;
 import com.pte.media.internal.dto.request.CloudinaryCompleteRequest;
 import com.pte.media.internal.dto.request.CloudinaryUploadRequest;
@@ -18,6 +19,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -30,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 
 /** Cloudinary direct-upload adapter for authoring media and student responses. */
@@ -66,10 +69,10 @@ public class CloudinaryMediaService {
         boolean authoringMedia = isAuthoringAssetKind(request.assetKind());
         boolean studentResponse = MediaConstants.STUDENT_RESPONSE_AUDIO.equals(request.assetKind());
         if (authoringMedia && !isPlatformAuthor(caller)) {
-            throw new AccessDeniedException("Only platform authors may upload question media");
+            throw new AccessDeniedException(MediaConstants.PLATFORM_AUTHOR_REQUIRED_FOR_QUESTION_MEDIA);
         }
         if (studentResponse && !caller.hasRole("STUDENT")) {
-            throw new AccessDeniedException("Only students may upload response audio");
+            throw new AccessDeniedException(MediaConstants.STUDENT_REQUIRED_FOR_RESPONSE_AUDIO);
         }
         if (!authoringMedia && !studentResponse) {
             throw new UnsupportedContentTypeException();
@@ -86,6 +89,8 @@ public class CloudinaryMediaService {
         String publicId = mediaPublicId.toString();
         String folder = studentResponse ? submissionFolder : authoringFolder;
         String cloudinaryPublicId = folder + "/" + publicId;
+        String deliveryType = CloudinaryDeliveryType.AUTHENTICATED.name().toLowerCase(java.util.Locale.ROOT);
+        // Cloudinary REST carries the delivery type in the endpoint path, not the multipart body/signature.
         String signature = sign("folder=" + folder + "&public_id=" + publicId + "&timestamp=" + timestamp);
 
         MediaObject media = new MediaObject();
@@ -97,10 +102,12 @@ public class CloudinaryMediaService {
         media.setStorageKey(cloudinaryPublicId);
         media.setCloudinaryPublicId(cloudinaryPublicId);
         media.setCloudinaryResourceType(resourceType);
+        media.setCloudinaryDeliveryType(CloudinaryDeliveryType.AUTHENTICATED);
         media.setSizeBytes(request.sizeBytes());
         repository.save(media);
 
-        String uploadUrl = "https://api.cloudinary.com/v1_1/%s/%s/upload".formatted(cloudName, resourceType);
+        String uploadUrl = "https://api.cloudinary.com/v1_1/%s/%s/%s/upload".formatted(
+                cloudName, resourceType, deliveryType);
         return new CloudinaryUploadResponse(media.getPublicId(), cloudinaryPublicId, uploadUrl, apiKey,
                 String.valueOf(timestamp),
                 signature, folder, resourceType, SIGNATURE_TTL_SECONDS);
@@ -146,7 +153,10 @@ public class CloudinaryMediaService {
         if (media.getStatus() != MediaStatus.UPLOADED || media.getSecureUrl() == null) {
             throw new MediaNotYetUploadedException();
         }
-        return new MediaPreviewResponse(media.getSecureUrl(), SIGNATURE_TTL_SECONDS, media.getDurationSeconds());
+        long ttl = media.getCloudinaryDeliveryType() == CloudinaryDeliveryType.AUTHENTICATED
+                ? SIGNATURE_TTL_SECONDS : 0;
+        String url = ttl == 0 ? media.getSecureUrl() : privateDownloadUrl(media, ttl);
+        return new MediaPreviewResponse(url, ttl, media.getDurationSeconds());
     }
 
     /** Trusted module-to-module resolution for approved question media. */
@@ -200,7 +210,45 @@ public class CloudinaryMediaService {
             throw new MediaNotYetUploadedException();
         }
         long ttl = Math.min(Math.max(requestedTtlSeconds, 1), SIGNATURE_TTL_SECONDS);
-        return new PresignedDownloadResponse(media.getSecureUrl(), ttl, media.getDurationSeconds());
+        if (media.getCloudinaryDeliveryType() != CloudinaryDeliveryType.AUTHENTICATED) {
+            // Existing pre-migration assets are still public Cloudinary uploads; never claim their URL expires.
+            return new PresignedDownloadResponse(media.getSecureUrl(), 0, media.getDurationSeconds());
+        }
+        return new PresignedDownloadResponse(privateDownloadUrl(media, ttl), ttl, media.getDurationSeconds());
+    }
+
+    private String privateDownloadUrl(MediaObject media, long ttlSeconds) {
+        long timestamp = Instant.now().getEpochSecond();
+        Map<String, String> signedParameters = new TreeMap<>();
+        signedParameters.put("attachment", "false");
+        signedParameters.put("expires_at", String.valueOf(timestamp + ttlSeconds));
+        signedParameters.put("format", fileFormat(media.getContentType()));
+        signedParameters.put("public_id", media.getCloudinaryPublicId());
+        signedParameters.put("timestamp", String.valueOf(timestamp));
+        signedParameters.put("type", CloudinaryDeliveryType.AUTHENTICATED.name().toLowerCase(java.util.Locale.ROOT));
+        String payload = signedParameters.entrySet().stream()
+                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .collect(java.util.stream.Collectors.joining("&"));
+        String signature = sign(payload);
+        String query = signedParameters.entrySet().stream()
+                .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
+                .collect(java.util.stream.Collectors.joining("&"));
+        return "https://api.cloudinary.com/v1_1/%s/%s/download?%s&signature=%s&api_key=%s".formatted(
+                cloudName, media.getCloudinaryResourceType(), query, signature, encode(apiKey));
+    }
+
+    private String fileFormat(String contentType) {
+        return switch (contentType) {
+            case "audio/wav" -> "wav";
+            case "image/png" -> "png";
+            case "image/jpeg" -> "jpg";
+            case "image/webp" -> "webp";
+            default -> throw new UnsupportedContentTypeException();
+        };
+    }
+
+    private String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
     public void validateAuthoringMedia(UUID mediaPublicId, String assetKind, CurrentUser caller) {
@@ -215,7 +263,7 @@ public class CloudinaryMediaService {
             throw new UnsupportedContentTypeException();
         }
         if (!caller.hasRole("PLATFORM_ADMIN") && !media.getOwnerPublicId().equals(caller.userId())) {
-            throw new AccessDeniedException("The media asset is owned by another author");
+            throw new AccessDeniedException(MediaConstants.MEDIA_ASSET_OWNED_BY_ANOTHER_AUTHOR);
         }
     }
 
@@ -239,13 +287,13 @@ public class CloudinaryMediaService {
 
     private String sign(String payload) {
         if (cloudName.isBlank() || apiKey.isBlank() || apiSecret.isBlank()) {
-            throw new IllegalStateException("Cloudinary credentials are not configured");
+            throw new IllegalStateException(MediaConstants.CLOUDINARY_CREDENTIALS_NOT_CONFIGURED);
         }
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-1");
             return HexFormat.of().formatHex(digest.digest((payload + apiSecret).getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("SHA-1 is unavailable", ex);
+            throw new IllegalStateException(MediaConstants.SHA1_UNAVAILABLE, ex);
         }
     }
 }

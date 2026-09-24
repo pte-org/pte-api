@@ -22,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -82,6 +84,23 @@ public class ScoreTemplateService {
         return ScoreTemplateMapper.toResponse(template);
     }
 
+    /** Resolves pinned templates for a report cohort with one item-fetch query. */
+    @Transactional(readOnly = true)
+    public Map<UUID, ScoreTemplateResponse> getByPublicIds(Collection<UUID> publicIds) {
+        if (publicIds == null || publicIds.isEmpty()) {
+            return Map.of();
+        }
+        Set<UUID> uniqueIds = new LinkedHashSet<>(publicIds);
+        Map<UUID, ScoreTemplateResponse> templates = repository.findAllWithItemsByPublicIds(List.copyOf(uniqueIds))
+                .stream()
+                .map(ScoreTemplateMapper::toResponse)
+                .collect(java.util.stream.Collectors.toMap(ScoreTemplateResponse::publicId, template -> template));
+        if (templates.size() != uniqueIds.size()) {
+            throw new ScoreTemplateNotFoundException();
+        }
+        return Map.copyOf(templates);
+    }
+
     /** Returns a template only when it is currently ACTIVE, without exposing its internal enum. */
     @Transactional(readOnly = true)
     public Optional<ScoreTemplateResponse> findActiveByPublicId(UUID publicId) {
@@ -94,7 +113,7 @@ public class ScoreTemplateService {
     @Transactional(readOnly = true)
     public ScoreTemplateFeasibilityResponse getTemplateFeasibility(UUID templatePublicId) {
         if (itembankService == null) {
-            throw new IllegalStateException("Template feasibility dependencies are not configured");
+            throw new IllegalStateException(ScoreTemplateConstants.TEMPLATE_FEASIBILITY_DEPENDENCIES_NOT_CONFIGURED);
         }
         ScoreTemplateResponse template = getByPublicId(templatePublicId);
         Set<String> taskTypeKeys = new java.util.LinkedHashSet<>();

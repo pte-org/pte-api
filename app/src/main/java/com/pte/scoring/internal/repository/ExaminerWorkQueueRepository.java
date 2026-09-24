@@ -50,6 +50,10 @@ public interface ExaminerWorkQueueRepository extends Repository<ExaminerAttemptA
             where assignment.tenantId = :tenantId
               and assignment.examinerPublicId = :examinerPublicId
               and assignment.deleted = false
+              and not exists (select state.id from ScoringSessionState state
+                    where state.tenantId = assignment.tenantId
+                      and state.sessionPublicId = assignment.sessionPublicId
+                      and state.publicationPublicId is not null)
               and (:sessionPublicId is null or assignment.sessionPublicId = :sessionPublicId)
               and (:status = 'ALL'
                 or (:status = 'PENDING' and assignment.eligibleAnswerCount > 0
@@ -80,6 +84,10 @@ public interface ExaminerWorkQueueRepository extends Repository<ExaminerAttemptA
             where assignment.tenantId = :tenantId
               and assignment.examinerPublicId = :examinerPublicId
               and assignment.deleted = false
+              and not exists (select state.id from ScoringSessionState state
+                    where state.tenantId = assignment.tenantId
+                      and state.sessionPublicId = assignment.sessionPublicId
+                      and state.publicationPublicId is not null)
               and (:sessionPublicId is null or assignment.sessionPublicId = :sessionPublicId)
               and (:status = 'ALL'
                 or (:status = 'PENDING' and assignment.eligibleAnswerCount > 0

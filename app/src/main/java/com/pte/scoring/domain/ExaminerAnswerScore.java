@@ -91,6 +91,10 @@ public class ExaminerAnswerScore extends BaseEntity {
         }
     }
 
+    public boolean isPublishable() {
+        return status == ExaminerAnswerScoreStatus.SUBMITTED && score >= 0 && score <= 100;
+    }
+
     @PreUpdate
     private void preventUpdate() {
         throw new IllegalStateException(ScoringDomainConstants.EXAMINER_SCORES_IMMUTABLE);

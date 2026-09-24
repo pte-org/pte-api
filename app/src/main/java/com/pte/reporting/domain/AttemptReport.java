@@ -22,7 +22,9 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "attempt_reports", indexes = {
-        @Index(name = "idx_attempt_reports_session", columnList = "session_public_id")
+        @Index(name = "idx_attempt_reports_session", columnList = "session_public_id"),
+        @Index(name = "idx_attempt_reports_student_tenant_published",
+                columnList = "student_public_id, tenant_id, published, published_at")
 })
 @Getter
 @Setter

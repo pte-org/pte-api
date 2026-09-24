@@ -51,7 +51,7 @@ public class ScoringEligibilityQueryService {
 
     boolean isAiEligible(ScoringAnswer answer) {
         return scoringMethodResolver.resolve(answer.getScoreTemplatePublicId(), answer.getTaskType())
-                .filter(method -> method == ScoringMethod.AI_SPEECH || method == ScoringMethod.AI_TEXT)
+                .filter(ScoringMethod::isAiScored)
                 .isPresent();
     }
 }

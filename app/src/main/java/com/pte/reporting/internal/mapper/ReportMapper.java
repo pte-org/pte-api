@@ -23,6 +23,7 @@ public final class ReportMapper {
                 report.getSessionPublicId(),
                 report.isPublished(),
                 report.getPublishedAt(),
+                report.getReportSnapshotJson() != null,
                 overall,
                 communicative);
     }

@@ -5,9 +5,11 @@ import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.reporting.domain.enums.Skill;
 import com.pte.scoretemplate.ScoreTemplateService;
+import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoring.ScoringService;
 import com.pte.scoring.dto.response.ReportScoringAnswerView;
+import com.pte.scoring.dto.response.ScoredAnswerView;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -80,12 +82,43 @@ public class ScoreAggregationService {
 
     public AttemptScoreSummary aggregateFromInputs(UUID attemptPublicId, UUID tenantId,
             List<ReportScoringAnswerView> answers) {
-        Map<String, BigDecimal> avgRawByTaskType = averageSelectedScoresByTaskType(answers);
-
         AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
-        List<ScoreTemplateItemResponse> templateItems =
-                scoreTemplateService.getByPublicId(context.scoreTemplatePublicId()).items();
+        ScoreTemplateResponse template = scoreTemplateService.getByPublicId(context.scoreTemplatePublicId());
+        return aggregateWithScores(attemptPublicId, averageSelectedScoresByTaskType(answers), context, template.items());
+    }
 
+    /** Loads pinned contexts/templates in batches before aggregating a session cohort. */
+    public Map<UUID, ReportScoreAggregation> aggregateBatchFromInputs(Set<UUID> attemptPublicIds,
+            Map<UUID, List<ReportScoringAnswerView>> answersByAttempt) {
+        if (attemptPublicIds == null || attemptPublicIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, AttemptScoreContextView> contexts = attemptService.getScoreContexts(attemptPublicIds);
+        Set<UUID> templateIds = contexts.values().stream()
+                .map(AttemptScoreContextView::scoreTemplatePublicId).collect(Collectors.toSet());
+        Map<UUID, ScoreTemplateResponse> templates = scoreTemplateService.getByPublicIds(templateIds);
+        Map<UUID, ReportScoreAggregation> results = new HashMap<>();
+        for (UUID attemptPublicId : attemptPublicIds) {
+            AttemptScoreContextView context = contexts.get(attemptPublicId);
+            ScoreTemplateResponse template = templates.get(context.scoreTemplatePublicId());
+            AttemptScoreSummary summary = aggregateWithScores(attemptPublicId,
+                    averageSelectedScoresByTaskType(answersByAttempt.getOrDefault(attemptPublicId, List.of())),
+                    context, template.items());
+            results.put(attemptPublicId, new ReportScoreAggregation(context, summary));
+        }
+        return Map.copyOf(results);
+    }
+
+    /** Preserves the pre-snapshot scoring behavior for reports already published before this workflow. */
+    public AttemptScoreSummary aggregateLegacyPublished(UUID attemptPublicId, UUID tenantId) {
+        List<ScoredAnswerView> answers = scoringService.getScoredAnswersForAttempt(attemptPublicId, tenantId);
+        AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
+        ScoreTemplateResponse template = scoreTemplateService.getByPublicId(context.scoreTemplatePublicId());
+        return aggregateWithScores(attemptPublicId, averageRawScoresByTaskType(answers), context, template.items());
+    }
+
+    private AttemptScoreSummary aggregateWithScores(UUID attemptPublicId, Map<String, BigDecimal> avgRawByTaskType,
+            AttemptScoreContextView context, List<ScoreTemplateItemResponse> templateItems) {
         Map<Skill, SkillScore> skillScores = new EnumMap<>(Skill.class);
         for (Skill skill : Skill.values()) {
             if (context.testedSections().contains(skill.name())) {
@@ -100,6 +133,19 @@ public class ScoreAggregationService {
                 : null;
 
         return new AttemptScoreSummary(overall, skillScores);
+    }
+
+    private Map<String, BigDecimal> averageRawScoresByTaskType(List<ScoredAnswerView> answers) {
+        Map<String, List<ScoredAnswerView>> byTaskType = answers.stream()
+                .collect(Collectors.groupingBy(answer ->
+                        TaskTypeCodeCompatibility.normalizeTaskTypeKey(answer.taskType())));
+        Map<String, BigDecimal> result = new HashMap<>();
+        byTaskType.forEach((taskType, group) -> {
+            BigDecimal sum = group.stream().map(answer -> BigDecimal.valueOf(answer.rawScore()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            result.put(taskType, sum.divide(BigDecimal.valueOf(group.size()), MATH_CONTEXT));
+        });
+        return result;
     }
 
     /** Only the selected publishable score contributes; objective scores are supplied unchanged by scoring. */

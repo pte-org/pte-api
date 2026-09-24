@@ -98,17 +98,6 @@ class AttemptLifecycleServiceTest {
             heartbeatService
         );
 
-        when(attemptRepository.save(any(ExamAttempt.class)))
-            .thenAnswer(invocation -> {
-                ExamAttempt attempt = invocation.getArgument(0);
-                if (attempt.getId() == null) {
-                    attempt.setId(1L);
-                }
-                if (attempt.getPublicId() == null) {
-                    attempt.setPublicId(UUID.randomUUID());
-                }
-                return attempt;
-            });
     }
 
     @Test
@@ -121,6 +110,7 @@ class AttemptLifecycleServiceTest {
 
         PinnedExamSnapshot pinnedSnapshot = createPinnedSnapshot(tenantId, "STRICT");
 
+        stubAttemptSave();
         when(snapshotPinService.pin(any(), any(), any())).thenReturn(pinnedSnapshot);
         when(encryptionKeyProvider.getPublicKeyBase64()).thenReturn(TEST_PUBLIC_KEY_BASE64);
 
@@ -143,6 +133,7 @@ class AttemptLifecycleServiceTest {
 
         PinnedExamSnapshot pinnedSnapshot = createPinnedSnapshot(tenantId, "STANDARD");
 
+        stubAttemptSave();
         when(snapshotPinService.pin(any(), any(), any())).thenReturn(pinnedSnapshot);
 
         StartAttemptRequest request = new StartAttemptRequest(sessionPublicId, true);
@@ -163,6 +154,7 @@ class AttemptLifecycleServiceTest {
         PinnedExamSnapshot pinnedSnapshot = createPinnedSnapshot(tenantId, "STANDARD");
         PinnedItem firstItem = pinnedSnapshot.getItems().get(0);
 
+        stubAttemptSave();
         when(snapshotPinService.pin(any(), any(), any())).thenReturn(pinnedSnapshot);
 
         StartAttemptRequest request = new StartAttemptRequest(sessionPublicId, true);
@@ -224,5 +216,18 @@ class AttemptLifecycleServiceTest {
 
         snapshot.addItem(item);
         return snapshot;
+    }
+
+    private void stubAttemptSave() {
+        when(attemptRepository.save(any(ExamAttempt.class))).thenAnswer(invocation -> {
+            ExamAttempt attempt = invocation.getArgument(0);
+            if (attempt.getId() == null) {
+                attempt.setId(1L);
+            }
+            if (attempt.getPublicId() == null) {
+                attempt.setPublicId(UUID.randomUUID());
+            }
+            return attempt;
+        });
     }
 }

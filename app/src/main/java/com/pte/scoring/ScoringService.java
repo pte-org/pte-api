@@ -11,6 +11,8 @@ import com.pte.scoring.dto.response.HostScoreReviewResponse;
 import com.pte.scoring.dto.response.ReportScoringAnswerView;
 import com.pte.scoring.dto.response.ReportPublicationScoringView;
 import com.pte.scoring.internal.service.ExaminerWorkQueryService;
+import com.pte.scoring.internal.service.ScorePublicationLockService;
+import com.pte.scoring.internal.service.ScoreSourceSelectionService;
 import com.pte.scoring.internal.service.ScoredAnswerQueryService;
 import com.pte.scoring.internal.service.ScoringEligibilityQueryService;
 import com.pte.scoring.internal.service.ScoringReviewReadQueryService;

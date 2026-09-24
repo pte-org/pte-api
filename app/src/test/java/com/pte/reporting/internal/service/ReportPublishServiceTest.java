@@ -83,7 +83,6 @@ class ReportPublishServiceTest {
                 new AttemptScoreContextView(scoreTemplateId, scoreTemplateVersion, Set.of("SPEAKING")));
         when(scoringService.lockForReportPublication(eq(tenantId), eq(sessionId), any()))
                 .thenReturn(new ReportPublicationScoringView(publicationId, List.of(input)));
-        when(scoringService.getReportScoringInputs(tenantId, sessionId)).thenReturn(List.of(input));
         when(attemptReportRepository.findByAttemptPublicId(attemptId)).thenReturn(Optional.of(report));
         when(aggregationService.aggregateFromInputs(attemptId, tenantId, List.of(input))).thenReturn(summary);
         when(snapshotCodec.encode(eq(publicationId), eq(actorId), any(), eq(1), eq(examSnapshotId),

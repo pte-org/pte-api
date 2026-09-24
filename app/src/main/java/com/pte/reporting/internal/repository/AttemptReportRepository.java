@@ -11,7 +11,7 @@ public interface AttemptReportRepository extends JpaRepository<AttemptReport, Lo
 
     Optional<AttemptReport> findByAttemptPublicId(UUID attemptPublicId);
 
-    List<AttemptReport> findByStudentPublicIdAndTenantIdAndPublishedTrueAndReportSnapshotJsonIsNotNullOrderByPublishedAtDesc(
+    List<AttemptReport> findByStudentPublicIdAndTenantIdAndPublishedTrueOrderByPublishedAtDesc(
             UUID studentPublicId, UUID tenantId);
 
     java.util.Optional<AttemptReport> findFirstBySessionPublicIdAndTenantIdAndPublishedTrueAndReportSnapshotJsonIsNotNullOrderByPublishedAtAsc(

@@ -57,10 +57,7 @@ public class ReportService {
             throw new ReportNotFoundException();
         }
         if (report.isPublished()) {
-            if (report.getReportSnapshotJson() == null) {
-                throw new ReportNotFoundException();
-            }
-            return ReportMapper.toResponse(report, snapshotCodec.decode(report.getReportSnapshotJson()).scoreSummary());
+            return ReportMapper.toResponse(report, publishedSummary(report));
         }
         if (caller.hasRole(ROLE_STUDENT)) {
             throw new ReportNotFoundException();
@@ -75,12 +72,17 @@ public class ReportService {
             return List.of();
         }
         return attemptReportRepository
-                .findByStudentPublicIdAndTenantIdAndPublishedTrueAndReportSnapshotJsonIsNotNullOrderByPublishedAtDesc(
-                        caller.userId(), caller.tenantId())
+                .findByStudentPublicIdAndTenantIdAndPublishedTrueOrderByPublishedAtDesc(caller.userId(), caller.tenantId())
                 .stream()
-                .map(report -> ReportMapper.toResponse(report,
-                        snapshotCodec.decode(report.getReportSnapshotJson()).scoreSummary()))
+                .map(report -> ReportMapper.toResponse(report, publishedSummary(report)))
                 .toList();
+    }
+
+    private AttemptScoreSummary publishedSummary(AttemptReport report) {
+        if (report.getReportSnapshotJson() == null) {
+            return scoreAggregationService.aggregateLegacyPublished(report.getAttemptPublicId(), report.getTenantId());
+        }
+        return snapshotCodec.decode(report.getReportSnapshotJson()).scoreSummary();
     }
 
     static AttemptReport newReport(AttemptSummaryView summary) {
@@ -101,11 +103,11 @@ public class ReportService {
             return report.isPublished() && report.getStudentPublicId().equals(caller.userId())
                     && report.getTenantId().equals(caller.tenantId());
         }
-        return caller.isPlatformUser() || report.getTenantId().equals(caller.tenantId());
+        return caller.hasRole("PLATFORM_ADMIN") || report.getTenantId().equals(caller.tenantId());
     }
 
     private boolean canViewAttempt(AttemptSummaryView attempt, CurrentUser caller) {
         return caller != null && !caller.hasRole(ROLE_STUDENT)
-                && (caller.isPlatformUser() || attempt.tenantId().equals(caller.tenantId()));
+                && (caller.hasRole("PLATFORM_ADMIN") || attempt.tenantId().equals(caller.tenantId()));
     }
 }

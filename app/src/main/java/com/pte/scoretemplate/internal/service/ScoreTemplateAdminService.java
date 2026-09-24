@@ -381,7 +381,7 @@ public class ScoreTemplateAdminService {
             try {
                 logicalKey = logicalTaskKey(item);
                 if (logicalKey == null || logicalKey.isBlank()) {
-                    throw new IllegalArgumentException("missing task type key");
+                    throw new IllegalArgumentException(ScoreTemplateConstants.MISSING_TASK_TYPE_KEY);
                 }
                 logicalKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(logicalKey);
                 item.setTaskTypeKey(logicalKey);
@@ -665,7 +665,7 @@ public class ScoreTemplateAdminService {
         try {
             return TemplatePolicy.valueOf(raw.trim().toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException ex) {
-            throw new ScoreTemplateValidationException("Unknown template policy: " + raw);
+            throw new ScoreTemplateValidationException(ScoreTemplateConstants.UNKNOWN_TEMPLATE_POLICY + raw);
         }
     }
 }

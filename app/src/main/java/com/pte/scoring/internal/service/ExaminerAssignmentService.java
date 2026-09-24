@@ -63,12 +63,14 @@ public class ExaminerAssignmentService {
     private final IdentityService identityService;
     private final ExaminerAssignmentBatchRepository batchRepository;
     private final ExaminerAttemptAssignmentRepository assignmentRepository;
+    private final ScorePublicationLockService publicationLockService;
     private final ObjectMapper objectMapper;
 
     public ExaminerAssignmentService(SessionService sessionService, EnrollmentModuleService enrollmentService,
             AttemptService attemptService, ScoringEligibilityQueryService eligibilityQueryService,
             IdentityService identityService, ExaminerAssignmentBatchRepository batchRepository,
-            ExaminerAttemptAssignmentRepository assignmentRepository, ObjectMapper objectMapper) {
+            ExaminerAttemptAssignmentRepository assignmentRepository, ScorePublicationLockService publicationLockService,
+            ObjectMapper objectMapper) {
         this.sessionService = sessionService;
         this.enrollmentService = enrollmentService;
         this.attemptService = attemptService;
@@ -76,6 +78,7 @@ public class ExaminerAssignmentService {
         this.identityService = identityService;
         this.batchRepository = batchRepository;
         this.assignmentRepository = assignmentRepository;
+        this.publicationLockService = publicationLockService;
         this.objectMapper = objectMapper;
     }
 
@@ -84,6 +87,7 @@ public class ExaminerAssignmentService {
             CreateExaminerAssignmentPreviewRequest request, CurrentUser caller) {
         UUID tenantId = requireHost(caller);
         sessionService.lockForExaminerAssignment(sessionPublicId, tenantId);
+        publicationLockService.assertNotPublished(tenantId, sessionPublicId);
         batchRepository.expireOverduePreviews(tenantId, sessionPublicId,
                 AssignmentBatchStatus.PREVIEWED, AssignmentBatchStatus.EXPIRED, Instant.now());
         NormalizedRequest normalized = normalize(request);
@@ -143,6 +147,7 @@ public class ExaminerAssignmentService {
                     expectedScopes.supplemental(), entries.size(), expectedScopes.eligibleAnswerCount(),
                     expectedScopes.examinerPublicIds(), entries, List.of(), batch.getPreviewExpiresAt(), null);
         }
+        publicationLockService.assertNotPublished(tenantId, sessionPublicId);
         if (!Instant.now().isBefore(batch.getPreviewExpiresAt())) {
             batch.expire();
             batchRepository.save(batch);

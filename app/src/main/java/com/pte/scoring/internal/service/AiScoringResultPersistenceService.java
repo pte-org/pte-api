@@ -34,7 +34,7 @@ public class AiScoringResultPersistenceService {
     public boolean persistAiScore(UUID answerPublicId, UUID attemptPublicId, UUID tenantId, UUID sessionPublicId,
             AiScoreResult result) {
         ScoringAnswer answer = lockAnswer(answerPublicId, attemptPublicId, tenantId, sessionPublicId);
-        if (answer == null || publicationLocked(tenantId, sessionPublicId) || isTerminal(answer)) {
+        if (answer == null || isTerminal(answer) || publicationLocked(tenantId, sessionPublicId)) {
             return false;
         }
         answer.markAiScored(result.rawScore(), result.providerCategory(), result.provider(),
@@ -46,7 +46,7 @@ public class AiScoringResultPersistenceService {
     @Transactional
     public boolean markScoringFailed(UUID answerPublicId, UUID attemptPublicId, UUID tenantId, UUID sessionPublicId) {
         ScoringAnswer answer = lockAnswer(answerPublicId, attemptPublicId, tenantId, sessionPublicId);
-        if (answer == null || publicationLocked(tenantId, sessionPublicId) || isTerminal(answer)) {
+        if (answer == null || isTerminal(answer) || publicationLocked(tenantId, sessionPublicId)) {
             return false;
         }
         answer.setStatus(ScoringAnswerStatus.SCORING_FAILED);

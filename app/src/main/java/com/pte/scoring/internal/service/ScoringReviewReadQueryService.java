@@ -4,8 +4,6 @@ import com.pte.scoring.domain.ExaminerAnswerScore;
 import com.pte.scoring.domain.ExaminerAttemptAssignment;
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.ScoringSessionState;
-import com.pte.scoring.domain.enums.AiProviderCategory;
-import com.pte.scoring.domain.enums.ExaminerAnswerScoreStatus;
 import com.pte.scoring.domain.enums.ScoreSource;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.domain.enums.ScoringMethod;
@@ -116,7 +114,7 @@ public class ScoringReviewReadQueryService {
     private HostScoreReviewView toHostReview(ScoringAnswer answer, ExaminerAnswerScore examinerScore,
             UUID assignedExaminerPublicId) {
         ScoringMethod method = methodFor(answer);
-        boolean aiAvailable = isAiMethod(method) && isValidAi(answer);
+        boolean aiAvailable = isAiScored(method) && answer.hasPublishableAiScore();
         boolean examinerAvailable = isSubmitted(examinerScore);
         return new HostScoreReviewView(answer.getAnswerPublicId(), answer.getAttemptPublicId(), answer.getTaskType(),
                 scoringMethodResolver.resolveSection(answer.getScoreTemplatePublicId(), answer.getTaskType())
@@ -147,8 +145,8 @@ public class ScoringReviewReadQueryService {
     private Integer selectedScore(ScoringAnswer answer, ExaminerAnswerScore examinerScore) {
         ScoringMethod method = methodFor(answer);
         ScoreSource source = answer.getSelectedScoreSource();
-        if (isAiMethod(method)) {
-            if (source == ScoreSource.AI && isValidAi(answer)) {
+        if (isAiScored(method)) {
+            if (source == ScoreSource.AI && answer.hasPublishableAiScore()) {
                 return answer.getRawScore();
             }
             if (source == ScoreSource.EXAMINER && isSubmitted(examinerScore)) {
@@ -172,13 +170,13 @@ public class ScoringReviewReadQueryService {
             // aggregation, rather than blocking publication. AI-eligible answers still require a selection.
             return null;
         }
-        if (!isAiMethod(method)) {
+        if (!isAiScored(method)) {
             return ScoreReviewConstants.REASON_SCORING_METHOD_UNAVAILABLE;
         }
         if (answer.getSelectedScoreSource() == null) {
             return ScoreReviewConstants.REASON_NO_SELECTED_SOURCE;
         }
-        if (answer.getSelectedScoreSource() == ScoreSource.AI && !isValidAi(answer)) {
+        if (answer.getSelectedScoreSource() == ScoreSource.AI && !answer.hasPublishableAiScore()) {
             return ScoreReviewConstants.REASON_AI_SCORE_NOT_PUBLISHABLE;
         }
         if (answer.getSelectedScoreSource() == ScoreSource.EXAMINER && !isSubmitted(examinerScore)) {
@@ -188,26 +186,19 @@ public class ScoringReviewReadQueryService {
     }
 
     private boolean isAiEligible(ScoringAnswer answer) {
-        return isAiMethod(methodFor(answer));
-    }
-
-    private boolean isValidAi(ScoringAnswer answer) {
-        return answer.getStatus() == ScoringAnswerStatus.SCORED && isRangeValid(answer.getRawScore())
-                && answer.getAiProviderCategory() == AiProviderCategory.REAL
-                && answer.getAiProvider() != null && !answer.getAiProvider().isBlank();
+        return isAiScored(methodFor(answer));
     }
 
     private boolean isSubmitted(ExaminerAnswerScore score) {
-        return score != null && score.getStatus() == ExaminerAnswerScoreStatus.SUBMITTED
-                && isRangeValid(score.getScore());
+        return score != null && score.isPublishable();
     }
 
     private boolean isRangeValid(Integer score) {
         return score != null && score >= 0 && score <= 100;
     }
 
-    private boolean isAiMethod(ScoringMethod method) {
-        return method == ScoringMethod.AI_SPEECH || method == ScoringMethod.AI_TEXT;
+    private boolean isAiScored(ScoringMethod method) {
+        return method != null && method.isAiScored();
     }
 
     private ScoringMethod methodFor(ScoringAnswer answer) {
