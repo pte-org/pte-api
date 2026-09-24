@@ -11,5 +11,11 @@ import java.util.UUID;
  */
 public record AnswerListItemResponse(UUID answerPublicId, UUID attemptPublicId, UUID sessionPublicId,
                                       String taskType, String status, Integer rawScore, Integer teacherScore,
-                                      Instant createdAt) {
+                                      Instant createdAt, Integer attemptNumber) {
+
+    public AnswerListItemResponse(UUID answerPublicId, UUID attemptPublicId, UUID sessionPublicId,
+            String taskType, String status, Integer rawScore, Integer teacherScore, Instant createdAt) {
+        this(answerPublicId, attemptPublicId, sessionPublicId, taskType, status, rawScore, teacherScore,
+                createdAt, null);
+    }
 }

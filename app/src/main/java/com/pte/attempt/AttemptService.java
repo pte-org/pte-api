@@ -74,6 +74,19 @@ public class AttemptService implements StartedAttemptLookup {
         return attemptSummaryQueryService.findSubmittedForSession(sessionPublicId, tenantId);
     }
 
+    /** Tenant- and session-scoped attempt numbers for the host's submitted-answer list. */
+    public Map<UUID, Integer> getAttemptNumbers(UUID sessionPublicId, UUID tenantId,
+            Collection<UUID> attemptPublicIds) {
+        if (attemptPublicIds == null || attemptPublicIds.isEmpty()) {
+            return Map.of();
+        }
+        return examAttemptRepository.findBySessionPublicIdAndTenantIdAndPublicIdIn(sessionPublicId, tenantId,
+                        List.copyOf(attemptPublicIds)).stream()
+                .collect(Collectors.toMap(
+                        com.pte.attempt.domain.ExamAttempt::getPublicId,
+                        com.pte.attempt.domain.ExamAttempt::getAttemptNumber));
+    }
+
     /** The pinned score template + tested sections for one attempt — reporting's weighted scoring (Phase 5). */
     public AttemptScoreContextView getScoreContext(UUID attemptPublicId) {
         return attemptSummaryQueryService.getScoreContext(attemptPublicId);

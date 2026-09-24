@@ -16,6 +16,7 @@ import com.pte.attempt.internal.exception.ExamCapabilityException;
 import com.pte.attempt.internal.exception.NotCurrentTaskException;
 import com.pte.attempt.internal.exception.PinnedSnapshotEmptyException;
 import com.pte.attempt.internal.exception.ReplayLimitExceededException;
+import com.pte.attempt.internal.exception.RetryLimitReachedException;
 import com.pte.attempt.internal.dto.request.EncryptedSubmissionRequest;
 import com.pte.attempt.internal.dto.request.AttemptPreflightRequest;
 import com.pte.attempt.internal.dto.request.ClientCapabilityManifest;
@@ -140,20 +141,37 @@ public class AttemptLifecycleService {
             sessionService.lockOpenForAttemptOperation(request.sessionPublicId(), caller.tenantId());
         }
         UUID studentPublicId = caller.userId();
-        var existing = attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicId(request.sessionPublicId(),
-                studentPublicId);
-        if (existing.isPresent()) {
-            requireTenantOwnership(existing.get(), caller);
+        var latest = attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+                request.sessionPublicId(), studentPublicId);
+        if (latest.isPresent() && (latest.get().getStatus() == AttemptStatus.CREATED
+                || latest.get().getStatus() == AttemptStatus.IN_PROGRESS)) {
+            requireTenantOwnership(latest.get(), caller);
             if (capabilityNegotiationService != null) {
-                capabilityNegotiationService.authorizeExisting(existing.get(), request.capabilityManifest(), caller);
+                capabilityNegotiationService.authorizeExisting(latest.get(), request.capabilityManifest(), caller);
             }
-            return resumeOrReject(existing.get(), caller);
+            return resumeOrReject(latest.get(), caller);
         }
+
+        int maxRetries = configuredRetries(request.sessionPublicId(), caller.tenantId());
+        long submittedAttempts = attemptRepository.countBySessionPublicIdAndStudentPublicIdAndStatus(
+                request.sessionPublicId(), studentPublicId, AttemptStatus.SUBMITTED);
+        if (submittedAttempts >= 1L + maxRetries) {
+            throw new RetryLimitReachedException();
+        }
+
         String capabilityFingerprint = capabilityNegotiationService == null ? null
                 : capabilityNegotiationService.authorizeStart(request.sessionPublicId(), studentPublicId,
                         request.capabilityManifest(), caller);
         return createAndPin(request.sessionPublicId(), studentPublicId, caller.tenantId(),
-                request.deviceCheckConfirmed(), capabilityFingerprint, caller);
+                request.deviceCheckConfirmed(), capabilityFingerprint, caller, (int) submittedAttempts + 1,
+                maxRetries);
+    }
+
+    private int configuredRetries(UUID sessionPublicId, UUID tenantId) {
+        if (sessionService == null) {
+            return 0;
+        }
+        return sessionService.getAttemptRetryPolicy(sessionPublicId, tenantId).maxRetriesPerStudent();
     }
 
     @Transactional
@@ -307,11 +325,13 @@ public class AttemptLifecycleService {
 
     private AttemptTaskResponse createAndPin(UUID sessionPublicId, UUID studentPublicId, UUID tenantId,
                                              boolean deviceCheckConfirmed, String capabilityFingerprint,
-                                             CurrentUser caller) {
+                                             CurrentUser caller, int attemptNumber, int maxRetriesPerStudent) {
         ExamAttempt attempt = new ExamAttempt();
         attempt.setSessionPublicId(sessionPublicId);
         attempt.setStudentPublicId(studentPublicId);
         attempt.setTenantId(tenantId);
+        attempt.setAttemptNumber(attemptNumber);
+        attempt.setMaxRetriesPerStudent(maxRetriesPerStudent);
         attempt.setCapabilityFingerprint(capabilityFingerprint);
         try {
             attempt = attemptRepository.save(attempt);

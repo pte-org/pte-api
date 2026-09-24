@@ -1,5 +1,7 @@
 package com.pte.session.internal.constant;
 
+import java.util.Set;
+
 /** Centralized codes/labels for session. */
 public final class SessionConstants {
 
@@ -88,7 +90,16 @@ public final class SessionConstants {
     public static final String AT_LEAST_ONE_STUDENT_REQUIRED = "At least one student is required";
     public static final String SESSION_NAME_REQUIRED = "Session name is required";
     public static final String SKILLS_REQUIRED = "At least one skill is required";
+    public static final Set<String> SUPPORTED_EXAM_SKILLS =
+            Set.of("SPEAKING", "WRITING", "READING", "LISTENING");
     public static final String SKILLS_SIZE_INVALID = "Between 1 and 4 skills must be selected";
+    public static final String SKILLS_DUPLICATE = "Select each skill only once.";
+    public static final String SKILLS_NOT_IN_TEMPLATE = "Choose only skills included in the selected exam template.";
+    public static final String SKILLS_FULL_TEMPLATE_REQUIRED =
+            "Mock and official exams must include every skill in the selected template.";
+    public static final String TEMPLATE_SKILLS_UNAVAILABLE =
+            "The selected exam template does not contain any supported skills.";
+    public static final String RETRY_COUNT_INVALID = "Set the retry count to a whole number from 0 to 9.";
     public static final String SUBSCRIPTION_REFERENCE_REQUIRED = "Subscription reference is required";
     public static final String OPEN_TIME_REQUIRED = "Open time is required";
     public static final String OPEN_TIME_FUTURE = "Open time must be in the future";

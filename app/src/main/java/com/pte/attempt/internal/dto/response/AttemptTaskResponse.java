@@ -9,5 +9,11 @@ import java.util.UUID;
  * else, including STANDARD-pinned attempts and every other response built off this same record.
  */
 public record AttemptTaskResponse(UUID attemptPublicId, String attemptStatus, boolean completed, TaskView task,
-        String encryptionPublicKey, String lockdownMode) {
+        String encryptionPublicKey, String lockdownMode, int attemptNumber, int remainingRetries,
+        boolean canRetry) {
+
+    public AttemptTaskResponse(UUID attemptPublicId, String attemptStatus, boolean completed, TaskView task,
+            String encryptionPublicKey, String lockdownMode) {
+        this(attemptPublicId, attemptStatus, completed, task, encryptionPublicKey, lockdownMode, 1, 0, false);
+    }
 }

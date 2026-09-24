@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.service;
 
+import com.pte.attempt.AttemptService;
 import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.scoring.domain.ScoringAnswer;
@@ -31,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -56,21 +58,30 @@ public class ScoringReviewService {
     private final MediaService mediaService;
     private final ScoringSessionStateRepository sessionStateRepository;
     private final EntityManager entityManager;
+    private final AttemptService attemptService;
 
     @Autowired
     public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
             AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService,
-            ScoringSessionStateRepository sessionStateRepository, EntityManager entityManager) {
+            ScoringSessionStateRepository sessionStateRepository, EntityManager entityManager,
+            AttemptService attemptService) {
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.answerPayloadDecoder = answerPayloadDecoder;
         this.mediaService = mediaService;
         this.sessionStateRepository = sessionStateRepository;
         this.entityManager = entityManager;
+        this.attemptService = attemptService;
+    }
+
+    public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
+            AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService,
+            ScoringSessionStateRepository sessionStateRepository, EntityManager entityManager) {
+        this(scoringAnswerRepository, answerPayloadDecoder, mediaService, sessionStateRepository, entityManager, null);
     }
 
     public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
             AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService) {
-        this(scoringAnswerRepository, answerPayloadDecoder, mediaService, null, null);
+        this(scoringAnswerRepository, answerPayloadDecoder, mediaService, null, null, null);
     }
 
     /**
@@ -87,10 +98,14 @@ public class ScoringReviewService {
                 pageable);
         log.debug("Host {} listed answers (tenantId={}, sessionPublicId={}, status={}) -> {} results",
                 caller.userId(), caller.tenantId(), sessionPublicId, status, page.getNumberOfElements());
+        Map<UUID, Integer> attemptNumbers = attemptService == null ? Map.of()
+                : attemptService.getAttemptNumbers(sessionPublicId, caller.tenantId(), page.getContent().stream()
+                        .map(ScoringAnswer::getAttemptPublicId).distinct().toList());
         List<AnswerListItemResponse> items = page.getContent().stream()
                 .map(answer -> new AnswerListItemResponse(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
                         answer.getSessionPublicId(), answer.getTaskType(), answer.getStatus().name(),
-                        answer.getRawScore(), answer.getTeacherScore(), answer.getCreatedAt()))
+                        answer.getRawScore(), answer.getTeacherScore(), answer.getCreatedAt(),
+                        attemptNumbers.get(answer.getAttemptPublicId())))
                 .toList();
         return new AnswerListResponse(items, page.getNumber(), page.getSize(), page.getTotalElements(),
                 page.getTotalPages());

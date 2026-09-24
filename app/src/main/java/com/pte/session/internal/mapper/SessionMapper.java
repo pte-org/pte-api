@@ -30,7 +30,10 @@ public final class SessionMapper {
                 session.getReusePolicy(),
                 session.getSeriesKey(),
                 session.getGenerationJobPublicId(),
-                session.getDraftVersion() == null ? 0L : session.getDraftVersion());
+                session.getDraftVersion() == null ? 0L : session.getDraftVersion(),
+                session.getSelectedSkills() == null || session.getSelectedSkills().isEmpty()
+                        ? null : java.util.Set.copyOf(session.getSelectedSkills()),
+                session.getMaxRetriesPerStudent());
     }
 
     /**

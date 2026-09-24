@@ -2,6 +2,7 @@ package com.pte.session;
 
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
+import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.session.internal.service.EntitlementService;
 import com.pte.session.internal.service.SessionLifecycleService;
 import org.springframework.stereotype.Service;
@@ -64,6 +65,11 @@ public class SessionService {
     @Transactional
     public void lockOpenForAttemptOperation(UUID sessionPublicId, UUID tenantId) {
         sessionLifecycleService.lockOpenForAttemptOperation(sessionPublicId, tenantId);
+    }
+
+    /** Reads the retry policy through the session module after its row has been locked for this attempt operation. */
+    public AttemptRetryPolicyResponse getAttemptRetryPolicy(UUID sessionPublicId, UUID tenantId) {
+        return sessionLifecycleService.getAttemptRetryPolicy(sessionPublicId, tenantId);
     }
 
     /** Holds the session row lock while Reporting validates CLOSED and publishes the cohort. */

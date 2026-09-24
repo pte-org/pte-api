@@ -18,6 +18,7 @@ import com.pte.session.internal.dto.request.ChangeSubscriptionRequest;
 import com.pte.session.internal.dto.request.CreateSessionRequest;
 import com.pte.session.internal.dto.request.PatchExamPolicyRequest;
 import com.pte.session.internal.dto.response.SessionResponse;
+import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.session.internal.exception.HostContextRequiredException;
 import com.pte.session.internal.exception.InvalidPolicyPatchException;
 import com.pte.session.internal.exception.InvalidSessionWindowException;
@@ -275,6 +276,13 @@ public class SessionLifecycleService {
         if (session.getStatus() != SessionStatus.OPEN) {
             throw new NotEntitledException();
         }
+    }
+
+    @Transactional(readOnly = true)
+    public AttemptRetryPolicyResponse getAttemptRetryPolicy(UUID publicId, UUID tenantId) {
+        ExamSession session = sessionRepository.findByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(NotEntitledException::new);
+        return new AttemptRetryPolicyResponse(session.getMaxRetriesPerStudent());
     }
 
     @Transactional

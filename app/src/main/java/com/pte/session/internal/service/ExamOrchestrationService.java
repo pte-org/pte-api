@@ -60,6 +60,7 @@ import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.FormAssignmentRepository;
 import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse;
+import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.audit.AuditLogService;
@@ -163,6 +164,9 @@ public class ExamOrchestrationService {
         session.setFormMode(formMode);
         session.setReusePolicy(reusePolicy);
         session.setSeriesKey(normalizeSeriesKey(request.seriesKey()));
+        Set<String> templateSkills = resolveTemplateSkills(template);
+        session.setSelectedSkills(resolveSelectedSkills(request.selectedSkills(), templateSkills, mode));
+        session.setMaxRetriesPerStudent(resolveRetryCount(request.maxRetriesPerStudent()));
         session.setOpensAt(request.opensAt());
         session.setClosesAt(request.closesAt());
         session.setCapacity(request.capacity());
@@ -180,6 +184,10 @@ public class ExamOrchestrationService {
         if (request.expectedVersion() != null && !request.expectedVersion().equals(session.getDraftVersion())) {
             throw new ExamDraftVersionConflictException();
         }
+        ExamMode previousMode = session.getExamMode();
+        UUID previousTemplatePublicId = session.getTemplatePublicId();
+        Integer previousTemplateVersion = session.getTemplateVersion();
+        ScoreTemplateResponse selectedTemplate = null;
         if (request.name() != null) {
             if (request.name().isBlank()) {
                 throw new ExamDraftConfigurationException(SessionConstants.SESSION_NAME_REQUIRED);
@@ -187,10 +195,10 @@ public class ExamOrchestrationService {
             session.setName(request.name().trim());
         }
         if (request.templatePublicId() != null) {
-            var template = scoreTemplateService.findActiveByPublicId(request.templatePublicId())
+            selectedTemplate = scoreTemplateService.findActiveByPublicId(request.templatePublicId())
                     .orElseThrow(() -> new ExamDraftConfigurationException(SessionConstants.EXAM_TEMPLATE_ACTIVE_REQUIRED));
-            session.setTemplatePublicId(template.publicId());
-            session.setTemplateVersion(template.version());
+            session.setTemplatePublicId(selectedTemplate.publicId());
+            session.setTemplateVersion(selectedTemplate.version());
         }
         if (request.subscriptionPublicId() != null) {
             SubscriptionView subscription = activeSubscription(request.subscriptionPublicId(), caller.tenantId());
@@ -210,6 +218,29 @@ public class ExamOrchestrationService {
         if (request.formMode() != null) session.setFormMode(request.formMode());
         if (request.reusePolicy() != null) session.setReusePolicy(request.reusePolicy());
         if (request.seriesKey() != null) session.setSeriesKey(normalizeSeriesKey(request.seriesKey()));
+        if (selectedTemplate == null) {
+            if (session.getTemplatePublicId() == null) {
+                throw new ExamDraftConfigurationException(SessionConstants.EXAM_TEMPLATE_ACTIVE_REQUIRED);
+            }
+            selectedTemplate = scoreTemplateService.getByPublicId(session.getTemplatePublicId());
+        }
+        Set<String> templateSkills = resolveTemplateSkills(selectedTemplate);
+        boolean templateChanged = !java.util.Objects.equals(previousTemplatePublicId, session.getTemplatePublicId())
+                || !java.util.Objects.equals(previousTemplateVersion, session.getTemplateVersion());
+        boolean modeChanged = previousMode != session.getExamMode();
+        Set<String> currentSkills = session.getSelectedSkills() == null
+                ? Set.of() : new LinkedHashSet<>(session.getSelectedSkills());
+        boolean resetSkillsToFull = templateChanged || currentSkills.isEmpty()
+                || (modeChanged && session.getExamMode() != ExamMode.PRACTICE
+                        && !currentSkills.equals(templateSkills));
+        List<String> requestedSkills = request.selectedSkills();
+        if (requestedSkills == null && !resetSkillsToFull) {
+            requestedSkills = new ArrayList<>(currentSkills);
+        }
+        session.setSelectedSkills(resolveSelectedSkills(requestedSkills, templateSkills, session.getExamMode()));
+        if (request.maxRetriesPerStudent() != null) {
+            session.setMaxRetriesPerStudent(resolveRetryCount(request.maxRetriesPerStudent()));
+        }
         validateWindow(session.getOpensAt(), session.getClosesAt());
         validateConfiguration(session.getExamMode(), session.getFormMode(), session.getReusePolicy(), session.getSeriesKey());
         SubscriptionView subscription = activeSubscription(session.getSubscriptionId(), caller.tenantId());
@@ -327,7 +358,7 @@ public class ExamOrchestrationService {
         for (int index = 0; index < formsTotal; index++) {
             long formSeed = baseSeed ^ (0x9E3779B97F4A7C15L * (index + 1L));
             SnapshotResponse snapshot = assessmentService.generateDeterministic(
-                    session.getName(), session.getTemplatePublicId(), formSeed, caller);
+                    session.getName(), session.getTemplatePublicId(), formSeed, caller, session.getSelectedSkills());
             ExamForm form = new ExamForm();
             form.setSession(session);
             form.setSnapshotPublicId(snapshot.publicId());
@@ -418,8 +449,8 @@ public class ExamOrchestrationService {
     }
 
     private ExamPreflightResponse preflightInternal(ExamSession session, boolean persistAudience) {
-        ScoreTemplateFeasibilityResponse template = scoreTemplateService
-                .getTemplateFeasibility(session.getTemplatePublicId());
+        ScoreTemplateFeasibilityResponse template = assessmentService
+                .getTemplateFeasibility(session.getTemplatePublicId(), session.getSelectedSkills());
         SubscriptionView subscription = billingService.getActiveSubscription(session.getSubscriptionId(), session.getTenantId())
                 .orElse(null);
         boolean subscriptionReady = subscription != null;
@@ -677,6 +708,64 @@ public class ExamOrchestrationService {
                 && (seriesKey == null || seriesKey.isBlank())) {
             throw new ExamDraftConfigurationException(SessionConstants.EXAM_SERIES_REQUIRED);
         }
+    }
+
+    private Set<String> resolveTemplateSkills(ScoreTemplateResponse template) {
+        if (template == null || template.items() == null || template.items().isEmpty()) {
+            throw new ExamDraftConfigurationException(SessionConstants.TEMPLATE_SKILLS_UNAVAILABLE);
+        }
+        LinkedHashSet<String> skills = new LinkedHashSet<>();
+        for (var item : template.items()) {
+            String section = normalizeSkill(item.section());
+            if (section == null) {
+                continue;
+            }
+            if (!SessionConstants.SUPPORTED_EXAM_SKILLS.contains(section)) {
+                throw new ExamDraftConfigurationException(SessionConstants.TEMPLATE_SKILLS_UNAVAILABLE);
+            }
+            skills.add(section);
+        }
+        if (skills.isEmpty()) {
+            throw new ExamDraftConfigurationException(SessionConstants.TEMPLATE_SKILLS_UNAVAILABLE);
+        }
+        return skills;
+    }
+
+    private Set<String> resolveSelectedSkills(List<String> requestedSkills, Set<String> templateSkills, ExamMode mode) {
+        if (requestedSkills == null) {
+            return new LinkedHashSet<>(templateSkills);
+        }
+        if (requestedSkills.isEmpty()) {
+            throw new ExamDraftConfigurationException(SessionConstants.SKILLS_REQUIRED);
+        }
+        LinkedHashSet<String> selectedSkills = new LinkedHashSet<>();
+        for (String value : requestedSkills) {
+            String skill = normalizeSkill(value);
+            if (skill == null || !templateSkills.contains(skill)) {
+                throw new ExamDraftConfigurationException(SessionConstants.SKILLS_NOT_IN_TEMPLATE);
+            }
+            if (!selectedSkills.add(skill)) {
+                throw new ExamDraftConfigurationException(SessionConstants.SKILLS_DUPLICATE);
+            }
+        }
+        if (mode != ExamMode.PRACTICE && !selectedSkills.equals(templateSkills)) {
+            throw new ExamDraftConfigurationException(SessionConstants.SKILLS_FULL_TEMPLATE_REQUIRED);
+        }
+        return selectedSkills;
+    }
+
+    private String normalizeSkill(String value) {
+        return value == null || value.isBlank() ? null : value.trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
+    private int resolveRetryCount(Integer retries) {
+        if (retries == null) {
+            return 0;
+        }
+        if (retries < 0 || retries > 9) {
+            throw new ExamDraftConfigurationException(SessionConstants.RETRY_COUNT_INVALID);
+        }
+        return retries;
     }
 
     private FormMode defaultFormMode(ExamMode mode) {

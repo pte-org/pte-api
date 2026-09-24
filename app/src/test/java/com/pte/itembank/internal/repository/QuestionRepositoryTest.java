@@ -43,9 +43,9 @@ class QuestionRepositoryTest {
     void groupedCounts_coverSharedQuestionBankOnly() {
         persist("Shared listening", "prompt", "LISTENING", QuestionStatus.APPROVED);
         persist("Shared draft", "prompt", "LISTENING", QuestionStatus.DRAFT);
-        Question privateQuestion = persist("Private reading", "prompt", "READING", QuestionStatus.APPROVED);
-        privateQuestion.setVisibility(Visibility.PRIVATE);
-        questionRepository.saveAndFlush(privateQuestion);
+        Question deletedQuestion = persist("Deleted reading", "prompt", "READING", QuestionStatus.APPROVED);
+        deletedQuestion.setDeleted(true);
+        questionRepository.saveAndFlush(deletedQuestion);
 
         assertThat(questionRepository.countByDeletedFalseAndVisibility(Visibility.SHARED)).isEqualTo(2);
         assertThat(questionRepository.countBySectionAndVisibility(Visibility.SHARED))

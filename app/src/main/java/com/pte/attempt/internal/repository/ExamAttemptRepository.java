@@ -18,8 +18,21 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long> 
     Optional<ExamAttempt> findBySessionPublicIdAndStudentPublicId(UUID sessionPublicId, UUID studentPublicId);
 
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
-    Optional<ExamAttempt> findWithPinnedBySessionPublicIdAndStudentPublicId(UUID sessionPublicId,
-            UUID studentPublicId);
+    Optional<ExamAttempt> findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+            UUID sessionPublicId, UUID studentPublicId);
+
+    /** Compatibility alias; production lifecycle uses the ordered multi-attempt query above. */
+    default Optional<ExamAttempt> findWithPinnedBySessionPublicIdAndStudentPublicId(UUID sessionPublicId,
+            UUID studentPublicId) {
+        return findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+                sessionPublicId, studentPublicId);
+    }
+
+    long countBySessionPublicIdAndStudentPublicIdAndStatus(UUID sessionPublicId, UUID studentPublicId,
+            AttemptStatus status);
+
+    List<ExamAttempt> findBySessionPublicIdAndTenantIdAndPublicIdIn(UUID sessionPublicId, UUID tenantId,
+            List<UUID> publicIds);
 
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
     Optional<ExamAttempt> findWithPinnedByPublicIdAndStudentPublicId(UUID publicId, UUID studentPublicId);

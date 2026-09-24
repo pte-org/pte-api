@@ -7,17 +7,23 @@ import com.pte.session.domain.enums.ExamMode;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -75,6 +81,18 @@ public class ExamSession extends BaseEntity {
 
     @Column(name = "series_key", length = 128)
     private String seriesKey;
+
+    /** Skill sections selected for this exam; empty legacy rows are resolved from their pinned template. */
+    @ElementCollection
+    @CollectionTable(name = "exam_session_selected_skills", joinColumns = @JoinColumn(name = "session_id"),
+            uniqueConstraints = @UniqueConstraint(name = "uk_exam_session_selected_skills_session_skill",
+                    columnNames = {"session_id", "skill"}))
+    @Column(name = "skill", nullable = false, length = 16)
+    private Set<String> selectedSkills = new LinkedHashSet<>();
+
+    /** Additional submissions allowed after the initial attempt. */
+    @Column(name = "max_retries_per_student", nullable = false)
+    private int maxRetriesPerStudent = 0;
 
     @Column(name = "generation_job_public_id")
     private UUID generationJobPublicId;

@@ -76,7 +76,7 @@ public class SessionController {
 
     @PatchMapping("/{publicId}")
     public ApiResponse<SessionResponse> updateDraft(@PathVariable UUID publicId,
-            @RequestBody PatchExamDraftRequest request) {
+            @Valid @RequestBody PatchExamDraftRequest request) {
         return ApiResponse.success(examOrchestrationService.updateDraft(publicId, request, currentUser()));
     }
 

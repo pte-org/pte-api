@@ -33,7 +33,8 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "exam_attempts", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"session_public_id", "student_public_id"})
+        @UniqueConstraint(name = "uk_exam_attempt_session_student_number",
+                columnNames = {"session_public_id", "student_public_id", "attempt_number"})
 }, indexes = {
         @Index(name = "idx_attempts_tenant", columnList = "tenant_id")
 })
@@ -47,6 +48,14 @@ public class ExamAttempt extends BaseEntity {
 
     @Column(name = "student_public_id", nullable = false)
     private UUID studentPublicId;
+
+    /** 1-based immutable submission sequence for this student in the session. */
+    @Column(name = "attempt_number", nullable = false)
+    private int attemptNumber = 1;
+
+    /** Retry limit copied from the locked session when this immutable attempt is created. */
+    @Column(name = "max_retries_per_student", nullable = false, columnDefinition = "integer not null default 0")
+    private int maxRetriesPerStudent;
 
     @Column(nullable = false)
     private UUID tenantId;

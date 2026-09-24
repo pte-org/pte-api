@@ -94,6 +94,19 @@ public class AssessmentService {
         return examGenerationService.generateDeterministic(name, templatePublicId, seed, caller);
     }
 
+    /** Generates from the host-persisted skill scope through the assessment module boundary. */
+    public SnapshotResponse generateDeterministic(String name, UUID templatePublicId, long seed,
+            CurrentUser caller, Set<String> selectedSkills) {
+        return examGenerationService.generateDeterministic(name, templatePublicId, seed, caller, selectedSkills);
+    }
+
+    /** Answer-free feasibility for the exact sections that deterministic generation will include. */
+    @Transactional(readOnly = true)
+    public ScoreTemplateFeasibilityResponse getTemplateFeasibility(UUID templatePublicId,
+            Set<String> selectedSkills) {
+        return examGenerationService.getTemplateFeasibility(templatePublicId, selectedSkills);
+    }
+
     /** Safe, answer-free readiness report used by authoring/admin screens. */
     @Transactional(readOnly = true)
     public ScoreTemplateFeasibilityResponse getTemplateFeasibility(UUID templatePublicId) {

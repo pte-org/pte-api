@@ -4,6 +4,9 @@ public final class AttemptConstants {
 
     public static final String ATTEMPT_NOT_FOUND = "ATTEMPT_NOT_FOUND";
     public static final String ALREADY_ATTEMPTED = "ALREADY_ATTEMPTED";
+    public static final String RETRY_LIMIT_REACHED = "RETRY_LIMIT_REACHED";
+    public static final String RETRY_LIMIT_REACHED_MESSAGE =
+            "You have used all attempts for this exam. Please contact your host if you need help.";
     public static final String TASK_TIMING_NOT_CONFIGURED = "TASK_TIMING_NOT_CONFIGURED";
     public static final String NOT_CURRENT_TASK = "NOT_CURRENT_TASK";
     public static final String ATTEMPT_ALREADY_COMPLETE = "ATTEMPT_ALREADY_COMPLETE";

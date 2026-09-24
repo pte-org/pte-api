@@ -67,11 +67,18 @@ public class AttemptMapper {
         // absent. Null lockdownMode is the client's "no lockdown" contract, same as toCompletedResponse.
         PinnedExamSnapshot pinned = attempt.getPinnedSnapshot();
         return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey,
-                pinned != null ? pinned.getLockdownMode() : null);
+                pinned != null ? pinned.getLockdownMode() : null, attempt.getAttemptNumber(),
+                remainingRetries(attempt), remainingRetries(attempt) > 0);
     }
 
     public AttemptTaskResponse toCompletedResponse(ExamAttempt attempt) {
-        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), true, null, null, null);
+        int remainingRetries = remainingRetries(attempt);
+        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), true, null, null, null,
+                attempt.getAttemptNumber(), remainingRetries, remainingRetries > 0);
+    }
+
+    private int remainingRetries(ExamAttempt attempt) {
+        return Math.max(0, attempt.getMaxRetriesPerStudent() - attempt.getAttemptNumber() + 1);
     }
 
     private List<FrozenOption> parseFrozenOptions(String optionsJson) {
