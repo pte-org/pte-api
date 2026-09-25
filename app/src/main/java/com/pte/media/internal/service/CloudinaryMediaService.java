@@ -89,8 +89,8 @@ public class CloudinaryMediaService {
         String publicId = mediaPublicId.toString();
         String folder = studentResponse ? submissionFolder : authoringFolder;
         String cloudinaryPublicId = folder + "/" + publicId;
-        String deliveryType = CloudinaryDeliveryType.AUTHENTICATED.name().toLowerCase(java.util.Locale.ROOT);
-        // Cloudinary REST carries the delivery type in the endpoint path, not the multipart body/signature.
+        // Cloudinary defaults to the public `upload` delivery type. Keep the
+        // signed upload small and let public media use its stable secure URL.
         String signature = sign("folder=" + folder + "&public_id=" + publicId + "&timestamp=" + timestamp);
 
         MediaObject media = new MediaObject();
@@ -102,12 +102,11 @@ public class CloudinaryMediaService {
         media.setStorageKey(cloudinaryPublicId);
         media.setCloudinaryPublicId(cloudinaryPublicId);
         media.setCloudinaryResourceType(resourceType);
-        media.setCloudinaryDeliveryType(CloudinaryDeliveryType.AUTHENTICATED);
+        media.setCloudinaryDeliveryType(CloudinaryDeliveryType.UPLOAD);
         media.setSizeBytes(request.sizeBytes());
         repository.save(media);
 
-        String uploadUrl = "https://api.cloudinary.com/v1_1/%s/%s/%s/upload".formatted(
-                cloudName, resourceType, deliveryType);
+        String uploadUrl = "https://api.cloudinary.com/v1_1/%s/%s/upload".formatted(cloudName, resourceType);
         return new CloudinaryUploadResponse(media.getPublicId(), cloudinaryPublicId, uploadUrl, apiKey,
                 String.valueOf(timestamp),
                 signature, folder, resourceType, SIGNATURE_TTL_SECONDS);

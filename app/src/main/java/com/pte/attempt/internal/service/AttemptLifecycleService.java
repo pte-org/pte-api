@@ -288,7 +288,7 @@ public class AttemptLifecycleService {
             throw new ReplayLimitExceededException();
         }
 
-        if (currentItem.getAudioUrlExpiresAt() == null || Instant.now().isAfter(currentItem.getAudioUrlExpiresAt())) {
+        if (hasExpiredAuthenticatedAudioUrl(currentItem)) {
             throw new AudioUrlExpiredException();
         }
 
@@ -314,6 +314,17 @@ public class AttemptLifecycleService {
             return -1;
         }
         return snapshot.getReplayPolicyLimit();
+    }
+
+    private boolean hasExpiredAuthenticatedAudioUrl(PinnedItem item) {
+        Instant expiresAt = item.getAudioUrlExpiresAt();
+        String audioUrl = item.getAudioUrl();
+        if (expiresAt == null || audioUrl == null) {
+            return false;
+        }
+        boolean authenticatedCloudinaryUrl = audioUrl.contains("/authenticated/")
+                || audioUrl.contains("type=authenticated");
+        return authenticatedCloudinaryUrl && Instant.now().isAfter(expiresAt);
     }
 
     private AttemptTaskResponse resumeOrReject(ExamAttempt existing, CurrentUser caller) {

@@ -299,7 +299,9 @@ public class SnapshotPinService {
     private Integer resolveAudioUrl(PinnedItem item, UUID audioPromptRef, long audioUrlTtlSeconds, UUID tenantId) {
         PresignedDownloadResponse presigned = mediaService.presignGet(audioPromptRef, audioUrlTtlSeconds, tenantId);
         item.setAudioUrl(presigned.url());
-        item.setAudioUrlExpiresAt(Instant.now().plusSeconds(presigned.expiresInSeconds()));
+        item.setAudioUrlExpiresAt(presigned.expiresInSeconds() > 0
+                ? Instant.now().plusSeconds(presigned.expiresInSeconds())
+                : null);
         return presigned.durationSeconds();
     }
 
@@ -313,6 +315,8 @@ public class SnapshotPinService {
     private void resolveImageUrl(PinnedItem item, UUID imagePromptRef, long imageUrlTtlSeconds, UUID tenantId) {
         PresignedDownloadResponse presigned = mediaService.presignGet(imagePromptRef, imageUrlTtlSeconds, tenantId);
         item.setImageUrl(presigned.url());
-        item.setImageUrlExpiresAt(Instant.now().plusSeconds(presigned.expiresInSeconds()));
+        item.setImageUrlExpiresAt(presigned.expiresInSeconds() > 0
+                ? Instant.now().plusSeconds(presigned.expiresInSeconds())
+                : null);
     }
 }
