@@ -50,7 +50,9 @@ public record TaskView(
         String imageUrl,
         String taskTypeCode,
         TaskRuntimeProfileDescriptor runtime,
-        String taskTypeDisplayName) {
+        String taskTypeDisplayName,
+        boolean canNavigatePrevious,
+        boolean canNavigateNext) {
 
     public TaskView(UUID pinnedItemPublicId, int orderIndex, int totalTasks, String section,
             String taskType, String title, String promptText, UUID audioPromptRef, UUID imagePromptRef,
@@ -59,7 +61,7 @@ public record TaskView(
             Integer preListenSeconds, Integer preRecordSeconds, String imageUrl) {
         this(pinnedItemPublicId, orderIndex, totalTasks, section, taskType, title, promptText, audioPromptRef,
                 imagePromptRef, minWordCount, maxWordCount, options, blankGroups, prepSeconds, responseSeconds,
-                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, taskType, null);
+                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, taskType, null, title, false, false);
     }
 
     public TaskView(UUID pinnedItemPublicId, int orderIndex, int totalTasks, String section,
@@ -70,6 +72,19 @@ public record TaskView(
             TaskRuntimeProfileDescriptor runtime) {
         this(pinnedItemPublicId, orderIndex, totalTasks, section, taskType, title, promptText, audioPromptRef,
                 imagePromptRef, minWordCount, maxWordCount, options, blankGroups, prepSeconds, responseSeconds,
-                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, taskTypeCode, runtime, title);
+                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, taskTypeCode, runtime, title,
+                false, false);
+    }
+
+    public TaskView(UUID pinnedItemPublicId, int orderIndex, int totalTasks, String section,
+            String taskType, String title, String promptText, UUID audioPromptRef, UUID imagePromptRef,
+            Integer minWordCount, Integer maxWordCount, List<OptionView> options,
+            List<BlankGroupView> blankGroups, int prepSeconds, int responseSeconds, Instant examEndTime,
+            Integer preListenSeconds, Integer preRecordSeconds, String imageUrl, String taskTypeCode,
+            TaskRuntimeProfileDescriptor runtime, String taskTypeDisplayName) {
+        this(pinnedItemPublicId, orderIndex, totalTasks, section, taskType, title, promptText, audioPromptRef,
+                imagePromptRef, minWordCount, maxWordCount, options, blankGroups, prepSeconds, responseSeconds,
+                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, taskTypeCode, runtime,
+                taskTypeDisplayName, false, false);
     }
 }

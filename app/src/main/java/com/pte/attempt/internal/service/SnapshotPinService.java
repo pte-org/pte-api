@@ -103,6 +103,7 @@ public class SnapshotPinService {
         pinned.setProctorRequired(Boolean.TRUE.equals(entitlement.policy().proctorRequired()));
         pinned.setAnswerIntegrityLevel(entitlement.policy().answerIntegrityLevel());
         pinned.setLockdownMode(entitlement.policy().lockdownMode());
+        pinned.setExamMode(entitlement.examMode() == null ? "MOCK_TEST" : entitlement.examMode());
 
         long audioUrlTtlSeconds = Duration.between(entitlement.opensAt(), entitlement.closesAt()).getSeconds()
                 + AUDIO_URL_GRACE_SECONDS;

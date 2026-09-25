@@ -21,6 +21,7 @@ import com.pte.attempt.internal.dto.request.EncryptedSubmissionRequest;
 import com.pte.attempt.internal.dto.request.AttemptPreflightRequest;
 import com.pte.attempt.internal.dto.request.ClientCapabilityManifest;
 import com.pte.attempt.internal.dto.request.StartAttemptRequest;
+import com.pte.attempt.internal.dto.request.NavigateTaskRequest;
 import com.pte.attempt.internal.dto.request.SubmitAnswerRequest;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.dto.response.AudioPlayResponse;
@@ -184,6 +185,66 @@ public class AttemptLifecycleService {
         return advanceUntilLiveOrComplete(attempt, caller);
     }
 
+    /**
+     * Moves the live task pointer by one item without submitting an answer.
+     * The pinned mode and both adjacent sections are checked server-side;
+     * the client-provided item id is only a stale-screen guard.
+     */
+    @Transactional
+    public AttemptTaskResponse navigateTask(UUID attemptPublicId, NavigateTaskRequest request, CurrentUser caller) {
+        ExamAttempt attempt = findOwned(attemptPublicId, caller);
+        lockOpenSession(attempt);
+        if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
+            return attemptMapper.toCompletedResponse(attempt);
+        }
+        attempt = lockAttempt(attempt);
+
+        Long pinnedSnapshotId = attempt.getPinnedSnapshot().getId();
+        PinnedItem sourceItem = pinnedItemRepository.findByPublicId(request.fromPinnedItemPublicId())
+                .filter(item -> item.getPinnedSnapshot().getId().equals(pinnedSnapshotId))
+                .orElseThrow(NotCurrentTaskException::new);
+        int sourceIndex = sourceItem.getOrderIndex();
+        int targetIndex = sourceIndex + (request.direction() == NavigateTaskRequest.Direction.NEXT ? 1 : -1);
+        long totalTasks = pinnedItemRepository.countByPinnedSnapshotId(attempt.getPinnedSnapshot().getId());
+        int currentIndex = attempt.getCurrentOrderIndex();
+
+        // The answer-submit path may already have advanced one item before an
+        // older client retries navigation. Reject anything further out of date.
+        if (currentIndex != sourceIndex && currentIndex != sourceIndex + 1) {
+            throw new NotCurrentTaskException();
+        }
+
+        if (targetIndex < 0) {
+            return advanceUntilLiveOrComplete(attempt, caller);
+        }
+
+        if (targetIndex >= totalTasks) {
+            if (!isManualNavigationAllowed(attempt.getPinnedSnapshot().getExamMode(), sourceItem.getSection())) {
+                throw new NotCurrentTaskException();
+            }
+            answerSubmitService.submitIfAbsent(attempt, sourceItem, null);
+            completeAttempt(attempt);
+            return attemptMapper.toCompletedResponse(attempt);
+        }
+
+        PinnedItem targetItem = itemAt(attempt, targetIndex);
+        if (!isManualNavigationAllowed(attempt.getPinnedSnapshot().getExamMode(), sourceItem.getSection())
+                || !isManualNavigationAllowed(attempt.getPinnedSnapshot().getExamMode(), targetItem.getSection())) {
+            throw new NotCurrentTaskException();
+        }
+
+        // A skipped task still needs a blank answer for scoring; an existing
+        // answer from an earlier visit is left untouched.
+        answerSubmitService.submitIfAbsent(attempt, sourceItem, null);
+        if (currentIndex != targetIndex) {
+            List<PinnedItemView> allItems = allItemViews(attempt);
+            PinnedItemView targetView = PinnedSnapshotCacheService.toView(targetItem);
+            timerService.startTask(attempt, targetView, allItems);
+            attemptRepository.save(attempt);
+        }
+        return advanceUntilLiveOrComplete(attempt, caller);
+    }
+
     /** STANDARD-pinned attempts only — a STRICT-pinned attempt must use {@link #submitEncryptedAnswer}. */
     @Transactional
     public AttemptTaskResponse submitAnswer(UUID attemptPublicId, SubmitAnswerRequest request, CurrentUser caller) {
@@ -191,6 +252,15 @@ public class AttemptLifecycleService {
         lockOpenSession(attempt);
         requireIntegrityLevel(attempt, "STANDARD");
         return processAnswer(attempt, request.pinnedItemPublicId(), request.payload(), caller);
+    }
+
+    /** Persists an answer draft while leaving the current task pointer unchanged. */
+    @Transactional
+    public AttemptTaskResponse saveAnswer(UUID attemptPublicId, SubmitAnswerRequest request, CurrentUser caller) {
+        ExamAttempt attempt = findOwned(attemptPublicId, caller);
+        lockOpenSession(attempt);
+        requireIntegrityLevel(attempt, "STANDARD");
+        return saveAnswerWithoutAdvance(attempt, request.pinnedItemPublicId(), request.payload(), caller);
     }
 
     /**
@@ -208,6 +278,17 @@ public class AttemptLifecycleService {
         requireIntegrityLevel(attempt, "STRICT");
         String payload = submissionDecryptionService.decrypt(request, encryptionKeyProvider.getPrivateKey());
         return processAnswer(attempt, request.pinnedItemPublicId(), payload, caller);
+    }
+
+    /** STRICT-pinned counterpart to {@link #saveAnswer}; the answer is decrypted and saved without advancing. */
+    @Transactional
+    public AttemptTaskResponse saveEncryptedAnswer(UUID attemptPublicId, EncryptedSubmissionRequest request,
+                                                    CurrentUser caller) {
+        ExamAttempt attempt = findOwned(attemptPublicId, caller);
+        lockOpenSession(attempt);
+        requireIntegrityLevel(attempt, "STRICT");
+        String payload = submissionDecryptionService.decrypt(request, encryptionKeyProvider.getPrivateKey());
+        return saveAnswerWithoutAdvance(attempt, request.pinnedItemPublicId(), payload, caller);
     }
 
     /** Request shape (plain vs. encrypted) is server-decided by the pinned level, never client-chosen. */
@@ -239,6 +320,28 @@ public class AttemptLifecycleService {
 
         answerSubmitService.submit(attempt, currentItem, payload);
         return advanceAfterCurrent(attempt, caller);
+    }
+
+    private AttemptTaskResponse saveAnswerWithoutAdvance(ExamAttempt attempt, UUID pinnedItemPublicId,
+                                                          String payload, CurrentUser caller) {
+        if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
+            throw new AttemptAlreadyCompleteException();
+        }
+        attempt = lockAttempt(attempt);
+        Long pinnedSnapshotId = attempt.getPinnedSnapshot().getId();
+        PinnedItem answerItem = pinnedItemRepository.findByPublicId(pinnedItemPublicId)
+                .filter(item -> item.getPinnedSnapshot().getId().equals(pinnedSnapshotId))
+                .orElseThrow(NotCurrentTaskException::new);
+        // Saving an answer does not move the task pointer. Allow background
+        // sync for every section; mode restrictions apply only to navigation.
+        answerSubmitService.submit(attempt, answerItem, payload);
+        return advanceUntilLiveOrComplete(attempt, caller);
+    }
+
+    private boolean isManualNavigationAllowed(String examMode, String section) {
+        return "PRACTICE".equals(examMode)
+                || "READING".equals(section)
+                || "WRITING".equals(section);
     }
 
     @Transactional

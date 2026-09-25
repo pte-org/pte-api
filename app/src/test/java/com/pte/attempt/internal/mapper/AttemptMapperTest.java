@@ -1,6 +1,7 @@
 package com.pte.attempt.internal.mapper;
 
 import com.pte.attempt.domain.ExamAttempt;
+import com.pte.attempt.domain.PinnedExamSnapshot;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.dto.response.BlankGroupView;
@@ -148,6 +149,47 @@ class AttemptMapperTest {
         assertThat(task.responseSeconds()).isEqualTo(1200);
         assertThat(task.options()).isNull();
         assertThat(task.blankGroups()).isNull();
+    }
+
+    @Test
+    void practiceTask_allowsNavigationWithinAttemptBounds() {
+        PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
+        snapshot.setExamMode("PRACTICE");
+        ExamAttempt attempt = new ExamAttempt();
+        attempt.setPublicId(UUID.randomUUID());
+        attempt.setStatus(AttemptStatus.IN_PROGRESS);
+        attempt.setPinnedSnapshot(snapshot);
+
+        PinnedItemView item = writingItem("WRITE_ESSAY", 200, 300, 0, 1200);
+        TaskView task = mapper.toTaskResponse(attempt, item, 0, 1200, 3).task();
+
+        assertThat(task.canNavigatePrevious()).isFalse();
+        assertThat(task.canNavigateNext()).isTrue();
+
+        PinnedItemView finalItem = new PinnedItemView(
+                UUID.randomUUID(), 2, "WRITING", "WRITE_ESSAY", "Final task", "Prompt",
+                null, null, null, null, 200, 300, null, 0, 1200, null, null, null);
+        TaskView finalTask = mapper.toTaskResponse(attempt, finalItem, 0, 1200, 3).task();
+        assertThat(finalTask.canNavigatePrevious()).isTrue();
+        assertThat(finalTask.canNavigateNext()).isTrue();
+    }
+
+    @Test
+    void mockTestListeningTask_disallowsManualNavigation() {
+        PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
+        snapshot.setExamMode("MOCK_TEST");
+        ExamAttempt attempt = new ExamAttempt();
+        attempt.setPublicId(UUID.randomUUID());
+        attempt.setStatus(AttemptStatus.IN_PROGRESS);
+        attempt.setPinnedSnapshot(snapshot);
+        PinnedItemView item = new PinnedItemView(
+                UUID.randomUUID(), 3, "LISTENING", "MC_LISTENING_SINGLE", "Listening", "Prompt",
+                null, null, null, null, null, null, null, 0, 60, null, null, null);
+
+        TaskView task = mapper.toTaskResponse(attempt, item, 0, 60, 5).task();
+
+        assertThat(task.canNavigatePrevious()).isFalse();
+        assertThat(task.canNavigateNext()).isFalse();
     }
 
     @Test
