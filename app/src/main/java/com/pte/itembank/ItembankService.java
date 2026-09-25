@@ -346,6 +346,12 @@ public class ItembankService {
         questionRepository.findWithOptionsByPublicId(question.getSupersedesPublicId()).ifPresent(previous -> {
             previous.setCurrent(false);
             previous.setStatus(QuestionStatus.ARCHIVED);
+            // Flush now so the previous revision's is_current=false UPDATE reaches the
+            // database before this question's is_current=true UPDATE is flushed — otherwise
+            // Hibernate may order the two statements the other way around (it was loaded
+            // into the persistence context first) and both rows momentarily hold
+            // is_current=true, violating uq_questions_current_revision_group.
+            questionRepository.flush();
         });
     }
 
