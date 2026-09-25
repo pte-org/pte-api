@@ -375,7 +375,14 @@ public class ItembankService {
             throw new InvalidQuestionStatusTransitionException();
         }
         question.setStatus(QuestionStatus.DRAFT);
-        question.setCurrent(true);
+        // A later revision may already hold the group's one "current" slot (e.g. this
+        // question was archived after being superseded, not archived directly) — only
+        // reclaim it when nothing else in the group has it, or uq_questions_current_revision_group
+        // rejects the update.
+        boolean groupHasCurrentElsewhere = questionRepository
+                .existsByRevisionGroupPublicIdAndCurrentTrueAndPublicIdNot(
+                        question.getRevisionGroupPublicId(), question.getPublicId());
+        question.setCurrent(!groupHasCurrentElsewhere);
         return toResponse(question);
     }
 
