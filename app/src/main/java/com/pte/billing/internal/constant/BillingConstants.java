@@ -86,7 +86,7 @@ public final class BillingConstants {
     public static final String REJECT_REASON_REQUIRED = "Reject reason is required";
     public static final String PLAN_NAME_REQUIRED = "Plan name is required";
     public static final String PLAN_PRICE_REQUIRED = "Plan price is required";
-    public static final String PLAN_PRICE_NON_NEGATIVE = "Plan price must not be negative";
+    public static final String PLAN_PRICE_POSITIVE = "Plan price must be greater than zero";
     public static final String PLAN_PRICE_PRECISION_INVALID =
             "Plan price must have at most 17 integer digits and 2 decimal places";
     public static final String PLAN_CURRENCY_REQUIRED = "Plan currency is required";

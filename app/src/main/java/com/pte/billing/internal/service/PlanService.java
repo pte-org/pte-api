@@ -127,8 +127,8 @@ public class PlanService {
         if (price == null) {
             throw new PlanValidationException(BillingConstants.PLAN_PRICE_REQUIRED);
         }
-        if (price.signum() < 0) {
-            throw new PlanValidationException(BillingConstants.PLAN_PRICE_NON_NEGATIVE);
+        if (price.signum() <= 0) {
+            throw new PlanValidationException(BillingConstants.PLAN_PRICE_POSITIVE);
         }
         if (price.scale() > 2 || price.precision() - price.scale() > 17) {
             throw new PlanValidationException(BillingConstants.PLAN_PRICE_PRECISION_INVALID);
