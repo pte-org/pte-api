@@ -340,13 +340,26 @@ public class ItembankService {
     }
 
     private void archiveSupersededQuestion(Question question) {
-        if (question.getSupersedesPublicId() == null) {
-            return;
+        if (question.getSupersedesPublicId() != null) {
+            questionRepository.findWithOptionsByPublicId(question.getSupersedesPublicId()).ifPresent(previous -> {
+                previous.setCurrent(false);
+                previous.setStatus(QuestionStatus.ARCHIVED);
+            });
         }
-        questionRepository.findWithOptionsByPublicId(question.getSupersedesPublicId()).ifPresent(previous -> {
-            previous.setCurrent(false);
-            previous.setStatus(QuestionStatus.ARCHIVED);
-        });
+        // Defensive fallback: a data-integrity gap (e.g. a duplicate revision created by a
+        // race — see V67) can leave some other row in the group holding "current" that isn't
+        // this question's declared supersedesPublicId. Clear it too so the flush below never
+        // fights this question's is_current=true update over the group's one current slot.
+        questionRepository
+                .findByRevisionGroupPublicIdAndCurrentTrueAndPublicIdNot(question.getRevisionGroupPublicId(),
+                        question.getPublicId())
+                .forEach(other -> other.setCurrent(false));
+        // Flush now so those is_current=false UPDATEs reach the database before this
+        // question's is_current=true UPDATE is flushed — otherwise Hibernate may order the
+        // statements the other way around (this question was loaded into the persistence
+        // context first) and two rows momentarily hold is_current=true, violating
+        // uq_questions_current_revision_group.
+        questionRepository.flush();
     }
 
     /** Archive DRAFT/APPROVED→ARCHIVED. ARCHIVED is idempotent. */
@@ -369,7 +382,14 @@ public class ItembankService {
             throw new InvalidQuestionStatusTransitionException();
         }
         question.setStatus(QuestionStatus.DRAFT);
-        question.setCurrent(true);
+        // A later revision may already hold the group's one "current" slot (e.g. this
+        // question was archived after being superseded, not archived directly) — only
+        // reclaim it when nothing else in the group has it, or uq_questions_current_revision_group
+        // rejects the update.
+        boolean groupHasCurrentElsewhere = questionRepository
+                .existsByRevisionGroupPublicIdAndCurrentTrueAndPublicIdNot(
+                        question.getRevisionGroupPublicId(), question.getPublicId());
+        question.setCurrent(!groupHasCurrentElsewhere);
         return toResponse(question);
     }
 

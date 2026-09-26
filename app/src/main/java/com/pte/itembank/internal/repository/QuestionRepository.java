@@ -63,6 +63,14 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
 
     long countByDeletedFalseAndVisibility(Visibility visibility);
 
+    /** True when some other revision in the group already holds the group's one "current" slot. */
+    boolean existsByRevisionGroupPublicIdAndCurrentTrueAndPublicIdNot(UUID revisionGroupPublicId,
+            UUID publicId);
+
+    /** Any other revision(s) in the group currently holding the "current" slot — normally at most one. */
+    List<Question> findByRevisionGroupPublicIdAndCurrentTrueAndPublicIdNot(UUID revisionGroupPublicId,
+            UUID publicId);
+
     @Query("SELECT q.taskTypeSection, COUNT(q) FROM Question q "
             + "WHERE q.deleted = false AND q.visibility = :visibility GROUP BY q.taskTypeSection")
     List<Object[]> countBySectionAndVisibility(@Param("visibility") Visibility visibility);
