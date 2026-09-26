@@ -43,11 +43,16 @@ public record TaskView(
         Integer preRecordSeconds,
         /**
          * Resolved, directly-fetchable presigned URL — non-null whenever
-         * {@link #imagePromptRef} resolved successfully. Unlike audio, there is
-         * no separate on-demand endpoint for images (no replay-limit concern for
-         * a static image), so this is embedded directly here.
+         * {@link #imagePromptRef} resolved successfully. No separate on-demand
+         * endpoint for images (no replay-limit concern), so embedded directly here.
          */
         String imageUrl,
+        /**
+         * Resolved presigned audio URL — non-null for LISTENING tasks that have
+         * an audio prompt. Listening tasks play this URL directly; Speaking tasks
+         * still use the /audio on-demand endpoint (replay-limit enforcement).
+         */
+        String audioUrl,
         String taskTypeCode,
         TaskRuntimeProfileDescriptor runtime,
         String taskTypeDisplayName,
@@ -61,7 +66,7 @@ public record TaskView(
             Integer preListenSeconds, Integer preRecordSeconds, String imageUrl) {
         this(pinnedItemPublicId, orderIndex, totalTasks, section, taskType, title, promptText, audioPromptRef,
                 imagePromptRef, minWordCount, maxWordCount, options, blankGroups, prepSeconds, responseSeconds,
-                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, taskType, null, title, false, false);
+                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, null, taskType, null, title, false, false);
     }
 
     public TaskView(UUID pinnedItemPublicId, int orderIndex, int totalTasks, String section,
@@ -72,7 +77,7 @@ public record TaskView(
             TaskRuntimeProfileDescriptor runtime) {
         this(pinnedItemPublicId, orderIndex, totalTasks, section, taskType, title, promptText, audioPromptRef,
                 imagePromptRef, minWordCount, maxWordCount, options, blankGroups, prepSeconds, responseSeconds,
-                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, taskTypeCode, runtime, title,
+                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, null, taskTypeCode, runtime, title,
                 false, false);
     }
 
@@ -84,7 +89,7 @@ public record TaskView(
             TaskRuntimeProfileDescriptor runtime, String taskTypeDisplayName) {
         this(pinnedItemPublicId, orderIndex, totalTasks, section, taskType, title, promptText, audioPromptRef,
                 imagePromptRef, minWordCount, maxWordCount, options, blankGroups, prepSeconds, responseSeconds,
-                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, taskTypeCode, runtime,
+                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, null, taskTypeCode, runtime,
                 taskTypeDisplayName, false, false);
     }
 }
