@@ -184,7 +184,7 @@ public class AttemptLifecycleService {
      * (live at this instant), which the client ignores in favour of the global
      * exam timer already derived from {@code examEndTime}.
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public List<AttemptTaskResponse> getAllTasks(UUID attemptPublicId, CurrentUser caller) {
         ExamAttempt attempt = findOwned(attemptPublicId, caller);
         lockOpenSession(attempt);
