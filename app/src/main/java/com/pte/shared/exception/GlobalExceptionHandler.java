@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -46,6 +47,20 @@ public class GlobalExceptionHandler {
                 : SharedConstants.VALIDATION_FALLBACK;
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(SharedConstants.VALIDATION_FALLBACK, message, message));
+    }
+
+    /**
+     * The request body failed to parse into the target DTO — malformed JSON, wrong type,
+     * or (the common case) a number field that overflows its Java type (e.g. a 12-digit
+     * value into an {@code int}). Jackson wraps that as an unchecked exception during
+     * {@code @RequestBody} binding, which otherwise falls through to the 500 handler
+     * below even though the fault is entirely in the client's payload.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMalformedRequest(HttpMessageNotReadableException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(SharedConstants.MALFORMED_REQUEST,
+                        SharedConstants.MALFORMED_REQUEST_MESSAGE, SharedConstants.MALFORMED_REQUEST_MESSAGE));
     }
 
     @ExceptionHandler(AccessDeniedException.class)

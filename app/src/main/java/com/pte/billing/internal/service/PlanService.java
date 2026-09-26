@@ -127,8 +127,8 @@ public class PlanService {
         if (price == null) {
             throw new PlanValidationException(BillingConstants.PLAN_PRICE_REQUIRED);
         }
-        if (price.signum() < 0) {
-            throw new PlanValidationException(BillingConstants.PLAN_PRICE_NON_NEGATIVE);
+        if (price.signum() <= 0) {
+            throw new PlanValidationException(BillingConstants.PLAN_PRICE_POSITIVE);
         }
         if (price.scale() > 2 || price.precision() - price.scale() > 17) {
             throw new PlanValidationException(BillingConstants.PLAN_PRICE_PRECISION_INVALID);
@@ -147,6 +147,9 @@ public class PlanService {
             if (!positive(maxStudentsPerSession)) {
                 throw new PlanValidationException(BillingConstants.EXAM_MAX_STUDENTS_REQUIRED);
             }
+            if (maxStudentsPerSession > BillingConstants.MAX_STUDENT_COUNT) {
+                throw new PlanValidationException(BillingConstants.EXAM_MAX_STUDENTS_LIMIT_EXCEEDED);
+            }
             if (extraStudentSlots != null) {
                 throw new PlanValidationException(BillingConstants.EXAM_EXTRA_STUDENT_SLOTS_FORBIDDEN);
             }
@@ -155,6 +158,9 @@ public class PlanService {
 
         if (!positive(extraStudentSlots)) {
             throw new PlanValidationException(BillingConstants.CAPACITY_EXTRA_STUDENTS_REQUIRED);
+        }
+        if (extraStudentSlots > BillingConstants.MAX_STUDENT_COUNT) {
+            throw new PlanValidationException(BillingConstants.CAPACITY_EXTRA_STUDENTS_LIMIT_EXCEEDED);
         }
         if (durationDays != null) {
             throw new PlanValidationException(BillingConstants.CAPACITY_DURATION_FORBIDDEN);

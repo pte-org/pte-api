@@ -21,7 +21,7 @@ public record PlanRequest(
         String type,
 
         @NotNull(message = BillingConstants.PLAN_PRICE_REQUIRED)
-        @DecimalMin(value = "0.0", message = BillingConstants.PLAN_PRICE_NON_NEGATIVE)
+        @DecimalMin(value = "0.0", inclusive = false, message = BillingConstants.PLAN_PRICE_POSITIVE)
         @Digits(integer = 17, fraction = 2, message = BillingConstants.PLAN_PRICE_PRECISION_INVALID)
         BigDecimal price,
 

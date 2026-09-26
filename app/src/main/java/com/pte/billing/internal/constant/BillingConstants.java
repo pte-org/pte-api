@@ -69,6 +69,7 @@ public final class BillingConstants {
     public static final String PAYOS_CURRENCY = "VND";
     public static final String PAYOS_EXPIRATION_CANCELLATION_REASON = "Payment link expired";
     public static final int DEFAULT_LICENSE_CODE_REDEEM_RATE_PER_SECOND = 5;
+    public static final int MAX_STUDENT_COUNT = 2_000;
 
     public static final String FREE_STUDENT_LIMIT_SETTING_KEY = "free_student_limit";
     public static final String SUSPENSION_DEFAULT_DAYS_SETTING_KEY = "suspension_default_days";
@@ -85,7 +86,7 @@ public final class BillingConstants {
     public static final String REJECT_REASON_REQUIRED = "Reject reason is required";
     public static final String PLAN_NAME_REQUIRED = "Plan name is required";
     public static final String PLAN_PRICE_REQUIRED = "Plan price is required";
-    public static final String PLAN_PRICE_NON_NEGATIVE = "Plan price must not be negative";
+    public static final String PLAN_PRICE_POSITIVE = "Plan price must be greater than zero";
     public static final String PLAN_PRICE_PRECISION_INVALID =
             "Plan price must have at most 17 integer digits and 2 decimal places";
     public static final String PLAN_CURRENCY_REQUIRED = "Plan currency is required";
@@ -95,10 +96,14 @@ public final class BillingConstants {
     public static final String EXAM_DURATION_REQUIRED = "EXAM_PACKAGE requires durationDays > 0";
     public static final String EXAM_MAX_STUDENTS_REQUIRED =
             "EXAM_PACKAGE requires maxStudentsPerSession > 0";
+    public static final String EXAM_MAX_STUDENTS_LIMIT_EXCEEDED =
+            "maxStudentsPerSession must not exceed " + MAX_STUDENT_COUNT;
     public static final String EXAM_EXTRA_STUDENT_SLOTS_FORBIDDEN =
             "EXAM_PACKAGE must not set extraStudentSlots";
     public static final String CAPACITY_EXTRA_STUDENTS_REQUIRED =
             "STUDENT_CAPACITY requires extraStudentSlots > 0";
+    public static final String CAPACITY_EXTRA_STUDENTS_LIMIT_EXCEEDED =
+            "extraStudentSlots must not exceed " + MAX_STUDENT_COUNT;
     public static final String CAPACITY_DURATION_FORBIDDEN =
             "STUDENT_CAPACITY must not set durationDays";
     public static final String CAPACITY_MAX_STUDENTS_FORBIDDEN =
