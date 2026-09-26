@@ -410,10 +410,15 @@ public class AttemptLifecycleService {
             throw new AttemptAlreadyCompleteException();
         }
         attempt = lockAttempt(attempt);
-        PinnedItem currentItem = currentItem(attempt);
-        if (!currentItem.getPublicId().equals(pinnedItemPublicId)) {
-            throw new NotCurrentTaskException();
-        }
+        // Navigation is now fully client-side — the server's currentOrderIndex is only
+        // updated on answer-submit, not on every Next/Prev tap. Verifying the item
+        // belongs to this attempt's snapshot is sufficient; requiring it to equal
+        // currentOrderIndex incorrectly rejects valid audio requests on tasks the
+        // student has navigated to without submitting the previous one.
+        Long snapshotId = attempt.getPinnedSnapshot().getId();
+        PinnedItem currentItem = pinnedItemRepository.findByPublicId(pinnedItemPublicId)
+                .filter(item -> item.getPinnedSnapshot().getId().equals(snapshotId))
+                .orElseThrow(NotCurrentTaskException::new);
 
         if (playRequestId.equals(attempt.getLastPlayRequestId())) {
             if (Boolean.TRUE.equals(attempt.getLastPlayAllowed())) {
