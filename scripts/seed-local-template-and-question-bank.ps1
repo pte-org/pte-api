@@ -158,7 +158,8 @@ function Get-QuestionByTitle {
     )
 
     $query = [Uri]::EscapeDataString($Title)
-    $questions = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/questions?q=$query" -Token $script:AdminToken)
+    $result = Invoke-SeedApi -Method GET -Path "/api/v1/questions?q=$query&size=100" -Token $script:AdminToken
+    $questions = if ($null -ne $result -and $result.PSObject.Properties.Name -contains 'content') { Get-Array ($result.content) } else { @() }
     return $questions |
         Where-Object {
             $_.title -eq $Title -and
