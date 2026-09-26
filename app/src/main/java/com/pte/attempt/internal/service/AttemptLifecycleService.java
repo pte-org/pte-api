@@ -175,6 +175,37 @@ public class AttemptLifecycleService {
         return sessionService.getAttemptRetryPolicy(sessionPublicId, tenantId).maxRetriesPerStudent();
     }
 
+    /**
+     * Returns every task in the attempt's pinned snapshot in order. The client
+     * uses this to prefetch the full list on start/resume and navigate locally
+     * without a server round-trip per step. Timer values are computed at call
+     * time: speaking/listening items get their own {@code prepSeconds}/
+     * {@code responseSeconds}; reading items get {@code sectionBudget - elapsed}
+     * (live at this instant), which the client ignores in favour of the global
+     * exam timer already derived from {@code examEndTime}.
+     */
+    @Transactional(readOnly = true)
+    public List<AttemptTaskResponse> getAllTasks(UUID attemptPublicId, CurrentUser caller) {
+        ExamAttempt attempt = findOwned(attemptPublicId, caller);
+        lockOpenSession(attempt);
+        if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
+            return List.of(attemptMapper.toCompletedResponse(attempt));
+        }
+        assertStoredCapabilities(attempt, caller);
+        List<PinnedItemView> allItems = allItemViews(attempt);
+        String encryptionPublicKey = "STRICT".equals(attempt.getPinnedSnapshot().getAnswerIntegrityLevel())
+                ? encryptionKeyProvider.getPublicKeyBase64()
+                : null;
+        return allItems.stream()
+                .map(item -> {
+                    int effectivePrep = timerService.resolveEffectivePrepSeconds(item);
+                    int effectiveResponse = timerService.resolveEffectiveResponseSeconds(attempt, item, allItems);
+                    return attemptMapper.toTaskResponse(attempt, item, effectivePrep, effectiveResponse,
+                            allItems.size(), encryptionPublicKey);
+                })
+                .toList();
+    }
+
     @Transactional
     public AttemptTaskResponse getNextTask(UUID attemptPublicId, CurrentUser caller) {
         ExamAttempt attempt = findOwned(attemptPublicId, caller);

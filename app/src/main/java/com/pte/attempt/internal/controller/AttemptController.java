@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -52,6 +53,12 @@ public class AttemptController {
     @GetMapping("/{publicId}/next-task")
     public ApiResponse<AttemptTaskResponse> nextTask(@PathVariable UUID publicId) {
         return ApiResponse.success(attemptLifecycleService.getNextTask(publicId, currentUser()));
+    }
+
+    /** Returns all tasks for the attempt in order — used by the client to prefetch the full task list on start/resume. */
+    @GetMapping("/{publicId}/tasks")
+    public ApiResponse<List<AttemptTaskResponse>> allTasks(@PathVariable UUID publicId) {
+        return ApiResponse.success(attemptLifecycleService.getAllTasks(publicId, currentUser()));
     }
 
     @PostMapping("/{publicId}/navigate")
