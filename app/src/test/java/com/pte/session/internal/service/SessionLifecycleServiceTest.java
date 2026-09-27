@@ -249,7 +249,7 @@ class SessionLifecycleServiceTest {
         SessionResponse response = service.create(
                 new CreateSessionRequest("Real Exam Session", subscriptionId, Set.of("SPEAKING"),
                         Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
-                        ExamMode.REAL_EXAM, null, 100),
+                        ExamMode.OFFICIAL_EXAM, null, 100),
                 hostAdmin);
 
         assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
@@ -288,7 +288,7 @@ class SessionLifecycleServiceTest {
         SessionResponse response = service.create(
                 new CreateSessionRequest("Session", subscriptionId, skills,
                         Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
-                        ExamMode.MOCK_TEST, null, 100),
+                        ExamMode.OFFICIAL_EXAM, null, 100),
                 hostAdmin);
 
         assertThat(response.snapshotPublicId()).isEqualTo(canonicalSnapshotId);
@@ -304,7 +304,7 @@ class SessionLifecycleServiceTest {
         assertThatThrownBy(() -> service.create(
                 new CreateSessionRequest("Session", subscriptionId, Set.of("SPEAKING"),
                         Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
-                        ExamMode.MOCK_TEST, null, 100),
+                        ExamMode.OFFICIAL_EXAM, null, 100),
                 hostAdmin))
                 .isInstanceOf(RuntimeException.class);
 
@@ -316,10 +316,10 @@ class SessionLifecycleServiceTest {
         jakarta.validation.Validator validator = jakarta.validation.Validation.buildDefaultValidatorFactory().getValidator();
 
         CreateSessionRequest empty = new CreateSessionRequest("Session", subscriptionId, Set.of(),
-                Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), ExamMode.MOCK_TEST, null, 100);
+                Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), ExamMode.OFFICIAL_EXAM, null, 100);
         CreateSessionRequest tooMany = new CreateSessionRequest("Session", subscriptionId,
                 Set.of("SPEAKING", "WRITING", "READING", "LISTENING", "EXTRA"),
-                Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), ExamMode.MOCK_TEST, null, 100);
+                Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), ExamMode.OFFICIAL_EXAM, null, 100);
 
         assertThat(validator.validate(empty)).isNotEmpty();
         assertThat(validator.validate(tooMany)).isNotEmpty();
@@ -534,7 +534,7 @@ class SessionLifecycleServiceTest {
 
     private CreateSessionRequest request(UUID requestedSubscriptionId, int capacity, Window window) {
         return new CreateSessionRequest("Session", requestedSubscriptionId, Set.of("SPEAKING"),
-                window.opensAt(), window.closesAt(), ExamMode.MOCK_TEST, null, capacity);
+                window.opensAt(), window.closesAt(), ExamMode.OFFICIAL_EXAM, null, capacity);
     }
 
     private Window futureWindow() {

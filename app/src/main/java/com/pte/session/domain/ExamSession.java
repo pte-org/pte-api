@@ -73,7 +73,7 @@ public class ExamSession extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "exam_mode", length = 16)
-    private ExamMode examMode = ExamMode.MOCK_TEST;
+    private ExamMode examMode = ExamMode.OFFICIAL_EXAM;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "reuse_policy", length = 40)

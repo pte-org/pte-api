@@ -35,9 +35,13 @@ public class AnswerSubmitService {
      */
     @Transactional
     public AttemptAnswer submit(ExamAttempt attempt, PinnedItem item, String payload) {
-        AttemptAnswer answer = new AttemptAnswer();
-        answer.setAttempt(attempt);
-        answer.setPinnedItem(item);
+        AttemptAnswer answer = attemptAnswerRepository.findByAttemptIdAndPinnedItemId(attempt.getId(), item.getId())
+                .orElseGet(() -> {
+                    AttemptAnswer created = new AttemptAnswer();
+                    created.setAttempt(attempt);
+                    created.setPinnedItem(item);
+                    return created;
+                });
         answer.setPayload(payload);
         answer.setStatus(AnswerStatus.SUBMITTED);
         answer.setExpired(false);
@@ -46,5 +50,12 @@ public class AnswerSubmitService {
         } catch (DataIntegrityViolationException ex) {
             throw new AnswerAlreadySubmittedException();
         }
+    }
+
+    /** Creates an empty answer only when the student skips an item with no saved response. */
+    @Transactional
+    public AttemptAnswer submitIfAbsent(ExamAttempt attempt, PinnedItem item, String payload) {
+        return attemptAnswerRepository.findByAttemptIdAndPinnedItemId(attempt.getId(), item.getId())
+                .orElseGet(() -> submit(attempt, item, payload));
     }
 }

@@ -14,5 +14,11 @@ public record EntitlementResponse(
         UUID tenantId,
         Instant opensAt,
         Instant closesAt,
-        ExamPolicyResponse policy) {
+        ExamPolicyResponse policy,
+        String examMode) {
+
+    public EntitlementResponse(UUID sessionPublicId, UUID snapshotPublicId, UUID tenantId,
+            Instant opensAt, Instant closesAt, ExamPolicyResponse policy) {
+        this(sessionPublicId, snapshotPublicId, tenantId, opensAt, closesAt, policy, "OFFICIAL_EXAM");
+    }
 }

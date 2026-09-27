@@ -3,6 +3,7 @@ package com.pte.attempt.internal.controller;
 import com.pte.attempt.internal.dto.request.EncryptedSubmissionRequest;
 import com.pte.attempt.internal.dto.request.AttemptPreflightRequest;
 import com.pte.attempt.internal.dto.request.StartAttemptRequest;
+import com.pte.attempt.internal.dto.request.NavigateTaskRequest;
 import com.pte.attempt.internal.dto.request.SubmitAnswerRequest;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.dto.response.AudioPlayResponse;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -51,6 +53,32 @@ public class AttemptController {
     @GetMapping("/{publicId}/next-task")
     public ApiResponse<AttemptTaskResponse> nextTask(@PathVariable UUID publicId) {
         return ApiResponse.success(attemptLifecycleService.getNextTask(publicId, currentUser()));
+    }
+
+    /** Returns all tasks for the attempt in order — used by the client to prefetch the full task list on start/resume. */
+    @GetMapping("/{publicId}/tasks")
+    public ApiResponse<List<AttemptTaskResponse>> allTasks(@PathVariable UUID publicId) {
+        return ApiResponse.success(attemptLifecycleService.getAllTasks(publicId, currentUser()));
+    }
+
+    @PostMapping("/{publicId}/navigate")
+    public ApiResponse<AttemptTaskResponse> navigate(@PathVariable UUID publicId,
+                                                      @Valid @RequestBody NavigateTaskRequest request) {
+        return ApiResponse.success(attemptLifecycleService.navigateTask(publicId, request, currentUser()));
+    }
+
+    /** Saves a draft without advancing the attempt pointer; used before explicit Previous/Next navigation. */
+    @PostMapping("/{publicId}/answers/save")
+    public ApiResponse<AttemptTaskResponse> saveAnswer(@PathVariable UUID publicId,
+                                                        @Valid @RequestBody SubmitAnswerRequest request) {
+        return ApiResponse.success(attemptLifecycleService.saveAnswer(publicId, request, currentUser()));
+    }
+
+    /** STRICT-pinned counterpart to the non-advancing draft save endpoint. */
+    @PostMapping("/{publicId}/answers/encrypted/save")
+    public ApiResponse<AttemptTaskResponse> saveEncryptedAnswer(@PathVariable UUID publicId,
+            @Valid @RequestBody EncryptedSubmissionRequest request) {
+        return ApiResponse.success(attemptLifecycleService.saveEncryptedAnswer(publicId, request, currentUser()));
     }
 
     /** STANDARD-pinned attempts only — server rejects if the attempt is pinned STRICT. */
