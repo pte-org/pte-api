@@ -50,7 +50,7 @@ public class ExamGenerationService {
 
     /** Fixed section draw order — the natural PTE test-day order, and also the V5 template's own sequence order. */
     private static final List<PteSection> SECTION_ORDER =
-            List.of(PteSection.SPEAKING, PteSection.WRITING, PteSection.READING, PteSection.LISTENING);
+            List.of(PteSection.LISTENING, PteSection.SPEAKING, PteSection.READING, PteSection.WRITING);
 
     private final ScoreTemplateService scoreTemplateService;
     private final ItembankService itembankService;

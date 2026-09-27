@@ -77,7 +77,8 @@ public class AttemptMapper {
         // absent. Null lockdownMode is the client's "no lockdown" contract, same as toCompletedResponse.
         return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey,
                 pinned != null ? pinned.getLockdownMode() : null, attempt.getAttemptNumber(),
-                remainingRetries(attempt), remainingRetries(attempt) > 0);
+                remainingRetries(attempt), remainingRetries(attempt) > 0,
+                pinned != null ? pinned.getExamMode() : null);
     }
 
     private boolean isManualNavigationAllowed(PinnedExamSnapshot pinned, String section) {
@@ -100,7 +101,7 @@ public class AttemptMapper {
     public AttemptTaskResponse toCompletedResponse(ExamAttempt attempt) {
         int remainingRetries = remainingRetries(attempt);
         return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), true, null, null, null,
-                attempt.getAttemptNumber(), remainingRetries, remainingRetries > 0);
+                attempt.getAttemptNumber(), remainingRetries, remainingRetries > 0, null);
     }
 
     private int remainingRetries(ExamAttempt attempt) {
