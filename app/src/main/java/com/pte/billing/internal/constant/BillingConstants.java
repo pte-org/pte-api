@@ -21,6 +21,8 @@ public final class BillingConstants {
     public static final String SUBSCRIPTION_PLAN_NOT_ACTIVE = "SUBSCRIPTION_PLAN_NOT_ACTIVE";
     public static final String SUBSCRIPTION_EXAM_FIELDS_INVALID = "SUBSCRIPTION_EXAM_FIELDS_INVALID";
     public static final String SUBSCRIPTION_CAPACITY_FIELDS_INVALID = "SUBSCRIPTION_CAPACITY_FIELDS_INVALID";
+    public static final String SUBSCRIPTION_NOT_FOUND = "SUBSCRIPTION_NOT_FOUND";
+    public static final String LICENSE_KEY_REVEAL_INVALID_PASSWORD = "LICENSE_KEY_REVEAL_INVALID_PASSWORD";
     public static final String LICENSE_KEY_GENERATION_FAILED = "LICENSE_KEY_GENERATION_FAILED";
     public static final String ORDER_TENANT_REQUIRED = "ORDER_TENANT_REQUIRED";
     public static final String ORDER_PLAN_REQUIRED = "ORDER_PLAN_REQUIRED";
@@ -112,6 +114,7 @@ public final class BillingConstants {
     public static final String SETTING_VALUE_REQUIRED = "Setting value is required";
     public static final String SETTING_VALUE_MAX = "Setting value must be at most 255 characters";
     public static final String SETTING_DESCRIPTION_MAX = "Setting description must be at most 255 characters";
+    public static final String PASSWORD_REQUIRED = "Password is required";
 
     private BillingConstants() {
     }

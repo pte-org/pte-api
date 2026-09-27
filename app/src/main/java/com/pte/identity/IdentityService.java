@@ -57,6 +57,23 @@ public class IdentityService implements StudentCountProvider {
         return userRepository.findByPublicId(publicId).map(User::getTenantId);
     }
 
+    /**
+     * Re-authenticates the caller by password alone (no new token issued) — for a
+     * step-up confirmation gate in front of a sensitive read, e.g. billing's
+     * "reveal license key" action. Returns {@code false} for any unknown user or
+     * wrong password rather than throwing, so the caller can map it to its own
+     * domain-appropriate error.
+     */
+    public boolean verifyPassword(UUID userPublicId, String rawPassword) {
+        if (userPublicId == null || rawPassword == null || rawPassword.isBlank()) {
+            return false;
+        }
+        return userRepository.findByPublicId(userPublicId)
+                .flatMap(user -> loginHashRepository.findByUserId(user.getId()))
+                .map(loginHash -> passwordEncoder.matches(rawPassword, loginHash.getHash()))
+                .orElse(false);
+    }
+
     public List<User> findByTenantIdAndRole(UUID tenantId, Role role) {
         return userRepository.findByTenantIdAndRolesContaining(tenantId, role);
     }

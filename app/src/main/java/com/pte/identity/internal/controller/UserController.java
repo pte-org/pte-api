@@ -5,6 +5,7 @@ import com.pte.identity.internal.dto.request.CreateUserRequest;
 import com.pte.identity.internal.dto.request.ResetPasswordRequest;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
 import com.pte.identity.internal.dto.response.GeneratedCredentialsResponse;
+import com.pte.identity.internal.dto.response.UserDirectoryEntryResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.service.ExamStaffQueryService;
 import com.pte.identity.internal.service.UserService;
@@ -62,6 +63,17 @@ public class UserController {
     @GetMapping
     public ApiResponse<List<UserResponse>> list() {
         return ApiResponse.success(userService.listByTenant(currentUser()));
+    }
+
+    /**
+     * Unfiltered tenant user directory (publicId + fullName only) for display purposes —
+     * e.g. resolving an Audit Log actor's name. See {@link com.pte.identity.internal.service
+     * .UserService#listDirectory} for why this must not reuse {@link #list()}'s
+     * manageable-roles filter.
+     */
+    @GetMapping("/directory")
+    public ApiResponse<List<UserDirectoryEntryResponse>> directory() {
+        return ApiResponse.success(userService.listDirectory(currentUser()));
     }
 
     @GetMapping("/exam-staff")

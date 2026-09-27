@@ -42,9 +42,15 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Void>> handleValidation(MethodArgumentNotValidException ex) {
-        String message = ex.getBindingResult().getFieldError() != null
-                ? ex.getBindingResult().getFieldError().getDefaultMessage()
-                : SharedConstants.VALIDATION_FALLBACK;
+        String message;
+        if (ex.getBindingResult().getFieldError() != null) {
+            message = ex.getBindingResult().getFieldError().getDefaultMessage();
+        } else if (ex.getBindingResult().getGlobalError() != null) {
+            message = ex.getBindingResult().getGlobalError().getDefaultMessage();
+        } else {
+            message = SharedConstants.VALIDATION_FALLBACK;
+        }
+        if (message == null) message = SharedConstants.VALIDATION_FALLBACK;
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(SharedConstants.VALIDATION_FALLBACK, message, message));
     }
