@@ -14,6 +14,7 @@ import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse.CreatedUser;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse.RowError;
 import com.pte.identity.internal.dto.response.GeneratedCredentialsResponse;
+import com.pte.identity.internal.dto.response.UserDirectoryEntryResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.DuplicateEmailInBatchException;
 import com.pte.identity.internal.exception.EmailAlreadyUsedException;
@@ -251,6 +252,25 @@ public class UserService {
         return userRepository.findByTenantId(tenantId).stream()
                 .filter(user -> provisioningHelper.canManageTarget(caller, user.getRoles()))
                 .map(UserMapper::toResponse)
+                .toList();
+    }
+
+    /**
+     * Every user in the caller's tenant — including HOST_ADMIN accounts — for display
+     * purposes only (e.g. resolving an Audit Log actor's name). Deliberately skips the
+     * {@code canManageTarget} filter {@link #listByTenant} applies: that filter answers
+     * "who may I administer," not "whose name may I see," and a HOST_ADMIN can never
+     * manage its own or a peer HOST_ADMIN account, which made every admin-performed
+     * audit entry resolve to no name at all.
+     */
+    @Transactional(readOnly = true)
+    public List<UserDirectoryEntryResponse> listDirectory(CurrentUser caller) {
+        UUID tenantId = caller.tenantId();
+        if (tenantId == null) {
+            return List.of();
+        }
+        return userRepository.findByTenantId(tenantId).stream()
+                .map(user -> new UserDirectoryEntryResponse(user.getPublicId(), user.getFullName()))
                 .toList();
     }
 
