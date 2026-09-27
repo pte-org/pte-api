@@ -701,11 +701,7 @@ public class ExamOrchestrationService {
     }
 
     private void validateConfiguration(ExamMode mode, FormMode formMode, ReusePolicy reusePolicy, String seriesKey) {
-        if (mode != ExamMode.PRACTICE && formMode != FormMode.UNIQUE_FORM_PER_STUDENT) {
-            throw new ExamDraftConfigurationException(SessionConstants.EXAM_OFFICIAL_UNIQUE_FORM_REQUIRED);
-        }
-        if (mode != ExamMode.PRACTICE && reusePolicy != ReusePolicy.ALLOW
-                && (seriesKey == null || seriesKey.isBlank())) {
+        if (reusePolicy != ReusePolicy.ALLOW && (seriesKey == null || seriesKey.isBlank())) {
             throw new ExamDraftConfigurationException(SessionConstants.EXAM_SERIES_REQUIRED);
         }
     }

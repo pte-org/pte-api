@@ -155,20 +155,6 @@ class ExamOrchestrationServiceTest {
     }
 
     @Test
-    void createDraft_rejectsOfficialSharedFormBeforePersistence() {
-        stubTemplateAndSubscription();
-
-        assertThatThrownBy(() -> service.createDraft(new CreateExamDraftRequest(
-                "Unsafe mock", templateId, subscriptionId, opensAt, closesAt,
-                ExamMode.OFFICIAL_EXAM, FormMode.SHARED_FORM, ReusePolicy.ALLOW, null, 20), hostAdmin))
-                .isInstanceOf(ExamDraftConfigurationException.class)
-                .extracting(throwable -> ((DomainException) throwable).getUserMessage())
-                .isEqualTo(SessionConstants.EXAM_OFFICIAL_UNIQUE_FORM_REQUIRED);
-
-        verify(sessionRepository, never()).saveAndFlush(any());
-    }
-
-    @Test
     void updateDraft_rejectsStaleOptimisticVersion() {
         var session = new com.pte.session.domain.ExamSession();
         session.setPublicId(UUID.randomUUID());
