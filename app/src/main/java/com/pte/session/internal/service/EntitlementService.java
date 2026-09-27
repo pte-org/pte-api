@@ -67,7 +67,8 @@ public class EntitlementService {
                     .orElseThrow(NotEntitledException::new);
         }
         return new EntitlementResponse(session.getPublicId(), snapshotPublicId, session.getTenantId(),
-                session.getOpensAt(), session.getClosesAt(), SessionMapper.toPolicy(session.getPolicy()));
+                session.getOpensAt(), session.getClosesAt(), SessionMapper.toPolicy(session.getPolicy()),
+                session.getExamMode() == null ? "OFFICIAL_EXAM" : session.getExamMode().name());
     }
 
     @Transactional(readOnly = true)

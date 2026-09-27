@@ -147,6 +147,21 @@ class SnapshotPinServiceTest {
     }
 
     @Test
+    @DisplayName("public audio URL is pinned without an expiry timestamp")
+    void speakingItem_withPublicAudioUrl_hasNoExpiryTimestamp() {
+        stubEntitlement("RE_TELL_LECTURE");
+        stubContent(item("SPEAKING", "RE_TELL_LECTURE", AUDIO_REF));
+        when(mediaService.presignGet(eq(AUDIO_REF), anyLong(), any()))
+                .thenReturn(new PresignedDownloadResponse("https://cdn.example.com/lecture.mp3", 0, 68));
+
+        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
+
+        PinnedItem pinnedItem = pinned.getItems().get(0);
+        assertThat(pinnedItem.getAudioUrl()).isEqualTo("https://cdn.example.com/lecture.mp3");
+        assertThat(pinnedItem.getAudioUrlExpiresAt()).isNull();
+    }
+
+    @Test
     @DisplayName("Non-LISTENING item with null audioPromptRef pins with no exception and no audioUrl")
     void speakingItem_nullAudioPromptRef_pinsSilently() {
         stubEntitlement("READ_ALOUD");

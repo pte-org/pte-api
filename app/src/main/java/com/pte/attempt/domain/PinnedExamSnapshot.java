@@ -73,6 +73,10 @@ public class PinnedExamSnapshot extends BaseEntity {
     @Column(nullable = false)
     private String answerIntegrityLevel;
 
+    /** Session mode captured at pin time so navigation policy cannot change mid-attempt. */
+    @Column(nullable = false, length = 16)
+    private String examMode;
+
     @Column(length = 20)
     private String lockdownMode;
 

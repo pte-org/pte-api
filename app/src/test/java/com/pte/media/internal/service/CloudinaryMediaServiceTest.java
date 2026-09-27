@@ -39,7 +39,7 @@ class CloudinaryMediaServiceTest {
     private MediaObjectRepository repository;
 
     @Test
-    void studentResponseUploadUsesSubmissionFolderAndStudentOwnership() throws Exception {
+    void studentResponseUploadUsesPublicSubmissionFolderAndStudentOwnership() throws Exception {
         when(repository.save(any(MediaObject.class))).thenAnswer(invocation -> invocation.getArgument(0));
         UUID studentId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
@@ -52,7 +52,7 @@ class CloudinaryMediaServiceTest {
         assertThat(response.folder()).isEqualTo("pte/submissions");
         assertThat(response.publicId()).startsWith("pte/submissions/");
         assertThat(response.resourceType()).isEqualTo("video");
-        assertThat(response.uploadUrl()).endsWith("/video/authenticated/upload");
+        assertThat(response.uploadUrl()).endsWith("/video/upload");
         String uploadPayload = "folder=pte/submissions&public_id=" + response.mediaPublicId()
                 + "&timestamp=" + response.timestamp();
         String expectedUploadSignature = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-1")
@@ -67,7 +67,7 @@ class CloudinaryMediaServiceTest {
         assertThat(media.getTenantId()).isEqualTo(tenantId);
         assertThat(media.isAudioPrompt()).isFalse();
         assertThat(media.getCloudinaryPublicId()).isEqualTo(response.publicId());
-        assertThat(media.getCloudinaryDeliveryType()).isEqualTo(CloudinaryDeliveryType.AUTHENTICATED);
+        assertThat(media.getCloudinaryDeliveryType()).isEqualTo(CloudinaryDeliveryType.UPLOAD);
     }
 
     @Test

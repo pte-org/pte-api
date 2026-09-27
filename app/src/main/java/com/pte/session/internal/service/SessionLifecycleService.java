@@ -110,7 +110,7 @@ public class SessionLifecycleService {
         session.setOpensAt(request.opensAt());
         session.setClosesAt(request.closesAt());
         session.setCapacity(request.capacity());
-        ExamMode mode = request.examMode() != null ? request.examMode() : ExamMode.MOCK_TEST;
+        ExamMode mode = request.examMode() != null ? request.examMode() : ExamMode.OFFICIAL_EXAM;
         session.setExamMode(mode);
         session.setFormMode(com.pte.session.domain.enums.FormMode.SHARED_FORM);
         session.setReusePolicy(com.pte.session.domain.enums.ReusePolicy.ALLOW);
