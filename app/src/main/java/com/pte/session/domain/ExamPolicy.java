@@ -71,7 +71,7 @@ public class ExamPolicy {
     }
 
     public static ExamPolicy practiceDefault() {
-        return build(ReplayPolicy.unlimited(), false, false, AnswerIntegrityLevel.STANDARD, LockdownMode.NONE);
+        return build(ReplayPolicy.unlimited(), true, false, AnswerIntegrityLevel.STANDARD, LockdownMode.NONE);
     }
 
     public static ExamPolicy mockTestDefault() {
