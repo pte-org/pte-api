@@ -148,7 +148,7 @@ public class ExamOrchestrationService {
         var template = scoreTemplateService.findActiveByPublicId(request.templatePublicId())
                 .orElseThrow(() -> new ExamDraftConfigurationException(SessionConstants.EXAM_TEMPLATE_ACTIVE_REQUIRED));
 
-        ExamMode mode = request.examMode() == null ? ExamMode.MOCK_TEST : request.examMode();
+        ExamMode mode = request.examMode() == null ? ExamMode.OFFICIAL_EXAM : request.examMode();
         FormMode formMode = request.formMode() == null ? defaultFormMode(mode) : request.formMode();
         ReusePolicy reusePolicy = request.reusePolicy() == null ? defaultReusePolicy(mode) : request.reusePolicy();
         validateConfiguration(mode, formMode, reusePolicy, request.seriesKey());

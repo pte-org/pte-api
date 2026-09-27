@@ -19,6 +19,6 @@ public record EntitlementResponse(
 
     public EntitlementResponse(UUID sessionPublicId, UUID snapshotPublicId, UUID tenantId,
             Instant opensAt, Instant closesAt, ExamPolicyResponse policy) {
-        this(sessionPublicId, snapshotPublicId, tenantId, opensAt, closesAt, policy, "MOCK_TEST");
+        this(sessionPublicId, snapshotPublicId, tenantId, opensAt, closesAt, policy, "OFFICIAL_EXAM");
     }
 }

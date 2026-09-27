@@ -86,8 +86,7 @@ public class ExamPolicy {
     public static ExamPolicy forMode(ExamMode mode) {
         return switch (mode) {
             case PRACTICE -> practiceDefault();
-            case MOCK_TEST -> mockTestDefault();
-            case REAL_EXAM -> realExamDefault();
+            case OFFICIAL_EXAM -> realExamDefault();
         };
     }
 

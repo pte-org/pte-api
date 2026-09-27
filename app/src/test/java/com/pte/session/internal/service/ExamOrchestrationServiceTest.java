@@ -123,7 +123,7 @@ class ExamOrchestrationServiceTest {
 
         var response = service.createDraft(new CreateExamDraftRequest(
                 "  HK1 mock  ", templateId, subscriptionId, opensAt, closesAt,
-                ExamMode.MOCK_TEST, null, null, " HK1-2026 ", 50), hostAdmin);
+                ExamMode.OFFICIAL_EXAM, null, null, " HK1-2026 ", 50), hostAdmin);
 
         assertThat(response.status()).isEqualTo(SessionStatus.DRAFT.name());
         assertThat(response.formMode()).isEqualTo(FormMode.UNIQUE_FORM_PER_STUDENT);
@@ -160,7 +160,7 @@ class ExamOrchestrationServiceTest {
 
         assertThatThrownBy(() -> service.createDraft(new CreateExamDraftRequest(
                 "Unsafe mock", templateId, subscriptionId, opensAt, closesAt,
-                ExamMode.MOCK_TEST, FormMode.SHARED_FORM, ReusePolicy.ALLOW, null, 20), hostAdmin))
+                ExamMode.OFFICIAL_EXAM, FormMode.SHARED_FORM, ReusePolicy.ALLOW, null, 20), hostAdmin))
                 .isInstanceOf(ExamDraftConfigurationException.class)
                 .extracting(throwable -> ((DomainException) throwable).getUserMessage())
                 .isEqualTo(SessionConstants.EXAM_OFFICIAL_UNIQUE_FORM_REQUIRED);
