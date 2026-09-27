@@ -16,12 +16,9 @@ public final class EnrollmentConstants {
     public static final String CLASS_MEMBERSHIP_NOT_FOUND = "CLASS_MEMBERSHIP_NOT_FOUND";
     public static final String LECTURER_ALREADY_ASSIGNED = "LECTURER_ALREADY_ASSIGNED";
     public static final String LECTURER_ASSIGNMENT_NOT_FOUND = "LECTURER_ASSIGNMENT_NOT_FOUND";
-    public static final String COORDINATOR_ALREADY_ASSIGNED = "COORDINATOR_ALREADY_ASSIGNED";
-    public static final String COORDINATOR_ASSIGNMENT_NOT_FOUND = "COORDINATOR_ASSIGNMENT_NOT_FOUND";
     public static final String INVALID_STUDENT_ROSTER_QUERY = "INVALID_STUDENT_ROSTER_QUERY";
     public static final String STUDENT_NOT_FOUND = "STUDENT_NOT_FOUND";
 
-    public static final String COORDINATOR_REFERENCE_REQUIRED = "Coordinator reference is required";
     public static final String LECTURER_REFERENCE_REQUIRED = "Lecturer reference is required";
     public static final String STUDENT_REFERENCE_REQUIRED = "Student reference is required";
     public static final String AT_LEAST_ONE_STUDENT_REQUIRED = "At least one student is required";
@@ -49,8 +46,6 @@ public final class EnrollmentConstants {
     public static final String EVENT_CLASS_SPLIT = "ClassSplit";
     public static final String EVENT_LECTURER_ASSIGNED = "LecturerAssigned";
     public static final String EVENT_LECTURER_UNASSIGNED = "LecturerUnassigned";
-    public static final String EVENT_COORDINATOR_ASSIGNED = "CoordinatorAssigned";
-    public static final String EVENT_COORDINATOR_UNASSIGNED = "CoordinatorUnassigned";
 
     private EnrollmentConstants() {
     }
