@@ -24,6 +24,7 @@ public final class EnrollmentConstants {
     public static final String AT_LEAST_ONE_STUDENT_REQUIRED = "At least one student is required";
     public static final String CLASS_NAME_REQUIRED = "Class name is required";
     public static final String PROGRAM_NAME_REQUIRED = "Program name is required";
+    public static final String PROGRAM_END_DATE_BEFORE_START_DATE = "End date must be after start date";
     public static final String SOURCE_CLASS_REQUIRED = "At least one source Class is required";
     public static final String NEW_CLASS_NAME_REQUIRED = "New Class name is required";
     public static final String TARGET_CLASS_REFERENCE_REQUIRED = "Target class reference is required";
