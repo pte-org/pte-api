@@ -443,6 +443,21 @@ class SnapshotPinServiceTest {
         assertThat(pinned.getItems().get(0).getMaxPlayCountOverride()).isNull();
     }
 
+    @Test
+    @DisplayName("snapshot pin carries the resolved standard lockdown mode")
+    void pin_copiesResolvedStandardLockdownMode() {
+        ExamPolicyResponse policy = new ExamPolicyResponse("UNLIMITED", null, false, false, "STANDARD", "STANDARD");
+        when(sessionService.checkEntitlement(SESSION_ID, STUDENT_ID)).thenReturn(new EntitlementResponse(
+                SESSION_ID, SNAPSHOT_ID, TENANT_ID, Instant.now(), Instant.now().plusSeconds(3600), policy,
+                "PRACTICE"));
+        stubContent(item("SPEAKING", "READ_ALOUD", null));
+
+        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
+
+        assertThat(pinned.getLockdownMode()).isEqualTo("STANDARD");
+        assertThat(pinned.getExamMode()).isEqualTo("PRACTICE");
+    }
+
     private void stubEntitlement(String taskType) {
         ExamPolicyResponse policy = new ExamPolicyResponse("UNLIMITED", null, false, false, "STANDARD", "NONE");
         EntitlementResponse entitlement = new EntitlementResponse(

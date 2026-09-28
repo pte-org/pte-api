@@ -123,6 +123,12 @@ public final class SessionConstants {
     public static final String LIMITED_REPLAY_COUNT_INVALID = "Limited replay count must be >= 1";
     public static final String EXAM_POLICY_INCOMPLETE = "ExamPolicy is incomplete — expected all fields set together";
     public static final String STRICT_LOCKDOWN_NOT_ALLOWED_FOR_PRACTICE = "LockdownMode.STRICT is not allowed for PRACTICE exams";
+    public static final String LOCKDOWN_MODE_INVALID_FOR_EXAM_MODE = "LOCKDOWN_MODE_INVALID_FOR_EXAM_MODE";
+    public static final String LOCKDOWN_MODE_INVALID_FOR_EXAM_MODE_FRIENDLY =
+            "The selected lockdown mode is not allowed for this exam mode.";
+    public static final String LOCKDOWN_MODE_REQUIRED = "LOCKDOWN_MODE_REQUIRED";
+    public static final String LOCKDOWN_MODE_REQUIRED_FRIENDLY =
+            "A lockdown mode must be resolved before this exam can be opened.";
     public static final String SESSION_CAPACITY_EXCEEDS_SUBSCRIPTION_DETAIL =
             "Session capacity %d exceeds subscription cap %d";
     public static final String SESSION_ENROLLMENTS_EXCEED_SUBSCRIPTION_DETAIL =

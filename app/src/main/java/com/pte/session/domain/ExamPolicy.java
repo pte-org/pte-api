@@ -66,7 +66,6 @@ public class ExamPolicy {
             this.deviceCheckRequired = fallback.deviceCheckRequired;
             this.proctorRequired = fallback.proctorRequired;
             this.answerIntegrityLevel = fallback.answerIntegrityLevel;
-            this.lockdownMode = fallback.lockdownMode;
         }
     }
 
