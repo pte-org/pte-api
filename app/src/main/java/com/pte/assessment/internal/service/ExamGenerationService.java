@@ -48,9 +48,9 @@ import java.util.stream.Collectors;
 @Service
 public class ExamGenerationService {
 
-    /** Fixed section draw order — the natural PTE test-day order, and also the V5 template's own sequence order. */
+    /** Fixed section draw order. */
     private static final List<PteSection> SECTION_ORDER =
-            List.of(PteSection.LISTENING, PteSection.SPEAKING, PteSection.READING, PteSection.WRITING);
+            List.of(PteSection.SPEAKING, PteSection.LISTENING, PteSection.READING, PteSection.WRITING);
 
     private final ScoreTemplateService scoreTemplateService;
     private final ItembankService itembankService;
