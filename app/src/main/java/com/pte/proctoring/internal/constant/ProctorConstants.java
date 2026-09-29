@@ -12,6 +12,14 @@ public final class ProctorConstants {
     public static final String STOMP_AUTH_HEADER_MISSING = "Missing or malformed Authorization header on STOMP CONNECT";
     public static final String STOMP_JWT_INVALID = "Invalid JWT on STOMP CONNECT";
     public static final String SHA256_UNAVAILABLE = "SHA-256 not available";
+    public static final int SECURITY_AUDIT_DEFAULT_LIMIT = 50;
+    public static final int SECURITY_AUDIT_MAX_LIMIT = 100;
+    public static final String SECURITY_AUDIT_LIMIT_INVALID = "SECURITY_AUDIT_LIMIT_INVALID";
+    public static final String SECURITY_AUDIT_LIMIT_INVALID_MESSAGE =
+            "Security audit limit must be between 1 and 100.";
+    public static final String SECURITY_AUDIT_CURSOR_INVALID = "SECURITY_AUDIT_CURSOR_INVALID";
+    public static final String SECURITY_AUDIT_CURSOR_INVALID_MESSAGE =
+            "Security audit cursor is invalid or expired.";
 
     // STOMP
     public static final String TOPIC_PREFIX = "/topic/proctor-sessions/";

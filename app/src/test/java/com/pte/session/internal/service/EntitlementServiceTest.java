@@ -1,6 +1,8 @@
 package com.pte.session.internal.service;
 
+import com.pte.session.domain.ExamPolicy;
 import com.pte.session.domain.ExamSession;
+import com.pte.session.domain.enums.ExamMode;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
@@ -47,6 +49,7 @@ class EntitlementServiceTest {
         session.setTenantId(tenantId);
         session.setStatus(SessionStatus.OPEN);
         session.setSnapshotPublicId(UUID.randomUUID());
+        session.setPolicy(ExamPolicy.realExamDefault());
         return session;
     }
 
@@ -62,6 +65,23 @@ class EntitlementServiceTest {
 
         assertThat(response.sessionPublicId()).isEqualTo(sessionPublicId);
         assertThat(response.snapshotPublicId()).isEqualTo(session.getSnapshotPublicId());
+    }
+
+    @Test
+    void checkEntitlement_legacyNullLockdown_preservesHistoricalStandard() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        ExamSession session = openSession(sessionPublicId, UUID.randomUUID());
+        session.setExamMode(null);
+        ExamPolicy legacyPolicy = ExamPolicy.practiceDefault();
+        legacyPolicy.setLockdownMode(null);
+        session.setPolicy(legacyPolicy);
+        when(sessionRepository.findByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
+        when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, studentPublicId)).thenReturn(true);
+
+        EntitlementResponse response = entitlementService.checkEntitlement(sessionPublicId, studentPublicId);
+
+        assertThat(response.policy().lockdownMode()).isEqualTo("STANDARD");
     }
 
     @Test

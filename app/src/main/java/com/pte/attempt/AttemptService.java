@@ -4,17 +4,20 @@ import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.attempt.dto.response.AttemptExaminerPromptView;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
+import com.pte.attempt.dto.response.AttemptSecurityEventView;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import com.pte.attempt.internal.service.AttemptSummaryQueryService;
 import com.pte.attempt.internal.service.AttemptExaminerPromptQueryService;
 import com.pte.attempt.internal.service.ProctorCommandService;
 import com.pte.attempt.internal.service.SubmittedAnswerQueryService;
+import com.pte.attempt.internal.service.AttemptSecurityAuditQueryService;
 import com.pte.shared.StartedAttemptLookup;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Collection;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -41,17 +44,20 @@ public class AttemptService implements StartedAttemptLookup {
     private final AttemptSummaryQueryService attemptSummaryQueryService;
     private final AttemptExaminerPromptQueryService attemptExaminerPromptQueryService;
     private final ExamAttemptRepository examAttemptRepository;
+    private final AttemptSecurityAuditQueryService attemptSecurityAuditQueryService;
 
     public AttemptService(ProctorCommandService proctorCommandService,
                           SubmittedAnswerQueryService submittedAnswerQueryService,
                           AttemptSummaryQueryService attemptSummaryQueryService,
                           AttemptExaminerPromptQueryService attemptExaminerPromptQueryService,
-                          ExamAttemptRepository examAttemptRepository) {
+                          ExamAttemptRepository examAttemptRepository,
+                          AttemptSecurityAuditQueryService attemptSecurityAuditQueryService) {
         this.proctorCommandService = proctorCommandService;
         this.submittedAnswerQueryService = submittedAnswerQueryService;
         this.attemptSummaryQueryService = attemptSummaryQueryService;
         this.attemptExaminerPromptQueryService = attemptExaminerPromptQueryService;
         this.examAttemptRepository = examAttemptRepository;
+        this.attemptSecurityAuditQueryService = attemptSecurityAuditQueryService;
     }
 
     /** Silent no-op if the attempt doesn't exist or isn't IN_PROGRESS — a stale/duplicate/late command is not an error. */
@@ -95,6 +101,14 @@ public class AttemptService implements StartedAttemptLookup {
     /** Batch pinned scoring contexts for report publication; attempt contents stay inside this module. */
     public Map<UUID, AttemptScoreContextView> getScoreContexts(Collection<UUID> attemptPublicIds) {
         return attemptSummaryQueryService.getScoreContexts(attemptPublicIds);
+    }
+
+    /** Public cross-module read surface for the normalized student security audit. */
+    public List<AttemptSecurityEventView> getSecurityEventsForSession(UUID sessionPublicId, UUID tenantId,
+                                                                        Instant cursorAt, UUID cursorId,
+                                                                        int limit) {
+        return attemptSecurityAuditQueryService.findForSession(sessionPublicId, tenantId, cursorAt, cursorId,
+                limit);
     }
 
     /**

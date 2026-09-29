@@ -8,7 +8,9 @@ import com.pte.billing.domain.enums.SubscriptionStatus;
 import com.pte.enrollment.EnrollmentModuleService;
 import com.pte.identity.IdentityService;
 import com.pte.scoretemplate.ScoreTemplateService;
+import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.session.domain.ExamPolicy;
 import com.pte.session.domain.ExamAudienceMember;
 import com.pte.session.domain.ExamAudienceSource;
 import com.pte.session.domain.ExamSession;
@@ -41,6 +43,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -131,6 +134,7 @@ class ExamOrchestrationServiceTest {
         assertThat(response.seriesKey()).isEqualTo("HK1-2026");
         assertThat(response.templatePublicId()).isEqualTo(templateId);
         assertThat(response.templateVersion()).isEqualTo(3);
+        assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
         verify(auditLogService).record(hostAdmin, SessionConstants.AGGREGATE_EXAM_SESSION,
                 response.publicId().toString(), SessionConstants.EVENT_EXAM_DRAFT_CREATED, "HK1 mock");
     }
@@ -152,6 +156,72 @@ class ExamOrchestrationServiceTest {
         assertThat(response.formMode()).isEqualTo(FormMode.SHARED_FORM);
         assertThat(response.reusePolicy()).isEqualTo(ReusePolicy.ALLOW);
         assertThat(response.seriesKey()).isNull();
+        assertThat(response.policy().lockdownMode()).isEqualTo("NONE");
+    }
+
+    @Test
+    void createDraft_practiceWithStandardLockdown_persistsStandard() {
+        stubTemplateAndSubscription();
+        when(sessionRepository.saveAndFlush(any())).thenAnswer(invocation -> {
+            var session = invocation.getArgument(0, ExamSession.class);
+            session.setPublicId(UUID.randomUUID());
+            session.setId(12L);
+            return session;
+        });
+
+        var response = service.createDraft(new CreateExamDraftRequest(
+                "Practice controlled", templateId, subscriptionId, opensAt, closesAt,
+                ExamMode.PRACTICE, null, null, null, 20, null, null,
+                com.pte.session.domain.enums.LockdownMode.STANDARD), hostAdmin);
+
+        assertThat(response.policy().lockdownMode()).isEqualTo("STANDARD");
+    }
+
+    @Test
+    void createDraft_officialWithNonStrictLockdown_isRejected() {
+        stubTemplateAndSubscription();
+
+        assertThatThrownBy(() -> service.createDraft(new CreateExamDraftRequest(
+                "Invalid official", templateId, subscriptionId, opensAt, closesAt,
+                ExamMode.OFFICIAL_EXAM, null, null, "SERIES", 50, null, null,
+                com.pte.session.domain.enums.LockdownMode.STANDARD), hostAdmin))
+                .isInstanceOf(com.pte.session.internal.exception.InvalidLockdownModeException.class);
+
+        verify(sessionRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updateDraft_sameModeWithoutLockdown_preservesStandardAfterRetryPatch() {
+        ExamSession session = draftSession(ExamMode.PRACTICE,
+                com.pte.session.domain.enums.LockdownMode.STANDARD);
+        when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
+        when(scoreTemplateService.getByPublicId(templateId)).thenReturn(templateResponse());
+        stubSubscriptionForDraft();
+        when(sessionRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.updateDraft(session.getPublicId(), new PatchExamDraftRequest(
+                "Renamed", null, null, null, null, null, null, null, null, null,
+                0L, null, 2, null), hostAdmin);
+
+        assertThat(session.getMaxRetriesPerStudent()).isEqualTo(2);
+        assertThat(response.policy().lockdownMode()).isEqualTo("STANDARD");
+    }
+
+    @Test
+    void updateDraft_modeChangeWithoutLockdown_derivesOfficialStrictDefault() {
+        ExamSession session = draftSession(ExamMode.PRACTICE,
+                com.pte.session.domain.enums.LockdownMode.STANDARD);
+        when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
+        when(scoreTemplateService.getByPublicId(templateId)).thenReturn(templateResponse());
+        stubSubscriptionForDraft();
+        when(sessionRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.updateDraft(session.getPublicId(), new PatchExamDraftRequest(
+                null, null, null, null, null, ExamMode.OFFICIAL_EXAM, null, null, null, null,
+                0L, null, null, null), hostAdmin);
+
+        assertThat(session.getExamMode()).isEqualTo(ExamMode.OFFICIAL_EXAM);
+        assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
     }
 
     @Test
@@ -215,10 +285,49 @@ class ExamOrchestrationServiceTest {
 
     private void stubTemplateAndSubscription() {
         when(scoreTemplateService.findActiveByPublicId(templateId)).thenReturn(Optional.of(
-                new ScoreTemplateResponse(templateId, "PTE", 3, "PTE template", "ACTIVE", List.of())));
+                templateResponse()));
         when(billingService.getActiveSubscription(subscriptionId, tenantId)).thenReturn(Optional.of(
                 new SubscriptionView(subscriptionId, tenantId, UUID.randomUUID(), "LIC-TEST",
                         Instant.now().minusSeconds(60), Instant.now().plusSeconds(86400), 100,
                         SubscriptionStatus.ACTIVE, ActivationSource.LICENSE_CODE)));
+    }
+
+    private ScoreTemplateResponse templateResponse() {
+        return new ScoreTemplateResponse(templateId, "PTE", 3, "PTE template", "ACTIVE", List.of(
+                new ScoreTemplateItemResponse("READ_ALOUD", "SPEAKING", 1, 1, 1, 10, 30,
+                        "OBJECTIVE", BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO,
+                        BigDecimal.ZERO, BigDecimal.ZERO)));
+    }
+
+    private void stubSubscriptionForDraft() {
+        when(billingService.getActiveSubscription(subscriptionId, tenantId)).thenReturn(Optional.of(
+                new SubscriptionView(subscriptionId, tenantId, UUID.randomUUID(), "LIC-TEST",
+                        Instant.now().minusSeconds(60), Instant.now().plusSeconds(86400), 100,
+                        SubscriptionStatus.ACTIVE, ActivationSource.LICENSE_CODE)));
+    }
+
+    private ExamSession draftSession(ExamMode mode, com.pte.session.domain.enums.LockdownMode lockdownMode) {
+        ExamSession session = new ExamSession();
+        session.setId(13L);
+        session.setPublicId(UUID.randomUUID());
+        session.setTenantId(tenantId);
+        session.setSubscriptionId(subscriptionId);
+        session.setTemplatePublicId(templateId);
+        session.setTemplateVersion(3);
+        session.setName("Draft");
+        session.setStatus(SessionStatus.DRAFT);
+        session.setDraftVersion(0L);
+        session.setExamMode(mode);
+        session.setFormMode(FormMode.SHARED_FORM);
+        session.setReusePolicy(ReusePolicy.ALLOW);
+        session.setSelectedSkills(new java.util.LinkedHashSet<>(List.of("SPEAKING")));
+        session.setMaxRetriesPerStudent(0);
+        session.setOpensAt(opensAt);
+        session.setClosesAt(closesAt);
+        session.setCapacity(20);
+        ExamPolicy policy = ExamPolicy.forMode(mode);
+        policy.setLockdownMode(lockdownMode);
+        session.setPolicy(policy);
+        return session;
     }
 }

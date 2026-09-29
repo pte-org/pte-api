@@ -2,6 +2,7 @@ package com.pte.session.internal.dto.request;
 
 import com.pte.session.domain.enums.ExamMode;
 import com.pte.session.domain.enums.FormMode;
+import com.pte.session.domain.enums.LockdownMode;
 import com.pte.session.domain.enums.ReusePolicy;
 import com.pte.session.internal.constant.SessionConstants;
 import jakarta.validation.constraints.Future;
@@ -29,13 +30,23 @@ public record CreateExamDraftRequest(
         @NotNull(message = SessionConstants.CAPACITY_REQUIRED) @Positive(message = SessionConstants.CAPACITY_POSITIVE) Integer capacity,
         @Size(min = 1, max = 4, message = SessionConstants.SKILLS_SIZE_INVALID) List<String> selectedSkills,
         @Min(value = 0, message = SessionConstants.RETRY_COUNT_INVALID)
-        @Max(value = 9, message = SessionConstants.RETRY_COUNT_INVALID) Integer maxRetriesPerStudent) {
+        @Max(value = 9, message = SessionConstants.RETRY_COUNT_INVALID) Integer maxRetriesPerStudent,
+        LockdownMode lockdownMode) {
 
     /** Source-compatible constructor for callers predating explicit skill/retry configuration. */
     public CreateExamDraftRequest(String name, UUID templatePublicId, UUID subscriptionPublicId,
             Instant opensAt, Instant closesAt, ExamMode examMode, FormMode formMode,
             ReusePolicy reusePolicy, String seriesKey, Integer capacity) {
         this(name, templatePublicId, subscriptionPublicId, opensAt, closesAt, examMode, formMode, reusePolicy,
-                seriesKey, capacity, null, null);
+                seriesKey, capacity, null, null, null);
+    }
+
+    /** Source-compatible constructor for callers using the previous full request shape. */
+    public CreateExamDraftRequest(String name, UUID templatePublicId, UUID subscriptionPublicId,
+            Instant opensAt, Instant closesAt, ExamMode examMode, FormMode formMode,
+            ReusePolicy reusePolicy, String seriesKey, Integer capacity,
+            List<String> selectedSkills, Integer maxRetriesPerStudent) {
+        this(name, templatePublicId, subscriptionPublicId, opensAt, closesAt, examMode, formMode, reusePolicy,
+                seriesKey, capacity, selectedSkills, maxRetriesPerStudent, null);
     }
 }

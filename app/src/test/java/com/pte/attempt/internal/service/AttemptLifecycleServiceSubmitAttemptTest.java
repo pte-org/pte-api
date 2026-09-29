@@ -122,9 +122,22 @@ class AttemptLifecycleServiceSubmitAttemptTest {
     }
 
     @Test
-    @DisplayName("an already-completed attempt throws without locking or re-completing")
-    void submitAttempt_alreadyComplete_throwsWithoutLocking() {
+    @DisplayName("a submitted attempt replays the completed response without re-locking or re-completing")
+    void submitAttempt_submittedAttempt_replaysCompletedResponse() {
         attempt.submit();
+
+        AttemptTaskResponse response = attemptLifecycleService.submitAttempt(attemptPublicId, caller);
+
+        assertThat(response.completed()).isTrue();
+        assertThat(response.attemptStatus()).isEqualTo(AttemptStatus.SUBMITTED.name());
+        verify(attemptRepository, never()).findWithLockById(any());
+        verify(attemptRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("a created attempt still rejects submission without locking or re-completing")
+    void submitAttempt_createdAttempt_throwsWithoutLocking() {
+        attempt.setStatus(AttemptStatus.CREATED);
 
         assertThatThrownBy(() -> attemptLifecycleService.submitAttempt(attemptPublicId, caller))
             .isInstanceOf(AttemptAlreadyCompleteException.class);

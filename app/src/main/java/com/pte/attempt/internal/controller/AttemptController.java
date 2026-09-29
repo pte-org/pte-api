@@ -5,10 +5,13 @@ import com.pte.attempt.internal.dto.request.AttemptPreflightRequest;
 import com.pte.attempt.internal.dto.request.StartAttemptRequest;
 import com.pte.attempt.internal.dto.request.NavigateTaskRequest;
 import com.pte.attempt.internal.dto.request.SubmitAnswerRequest;
+import com.pte.attempt.internal.dto.request.RecordSecurityViolationRequest;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.dto.response.AudioPlayResponse;
+import com.pte.attempt.internal.dto.response.SecurityViolationReceipt;
 import com.pte.attempt.internal.dto.response.AttemptPreflightResponse;
 import com.pte.attempt.internal.service.AttemptLifecycleService;
+import com.pte.attempt.internal.service.AttemptSecurityAuditService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -35,9 +38,12 @@ import java.util.UUID;
 public class AttemptController {
 
     private final AttemptLifecycleService attemptLifecycleService;
+    private final AttemptSecurityAuditService attemptSecurityAuditService;
 
-    public AttemptController(AttemptLifecycleService attemptLifecycleService) {
+    public AttemptController(AttemptLifecycleService attemptLifecycleService,
+                             AttemptSecurityAuditService attemptSecurityAuditService) {
         this.attemptLifecycleService = attemptLifecycleService;
+        this.attemptSecurityAuditService = attemptSecurityAuditService;
     }
 
     @PostMapping
@@ -98,6 +104,13 @@ public class AttemptController {
     @PostMapping("/{publicId}/submit")
     public ApiResponse<AttemptTaskResponse> submit(@PathVariable UUID publicId) {
         return ApiResponse.success(attemptLifecycleService.submitAttempt(publicId, currentUser()));
+    }
+
+    @PostMapping("/{publicId}/security-violations")
+    public ApiResponse<SecurityViolationReceipt> recordSecurityViolation(
+            @PathVariable UUID publicId,
+            @Valid @RequestBody RecordSecurityViolationRequest request) {
+        return ApiResponse.success(attemptSecurityAuditService.record(publicId, request, currentUser()));
     }
 
     /** {@code X-Play-Request-Id} is a client-generated UUID per user-initiated play tap — required for idempotent retry-safety. */

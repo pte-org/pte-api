@@ -24,6 +24,19 @@ public final class AttemptConstants {
     public static final String EXAM_CONFIGURATION_NOT_COMPATIBLE = "EXAM_CONFIGURATION_NOT_COMPATIBLE";
     public static final String CAPABILITY_MANIFEST_INVALID = "CAPABILITY_MANIFEST_INVALID";
     public static final String UNSUPPORTED_RUNTIME_CONTRACT = "UNSUPPORTED_RUNTIME_CONTRACT";
+    public static final String SECURITY_AUDIT_DISABLED = "SECURITY_AUDIT_DISABLED";
+    public static final String SECURITY_AUDIT_POLICY_UNRESOLVED = "SECURITY_AUDIT_POLICY_UNRESOLVED";
+    public static final String SECURITY_AUDIT_EVENT_CONFLICT = "SECURITY_AUDIT_EVENT_CONFLICT";
+    public static final String SECURITY_CLIENT_EVENT_ID_REQUIRED = "Client event ID is required";
+    public static final String SECURITY_CLIENT_EVENT_ID_TOO_LONG = "Client event ID must not exceed 128 characters";
+    public static final String SECURITY_VIOLATION_TYPE_REQUIRED = "Violation type is required";
+    public static final String SECURITY_DETAIL_TOO_LONG = "Security event detail must not exceed 2048 characters";
+    public static final String SECURITY_AUDIT_DISABLED_MESSAGE =
+            "Security audit is disabled for this attempt's policy.";
+    public static final String SECURITY_AUDIT_POLICY_UNRESOLVED_MESSAGE =
+            "The attempt security policy could not be resolved.";
+    public static final String SECURITY_AUDIT_EVENT_CONFLICT_MESSAGE =
+            "The client event ID was already used for a different security event.";
 
     public static final String EXAM_REQUIRES_APP_UPDATE_MESSAGE =
             "Please update the PTE Prep app before starting this exam. It requires capabilities that this app does not provide.";

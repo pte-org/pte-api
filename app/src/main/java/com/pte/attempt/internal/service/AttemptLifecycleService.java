@@ -380,6 +380,13 @@ public class AttemptLifecycleService {
         ExamAttempt attempt = findOwned(attemptPublicId, caller);
         lockOpenSession(attempt);
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
+            // The request may have committed successfully while the student's
+            // network response was lost. Replaying the terminal command must
+            // return the same acknowledged terminal shape instead of turning a
+            // successful submission into a retryable client error.
+            if (attempt.getStatus() == AttemptStatus.SUBMITTED) {
+                return attemptMapper.toCompletedResponse(attempt);
+            }
             throw new AttemptAlreadyCompleteException();
         }
         completeAttempt(attempt);

@@ -21,6 +21,7 @@ import com.pte.session.domain.enums.AudienceMemberStatus;
 import com.pte.session.domain.enums.AudienceSourceType;
 import com.pte.session.domain.enums.ExamMode;
 import com.pte.session.domain.enums.FormMode;
+import com.pte.session.domain.enums.LockdownMode;
 import com.pte.session.domain.enums.GenerationJobStatus;
 import com.pte.session.domain.enums.ReusePolicy;
 import com.pte.session.domain.enums.SessionStatus;
@@ -51,6 +52,7 @@ import com.pte.session.internal.exception.SessionSubscriptionNotFoundException;
 import com.pte.session.internal.exception.SessionTimeConflictException;
 import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionException;
 import com.pte.session.internal.mapper.SessionMapper;
+import com.pte.session.internal.policy.SessionPolicyResolver;
 import com.pte.session.internal.repository.ExamAudienceMemberRepository;
 import com.pte.session.internal.repository.ExamAudienceSourceRepository;
 import com.pte.session.internal.repository.ExamFormRepository;
@@ -171,6 +173,7 @@ public class ExamOrchestrationService {
         session.setClosesAt(request.closesAt());
         session.setCapacity(request.capacity());
         session.setPolicy(ExamPolicy.forMode(mode));
+        session.getPolicy().setLockdownMode(SessionPolicyResolver.resolveForCreate(mode, request.lockdownMode()));
         session.setStatus(SessionStatus.DRAFT);
         ExamSession saved = sessionRepository.saveAndFlush(session);
         auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, saved.getPublicId().toString(),
@@ -185,6 +188,7 @@ public class ExamOrchestrationService {
             throw new ExamDraftVersionConflictException();
         }
         ExamMode previousMode = session.getExamMode();
+        LockdownMode previousLockdownMode = session.getPolicy() == null ? null : session.getPolicy().getLockdownMode();
         UUID previousTemplatePublicId = session.getTemplatePublicId();
         Integer previousTemplateVersion = session.getTemplateVersion();
         ScoreTemplateResponse selectedTemplate = null;
@@ -211,10 +215,21 @@ public class ExamOrchestrationService {
             if (request.capacity() <= 0) throw new SessionCapacityInvalidException();
             session.setCapacity(request.capacity());
         }
-        if (request.examMode() != null) {
-            session.setExamMode(request.examMode());
-            session.setPolicy(ExamPolicy.forMode(request.examMode()));
+        ExamMode requestedMode = request.examMode();
+        ExamMode nextMode = requestedMode == null ? previousMode : requestedMode;
+        boolean modeChanged = SessionPolicyResolver.effectiveExamMode(previousMode)
+                != SessionPolicyResolver.effectiveExamMode(nextMode);
+        LockdownMode resolvedLockdownMode = SessionPolicyResolver.resolveForDraftPatch(
+                previousMode, previousLockdownMode, requestedMode, request.lockdownMode());
+        if (requestedMode != null) {
+            session.setExamMode(requestedMode);
         }
+        if (modeChanged) {
+            session.setPolicy(ExamPolicy.forMode(nextMode));
+        } else if (session.getPolicy() == null) {
+            throw new ExamDraftConfigurationException(SessionConstants.EXAM_POLICY_INCOMPLETE);
+        }
+        session.getPolicy().setLockdownMode(resolvedLockdownMode);
         if (request.formMode() != null) session.setFormMode(request.formMode());
         if (request.reusePolicy() != null) session.setReusePolicy(request.reusePolicy());
         if (request.seriesKey() != null) session.setSeriesKey(normalizeSeriesKey(request.seriesKey()));
@@ -227,7 +242,6 @@ public class ExamOrchestrationService {
         Set<String> templateSkills = resolveTemplateSkills(selectedTemplate);
         boolean templateChanged = !java.util.Objects.equals(previousTemplatePublicId, session.getTemplatePublicId())
                 || !java.util.Objects.equals(previousTemplateVersion, session.getTemplateVersion());
-        boolean modeChanged = previousMode != session.getExamMode();
         Set<String> currentSkills = session.getSelectedSkills() == null
                 ? Set.of() : new LinkedHashSet<>(session.getSelectedSkills());
         boolean resetSkillsToFull = templateChanged || currentSkills.isEmpty()

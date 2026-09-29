@@ -454,6 +454,32 @@ class SessionLifecycleServiceTest {
     }
 
     @Test
+    void patchPolicy_practiceStrict_isRejected() {
+        ExamSession session = existingSession(SessionStatus.SCHEDULED, 100);
+        session.setExamMode(ExamMode.PRACTICE);
+        session.setPolicy(ExamPolicy.practiceDefault());
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> service.patchPolicy(session.getPublicId(),
+                new PatchExamPolicyRequest(null, null, null, null, null, LockdownMode.STRICT), hostAdmin))
+                .isInstanceOf(com.pte.session.internal.exception.InvalidLockdownModeException.class);
+    }
+
+    @Test
+    void patchPolicy_officialNonStrict_isRejected() {
+        ExamSession session = existingSession(SessionStatus.SCHEDULED, 100);
+        session.setExamMode(ExamMode.OFFICIAL_EXAM);
+        session.setPolicy(ExamPolicy.realExamDefault());
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> service.patchPolicy(session.getPublicId(),
+                new PatchExamPolicyRequest(null, null, null, null, null, LockdownMode.NONE), hostAdmin))
+                .isInstanceOf(com.pte.session.internal.exception.InvalidLockdownModeException.class);
+    }
+
+    @Test
     void toPolicy_emitsLockdownModeAsUppercaseString() {
         ExamPolicy policy = ExamPolicy.realExamDefault();
 
@@ -470,6 +496,17 @@ class SessionLifecycleServiceTest {
         assertThatThrownBy(() -> SessionMapper.toPolicy(incomplete))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("incomplete");
+    }
+
+    @Test
+    void toPolicy_legacyNullLockdown_resolvesFromExamMode() {
+        ExamPolicy practice = ExamPolicy.practiceDefault();
+        practice.setLockdownMode(null);
+        ExamPolicy official = ExamPolicy.realExamDefault();
+        official.setLockdownMode(null);
+
+        assertThat(SessionMapper.toPolicy(practice, ExamMode.PRACTICE, true).lockdownMode()).isEqualTo("NONE");
+        assertThat(SessionMapper.toPolicy(official, ExamMode.OFFICIAL_EXAM, true).lockdownMode()).isEqualTo("STRICT");
     }
 
     @Test
@@ -555,7 +592,7 @@ class SessionLifecycleServiceTest {
         session.setClosesAt(Instant.now().plusSeconds(7200));
         session.setCapacity(capacity);
         session.setStatus(status);
-        session.setPolicy(ExamPolicy.mockTestDefault());
+        session.setPolicy(ExamPolicy.realExamDefault());
         return session;
     }
 

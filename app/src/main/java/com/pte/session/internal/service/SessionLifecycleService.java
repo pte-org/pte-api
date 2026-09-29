@@ -34,6 +34,7 @@ import com.pte.session.internal.exception.SessionSubscriptionNotFoundException;
 import com.pte.session.internal.exception.SessionTimeConflictException;
 import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionException;
 import com.pte.session.internal.mapper.SessionMapper;
+import com.pte.session.internal.policy.SessionPolicyResolver;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.shared.security.CurrentUser;
@@ -216,9 +217,10 @@ public class SessionLifecycleService {
             policy.setAnswerIntegrityLevel(request.answerIntegrityLevel());
         }
         if (request.lockdownMode() != null) {
-            policy.setLockdownMode(request.lockdownMode());
+            policy.setLockdownMode(SessionPolicyResolver.resolveForPolicyPatch(
+                    session.getExamMode(), policy.getLockdownMode(), request.lockdownMode()));
         }
-        return SessionMapper.toPolicy(policy);
+        return SessionMapper.toPolicy(policy, session.getExamMode(), session.getExamMode() == null);
     }
 
     @Transactional
