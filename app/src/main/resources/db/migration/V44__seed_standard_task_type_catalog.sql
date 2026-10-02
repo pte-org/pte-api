@@ -115,3 +115,19 @@ BEGIN
 END $$;
 
 DROP TABLE _pte_standard_task_type_catalog;
+
+-- V40 temporarily removes the V37 foreign key while canonicalizing legacy
+-- identifiers. Recreate it only after the standard catalog is present.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+          FROM pg_constraint
+         WHERE conname = 'fk_questions_question_type'
+           AND conrelid = 'questions'::regclass
+    ) THEN
+        ALTER TABLE questions
+            ADD CONSTRAINT fk_questions_question_type
+            FOREIGN KEY (pte_task_type) REFERENCES question_types (code) NOT VALID;
+    END IF;
+END $$;
