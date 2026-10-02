@@ -39,6 +39,28 @@ class QuestionTypeCatalogMigrationTest {
     }
 
     @Test
+    void fillBlankRenameDefersQuestionTypeForeignKeyUntilCatalogIsSeeded() throws IOException {
+        String renameSql;
+        String catalogSql;
+        try (InputStream renameInput = getClass().getResourceAsStream(
+                "/db/migration/V40__rename_fill_blanks_task_types.sql");
+                InputStream catalogInput = getClass().getResourceAsStream(
+                        "/db/migration/V44__seed_standard_task_type_catalog.sql")) {
+            assertThat(renameInput).isNotNull();
+            assertThat(catalogInput).isNotNull();
+            renameSql = new String(renameInput.readAllBytes(), StandardCharsets.UTF_8);
+            catalogSql = new String(catalogInput.readAllBytes(), StandardCharsets.UTF_8);
+        }
+
+        int dropConstraint = renameSql.indexOf("DROP CONSTRAINT IF EXISTS fk_questions_question_type");
+        int questionRename = renameSql.indexOf("UPDATE questions SET pte_task_type");
+        assertThat(dropConstraint).isGreaterThanOrEqualTo(0).isLessThan(questionRename);
+        assertThat(renameSql).doesNotContain("UPDATE question_types SET code");
+        assertThat(catalogSql).contains("ADD CONSTRAINT fk_questions_question_type")
+                .contains("REFERENCES question_types (code) NOT VALID");
+    }
+
+    @Test
     void runtimeProfileMigrationSeedsTheProfileContractAndPinsLegacyTemplateRows() throws IOException {
         try (InputStream input = getClass().getResourceAsStream(
                 "/db/migration/V45__task_runtime_profiles_and_template_pins.sql")) {

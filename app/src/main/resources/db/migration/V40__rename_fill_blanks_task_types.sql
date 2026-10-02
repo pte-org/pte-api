@@ -10,6 +10,11 @@
 -- the Java enum constant no longer exists under the old name. Safe to run
 -- even where a table has zero matching rows (system not yet deployed).
 
+-- V37 installed this foreign key before the catalog was populated. PostgreSQL
+-- still enforces NOT VALID foreign keys for new updates, so defer the
+-- constraint until V44 has seeded and canonicalized question_types.
+ALTER TABLE questions DROP CONSTRAINT IF EXISTS fk_questions_question_type;
+
 UPDATE score_template_items SET task_type = 'FILL_IN_THE_BLANKS_DROPDOWN' WHERE task_type = 'FILL_BLANKS_READING_WRITING';
 UPDATE score_template_items SET task_type = 'FILL_IN_THE_BLANKS_DRAG_AND_DROP' WHERE task_type = 'FILL_BLANKS_READING';
 UPDATE score_template_items SET task_type = 'FILL_IN_THE_BLANKS_TYPE_IN' WHERE task_type = 'FILL_BLANKS_LISTENING';
@@ -30,9 +35,5 @@ UPDATE scoring_answers SET task_type = 'FILL_IN_THE_BLANKS_DROPDOWN' WHERE task_
 UPDATE scoring_answers SET task_type = 'FILL_IN_THE_BLANKS_DRAG_AND_DROP' WHERE task_type = 'FILL_BLANKS_READING';
 UPDATE scoring_answers SET task_type = 'FILL_IN_THE_BLANKS_TYPE_IN' WHERE task_type = 'FILL_BLANKS_LISTENING';
 
--- question_types.code is not seeded by migration (V37) — populated only when
--- a platform admin imports the catalog from a score template via the vendor
--- UI. Updated defensively in case that import already ran in this environment.
-UPDATE question_types SET code = 'FILL_IN_THE_BLANKS_DROPDOWN' WHERE code = 'FILL_BLANKS_READING_WRITING';
-UPDATE question_types SET code = 'FILL_IN_THE_BLANKS_DRAG_AND_DROP' WHERE code = 'FILL_BLANKS_READING';
-UPDATE question_types SET code = 'FILL_IN_THE_BLANKS_TYPE_IN' WHERE code = 'FILL_BLANKS_LISTENING';
+-- V44 owns question_types catalog population and legacy-code canonicalization.
+-- The question-type foreign key is recreated there after those rows exist.
