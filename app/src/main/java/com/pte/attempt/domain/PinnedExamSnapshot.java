@@ -45,6 +45,10 @@ public class PinnedExamSnapshot extends BaseEntity {
     @Column(nullable = false)
     private UUID scoreTemplatePublicId;
 
+    /** Additive provenance for the immutable scoring/weight contract; null only for legacy attempts. */
+    @Column
+    private Integer scoreTemplateVersion;
+
     @Column(nullable = false)
     private UUID tenantId;
 
@@ -68,6 +72,10 @@ public class PinnedExamSnapshot extends BaseEntity {
 
     @Column(nullable = false)
     private String answerIntegrityLevel;
+
+    /** Session mode captured at pin time so navigation policy cannot change mid-attempt. */
+    @Column(nullable = false, length = 16)
+    private String examMode;
 
     @Column(length = 20)
     private String lockdownMode;

@@ -25,7 +25,8 @@ class QuestionControllerSecurityTest {
     void methodLevelRestrictionsOnlyNarrowTheClassLevelRestriction() {
         for (var method : QuestionController.class.getDeclaredMethods()) {
             PreAuthorize methodLevel = method.getAnnotation(PreAuthorize.class);
-            if (method.getName().equals("approve") || method.getName().equals("reject")) {
+            if (method.getName().equals("approve") || method.getName().equals("reject")
+                    || method.getName().equals("publish")) {
                 assertThat(methodLevel).isNotNull();
                 assertThat(methodLevel.value()).isEqualTo("hasRole('PLATFORM_ADMIN')");
             } else {

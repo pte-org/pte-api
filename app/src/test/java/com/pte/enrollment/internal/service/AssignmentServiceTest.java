@@ -4,22 +4,15 @@ import com.pte.enrollment.internal.constant.EnrollmentConstants;
 import com.pte.enrollment.domain.LecturerAssignment;
 import com.pte.tenancy.domain.Organization;
 import com.pte.enrollment.domain.Program;
-import com.pte.enrollment.domain.ProgramCoordinatorAssignment;
 import com.pte.enrollment.domain.StudentClass;
 import com.pte.tenancy.domain.Tenant;
 import com.pte.tenancy.domain.enums.FacilityType;
-import com.pte.enrollment.internal.exception.CoordinatorAlreadyAssignedException;
-import com.pte.enrollment.internal.exception.CoordinatorAssignmentNotFoundException;
 import com.pte.enrollment.internal.exception.LecturerAlreadyAssignedException;
 import com.pte.enrollment.internal.exception.LecturerAssignmentNotFoundException;
-import com.pte.enrollment.internal.exception.ProgramNotFoundException;
 import com.pte.enrollment.internal.exception.StudentClassNotFoundException;
-import com.pte.enrollment.internal.dto.request.AssignCoordinatorRequest;
 import com.pte.enrollment.internal.dto.request.AssignLecturerRequest;
 import com.pte.enrollment.internal.dto.response.LecturerAssignmentResponse;
-import com.pte.enrollment.internal.dto.response.ProgramCoordinatorAssignmentResponse;
 import com.pte.enrollment.internal.repository.LecturerAssignmentRepository;
-import com.pte.enrollment.internal.repository.ProgramCoordinatorAssignmentRepository;
 import com.pte.enrollment.internal.repository.ProgramRepository;
 import com.pte.enrollment.internal.repository.StudentClassRepository;
 import com.pte.shared.audit.AuditLogService;
@@ -56,27 +49,21 @@ class AssignmentServiceTest {
     private LecturerAssignmentRepository lecturerAssignmentRepository;
 
     @Mock
-    private ProgramCoordinatorAssignmentRepository coordinatorAssignmentRepository;
-
-
-    @Mock
     private AuditLogService auditLogService;
 
     private AssignmentService service;
 
     @BeforeEach
     void setUp() {
-        // ClassService/ProgramService are the real classes (not mocked) so findOwned's actual
-        // tenant-check logic is exercised, not just a mocked pass-through — this is exactly the
-        // reuse-not-duplicate discipline this phase's Design Constraints call for. Their own
-        // AuditLogService dependency is passed as null (not this test's `auditLogService` mock) —
-        // AssignmentServiceTest never calls a ClassService/ProgramService write method (only the
-        // package-private findOwned via AssignmentService), so it's never invoked; the mock
-        // verified below is AssignmentService's own, separate injected instance.
+        // ClassService is the real class (not mocked) so findOwned's actual tenant-check logic
+        // is exercised, not just a mocked pass-through — this is exactly the reuse-not-duplicate
+        // discipline this phase's Design Constraints call for. Its own AuditLogService dependency
+        // is passed as null (not this test's `auditLogService` mock) — AssignmentServiceTest never
+        // calls a ClassService write method (only the package-private findOwned via
+        // AssignmentService), so it's never invoked; the mock verified below is AssignmentService's
+        // own, separate injected instance.
         ClassService classService = new ClassService(studentClassRepository, null, programRepository, null, null);
-        ProgramService programService = new ProgramService(programRepository, null, null, null);
-        service = new AssignmentService(classService, programService, lecturerAssignmentRepository,
-                coordinatorAssignmentRepository, auditLogService);
+        service = new AssignmentService(classService, lecturerAssignmentRepository, auditLogService);
     }
 
     private Tenant tenantWithPublicId(UUID publicId) {
@@ -285,162 +272,4 @@ class AssignmentServiceTest {
         assertThat(response.assigneePublicId()).isEqualTo(assigneePublicId);
     }
 
-    // --- Coordinator ---
-
-    @Test
-    void assignCoordinator_saves() {
-        UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        UUID programPublicId = UUID.randomUUID();
-        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
-        UUID assigneePublicId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
-
-        when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
-        when(coordinatorAssignmentRepository.save(any(ProgramCoordinatorAssignment.class))).thenAnswer(invocation -> {
-            ProgramCoordinatorAssignment saved = invocation.getArgument(0);
-            saved.setPublicId(UUID.randomUUID());
-            return saved;
-        });
-
-        ProgramCoordinatorAssignmentResponse response = service.assignCoordinator(organizationPublicId,
-                programPublicId, new AssignCoordinatorRequest(assigneePublicId), caller);
-
-        assertThat(response.programPublicId()).isEqualTo(programPublicId);
-        assertThat(response.assigneePublicId()).isEqualTo(assigneePublicId);
-        verify(auditLogService).record(eq(caller), eq(EnrollmentConstants.AGGREGATE_PROGRAM), eq(programPublicId.toString()),
-                eq(EnrollmentConstants.EVENT_COORDINATOR_ASSIGNED), any());
-    }
-
-    @Test
-    void assignCoordinator_programBelongsToDifferentTenant_throwsNotFoundWithoutSaving() {
-        UUID callerTenantId = UUID.randomUUID();
-        UUID otherTenantId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        UUID programPublicId = UUID.randomUUID();
-        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(otherTenantId)));
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
-
-        when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
-
-        assertThatThrownBy(() -> service.assignCoordinator(organizationPublicId, programPublicId,
-                new AssignCoordinatorRequest(UUID.randomUUID()), caller))
-                .isInstanceOf(ProgramNotFoundException.class);
-
-        verify(coordinatorAssignmentRepository, never()).save(any());
-    }
-
-    @Test
-    void assignCoordinator_duplicateAssignment_rejectedByConstraint() {
-        UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        UUID programPublicId = UUID.randomUUID();
-        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
-
-        when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
-        when(coordinatorAssignmentRepository.save(any(ProgramCoordinatorAssignment.class)))
-                .thenThrow(new DataIntegrityViolationException("unique violation"));
-
-        assertThatThrownBy(() -> service.assignCoordinator(organizationPublicId, programPublicId,
-                new AssignCoordinatorRequest(UUID.randomUUID()), caller))
-                .isInstanceOf(CoordinatorAlreadyAssignedException.class);
-    }
-
-    @Test
-    void listCoordinators_returnsAssigneesForProgram() {
-        UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        UUID programPublicId = UUID.randomUUID();
-        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
-
-        ProgramCoordinatorAssignment assignment = new ProgramCoordinatorAssignment();
-        assignment.setPublicId(UUID.randomUUID());
-        assignment.setAssigneePublicId(UUID.randomUUID());
-        assignment.setProgram(program);
-
-        when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
-        when(coordinatorAssignmentRepository.findByTenantIdAndProgram_PublicId(caller.tenantId(), programPublicId))
-                .thenReturn(List.of(assignment));
-
-        List<ProgramCoordinatorAssignmentResponse> result = service.listCoordinators(organizationPublicId,
-                programPublicId, caller);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).assigneePublicId()).isEqualTo(assignment.getAssigneePublicId());
-    }
-
-    @Test
-    void unassignCoordinator_deletes() {
-        UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        UUID programPublicId = UUID.randomUUID();
-        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
-        UUID assignmentPublicId = UUID.randomUUID();
-        ProgramCoordinatorAssignment assignment = new ProgramCoordinatorAssignment();
-        assignment.setPublicId(assignmentPublicId);
-        assignment.setProgram(program);
-        assignment.setAssigneePublicId(UUID.randomUUID());
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
-
-        when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
-        when(coordinatorAssignmentRepository.findByPublicIdAndTenantId(assignmentPublicId, caller.tenantId())).thenReturn(Optional.of(assignment));
-
-        service.unassignCoordinator(organizationPublicId, programPublicId, assignmentPublicId, caller);
-
-        verify(coordinatorAssignmentRepository).delete(assignment);
-        verify(auditLogService).record(eq(caller), eq(EnrollmentConstants.AGGREGATE_PROGRAM), eq(programPublicId.toString()),
-                eq(EnrollmentConstants.EVENT_COORDINATOR_UNASSIGNED), any());
-    }
-
-    @Test
-    void unassignCoordinator_notFound_throws() {
-        UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        UUID programPublicId = UUID.randomUUID();
-        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
-        UUID assignmentPublicId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
-
-        when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
-        when(coordinatorAssignmentRepository.findByPublicIdAndTenantId(assignmentPublicId, caller.tenantId())).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.unassignCoordinator(organizationPublicId, programPublicId,
-                assignmentPublicId, caller))
-                .isInstanceOf(CoordinatorAssignmentNotFoundException.class);
-    }
-
-    @Test
-    void unassignThenReassignCoordinator_succeeds() {
-        UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        UUID programPublicId = UUID.randomUUID();
-        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
-        UUID assigneePublicId = UUID.randomUUID();
-        UUID firstAssignmentPublicId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
-
-        ProgramCoordinatorAssignment firstAssignment = new ProgramCoordinatorAssignment();
-        firstAssignment.setPublicId(firstAssignmentPublicId);
-        firstAssignment.setProgram(program);
-        firstAssignment.setAssigneePublicId(assigneePublicId);
-
-        when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
-        when(coordinatorAssignmentRepository.findByPublicIdAndTenantId(firstAssignmentPublicId, caller.tenantId()))
-                .thenReturn(Optional.of(firstAssignment));
-
-        service.unassignCoordinator(organizationPublicId, programPublicId, firstAssignmentPublicId, caller);
-
-        when(coordinatorAssignmentRepository.save(any(ProgramCoordinatorAssignment.class))).thenAnswer(invocation -> {
-            ProgramCoordinatorAssignment saved = invocation.getArgument(0);
-            saved.setPublicId(UUID.randomUUID());
-            return saved;
-        });
-
-        ProgramCoordinatorAssignmentResponse response = service.assignCoordinator(organizationPublicId,
-                programPublicId, new AssignCoordinatorRequest(assigneePublicId), caller);
-
-        assertThat(response.assigneePublicId()).isEqualTo(assigneePublicId);
-    }
 }

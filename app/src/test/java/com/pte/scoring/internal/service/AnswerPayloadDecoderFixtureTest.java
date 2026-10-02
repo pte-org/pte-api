@@ -30,7 +30,7 @@ class AnswerPayloadDecoderFixtureTest {
 
     @Test
     void fillBlanksListening_decodesTypedValuesAndPreservesTrailingEmptyGap() throws IOException {
-        Map<String, Object> fixture = fixtureFor("FILL_BLANKS_LISTENING");
+        Map<String, Object> fixture = fixtureFor("FILL_IN_THE_BLANKS_TYPE_IN");
 
         DecodedAnswerPayload decoded = decoder.decode(answerFrom(fixture));
 

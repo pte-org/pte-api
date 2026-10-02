@@ -18,7 +18,7 @@ import org.springframework.security.core.Authentication;
 import java.util.List;
 import java.util.UUID;
 
-/** Platform-admin catalog management plus the authenticated active catalog. */
+/** Platform-admin catalog management plus the public active catalog. */
 @RestController
 @RequestMapping("/api/v1")
 public class PlanController {
@@ -30,9 +30,8 @@ public class PlanController {
     }
 
     @GetMapping("/plans")
-    @PreAuthorize("isAuthenticated()")
     public ApiResponse<List<PlanResponse>> list(Authentication authentication) {
-        boolean platformAdmin = authentication.getAuthorities().stream()
+        boolean platformAdmin = authentication != null && authentication.getAuthorities().stream()
                 .anyMatch(authority -> "ROLE_PLATFORM_ADMIN".equals(authority.getAuthority()));
         return ApiResponse.success(platformAdmin ? planService.listForAdmin() : planService.listActive());
     }

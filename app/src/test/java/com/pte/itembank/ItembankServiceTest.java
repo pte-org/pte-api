@@ -8,6 +8,7 @@ import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.request.CreateQuestionRequest;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.dto.response.QuestionResponse;
+import com.pte.itembank.dto.response.QuestionStatsResponse;
 import com.pte.itembank.internal.exception.InvalidQuestionStatusTransitionException;
 import com.pte.itembank.internal.exception.QuestionNotFoundException;
 import com.pte.itembank.internal.exception.QuestionValidationException;
@@ -16,11 +17,15 @@ import com.pte.itembank.internal.repository.TaskTypeCountProjection;
 import com.pte.itembank.internal.service.ItembankAccessPolicy;
 import com.pte.itembank.internal.service.QuestionValidationHelper;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.web.PagedResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
@@ -34,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 
 /**
@@ -128,6 +134,52 @@ class ItembankServiceTest {
         when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.get(publicId, hostCaller)).isInstanceOf(QuestionNotFoundException.class);
+    }
+
+    @Test
+    void listAccessiblePage_appliesFiltersAndPreservesCommonPageMetadata() {
+        UUID publicId = UUID.randomUUID();
+        Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        question.setPublicId(publicId);
+        question.setTaskTypeKey("READ_ALOUD");
+        question.setTaskTypeSection("SPEAKING");
+        PageRequest pageable = PageRequest.of(1, 1);
+        when(questionRepository.findPagePublicIds(eq("READ_ALOUD"), eq("SPEAKING"), eq(QuestionStatus.APPROVED),
+                eq("read"), isNull(UUID.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(publicId), pageable, 3));
+        when(questionRepository.findWithOptionsByPublicIdIn(List.of(publicId))).thenReturn(List.of(question));
+
+        PagedResult<QuestionResponse> result = service.listAccessible(
+                platformCaller, 1, 1, "READ_ALOUD", "SPEAKING", "APPROVED", " read ");
+
+        assertThat(result.data()).extracting(QuestionResponse::publicId).containsExactly(publicId);
+        assertThat(result.meta().page()).isEqualTo(1);
+        assertThat(result.meta().size()).isEqualTo(1);
+        assertThat(result.meta().totalElements()).isEqualTo(3);
+        assertThat(result.meta().totalPages()).isEqualTo(3);
+        assertThat(result.meta().hasNext()).isTrue();
+        assertThat(result.meta().hasPrevious()).isTrue();
+    }
+
+    @Test
+    void stats_returnsSectionAndDraftCounts() {
+        when(questionRepository.countByDeletedFalseAndVisibility(Visibility.SHARED)).thenReturn(12L);
+        when(questionRepository.countBySectionAndVisibility(Visibility.SHARED)).thenReturn(List.<Object[]>of(
+                new Object[] { "LISTENING", 2L },
+                new Object[] { "READING", 3L },
+                new Object[] { "WRITING", 4L },
+                new Object[] { "SPEAKING", 3L }));
+        when(questionRepository.countByStatusAndVisibility(Visibility.SHARED)).thenReturn(List.<Object[]>of(
+                new Object[] { QuestionStatus.DRAFT, 5L }));
+
+        QuestionStatsResponse stats = service.stats(platformCaller);
+
+        assertThat(stats.total()).isEqualTo(12L);
+        assertThat(stats.listening()).isEqualTo(2L);
+        assertThat(stats.reading()).isEqualTo(3L);
+        assertThat(stats.writing()).isEqualTo(4L);
+        assertThat(stats.speaking()).isEqualTo(3L);
+        assertThat(stats.draft()).isEqualTo(5L);
     }
 
     // ------------------------------------------------------------------

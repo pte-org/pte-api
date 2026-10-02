@@ -19,6 +19,10 @@ public interface ScoreTemplateRepository extends JpaRepository<ScoreTemplate, Lo
     Optional<ScoreTemplate> findWithItemsByPublicId(UUID publicId);
 
     @EntityGraph(attributePaths = "items")
+    @Query("SELECT DISTINCT t FROM ScoreTemplate t WHERE t.publicId IN :publicIds")
+    List<ScoreTemplate> findAllWithItemsByPublicIds(@Param("publicIds") List<UUID> publicIds);
+
+    @EntityGraph(attributePaths = "items")
     Optional<ScoreTemplate> findWithItemsByStatus(ScoreTemplateStatus status);
 
     List<ScoreTemplate> findAllByOrderByCodeAscVersionDesc();

@@ -5,6 +5,7 @@ import com.pte.enrollment.domain.Program;
 import com.pte.enrollment.domain.StudentClass;
 import com.pte.enrollment.internal.exception.StudentClassNotFoundException;
 import com.pte.enrollment.internal.repository.ClassMembershipRepository;
+import com.pte.enrollment.internal.repository.ProgramRepository;
 import com.pte.enrollment.internal.repository.StudentClassRepository;
 import com.pte.tenancy.domain.Organization;
 import com.pte.tenancy.domain.Tenant;
@@ -35,12 +36,14 @@ class EnrollmentModuleServiceTest {
     private StudentClassRepository studentClassRepository;
     @Mock
     private ClassMembershipRepository classMembershipRepository;
+    @Mock
+    private ProgramRepository programRepository;
 
     private EnrollmentModuleService service;
 
     @BeforeEach
     void setUp() {
-        service = new EnrollmentModuleService(studentClassRepository, classMembershipRepository);
+        service = new EnrollmentModuleService(studentClassRepository, classMembershipRepository, programRepository);
     }
 
     private StudentClass classForTenant(UUID tenantPublicId) {
@@ -93,5 +96,41 @@ class EnrollmentModuleServiceTest {
 
         assertThatThrownBy(() -> service.findActiveStudentPublicIds(tenantId, classPublicId))
                 .isInstanceOf(StudentClassNotFoundException.class);
+    }
+
+    @Test
+    void findActiveStudentPublicIdsByProgram_requiresActiveProgramInTenant() {
+        UUID tenantId = UUID.randomUUID();
+        UUID programPublicId = UUID.randomUUID();
+        Program program = programForTenant(tenantId, programPublicId);
+        when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
+        when(classMembershipRepository
+                .findByStudentClass_Program_Organization_Tenant_PublicIdAndStudentClass_Program_PublicId(
+                        tenantId, programPublicId))
+                .thenReturn(List.of());
+
+        assertThat(service.findActiveStudentPublicIdsByProgram(tenantId, programPublicId)).isEmpty();
+    }
+
+    @Test
+    void findActiveStudentPublicIdsByProgram_rejectsProgramFromOtherTenant() {
+        UUID tenantId = UUID.randomUUID();
+        UUID programPublicId = UUID.randomUUID();
+        Program program = programForTenant(UUID.randomUUID(), programPublicId);
+        when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
+
+        assertThatThrownBy(() -> service.findActiveStudentPublicIdsByProgram(tenantId, programPublicId))
+                .isInstanceOf(com.pte.enrollment.internal.exception.ProgramNotFoundException.class);
+    }
+
+    private Program programForTenant(UUID tenantId, UUID programPublicId) {
+        Tenant tenant = new Tenant();
+        tenant.setPublicId(tenantId);
+        Organization organization = new Organization();
+        organization.setTenant(tenant);
+        Program program = new Program();
+        program.setPublicId(programPublicId);
+        program.setOrganization(organization);
+        return program;
     }
 }

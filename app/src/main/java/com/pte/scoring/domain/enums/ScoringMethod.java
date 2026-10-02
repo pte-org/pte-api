@@ -13,5 +13,9 @@ public enum ScoringMethod {
     AI_SPEECH,
     AI_TEXT,
     OBJECTIVE,
-    UNSCORED
+    UNSCORED;
+
+    public boolean isAiScored() {
+        return this == AI_SPEECH || this == AI_TEXT;
+    }
 }

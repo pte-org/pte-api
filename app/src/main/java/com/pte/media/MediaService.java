@@ -6,6 +6,8 @@ import com.pte.shared.security.CurrentUser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -31,6 +33,12 @@ public class MediaService {
     /** Trusted application call — {@code tenantId} must come from the caller's own verified context, never from request input it merely forwards. */
     public PresignedDownloadResponse presignGet(UUID mediaPublicId, long ttlSeconds, UUID tenantId) {
         return cloudinaryMediaService.resolveForTrustedCaller(mediaPublicId, ttlSeconds, tenantId);
+    }
+
+    /** Trusted tenant-scoped bulk resolution for already-authorized answer and prompt media references. */
+    public Map<UUID, PresignedDownloadResponse> presignGetAll(
+            Collection<UUID> mediaPublicIds, long ttlSeconds, UUID tenantId) {
+        return cloudinaryMediaService.resolveForTrustedCallers(mediaPublicIds, ttlSeconds, tenantId);
     }
 
     public void validateAuthoringMedia(UUID mediaPublicId, String assetKind, CurrentUser caller) {

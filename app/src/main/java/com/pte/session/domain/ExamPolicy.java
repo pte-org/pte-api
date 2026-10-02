@@ -66,12 +66,11 @@ public class ExamPolicy {
             this.deviceCheckRequired = fallback.deviceCheckRequired;
             this.proctorRequired = fallback.proctorRequired;
             this.answerIntegrityLevel = fallback.answerIntegrityLevel;
-            this.lockdownMode = fallback.lockdownMode;
         }
     }
 
     public static ExamPolicy practiceDefault() {
-        return build(ReplayPolicy.unlimited(), false, false, AnswerIntegrityLevel.STANDARD, LockdownMode.NONE);
+        return build(ReplayPolicy.unlimited(), true, false, AnswerIntegrityLevel.STANDARD, LockdownMode.NONE);
     }
 
     public static ExamPolicy mockTestDefault() {
@@ -86,8 +85,7 @@ public class ExamPolicy {
     public static ExamPolicy forMode(ExamMode mode) {
         return switch (mode) {
             case PRACTICE -> practiceDefault();
-            case MOCK_TEST -> mockTestDefault();
-            case REAL_EXAM -> realExamDefault();
+            case OFFICIAL_EXAM -> realExamDefault();
         };
     }
 

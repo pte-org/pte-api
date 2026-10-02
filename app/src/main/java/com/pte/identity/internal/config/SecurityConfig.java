@@ -53,7 +53,7 @@ public class SecurityConfig {
             "/api/v1/auth/login", "/api/v1/auth/login-options",
             "/api/v1/auth/refresh", "/api/v1/auth/logout",
             "/actuator/health", "/actuator/health/**", "/ws/**",
-            "/api/v1/applications", "/api/v1/webhooks/payos");
+            "/api/v1/applications", "/api/v1/plans", "/api/v1/webhooks/payos");
 
     @Bean
     public SecurityFilterChain jwtFilterChain(

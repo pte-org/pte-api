@@ -18,6 +18,23 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long> 
     Optional<ExamAttempt> findBySessionPublicIdAndStudentPublicId(UUID sessionPublicId, UUID studentPublicId);
 
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
+    Optional<ExamAttempt> findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+            UUID sessionPublicId, UUID studentPublicId);
+
+    /** Compatibility alias; production lifecycle uses the ordered multi-attempt query above. */
+    default Optional<ExamAttempt> findWithPinnedBySessionPublicIdAndStudentPublicId(UUID sessionPublicId,
+            UUID studentPublicId) {
+        return findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+                sessionPublicId, studentPublicId);
+    }
+
+    long countBySessionPublicIdAndStudentPublicIdAndStatus(UUID sessionPublicId, UUID studentPublicId,
+            AttemptStatus status);
+
+    List<ExamAttempt> findBySessionPublicIdAndTenantIdAndPublicIdIn(UUID sessionPublicId, UUID tenantId,
+            List<UUID> publicIds);
+
+    @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
     Optional<ExamAttempt> findWithPinnedByPublicIdAndStudentPublicId(UUID publicId, UUID studentPublicId);
 
     /** No {@code pinnedSnapshot} eager-fetch — deliberately lighter than {@link #findWithPinnedByPublicIdAndStudentPublicId} for the heartbeat endpoint, which only needs ownership + status, never task content. */
@@ -39,7 +56,15 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long> 
     @EntityGraph(attributePaths = "pinnedSnapshot")
     List<ExamAttempt> findBySessionPublicIdAndTenantIdAndStatus(UUID sessionPublicId, UUID tenantId, AttemptStatus status);
 
+    List<ExamAttempt> findByTenantIdAndSessionPublicIdInAndStudentPublicIdInAndStatus(
+            UUID tenantId, List<UUID> sessionPublicIds, List<UUID> studentPublicIds, AttemptStatus status);
+
     /** Mirrors {@link #findWithPinnedByPublicIdAndStudentPublicId} but no student filter — trusted internal caller (reporting's per-attempt scoring, Phase 5), not a student-facing read. */
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
     Optional<ExamAttempt> findWithPinnedByPublicId(UUID publicId);
+
+    /** Batch context read for report publication; loads each pinned section set with a single query. */
+    @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
+    @Query("SELECT DISTINCT a FROM ExamAttempt a WHERE a.publicId IN :publicIds")
+    List<ExamAttempt> findAllWithPinnedByPublicIds(@Param("publicIds") List<UUID> publicIds);
 }

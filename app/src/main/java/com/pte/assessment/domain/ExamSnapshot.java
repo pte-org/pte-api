@@ -49,6 +49,15 @@ public class ExamSnapshot extends BaseEntity {
     @Column(nullable = false)
     private int scoreTemplateVersion;
 
+    @Column(name = "generation_algorithm_version", length = 32)
+    private String generationAlgorithmVersion;
+
+    @Column(name = "generation_seed")
+    private Long generationSeed;
+
+    @Column(name = "pool_policy_fingerprint", length = 128)
+    private String poolPolicyFingerprint;
+
     @Column
     private UUID tenantId;
 

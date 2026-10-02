@@ -16,6 +16,7 @@ import com.pte.session.internal.dto.response.StudentEnrollmentResponse;
 import com.pte.session.internal.exception.AlreadyAssignedException;
 import com.pte.session.internal.exception.AlreadyEnrolledException;
 import com.pte.session.internal.exception.EnrollmentNotFoundException;
+import com.pte.session.internal.exception.ExamAudienceLockedException;
 import com.pte.session.internal.exception.ProctorAssignmentNotFoundException;
 import com.pte.session.internal.exception.SessionCapacityExceededException;
 import com.pte.session.internal.repository.EnrollmentRepository;
@@ -57,6 +58,7 @@ public class EnrollmentService {
     @Transactional
     public EnrollmentResponse enrollStudent(UUID sessionPublicId, EnrollStudentRequest request, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
+        requireManualAudienceMutationAllowed(session);
         if (enrollmentRepository.existsBySessionIdAndStudentPublicId(session.getId(), request.studentPublicId())) {
             throw new AlreadyEnrolledException();
         }
@@ -93,6 +95,21 @@ public class EnrollmentService {
     @Transactional
     public BulkEnrollResponse bulkEnroll(UUID sessionPublicId, BulkEnrollRequest request, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
+        requireManualAudienceMutationAllowed(session);
+        return bulkEnrollLocked(session, request, caller);
+    }
+
+    /** Canonical publish path: materializes the already generated audience before scheduling. */
+    @Transactional
+    BulkEnrollResponse bulkEnrollPublishedExam(ExamSession session, BulkEnrollRequest request, CurrentUser caller) {
+        if (session.getStatus() != com.pte.session.domain.enums.SessionStatus.READY
+                || session.getGenerationJobPublicId() == null) {
+            throw new ExamAudienceLockedException();
+        }
+        return bulkEnrollLocked(session, request, caller);
+    }
+
+    private BulkEnrollResponse bulkEnrollLocked(ExamSession session, BulkEnrollRequest request, CurrentUser caller) {
 
         List<UUID> existing = enrollmentRepository
                 .findBySessionIdAndStudentPublicIdIn(session.getId(), request.studentPublicIds())
@@ -151,6 +168,7 @@ public class EnrollmentService {
     @Transactional
     public void unenroll(UUID sessionPublicId, UUID enrollmentPublicId, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwned(sessionPublicId, caller);
+        requireManualAudienceMutationAllowed(session);
         Enrollment enrollment = enrollmentRepository.findByPublicId(enrollmentPublicId)
                 .orElseThrow(EnrollmentNotFoundException::new);
         if (!enrollment.getSession().getId().equals(session.getId())) {
@@ -235,6 +253,13 @@ public class EnrollmentService {
             return enrollmentRepository.save(enrollment);
         } catch (DataIntegrityViolationException ex) {
             throw new AlreadyEnrolledException();
+        }
+    }
+
+    private void requireManualAudienceMutationAllowed(ExamSession session) {
+        if (session.getStatus() != com.pte.session.domain.enums.SessionStatus.SCHEDULED
+                || session.getGenerationJobPublicId() != null) {
+            throw new ExamAudienceLockedException();
         }
     }
 }

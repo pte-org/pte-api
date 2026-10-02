@@ -43,7 +43,15 @@ public interface ClassMembershipRepository extends JpaRepository<ClassMembership
             join fetch m.studentClass c
             join fetch c.program p
             join p.organization o
-            where m.tenantId = :tenantId and o.tenant.publicId = :tenantId
+            where m.tenantId = :tenantId
+              and m.deleted = false
+              and c.deleted = false
+              and c.status = com.pte.enrollment.domain.enums.ClassStatus.ACTIVE
+              and p.deleted = false
+              and p.status = com.pte.enrollment.domain.enums.ProgramStatus.ACTIVE
+              and (p.startDate is null or p.startDate <= CURRENT_DATE)
+              and (p.endDate is null or p.endDate >= CURRENT_DATE)
+              and o.tenant.publicId = :tenantId
             """)
     List<ClassMembership> findByStudentClass_Program_Organization_Tenant_PublicId(
             @Param("tenantId") UUID tenantPublicId);
@@ -56,6 +64,13 @@ public interface ClassMembershipRepository extends JpaRepository<ClassMembership
             join fetch c.program p
             join p.organization o
             where m.tenantId = :tenantId
+              and m.deleted = false
+              and c.deleted = false
+              and c.status = com.pte.enrollment.domain.enums.ClassStatus.ACTIVE
+              and p.deleted = false
+              and p.status = com.pte.enrollment.domain.enums.ProgramStatus.ACTIVE
+              and (p.startDate is null or p.startDate <= CURRENT_DATE)
+              and (p.endDate is null or p.endDate >= CURRENT_DATE)
               and o.tenant.publicId = :tenantId
               and p.publicId = :programPublicId
             """)

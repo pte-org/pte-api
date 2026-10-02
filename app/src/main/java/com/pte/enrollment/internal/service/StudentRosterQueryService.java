@@ -56,7 +56,8 @@ public class StudentRosterQueryService {
     private static StudentRosterRowResponse toResponse(StudentRosterRow row) {
         return new StudentRosterRowResponse(toUuid(row.getStudentPublicId()), row.getEmail(), row.getFullName(),
                 row.getStudentCode(), row.getPhone(), row.getStatus(), row.getCreatedAt(), toUuid(row.getProgramPublicId()),
-                row.getProgramName(), toUuid(row.getClassPublicId()), row.getClassName());
+                row.getProgramName(), toUuid(row.getClassPublicId()), row.getClassName(), row.getUsername(),
+                row.getMustChangePassword());
     }
 
     private static UUID toUuid(String value) {

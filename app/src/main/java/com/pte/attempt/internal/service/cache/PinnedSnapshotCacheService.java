@@ -115,6 +115,7 @@ public class PinnedSnapshotCacheService {
                 item.getTitle(), item.getPromptText(), item.getAudioPromptRef(), item.getImagePromptRef(),
                 item.getReferenceAnswerText(), item.getCorrectAnswerText(), item.getMinWordCount(),
                 item.getMaxWordCount(), item.getOptionsJson(), item.getPrepSeconds(), item.getResponseSeconds(),
-                item.getPreListenSeconds(), item.getPreRecordSeconds(), item.getImageUrl());
+                item.getPreListenSeconds(), item.getPreRecordSeconds(), item.getImageUrl(), item.getAudioUrl(),
+                item.getTaskTypeCode(), item.runtimeProfile(), item.getTaskTypeDisplayName());
     }
 }

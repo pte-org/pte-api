@@ -99,8 +99,18 @@ media:
     api-key: ${CLOUDINARY_API_KEY:}
     api-secret: ${CLOUDINARY_API_SECRET:}
     authoring-folder: ${CLOUDINARY_AUTHORING_FOLDER:pte/authoring}
+    submission-folder: ${CLOUDINARY_SUBMISSION_FOLDER:pte/submissions}
 
 attempt:
+  capability:
+    # Only snapshots without Phase 4 runtime provenance may use this legacy path.
+    allow-legacy-missing-manifest: ${ATTEMPT_ALLOW_LEGACY_MISSING_MANIFEST:true}
+    # Keep unsupported custom contracts observable before strict enforcement
+    # is enabled after cross-repository compatibility checks.
+    strict-preflight-enabled: ${ATTEMPT_STRICT_PRE_FLIGHT_ENABLED:false}
+  security-audit:
+    retention-days: ${ATTEMPT_SECURITY_AUDIT_RETENTION_DAYS:180}
+    retention-cron: ${ATTEMPT_SECURITY_AUDIT_RETENTION_CRON:0 0 2 * * *}
   # RSA keypair for answer-submission encryption (STRICT answerIntegrityLevel
   # attempts only). attempt holds its own keypair — never identity's — so no
   # call to identity is needed for key material at submission time. Outside
@@ -141,3 +151,10 @@ scoring:
     media-url-ttl-seconds: ${SCORING_AI_MEDIA_URL_TTL_SECONDS:120}
     connect-timeout-ms: ${SCORING_AI_CONNECT_TIMEOUT_MS:2000}
     read-timeout-ms: ${SCORING_AI_READ_TIMEOUT_MS:30000}
+
+task-types:
+  rollout:
+    # Standard compatibility/read paths remain on. Enable custom creation and
+    # activation only after the authenticated walkthrough and metrics review.
+    custom-creation-enabled: ${TASK_TYPES_CUSTOM_CREATION_ENABLED:false}
+    custom-template-activation-enabled: ${TASK_TYPES_CUSTOM_TEMPLATE_ACTIVATION_ENABLED:false}

@@ -20,6 +20,7 @@ public final class UserMapper {
         List<String> roles = user.getRoles().stream().map(Role::name).toList();
         return new UserResponse(
                 user.getPublicId(),
+                user.getUsername(),
                 user.getEmail(),
                 user.getFullName(),
                 user.getTenantId(),
@@ -29,6 +30,7 @@ public final class UserMapper {
                 user.getClassName(),
                 user.getPhone(),
                 user.getDateOfBirth(),
-                organizationType);
+                organizationType,
+                user.isMustChangePassword());
     }
 }

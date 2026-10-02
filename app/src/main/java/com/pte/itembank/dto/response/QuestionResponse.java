@@ -24,5 +24,6 @@ public record QuestionResponse(
         UUID supersedesPublicId,
         boolean current,
         long version,
-        String rejectionReason) {
+        String rejectionReason,
+        String taskTypeKey) {
 }

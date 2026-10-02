@@ -1,5 +1,6 @@
 package com.pte.assessment.internal.service;
 
+import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.assessment.domain.BlueprintItem;
 import com.pte.assessment.domain.ExamBlueprint;
 import com.pte.assessment.dto.response.SnapshotResponse;
@@ -7,6 +8,8 @@ import com.pte.assessment.internal.exception.InsufficientQuestionBankException;
 import com.pte.assessment.internal.exception.InsufficientQuestionBankException.Shortage;
 import com.pte.assessment.internal.exception.InvalidSectionException;
 import com.pte.assessment.internal.exception.InvalidSkillSelectionException;
+import com.pte.assessment.internal.constant.AssessmentConstants;
+import com.pte.assessment.internal.exception.TemplateNotActiveException;
 import com.pte.assessment.internal.repository.ExamBlueprintRepository;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.domain.enums.PteSection;
@@ -19,8 +22,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -41,9 +48,9 @@ import java.util.stream.Collectors;
 @Service
 public class ExamGenerationService {
 
-    /** Fixed section draw order — the natural PTE test-day order, and also the V5 template's own sequence order. */
+    /** Fixed section draw order. */
     private static final List<PteSection> SECTION_ORDER =
-            List.of(PteSection.SPEAKING, PteSection.WRITING, PteSection.READING, PteSection.LISTENING);
+            List.of(PteSection.SPEAKING, PteSection.LISTENING, PteSection.READING, PteSection.WRITING);
 
     private final ScoreTemplateService scoreTemplateService;
     private final ItembankService itembankService;
@@ -64,7 +71,7 @@ public class ExamGenerationService {
     public SnapshotResponse generate(String name, Set<String> skills, CurrentUser caller) {
         Set<PteSection> selectedSections = parseSkills(skills);
         ScoreTemplateResponse template = scoreTemplateService.getActive();
-        List<Requirement> requirements = buildRequirements(template, selectedSections);
+        List<Requirement> requirements = buildRequirements(template, selectedSections, true);
         List<RolledRequirement> rolled = requirements.stream().map(this::roll).toList();
 
         checkStockOrThrow(rolled);
@@ -86,6 +93,94 @@ public class ExamGenerationService {
         return snapshotPublishService.publish(saved.getPublicId(), caller);
     }
 
+    /** Deterministic, template-pinned generation used by the new session flow. */
+    @Transactional
+    public SnapshotResponse generateDeterministic(String name, UUID templatePublicId, long seed,
+            CurrentUser caller) {
+        return generateDeterministic(name, templatePublicId, seed, caller, null);
+    }
+
+    /** Deterministic generation constrained to the session's persisted template sections. */
+    @Transactional
+    public SnapshotResponse generateDeterministic(String name, UUID templatePublicId, long seed,
+            CurrentUser caller, Set<String> selectedSkills) {
+        ScoreTemplateResponse template = scoreTemplateService.findActiveByPublicId(templatePublicId)
+                .orElseThrow(TemplateNotActiveException::new);
+        Set<PteSection> selectedSections = resolveSelectedSections(template, selectedSkills);
+        List<Requirement> requirements = buildRequirements(template, selectedSections,
+                !"CUSTOM".equalsIgnoreCase(template.templatePolicy()));
+        List<RolledRequirement> rolled = requirements.stream()
+                .map(requirement -> roll(requirement, new Random(seed ^ requirement.taskTypeKey().hashCode())))
+                .toList();
+        checkStockOrThrow(rolled);
+        List<PickedItem> picked = drawDeterministic(rolled, seed);
+
+        ExamBlueprint blueprint = new ExamBlueprint();
+        blueprint.setName(name);
+        blueprint.setTenantId(caller.tenantId());
+        int orderIndex = 0;
+        for (PickedItem item : picked) {
+            BlueprintItem blueprintItem = new BlueprintItem();
+            blueprintItem.setQuestionPublicId(item.questionPublicId());
+            blueprintItem.setSection(item.section());
+            blueprintItem.setOrderIndex(orderIndex++);
+            blueprint.addItem(blueprintItem);
+        }
+        ExamBlueprint saved = blueprintRepository.save(blueprint);
+        return snapshotPublishService.publish(saved.getPublicId(), caller, template, seed,
+                AssessmentConstants.DETERMINISTIC_ALGORITHM_VERSION,
+                template.publicId() + ":" + template.version());
+    }
+
+    /** Scope-aware host readiness using the exact same requirement resolver as deterministic generation. */
+    @Transactional(readOnly = true)
+    public com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse getTemplateFeasibility(
+            UUID templatePublicId, Set<String> selectedSkills) {
+        ScoreTemplateResponse template = scoreTemplateService.getByPublicId(templatePublicId);
+        Set<PteSection> selectedSections = resolveSelectedSections(template, selectedSkills);
+        List<Requirement> requirements = buildRequirements(template, selectedSections,
+                !"CUSTOM".equalsIgnoreCase(template.templatePolicy()));
+        List<RolledRequirement> required = requirements.stream()
+                .map(item -> new RolledRequirement(item.taskTypeKey(), item.standardTaskType(), item.section(),
+                        item.maxCount()))
+                .toList();
+        Map<String, Long> available = publishedCounts(required);
+        List<com.pte.scoretemplate.dto.response.ScoreTemplateSlotFeasibilityResponse> slots = requirements.stream()
+                .map(item -> {
+                    long count = available.getOrDefault(item.taskTypeKey(), 0L);
+                    boolean ready = count >= item.maxCount();
+                    return new com.pte.scoretemplate.dto.response.ScoreTemplateSlotFeasibilityResponse(
+                            item.taskTypeKey(), item.section().name(), item.maxCount(), count, ready,
+                            ready ? null : "INSUFFICIENT_POOL");
+                })
+                .toList();
+        return new com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse(
+                template.publicId(), template.version(), !slots.isEmpty()
+                        && slots.stream().allMatch(
+                                com.pte.scoretemplate.dto.response.ScoreTemplateSlotFeasibilityResponse::ready),
+                slots);
+    }
+
+    private Set<PteSection> resolveSelectedSections(ScoreTemplateResponse template, Set<String> requestedSkills) {
+        Set<PteSection> available = template.items().stream()
+                .map(item -> parseSection(item.section()))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (available.isEmpty()) {
+            throw new InvalidSkillSelectionException();
+        }
+        if (requestedSkills == null || requestedSkills.isEmpty()) {
+            return available;
+        }
+        Set<PteSection> selected = requestedSkills.stream()
+                .map(skill -> skill == null ? null : skill.trim().toUpperCase(Locale.ROOT))
+                .map(this::parseSection)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (!available.containsAll(selected)) {
+            throw new InvalidSkillSelectionException();
+        }
+        return selected;
+    }
+
     private Set<PteSection> parseSkills(Set<String> skills) {
         if (skills == null || skills.isEmpty() || skills.size() > 4) {
             throw new InvalidSkillSelectionException();
@@ -94,6 +189,9 @@ public class ExamGenerationService {
     }
 
     private PteSection parseSection(String value) {
+        if (value == null || value.isBlank()) {
+            throw new InvalidSectionException();
+        }
         try {
             return PteSection.valueOf(value);
         } catch (IllegalArgumentException ex) {
@@ -101,7 +199,8 @@ public class ExamGenerationService {
         }
     }
 
-    private List<Requirement> buildRequirements(ScoreTemplateResponse template, Set<PteSection> selectedSections) {
+    private List<Requirement> buildRequirements(ScoreTemplateResponse template, Set<PteSection> selectedSections,
+            boolean includeImplicitPersonalIntroduction) {
         Map<PteSection, List<ScoreTemplateItemResponse>> itemsBySection = template.items().stream()
                 .collect(Collectors.groupingBy(i -> PteSection.valueOf(i.section())));
 
@@ -110,32 +209,70 @@ public class ExamGenerationService {
             if (!selectedSections.contains(section)) {
                 continue;
             }
-            if (section == PteSection.SPEAKING) {
-                requirements.add(new Requirement(PteTaskType.PERSONAL_INTRODUCTION, section, 1, 1));
+            if (includeImplicitPersonalIntroduction && section == PteSection.SPEAKING) {
+                requirements.add(new Requirement(PteTaskType.PERSONAL_INTRODUCTION.name(),
+                        PteTaskType.PERSONAL_INTRODUCTION, section, 1, 1));
             }
             itemsBySection.getOrDefault(section, List.of()).stream()
                     .sorted(Comparator.comparingInt(ScoreTemplateItemResponse::sequence))
-                    .forEach(i -> requirements.add(new Requirement(
-                            PteTaskType.valueOf(i.taskType()), section, i.minCount(), i.maxCount())));
+                    .forEach(i -> {
+                        String taskTypeKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
+                                i.taskTypeKey() == null ? i.taskType() : i.taskTypeKey());
+                        PteTaskType standard = TaskTypeCodeCompatibility.isStandard(taskTypeKey)
+                                ? TaskTypeCodeCompatibility.parse(taskTypeKey) : null;
+                        requirements.add(new Requirement(taskTypeKey, standard, section, i.minCount(), i.maxCount()));
+                    });
         }
         return requirements;
     }
 
     private RolledRequirement roll(Requirement requirement) {
+        return roll(requirement, random);
+    }
+
+    private RolledRequirement roll(Requirement requirement, Random source) {
         int n = requirement.minCount() == requirement.maxCount()
                 ? requirement.minCount()
-                : requirement.minCount() + random.nextInt(requirement.maxCount() - requirement.minCount() + 1);
-        return new RolledRequirement(requirement.taskType(), requirement.section(), n);
+                : requirement.minCount() + source.nextInt(requirement.maxCount() - requirement.minCount() + 1);
+        return new RolledRequirement(requirement.taskTypeKey(), requirement.standardTaskType(),
+                requirement.section(), n);
+    }
+
+    private List<PickedItem> drawDeterministic(List<RolledRequirement> rolled, long seed) {
+        List<PickedItem> picked = new ArrayList<>();
+        Set<UUID> used = new HashSet<>();
+        List<Shortage> shortages = new ArrayList<>();
+        for (RolledRequirement requirement : rolled) {
+            List<UUID> candidates = new ArrayList<>(publishedQuestionIds(requirement));
+            Collections.shuffle(candidates, new Random(seed ^ requirement.taskTypeKey().hashCode()
+                    ^ requirement.section().name().hashCode()));
+            int selected = 0;
+            for (UUID candidate : candidates) {
+                if (used.add(candidate)) {
+                    picked.add(new PickedItem(candidate, requirement.section()));
+                    selected++;
+                    if (selected == requirement.n()) {
+                        break;
+                    }
+                }
+            }
+            if (selected < requirement.n()) {
+                shortages.add(new Shortage(requirement.taskTypeKey(), requirement.n(), selected));
+            }
+        }
+        if (!shortages.isEmpty()) {
+            throw new InsufficientQuestionBankException(shortages);
+        }
+        return picked;
     }
 
     private void checkStockOrThrow(List<RolledRequirement> rolled) {
-        Set<PteTaskType> taskTypes = rolled.stream().map(RolledRequirement::taskType).collect(Collectors.toSet());
-        Map<PteTaskType, Long> counts = itembankService.countPublishedByTaskTypes(taskTypes);
+        Map<String, Long> available = publishedCounts(rolled);
         List<Shortage> shortages = new ArrayList<>();
         for (RolledRequirement r : rolled) {
-            long available = counts.getOrDefault(r.taskType(), 0L);
-            if (available < r.n()) {
-                shortages.add(new Shortage(r.taskType().name(), r.n(), (int) available));
+            long count = available.getOrDefault(r.taskTypeKey(), 0L);
+            if (count < r.n()) {
+                shortages.add(new Shortage(r.taskTypeKey(), r.n(), (int) count));
             }
         }
         if (!shortages.isEmpty()) {
@@ -153,9 +290,11 @@ public class ExamGenerationService {
         List<PickedItem> picked = new ArrayList<>();
         List<Shortage> shortages = new ArrayList<>();
         for (RolledRequirement r : rolled) {
-            List<UUID> ids = itembankService.randomPublishedQuestionIds(r.taskType(), r.n());
+            List<UUID> ids = r.standardTaskType() == null
+                    ? itembankService.randomPublishedQuestionIdsByTaskTypeKey(r.taskTypeKey(), r.n())
+                    : itembankService.randomPublishedQuestionIds(r.standardTaskType(), r.n());
             if (ids.size() != r.n()) {
-                shortages.add(new Shortage(r.taskType().name(), r.n(), ids.size()));
+                shortages.add(new Shortage(r.taskTypeKey(), r.n(), ids.size()));
                 continue;
             }
             for (UUID id : ids) {
@@ -168,10 +307,29 @@ public class ExamGenerationService {
         return picked;
     }
 
-    private record Requirement(PteTaskType taskType, PteSection section, int minCount, int maxCount) {
+    private List<UUID> publishedQuestionIds(RolledRequirement requirement) {
+        return requirement.standardTaskType() == null
+                ? itembankService.publishedQuestionIdsByTaskTypeKey(requirement.taskTypeKey())
+                : itembankService.publishedQuestionIds(requirement.standardTaskType());
     }
 
-    private record RolledRequirement(PteTaskType taskType, PteSection section, int n) {
+    private Map<String, Long> publishedCounts(List<RolledRequirement> requirements) {
+        boolean allStandard = requirements.stream().allMatch(requirement -> requirement.standardTaskType() != null);
+        if (allStandard) {
+            return itembankService.countPublishedByTaskTypes(requirements.stream()
+                            .map(RolledRequirement::standardTaskType).collect(Collectors.toSet()))
+                    .entrySet().stream()
+                    .collect(Collectors.toMap(entry -> entry.getKey().name(), Map.Entry::getValue));
+        }
+        return itembankService.countPublishedByTaskTypeKeys(requirements.stream()
+                .map(RolledRequirement::taskTypeKey).collect(Collectors.toSet()));
+    }
+
+    private record Requirement(String taskTypeKey, PteTaskType standardTaskType, PteSection section,
+            int minCount, int maxCount) {
+    }
+
+    private record RolledRequirement(String taskTypeKey, PteTaskType standardTaskType, PteSection section, int n) {
     }
 
     private record PickedItem(UUID questionPublicId, PteSection section) {

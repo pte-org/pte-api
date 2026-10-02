@@ -34,7 +34,7 @@
       "description": "Exactly one selected option orderIndex is sent as a decimal string; it is not comma-joined."
     },
     {
-      "taskType": "FILL_BLANKS_LISTENING",
+      "taskType": "FILL_IN_THE_BLANKS_TYPE_IN",
       "optionsJson": null,
       "payload": "rapid,,forest,",
       "description": "Typed values are comma-joined in gap-index order. Empty entries preserve unanswered gaps, including the required trailing empty entry; commas are forbidden inside a v1 gap value."

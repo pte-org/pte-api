@@ -165,6 +165,7 @@ class AttemptSummaryQueryServiceTest {
 
         PinnedExamSnapshot pinnedSnapshot = new PinnedExamSnapshot();
         pinnedSnapshot.setScoreTemplatePublicId(scoreTemplateId);
+        pinnedSnapshot.setScoreTemplateVersion(7);
         pinnedSnapshot.addItem(pinnedItem("SPEAKING"));
         pinnedSnapshot.addItem(pinnedItem("SPEAKING"));
         pinnedSnapshot.addItem(pinnedItem("READING"));
@@ -178,6 +179,7 @@ class AttemptSummaryQueryServiceTest {
         AttemptScoreContextView context = service.getScoreContext(attemptPublicId);
 
         assertThat(context.scoreTemplatePublicId()).isEqualTo(scoreTemplateId);
+        assertThat(context.scoreTemplateVersion()).isEqualTo(7);
         assertThat(context.testedSections()).containsExactlyInAnyOrder("SPEAKING", "READING");
     }
 

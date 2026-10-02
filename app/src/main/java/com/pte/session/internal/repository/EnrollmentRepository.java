@@ -34,4 +34,10 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
     @Query("select e from Enrollment e join fetch e.session where e.studentPublicId = :studentPublicId and e.tenantId = :tenantId")
     List<Enrollment> findByStudentPublicIdAndTenantId(@Param("studentPublicId") UUID studentPublicId,
             @Param("tenantId") UUID tenantId);
+
+    /** Batch read used by the publish conflict gate; the session is join-fetched to avoid N+1. */
+    @Query("select e from Enrollment e join fetch e.session "
+            + "where e.tenantId = :tenantId and e.studentPublicId in :studentPublicIds")
+    List<Enrollment> findByTenantIdAndStudentPublicIdIn(@Param("tenantId") UUID tenantId,
+            @Param("studentPublicIds") List<UUID> studentPublicIds);
 }

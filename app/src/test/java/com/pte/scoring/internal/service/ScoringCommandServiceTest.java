@@ -5,6 +5,10 @@ import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.constant.ScoreReviewConstants;
+import com.pte.scoring.internal.exception.ScoreSourceSelectionException;
+import com.pte.session.SessionService;
+import org.springframework.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +22,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -68,6 +73,26 @@ class ScoringCommandServiceTest {
         service.requestScoring(sessionPublicId, tenantId);
 
         verify(scoringIngestService).ingestForSession(sessionPublicId, tenantId);
+    }
+
+    @Test
+    void requestScoring_rejectsWorkAfterPublicationBeforeIngest() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        SessionService sessionService = org.mockito.Mockito.mock(SessionService.class);
+        ScorePublicationLockService publicationLockService = org.mockito.Mockito.mock(ScorePublicationLockService.class);
+        doThrow(new ScoreSourceSelectionException(HttpStatus.CONFLICT, ScoreReviewConstants.PUBLISHED_LOCK,
+                null, ScoreReviewConstants.PUBLISHED_LOCK_MESSAGE))
+                .when(publicationLockService).assertNotPublished(tenantId, sessionPublicId);
+        ScoringCommandService guardedService = new ScoringCommandService(scoringIngestService,
+                scoringAnswerRepository, objectiveScoringService, aiScoringDispatcher, scoringMethodResolver,
+                sessionService, publicationLockService);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> guardedService.requestScoring(sessionPublicId, tenantId))
+                .isInstanceOf(ScoreSourceSelectionException.class);
+
+        verify(sessionService).lockForScoreReviewMutation(sessionPublicId, tenantId);
+        verify(scoringIngestService, never()).ingestForSession(sessionPublicId, tenantId);
     }
 
     @Test

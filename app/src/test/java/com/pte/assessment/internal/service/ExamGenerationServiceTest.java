@@ -25,6 +25,7 @@ import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -33,6 +34,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -72,14 +76,14 @@ class ExamGenerationServiceTest {
             new Row("RESPOND_TO_A_SITUATION", "SPEAKING", 7, 2, 3),
             new Row("SUMMARIZE_WRITTEN_TEXT", "WRITING", 8, 2, 2),
             new Row("WRITE_ESSAY", "WRITING", 9, 1, 1),
-            new Row("FILL_BLANKS_READING_WRITING", "READING", 10, 5, 6),
+            new Row("FILL_IN_THE_BLANKS_DROPDOWN", "READING", 10, 5, 6),
             new Row("MC_READING_MULTIPLE", "READING", 11, 2, 3),
             new Row("RE_ORDER_PARAGRAPHS", "READING", 12, 2, 3),
-            new Row("FILL_BLANKS_READING", "READING", 13, 4, 5),
+            new Row("FILL_IN_THE_BLANKS_DRAG_AND_DROP", "READING", 13, 4, 5),
             new Row("MC_READING_SINGLE", "READING", 14, 2, 3),
             new Row("SUMMARIZE_SPOKEN_TEXT", "LISTENING", 15, 1, 1),
             new Row("MC_LISTENING_MULTIPLE", "LISTENING", 16, 2, 3),
-            new Row("FILL_BLANKS_LISTENING", "LISTENING", 17, 2, 3),
+            new Row("FILL_IN_THE_BLANKS_TYPE_IN", "LISTENING", 17, 2, 3),
             new Row("HIGHLIGHT_CORRECT_SUMMARY", "LISTENING", 18, 2, 3),
             new Row("MC_LISTENING_SINGLE", "LISTENING", 19, 2, 3),
             new Row("SELECT_MISSING_WORD", "LISTENING", 20, 1, 2),
@@ -89,7 +93,7 @@ class ExamGenerationServiceTest {
     private ScoreTemplateResponse v5Template() {
         List<ScoreTemplateItemResponse> items = V5_ROWS.stream()
                 .map(r -> new ScoreTemplateItemResponse(r.taskType(), r.section(), r.sequence(), r.min(), r.max(),
-                        0, 30, "FIXED", "OBJECTIVE", BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO,
+                        0, 30, "OBJECTIVE", BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO,
                         BigDecimal.ZERO, BigDecimal.ZERO))
                 .toList();
         return new ScoreTemplateResponse(UUID.randomUUID(), "PTE_Score_Template", 1, "APEUni PTE Score Table V5",
@@ -335,5 +339,57 @@ class ExamGenerationServiceTest {
                 .randomPublishedQuestionIds(any(PteTaskType.class), anyInt());
         // No overload taking CurrentUser exists on these two methods (compile-level guard,
         // enforced already in ItembankServiceTest.generationFacades_neverTakeACurrentUserParameter).
+    }
+
+    @Test
+    void generateDeterministic_sameSeedAndTemplateProducesSameBlueprintOrder() {
+        UUID templateId = UUID.randomUUID();
+        ScoreTemplateResponse template = new ScoreTemplateResponse(
+                templateId,
+                "CUSTOM",
+                4,
+                "Deterministic template",
+                "ACTIVE",
+                null,
+                List.of(new ScoreTemplateItemResponse(
+                        "READ_ALOUD", "SPEAKING", 1, 2, 2, 0, 30, "AI_SPEECH", BigDecimal.ONE,
+                        BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)),
+                "CUSTOM");
+        when(scoreTemplateService.findActiveByPublicId(templateId)).thenReturn(Optional.of(template));
+        when(itembankService.countPublishedByTaskTypes(anySet())).thenAnswer(invocation -> {
+            Set<PteTaskType> requested = invocation.getArgument(0);
+            Map<PteTaskType, Long> counts = new EnumMap<>(PteTaskType.class);
+            requested.forEach(taskType -> counts.put(taskType, 20L));
+            return counts;
+        });
+        when(itembankService.publishedQuestionIds(any(PteTaskType.class))).thenAnswer(invocation -> {
+            PteTaskType taskType = invocation.getArgument(0);
+            return java.util.stream.IntStream.range(0, 20)
+                    .mapToObj(index -> UUID.nameUUIDFromBytes((taskType.name() + index).getBytes()))
+                    .toList();
+        });
+        when(blueprintRepository.save(any(ExamBlueprint.class))).thenAnswer(invocation -> {
+            ExamBlueprint blueprint = invocation.getArgument(0);
+            blueprint.setPublicId(UUID.randomUUID());
+            return blueprint;
+        });
+        when(snapshotPublishService.publish(any(UUID.class), any(CurrentUser.class), any(ScoreTemplateResponse.class),
+                anyLong(), anyString(), anyString())).thenReturn(mock(SnapshotResponse.class));
+
+        long seed = 20260921L;
+        service.generateDeterministic("Exam", templateId, seed, hostCaller);
+        service.generateDeterministic("Exam", templateId, seed, hostCaller);
+
+        org.mockito.ArgumentCaptor<ExamBlueprint> captor = org.mockito.ArgumentCaptor.forClass(ExamBlueprint.class);
+        verify(blueprintRepository, org.mockito.Mockito.times(2)).save(captor.capture());
+        List<UUID> first = captor.getAllValues().get(0).getItems().stream()
+                .map(BlueprintItem::getQuestionPublicId).toList();
+        List<UUID> second = captor.getAllValues().get(1).getItems().stream()
+                .map(BlueprintItem::getQuestionPublicId).toList();
+        assertThat(first).containsExactlyElementsOf(second);
+        verify(snapshotPublishService, org.mockito.Mockito.times(2)).publish(any(UUID.class), any(CurrentUser.class),
+                eq(template), eq(seed), eq("PTE_SEEDED_V1"), eq(templateId + ":4"));
+        verify(itembankService, org.mockito.Mockito.never())
+                .publishedQuestionIds(PteTaskType.PERSONAL_INTRODUCTION);
     }
 }

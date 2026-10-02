@@ -7,13 +7,14 @@ import com.pte.reporting.domain.enums.Skill;
 import com.pte.reporting.internal.dto.response.ReportResponse;
 import com.pte.reporting.internal.exception.ReportNotFoundException;
 import com.pte.reporting.internal.repository.AttemptReportRepository;
+import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.EnumMap;
 import java.util.List;
@@ -40,13 +41,19 @@ class ReportServiceTest {
     @Mock
     private AttemptService attemptService;
 
+    @Mock
+    private SessionService sessionService;
+
     private ReportService service;
+    private ReportSnapshotCodec snapshotCodec;
     private UUID tenantId;
     private UUID studentPublicId;
 
     @BeforeEach
     void setUp() {
-        service = new ReportService(attemptReportRepository, scoreAggregationService, attemptService);
+        snapshotCodec = new ReportSnapshotCodec(JsonMapper.builder().build());
+        service = new ReportService(attemptReportRepository, scoreAggregationService, attemptService, snapshotCodec,
+                sessionService);
         tenantId = UUID.randomUUID();
         studentPublicId = UUID.randomUUID();
     }
@@ -68,13 +75,11 @@ class ReportServiceTest {
             skillScores.put(skill, SkillScore.insufficientData());
         }
         AttemptScoreSummary summary = new AttemptScoreSummary(SkillScore.of(50), skillScores);
+        existingReport.setReportSnapshotJson(snapshotJson(summary));
         CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
 
         when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.of(existingReport));
-        when(scoreAggregationService.aggregate(attemptPublicId, tenantId))
-                .thenReturn(summary);
-
         ReportResponse response = service.getReport(attemptPublicId, caller);
 
         assertThat(response.attemptPublicId()).isEqualTo(attemptPublicId);
@@ -113,6 +118,7 @@ class ReportServiceTest {
         assertThat(response.sessionPublicId()).isEqualTo(sessionPublicId);
         verify(attemptService).getSubmittedAttempt(attemptPublicId);
         verify(attemptReportRepository).save(any(AttemptReport.class));
+        verify(sessionService).lockForScoreReviewMutation(sessionPublicId, tenantId);
     }
 
     @Test
@@ -163,16 +169,16 @@ class ReportServiceTest {
             skillScores.put(skill, SkillScore.insufficientData());
         }
         AttemptScoreSummary summary = new AttemptScoreSummary(SkillScore.of(50), skillScores);
+        report.setReportSnapshotJson(snapshotJson(summary));
         CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
 
         when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.of(report));
-        when(scoreAggregationService.aggregate(attemptPublicId, tenantId))
-                .thenReturn(summary);
-
         ReportResponse response = service.getReport(attemptPublicId, caller);
 
         assertThat(response.published()).isTrue();
+        assertThat(response.overall().score()).isEqualTo(50);
+        verify(scoreAggregationService, never()).aggregate(attemptPublicId, tenantId);
     }
 
     @Test
@@ -194,6 +200,59 @@ class ReportServiceTest {
 
         assertThatThrownBy(() -> service.getReport(attemptPublicId, caller))
                 .isInstanceOf(ReportNotFoundException.class);
+    }
+
+    @Test
+    void getReport_studentCanStillSeeLegacyPublishedReportWithoutSnapshot() {
+        UUID attemptPublicId = UUID.randomUUID();
+        AttemptReport report = new AttemptReport();
+        report.setAttemptPublicId(attemptPublicId);
+        report.setSessionPublicId(UUID.randomUUID());
+        report.setStudentPublicId(studentPublicId);
+        report.setTenantId(tenantId);
+        report.setPublished(true);
+        AttemptScoreSummary legacySummary = new AttemptScoreSummary(SkillScore.of(64), Map.of());
+        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId)).thenReturn(Optional.of(report));
+        when(scoreAggregationService.aggregateLegacyPublished(attemptPublicId, tenantId)).thenReturn(legacySummary);
+
+        ReportResponse response = service.getReport(attemptPublicId,
+                new CurrentUser(studentPublicId, tenantId, List.of("STUDENT")));
+
+        assertThat(response.published()).isTrue();
+        assertThat(response.immutableSnapshot()).isFalse();
+        assertThat(response.overall().score()).isEqualTo(64);
+    }
+
+    @Test
+    void getMyPublishedReports_readsSnapshotsAndPreservesLegacyPublishedReports() {
+        UUID attemptPublicId = UUID.randomUUID();
+        AttemptReport report = new AttemptReport();
+        report.setAttemptPublicId(attemptPublicId);
+        report.setSessionPublicId(UUID.randomUUID());
+        report.setStudentPublicId(studentPublicId);
+        report.setTenantId(tenantId);
+        report.setPublished(true);
+        report.setReportSnapshotJson(snapshotJson(new AttemptScoreSummary(SkillScore.of(72), Map.of())));
+        UUID legacyAttemptPublicId = UUID.randomUUID();
+        AttemptReport legacyReport = new AttemptReport();
+        legacyReport.setAttemptPublicId(legacyAttemptPublicId);
+        legacyReport.setSessionPublicId(UUID.randomUUID());
+        legacyReport.setStudentPublicId(studentPublicId);
+        legacyReport.setTenantId(tenantId);
+        legacyReport.setPublished(true);
+        CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
+        when(attemptReportRepository.findByStudentPublicIdAndTenantIdAndPublishedTrueOrderByPublishedAtDesc(
+                studentPublicId, tenantId)).thenReturn(List.of(report, legacyReport));
+        when(scoreAggregationService.aggregateLegacyPublished(legacyAttemptPublicId, tenantId))
+                .thenReturn(new AttemptScoreSummary(SkillScore.of(64), Map.of()));
+
+        List<ReportResponse> reports = service.getMyPublishedReports(caller);
+
+        assertThat(reports).hasSize(2);
+        assertThat(reports.getFirst().overall().score()).isEqualTo(72);
+        assertThat(reports.getFirst().immutableSnapshot()).isTrue();
+        assertThat(reports.get(1).overall().score()).isEqualTo(64);
+        assertThat(reports.get(1).immutableSnapshot()).isFalse();
     }
 
     @Test
@@ -301,7 +360,38 @@ class ReportServiceTest {
     }
 
     @Test
-    void getReport_concurrentCreateRace_recoversAndReturnsRecoveredReport() {
+    void getReport_platformAuthorCannotSeeCrossTenantReport() {
+        UUID attemptPublicId = UUID.randomUUID();
+        AttemptReport report = new AttemptReport();
+        report.setAttemptPublicId(attemptPublicId);
+        report.setSessionPublicId(UUID.randomUUID());
+        report.setStudentPublicId(studentPublicId);
+        report.setTenantId(UUID.randomUUID());
+        report.setPublished(true);
+        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId)).thenReturn(Optional.of(report));
+
+        assertThatThrownBy(() -> service.getReport(attemptPublicId,
+                new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"))))
+                .isInstanceOf(ReportNotFoundException.class);
+        verify(scoreAggregationService, never()).aggregate(any(), any());
+    }
+
+    @Test
+    void getReport_platformAuthorCannotCreateCrossTenantReportFromAttempt() {
+        UUID attemptPublicId = UUID.randomUUID();
+        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId)).thenReturn(Optional.empty());
+        when(attemptService.getSubmittedAttempt(attemptPublicId)).thenReturn(new AttemptSummaryView(
+                attemptPublicId, UUID.randomUUID(), studentPublicId, UUID.randomUUID()));
+
+        assertThatThrownBy(() -> service.getReport(attemptPublicId,
+                new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"))))
+                .isInstanceOf(ReportNotFoundException.class);
+        verify(sessionService, never()).lockForScoreReviewMutation(any(), any());
+        verify(attemptReportRepository, never()).save(any());
+    }
+
+    @Test
+    void getReport_rechecksForReportAfterAcquiringSessionMutationLock() {
         UUID attemptPublicId = UUID.randomUUID();
         UUID sessionPublicId = UUID.randomUUID();
 
@@ -325,13 +415,18 @@ class ReportServiceTest {
                 .thenReturn(Optional.of(savedReport));
         when(attemptService.getSubmittedAttempt(attemptPublicId))
                 .thenReturn(attemptSummary);
-        when(attemptReportRepository.save(any(AttemptReport.class)))
-                .thenThrow(new DataIntegrityViolationException("Unique constraint violation"));
         when(scoreAggregationService.aggregate(attemptPublicId, tenantId))
                 .thenReturn(scoreSummary);
 
         ReportResponse response = service.getReport(attemptPublicId, caller);
 
         assertThat(response.attemptPublicId()).isEqualTo(attemptPublicId);
+        verify(attemptReportRepository, never()).save(any(AttemptReport.class));
+        verify(sessionService).lockForScoreReviewMutation(sessionPublicId, tenantId);
+    }
+
+    private String snapshotJson(AttemptScoreSummary summary) {
+        return snapshotCodec.encode(UUID.randomUUID(), UUID.randomUUID(), java.time.Instant.now(), 1,
+                UUID.randomUUID(), UUID.randomUUID(), 1, summary, List.of());
     }
 }

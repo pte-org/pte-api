@@ -1,5 +1,6 @@
 package com.pte.scoretemplate.internal.mapper;
 
+import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.scoretemplate.domain.ScoreTemplate;
 import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
@@ -17,24 +18,27 @@ public final class ScoreTemplateMapper {
                 template.getVersion(),
                 template.getName(),
                 template.getStatus().name(),
-                template.getItems().stream().map(ScoreTemplateMapper::toItemResponse).toList());
+                template.getRejectionReason(),
+                template.getItems().stream().map(ScoreTemplateMapper::toItemResponse).toList(),
+                template.getTemplatePolicy() == null ? "STANDARD_PTE" : template.getTemplatePolicy().name());
     }
 
     private static ScoreTemplateItemResponse toItemResponse(ScoreTemplateItem item) {
         return new ScoreTemplateItemResponse(
-                item.getTaskType(),
+                item.getTaskType() == null ? null : TaskTypeCodeCompatibility.normalizeForLookup(item.getTaskType()),
                 item.getSection(),
                 item.getSequence(),
                 item.getMinCount(),
                 item.getMaxCount(),
                 item.getPrepSeconds(),
                 item.getResponseSeconds(),
-                item.getTimingMode().name(),
                 item.getScoringMethod().name(),
                 item.getOverallWeight(),
                 item.getSpeakingWeight(),
                 item.getWritingWeight(),
                 item.getReadingWeight(),
-                item.getListeningWeight());
+                item.getListeningWeight(),
+                item.pinnedRuntimeProfile(), item.getTaskTypeKey() == null
+                        ? item.getTaskType() : item.getTaskTypeKey());
     }
 }

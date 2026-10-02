@@ -12,6 +12,8 @@ import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import com.pte.attempt.internal.repository.PinnedItemRepository;
 import com.pte.attempt.internal.service.cache.PinnedSnapshotCacheService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.session.SessionService;
+import com.pte.session.internal.exception.NotEntitledException;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +29,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 /**
  * Ported from services/exam-delivery's own AttemptServiceTest — same
@@ -93,17 +98,6 @@ class AttemptLifecycleServiceTest {
             heartbeatService
         );
 
-        when(attemptRepository.save(any(ExamAttempt.class)))
-            .thenAnswer(invocation -> {
-                ExamAttempt attempt = invocation.getArgument(0);
-                if (attempt.getId() == null) {
-                    attempt.setId(1L);
-                }
-                if (attempt.getPublicId() == null) {
-                    attempt.setPublicId(UUID.randomUUID());
-                }
-                return attempt;
-            });
     }
 
     @Test
@@ -116,6 +110,7 @@ class AttemptLifecycleServiceTest {
 
         PinnedExamSnapshot pinnedSnapshot = createPinnedSnapshot(tenantId, "STRICT");
 
+        stubAttemptSave();
         when(snapshotPinService.pin(any(), any(), any())).thenReturn(pinnedSnapshot);
         when(encryptionKeyProvider.getPublicKeyBase64()).thenReturn(TEST_PUBLIC_KEY_BASE64);
 
@@ -138,6 +133,7 @@ class AttemptLifecycleServiceTest {
 
         PinnedExamSnapshot pinnedSnapshot = createPinnedSnapshot(tenantId, "STANDARD");
 
+        stubAttemptSave();
         when(snapshotPinService.pin(any(), any(), any())).thenReturn(pinnedSnapshot);
 
         StartAttemptRequest request = new StartAttemptRequest(sessionPublicId, true);
@@ -158,6 +154,7 @@ class AttemptLifecycleServiceTest {
         PinnedExamSnapshot pinnedSnapshot = createPinnedSnapshot(tenantId, "STANDARD");
         PinnedItem firstItem = pinnedSnapshot.getItems().get(0);
 
+        stubAttemptSave();
         when(snapshotPinService.pin(any(), any(), any())).thenReturn(pinnedSnapshot);
 
         StartAttemptRequest request = new StartAttemptRequest(sessionPublicId, true);
@@ -169,6 +166,27 @@ class AttemptLifecycleServiceTest {
         assertThat(response.completed()).isFalse();
         assertThat(response.task()).isNotNull();
         assertThat(response.task().pinnedItemPublicId()).isEqualTo(firstItem.getPublicId());
+    }
+
+    @Test
+    @DisplayName("startAttempt after the session cutoff is rejected before pinning an attempt")
+    void startAttempt_closedSessionIsRejectedBeforePinning() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        SessionService sessionService = org.mockito.Mockito.mock(SessionService.class);
+        doThrow(new NotEntitledException()).when(sessionService)
+                .lockOpenForAttemptOperation(sessionPublicId, tenantId);
+        AttemptLifecycleService cutoffAwareService = new AttemptLifecycleService(
+                attemptRepository, pinnedItemRepository, snapshotPinService, cacheService, timerService,
+                answerSubmitService, new AttemptMapper(JsonMapper.builder().build()), encryptionKeyProvider,
+                submissionDecryptionService, heartbeatService, null, sessionService);
+
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> cutoffAwareService.startAttempt(
+                new StartAttemptRequest(sessionPublicId, true), new CurrentUser(studentPublicId, tenantId, List.of("STUDENT")))))
+                .isInstanceOf(NotEntitledException.class);
+
+        verify(snapshotPinService, never()).pin(any(), any(), any());
     }
 
     private PinnedExamSnapshot createPinnedSnapshot(UUID tenantId, String answerIntegrityLevel) {
@@ -198,5 +216,18 @@ class AttemptLifecycleServiceTest {
 
         snapshot.addItem(item);
         return snapshot;
+    }
+
+    private void stubAttemptSave() {
+        when(attemptRepository.save(any(ExamAttempt.class))).thenAnswer(invocation -> {
+            ExamAttempt attempt = invocation.getArgument(0);
+            if (attempt.getId() == null) {
+                attempt.setId(1L);
+            }
+            if (attempt.getPublicId() == null) {
+                attempt.setPublicId(UUID.randomUUID());
+            }
+            return attempt;
+        });
     }
 }

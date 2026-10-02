@@ -18,6 +18,7 @@ public record ReportResponse(
         UUID sessionPublicId,
         boolean published,
         Instant publishedAt,
+        boolean immutableSnapshot,
         SkillScoreResponse overall,
         List<SkillScoreResponse> communicativeSkills) {
 }

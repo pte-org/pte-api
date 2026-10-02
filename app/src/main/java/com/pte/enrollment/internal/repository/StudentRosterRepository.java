@@ -23,7 +23,9 @@ public interface StudentRosterRepository extends Repository<StudentClass, Long> 
                    CAST(p.public_id AS VARCHAR) AS programPublicId,
                    p.name AS programName,
                    CAST(c.public_id AS VARCHAR) AS classPublicId,
-                   c.name AS className
+                   c.name AS className,
+                   u.username AS username,
+                   u.must_change_password AS mustChangePassword
             FROM identity_student_directory u
             LEFT JOIN class_memberships m
                    ON m.student_public_id = u.public_id

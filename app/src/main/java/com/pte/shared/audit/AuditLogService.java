@@ -11,6 +11,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 /** In-transaction append and tenant-scoped read API for audit records. */
 @Service
@@ -28,6 +29,21 @@ public class AuditLogService {
 
     @Transactional
     public void record(CurrentUser caller, String aggregateType, String aggregateId, String action, String summary) {
+        recordInternal(caller, aggregateType, aggregateId, action, summary);
+    }
+
+    /**
+     * Persists a validation/audit event even when the business transaction is
+     * about to roll back because the requested transition was invalid.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordFailure(CurrentUser caller, String aggregateType, String aggregateId, String action,
+            String summary) {
+        recordInternal(caller, aggregateType, aggregateId, action, summary);
+    }
+
+    private void recordInternal(CurrentUser caller, String aggregateType, String aggregateId, String action,
+            String summary) {
         AuditLog auditLog = new AuditLog();
         auditLog.setTenantId(caller.tenantId());
         auditLog.setActorUserId(caller.userId());

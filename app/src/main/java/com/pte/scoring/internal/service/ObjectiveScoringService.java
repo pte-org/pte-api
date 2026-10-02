@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.service;
 
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.constant.ScoringConstants;
@@ -21,7 +22,7 @@ import java.util.TreeMap;
  * the four option-based Listening types ({@code MC_LISTENING_SINGLE}, {@code
  * MC_LISTENING_MULTIPLE}, {@code HIGHLIGHT_CORRECT_SUMMARY}, and {@code
  * SELECT_MISSING_WORD}), plus the reference-based {@code
- * FILL_BLANKS_LISTENING}, {@code HIGHLIGHT_INCORRECT_WORDS}, and {@code
+ * FILL_IN_THE_BLANKS_TYPE_IN}, {@code HIGHLIGHT_INCORRECT_WORDS}, and {@code
  * WRITE_FROM_DICTATION} types. Since Phase 4 (plans/score-template-exam-generation),
  * WHICH task types these are is the pinned {@code ScoreTemplate}'s decision
  * (via {@code ScoringMethodResolver}) — {@link #supports} is a trivial gate
@@ -48,7 +49,17 @@ public class ObjectiveScoringService {
      * contributing rawScores / 100), so every scorer must share one scale.
      */
     public int score(ScoringAnswer answer) {
-        return switch (answer.getTaskType()) {
+        return score(answer, null);
+    }
+
+    /**
+     * Scores by the pinned runtime renderer when one is available. A custom
+     * task key may reuse an existing renderer, so dispatching by the logical
+     * key alone would incorrectly reject a valid custom task.
+     */
+    public int score(ScoringAnswer answer, TaskRuntimeProfileDescriptor runtime) {
+        String route = runtime == null ? answer.getTaskType() : runtime.rendererKey();
+        return switch (route) {
             case ScoringConstants.TASK_TYPE_MC_READING_SINGLE -> scoreSingleChoice(answer);
             case ScoringConstants.TASK_TYPE_MC_READING_MULTIPLE -> scoreMultipleChoice(answer);
             case ScoringConstants.TASK_TYPE_MC_LISTENING_SINGLE,
@@ -56,11 +67,20 @@ public class ObjectiveScoringService {
                     ScoringConstants.TASK_TYPE_SELECT_MISSING_WORD -> scoreSingleChoice(answer);
             case ScoringConstants.TASK_TYPE_MC_LISTENING_MULTIPLE -> scoreMultipleChoice(answer);
             case ScoringConstants.TASK_TYPE_RE_ORDER_PARAGRAPHS -> scoreReorderParagraphs(answer);
-            case ScoringConstants.TASK_TYPE_FILL_BLANKS_READING, ScoringConstants.TASK_TYPE_FILL_BLANKS_READING_WRITING ->
+            case ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_DRAG_AND_DROP, ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_DROPDOWN ->
                     scoreFillBlanks(answer);
-            case ScoringConstants.TASK_TYPE_FILL_BLANKS_LISTENING -> scoreListeningFillBlanks(answer);
+            case ScoringConstants.TASK_TYPE_FILL_IN_THE_BLANKS_TYPE_IN -> scoreListeningFillBlanks(answer);
             case ScoringConstants.TASK_TYPE_HIGHLIGHT_INCORRECT_WORDS -> scoreHighlightIncorrectWords(answer);
             case ScoringConstants.TASK_TYPE_WRITE_FROM_DICTATION -> scoreWriteFromDictation(answer);
+            case "MC_READING_SINGLE_V1", "MC_LISTENING_SINGLE_V1", "HIGHLIGHT_CORRECT_SUMMARY_V1",
+                    "SELECT_MISSING_WORD_V1" -> scoreSingleChoice(answer);
+            case "MC_READING_MULTIPLE_V1", "MC_LISTENING_MULTIPLE_V1" -> scoreMultipleChoice(answer);
+            case "RE_ORDER_PARAGRAPHS_V1" -> scoreReorderParagraphs(answer);
+            case "FILL_IN_THE_BLANKS_DRAG_AND_DROP_V1", "FILL_IN_THE_BLANKS_DROPDOWN_V1" ->
+                    scoreFillBlanks(answer);
+            case "FILL_IN_THE_BLANKS_TYPE_IN_V1" -> scoreListeningFillBlanks(answer);
+            case "HIGHLIGHT_INCORRECT_WORDS_V1" -> scoreHighlightIncorrectWords(answer);
+            case "WRITE_FROM_DICTATION_V1" -> scoreWriteFromDictation(answer);
             default -> throw new UnsupportedTaskTypeException();
         };
     }
@@ -134,9 +154,9 @@ public class ObjectiveScoringService {
     }
 
     /**
-     * Shared evaluator for both fill-blanks types: {@code FILL_BLANKS_READING}
+     * Shared evaluator for both fill-blanks types: {@code FILL_IN_THE_BLANKS_DRAG_AND_DROP}
      * (shared word bank — each correct option's target gap comes from {@link
-     * FrozenOption#correctGapIndex}) and {@code FILL_BLANKS_READING_WRITING}
+     * FrozenOption#correctGapIndex}) and {@code FILL_IN_THE_BLANKS_DROPDOWN}
      * (per-blank groups — each correct option's target gap comes from {@link
      * FrozenOption#blankIndex}, since every option in a group already carries
      * it). Payload parsing preserves a trailing empty entry (mirrors the

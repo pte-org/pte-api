@@ -2,6 +2,7 @@ package com.pte.attempt.internal.mapper;
 
 import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.domain.PinnedExamSnapshot;
+import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.dto.response.BlankGroupView;
@@ -56,21 +57,55 @@ public class AttemptMapper {
             int effectiveResponseSeconds, int totalTasks, String encryptionPublicKey) {
         List<FrozenOption> parsedOptions = parseFrozenOptions(item.optionsJson());
         requireHomogeneousBlankIndex(item.publicId(), parsedOptions);
+        PinnedExamSnapshot pinned = attempt.getPinnedSnapshot();
+        boolean navigationAllowed = isManualNavigationAllowed(pinned, item.section());
+        boolean practiceMode = pinned != null && "PRACTICE".equals(pinned.getExamMode());
+        boolean canNavigatePrevious = navigationAllowed && item.orderIndex() > 0
+                && (practiceMode || isManualNavigationAllowed(pinned, sectionAt(pinned, item.orderIndex() - 1)));
+        boolean hasNextItem = item.orderIndex() + 1 < totalTasks;
+        boolean canNavigateNext = navigationAllowed
+                && (!hasNextItem || practiceMode
+                        || isManualNavigationAllowed(pinned, sectionAt(pinned, item.orderIndex() + 1)));
         TaskView task = new TaskView(
                 item.publicId(), item.orderIndex(), totalTasks, item.section(), item.taskType(), item.title(),
                 item.promptText(), item.audioPromptRef(), item.imagePromptRef(), item.minWordCount(),
                 item.maxWordCount(), toFlatOptions(parsedOptions), toBlankGroups(parsedOptions), effectivePrepSeconds,
                 effectiveResponseSeconds, attempt.getExamEndTime(), item.preListenSeconds(), item.preRecordSeconds(),
-                item.imageUrl());
+                item.imageUrl(), item.audioUrl(), item.taskTypeCode() != null ? item.taskTypeCode() : item.taskType(),
+                item.runtime(), item.taskTypeDisplayName(), canNavigatePrevious, canNavigateNext);
         // pinnedSnapshot is an optional lazy @OneToOne — null for an attempt whose pin row is
         // absent. Null lockdownMode is the client's "no lockdown" contract, same as toCompletedResponse.
-        PinnedExamSnapshot pinned = attempt.getPinnedSnapshot();
         return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey,
-                pinned != null ? pinned.getLockdownMode() : null);
+                pinned != null ? pinned.getLockdownMode() : null, attempt.getAttemptNumber(),
+                remainingRetries(attempt), remainingRetries(attempt) > 0,
+                pinned != null ? pinned.getExamMode() : null);
+    }
+
+    private boolean isManualNavigationAllowed(PinnedExamSnapshot pinned, String section) {
+        if (pinned == null || section == null) {
+            return false;
+        }
+        return "PRACTICE".equals(pinned.getExamMode())
+                || "READING".equals(section)
+                || "WRITING".equals(section);
+    }
+
+    private String sectionAt(PinnedExamSnapshot pinned, int orderIndex) {
+        return pinned.getItems().stream()
+                .filter(candidate -> candidate.getOrderIndex() == orderIndex)
+                .map(PinnedItem::getSection)
+                .findFirst()
+                .orElse(null);
     }
 
     public AttemptTaskResponse toCompletedResponse(ExamAttempt attempt) {
-        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), true, null, null, null);
+        int remainingRetries = remainingRetries(attempt);
+        return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), true, null, null, null,
+                attempt.getAttemptNumber(), remainingRetries, remainingRetries > 0, null);
+    }
+
+    private int remainingRetries(ExamAttempt attempt) {
+        return Math.max(0, attempt.getMaxRetriesPerStudent() - attempt.getAttemptNumber() + 1);
     }
 
     private List<FrozenOption> parseFrozenOptions(String optionsJson) {
@@ -105,7 +140,7 @@ public class AttemptMapper {
 
     /**
      * Flat, ungrouped option list for every task type except
-     * {@code FILL_BLANKS_READING_WRITING} — {@code null} when the parsed
+     * {@code FILL_IN_THE_BLANKS_DROPDOWN} — {@code null} when the parsed
      * options are blank-grouped instead (never both populated on one task,
      * per {@link TaskView}'s doc comment).
      */
@@ -117,7 +152,7 @@ public class AttemptMapper {
     }
 
     /**
-     * Groups parsed options by {@code blankIndex} for {@code FILL_BLANKS_READING_WRITING}
+     * Groups parsed options by {@code blankIndex} for {@code FILL_IN_THE_BLANKS_DROPDOWN}
      * — {@code null} when no option carries a {@code blankIndex} (every other task type).
      */
     private List<BlankGroupView> toBlankGroups(List<FrozenOption> parsed) {
@@ -135,7 +170,7 @@ public class AttemptMapper {
     /**
      * Mirrors assessment's frozen option shape (text/correct/orderIndex/blankIndex)
      * — {@code correct} is read but discarded. {@code blankIndex} is null except
-     * for {@code FILL_BLANKS_READING_WRITING} options; must stay structurally
+     * for {@code FILL_IN_THE_BLANKS_DROPDOWN} options; must stay structurally
      * identical to assessment's own frozen-option shape, which writes this same
      * JSON into {@code SnapshotItem.optionsJson}.
      */

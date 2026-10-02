@@ -18,6 +18,7 @@ import com.pte.session.internal.dto.request.ChangeSubscriptionRequest;
 import com.pte.session.internal.dto.request.CreateSessionRequest;
 import com.pte.session.internal.dto.request.PatchExamPolicyRequest;
 import com.pte.session.internal.dto.response.SessionResponse;
+import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.session.internal.exception.HostContextRequiredException;
 import com.pte.session.internal.exception.InvalidPolicyPatchException;
 import com.pte.session.internal.exception.InvalidSessionWindowException;
@@ -25,11 +26,15 @@ import com.pte.session.internal.exception.PolicyLockedException;
 import com.pte.session.internal.exception.SessionCapacityInvalidException;
 import com.pte.session.internal.exception.SessionCapacityRequiredException;
 import com.pte.session.internal.exception.SessionNotFoundException;
+import com.pte.session.internal.exception.NotEntitledException;
+import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
+import com.pte.session.internal.exception.SessionNotReadyToOpenException;
 import com.pte.session.internal.exception.SessionSubscriptionCapacityException;
 import com.pte.session.internal.exception.SessionSubscriptionNotFoundException;
 import com.pte.session.internal.exception.SessionTimeConflictException;
 import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionException;
 import com.pte.session.internal.mapper.SessionMapper;
+import com.pte.session.internal.policy.SessionPolicyResolver;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.shared.security.CurrentUser;
@@ -101,10 +106,15 @@ public class SessionLifecycleService {
         session.setSubscriptionId(subscription.publicId());
         session.setLicenseKey(subscription.licenseKey());
         session.setSnapshotPublicId(snapshot.publicId());
+        session.setTemplatePublicId(snapshot.scoreTemplatePublicId());
+        session.setTemplateVersion(snapshot.scoreTemplateVersion());
         session.setOpensAt(request.opensAt());
         session.setClosesAt(request.closesAt());
         session.setCapacity(request.capacity());
-        ExamMode mode = request.examMode() != null ? request.examMode() : ExamMode.MOCK_TEST;
+        ExamMode mode = request.examMode() != null ? request.examMode() : ExamMode.OFFICIAL_EXAM;
+        session.setExamMode(mode);
+        session.setFormMode(com.pte.session.domain.enums.FormMode.SHARED_FORM);
+        session.setReusePolicy(com.pte.session.domain.enums.ReusePolicy.ALLOW);
         ExamPolicy policy = ExamPolicy.forMode(mode);
 
         if (request.lockdownMode() != null) {
@@ -175,6 +185,9 @@ public class SessionLifecycleService {
     public SessionResponse open(UUID publicId, CurrentUser caller) {
         ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, requireTenant(caller))
                 .orElseThrow(SessionNotFoundException::new);
+        if (session.getStatus() != SessionStatus.SCHEDULED) {
+            throw new SessionNotReadyToOpenException();
+        }
         session.open();
         return SessionMapper.toResponse(session);
     }
@@ -204,14 +217,15 @@ public class SessionLifecycleService {
             policy.setAnswerIntegrityLevel(request.answerIntegrityLevel());
         }
         if (request.lockdownMode() != null) {
-            policy.setLockdownMode(request.lockdownMode());
+            policy.setLockdownMode(SessionPolicyResolver.resolveForPolicyPatch(
+                    session.getExamMode(), policy.getLockdownMode(), request.lockdownMode()));
         }
-        return SessionMapper.toPolicy(policy);
+        return SessionMapper.toPolicy(policy, session.getExamMode(), session.getExamMode() == null);
     }
 
     @Transactional
     public SessionResponse close(UUID publicId, CurrentUser caller) {
-        ExamSession session = findOwned(publicId, caller);
+        ExamSession session = findOwnedWithLock(publicId, caller);
         session.close();
         return SessionMapper.toResponse(session);
     }
@@ -238,9 +252,60 @@ public class SessionLifecycleService {
                 .orElseThrow(SessionNotFoundException::new);
     }
 
+    /** Serializes scoring-owned assignment commits with other session-scoped lifecycle changes. */
+    @Transactional
+    public void lockForExaminerAssignment(UUID publicId, UUID tenantId) {
+        if (tenantId == null) {
+            throw new HostContextRequiredException();
+        }
+        sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(SessionNotFoundException::new);
+    }
+
+    @Transactional
+    public void lockForScoreReviewMutation(UUID publicId, UUID tenantId) {
+        if (tenantId == null) {
+            throw new HostContextRequiredException();
+        }
+        sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(SessionNotFoundException::new);
+    }
+
+    @Transactional
+    public void lockOpenForAttemptOperation(UUID publicId, UUID tenantId) {
+        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(NotEntitledException::new);
+        if (session.getStatus() != SessionStatus.OPEN) {
+            throw new NotEntitledException();
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public AttemptRetryPolicyResponse getAttemptRetryPolicy(UUID publicId, UUID tenantId) {
+        ExamSession session = sessionRepository.findByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(NotEntitledException::new);
+        return new AttemptRetryPolicyResponse(session.getMaxRetriesPerStudent());
+    }
+
+    @Transactional
+    public void lockClosedForReportPublication(UUID publicId, UUID tenantId) {
+        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(SessionNotFoundException::new);
+        if (session.getStatus() != SessionStatus.CLOSED) {
+            throw new SessionNotClosedForReportPublicationException();
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isSessionClosed(UUID publicId, UUID tenantId) {
+        ExamSession session = sessionRepository.findByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(SessionNotFoundException::new);
+        return session.getStatus() == SessionStatus.CLOSED;
+    }
+
     private SubscriptionView activeSubscription(UUID subscriptionId, UUID tenantId) {
         if (billingService == null) {
-            throw new IllegalStateException("BillingService is required for session creation");
+            throw new IllegalStateException(SessionConstants.BILLING_SERVICE_REQUIRED);
         }
         return billingService.getActiveSubscription(subscriptionId, tenantId)
                 .orElseThrow(SessionSubscriptionNotFoundException::new);

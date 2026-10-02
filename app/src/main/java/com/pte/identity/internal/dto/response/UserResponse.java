@@ -7,6 +7,7 @@ import java.util.UUID;
 /** Public view of a user — never exposes the entity or password hash. */
 public record UserResponse(
         UUID publicId,
+        String username,
         String email,
         String fullName,
         UUID tenantId,
@@ -16,5 +17,6 @@ public record UserResponse(
         String className,
         String phone,
         LocalDate dateOfBirth,
-        String organizationType) {
+        String organizationType,
+        boolean mustChangePassword) {
 }

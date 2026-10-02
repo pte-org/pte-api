@@ -2,6 +2,7 @@ package com.pte.scoring.internal.vendor.stub;
 
 import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.SpeechScoringClient;
+import com.pte.scoring.domain.enums.AiProviderCategory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +30,6 @@ public class StubSpeechScoringClient implements SpeechScoringClient {
     public AiScoreResult score(String audioMediaPublicId, String referenceText, UUID tenantId) {
         return new AiScoreResult(PLACEHOLDER_SCORE,
                 Map.of("ORAL_FLUENCY", PLACEHOLDER_SCORE, "PRONUNCIATION", PLACEHOLDER_SCORE),
-                "STUB: no real vendor configured yet.");
+                "STUB: no real vendor configured yet.", AiProviderCategory.STUB, "STUB", null, null);
     }
 }

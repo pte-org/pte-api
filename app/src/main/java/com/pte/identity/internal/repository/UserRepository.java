@@ -3,8 +3,10 @@ package com.pte.identity.internal.repository;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -28,6 +30,24 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByPublicId(UUID publicId);
 
     Optional<User> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.publicId = :publicId and u.deleted = false")
+    Optional<User> findWithLockByPublicId(@Param("publicId") UUID publicId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.publicId = :publicId and u.tenantId = :tenantId "
+            + "and u.deleted = false")
+    Optional<User> findWithLockByPublicIdAndTenantId(@Param("publicId") UUID publicId,
+            @Param("tenantId") UUID tenantId);
+
+    List<User> findByPublicIdInAndTenantIdAndDeletedFalse(List<UUID> publicIds, UUID tenantId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.publicId in :publicIds and u.tenantId = :tenantId "
+            + "and u.deleted = false order by u.id")
+    List<User> findWithLockByPublicIdsAndTenantId(@Param("publicIds") List<UUID> publicIds,
+            @Param("tenantId") UUID tenantId);
 
     List<User> findByTenantId(UUID tenantId);
 

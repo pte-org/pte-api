@@ -1,6 +1,9 @@
 package com.pte.scoring.domain;
 
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
+import com.pte.scoring.domain.enums.AiProviderCategory;
+import com.pte.scoring.domain.enums.ExaminerAnswerScoreStatus;
+import com.pte.scoring.domain.enums.ScoreSource;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -8,11 +11,15 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -29,7 +36,8 @@ import java.util.UUID;
         @Index(name = "idx_scoring_answers_attempt", columnList = "attempt_public_id"),
         @Index(name = "idx_scoring_answers_status", columnList = "status"),
         @Index(name = "idx_scoring_answers_tenant_review", columnList = "tenant_id, session_public_id, status, created_at")
-})
+}, uniqueConstraints = @UniqueConstraint(name = "uq_scoring_answer_owner_scope",
+        columnNames = {"answer_public_id", "tenant_id", "session_public_id", "attempt_public_id"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -79,6 +87,46 @@ public class ScoringAnswer extends BaseEntity {
     @Column
     private Instant scoredAt;
 
+    /** Provider identity emitted alongside this exact result. Null means legacy or unknown provenance. */
+    @Setter(AccessLevel.NONE)
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private AiProviderCategory aiProviderCategory;
+
+    @Setter(AccessLevel.NONE)
+    @Column(length = 64)
+    private String aiProvider;
+
+    @Setter(AccessLevel.NONE)
+    @Column(length = 160)
+    private String aiModel;
+
+    @Setter(AccessLevel.NONE)
+    @Column(length = 100)
+    private String aiProviderVersion;
+
+    @Setter(AccessLevel.NONE)
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private ScoreSource selectedScoreSource;
+
+    @Setter(AccessLevel.NONE)
+    @Column
+    private Instant selectedScoreSourceAt;
+
+    @Setter(AccessLevel.NONE)
+    @Column
+    private UUID selectedScoreSourceByPublicId;
+
+    @Setter(AccessLevel.NONE)
+    @Column(name = "selected_examiner_score_public_id")
+    private UUID selectedExaminerScorePublicId;
+
+    @Setter(AccessLevel.NONE)
+    @Version
+    @Column(name = "lock_version", nullable = false)
+    private long lockVersion;
+
     /**
      * A host's own independent score — parallel to {@link #rawScore}, never
      * derived from it and never gating it. Which of the two counts as
@@ -91,8 +139,58 @@ public class ScoringAnswer extends BaseEntity {
     private Instant teacherScoredAt;
 
     public void markScored(int rawScore) {
+        if (rawScore < 0 || rawScore > 100) {
+            throw new IllegalArgumentException(ScoringDomainConstants.RAW_SCORE_RANGE_INVALID);
+        }
         this.status = ScoringAnswerStatus.SCORED;
         this.rawScore = rawScore;
         this.scoredAt = Instant.now();
+    }
+
+    public void markAiScored(int rawScore, AiProviderCategory providerCategory, String provider,
+            String model, String providerVersion) {
+        if (providerCategory == null || provider == null || provider.isBlank()) {
+            throw new IllegalArgumentException(ScoringDomainConstants.AI_SCORE_PROVENANCE_REQUIRED);
+        }
+        markScored(rawScore);
+        this.aiProviderCategory = providerCategory;
+        this.aiProvider = provider;
+        this.aiModel = model;
+        this.aiProviderVersion = providerVersion;
+    }
+
+    public boolean hasPublishableAiScore() {
+        return status == ScoringAnswerStatus.SCORED && rawScore != null && rawScore >= 0 && rawScore <= 100
+                && aiProviderCategory == AiProviderCategory.REAL && aiProvider != null && !aiProvider.isBlank();
+    }
+
+    public void selectScoreSource(ScoreSource source, UUID actorPublicId, Instant selectedAt,
+            ExaminerAnswerScore submittedExaminerScore) {
+        if (source == null || actorPublicId == null || selectedAt == null) {
+            throw new IllegalArgumentException(ScoringDomainConstants.SCORE_SOURCE_SELECTION_FIELDS_REQUIRED);
+        }
+        if (source == ScoreSource.AI && !hasPublishableAiScore()) {
+            throw new IllegalStateException(ScoringDomainConstants.REAL_AI_SCORE_REQUIRED_FOR_SELECTION);
+        }
+        if (source == ScoreSource.EXAMINER && !isSubmittedExaminerScoreForThisAnswer(submittedExaminerScore)) {
+            throw new IllegalStateException(ScoringDomainConstants.SUBMITTED_EXAMINER_SCORE_REQUIRED_FOR_SELECTION);
+        }
+        this.selectedScoreSource = source;
+        this.selectedScoreSourceByPublicId = actorPublicId;
+        this.selectedScoreSourceAt = selectedAt;
+        this.selectedExaminerScorePublicId = source == ScoreSource.EXAMINER
+                ? submittedExaminerScore.getPublicId()
+                : null;
+    }
+
+    private boolean isSubmittedExaminerScoreForThisAnswer(ExaminerAnswerScore examinerScore) {
+        return examinerScore != null
+                && examinerScore.getId() != null
+                && examinerScore.getPublicId() != null
+                && examinerScore.getStatus() == ExaminerAnswerScoreStatus.SUBMITTED
+                && Objects.equals(examinerScore.getAnswerPublicId(), answerPublicId)
+                && Objects.equals(examinerScore.getAttemptPublicId(), attemptPublicId)
+                && Objects.equals(examinerScore.getSessionPublicId(), sessionPublicId)
+                && Objects.equals(examinerScore.getTenantId(), tenantId);
     }
 }

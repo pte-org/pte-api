@@ -80,6 +80,13 @@ public class TimerService {
         if (!SECTION_SCOPED_SECTIONS.contains(item.section())) {
             return item.responseSeconds();
         }
+        // sectionStartedAt is null when the student hasn't reached this section yet
+        // (e.g. getAllTasks prefetches items for future sections). Treat elapsed as 0
+        // — the client ignores this value for reading items anyway and uses the global
+        // exam timer derived from examEndTime.
+        if (attempt.getSectionStartedAt() == null) {
+            return (int) sectionBudgetSeconds(item, allItems);
+        }
         long elapsedSeconds = Duration.between(attempt.getSectionStartedAt(), Instant.now()).getSeconds();
         return (int) Math.max(0, sectionBudgetSeconds(item, allItems) - elapsedSeconds);
     }

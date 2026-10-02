@@ -3,7 +3,11 @@ package com.pte.scoring.internal.service;
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.domain.enums.ScoringMethod;
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.constant.ScoringConstants;
+import com.pte.session.SessionService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,33 +36,56 @@ public class ScoringCommandService {
     private final ObjectiveScoringService objectiveScoringService;
     private final AiScoringDispatcher aiScoringDispatcher;
     private final ScoringMethodResolver scoringMethodResolver;
+    private final SessionService sessionService;
+    private final ScorePublicationLockService publicationLockService;
 
+    @Autowired
     public ScoringCommandService(ScoringIngestService scoringIngestService,
                                  ScoringAnswerRepository scoringAnswerRepository,
                                  ObjectiveScoringService objectiveScoringService,
                                  AiScoringDispatcher aiScoringDispatcher,
-                                 ScoringMethodResolver scoringMethodResolver) {
+                                 ScoringMethodResolver scoringMethodResolver,
+                                 SessionService sessionService,
+                                 ScorePublicationLockService publicationLockService) {
         this.scoringIngestService = scoringIngestService;
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.objectiveScoringService = objectiveScoringService;
         this.aiScoringDispatcher = aiScoringDispatcher;
         this.scoringMethodResolver = scoringMethodResolver;
+        this.sessionService = sessionService;
+        this.publicationLockService = publicationLockService;
+    }
+
+    /** Compatibility constructor for focused scoring-command tests. */
+    public ScoringCommandService(ScoringIngestService scoringIngestService,
+                                 ScoringAnswerRepository scoringAnswerRepository,
+                                 ObjectiveScoringService objectiveScoringService,
+                                 AiScoringDispatcher aiScoringDispatcher,
+                                 ScoringMethodResolver scoringMethodResolver) {
+        this(scoringIngestService, scoringAnswerRepository, objectiveScoringService, aiScoringDispatcher,
+                scoringMethodResolver, null, null);
     }
 
     @Transactional
     public void requestScoring(UUID sessionPublicId, UUID tenantId) {
+        if (sessionService != null) {
+            sessionService.lockForScoreReviewMutation(sessionPublicId, tenantId);
+            publicationLockService.assertNotPublished(tenantId, sessionPublicId);
+        }
         scoringIngestService.ingestForSession(sessionPublicId, tenantId);
 
         List<ScoringAnswer> pending = scoringAnswerRepository
                 .findBySessionPublicIdAndTenantIdAndStatus(sessionPublicId, tenantId, ScoringAnswerStatus.PENDING);
         for (ScoringAnswer answer : pending) {
-            Optional<ScoringMethod> method =
-                    scoringMethodResolver.resolve(answer.getScoreTemplatePublicId(), answer.getTaskType());
+            Optional<TaskRuntimeProfileDescriptor> runtime = scoringMethodResolver.resolveProfile(
+                    answer.getScoreTemplatePublicId(), answer.getTaskType());
+            Optional<ScoringMethod> method = runtime.map(this::methodFor)
+                    .or(() -> scoringMethodResolver.resolve(answer.getScoreTemplatePublicId(), answer.getTaskType()));
             if (method.isEmpty()) {
                 continue; // Task type absent from the pinned template (e.g. PERSONAL_INTRODUCTION) — stays PENDING.
             }
             if (objectiveScoringService.supports(method.get())) {
-                scoreObjectively(answer);
+                scoreObjectively(answer, runtime.orElse(null));
             } else if (aiScoringDispatcher.supports(method.get())) {
                 aiScoringDispatcher.dispatch(answer, method.get());
             }
@@ -66,8 +93,21 @@ public class ScoringCommandService {
         }
     }
 
-    private void scoreObjectively(ScoringAnswer answer) {
-        int rawScore = objectiveScoringService.score(answer);
+    private ScoringMethod methodFor(TaskRuntimeProfileDescriptor runtime) {
+        return switch (runtime.scoringProfileKey()) {
+            case "AI_SPEECH" -> ScoringMethod.AI_SPEECH;
+            case "AI_TEXT" -> ScoringMethod.AI_TEXT;
+            case "OBJECTIVE" -> ScoringMethod.OBJECTIVE;
+            case "UNSCORED" -> ScoringMethod.UNSCORED;
+            default -> throw new IllegalStateException(String.format(ScoringConstants.UNSUPPORTED_SCORING_PROFILE,
+                    runtime.scoringProfileKey()));
+        };
+    }
+
+    private void scoreObjectively(ScoringAnswer answer, TaskRuntimeProfileDescriptor runtime) {
+        int rawScore = runtime == null
+                ? objectiveScoringService.score(answer)
+                : objectiveScoringService.score(answer, runtime);
         answer.markScored(rawScore);
         scoringAnswerRepository.save(answer);
     }

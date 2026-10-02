@@ -11,6 +11,9 @@ import com.pte.attempt.internal.exception.MissingAudioPromptException;
 import com.pte.attempt.internal.exception.MissingImagePromptException;
 import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
+import com.pte.itembank.TaskRuntimeProfileRegistry;
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
+import com.pte.itembank.TaskRuntimeContractConstants;
 import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
@@ -141,6 +144,21 @@ class SnapshotPinServiceTest {
         PinnedItem pinnedItem = pinned.getItems().get(0);
         assertThat(pinnedItem.getAudioUrl()).isEqualTo("https://res.cloudinary.com/test/signed");
         assertThat(pinnedItem.getAudioUrlExpiresAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("public audio URL is pinned without an expiry timestamp")
+    void speakingItem_withPublicAudioUrl_hasNoExpiryTimestamp() {
+        stubEntitlement("RE_TELL_LECTURE");
+        stubContent(item("SPEAKING", "RE_TELL_LECTURE", AUDIO_REF));
+        when(mediaService.presignGet(eq(AUDIO_REF), anyLong(), any()))
+                .thenReturn(new PresignedDownloadResponse("https://cdn.example.com/lecture.mp3", 0, 68));
+
+        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
+
+        PinnedItem pinnedItem = pinned.getItems().get(0);
+        assertThat(pinnedItem.getAudioUrl()).isEqualTo("https://cdn.example.com/lecture.mp3");
+        assertThat(pinnedItem.getAudioUrlExpiresAt()).isNull();
     }
 
     @Test
@@ -354,6 +372,27 @@ class SnapshotPinServiceTest {
         PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
 
         assertThat(pinned.getScoreTemplatePublicId()).isEqualTo(SCORE_TEMPLATE_ID);
+        assertThat(pinned.getScoreTemplateVersion()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("pin copies the frozen runtime contract without consulting a mutable catalog")
+    void pin_copiesFrozenRuntimeContractToPinnedItem() {
+        stubEntitlement("READ_ALOUD");
+        TaskRuntimeProfileDescriptor runtime = TaskRuntimeProfileRegistry.descriptorFor("READ_ALOUD");
+        SnapshotContentResponse.Item source = new SnapshotContentResponse.Item(
+                0, "SPEAKING", "READ_ALOUD", "title", "prompt", null, null, null, null, null, null, null,
+                "READ_ALOUD", runtime, TaskRuntimeContractConstants.MAPPING_VERSION_CANONICAL,
+                TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_CANONICAL);
+        stubContent(source);
+
+        PinnedItem pinnedItem = service.pin(attempt(), SESSION_ID, STUDENT_ID).getItems().get(0);
+
+        assertThat(pinnedItem.getTaskType()).isEqualTo("READ_ALOUD");
+        assertThat(pinnedItem.getTaskTypeCode()).isEqualTo("READ_ALOUD");
+        assertThat(pinnedItem.runtimeProfile()).isEqualTo(runtime);
+        assertThat(pinnedItem.getRuntimeMappingVersion()).isEqualTo("CANONICAL_V1");
+        assertThat(pinnedItem.getRuntimeMappingStatus()).isEqualTo("RESOLVED_CANONICAL");
     }
 
     /** {@code taskType} is unused now (Plan B: no composition to filter by) — kept as a param so every existing call site reads unchanged. */
@@ -404,6 +443,21 @@ class SnapshotPinServiceTest {
         assertThat(pinned.getItems().get(0).getMaxPlayCountOverride()).isNull();
     }
 
+    @Test
+    @DisplayName("snapshot pin carries the resolved standard lockdown mode")
+    void pin_copiesResolvedStandardLockdownMode() {
+        ExamPolicyResponse policy = new ExamPolicyResponse("UNLIMITED", null, false, false, "STANDARD", "STANDARD");
+        when(sessionService.checkEntitlement(SESSION_ID, STUDENT_ID)).thenReturn(new EntitlementResponse(
+                SESSION_ID, SNAPSHOT_ID, TENANT_ID, Instant.now(), Instant.now().plusSeconds(3600), policy,
+                "PRACTICE"));
+        stubContent(item("SPEAKING", "READ_ALOUD", null));
+
+        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
+
+        assertThat(pinned.getLockdownMode()).isEqualTo("STANDARD");
+        assertThat(pinned.getExamMode()).isEqualTo("PRACTICE");
+    }
+
     private void stubEntitlement(String taskType) {
         ExamPolicyResponse policy = new ExamPolicyResponse("UNLIMITED", null, false, false, "STANDARD", "NONE");
         EntitlementResponse entitlement = new EntitlementResponse(
@@ -424,7 +478,7 @@ class SnapshotPinServiceTest {
     }
 
     private ScoreTemplateItemResponse templateItem(String taskType, String section, int prepSeconds, int responseSeconds) {
-        return new ScoreTemplateItemResponse(taskType, section, 0, 1, 1, prepSeconds, responseSeconds, "FIXED",
+        return new ScoreTemplateItemResponse(taskType, section, 0, 1, 1, prepSeconds, responseSeconds,
                 "OBJECTIVE", BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 

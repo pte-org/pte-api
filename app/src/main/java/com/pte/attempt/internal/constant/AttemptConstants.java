@@ -4,6 +4,9 @@ public final class AttemptConstants {
 
     public static final String ATTEMPT_NOT_FOUND = "ATTEMPT_NOT_FOUND";
     public static final String ALREADY_ATTEMPTED = "ALREADY_ATTEMPTED";
+    public static final String RETRY_LIMIT_REACHED = "RETRY_LIMIT_REACHED";
+    public static final String RETRY_LIMIT_REACHED_MESSAGE =
+            "You have used all attempts for this exam. Please contact your host if you need help.";
     public static final String TASK_TIMING_NOT_CONFIGURED = "TASK_TIMING_NOT_CONFIGURED";
     public static final String NOT_CURRENT_TASK = "NOT_CURRENT_TASK";
     public static final String ATTEMPT_ALREADY_COMPLETE = "ATTEMPT_ALREADY_COMPLETE";
@@ -17,6 +20,36 @@ public final class AttemptConstants {
     public static final String MISSING_IMAGE_PROMPT = "MISSING_IMAGE_PROMPT";
     public static final String ANSWER_ALREADY_SUBMITTED = "ANSWER_ALREADY_SUBMITTED";
     public static final String PINNED_SNAPSHOT_EMPTY = "PINNED_SNAPSHOT_EMPTY";
+    public static final String EXAM_REQUIRES_APP_UPDATE = "EXAM_REQUIRES_APP_UPDATE";
+    public static final String EXAM_CONFIGURATION_NOT_COMPATIBLE = "EXAM_CONFIGURATION_NOT_COMPATIBLE";
+    public static final String CAPABILITY_MANIFEST_INVALID = "CAPABILITY_MANIFEST_INVALID";
+    public static final String UNSUPPORTED_RUNTIME_CONTRACT = "UNSUPPORTED_RUNTIME_CONTRACT";
+    public static final String SECURITY_AUDIT_DISABLED = "SECURITY_AUDIT_DISABLED";
+    public static final String SECURITY_AUDIT_POLICY_UNRESOLVED = "SECURITY_AUDIT_POLICY_UNRESOLVED";
+    public static final String SECURITY_AUDIT_EVENT_CONFLICT = "SECURITY_AUDIT_EVENT_CONFLICT";
+    public static final String SECURITY_CLIENT_EVENT_ID_REQUIRED = "Client event ID is required";
+    public static final String SECURITY_CLIENT_EVENT_ID_TOO_LONG = "Client event ID must not exceed 128 characters";
+    public static final String SECURITY_VIOLATION_TYPE_REQUIRED = "Violation type is required";
+    public static final String SECURITY_DETAIL_TOO_LONG = "Security event detail must not exceed 2048 characters";
+    public static final String SECURITY_AUDIT_DISABLED_MESSAGE =
+            "Security audit is disabled for this attempt's policy.";
+    public static final String SECURITY_AUDIT_POLICY_UNRESOLVED_MESSAGE =
+            "The attempt security policy could not be resolved.";
+    public static final String SECURITY_AUDIT_EVENT_CONFLICT_MESSAGE =
+            "The client event ID was already used for a different security event.";
+
+    public static final String EXAM_REQUIRES_APP_UPDATE_MESSAGE =
+            "Please update the PTE Prep app before starting this exam. It requires capabilities that this app does not provide.";
+    public static final String EXAM_CONFIGURATION_NOT_COMPATIBLE_MESSAGE =
+            "This exam is not currently compatible with the configured task runtime. Please ask an administrator to review the exam configuration.";
+    public static final String CAPABILITY_MANIFEST_INVALID_MESSAGE =
+            "The app capability manifest is invalid. Please update the app and try again.";
+    public static final String UNSUPPORTED_RUNTIME_CONTRACT_MESSAGE =
+            "This exam includes a task screen that this app version does not support. "
+                    + "Update the app or contact your exam administrator. Your attempt was not advanced past this task.";
+    public static final String RUNTIME_CONTRACT_FAILURE_AUDIT_ACTION = "RUNTIME_CONTRACT_FAILURE";
+    public static final String RUNTIME_CONTRACT_FAILURE_AUDIT_SUMMARY =
+            "Attempt delivery was blocked because the frozen exam runtime contract was incompatible";
 
     public static final String TASK_REFERENCE_REQUIRED = "Task reference is required";
     public static final String WRAPPED_KEY_REQUIRED = "Wrapped key is required";
@@ -39,6 +72,18 @@ public final class AttemptConstants {
     public static final String MISSING_PINNED_ITEM_AT_INDEX = "Missing pinned item at index %s";
     public static final String ATTEMPT_DISAPPEARED_MID_TRANSACTION = "Attempt disappeared mid-transaction: %s";
     public static final String PINNED_SNAPSHOT_CACHE_SERIALIZATION_FAILED = "Failed to serialize pinned snapshot cache entry";
+    public static final String SNAPSHOT_TASK_TYPE_KEY_MISMATCH =
+            "task type key does not match the frozen task type";
+    public static final String SNAPSHOT_TASK_TYPE_SECTION_MISMATCH =
+            "task type section does not match the frozen snapshot section";
+    public static final String SNAPSHOT_CUSTOM_TASK_TYPE_SECTION_REQUIRED =
+            "custom task type section is missing";
+    public static final String SNAPSHOT_RUNTIME_PROFILE_NOT_ALLOWLISTED =
+            "runtime profile is not an allowlisted match";
+    public static final String SNAPSHOT_STANDARD_RUNTIME_PROFILE_MISMATCH =
+            "standard runtime profile differs from the allowlisted match";
+    public static final String SNAPSHOT_CUSTOM_RUNTIME_PROFILE_INCOMPLETE =
+            "custom runtime profile is incomplete";
 
     public static final String CACHE_KEY_PREFIX = "attempt:pinned-snapshot:";
     public static final String LOCK_KEY_PREFIX = "attempt:lock:pinned-snapshot:";

@@ -3,11 +3,21 @@ package com.pte.attempt.internal.dto.response;
 import java.util.UUID;
 
 /**
- * {@code completed=true} once every task is done/expired; {@code task} is null in that case.
+ * {@code completed=true} once the attempt is terminal — either every task is
+ * done/expired or the student explicitly submitted it; {@code task} is null
+ * in that case.
  * {@code encryptionPublicKey} (Base64 X.509 SubjectPublicKeyInfo) is populated only on the
  * {@code startAttempt} response for a STRICT-pinned {@code answerIntegrityLevel}; null everywhere
  * else, including STANDARD-pinned attempts and every other response built off this same record.
+ * {@code examMode} mirrors {@code PinnedExamSnapshot.examMode} — {@code "PRACTICE"} or
+ * {@code "OFFICIAL_EXAM"}; null only for legacy attempts predating the field.
  */
 public record AttemptTaskResponse(UUID attemptPublicId, String attemptStatus, boolean completed, TaskView task,
-        String encryptionPublicKey, String lockdownMode) {
+        String encryptionPublicKey, String lockdownMode, int attemptNumber, int remainingRetries,
+        boolean canRetry, String examMode) {
+
+    public AttemptTaskResponse(UUID attemptPublicId, String attemptStatus, boolean completed, TaskView task,
+            String encryptionPublicKey, String lockdownMode) {
+        this(attemptPublicId, attemptStatus, completed, task, encryptionPublicKey, lockdownMode, 1, 0, false, null);
+    }
 }

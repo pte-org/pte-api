@@ -56,6 +56,17 @@ class AuditLogServiceTest {
     }
 
     @Test
+    void record_platformCaller_allowsNullTenantForPlatformAudit() {
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
+
+        service.record(caller, "SCORE_TEMPLATE", UUID.randomUUID().toString(), "ACTIVATED", "Activated version 2");
+
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+        assertThat(captor.getValue().getTenantId()).isNull();
+    }
+
+    @Test
     void list_noAggregateTypeFilter_returnsAllRowsForCallerTenantOnly() {
         UUID tenantPublicId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));

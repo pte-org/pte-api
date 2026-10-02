@@ -5,33 +5,34 @@ import org.springframework.security.access.prepost.PreAuthorize;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * This codebase has no {@code @WebMvcTest}/integration-test harness to
- * "mirror" (checked: no existing controller test anywhere) — a bare
- * reflection check on the class-level {@code @PreAuthorize} is the
- * lightweight, no-Spring-context equivalent, matching how this module's
- * other tests avoid a Spring context. Guards the FR-03 finding from
- * phase-01's red-team review: every endpoint here must stay
- * PLATFORM_ADMIN-only in Plan A, since list/get can return DRAFT/RETIRED
- * templates.
- */
+/** Guards the author-submit/admin-approval permission matrix without a Spring context. */
 class ScoreTemplateControllerSecurityTest {
 
     @Test
-    void controller_isRestrictedToPlatformAdmin_atClassLevel() {
-        PreAuthorize annotation = ScoreTemplateController.class.getAnnotation(PreAuthorize.class);
-
-        assertThat(annotation).isNotNull();
-        assertThat(annotation.value()).isEqualTo("hasRole('PLATFORM_ADMIN')");
+    void controller_doesNotUseAClassWidePermissionThatWouldHideTheWorkflow() {
+        assertThat(ScoreTemplateController.class.getAnnotation(PreAuthorize.class)).isNull();
     }
 
     @Test
-    void noMethodOverridesTheClassLevelRestrictionWithABroaderRole() {
-        for (var method : ScoreTemplateController.class.getDeclaredMethods()) {
-            PreAuthorize methodLevel = method.getAnnotation(PreAuthorize.class);
-            assertThat(methodLevel)
-                    .as("method %s must not override the controller's PLATFORM_ADMIN-only restriction", method.getName())
-                    .isNull();
+    void draftAndFeasibilityEndpointsAllowAuthors_butActivationRequiresAdmin() {
+        String authorOrAdmin = "hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')";
+        for (String method : new String[] {"list", "create", "get", "clone", "replaceItems", "delete",
+                "submitApproval", "feasibility"}) {
+            assertRole(method, authorOrAdmin);
         }
+        for (String method : new String[] {"activate", "approve", "reject"}) {
+            assertRole(method, "hasRole('PLATFORM_ADMIN')");
+        }
+        assertRole("activeForHost", "hasRole('HOST_ADMIN')");
+    }
+
+    private void assertRole(String methodName, String expected) {
+        var method = java.util.Arrays.stream(ScoreTemplateController.class.getDeclaredMethods())
+                .filter(candidate -> candidate.getName().equals(methodName))
+                .findFirst()
+                .orElseThrow();
+        PreAuthorize annotation = method.getAnnotation(PreAuthorize.class);
+        assertThat(annotation).as("method %s must declare its role", methodName).isNotNull();
+        assertThat(annotation.value()).isEqualTo(expected);
     }
 }

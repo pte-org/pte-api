@@ -96,6 +96,8 @@ class AttemptLifecycleServiceSubmitAnswerTest {
 
         attempt = new ExamAttempt();
         attempt.setId(1L);
+        attempt.setStudentPublicId(studentPublicId);
+        attempt.setTenantId(caller.tenantId());
         attempt.begin();
         attempt.setCurrentOrderIndex(0);
 

@@ -30,14 +30,14 @@ public enum PteTaskType {
     MC_READING_MULTIPLE(PteSection.READING, true, false, false, true, true, true, false),
     // Correctness is encoded by each paragraph's orderIndex, not a correct flag.
     RE_ORDER_PARAGRAPHS(PteSection.READING, true, false, false, false, true, false, false),
-    FILL_BLANKS_READING(PteSection.READING, true, false, false, true, true, true, false),
-    FILL_BLANKS_READING_WRITING(PteSection.READING, true, false, false, true, true, true, false),
+    FILL_IN_THE_BLANKS_DRAG_AND_DROP(PteSection.READING, true, false, false, true, true, true, false),
+    FILL_IN_THE_BLANKS_DROPDOWN(PteSection.READING, true, false, false, true, true, true, false),
 
     // ---- Listening ----
     SUMMARIZE_SPOKEN_TEXT(PteSection.LISTENING, true, true, false, false, false, false, true),
     MC_LISTENING_SINGLE(PteSection.LISTENING, true, true, false, false, true, true, false),
     MC_LISTENING_MULTIPLE(PteSection.LISTENING, true, true, false, false, true, true, false),
-    FILL_BLANKS_LISTENING(PteSection.LISTENING, true, true, false, true, false, true, false),
+    FILL_IN_THE_BLANKS_TYPE_IN(PteSection.LISTENING, true, true, false, true, false, true, false),
     HIGHLIGHT_CORRECT_SUMMARY(PteSection.LISTENING, true, true, false, false, true, true, false),
     SELECT_MISSING_WORD(PteSection.LISTENING, true, true, false, false, true, true, false),
     HIGHLIGHT_INCORRECT_WORDS(PteSection.LISTENING, true, true, false, true, false, true, false),

@@ -2,9 +2,11 @@ package com.pte.session;
 
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
+import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.session.internal.service.EntitlementService;
 import com.pte.session.internal.service.SessionLifecycleService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
@@ -45,6 +47,40 @@ public class SessionService {
     /** Throws if the session doesn't exist in the caller's tenant. */
     public void verifyHostAccess(UUID sessionPublicId, UUID tenantId) {
         entitlementService.verifyHostAccess(sessionPublicId, tenantId);
+    }
+
+    /** Locks an owned session row for the duration of a caller's assignment transaction. */
+    @Transactional
+    public void lockForExaminerAssignment(UUID sessionPublicId, UUID tenantId) {
+        sessionLifecycleService.lockForExaminerAssignment(sessionPublicId, tenantId);
+    }
+
+    /** Serializes Host source selection with report publication for a session. */
+    @Transactional
+    public void lockForScoreReviewMutation(UUID sessionPublicId, UUID tenantId) {
+        sessionLifecycleService.lockForScoreReviewMutation(sessionPublicId, tenantId);
+    }
+
+    /** Locks the session row and rejects student task operations after the cutoff. */
+    @Transactional
+    public void lockOpenForAttemptOperation(UUID sessionPublicId, UUID tenantId) {
+        sessionLifecycleService.lockOpenForAttemptOperation(sessionPublicId, tenantId);
+    }
+
+    /** Reads the retry policy through the session module after its row has been locked for this attempt operation. */
+    public AttemptRetryPolicyResponse getAttemptRetryPolicy(UUID sessionPublicId, UUID tenantId) {
+        return sessionLifecycleService.getAttemptRetryPolicy(sessionPublicId, tenantId);
+    }
+
+    /** Holds the session row lock while Reporting validates CLOSED and publishes the cohort. */
+    @Transactional
+    public void lockClosedForReportPublication(UUID sessionPublicId, UUID tenantId) {
+        sessionLifecycleService.lockClosedForReportPublication(sessionPublicId, tenantId);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isSessionClosed(UUID sessionPublicId, UUID tenantId) {
+        return sessionLifecycleService.isSessionClosed(sessionPublicId, tenantId);
     }
 
     /** Cancels scheduled sessions for a revoked subscription; open/closed sessions are untouched. */

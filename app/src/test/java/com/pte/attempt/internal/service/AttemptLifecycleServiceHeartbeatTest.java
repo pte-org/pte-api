@@ -96,6 +96,8 @@ class AttemptLifecycleServiceHeartbeatTest {
     void recordHeartbeat_owningStudentInProgress_succeeds() {
         ExamAttempt attempt = new ExamAttempt();
         attempt.setId(1L);
+        attempt.setStudentPublicId(studentPublicId);
+        attempt.setTenantId(caller.tenantId());
         attempt.begin();
         when(attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
             .thenReturn(Optional.of(attempt));
@@ -123,6 +125,8 @@ class AttemptLifecycleServiceHeartbeatTest {
     void recordHeartbeat_notInProgress_throwsWithoutRecording() {
         ExamAttempt attempt = new ExamAttempt();
         attempt.setId(1L);
+        attempt.setStudentPublicId(studentPublicId);
+        attempt.setTenantId(caller.tenantId());
         attempt.begin();
         attempt.submit();
         when(attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))

@@ -3,6 +3,8 @@ package com.pte.attempt.internal.service;
 import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
+import com.pte.session.SessionService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,14 +25,25 @@ import java.util.UUID;
 public class ProctorCommandService {
 
     private final ExamAttemptRepository attemptRepository;
+    private final SessionService sessionService;
+
+    @Autowired
+    public ProctorCommandService(ExamAttemptRepository attemptRepository, SessionService sessionService) {
+        this.attemptRepository = attemptRepository;
+        this.sessionService = sessionService;
+    }
 
     public ProctorCommandService(ExamAttemptRepository attemptRepository) {
         this.attemptRepository = attemptRepository;
+        this.sessionService = null;
     }
 
     @Transactional
     public void forceSubmit(UUID attemptPublicId, UUID tenantId) {
         inProgressAttempt(attemptPublicId, tenantId).ifPresent(attempt -> {
+            if (sessionService != null) {
+                sessionService.lockOpenForAttemptOperation(attempt.getSessionPublicId(), tenantId);
+            }
             attempt.submit();
             attemptRepository.save(attempt);
         });

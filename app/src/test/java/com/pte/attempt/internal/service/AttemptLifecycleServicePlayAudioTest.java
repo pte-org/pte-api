@@ -193,11 +193,26 @@ class AttemptLifecycleServicePlayAudioTest {
     @Test
     @DisplayName("expired audio URL throws before any replay-count logic runs")
     void playAudio_audioUrlExpired_throws() {
+        item.setAudioUrl("https://api.cloudinary.com/v1_1/test/video/download?type=authenticated");
         item.setAudioUrlExpiresAt(Instant.now().minusSeconds(1));
         when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
 
         assertThatThrownBy(() -> attemptLifecycleService.playAudio(attemptPublicId, pinnedItemPublicId, "req-1", caller))
             .isInstanceOf(AudioUrlExpiredException.class);
+    }
+
+    @Test
+    @DisplayName("public legacy audio remains playable when its stored zero-TTL timestamp is in the past")
+    void playAudio_publicLegacyAudio_ignoresStaleExpiryTimestamp() {
+        item.setAudioUrl("https://cdn.example.com/public/lecture.mp3");
+        item.setAudioUrlExpiresAt(Instant.now().minusSeconds(1));
+        when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
+        when(attemptRepository.save(any(ExamAttempt.class))).thenReturn(attempt);
+
+        AudioPlayResponse response = attemptLifecycleService.playAudio(
+                attemptPublicId, pinnedItemPublicId, "req-1", caller);
+
+        assertThat(response.audioUrl()).isEqualTo("https://cdn.example.com/public/lecture.mp3");
     }
 
     @Test

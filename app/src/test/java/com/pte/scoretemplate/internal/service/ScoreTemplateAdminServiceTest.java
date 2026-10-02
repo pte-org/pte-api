@@ -4,7 +4,7 @@ import com.pte.scoretemplate.domain.ScoreTemplate;
 import com.pte.scoretemplate.domain.ScoreTemplateItem;
 import com.pte.scoretemplate.domain.enums.ScoreTemplateStatus;
 import com.pte.scoretemplate.domain.enums.ScoringMethod;
-import com.pte.scoretemplate.domain.enums.TimingMode;
+import com.pte.scoretemplate.dto.request.CreateScoreTemplateRequest;
 import com.pte.scoretemplate.dto.request.ReplaceScoreTemplateItemsRequest;
 import com.pte.scoretemplate.dto.request.ScoreTemplateItemRequest;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
@@ -12,6 +12,11 @@ import com.pte.scoretemplate.internal.exception.ScoreTemplateConcurrentModificat
 import com.pte.scoretemplate.internal.exception.ScoreTemplateNotDraftException;
 import com.pte.scoretemplate.internal.exception.ScoreTemplateValidationException;
 import com.pte.scoretemplate.internal.repository.ScoreTemplateRepository;
+import com.pte.itembank.QuestionTypeService;
+import com.pte.itembank.TaskRuntimeProfileRegistry;
+import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.shared.audit.AuditLogService;
+import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +44,12 @@ class ScoreTemplateAdminServiceTest {
     @Mock
     private ScoreTemplateRepository repository;
 
+    @Mock
+    private QuestionTypeService questionTypeService;
+
+    @Mock
+    private AuditLogService auditLogService;
+
     private ScoreTemplateAdminService service;
 
     @BeforeEach
@@ -58,30 +69,44 @@ class ScoreTemplateAdminServiceTest {
                 "READ_ALOUD", "REPEAT_SENTENCE", "DESCRIBE_IMAGE", "RE_TELL_LECTURE", "ANSWER_SHORT_QUESTION",
                 "RESPOND_TO_A_SITUATION", "SUMMARIZE_GROUP_DISCUSSION",
                 "SUMMARIZE_WRITTEN_TEXT", "WRITE_ESSAY",
-                "MC_READING_SINGLE", "MC_READING_MULTIPLE", "RE_ORDER_PARAGRAPHS", "FILL_BLANKS_READING",
-                "FILL_BLANKS_READING_WRITING",
-                "SUMMARIZE_SPOKEN_TEXT", "MC_LISTENING_SINGLE", "MC_LISTENING_MULTIPLE", "FILL_BLANKS_LISTENING",
+                "MC_READING_SINGLE", "MC_READING_MULTIPLE", "RE_ORDER_PARAGRAPHS", "FILL_IN_THE_BLANKS_DRAG_AND_DROP",
+                "FILL_IN_THE_BLANKS_DROPDOWN",
+                "SUMMARIZE_SPOKEN_TEXT", "MC_LISTENING_SINGLE", "MC_LISTENING_MULTIPLE", "FILL_IN_THE_BLANKS_TYPE_IN",
                 "HIGHLIGHT_CORRECT_SUMMARY", "SELECT_MISSING_WORD", "HIGHLIGHT_INCORRECT_WORDS", "WRITE_FROM_DICTATION");
-        int seq = 0;
-        for (String taskType : taskTypes) {
+        // Every weight goes to the last item (100) and every other item gets
+        // 0 — the simplest distribution satisfying both "every skill total >
+        // 0" and ScoreTemplateActivationValidator's "every skill total ==
+        // exactly 100" check.
+        int lastIndex = taskTypes.size() - 1;
+        for (int i = 0; i <= lastIndex; i++) {
+            BigDecimal weight = i == lastIndex ? BigDecimal.valueOf(100) : BigDecimal.ZERO;
             ScoreTemplateItem item = new ScoreTemplateItem();
-            item.setTaskType(taskType);
+            item.setTaskType(taskTypes.get(i));
             item.setSection("SPEAKING");
-            item.setSequence(seq++);
+            item.setSequence(i);
             item.setMinCount(1);
             item.setMaxCount(2);
             item.setPrepSeconds(0);
             item.setResponseSeconds(30);
-            item.setTimingMode(TimingMode.FIXED);
-            item.setScoringMethod(ScoringMethod.AI_SPEECH);
-            item.setOverallWeight(BigDecimal.ONE);
-            item.setSpeakingWeight(BigDecimal.ONE);
-            item.setWritingWeight(BigDecimal.ONE);
-            item.setReadingWeight(BigDecimal.ONE);
-            item.setListeningWeight(BigDecimal.ONE);
+            item.setScoringMethod(scoringMethodFor(taskTypes.get(i)));
+            item.setOverallWeight(weight);
+            item.setSpeakingWeight(weight);
+            item.setWritingWeight(weight);
+            item.setReadingWeight(weight);
+            item.setListeningWeight(weight);
             template.addItem(item);
         }
         return template;
+    }
+
+    private ScoringMethod scoringMethodFor(String taskType) {
+        return switch (TaskRuntimeProfileRegistry.descriptorFor(taskType).scoringProfileKey()) {
+            case "AI_SPEECH" -> ScoringMethod.AI_SPEECH;
+            case "AI_TEXT" -> ScoringMethod.AI_TEXT;
+            case "OBJECTIVE" -> ScoringMethod.OBJECTIVE;
+            case "UNSCORED" -> ScoringMethod.UNSCORED;
+            default -> throw new IllegalArgumentException("Unknown scoring profile");
+        };
     }
 
     @Test
@@ -145,6 +170,144 @@ class ScoreTemplateAdminServiceTest {
     }
 
     @Test
+    void notDraftError_hasStableCodeAndActionableUserMessage() {
+        ScoreTemplateNotDraftException exception = new ScoreTemplateNotDraftException();
+
+        assertThat(exception.getCode()).isEqualTo("SCORE_TEMPLATE_NOT_DRAFT");
+        assertThat(exception.getUserMessage()).containsIgnoringCase("clone");
+    }
+
+    @Test
+    void replaceItems_allowsEmptyDraftWhileItIsBeingBuilt() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate draft = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ScoreTemplateResponse response = service.replaceItems(
+                publicId, new ReplaceScoreTemplateItemsRequest("Empty draft", List.of()));
+
+        assertThat(response.name()).isEqualTo("Empty draft");
+        assertThat(response.items()).isEmpty();
+    }
+
+    /**
+     * Every skill column on {@code replaceItems} must total exactly 100
+     * (validated on every save, not just activate) — so a test asserting on
+     * one item's derived fields must pad the other 3 skill totals up to 100
+     * with a second item, even though that item is otherwise irrelevant to
+     * the assertion.
+     */
+    private ScoreTemplateItemRequest paddingItemRequest(String taskType, BigDecimal speaking, BigDecimal writing,
+                                                         BigDecimal reading, BigDecimal listening) {
+        return new ScoreTemplateItemRequest(taskType, "SPEAKING", 1, 1, 1, 0, 30,
+                speaking, writing, reading, listening);
+    }
+
+    @Test
+    void replaceItems_derivesScoringMethodFromTaskType_notFromRequest() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate draft = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        // sampleItemRequest(): speaking=9, writing/reading/listening=0 — padded to 100 per column.
+        var padding = paddingItemRequest("WRITE_ESSAY", BigDecimal.valueOf(91), BigDecimal.valueOf(100),
+                BigDecimal.valueOf(100), BigDecimal.valueOf(100));
+
+        ScoreTemplateResponse response = service.replaceItems(
+                publicId, new ReplaceScoreTemplateItemsRequest("Custom", List.of(sampleItemRequest(), padding)));
+
+        assertThat(response.items()).hasSize(2);
+        assertThat(response.items().get(0).scoringMethod()).isEqualTo("AI_SPEECH");
+        assertThat(response.items().get(0).runtime()).isNotNull();
+        assertThat(response.items().get(0).runtime().rendererKey()).isEqualTo("READ_ALOUD_V1");
+        // sampleItemRequest(): speaking=9, writing/reading/listening=0 -> (9+0+0+0)/4 = 2.25
+        assertThat(response.items().get(0).overallWeight()).isEqualByComparingTo("2.25");
+    }
+
+    @Test
+    void replaceItems_computesOverallWeightAsMeanOfFourSkillWeights_notFromRequest() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate draft = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        var request = new ScoreTemplateItemRequest("SUMMARIZE_SPOKEN_TEXT", "LISTENING", 0, 1, 1, 0, 600,
+                BigDecimal.ZERO, BigDecimal.valueOf(23), BigDecimal.ZERO, BigDecimal.valueOf(10));
+        // Padded so every column still totals exactly 100.
+        var padding = paddingItemRequest("WRITE_ESSAY", BigDecimal.valueOf(100), BigDecimal.valueOf(77),
+                BigDecimal.valueOf(100), BigDecimal.valueOf(90));
+
+        ScoreTemplateResponse response = service.replaceItems(
+                publicId, new ReplaceScoreTemplateItemsRequest("Custom", List.of(request, padding)));
+
+        // (0 + 23 + 0 + 10) / 4 = 8.25 — matches the APEUni V5 table's SUMMARIZE_SPOKEN_TEXT row exactly.
+        assertThat(response.items().get(0).overallWeight()).isEqualByComparingTo("8.25");
+    }
+
+    @Test
+    void replaceItems_skillWeightsNotSummingTo100_throws() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate draft = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+
+        assertThatThrownBy(() -> service.replaceItems(
+                publicId, new ReplaceScoreTemplateItemsRequest("Custom", List.of(sampleItemRequest()))))
+                .isInstanceOf(ScoreTemplateValidationException.class)
+                .hasMessageContaining("SPEAKING");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void replaceItems_unknownTaskType_throwsValidationException() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate draft = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+        var badRequest = new ScoreTemplateItemRequest("NOT_A_REAL_TASK_TYPE", "SPEAKING", 0, 1, 1, 0, 30,
+                BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+
+        assertThatThrownBy(() -> service.replaceItems(publicId, new ReplaceScoreTemplateItemsRequest("Custom", List.of(badRequest))))
+                .isInstanceOf(ScoreTemplateValidationException.class);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createDraft_createsEmptyNextVersion() {
+        when(repository.findMaxVersionByCode("CUSTOM")).thenReturn(2);
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ScoreTemplateResponse response = service.createDraft(
+                new CreateScoreTemplateRequest("CUSTOM", "Custom template"));
+
+        assertThat(response.code()).isEqualTo("CUSTOM");
+        assertThat(response.version()).isEqualTo(3);
+        assertThat(response.name()).isEqualTo("Custom template");
+        assertThat(response.status()).isEqualTo("DRAFT");
+        assertThat(response.items()).isEmpty();
+    }
+
+    @Test
+    void deleteDraft_removesOnlyDraftTemplates() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate draft = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+
+        service.deleteDraft(publicId);
+
+        verify(repository).delete(draft);
+    }
+
+    @Test
+    void deleteDraft_onActiveTemplate_throwsNotDraft() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate active = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.ACTIVE);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(active));
+
+        assertThatThrownBy(() -> service.deleteDraft(publicId))
+                .isInstanceOf(ScoreTemplateNotDraftException.class);
+        verify(repository, never()).delete(any());
+    }
+
+    @Test
     void cloneToDraft_copiesAllItemsAndIncrementsVersion() {
         UUID sourceId = UUID.randomUUID();
         ScoreTemplate source = fullyValidTemplate(sourceId, "APEUNI_V5", 3, ScoreTemplateStatus.ACTIVE);
@@ -173,8 +336,73 @@ class ScoreTemplateAdminServiceTest {
                 .isInstanceOf(ScoreTemplateConcurrentModificationException.class);
     }
 
+    @Test
+    void approvalWorkflow_requiresCatalogAndMovesDraftThroughReview() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate template = fullyValidTemplate(publicId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        template.getItems().forEach(item -> item.setSection(PteTaskType.valueOf(item.getTaskType()).getSection().name()));
+        when(questionTypeService.isActive(any())).thenReturn(true);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(template));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service = new ScoreTemplateAdminService(repository, questionTypeService);
+
+        ScoreTemplateResponse pending = service.submitApproval(publicId);
+        assertThat(pending.status()).isEqualTo("PENDING_APPROVAL");
+        assertThat(template.getStatus()).isEqualTo(ScoreTemplateStatus.PENDING_APPROVAL);
+
+        ScoreTemplateResponse approvedForEditing = service.approve(publicId);
+        assertThat(approvedForEditing.status()).isEqualTo("DRAFT");
+        assertThat(template.getStatus()).isEqualTo(ScoreTemplateStatus.DRAFT);
+        verify(questionTypeService, org.mockito.Mockito.times(2)).isActive("READ_ALOUD");
+    }
+
+    @Test
+    void invalidActivation_isRecordedWithoutLeakingQuestionContent() {
+        UUID publicId = UUID.randomUUID();
+        ScoreTemplate invalid = new ScoreTemplate();
+        invalid.setPublicId(publicId);
+        invalid.setCode("CUSTOM");
+        invalid.setVersion(1);
+        invalid.setName("Broken");
+        invalid.setStatus(ScoreTemplateStatus.DRAFT);
+        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(invalid));
+        service = new ScoreTemplateAdminService(repository, questionTypeService, null, auditLogService);
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
+
+        assertThatThrownBy(() -> service.activate(publicId, caller))
+                .isInstanceOf(ScoreTemplateValidationException.class);
+
+        verify(auditLogService).recordFailure(eq(caller), eq("SCORE_TEMPLATE"), eq(publicId.toString()),
+                eq("VALIDATION_FAILED"), any());
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void clone_recordsPlatformAuditEvent() {
+        UUID sourceId = UUID.randomUUID();
+        ScoreTemplate source = fullyValidTemplate(sourceId, "APEUNI_V5", 3, ScoreTemplateStatus.ACTIVE);
+        when(repository.findWithItemsByPublicId(sourceId)).thenReturn(Optional.of(source));
+        when(repository.findAllByCodeForUpdate("APEUNI_V5")).thenReturn(List.of(source));
+        when(repository.findMaxVersionByCode("APEUNI_V5")).thenReturn(3);
+        when(repository.save(any())).thenAnswer(inv -> {
+            ScoreTemplate saved = inv.getArgument(0);
+            if (saved.getPublicId() == null) {
+                saved.setPublicId(UUID.randomUUID());
+            }
+            return saved;
+        });
+        service = new ScoreTemplateAdminService(repository, null, null, auditLogService);
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"));
+
+        ScoreTemplateResponse response = service.cloneToDraft(sourceId, caller);
+
+        verify(auditLogService).record(eq(caller), eq("SCORE_TEMPLATE"), eq(response.publicId().toString()),
+                eq("CLONED"), any());
+    }
+
     private ScoreTemplateItemRequest sampleItemRequest() {
-        return new ScoreTemplateItemRequest("READ_ALOUD", "SPEAKING", 0, 6, 7, 35, 40, "FIXED", "AI_SPEECH",
-                BigDecimal.valueOf(4), BigDecimal.valueOf(9), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+        return new ScoreTemplateItemRequest("READ_ALOUD", "SPEAKING", 0, 6, 7, 35, 40,
+                BigDecimal.valueOf(9), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 }

@@ -2,14 +2,26 @@ package com.pte.attempt;
 
 import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.attempt.dto.response.AttemptSummaryView;
+import com.pte.attempt.dto.response.AttemptExaminerPromptView;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
+import com.pte.attempt.dto.response.AttemptSecurityEventView;
+import com.pte.attempt.domain.enums.AttemptStatus;
+import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import com.pte.attempt.internal.service.AttemptSummaryQueryService;
+import com.pte.attempt.internal.service.AttemptExaminerPromptQueryService;
 import com.pte.attempt.internal.service.ProctorCommandService;
 import com.pte.attempt.internal.service.SubmittedAnswerQueryService;
+import com.pte.attempt.internal.service.AttemptSecurityAuditQueryService;
+import com.pte.shared.StartedAttemptLookup;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Collection;
+import java.time.Instant;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * The only door other modules use to reach {@code attempt}. {@code
@@ -25,18 +37,27 @@ import java.util.UUID;
  * directly.
  */
 @Service
-public class AttemptService {
+public class AttemptService implements StartedAttemptLookup {
 
     private final ProctorCommandService proctorCommandService;
     private final SubmittedAnswerQueryService submittedAnswerQueryService;
     private final AttemptSummaryQueryService attemptSummaryQueryService;
+    private final AttemptExaminerPromptQueryService attemptExaminerPromptQueryService;
+    private final ExamAttemptRepository examAttemptRepository;
+    private final AttemptSecurityAuditQueryService attemptSecurityAuditQueryService;
 
     public AttemptService(ProctorCommandService proctorCommandService,
                           SubmittedAnswerQueryService submittedAnswerQueryService,
-                          AttemptSummaryQueryService attemptSummaryQueryService) {
+                          AttemptSummaryQueryService attemptSummaryQueryService,
+                          AttemptExaminerPromptQueryService attemptExaminerPromptQueryService,
+                          ExamAttemptRepository examAttemptRepository,
+                          AttemptSecurityAuditQueryService attemptSecurityAuditQueryService) {
         this.proctorCommandService = proctorCommandService;
         this.submittedAnswerQueryService = submittedAnswerQueryService;
         this.attemptSummaryQueryService = attemptSummaryQueryService;
+        this.attemptExaminerPromptQueryService = attemptExaminerPromptQueryService;
+        this.examAttemptRepository = examAttemptRepository;
+        this.attemptSecurityAuditQueryService = attemptSecurityAuditQueryService;
     }
 
     /** Silent no-op if the attempt doesn't exist or isn't IN_PROGRESS — a stale/duplicate/late command is not an error. */
@@ -59,8 +80,59 @@ public class AttemptService {
         return attemptSummaryQueryService.findSubmittedForSession(sessionPublicId, tenantId);
     }
 
+    /** Tenant- and session-scoped attempt numbers for the host's submitted-answer list. */
+    public Map<UUID, Integer> getAttemptNumbers(UUID sessionPublicId, UUID tenantId,
+            Collection<UUID> attemptPublicIds) {
+        if (attemptPublicIds == null || attemptPublicIds.isEmpty()) {
+            return Map.of();
+        }
+        return examAttemptRepository.findBySessionPublicIdAndTenantIdAndPublicIdIn(sessionPublicId, tenantId,
+                        List.copyOf(attemptPublicIds)).stream()
+                .collect(Collectors.toMap(
+                        com.pte.attempt.domain.ExamAttempt::getPublicId,
+                        com.pte.attempt.domain.ExamAttempt::getAttemptNumber));
+    }
+
     /** The pinned score template + tested sections for one attempt — reporting's weighted scoring (Phase 5). */
     public AttemptScoreContextView getScoreContext(UUID attemptPublicId) {
         return attemptSummaryQueryService.getScoreContext(attemptPublicId);
+    }
+
+    /** Batch pinned scoring contexts for report publication; attempt contents stay inside this module. */
+    public Map<UUID, AttemptScoreContextView> getScoreContexts(Collection<UUID> attemptPublicIds) {
+        return attemptSummaryQueryService.getScoreContexts(attemptPublicIds);
+    }
+
+    /** Public cross-module read surface for the normalized student security audit. */
+    public List<AttemptSecurityEventView> getSecurityEventsForSession(UUID sessionPublicId, UUID tenantId,
+                                                                        Instant cursorAt, UUID cursorId,
+                                                                        int limit) {
+        return attemptSecurityAuditQueryService.findForSession(sessionPublicId, tenantId, cursorAt, cursorId,
+                limit);
+    }
+
+    /**
+     * Reads answer-key-free prompts from the attempt's immutable pinned items
+     * for an already assignment-authorized Examiner workflow.
+     */
+    public Map<UUID, AttemptExaminerPromptView> getExaminerPrompts(UUID attemptPublicId, UUID sessionPublicId,
+            UUID tenantId, Collection<UUID> pinnedItemPublicIds) {
+        return attemptExaminerPromptQueryService.findForExaminer(attemptPublicId, sessionPublicId, tenantId,
+                pinnedItemPublicIds);
+    }
+
+    /** Batch conflict read for session publish; no attempt content crosses the module boundary. */
+    @Override
+    public Set<UUID> findStartedStudentPublicIds(UUID tenantId, List<UUID> sessionPublicIds,
+            List<UUID> studentPublicIds) {
+        if (sessionPublicIds.isEmpty() || studentPublicIds.isEmpty()) {
+            return Set.of();
+        }
+        return examAttemptRepository
+                .findByTenantIdAndSessionPublicIdInAndStudentPublicIdInAndStatus(
+                        tenantId, sessionPublicIds, studentPublicIds, AttemptStatus.IN_PROGRESS)
+                .stream()
+                .map(com.pte.attempt.domain.ExamAttempt::getStudentPublicId)
+                .collect(Collectors.toSet());
     }
 }
