@@ -1,10 +1,12 @@
 package com.pte.billing.internal.service;
 
+import com.pte.billing.OrderExpiredEvent;
 import com.pte.billing.domain.Order;
 import com.pte.billing.domain.enums.OrderStatus;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.exception.OrderException;
 import com.pte.billing.internal.repository.OrderRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -18,9 +20,11 @@ import java.util.UUID;
 public class OrderPersistenceService {
 
     private final OrderRepository orderRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public OrderPersistenceService(OrderRepository orderRepository) {
+    public OrderPersistenceService(OrderRepository orderRepository, ApplicationEventPublisher eventPublisher) {
         this.orderRepository = orderRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     /** Commits the pending reservation before the remote PayOS call begins. */
@@ -36,14 +40,18 @@ public class OrderPersistenceService {
         return orderRepository.saveAndFlush(order);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public boolean expireIfPending(UUID publicId) {
-        Order order = find(publicId);
+        Order order = orderRepository.findByPublicIdForUpdateAndDeletedFalse(publicId)
+                .orElseThrow(() -> new OrderException(HttpStatus.NOT_FOUND,
+                        BillingConstants.ORDER_NOT_FOUND));
         if (order.getStatus() != OrderStatus.PENDING) {
             return false;
         }
         order.expire();
         orderRepository.saveAndFlush(order);
+        eventPublisher.publishEvent(new OrderExpiredEvent(
+                order.getTenantId(), order.getPublicId(), order.getPlanId(), order.getOrderCode()));
         return true;
     }
 

@@ -34,6 +34,7 @@ public class BillingService {
         return subscriptionRepository
                 .findByLicenseKeyAndTenantIdAndStatusAndStartsAtLessThanEqualAndExpiresAtGreaterThan(
                         licenseKey, tenantId, SubscriptionStatus.ACTIVE, now, now)
+                .filter(subscription -> !subscription.isDeleted())
                 .map(SubscriptionView::from);
     }
 
@@ -45,7 +46,18 @@ public class BillingService {
         }
         Instant now = Instant.now();
         return subscriptionRepository.findByPublicIdAndTenantId(subscriptionPublicId, tenantId)
-                .filter(subscription -> subscription.isUsableAt(now))
+                .filter(subscription -> !subscription.isDeleted() && subscription.isUsableAt(now))
+                .map(SubscriptionView::from);
+    }
+
+    /** Returns an exact tenant-owned subscription, including expired/cancelled state. */
+    @Transactional(readOnly = true)
+    public Optional<SubscriptionView> getSubscription(UUID subscriptionPublicId, UUID tenantId) {
+        if (subscriptionPublicId == null || tenantId == null) {
+            return Optional.empty();
+        }
+        return subscriptionRepository.findByPublicIdAndTenantId(subscriptionPublicId, tenantId)
+                .filter(subscription -> !subscription.isDeleted())
                 .map(SubscriptionView::from);
     }
 
@@ -80,6 +92,7 @@ public class BillingService {
         return subscriptionRepository
                 .findByTenantIdAndStatusAndStartsAtLessThanEqualAndExpiresAtGreaterThanOrderByCreatedAtDesc(
                         tenantId, SubscriptionStatus.ACTIVE, now, now).stream()
+                .filter(subscription -> !subscription.isDeleted())
                 .map(SubscriptionView::from)
                 .toList();
     }

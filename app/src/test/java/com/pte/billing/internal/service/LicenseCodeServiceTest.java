@@ -3,6 +3,10 @@ package com.pte.billing.internal.service;
 import com.pte.billing.domain.LicenseCode;
 import com.pte.billing.domain.Plan;
 import com.pte.billing.domain.Subscription;
+import com.pte.billing.CommercialActivationTarget;
+import com.pte.billing.CommercialOutcomeConfirmedEvent;
+import com.pte.billing.CommercialOutcomeType;
+import com.pte.billing.SubscriptionRevokedEvent;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.LicenseCodeStatus;
 import com.pte.billing.domain.enums.PlanStatus;
@@ -24,6 +28,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.context.ApplicationEventPublisher;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
@@ -119,7 +124,8 @@ class LicenseCodeServiceTest {
         subscription.setPublicId(UUID.randomUUID());
         SubscriptionActivationResponse activation = SubscriptionActivationResponse.fromSubscription(
                 tenantId, code.getPlanId(), "PTE-EXAM-2026-ABC123", Instant.now(),
-                Instant.now().plusSeconds(3600), 25, "ACTIVE", ActivationSource.LICENSE_CODE.name());
+                Instant.now().plusSeconds(3600), 25, "ACTIVE", ActivationSource.LICENSE_CODE.name(),
+                subscription.getPublicId());
         when(licenseCodeRepository.markRedeemed(eq(code.getCode()), eq(tenantId), any(),
                 eq(LicenseCodeStatus.ISSUED), eq(LicenseCodeStatus.REDEEMED)))
                 .thenAnswer(invocation -> {
@@ -143,6 +149,12 @@ class LicenseCodeServiceTest {
         verify(licenseCodeRepository).markRedeemed(eq(code.getCode()), eq(tenantId), any(),
                 eq(LicenseCodeStatus.ISSUED), eq(LicenseCodeStatus.REDEEMED));
         verify(subscriptionActivationService).activate(eq(tenantId), any(Plan.class), eq(ActivationSource.LICENSE_CODE));
+        ArgumentCaptor<CommercialOutcomeConfirmedEvent> eventCaptor =
+                ArgumentCaptor.forClass(CommercialOutcomeConfirmedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().outcomeType()).isEqualTo(CommercialOutcomeType.EXAM_PACKAGE);
+        assertThat(eventCaptor.getValue().targetType()).isEqualTo(CommercialActivationTarget.SUBSCRIPTION);
+        assertThat(eventCaptor.getValue().targetPublicId()).isEqualTo(subscription.getPublicId());
     }
 
     @Test
@@ -153,7 +165,8 @@ class LicenseCodeServiceTest {
         subscription.setPublicId(UUID.randomUUID());
         SubscriptionActivationResponse activation = SubscriptionActivationResponse.fromSubscription(
                 tenantId, code.getPlanId(), "PTE-EXAM-2026-ABC123", Instant.now(),
-                Instant.now().plusSeconds(3600), 25, "ACTIVE", ActivationSource.LICENSE_CODE.name());
+                Instant.now().plusSeconds(3600), 25, "ACTIVE", ActivationSource.LICENSE_CODE.name(),
+                subscription.getPublicId());
         when(licenseCodeRepository.markRedeemed(eq(code.getCode()), eq(tenantId), any(),
                 eq(LicenseCodeStatus.ISSUED), eq(LicenseCodeStatus.REDEEMED)))
                 .thenAnswer(invocation -> {
@@ -179,6 +192,8 @@ class LicenseCodeServiceTest {
                     assertThat(ex.getMessage()).isEqualTo(BillingConstants.LICENSE_CODE_ALREADY_REDEEMED);
                 });
         verify(subscriptionActivationService).activate(eq(tenantId), any(Plan.class), eq(ActivationSource.LICENSE_CODE));
+        verify(eventPublisher, org.mockito.Mockito.times(1))
+                .publishEvent(any(CommercialOutcomeConfirmedEvent.class));
     }
 
     @ParameterizedTest
@@ -212,6 +227,10 @@ class LicenseCodeServiceTest {
         code.linkSubscription(subscriptionId);
         Subscription subscription = new Subscription();
         subscription.setPublicId(subscriptionId);
+        UUID tenantId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        subscription.setTenantId(tenantId);
+        subscription.setPlanId(planId);
         subscription.setStatus(SubscriptionStatus.ACTIVE);
         when(licenseCodeRepository.findByCodeForUpdate(code.getCode())).thenReturn(Optional.of(code));
         when(subscriptionRepository.findByPublicId(subscriptionId)).thenReturn(Optional.of(subscription));
@@ -224,6 +243,12 @@ class LicenseCodeServiceTest {
         assertThat(response.revokeReason()).isEqualTo("fraud review");
         assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.CANCELLED);
         verify(subscriptionRepository).saveAndFlush(subscription);
+        ArgumentCaptor<SubscriptionRevokedEvent> eventCaptor = ArgumentCaptor.forClass(SubscriptionRevokedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().subscriptionPublicId()).isEqualTo(subscriptionId);
+        assertThat(eventCaptor.getValue().tenantPublicId()).isEqualTo(tenantId);
+        assertThat(eventCaptor.getValue().planPublicId()).isEqualTo(planId);
+        assertThat(eventCaptor.getValue().reason()).isEqualTo("fraud review");
     }
 
     @Test

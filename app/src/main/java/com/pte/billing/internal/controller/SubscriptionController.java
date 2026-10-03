@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.UUID;
 
-/** Tenant read endpoint for currently usable purchased exam packages. */
+/** Tenant-owned subscription reads, including exact historical state for billing status views. */
 @RestController
 @RequestMapping("/api/v1/subscriptions")
 @PreAuthorize("hasRole('HOST_ADMIN')")
@@ -46,6 +46,18 @@ public class SubscriptionController {
         return ApiResponse.success(billingService.listActiveSubscriptions(caller.tenantId()).stream()
                 .map(SubscriptionResponse::from)
                 .toList());
+    }
+
+    /** Exact tenant-owned lookup; inactive subscriptions remain addressable for billing history. */
+    @GetMapping("/{publicId}")
+    public ApiResponse<SubscriptionResponse> get(@PathVariable UUID publicId) {
+        CurrentUser caller = CurrentUserContext.required();
+        if (caller.tenantId() == null) {
+            throw new SubscriptionNotFoundException();
+        }
+        return ApiResponse.success(billingService.getSubscription(publicId, caller.tenantId())
+                .map(SubscriptionResponse::from)
+                .orElseThrow(SubscriptionNotFoundException::new));
     }
 
     /**

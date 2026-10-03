@@ -18,7 +18,8 @@ public record SubscriptionActivationResponse(
         Integer maxStudentsPerSession,
         Integer grantedStudentSlots,
         String status,
-        String activationSource) {
+        String activationSource,
+        UUID targetPublicId) {
 
     public enum ActivationKind {
         SUBSCRIPTION,
@@ -28,6 +29,13 @@ public record SubscriptionActivationResponse(
     public static SubscriptionActivationResponse fromSubscription(UUID tenantId, UUID planId, String licenseKey,
             Instant startsAt, Instant expiresAt, Integer maxStudentsPerSession, String status,
             String activationSource) {
+        return fromSubscription(tenantId, planId, licenseKey, startsAt, expiresAt, maxStudentsPerSession,
+                status, activationSource, null);
+    }
+
+    public static SubscriptionActivationResponse fromSubscription(UUID tenantId, UUID planId, String licenseKey,
+            Instant startsAt, Instant expiresAt, Integer maxStudentsPerSession, String status,
+            String activationSource, UUID targetPublicId) {
         return new SubscriptionActivationResponse(
                 ActivationKind.SUBSCRIPTION,
                 tenantId,
@@ -38,10 +46,16 @@ public record SubscriptionActivationResponse(
                 maxStudentsPerSession,
                 null,
                 status,
-                activationSource);
+                activationSource,
+                targetPublicId);
     }
 
     public static SubscriptionActivationResponse forStudentCapacity(UUID tenantId, UUID planId, int slots) {
+        return forStudentCapacity(tenantId, planId, slots, null);
+    }
+
+    public static SubscriptionActivationResponse forStudentCapacity(UUID tenantId, UUID planId, int slots,
+            UUID targetPublicId) {
         return new SubscriptionActivationResponse(
                 ActivationKind.STUDENT_CAPACITY,
                 tenantId,
@@ -52,6 +66,7 @@ public record SubscriptionActivationResponse(
                 null,
                 slots,
                 null,
-                null);
+                null,
+                targetPublicId);
     }
 }

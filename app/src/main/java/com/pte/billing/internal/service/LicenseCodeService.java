@@ -1,6 +1,10 @@
 package com.pte.billing.internal.service;
 
 import com.pte.billing.SubscriptionRevokedEvent;
+import com.pte.billing.CommercialActivationSource;
+import com.pte.billing.CommercialActivationTarget;
+import com.pte.billing.CommercialOutcomeConfirmedEvent;
+import com.pte.billing.CommercialOutcomeType;
 import com.pte.billing.domain.LicenseCode;
 import com.pte.billing.domain.Plan;
 import com.pte.billing.domain.Subscription;
@@ -129,6 +133,16 @@ public class LicenseCodeService {
             licenseCode.linkSubscription(subscriptionId);
         }
         licenseCodeRepository.saveAndFlush(licenseCode);
+        eventPublisher.publishEvent(new CommercialOutcomeConfirmedEvent(
+                tenantId,
+                plan.getPublicId(),
+                activation.kind() == SubscriptionActivationResponse.ActivationKind.SUBSCRIPTION
+                        ? CommercialOutcomeType.EXAM_PACKAGE : CommercialOutcomeType.STUDENT_CAPACITY,
+                CommercialActivationSource.LICENSE_CODE,
+                activation.kind() == SubscriptionActivationResponse.ActivationKind.SUBSCRIPTION
+                        ? CommercialActivationTarget.SUBSCRIPTION : CommercialActivationTarget.QUOTA,
+                activation.targetPublicId(),
+                activation.grantedStudentSlots()));
         return activation;
     }
 
@@ -160,7 +174,11 @@ public class LicenseCodeService {
                             BillingConstants.LICENSE_CODE_SUBSCRIPTION_NOT_FOUND));
             subscription.cancel();
             subscriptionRepository.saveAndFlush(subscription);
-            eventPublisher.publishEvent(new SubscriptionRevokedEvent(subscription.getPublicId()));
+            eventPublisher.publishEvent(new SubscriptionRevokedEvent(
+                    subscription.getPublicId(),
+                    subscription.getTenantId(),
+                    subscription.getPlanId(),
+                    reason.trim()));
         }
 
         licenseCode.revoke(reason.trim());

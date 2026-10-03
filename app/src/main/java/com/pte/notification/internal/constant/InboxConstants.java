@@ -57,6 +57,14 @@ public final class InboxConstants {
     public static final String AUDIT_RETRY_DELIVERY_SUMMARY = "Reset %d failed announcement deliveries";
     public static final String APPLICATION_NOTIFICATION_TITLE = "New organization application";
     public static final String APPLICATION_NOTIFICATION_BODY = "Organization '%s' submitted an application for platform review.";
+    public static final String COMMERCIAL_NOTIFICATION_TITLE = "Commercial access updated";
+    public static final String COMMERCIAL_EXAM_BODY = "Your exam package is active from %s. Open the billing target to review access.";
+    public static final String COMMERCIAL_CAPACITY_BODY = "Your student capacity increased by %d slots from %s.";
+    public static final String ORDER_EXPIRED_NOTIFICATION_TITLE = "Payment order expired";
+    public static final String ORDER_EXPIRED_NOTIFICATION_BODY = "Payment order %s expired before payment was confirmed.";
+    public static final String SUBSCRIPTION_REVOKED_NOTIFICATION_TITLE = "Subscription revoked";
+    public static final String SUBSCRIPTION_REVOKED_NOTIFICATION_BODY = "Subscription %s was revoked%s.";
+    public static final int BILLING_REASON_LIMIT = 255;
     public static final int APPLICATION_NAME_LIMIT = 256;
     public static final int DEFAULT_PAGE = 0;
     public static final int DEFAULT_PAGE_SIZE = 20;

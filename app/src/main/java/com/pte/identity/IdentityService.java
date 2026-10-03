@@ -90,6 +90,18 @@ public class IdentityService implements StudentCountProvider {
                 .toList();
     }
 
+    /** Returns active, nondeleted members of one role in one tenant. */
+    @Transactional(readOnly = true)
+    public List<IdentityRoleMember> findActiveRoleMembers(UUID tenantId, Role role) {
+        if (tenantId == null || role == null) {
+            return List.of();
+        }
+        return userRepository.findByTenantIdAndRolesContaining(tenantId, role).stream()
+                .filter(user -> !user.isDeleted() && user.getStatus() == UserStatus.ACTIVE)
+                .map(user -> new IdentityRoleMember(user.getPublicId(), user.getTenantId()))
+                .toList();
+    }
+
     /** Holds existing identity row serialization while a role-owned write commits. Null tenant is exact platform scope. */
     @Transactional(propagation = Propagation.MANDATORY)
     public boolean lockActiveRoleMember(UUID publicId, UUID tenantId, Role role) {

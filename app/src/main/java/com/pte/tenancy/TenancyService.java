@@ -76,8 +76,17 @@ public class TenancyService {
     }
 
     /** Billing activation path for STUDENT_CAPACITY plans. */
-    public void grantQuota(UUID tenantPublicId, int amount, String note) {
-        quotaTransactionService.grantForSystem(tenantPublicId, amount, note);
+    public UUID grantQuota(UUID tenantPublicId, int amount, String note) {
+        return quotaTransactionService.grantForSystem(tenantPublicId, amount, note).publicId();
+    }
+
+    /** Returns whether a tenant is active and not soft-deleted for fan-out decisions. */
+    @Transactional(readOnly = true)
+    public boolean isActiveTenant(UUID tenantPublicId) {
+        return tenantPublicId != null
+                && tenantRepository.findByPublicId(tenantPublicId)
+                .filter(tenant -> !tenant.isDeleted() && tenant.getStatus() == TenantStatus.ACTIVE)
+                .isPresent();
     }
 
     /** Returns the current student count and the tenant's effective limit. */
