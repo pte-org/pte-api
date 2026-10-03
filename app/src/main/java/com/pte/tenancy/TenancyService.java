@@ -13,6 +13,7 @@ import com.pte.tenancy.internal.service.TenantLifecycleService;
 import com.pte.tenancy.internal.service.QuotaTransactionService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -45,6 +46,15 @@ public class TenancyService {
     /** {@code billing.TenantApplicationService.submit()} — is this name already reserved? */
     public boolean existsByName(String name) {
         return tenantRepository.existsByName(name);
+    }
+
+    /** Reuses the tenant lock; acquire before identity locks when guarding tenant-owned delivery. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean lockActiveTenant(UUID tenantPublicId) {
+        if (tenantPublicId == null) { return false; }
+        return tenantRepository.findWithLockByPublicId(tenantPublicId)
+                .filter(tenant -> !tenant.isDeleted() && tenant.getStatus() == TenantStatus.ACTIVE)
+                .isPresent();
     }
 
     /** {@code billing.TenantApplicationService.approve()} — creates the tenant an approved application promised. */

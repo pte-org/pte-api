@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -76,6 +77,16 @@ public class IdentityService implements StudentCountProvider {
 
     public List<User> findByTenantIdAndRole(UUID tenantId, Role role) {
         return userRepository.findByTenantIdAndRolesContaining(tenantId, role);
+    }
+
+    /** Holds existing identity row serialization while a role-owned write commits. Null tenant is exact platform scope. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean lockActiveRoleMember(UUID publicId, UUID tenantId, Role role) {
+        if (publicId == null || role == null) { return false; }
+        return userRepository.findWithLockByPublicId(publicId)
+                .filter(user -> !user.isDeleted() && user.getStatus() == UserStatus.ACTIVE)
+                .filter(user -> Objects.equals(user.getTenantId(), tenantId) && user.getRoles().contains(role))
+                .isPresent();
     }
 
     /** Returns only active EXAMINER identities in the supplied tenant; invalid IDs are omitted. */
