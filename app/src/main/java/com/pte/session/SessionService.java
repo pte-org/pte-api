@@ -3,12 +3,16 @@ package com.pte.session;
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
 import com.pte.session.dto.response.AttemptRetryPolicyResponse;
+import com.pte.session.dto.response.ClosingSoonSessionView;
 import com.pte.session.internal.service.EntitlementService;
 import com.pte.session.internal.service.SessionLifecycleService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 
 /**
  * The only door other modules use to reach {@code session}. {@code
@@ -81,6 +85,24 @@ public class SessionService {
     @Transactional(readOnly = true)
     public boolean isSessionClosed(UUID sessionPublicId, UUID tenantId) {
         return sessionLifecycleService.isSessionClosed(sessionPublicId, tenantId);
+    }
+
+    /** Trusted notification read surface; the lifecycle service revalidates before append. */
+    public List<ClosingSoonSessionView> findDueClosingSoonSessions(Instant now, Instant cutoff) {
+        return sessionLifecycleService.findDueClosingSoonSessions(now, cutoff);
+    }
+
+    /** Locks and revalidates one candidate inside the caller's transaction. */
+    @Transactional
+    public Optional<ClosingSoonSessionView> lockDueClosingSoonSession(UUID sessionPublicId, Instant now,
+            Instant cutoff) {
+        return sessionLifecycleService.lockDueClosingSoonSession(sessionPublicId, now, cutoff);
+    }
+
+    /** Holds the session lock while scoring freezes a post-CLOSED grading cohort. */
+    @Transactional
+    public void lockClosedForGradingCohort(UUID sessionPublicId, UUID tenantId) {
+        sessionLifecycleService.lockClosedForGradingCohort(sessionPublicId, tenantId);
     }
 
     /** Cancels scheduled sessions for a revoked subscription; open/closed sessions are untouched. */

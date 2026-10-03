@@ -64,6 +64,11 @@ public final class InboxConstants {
     public static final String ORDER_EXPIRED_NOTIFICATION_BODY = "Payment order %s expired before payment was confirmed.";
     public static final String SUBSCRIPTION_REVOKED_NOTIFICATION_TITLE = "Subscription revoked";
     public static final String SUBSCRIPTION_REVOKED_NOTIFICATION_BODY = "Subscription %s was revoked%s.";
+    public static final String SESSION_CLOSING_SOON_NOTIFICATION_TITLE = "Exam session closing soon";
+    public static final String SESSION_CLOSING_SOON_NOTIFICATION_BODY = "Exam session '%s' closes at %s.";
+    public static final String SESSION_GRADING_COMPLETED_NOTIFICATION_TITLE = "Exam grading completed";
+    public static final String SESSION_GRADING_COMPLETED_NOTIFICATION_BODY =
+            "Grading for exam session '%s' is complete and ready for host review.";
     public static final int BILLING_REASON_LIMIT = 255;
     public static final int APPLICATION_NAME_LIMIT = 256;
     public static final int DEFAULT_PAGE = 0;

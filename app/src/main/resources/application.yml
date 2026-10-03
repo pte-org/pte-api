@@ -90,6 +90,13 @@ notification:
     initial-retry-seconds: ${NOTIFICATION_INBOX_INITIAL_RETRY_SECONDS:5}
     max-retry-seconds: ${NOTIFICATION_INBOX_MAX_RETRY_SECONDS:300}
     retry-jitter-seconds: ${NOTIFICATION_INBOX_RETRY_JITTER_SECONDS:3}
+  session-reminder:
+    poll-delay-ms: ${NOTIFICATION_SESSION_REMINDER_POLL_DELAY_MS:60000}
+    threshold-seconds: ${NOTIFICATION_SESSION_REMINDER_THRESHOLD_SECONDS:900}
+
+scoring:
+  grading-reconciliation:
+    poll-delay-ms: ${SCORING_GRADING_RECONCILIATION_POLL_DELAY_MS:60000}
 
 management:
   endpoints:

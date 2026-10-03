@@ -79,6 +79,34 @@ public class InboxDeliveryStore {
                 """, at(now).addValue("contentId", contentPublicId));
     }
 
+    /** Suppresses only pending reminders from an obsolete schedule; delivered history is retained. */
+    public int suppressPendingSessionReminders(UUID sessionPublicId, String keepEventKey, Instant now) {
+        return jdbc.update("""
+                UPDATE notification_inbox_deliveries d
+                SET status='SUPPRESSED',claim_token=NULL,lease_until=NULL,completed_at=:now,updated_at=:now
+                FROM notification_inbox_contents c
+                WHERE d.content_public_id=c.public_id AND d.deleted=FALSE AND c.deleted=FALSE
+                  AND d.status='PENDING' AND c.notification_type='SESSION_CLOSING_SOON'
+                  AND c.target_type='SESSION' AND c.target_public_id=:sessionId
+                  AND (:keepEventKey IS NULL OR c.event_key<>:keepEventKey)
+                """, at(now).addValue("sessionId", sessionPublicId)
+                .addValue("keepEventKey", keepEventKey, Types.VARCHAR));
+    }
+
+    /** Returns bounded session targets whose pending reminder may have become stale after rescheduling. */
+    public List<UUID> findPendingSessionReminderTargets() {
+        return jdbc.query("""
+                SELECT DISTINCT c.target_public_id
+                FROM notification_inbox_deliveries d
+                JOIN notification_inbox_contents c ON c.public_id=d.content_public_id
+                WHERE d.deleted=FALSE AND c.deleted=FALSE AND d.status='PENDING'
+                  AND c.notification_type='SESSION_CLOSING_SOON' AND c.target_type='SESSION'
+                ORDER BY c.target_public_id
+                LIMIT :limit
+                """, new MapSqlParameterSource("limit", InboxConstants.RECOVERY_BATCH_LIMIT),
+                (rs, row) -> rs.getObject("target_public_id", UUID.class));
+    }
+
     public List<InboxDeliveryClaim> claimBatch(Instant now, Instant leaseUntil, int limit, int maxAttempts) {
         return jdbc.query("""
                 WITH due AS (

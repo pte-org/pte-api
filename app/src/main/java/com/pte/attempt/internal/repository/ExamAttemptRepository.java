@@ -34,6 +34,8 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long> 
     List<ExamAttempt> findBySessionPublicIdAndTenantIdAndPublicIdIn(UUID sessionPublicId, UUID tenantId,
             List<UUID> publicIds);
 
+    List<ExamAttempt> findBySessionPublicIdAndTenantIdAndDeletedFalse(UUID sessionPublicId, UUID tenantId);
+
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
     Optional<ExamAttempt> findWithPinnedByPublicIdAndStudentPublicId(UUID publicId, UUID studentPublicId);
 
@@ -65,6 +67,6 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long> 
 
     /** Batch context read for report publication; loads each pinned section set with a single query. */
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
-    @Query("SELECT DISTINCT a FROM ExamAttempt a WHERE a.publicId IN :publicIds")
+    @Query("SELECT DISTINCT a FROM ExamAttempt a WHERE a.publicId IN :publicIds AND a.deleted = false")
     List<ExamAttempt> findAllWithPinnedByPublicIds(@Param("publicIds") List<UUID> publicIds);
 }

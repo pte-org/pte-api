@@ -9,6 +9,10 @@ public final class SessionConstants {
             "REPORT_PUBLICATION_REQUIRES_CLOSED_SESSION";
     public static final String REPORT_PUBLICATION_REQUIRES_CLOSED_SESSION_MESSAGE =
             "Close the exam session before publishing student reports.";
+    public static final String GRADING_COHORT_REQUIRES_CLOSED_SESSION =
+            "GRADING_COHORT_SESSION_NOT_CLOSED";
+    public static final String GRADING_COHORT_REQUIRES_CLOSED_SESSION_MESSAGE =
+            "Close the exam session before freezing its grading cohort.";
 
     public static final String SESSION_NOT_FOUND = "SESSION_NOT_FOUND";
     public static final String ALREADY_ENROLLED = "ALREADY_ENROLLED";

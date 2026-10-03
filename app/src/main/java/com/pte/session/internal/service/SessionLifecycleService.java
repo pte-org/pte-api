@@ -19,6 +19,7 @@ import com.pte.session.internal.dto.request.CreateSessionRequest;
 import com.pte.session.internal.dto.request.PatchExamPolicyRequest;
 import com.pte.session.internal.dto.response.SessionResponse;
 import com.pte.session.dto.response.AttemptRetryPolicyResponse;
+import com.pte.session.dto.response.ClosingSoonSessionView;
 import com.pte.session.internal.exception.HostContextRequiredException;
 import com.pte.session.internal.exception.InvalidPolicyPatchException;
 import com.pte.session.internal.exception.InvalidSessionWindowException;
@@ -27,6 +28,7 @@ import com.pte.session.internal.exception.SessionCapacityInvalidException;
 import com.pte.session.internal.exception.SessionCapacityRequiredException;
 import com.pte.session.internal.exception.SessionNotFoundException;
 import com.pte.session.internal.exception.NotEntitledException;
+import com.pte.session.internal.exception.SessionNotClosedForGradingCohortException;
 import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
 import com.pte.session.internal.exception.SessionNotReadyToOpenException;
 import com.pte.session.internal.exception.SessionSubscriptionCapacityException;
@@ -46,6 +48,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -179,6 +182,39 @@ public class SessionLifecycleService {
     public List<SessionResponse> list(CurrentUser caller) {
         return sessionRepository.findByTenantId(requireTenant(caller)).stream()
                 .map(SessionMapper::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ClosingSoonSessionView> findDueClosingSoonSessions(Instant now, Instant cutoff) {
+        if (now == null || cutoff == null || !cutoff.isAfter(now)) {
+            return List.of();
+        }
+        return sessionRepository.findDueClosingSoon(now, cutoff).stream()
+                .map(SessionLifecycleService::toClosingSoonView)
+                .toList();
+    }
+
+    /** Locks and revalidates the schedule so a stale reminder candidate cannot be appended. */
+    @Transactional
+    public Optional<ClosingSoonSessionView> lockDueClosingSoonSession(UUID publicId, Instant now, Instant cutoff) {
+        if (publicId == null || now == null || cutoff == null || !cutoff.isAfter(now)) {
+            return Optional.empty();
+        }
+        return sessionRepository.findWithLockByPublicId(publicId)
+                .filter(session -> !session.isDeleted())
+                .filter(session -> session.getStatus() == SessionStatus.OPEN)
+                .filter(session -> !session.getOpensAt().isAfter(now))
+                .filter(session -> session.getClosesAt().isAfter(now) && !session.getClosesAt().isAfter(cutoff))
+                .map(SessionLifecycleService::toClosingSoonView);
+    }
+
+    @Transactional
+    public void lockClosedForGradingCohort(UUID publicId, UUID tenantId) {
+        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(SessionNotFoundException::new);
+        if (session.getStatus() != SessionStatus.CLOSED) {
+            throw new SessionNotClosedForGradingCohortException();
+        }
     }
 
     @Transactional
@@ -366,5 +402,10 @@ public class SessionLifecycleService {
             throw new HostContextRequiredException();
         }
         return caller.tenantId();
+    }
+
+    private static ClosingSoonSessionView toClosingSoonView(ExamSession session) {
+        return new ClosingSoonSessionView(session.getPublicId(), session.getTenantId(), session.getName(),
+                session.getOpensAt(), session.getClosesAt());
     }
 }
