@@ -121,6 +121,11 @@ public class AttemptService implements StartedAttemptLookup {
                 pinnedItemPublicIds);
     }
 
+    /** Returns true if an attempt with the given publicId exists in the given tenant — used by cross-module entity reference validation. */
+    public boolean attemptExistsForTenant(UUID attemptPublicId, UUID tenantId) {
+        return examAttemptRepository.existsByPublicIdAndTenantId(attemptPublicId, tenantId);
+    }
+
     /** Batch conflict read for session publish; no attempt content crosses the module boundary. */
     @Override
     public Set<UUID> findStartedStudentPublicIds(UUID tenantId, List<UUID> sessionPublicIds,

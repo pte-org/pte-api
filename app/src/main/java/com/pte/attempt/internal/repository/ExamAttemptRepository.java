@@ -59,6 +59,9 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long> 
     List<ExamAttempt> findByTenantIdAndSessionPublicIdInAndStudentPublicIdInAndStatus(
             UUID tenantId, List<UUID> sessionPublicIds, List<UUID> studentPublicIds, AttemptStatus status);
 
+    /** Existence check used by support module's EntityReferenceValidator — trusted caller, never student-facing. */
+    boolean existsByPublicIdAndTenantId(UUID publicId, UUID tenantId);
+
     /** Mirrors {@link #findWithPinnedByPublicIdAndStudentPublicId} but no student filter — trusted internal caller (reporting's per-attempt scoring, Phase 5), not a student-facing read. */
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
     Optional<ExamAttempt> findWithPinnedByPublicId(UUID publicId);
