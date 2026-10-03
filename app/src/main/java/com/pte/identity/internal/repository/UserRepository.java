@@ -85,4 +85,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** Host-admin fanout for notification (Phase 09) — every user in a tenant carrying the given role. */
     List<User> findByTenantIdAndRolesContaining(UUID tenantId, Role role);
+
+    @Query("select distinct u from User u join u.roles userRole "
+            + "where userRole = :role and u.deleted = false and u.status = :status")
+    List<User> findActiveMembersByRole(@Param("role") Role role, @Param("status") UserStatus status);
 }

@@ -88,6 +88,13 @@ public class TenantApplicationService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public TenantApplicationResponse get(UUID applicationPublicId) {
+        return applicationRepository.findByPublicId(applicationPublicId)
+                .map(TenantApplicationMapper::toResponse)
+                .orElseThrow(TenantApplicationNotFoundException::new);
+    }
+
     /**
      * One transaction end to end: application status, the new tenant, and its
      * first HOST_ADMIN either all commit or none do. A failure creating the

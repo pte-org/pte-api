@@ -33,7 +33,7 @@ public class InboxDeliveryStore {
 
     public InboxDeliveryStore(NamedParameterJdbcTemplate jdbc) { this.jdbc = jdbc; }
 
-    public void append(InboxNotificationRequested event, Instant now) {
+    public UUID append(InboxNotificationRequested event, Instant now) {
         String hash = fingerprint(event);
         MapSqlParameterSource params = at(now).addValue("eventKey", event.eventKey())
                 .addValue("version", event.schemaVersion()).addValue("hash", hash)
@@ -68,6 +68,15 @@ public class InboxDeliveryStore {
                     ON CONFLICT (content_public_id,recipient_user_public_id) DO NOTHING
                     """, audience);
         }
+        return contents.getFirst();
+    }
+
+    public int retryFailedForContent(UUID contentPublicId, Instant now) {
+        return jdbc.update("""
+                UPDATE notification_inbox_deliveries SET status='PENDING',attempts=0,next_attempt_at=:now,
+                  last_failure_code=NULL,completed_at=NULL,updated_at=:now
+                WHERE content_public_id=:contentId AND status='FAILED' AND deleted=FALSE
+                """, at(now).addValue("contentId", contentPublicId));
     }
 
     public List<InboxDeliveryClaim> claimBatch(Instant now, Instant leaseUntil, int limit, int maxAttempts) {

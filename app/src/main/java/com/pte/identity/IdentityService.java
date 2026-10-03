@@ -79,6 +79,17 @@ public class IdentityService implements StudentCountProvider {
         return userRepository.findByTenantIdAndRolesContaining(tenantId, role);
     }
 
+    /** Returns active, nondeleted members for an owned role fan-out contract. */
+    @Transactional(readOnly = true)
+    public List<IdentityRoleMember> findActiveRoleMembers(Role role) {
+        if (role == null) {
+            return List.of();
+        }
+        return userRepository.findActiveMembersByRole(role, UserStatus.ACTIVE).stream()
+                .map(user -> new IdentityRoleMember(user.getPublicId(), user.getTenantId()))
+                .toList();
+    }
+
     /** Holds existing identity row serialization while a role-owned write commits. Null tenant is exact platform scope. */
     @Transactional(propagation = Propagation.MANDATORY)
     public boolean lockActiveRoleMember(UUID publicId, UUID tenantId, Role role) {

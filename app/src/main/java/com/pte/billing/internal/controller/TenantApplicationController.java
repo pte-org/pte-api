@@ -49,6 +49,12 @@ public class TenantApplicationController {
         return ApiResponse.success(applicationService.list());
     }
 
+    @GetMapping("/applications/{publicId}")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    public ApiResponse<TenantApplicationResponse> get(@PathVariable UUID publicId) {
+        return ApiResponse.success(applicationService.get(publicId));
+    }
+
     @PostMapping("/applications/{publicId}/approval")
     @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<Void> approve(@PathVariable UUID publicId) {

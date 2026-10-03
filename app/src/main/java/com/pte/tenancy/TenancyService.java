@@ -15,8 +15,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
+import java.util.Collection;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /** Public in-process API for tenant data needed by other modules. */
 @Service
@@ -55,6 +58,16 @@ public class TenancyService {
         return tenantRepository.findWithLockByPublicId(tenantPublicId)
                 .filter(tenant -> !tenant.isDeleted() && tenant.getStatus() == TenantStatus.ACTIVE)
                 .isPresent();
+    }
+
+    /** Resolves the active/nondeleted tenant subset without exposing the repository. */
+    @Transactional(readOnly = true)
+    public Set<UUID> findActiveTenantIds(Collection<UUID> tenantPublicIds) {
+        if (tenantPublicIds == null || tenantPublicIds.isEmpty()) {
+            return Set.of();
+        }
+        return tenantRepository.findByPublicIdInAndStatusAndDeletedFalse(tenantPublicIds, TenantStatus.ACTIVE)
+                .stream().map(Tenant::getPublicId).collect(Collectors.toUnmodifiableSet());
     }
 
     /** {@code billing.TenantApplicationService.approve()} — creates the tenant an approved application promised. */

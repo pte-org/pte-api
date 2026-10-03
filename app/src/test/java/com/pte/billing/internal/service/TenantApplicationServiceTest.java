@@ -135,6 +135,19 @@ class TenantApplicationServiceTest {
         verify(applicationRepository, never()).saveAndFlush(any());
     }
 
+    @Test
+    void get_returnsExactApplicationOutsideTheListPage() {
+        UUID applicationId = UUID.randomUUID();
+        TenantApplication application = pendingApplication(applicationId, "acme");
+        when(applicationRepository.findByPublicId(applicationId)).thenReturn(Optional.of(application));
+
+        TenantApplicationResponse response = service.get(applicationId);
+
+        assertThat(response.publicId()).isEqualTo(applicationId);
+        assertThat(response.status()).isEqualTo("PENDING");
+        verify(applicationRepository).findByPublicId(applicationId);
+    }
+
     private TenantApplication pendingApplication(UUID publicId, String code) {
         TenantApplication application = new TenantApplication();
         application.setPublicId(publicId);

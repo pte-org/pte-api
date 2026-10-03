@@ -1,12 +1,15 @@
 package com.pte.tenancy.internal.repository;
 
 import com.pte.tenancy.domain.Tenant;
+import com.pte.tenancy.domain.enums.TenantStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -28,4 +31,6 @@ public interface TenantRepository extends JpaRepository<Tenant, Long> {
 
     @Query("select t.organizationType from Tenant t where t.publicId = :tenantId")
     Optional<String> findOrganizationTypeByPublicId(@Param("tenantId") UUID tenantId);
+
+    List<Tenant> findByPublicIdInAndStatusAndDeletedFalse(Collection<UUID> publicIds, TenantStatus status);
 }
