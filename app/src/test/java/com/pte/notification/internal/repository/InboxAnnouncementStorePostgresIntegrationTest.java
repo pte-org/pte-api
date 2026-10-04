@@ -60,11 +60,11 @@ class InboxAnnouncementStorePostgresIntegrationTest {
         jdbc.update("INSERT INTO tenants(public_id) VALUES (?)", tenant);
         try (Connection connection = dataSource.getConnection()) {
             ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V71__notification_inbox_foundation.sql"));
+                    new ClassPathResource("db/migration/V72__notification_inbox_foundation.sql"));
             ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V72__notification_inbox_snapshots.sql"));
+                    new ClassPathResource("db/migration/V73__notification_inbox_snapshots.sql"));
             ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V73__notification_announcement_query_indexes.sql"));
+                    new ClassPathResource("db/migration/V74__notification_announcement_query_indexes.sql"));
         }
         transaction = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         announcementStore = new InboxAnnouncementStore(new NamedParameterJdbcTemplate(dataSource));

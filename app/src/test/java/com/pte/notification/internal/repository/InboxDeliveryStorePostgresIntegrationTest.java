@@ -79,13 +79,13 @@ class InboxDeliveryStorePostgresIntegrationTest {
         dataSource = new DriverManagerDataSource(url + (url.contains("?") ? "&" : "?")
                 + "currentSchema=" + schema, user, password);
         jdbc = new JdbcTemplate(dataSource);
-        // Only the FK identities V71 needs. Never load historical application data/migrations.
+        // Only the FK identities V72 needs. Never load historical application data/migrations.
         jdbc.execute("CREATE TABLE users (public_id UUID PRIMARY KEY)");
         jdbc.execute("CREATE TABLE tenants (public_id UUID PRIMARY KEY)");
         jdbc.update("INSERT INTO users(public_id) VALUES (?), (?)", admin, secondAdmin);
         try (Connection connection = dataSource.getConnection()) {
             ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V71__notification_inbox_foundation.sql"));
+                    new ClassPathResource("db/migration/V72__notification_inbox_foundation.sql"));
         }
         transaction = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         store = new InboxDeliveryStore(new NamedParameterJdbcTemplate(dataSource));
