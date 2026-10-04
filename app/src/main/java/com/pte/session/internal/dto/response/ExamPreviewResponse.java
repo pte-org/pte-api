@@ -22,7 +22,8 @@ public record ExamPreviewResponse(
             String imageUrl,
             Integer minWordCount,
             Integer maxWordCount,
-            List<Option> options) {
+            List<Option> options,
+            UUID sourceQuestionPublicId) {
     }
 
     /** Deliberately excludes option correctness and other scoring metadata. */
