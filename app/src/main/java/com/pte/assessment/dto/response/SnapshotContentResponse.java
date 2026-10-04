@@ -45,15 +45,16 @@ public record SnapshotContentResponse(
             String taskTypeCode,
             TaskRuntimeProfileDescriptor runtime,
             String runtimeMappingVersion,
-            String runtimeMappingStatus) {
+            String runtimeMappingStatus,
+            UUID sourceQuestionPublicId) {
 
         public Item(int orderIndex, String section, String taskType, String title, String promptText,
                 UUID audioPromptRef, UUID imagePromptRef, String referenceAnswerText,
-                    String correctAnswerText, Integer minWordCount, Integer maxWordCount, String optionsJson,
+                String correctAnswerText, Integer minWordCount, Integer maxWordCount, String optionsJson,
                 String taskTypeCode, TaskRuntimeProfileDescriptor runtime) {
             this(orderIndex, section, taskType, title, promptText, audioPromptRef, imagePromptRef,
                     referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson,
-                    taskTypeCode, title, taskTypeCode, runtime, null, null);
+                    taskTypeCode, title, taskTypeCode, runtime, null, null, null);
         }
 
         public Item(int orderIndex, String section, String taskType, String title, String promptText,
@@ -63,15 +64,16 @@ public record SnapshotContentResponse(
                 String runtimeMappingVersion, String runtimeMappingStatus) {
             this(orderIndex, section, taskType, title, promptText, audioPromptRef, imagePromptRef,
                     referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson,
-                    taskTypeCode, title, taskTypeCode, runtime, runtimeMappingVersion, runtimeMappingStatus);
+                    taskTypeCode, title, taskTypeCode, runtime, runtimeMappingVersion, runtimeMappingStatus, null);
         }
 
-        public Item(int orderIndex, String section, String taskType, String title, String promptText,
-                    UUID audioPromptRef, UUID imagePromptRef, String referenceAnswerText,
-                String correctAnswerText, Integer minWordCount, Integer maxWordCount, String optionsJson) {
+        public Item(int orderIndex, String section, String taskType, String title,
+                String promptText, UUID audioPromptRef, UUID imagePromptRef,
+                String referenceAnswerText, String correctAnswerText, Integer minWordCount,
+                Integer maxWordCount, String optionsJson) {
             this(orderIndex, section, taskType, title, promptText, audioPromptRef, imagePromptRef,
                     referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson,
-                    taskType, title, taskType, null, null, null);
+                    taskType, title, taskType, null, null, null, null);
         }
 
         public Item(int orderIndex, String section, String taskType, String title,
@@ -80,24 +82,10 @@ public record SnapshotContentResponse(
                 Integer maxWordCount, String optionsJson, String taskTypeKey,
                 String taskTypeDisplayName, String taskTypeCode, TaskRuntimeProfileDescriptor runtime,
                 String runtimeMappingVersion, String runtimeMappingStatus) {
-            this.orderIndex = orderIndex;
-            this.section = section;
-            this.taskType = taskType;
-            this.title = title;
-            this.promptText = promptText;
-            this.audioPromptRef = audioPromptRef;
-            this.imagePromptRef = imagePromptRef;
-            this.referenceAnswerText = referenceAnswerText;
-            this.correctAnswerText = correctAnswerText;
-            this.minWordCount = minWordCount;
-            this.maxWordCount = maxWordCount;
-            this.optionsJson = optionsJson;
-            this.taskTypeKey = taskTypeKey;
-            this.taskTypeDisplayName = taskTypeDisplayName;
-            this.taskTypeCode = taskTypeCode;
-            this.runtime = runtime;
-            this.runtimeMappingVersion = runtimeMappingVersion;
-            this.runtimeMappingStatus = runtimeMappingStatus;
+            this(orderIndex, section, taskType, title, promptText, audioPromptRef, imagePromptRef,
+                    referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson,
+                    taskTypeKey, taskTypeDisplayName, taskTypeCode, runtime, runtimeMappingVersion,
+                    runtimeMappingStatus, null);
         }
     }
 }
