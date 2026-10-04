@@ -156,7 +156,6 @@ identity:
 # for local development. Set SCORING_AI_PROVIDER=openai-compatible only with
 # deployment-owned credentials and explicitly selected models; the adapter
 # then calls /chat/completions.
-scoring:
   ai:
     provider: ${SCORING_AI_PROVIDER:stub}
     base-url: ${SCORING_AI_BASE_URL:https://api.openai.com/v1}
