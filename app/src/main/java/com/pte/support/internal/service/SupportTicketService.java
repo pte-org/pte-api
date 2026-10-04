@@ -8,6 +8,9 @@ import com.pte.support.domain.SupportTicket;
 import com.pte.support.domain.SupportTicketNote;
 import com.pte.support.domain.enums.TicketCategory;
 import com.pte.support.domain.enums.TicketStatus;
+import com.pte.support.dto.event.SupportTicketNoteAddedEvent;
+import com.pte.support.dto.event.SupportTicketStatusChangedEvent;
+import com.pte.support.dto.event.SupportTicketSubmittedEvent;
 import com.pte.support.internal.constant.SupportConstants;
 import com.pte.support.internal.dto.request.AddNoteRequest;
 import com.pte.support.internal.dto.request.SubmitTicketRequest;
@@ -18,6 +21,7 @@ import com.pte.support.internal.exception.SupportTicketNotFoundException;
 import com.pte.support.internal.mapper.SupportTicketMapper;
 import com.pte.support.internal.repository.SupportTicketNoteRepository;
 import com.pte.support.internal.repository.SupportTicketRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -38,15 +42,17 @@ public class SupportTicketService {
     private final SupportTicketNoteRepository noteRepository;
     private final EntityReferenceValidator entityReferenceValidator;
     private final AuditLogService auditLogService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public SupportTicketService(SupportTicketRepository ticketRepository,
             SupportTicketNoteRepository noteRepository,
             EntityReferenceValidator entityReferenceValidator,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService, ApplicationEventPublisher eventPublisher) {
         this.ticketRepository = ticketRepository;
         this.noteRepository = noteRepository;
         this.entityReferenceValidator = entityReferenceValidator;
         this.auditLogService = auditLogService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -62,6 +68,8 @@ public class SupportTicketService {
         ticket.setEntityId(request.entityId());
 
         SupportTicket saved = ticketRepository.save(ticket);
+        eventPublisher.publishEvent(new SupportTicketSubmittedEvent(saved.getPublicId(), saved.getTenantId(),
+                saved.getSubmitterUserPublicId(), saved.getCategory()));
         auditLogService.record(caller, SupportConstants.AGGREGATE_SUPPORT_TICKET,
                 saved.getPublicId().toString(), SupportConstants.EVENT_TICKET_SUBMITTED,
                 "Submitted ticket [" + saved.getCategory() + "]");
@@ -97,6 +105,7 @@ public class SupportTicketService {
     public SupportTicketResponse updateStatus(UUID publicId, UpdateTicketStatusRequest request, CurrentUser caller) {
         SupportTicket ticket = ticketRepository.findByPublicId(publicId)
                 .orElseThrow(SupportTicketNotFoundException::new);
+        TicketStatus previousStatus = ticket.getStatus();
         if (request.status() == TicketStatus.IN_PROGRESS) {
             ticket.startProcessing();
         } else if (request.status() == TicketStatus.RESOLVED) {
@@ -104,6 +113,8 @@ public class SupportTicketService {
         } else {
             throw new com.pte.support.internal.exception.InvalidStatusTransitionException(ticket.getStatus(), request.status());
         }
+        eventPublisher.publishEvent(new SupportTicketStatusChangedEvent(ticket.getPublicId(), ticket.getTenantId(),
+                ticket.getSubmitterUserPublicId(), ticket.getCategory(), previousStatus, ticket.getStatus()));
         auditLogService.record(caller, SupportConstants.AGGREGATE_SUPPORT_TICKET,
                 ticket.getPublicId().toString(), SupportConstants.EVENT_TICKET_STATUS_UPDATED,
                 "Status updated to " + request.status());
@@ -120,7 +131,9 @@ public class SupportTicketService {
         note.setTicketPublicId(ticket.getPublicId());
         note.setAdminPublicId(caller.userId());
         note.setContent(request.content());
-        noteRepository.save(note);
+        SupportTicketNote savedNote = noteRepository.save(note);
+        eventPublisher.publishEvent(new SupportTicketNoteAddedEvent(ticket.getPublicId(), ticket.getTenantId(),
+                ticket.getSubmitterUserPublicId(), savedNote.getPublicId(), ticket.getCategory()));
         auditLogService.record(caller, SupportConstants.AGGREGATE_SUPPORT_TICKET,
                 ticket.getPublicId().toString(), SupportConstants.EVENT_TICKET_NOTE_ADDED,
                 "Admin added note");

@@ -21,7 +21,8 @@ public class InboxRecipientEligibility {
     /** Tenant -> user -> delivery -> recipient stream; account deactivation cannot race insertion. */
     @Transactional(propagation = Propagation.MANDATORY)
     public boolean lockEligible(InboxDeliveryRecord record) {
-        if (record.type() == InboxNotificationType.APPLICATION_SUBMITTED) {
+        if (record.type() == InboxNotificationType.APPLICATION_SUBMITTED
+                || record.type() == InboxNotificationType.SUPPORT_TICKET_SUBMITTED) {
             return record.tenantId() == null && identity.lockActiveRoleMember(record.recipientPublicId(), null, Role.PLATFORM_ADMIN);
         }
         return record.tenantId() != null && tenancy.lockActiveTenant(record.tenantId())

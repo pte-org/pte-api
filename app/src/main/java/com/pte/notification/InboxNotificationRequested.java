@@ -26,7 +26,7 @@ public record InboxNotificationRequested(int schemaVersion, String eventKey, Inb
         }
         Map<UUID, InboxRecipient> audience = new HashMap<>();
         for (InboxRecipient recipient : recipients) {
-            if (recipient == null || (recipient.tenantId() == null) != (type == InboxNotificationType.APPLICATION_SUBMITTED)) {
+            if (recipient == null || (recipient.tenantId() == null) != isPlatformScoped(type)) {
                 throw invalid();
             }
             InboxRecipient previous = audience.putIfAbsent(recipient.userPublicId(), recipient);
@@ -49,7 +49,14 @@ public record InboxNotificationRequested(int schemaVersion, String eventKey, Inb
                     (target == InboxTargetType.ORDER || target == InboxTargetType.SUBSCRIPTION || target == InboxTargetType.QUOTA);
             case ORDER_EXPIRED -> category == InboxCategory.BILLING && target == InboxTargetType.ORDER;
             case SUBSCRIPTION_REVOKED -> category == InboxCategory.BILLING && target == InboxTargetType.SUBSCRIPTION;
+            case SUPPORT_TICKET_SUBMITTED, SUPPORT_TICKET_NOTE_ADDED, SUPPORT_TICKET_STATUS_CHANGED ->
+                    category == InboxCategory.SUPPORT && target == InboxTargetType.SUPPORT_TICKET;
         };
+    }
+
+    private static boolean isPlatformScoped(InboxNotificationType type) {
+        return type == InboxNotificationType.APPLICATION_SUBMITTED
+                || type == InboxNotificationType.SUPPORT_TICKET_SUBMITTED;
     }
 
     private static InboxNotificationException invalid() {

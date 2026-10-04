@@ -19,6 +19,7 @@ import com.pte.support.internal.exception.InvalidTicketEntityPairException;
 import com.pte.support.internal.exception.SupportTicketNotFoundException;
 import com.pte.support.internal.repository.SupportTicketNoteRepository;
 import com.pte.support.internal.repository.SupportTicketRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,11 +59,15 @@ class SupportTicketServiceTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private SupportTicketService service;
 
     @BeforeEach
     void setUp() {
-        service = new SupportTicketService(ticketRepository, noteRepository, entityReferenceValidator, auditLogService);
+        service = new SupportTicketService(ticketRepository, noteRepository, entityReferenceValidator,
+                auditLogService, eventPublisher);
     }
 
     private CurrentUser caller(UUID tenantId) {
@@ -286,6 +291,7 @@ class SupportTicketServiceTest {
 
         when(ticketRepository.findByPublicId(publicId)).thenReturn(Optional.of(ticket));
         when(noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(publicId)).thenReturn(List.of());
+        stubNoteSave();
 
         service.addNote(publicId, new AddNoteRequest("Please fix ASAP"), admin);
 
@@ -308,11 +314,22 @@ class SupportTicketServiceTest {
 
         when(ticketRepository.findByPublicId(publicId)).thenReturn(Optional.of(ticket));
         when(noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(publicId)).thenReturn(List.of());
+        stubNoteSave();
 
         service.addNote(publicId, new AddNoteRequest("First note"), admin);
         service.addNote(publicId, new AddNoteRequest("Second note"), admin);
 
         verify(noteRepository, times(2)).save(any(SupportTicketNote.class));
+    }
+
+    private void stubNoteSave() {
+        when(noteRepository.save(any(SupportTicketNote.class))).thenAnswer(invocation -> {
+            SupportTicketNote note = invocation.getArgument(0);
+            if (note.getPublicId() == null) {
+                note.setPublicId(UUID.randomUUID());
+            }
+            return note;
+        });
     }
 
     @Test

@@ -69,6 +69,15 @@ public final class InboxConstants {
     public static final String SESSION_GRADING_COMPLETED_NOTIFICATION_TITLE = "Exam grading completed";
     public static final String SESSION_GRADING_COMPLETED_NOTIFICATION_BODY =
             "Grading for exam session '%s' is complete and ready for host review.";
+    public static final String SUPPORT_TICKET_SUBMITTED_NOTIFICATION_TITLE = "New feedback received";
+    public static final String SUPPORT_TICKET_SUBMITTED_NOTIFICATION_BODY =
+            "New %s feedback was submitted for admin review.";
+    public static final String SUPPORT_TICKET_NOTE_ADDED_NOTIFICATION_TITLE = "Admin responded to your feedback";
+    public static final String SUPPORT_TICKET_NOTE_ADDED_NOTIFICATION_BODY =
+            "An admin responded to your %s feedback ticket.";
+    public static final String SUPPORT_TICKET_STATUS_CHANGED_NOTIFICATION_TITLE = "Feedback status updated";
+    public static final String SUPPORT_TICKET_STATUS_CHANGED_NOTIFICATION_BODY =
+            "Your %s feedback ticket is now %s.";
     public static final int BILLING_REASON_LIMIT = 255;
     public static final int APPLICATION_NAME_LIMIT = 256;
     public static final int DEFAULT_PAGE = 0;
