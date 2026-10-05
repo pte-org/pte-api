@@ -4,6 +4,8 @@ import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.QuestionOption;
 import com.pte.itembank.dto.response.OptionResponse;
 import com.pte.itembank.dto.response.QuestionResponse;
+import com.pte.itembank.internal.service.QuestionLifecyclePolicy;
+import com.pte.itembank.internal.constant.ItembankConstants;
 
 import java.util.List;
 
@@ -41,7 +43,10 @@ public final class QuestionMapper {
                 question.getVersion(),
                 question.getRejectionReason(),
                 question.getTaskTypeKey() == null && question.getPteTaskType() != null
-                        ? question.getPteTaskType().name() : question.getTaskTypeKey());
+                        ? question.getPteTaskType().name() : question.getTaskTypeKey(),
+                QuestionLifecyclePolicy.canDeleteDraft(question),
+                QuestionLifecyclePolicy.canArchive(question),
+                QuestionLifecyclePolicy.canDeleteDraft(question) ? null : ItembankConstants.QUESTION_DELETE_NOT_ALLOWED);
     }
 
     private static OptionResponse toOption(QuestionOption option) {

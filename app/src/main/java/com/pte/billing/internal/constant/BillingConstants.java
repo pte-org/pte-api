@@ -3,6 +3,20 @@ package com.pte.billing.internal.constant;
 /** Error codes and validation messages owned by the billing module. */
 public final class BillingConstants {
 
+    public static final String PLAN_DELETE_DRAFT_ONLY = "PLAN_DELETE_DRAFT_ONLY";
+    public static final String PLAN_HAS_REFERENCES = "PLAN_HAS_REFERENCES";
+    public static final String PLAN_HAS_OUTSTANDING_CODES = "PLAN_HAS_OUTSTANDING_CODES";
+    public static final String PLAN_MUST_BE_ACTIVE_TO_ARCHIVE = "PLAN_MUST_BE_ACTIVE_TO_ARCHIVE";
+    public static final String PLAN_ACTIVE_TYPE_IMMUTABLE = "PLAN_ACTIVE_TYPE_IMMUTABLE";
+    public static final String PLAN_DELETE_DRAFT_ONLY_MESSAGE = "Only an unused draft plan can be deleted.";
+    public static final String PLAN_HAS_REFERENCES_MESSAGE = "This plan has billing history and cannot be deleted.";
+    public static final String PLAN_HAS_OUTSTANDING_CODES_MESSAGE = "This plan has unredeemed license codes. Revoke or wait for them to expire before archiving or changing its benefits.";
+    public static final String PLAN_MUST_BE_ACTIVE_TO_ARCHIVE_MESSAGE = "Only active plans can be archived. Delete unused drafts instead.";
+    public static final String PLAN_ACTIVE_TYPE_IMMUTABLE_MESSAGE = "Create a new plan to change the type of an active plan.";
+    public static final String PLAN_AGGREGATE = "Plan";
+    public static final String PLAN_DRAFT_DELETED = "PlanDraftDeleted";
+    public static final String PLAN_DRAFT_DELETED_SUMMARY = "Unused plan draft removed.";
+
     public static final String TENANT_APPLICATION_NOT_FOUND = "TENANT_APPLICATION_NOT_FOUND";
     public static final String REQUESTED_CODE_ALREADY_USED = "REQUESTED_CODE_ALREADY_USED";
     public static final String TENANT_NAME_ALREADY_USED = "TENANT_NAME_ALREADY_USED";

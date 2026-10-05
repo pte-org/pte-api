@@ -13,6 +13,9 @@ import com.pte.shared.web.PagedResult;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.http.ResponseEntity;
+import com.pte.itembank.internal.service.QuestionDeletionService;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -29,9 +32,11 @@ import java.util.UUID;
 public class QuestionController {
 
     private final ItembankService itembankService;
+    private final QuestionDeletionService questionDeletionService;
 
-    public QuestionController(ItembankService itembankService) {
+    public QuestionController(ItembankService itembankService, QuestionDeletionService questionDeletionService) {
         this.itembankService = itembankService;
+        this.questionDeletionService = questionDeletionService;
     }
 
     @PostMapping
@@ -42,6 +47,12 @@ public class QuestionController {
     @GetMapping("/{publicId}")
     public ApiResponse<QuestionResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(itembankService.get(publicId, currentUser()));
+    }
+
+    @DeleteMapping("/{publicId}")
+    public ResponseEntity<Void> deleteDraft(@PathVariable UUID publicId) {
+        questionDeletionService.deleteDraft(publicId, currentUser());
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping

@@ -8,6 +8,11 @@ import com.pte.billing.internal.dto.response.PlanResponse;
 import com.pte.billing.internal.exception.PlanStateException;
 import com.pte.billing.internal.exception.PlanValidationException;
 import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.shared.audit.AuditLogService;
+import com.pte.shared.security.CurrentUser;
+import com.pte.billing.internal.exception.PlanLifecycleException;
+import com.pte.billing.internal.exception.PlanNotFoundException;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,11 +36,13 @@ class PlanServiceTest {
     @Mock
     private PlanRepository planRepository;
 
+    @Mock private AuditLogService auditLogService;
+
     private PlanService service;
 
     @BeforeEach
     void setUp() {
-        service = new PlanService(planRepository);
+        service = new PlanService(planRepository, auditLogService);
     }
 
     @Test
@@ -97,7 +104,7 @@ class PlanServiceTest {
     void activate_onlyAllowsDraftPlans() {
         UUID publicId = UUID.randomUUID();
         Plan plan = plan(publicId, PlanStatus.DRAFT);
-        when(planRepository.findByPublicId(publicId)).thenReturn(Optional.of(plan));
+        when(planRepository.findByPublicIdForUpdate(publicId)).thenReturn(Optional.of(plan));
 
         PlanResponse response = service.activate(publicId);
 
@@ -107,7 +114,7 @@ class PlanServiceTest {
     @Test
     void activate_activePlanIsRejected() {
         UUID publicId = UUID.randomUUID();
-        when(planRepository.findByPublicId(publicId)).thenReturn(Optional.of(plan(publicId, PlanStatus.ACTIVE)));
+        when(planRepository.findByPublicIdForUpdate(publicId)).thenReturn(Optional.of(plan(publicId, PlanStatus.ACTIVE)));
 
         assertThatThrownBy(() -> service.activate(publicId))
                 .isInstanceOf(PlanStateException.class)
@@ -120,6 +127,7 @@ class PlanServiceTest {
         UUID publicId = UUID.randomUUID();
         Plan plan = plan(publicId, PlanStatus.ACTIVE);
         when(planRepository.findByPublicId(publicId)).thenReturn(Optional.of(plan));
+        when(planRepository.findByPublicIdForUpdate(publicId)).thenReturn(Optional.of(plan));
         when(planRepository.findByStatusOrderByCreatedAtDesc(PlanStatus.ACTIVE)).thenReturn(List.of());
 
         PlanResponse archived = service.archive(publicId);
@@ -129,6 +137,65 @@ class PlanServiceTest {
         assertThat(archived.status()).isEqualTo("ARCHIVED");
         assertThat(active).isEmpty();
         assertThat(adminView.status()).isEqualTo("ARCHIVED");
+    }
+
+    @Test void deleteUnusedDraftIsSoftAndAuditedOnlyOnce() {
+        UUID id = UUID.randomUUID();
+        Plan plan = plan(id, PlanStatus.DRAFT);
+        CurrentUser admin = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
+        when(planRepository.findByPublicIdForUpdate(id)).thenReturn(Optional.of(plan));
+        service.deleteDraft(id, admin);
+        service.deleteDraft(id, admin);
+        assertThat(plan.isDeleted()).isTrue();
+        org.mockito.Mockito.verify(auditLogService).record(admin, BillingConstants.PLAN_AGGREGATE,
+                id.toString(), BillingConstants.PLAN_DRAFT_DELETED, BillingConstants.PLAN_DRAFT_DELETED_SUMMARY);
+    }
+
+    @Test void deleteRejectsAnyHistoricalReference() {
+        UUID id = UUID.randomUUID();
+        Plan plan = plan(id, PlanStatus.DRAFT);
+        when(planRepository.findByPublicIdForUpdate(id)).thenReturn(Optional.of(plan));
+        when(planRepository.findReferencedPlanIds(List.of(id))).thenReturn(Set.of(id));
+        assertThatThrownBy(() -> service.deleteDraft(id, new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"))))
+                .isInstanceOf(PlanLifecycleException.class).hasMessage(BillingConstants.PLAN_HAS_REFERENCES);
+        assertThat(plan.isDeleted()).isFalse();
+        org.mockito.Mockito.verifyNoInteractions(auditLogService);
+    }
+
+    @Test void archiveDraftIsNotAReplacementForDelete() {
+        UUID id = UUID.randomUUID();
+        when(planRepository.findByPublicIdForUpdate(id)).thenReturn(Optional.of(plan(id, PlanStatus.DRAFT)));
+        assertThatThrownBy(() -> service.archive(id)).hasMessage(BillingConstants.PLAN_MUST_BE_ACTIVE_TO_ARCHIVE);
+    }
+
+    @Test void outstandingCodesBlockArchiveAndBenefitChanges() {
+        UUID id = UUID.randomUUID();
+        Plan plan = plan(id, PlanStatus.ACTIVE);
+        when(planRepository.findByPublicIdForUpdate(id)).thenReturn(Optional.of(plan));
+        when(planRepository.findOutstandingCodePlanIds(org.mockito.ArgumentMatchers.eq(List.of(id)), any()))
+                .thenReturn(Set.of(id));
+        assertThatThrownBy(() -> service.archive(id)).hasMessage(BillingConstants.PLAN_HAS_OUTSTANDING_CODES);
+        assertThatThrownBy(() -> service.update(id, new PlanRequest("New", null, "STUDENT_CAPACITY",
+                BigDecimal.ZERO, "USD", null, null, 20))).hasMessage(BillingConstants.PLAN_HAS_OUTSTANDING_CODES);
+        assertThat(plan.getStatus()).isEqualTo(PlanStatus.ACTIVE);
+        assertThat(plan.getExtraStudentSlots()).isEqualTo(10);
+    }
+
+    @Test void tombstoneCannotBeReadOrActivated() {
+        UUID id = UUID.randomUUID();
+        Plan plan = plan(id, PlanStatus.DRAFT);
+        plan.setDeleted(true);
+        when(planRepository.findByPublicId(id)).thenReturn(Optional.of(plan));
+        when(planRepository.findByPublicIdForUpdate(id)).thenReturn(Optional.of(plan));
+        assertThatThrownBy(() -> service.get(id)).isInstanceOf(PlanNotFoundException.class);
+        assertThatThrownBy(() -> service.activate(id)).isInstanceOf(PlanNotFoundException.class);
+    }
+
+    @Test void nonAdminCannotDeleteEvenKnownId() {
+        assertThatThrownBy(() -> service.deleteDraft(UUID.randomUUID(),
+                new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"))))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        org.mockito.Mockito.verifyNoInteractions(planRepository);
     }
 
     private Plan plan(UUID publicId, PlanStatus status) {

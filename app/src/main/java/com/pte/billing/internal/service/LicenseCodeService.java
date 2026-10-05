@@ -73,6 +73,7 @@ public class LicenseCodeService {
         }
 
         Plan plan = planRepository.findByPublicId(planPublicId)
+                .filter(p -> !p.isDeleted())
                 .orElseThrow(PlanNotFoundException::new);
         if (plan.getStatus() != PlanStatus.ACTIVE) {
             throw new LicenseCodeException(HttpStatus.CONFLICT, BillingConstants.LICENSE_CODE_PLAN_NOT_ACTIVE);
@@ -120,7 +121,8 @@ public class LicenseCodeService {
         LicenseCode licenseCode = licenseCodeRepository.findByCodeForUpdate(codeValue)
                 .orElseThrow(() -> new LicenseCodeException(HttpStatus.NOT_FOUND,
                         BillingConstants.LICENSE_CODE_NOT_FOUND));
-        Plan plan = planRepository.findByPublicId(licenseCode.getPlanId())
+        Plan plan = planRepository.findByPublicIdForUpdate(licenseCode.getPlanId())
+                .filter(p -> !p.isDeleted())
                 .orElseThrow(PlanNotFoundException::new);
         SubscriptionActivationResponse activation = subscriptionActivationService.activate(
                 tenantId, plan, ActivationSource.LICENSE_CODE);

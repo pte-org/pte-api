@@ -7,6 +7,9 @@ import com.pte.shared.web.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.http.ResponseEntity;
+import com.pte.shared.security.CurrentUserContext;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -46,6 +49,13 @@ public class PlanController {
     @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<PlanResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(planService.get(publicId));
+    }
+
+    @DeleteMapping("/plans/{publicId}")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    public ResponseEntity<Void> deleteDraft(@PathVariable UUID publicId) {
+        planService.deleteDraft(publicId, CurrentUserContext.required());
+        return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/plans/{publicId}")

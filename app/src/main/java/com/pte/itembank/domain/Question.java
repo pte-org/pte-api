@@ -61,6 +61,10 @@ public class Question extends BaseEntity {
     @Column(nullable = false)
     private QuestionStatus status = QuestionStatus.DRAFT;
 
+    /** NULL means legacy history is unknown, not that the question was never published. */
+    @Column(name = "ever_published")
+    private Boolean everPublished;
+
     /** Stable logical group shared by all revisions of one authored question. */
     @Column(name = "revision_group_public_id", nullable = false)
     private UUID revisionGroupPublicId;

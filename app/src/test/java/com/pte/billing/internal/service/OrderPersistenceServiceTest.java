@@ -4,6 +4,7 @@ import com.pte.billing.OrderExpiredEvent;
 import com.pte.billing.domain.Order;
 import com.pte.billing.domain.enums.OrderStatus;
 import com.pte.billing.internal.repository.OrderRepository;
+import com.pte.billing.internal.repository.PlanRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,9 +34,11 @@ class OrderPersistenceServiceTest {
 
     private OrderPersistenceService service;
 
+    @Mock private PlanRepository planRepository;
+
     @BeforeEach
     void setUp() {
-        service = new OrderPersistenceService(orderRepository, eventPublisher);
+        service = new OrderPersistenceService(orderRepository, eventPublisher, planRepository);
     }
 
     @Test

@@ -13,5 +13,9 @@ public record PlanResponse(
         Integer durationDays,
         Integer maxStudentsPerSession,
         Integer extraStudentSlots,
-        String status) {
+        String status,
+        boolean canDeleteDraft,
+        boolean canArchive,
+        String deleteBlockReason,
+        String archiveBlockReason) {
 }

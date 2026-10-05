@@ -133,7 +133,7 @@ class LicenseCodeServiceTest {
                     return 1;
                 });
         when(licenseCodeRepository.findByCodeForUpdate(code.getCode())).thenReturn(Optional.of(code));
-        when(planRepository.findByPublicId(code.getPlanId())).thenReturn(Optional.of(activePlan(code.getPlanId())));
+        when(planRepository.findByPublicIdForUpdate(code.getPlanId())).thenReturn(Optional.of(activePlan(code.getPlanId())));
         when(subscriptionActivationService.activate(eq(tenantId), any(Plan.class), eq(ActivationSource.LICENSE_CODE)))
                 .thenReturn(activation);
         when(subscriptionRepository.findByLicenseKey(activation.licenseKey())).thenReturn(Optional.of(subscription));
@@ -178,7 +178,7 @@ class LicenseCodeServiceTest {
                 });
         when(licenseCodeRepository.findByCodeForUpdate(code.getCode())).thenReturn(Optional.of(code));
         when(licenseCodeRepository.findByCode(code.getCode())).thenReturn(Optional.of(code));
-        when(planRepository.findByPublicId(code.getPlanId())).thenReturn(Optional.of(activePlan(code.getPlanId())));
+        when(planRepository.findByPublicIdForUpdate(code.getPlanId())).thenReturn(Optional.of(activePlan(code.getPlanId())));
         when(subscriptionActivationService.activate(eq(tenantId), any(Plan.class), eq(ActivationSource.LICENSE_CODE)))
                 .thenReturn(activation);
         when(subscriptionRepository.findByLicenseKey(activation.licenseKey())).thenReturn(Optional.of(subscription));

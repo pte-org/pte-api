@@ -117,7 +117,7 @@ public class SubscriptionActivationService {
         if (source == null) {
             throw invalid(BillingConstants.SUBSCRIPTION_SOURCE_REQUIRED);
         }
-        if (plan.getStatus() != PlanStatus.ACTIVE) {
+        if (plan.isDeleted() || plan.getStatus() != PlanStatus.ACTIVE) {
             throw new SubscriptionActivationException(HttpStatus.CONFLICT,
                     BillingConstants.SUBSCRIPTION_PLAN_NOT_ACTIVE);
         }
