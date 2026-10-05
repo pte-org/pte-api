@@ -21,6 +21,7 @@ public final class SupportConstants {
     public static final String EVENT_TICKET_SUBMITTED = "TicketSubmitted";
     public static final String EVENT_TICKET_STATUS_UPDATED = "TicketStatusUpdated";
     public static final String EVENT_TICKET_NOTE_ADDED = "TicketNoteAdded";
+    public static final String EVENT_TICKET_CLOSED = "TicketClosed";
 
     private SupportConstants() {
     }

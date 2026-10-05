@@ -188,7 +188,7 @@ class ExamGenerationServiceTest {
     }
 
     @Test
-    void generate_orderIsSpeakingWritingReadingListening_thenBySequence() {
+    void generate_orderIsSpeakingListeningReadingWriting_thenBySequence() {
         stubUnlimitedStock();
         Set<String> allSkills = Set.of("SPEAKING", "WRITING", "READING", "LISTENING");
 
@@ -197,7 +197,7 @@ class ExamGenerationServiceTest {
         org.mockito.ArgumentCaptor<ExamBlueprint> captor = org.mockito.ArgumentCaptor.forClass(ExamBlueprint.class);
         verify(blueprintRepository).save(captor.capture());
         List<String> sections = captor.getValue().getItems().stream().map(i -> i.getSection().name()).toList();
-        List<String> order = List.of("SPEAKING", "WRITING", "READING", "LISTENING");
+        List<String> order = List.of("SPEAKING", "LISTENING", "READING", "WRITING");
         int lastRank = -1;
         for (String section : sections) {
             int rank = order.indexOf(section);

@@ -6,14 +6,19 @@ import com.pte.session.domain.enums.ExamMode;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
+import com.pte.session.internal.exception.InvalidSessionCodeException;
 import com.pte.session.internal.exception.NotEntitledException;
 import com.pte.session.internal.exception.ProctorNotAssignedException;
+import com.pte.session.internal.exception.SessionNotFoundException;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.session.internal.repository.ProctorAssignmentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -22,6 +27,10 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Covers the trusted application-call surface {@code attempt} (Phase 07) and {@code proctoring} (Phase 09) will use. */
@@ -34,6 +43,10 @@ class EntitlementServiceTest {
     private EnrollmentRepository enrollmentRepository;
     @Mock
     private ProctorAssignmentRepository proctorAssignmentRepository;
+
+    private static final String CODE = "FPT-261010-K7QM";
+    private static final UUID TENANT_ID = UUID.randomUUID();
+    private static final UUID STUDENT_ID = UUID.randomUUID();
 
     private EntitlementService entitlementService;
 
@@ -173,5 +186,99 @@ class EntitlementServiceTest {
 
         assertThatThrownBy(() -> entitlementService.verifyHostAccess(sessionPublicId, tenantId))
                 .isInstanceOf(com.pte.session.internal.exception.SessionNotFoundException.class);
+    }
+
+    @Test
+    void resolveSessionCode_enrolledStudent_returnsSessionPublicId() {
+        ExamSession session = openSession(UUID.randomUUID(), TENANT_ID);
+        when(sessionRepository.findBySessionCodeAndTenantIdAndDeletedFalse(CODE, TENANT_ID))
+                .thenReturn(Optional.of(session));
+        when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, STUDENT_ID)).thenReturn(true);
+
+        UUID resolved = entitlementService.resolveSessionCode(CODE, TENANT_ID, STUDENT_ID);
+
+        assertThat(resolved).isEqualTo(session.getPublicId());
+    }
+
+    @Test
+    void resolveSessionCode_lowercasePaddedInput_isNormalizedBeforeLookup() {
+        ExamSession session = openSession(UUID.randomUUID(), TENANT_ID);
+        when(sessionRepository.findBySessionCodeAndTenantIdAndDeletedFalse(CODE, TENANT_ID))
+                .thenReturn(Optional.of(session));
+        when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, STUDENT_ID)).thenReturn(true);
+
+        UUID resolved = entitlementService.resolveSessionCode("  fpt-261010-k7qm \t", TENANT_ID, STUDENT_ID);
+
+        assertThat(resolved).isEqualTo(session.getPublicId());
+    }
+
+    @Test
+    void resolveSessionCode_scheduledSession_stillResolvesForEnrolledStudent() {
+        ExamSession session = openSession(UUID.randomUUID(), TENANT_ID);
+        session.setStatus(SessionStatus.SCHEDULED);
+        when(sessionRepository.findBySessionCodeAndTenantIdAndDeletedFalse(CODE, TENANT_ID))
+                .thenReturn(Optional.of(session));
+        when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, STUDENT_ID)).thenReturn(true);
+
+        assertThat(entitlementService.resolveSessionCode(CODE, TENANT_ID, STUDENT_ID))
+                .isEqualTo(session.getPublicId());
+    }
+
+    @Test
+    void resolveSessionCode_unknownCode_throwsSessionNotFound() {
+        when(sessionRepository.findBySessionCodeAndTenantIdAndDeletedFalse(CODE, TENANT_ID))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> entitlementService.resolveSessionCode(CODE, TENANT_ID, STUDENT_ID))
+                .isInstanceOf(SessionNotFoundException.class);
+    }
+
+    @Test
+    void resolveSessionCode_codeOfAnotherTenant_throwsSameSessionNotFound() {
+        UUID otherTenantId = UUID.randomUUID();
+        lenient().when(sessionRepository.findBySessionCodeAndTenantIdAndDeletedFalse(CODE, otherTenantId))
+                .thenReturn(Optional.of(openSession(UUID.randomUUID(), otherTenantId)));
+        when(sessionRepository.findBySessionCodeAndTenantIdAndDeletedFalse(CODE, TENANT_ID))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> entitlementService.resolveSessionCode(CODE, TENANT_ID, STUDENT_ID))
+                .isInstanceOf(SessionNotFoundException.class);
+    }
+
+    @Test
+    void resolveSessionCode_softDeletedSession_throwsSameSessionNotFound() {
+        // The deleted=false filter lives in the derived query, so the repository returns empty.
+        when(sessionRepository.findBySessionCodeAndTenantIdAndDeletedFalse(CODE, TENANT_ID))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> entitlementService.resolveSessionCode(CODE, TENANT_ID, STUDENT_ID))
+                .isInstanceOf(SessionNotFoundException.class);
+        verify(enrollmentRepository, never()).existsBySessionIdAndStudentPublicId(any(), any());
+    }
+
+    @Test
+    void resolveSessionCode_noCallerTenant_throwsSessionNotFoundWithoutLookup() {
+        assertThatThrownBy(() -> entitlementService.resolveSessionCode(CODE, null, STUDENT_ID))
+                .isInstanceOf(SessionNotFoundException.class);
+        verify(sessionRepository, never()).findBySessionCodeAndTenantIdAndDeletedFalse(any(), any());
+    }
+
+    @Test
+    void resolveSessionCode_studentNotEnrolled_throwsSameSessionNotFound() {
+        when(sessionRepository.findBySessionCodeAndTenantIdAndDeletedFalse(CODE, TENANT_ID))
+                .thenReturn(Optional.of(openSession(UUID.randomUUID(), TENANT_ID)));
+        when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, STUDENT_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> entitlementService.resolveSessionCode(CODE, TENANT_ID, STUDENT_ID))
+                .isInstanceOf(SessionNotFoundException.class);
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", "   ", "FPTEDUVN-261010-K7QM-TOOLONG"})
+    void resolveSessionCode_blankOrOversizedInput_throwsInvalidCodeWithoutLookup(String rawCode) {
+        assertThatThrownBy(() -> entitlementService.resolveSessionCode(rawCode, TENANT_ID, STUDENT_ID))
+                .isInstanceOf(InvalidSessionCodeException.class);
+        verify(sessionRepository, never()).findBySessionCodeAndTenantIdAndDeletedFalse(any(), any());
     }
 }

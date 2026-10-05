@@ -94,6 +94,18 @@ public class SupportTicketService {
     }
 
     @Transactional
+    public SupportTicketResponse closeForHost(UUID publicId, CurrentUser caller) {
+        SupportTicket ticket = ticketRepository.findByPublicIdAndTenantId(publicId, caller.tenantId())
+                .orElseThrow(SupportTicketNotFoundException::new);
+        ticket.close();
+        auditLogService.record(caller, SupportConstants.AGGREGATE_SUPPORT_TICKET,
+                ticket.getPublicId().toString(), SupportConstants.EVENT_TICKET_CLOSED,
+                "Host closed ticket");
+        List<SupportTicketNote> notes = noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(ticket.getPublicId());
+        return SupportTicketMapper.toResponse(ticket, notes);
+    }
+
+    @Transactional
     public SupportTicketResponse updateStatus(UUID publicId, UpdateTicketStatusRequest request, CurrentUser caller) {
         SupportTicket ticket = ticketRepository.findByPublicId(publicId)
                 .orElseThrow(SupportTicketNotFoundException::new);

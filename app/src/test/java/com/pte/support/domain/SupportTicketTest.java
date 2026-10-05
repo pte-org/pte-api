@@ -67,4 +67,45 @@ class SupportTicketTest {
         assertThatThrownBy(ticket::startProcessing)
                 .isInstanceOf(InvalidStatusTransitionException.class);
     }
+
+    @Test
+    void close_fromOpen_transitionsToClosed() {
+        SupportTicket ticket = newTicket();
+        ticket.close();
+        assertThat(ticket.getStatus()).isEqualTo(TicketStatus.CLOSED);
+    }
+
+    @Test
+    void close_fromInProgress_throwsInvalidTransition() {
+        SupportTicket ticket = newTicket();
+        ticket.startProcessing();
+        assertThatThrownBy(ticket::close)
+                .isInstanceOf(InvalidStatusTransitionException.class);
+        assertThat(ticket.getStatus()).isEqualTo(TicketStatus.IN_PROGRESS);
+    }
+
+    @Test
+    void close_fromResolved_throwsInvalidTransition() {
+        SupportTicket ticket = newTicket();
+        ticket.startProcessing();
+        ticket.resolve();
+        assertThatThrownBy(ticket::close)
+                .isInstanceOf(InvalidStatusTransitionException.class);
+    }
+
+    @Test
+    void close_alreadyClosed_throwsInvalidTransition() {
+        SupportTicket ticket = newTicket();
+        ticket.close();
+        assertThatThrownBy(ticket::close)
+                .isInstanceOf(InvalidStatusTransitionException.class);
+    }
+
+    @Test
+    void startProcessing_fromClosed_throwsInvalidTransition() {
+        SupportTicket ticket = newTicket();
+        ticket.close();
+        assertThatThrownBy(ticket::startProcessing)
+                .isInstanceOf(InvalidStatusTransitionException.class);
+    }
 }

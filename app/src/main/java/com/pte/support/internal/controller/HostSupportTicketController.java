@@ -51,4 +51,9 @@ public class HostSupportTicketController {
     public ApiResponse<SupportTicketResponse> getDetail(@PathVariable UUID id) {
         return ApiResponse.success(supportTicketService.getDetailForHost(id, CurrentUserContext.required()));
     }
+
+    @PostMapping("/{id}/close")
+    public ApiResponse<SupportTicketResponse> close(@PathVariable UUID id) {
+        return ApiResponse.success(supportTicketService.closeForHost(id, CurrentUserContext.required()));
+    }
 }
