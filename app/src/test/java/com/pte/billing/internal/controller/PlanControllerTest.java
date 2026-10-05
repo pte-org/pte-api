@@ -94,6 +94,6 @@ class PlanControllerTest {
     private PlanResponse plan(String name, String status) {
         return new PlanResponse(
                 UUID.randomUUID(), name, null, "STUDENT_CAPACITY", BigDecimal.ZERO,
-                "VND", null, null, 10, status, false, "ACTIVE".equals(status), "PLAN_DELETE_DRAFT_ONLY", null);
+                "VND", null, null, 10, status, false, "ACTIVE".equals(status), "PLAN_DELETE_DRAFT_ONLY", null, 0L);
     }
 }

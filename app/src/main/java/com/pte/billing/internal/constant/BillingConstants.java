@@ -28,6 +28,7 @@ public final class BillingConstants {
     public static final String PLAN_MUST_BE_DRAFT_TO_ACTIVATE = "PLAN_MUST_BE_DRAFT_TO_ACTIVATE";
     public static final String PLAN_ALREADY_ARCHIVED = "PLAN_ALREADY_ARCHIVED";
     public static final String PLAN_ARCHIVED_NOT_EDITABLE = "PLAN_ARCHIVED_NOT_EDITABLE";
+    public static final String PLAN_VERSION_CONFLICT = "PLAN_VERSION_CONFLICT";
     public static final String PLATFORM_SETTING_NOT_FOUND = "PLATFORM_SETTING_NOT_FOUND";
     public static final String PLATFORM_SETTING_INVALID = "PLATFORM_SETTING_INVALID";
     public static final String SUBSCRIPTION_TENANT_REQUIRED = "SUBSCRIPTION_TENANT_REQUIRED";
@@ -108,15 +109,20 @@ public final class BillingConstants {
     public static final String CONTACT_EMAIL_MAX = "Contact email must be at most 255 characters";
     public static final String CONTACT_PHONE_MAX = "Contact phone must be at most 255 characters";
     public static final String PLAN_NAME_REQUIRED = "Plan name is required";
+    public static final String PLAN_NAME_MAX = "Plan name must be at most 255 characters";
     public static final String PLAN_PRICE_REQUIRED = "Plan price is required";
     public static final String PLAN_PRICE_NON_NEGATIVE = "Plan price must not be negative";
     public static final String PLAN_PRICE_PRECISION_INVALID =
             "Plan price must have at most 17 integer digits and 2 decimal places";
     public static final String PLAN_CURRENCY_REQUIRED = "Plan currency is required";
-    public static final String PLAN_CURRENCY_INVALID = "Plan currency must be a 3-letter code";
+    public static final String PLAN_CURRENCY_INVALID = "Plan currency must be VND";
+    public static final String PLAN_VERSION_REQUIRED = "Plan version is required";
+    public static final String PLAN_VERSION_INVALID = "Plan version must be a non-negative integer";
+    public static final String PLAN_VERSION_CONFLICT_MESSAGE = "This plan changed while you were editing. Reload it and try again.";
     public static final String PLAN_TYPE_REQUIRED = "Plan type is required";
     public static final String PLAN_DESCRIPTION_MAX = "Plan description must be at most 255 characters";
     public static final String EXAM_DURATION_REQUIRED = "EXAM_PACKAGE requires durationDays > 0";
+    public static final String EXAM_DURATION_LIMIT_EXCEEDED = "durationDays must not exceed 3650";
     public static final String EXAM_MAX_STUDENTS_REQUIRED =
             "EXAM_PACKAGE requires maxStudentsPerSession > 0";
     public static final String EXAM_MAX_STUDENTS_LIMIT_EXCEEDED =

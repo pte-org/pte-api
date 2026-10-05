@@ -31,6 +31,7 @@ public final class PlanMapper {
                 draft && !referenced,
                 active && !outstandingCodes,
                 !draft ? BillingConstants.PLAN_DELETE_DRAFT_ONLY : referenced ? BillingConstants.PLAN_HAS_REFERENCES : null,
-                !active ? BillingConstants.PLAN_MUST_BE_ACTIVE_TO_ARCHIVE : outstandingCodes ? BillingConstants.PLAN_HAS_OUTSTANDING_CODES : null);
+                !active ? BillingConstants.PLAN_MUST_BE_ACTIVE_TO_ARCHIVE : outstandingCodes ? BillingConstants.PLAN_HAS_OUTSTANDING_CODES : null,
+                plan.getVersion());
     }
 }

@@ -10,7 +10,8 @@ import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.enums.*;
 import com.pte.itembank.internal.repository.QuestionRepository;
 import com.pte.itembank.internal.service.*;
-import com.pte.billing.internal.dto.request.PlanRequest;
+import com.pte.billing.internal.dto.request.PlanTransitionRequest;
+import com.pte.billing.internal.dto.request.PlanUpdateRequest;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.Test;
@@ -138,7 +139,8 @@ class ArchiveLifecyclePostgresIntegrationTest {
         for (int i = 0; i < 10; i++) {
             Plan plan = plan(PlanStatus.ACTIVE);
             LicenseCode code = LicenseCode.issue("TEST-" + UUID.randomUUID().toString().substring(0, 20), plan.getPublicId(), admin.userId(), Instant.now(), null);
-            List<Throwable> results = race(() -> issuance.save(code), () -> planService.archive(plan.getPublicId()));
+            List<Throwable> results = race(() -> issuance.save(code),
+                    () -> planService.archive(plan.getPublicId(), new PlanTransitionRequest(plan.getVersion())));
             assertThat(results.stream().filter(t -> t != null).count()).isEqualTo(1);
             boolean archived = tx(() -> plans.findByPublicId(plan.getPublicId()).orElseThrow().getStatus() == PlanStatus.ARCHIVED);
             boolean issued = tx(() -> codes.findByCode(code.getCode()).isPresent());
@@ -150,7 +152,8 @@ class ArchiveLifecyclePostgresIntegrationTest {
     @Test void tenDeleteActivateRacesHaveExactlyOneDurableWinner() throws Exception {
         for (int i = 0; i < 10; i++) {
             Plan plan = plan(PlanStatus.DRAFT);
-            List<Throwable> results = race(() -> planService.deleteDraft(plan.getPublicId(), admin), () -> planService.activate(plan.getPublicId()));
+            List<Throwable> results = race(() -> planService.deleteDraft(plan.getPublicId(), admin),
+                    () -> planService.activate(plan.getPublicId(), new PlanTransitionRequest(plan.getVersion())));
             assertThat(results.stream().filter(t -> t != null).count()).isEqualTo(1);
             Plan result = tx(() -> plans.findByPublicId(plan.getPublicId()).orElseThrow());
             assertThat(result.isDeleted() && result.getStatus() == PlanStatus.ACTIVE).isFalse();
@@ -164,8 +167,8 @@ class ArchiveLifecyclePostgresIntegrationTest {
             Plan plan = plan(PlanStatus.ACTIVE);
             LicenseCode code = LicenseCode.issue("TEST-" + UUID.randomUUID().toString().substring(0, 20),
                     plan.getPublicId(), admin.userId(), Instant.now(), null);
-            PlanRequest edit = new PlanRequest(plan.getName(), null, "EXAM_PACKAGE", BigDecimal.TEN,
-                    "VND", 60, 40, null);
+            PlanUpdateRequest edit = new PlanUpdateRequest(plan.getName(), null, "EXAM_PACKAGE", BigDecimal.TEN,
+                    "VND", 60, 40, null, plan.getVersion());
             List<Throwable> results = race(() -> issuance.save(code), () -> planService.update(plan.getPublicId(), edit));
             assertThat(results.getFirst()).isNull();
             if (results.get(1) != null) assertThat(results.get(1)).isInstanceOf(PlanLifecycleException.class);
@@ -173,8 +176,8 @@ class ArchiveLifecyclePostgresIntegrationTest {
             assertThat(persisted.getDurationDays()).isEqualTo(results.get(1) == null ? 60 : 30);
             assertThat(persisted.getMaxStudentsPerSession()).isEqualTo(results.get(1) == null ? 40 : 20);
             assertThat(tx(() -> codes.findByCode(code.getCode()))).isPresent();
-            PlanRequest furtherEdit = new PlanRequest(plan.getName(), null, "EXAM_PACKAGE", BigDecimal.TEN,
-                    "VND", 90, 50, null);
+            PlanUpdateRequest furtherEdit = new PlanUpdateRequest(plan.getName(), null, "EXAM_PACKAGE", BigDecimal.TEN,
+                    "VND", 90, 50, null, persisted.getVersion());
             assertThatThrownBy(() -> planService.update(plan.getPublicId(), furtherEdit))
                     .isInstanceOf(PlanLifecycleException.class);
         }
@@ -197,7 +200,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
             Order row = Order.pending(tenant, plan.getPublicId(), System.nanoTime(), BigDecimal.TEN, "VND");
             row.markPaid(start); return orders.saveAndFlush(row);
         });
-        planService.archive(plan.getPublicId());
+        planService.archive(plan.getPublicId(), new PlanTransitionRequest(plan.getVersion()));
         Subscription retained = tx(() -> subscriptions.findByPublicId(subscription.getPublicId()).orElseThrow());
         assertThat(retained.getExpiresAt()).isEqualTo(expiry);
         assertThat(retained.getMaxStudentsPerSession()).isEqualTo(20);

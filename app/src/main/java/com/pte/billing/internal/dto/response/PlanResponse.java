@@ -17,5 +17,6 @@ public record PlanResponse(
         boolean canDeleteDraft,
         boolean canArchive,
         String deleteBlockReason,
-        String archiveBlockReason) {
+        String archiveBlockReason,
+        long version) {
 }

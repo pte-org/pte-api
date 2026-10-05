@@ -5,12 +5,14 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 
-/** Shared create/update payload for the two mutually exclusive plan families. */
-public record PlanRequest(
+/** Editable catalog fields plus the version read by the administrator. */
+public record PlanUpdateRequest(
         @NotBlank(message = BillingConstants.PLAN_NAME_REQUIRED)
         @Size(max = 255, message = BillingConstants.PLAN_NAME_MAX)
         String name,
@@ -28,10 +30,14 @@ public record PlanRequest(
 
         @NotBlank(message = BillingConstants.PLAN_CURRENCY_REQUIRED)
         @Size(min = 3, max = 3, message = BillingConstants.PLAN_CURRENCY_INVALID)
-        @jakarta.validation.constraints.Pattern(regexp = "VND", message = BillingConstants.PLAN_CURRENCY_INVALID)
+        @Pattern(regexp = "VND", message = BillingConstants.PLAN_CURRENCY_INVALID)
         String currency,
 
         Integer durationDays,
         Integer maxStudentsPerSession,
-        Integer extraStudentSlots) {
+        Integer extraStudentSlots,
+
+        @NotNull(message = BillingConstants.PLAN_VERSION_REQUIRED)
+        @PositiveOrZero(message = BillingConstants.PLAN_VERSION_INVALID)
+        Long expectedVersion) {
 }
