@@ -9,9 +9,11 @@ import jakarta.validation.constraints.Size;
 /** Submitted publicly, no auth — see BillingConstants for why validation here is strict. */
 public record SubmitApplicationRequest(
         @NotBlank(message = BillingConstants.ORG_NAME_REQUIRED)
+        @Size(max = 255, message = BillingConstants.ORG_NAME_MAX)
         String orgName,
 
         @NotBlank(message = BillingConstants.ORG_TYPE_REQUIRED)
+        @Size(max = 255, message = BillingConstants.ORG_TYPE_MAX)
         String orgType,
 
         @NotBlank(message = BillingConstants.REQUESTED_CODE_REQUIRED)
@@ -20,8 +22,10 @@ public record SubmitApplicationRequest(
 
         @NotBlank(message = BillingConstants.CONTACT_EMAIL_REQUIRED)
         @Email(message = BillingConstants.CONTACT_EMAIL_INVALID)
+        @Size(max = 255, message = BillingConstants.CONTACT_EMAIL_MAX)
         String contactEmail,
 
+        @Size(max = 255, message = BillingConstants.CONTACT_PHONE_MAX)
         String contactPhone,
 
         @NotBlank(message = BillingConstants.TAX_CODE_REQUIRED)

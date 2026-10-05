@@ -18,8 +18,10 @@ public final class BillingConstants {
     public static final String PLAN_DRAFT_DELETED_SUMMARY = "Unused plan draft removed.";
 
     public static final String TENANT_APPLICATION_NOT_FOUND = "TENANT_APPLICATION_NOT_FOUND";
+    public static final String TENANT_APPLICATION_INVALID = "TENANT_APPLICATION_INVALID";
     public static final String REQUESTED_CODE_ALREADY_USED = "REQUESTED_CODE_ALREADY_USED";
     public static final String TENANT_NAME_ALREADY_USED = "TENANT_NAME_ALREADY_USED";
+    public static final String TENANT_TAX_CODE_ALREADY_USED = "TENANT_TAX_CODE_ALREADY_USED";
     public static final String APPLICATION_NOT_PENDING = "APPLICATION_NOT_PENDING";
     public static final String PLAN_NOT_FOUND = "PLAN_NOT_FOUND";
     public static final String PLAN_TYPE_INVALID = "PLAN_TYPE_INVALID";
@@ -100,6 +102,11 @@ public final class BillingConstants {
     public static final String TAX_CODE_REQUIRED = "Tax code is required";
     public static final String TAX_CODE_MAX = "Tax code must be at most 64 characters";
     public static final String REJECT_REASON_REQUIRED = "Reject reason is required";
+    public static final String REJECT_REASON_MAX = "Reject reason must be at most 500 characters";
+    public static final String ORG_NAME_MAX = "Organization name must be at most 255 characters";
+    public static final String ORG_TYPE_MAX = "Organization type must be at most 255 characters";
+    public static final String CONTACT_EMAIL_MAX = "Contact email must be at most 255 characters";
+    public static final String CONTACT_PHONE_MAX = "Contact phone must be at most 255 characters";
     public static final String PLAN_NAME_REQUIRED = "Plan name is required";
     public static final String PLAN_PRICE_REQUIRED = "Plan price is required";
     public static final String PLAN_PRICE_NON_NEGATIVE = "Plan price must not be negative";

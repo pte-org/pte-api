@@ -10,7 +10,9 @@ import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.exception.ApplicationNotPendingException;
 import com.pte.billing.internal.exception.RequestedCodeAlreadyUsedException;
 import com.pte.billing.internal.exception.RequestedNameAlreadyUsedException;
+import com.pte.billing.internal.exception.RequestedTaxCodeAlreadyUsedException;
 import com.pte.billing.internal.exception.TenantApplicationNotFoundException;
+import com.pte.billing.internal.exception.TenantApplicationValidationException;
 import com.pte.billing.internal.repository.TenantApplicationRepository;
 import com.pte.identity.domain.HostAdminCreated;
 import com.pte.identity.domain.Role;
@@ -26,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.List;
 import java.util.Optional;
@@ -175,7 +178,7 @@ class TenantApplicationServiceTest {
         hostAdminUser.setRoles(Set.of(Role.HOST_ADMIN));
         HostAdminCreated hostAdmin = new HostAdminCreated(hostAdminUser, "Gener4ted!");
 
-        when(applicationRepository.findByPublicId(applicationId)).thenReturn(Optional.of(application));
+        when(applicationRepository.findByPublicIdForUpdate(applicationId)).thenReturn(Optional.of(application));
         when(platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY)).thenReturn(75);
         when(tenancyService.createTenant("Acme School", "SCHOOL", "acme", "0123456789", 75)).thenReturn(tenant);
         when(identityService.createHostAdmin(tenant.getPublicId(), "contact@acme.example")).thenReturn(hostAdmin);
@@ -185,6 +188,7 @@ class TenantApplicationServiceTest {
 
         assertThat(application.getStatus()).isEqualTo(TenantApplicationStatus.APPROVED);
         assertThat(application.getReviewedBy()).isEqualTo(reviewerId);
+        verify(applicationRepository).saveAndFlush(application);
         ArgumentCaptor<TenantApplicationApprovedEvent> eventCaptor =
                 ArgumentCaptor.forClass(TenantApplicationApprovedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
@@ -195,7 +199,7 @@ class TenantApplicationServiceTest {
     @Test
     void approve_unknownApplication_throwsNotFound() {
         UUID applicationId = UUID.randomUUID();
-        when(applicationRepository.findByPublicId(applicationId)).thenReturn(Optional.empty());
+        when(applicationRepository.findByPublicIdForUpdate(applicationId)).thenReturn(Optional.empty());
 
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
 
@@ -208,7 +212,7 @@ class TenantApplicationServiceTest {
         UUID applicationId = UUID.randomUUID();
         TenantApplication application = pendingApplication(applicationId, "acme");
         application.approve(UUID.randomUUID());
-        when(applicationRepository.findByPublicId(applicationId)).thenReturn(Optional.of(application));
+        when(applicationRepository.findByPublicIdForUpdate(applicationId)).thenReturn(Optional.of(application));
 
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
 
@@ -223,7 +227,7 @@ class TenantApplicationServiceTest {
         UUID applicationId = UUID.randomUUID();
         UUID reviewerId = UUID.randomUUID();
         TenantApplication application = pendingApplication(applicationId, "acme");
-        when(applicationRepository.findByPublicId(applicationId)).thenReturn(Optional.of(application));
+        when(applicationRepository.findByPublicIdForUpdate(applicationId)).thenReturn(Optional.of(application));
 
         CurrentUser caller = new CurrentUser(reviewerId, null, List.of("PLATFORM_ADMIN"));
         TenantApplicationResponse response = service.reject(applicationId,
@@ -232,6 +236,7 @@ class TenantApplicationServiceTest {
         assertThat(response.status()).isEqualTo("REJECTED");
         assertThat(response.rejectReason()).isEqualTo("Brand name conflict");
         assertThat(application.getReviewedBy()).isEqualTo(reviewerId);
+        verify(applicationRepository).saveAndFlush(application);
         verify(eventPublisher).publishEvent(any(Object.class));
     }
 
@@ -240,12 +245,46 @@ class TenantApplicationServiceTest {
         UUID applicationId = UUID.randomUUID();
         TenantApplication application = pendingApplication(applicationId, "acme");
         application.reject(UUID.randomUUID(), "first reason");
-        when(applicationRepository.findByPublicId(applicationId)).thenReturn(Optional.of(application));
+        when(applicationRepository.findByPublicIdForUpdate(applicationId)).thenReturn(Optional.of(application));
 
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
 
         assertThatThrownBy(() -> service.reject(applicationId,
                 new RejectApplicationRequest("second reason"), caller))
                 .isInstanceOf(ApplicationNotPendingException.class);
+    }
+
+    @Test
+    void approve_mapsApprovalTimeTaxConstraintToBillingConflict() {
+        UUID applicationId = UUID.randomUUID();
+        TenantApplication application = pendingApplication(applicationId, "acme");
+        when(applicationRepository.findByPublicIdForUpdate(applicationId)).thenReturn(Optional.of(application));
+        when(platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY)).thenReturn(75);
+        when(tenancyService.createTenant(any(), any(), any(), any(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenThrow(new DataIntegrityViolationException("uk_tenants_tax_code"));
+
+        assertThatThrownBy(() -> service.approve(applicationId,
+                new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"))))
+                .isInstanceOf(RequestedTaxCodeAlreadyUsedException.class);
+        verify(identityService, never()).createHostAdmin(any(), any());
+        assertThat(application.getStatus()).isEqualTo(TenantApplicationStatus.PENDING);
+    }
+
+    @Test
+    void reject_trimsReasonAndDirectBlankReasonIsUnprocessable() {
+        UUID applicationId = UUID.randomUUID();
+        TenantApplication application = pendingApplication(applicationId, "acme");
+        when(applicationRepository.findByPublicIdForUpdate(applicationId)).thenReturn(Optional.of(application));
+
+        service.reject(applicationId, new RejectApplicationRequest("  fix the tax code  "),
+                new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN")));
+
+        assertThat(application.getRejectReason()).isEqualTo("fix the tax code");
+        UUID blankApplicationId = UUID.randomUUID();
+        when(applicationRepository.findByPublicIdForUpdate(blankApplicationId))
+                .thenReturn(Optional.of(pendingApplication(blankApplicationId, "other-acme")));
+        assertThatThrownBy(() -> service.reject(blankApplicationId, new RejectApplicationRequest("   "),
+                new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"))))
+                .isInstanceOf(TenantApplicationValidationException.class);
     }
 }
