@@ -5,6 +5,7 @@ import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.domain.enums.FormMode;
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
+import com.pte.session.internal.exception.InvalidSessionCodeException;
 import com.pte.session.internal.exception.NotEntitledException;
 import com.pte.session.internal.exception.ProctorNotAssignedException;
 import com.pte.session.internal.exception.SessionNotFoundException;
@@ -17,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -28,6 +30,9 @@ import java.util.UUID;
  */
 @Service
 public class EntitlementService {
+
+    /** Matches the {@code session_code} column; no generated code is longer. */
+    private static final int MAX_SESSION_CODE_LENGTH = 24;
 
     private final ExamSessionRepository sessionRepository;
     private final EnrollmentRepository enrollmentRepository;
@@ -57,7 +62,7 @@ public class EntitlementService {
         if (session.getStatus() != SessionStatus.OPEN) {
             throw new NotEntitledException();
         }
-        if (!enrollmentRepository.existsBySessionIdAndStudentPublicId(session.getId(), studentPublicId)) {
+        if (!isEnrolled(session, studentPublicId)) {
             throw new NotEntitledException();
         }
         UUID snapshotPublicId = session.getSnapshotPublicId();
@@ -91,5 +96,38 @@ public class EntitlementService {
     public void verifyHostAccess(UUID sessionPublicId, UUID tenantId) {
         sessionRepository.findByPublicIdAndTenantId(sessionPublicId, tenantId)
                 .orElseThrow(SessionNotFoundException::new);
+    }
+
+    /**
+     * Exchanges a student-typed exam code for the session's publicId. Unknown
+     * code, another tenant's code, a deleted session, no tenant, and not
+     * enrolled all raise the same 404 so the response never tells which codes
+     * exist. Status is deliberately not checked: preflight stays the OPEN gate.
+     */
+    @Transactional(readOnly = true)
+    public UUID resolveSessionCode(String rawCode, UUID tenantId, UUID studentPublicId) {
+        String code = normalizeSessionCode(rawCode);
+        if (tenantId == null) {
+            throw new SessionNotFoundException();
+        }
+        ExamSession session = sessionRepository.findBySessionCodeAndTenantIdAndDeletedFalse(code, tenantId)
+                .orElseThrow(SessionNotFoundException::new);
+        if (!isEnrolled(session, studentPublicId)) {
+            throw new SessionNotFoundException();
+        }
+        return session.getPublicId();
+    }
+
+    private boolean isEnrolled(ExamSession session, UUID studentPublicId) {
+        return enrollmentRepository.existsBySessionIdAndStudentPublicId(session.getId(), studentPublicId);
+    }
+
+    /** Checks the input's shape only, before any lookup, so a 400 never depends on stored data. */
+    private static String normalizeSessionCode(String rawCode) {
+        String code = rawCode == null ? "" : rawCode.trim().toUpperCase(Locale.ROOT);
+        if (code.isEmpty() || code.length() > MAX_SESSION_CODE_LENGTH) {
+            throw new InvalidSessionCodeException();
+        }
+        return code;
     }
 }

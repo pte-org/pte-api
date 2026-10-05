@@ -49,6 +49,11 @@ public class SessionService {
         entitlementService.verifyHostAccess(sessionPublicId, tenantId);
     }
 
+    /** Exam code to session publicId for an enrolled student of the tenant; one 404 for every lookup failure. */
+    public UUID resolveSessionCode(String code, UUID tenantId, UUID studentPublicId) {
+        return entitlementService.resolveSessionCode(code, tenantId, studentPublicId);
+    }
+
     /** Locks an owned session row for the duration of a caller's assignment transaction. */
     @Transactional
     public void lockForExaminerAssignment(UUID sessionPublicId, UUID tenantId) {

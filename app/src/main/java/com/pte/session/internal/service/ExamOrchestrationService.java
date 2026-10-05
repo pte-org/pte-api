@@ -105,6 +105,7 @@ public class ExamOrchestrationService {
     private final IdentityService identityService;
     private final StartedAttemptLookup startedAttemptLookup;
     private final AuditLogService auditLogService;
+    private final SessionCodeGenerator sessionCodeGenerator;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public ExamOrchestrationService(ExamSessionRepository sessionRepository,
@@ -122,7 +123,8 @@ public class ExamOrchestrationService {
             EnrollmentModuleService enrollmentModuleService,
             IdentityService identityService,
             StartedAttemptLookup startedAttemptLookup,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+            SessionCodeGenerator sessionCodeGenerator) {
         this.sessionRepository = sessionRepository;
         this.sourceRepository = sourceRepository;
         this.memberRepository = memberRepository;
@@ -139,6 +141,7 @@ public class ExamOrchestrationService {
         this.identityService = identityService;
         this.startedAttemptLookup = startedAttemptLookup;
         this.auditLogService = auditLogService;
+        this.sessionCodeGenerator = sessionCodeGenerator;
     }
 
     @Transactional
@@ -175,6 +178,7 @@ public class ExamOrchestrationService {
         session.setPolicy(ExamPolicy.forMode(mode));
         session.getPolicy().setLockdownMode(SessionPolicyResolver.resolveForCreate(mode, request.lockdownMode()));
         session.setStatus(SessionStatus.DRAFT);
+        session.setSessionCode(sessionCodeGenerator.generate(tenantId, request.opensAt()));
         ExamSession saved = sessionRepository.saveAndFlush(session);
         auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, saved.getPublicId().toString(),
                 SessionConstants.EVENT_EXAM_DRAFT_CREATED, saved.getName());

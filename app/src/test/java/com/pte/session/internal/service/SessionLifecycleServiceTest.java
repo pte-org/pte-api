@@ -80,6 +80,9 @@ class SessionLifecycleServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private SessionCodeGenerator sessionCodeGenerator;
+
     private SessionLifecycleService service;
     private UUID tenantId;
     private UUID subscriptionId;
@@ -89,7 +92,7 @@ class SessionLifecycleServiceTest {
     @BeforeEach
     void setUp() {
         service = new SessionLifecycleService(sessionRepository, enrollmentRepository, assessmentService,
-                billingService, eventPublisher);
+                billingService, eventPublisher, sessionCodeGenerator);
         tenantId = UUID.randomUUID();
         subscriptionId = UUID.randomUUID();
         licenseKeyId = UUID.randomUUID();
@@ -147,6 +150,7 @@ class SessionLifecycleServiceTest {
                 .isInstanceOf(SessionTimeConflictException.class)
                 .hasMessageContaining(conflictingId.toString());
         verify(assessmentService, never()).generateAndPublish(any(), any(), any());
+        verify(sessionCodeGenerator, never()).generate(any(), any());
     }
 
     @Test
@@ -156,6 +160,7 @@ class SessionLifecycleServiceTest {
         UUID snapshotId = UUID.randomUUID();
         when(assessmentService.generateAndPublish(any(), any(), any()))
                 .thenReturn(new SnapshotResponse(snapshotId, "Generated", 1, UUID.randomUUID(), UUID.randomUUID(), 1, null, List.of()));
+        when(sessionCodeGenerator.generate(eq(tenantId), any())).thenReturn("FPT-261010-K7QM");
         when(sessionRepository.save(any())).thenAnswer(invocation -> {
             ExamSession saved = invocation.getArgument(0);
             saved.setPublicId(UUID.randomUUID());
@@ -169,6 +174,8 @@ class SessionLifecycleServiceTest {
         var captor = ArgumentCaptor.forClass(ExamSession.class);
         verify(sessionRepository).save(captor.capture());
         assertThat(captor.getValue().getLicenseKey()).isEqualTo("LIC-" + licenseKeyId);
+        assertThat(captor.getValue().getSessionCode()).isEqualTo("FPT-261010-K7QM");
+        assertThat(response.sessionCode()).isEqualTo("FPT-261010-K7QM");
         verify(sessionRepository).flush();
     }
 
