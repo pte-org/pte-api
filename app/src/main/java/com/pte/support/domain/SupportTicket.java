@@ -68,4 +68,12 @@ public class SupportTicket extends BaseEntity {
         }
         this.status = TicketStatus.RESOLVED;
     }
+
+    /** Host withdraws the ticket; only allowed before an admin has picked it up. */
+    public void close() {
+        if (status != TicketStatus.OPEN) {
+            throw new InvalidStatusTransitionException(status, TicketStatus.CLOSED);
+        }
+        this.status = TicketStatus.CLOSED;
+    }
 }
