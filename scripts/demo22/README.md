@@ -14,6 +14,8 @@ only. Full instructions: the section "Demo data: 22 task types" in `pte-api/READ
 | `data/` | the seed: `demo22-seed.sql` (generated), `demo22-questions.json`, `demo22-media.json`, `gap-content.json`, `score-table-v5.json` |
 | `tools/` | maintainer tools: builder + tests, media generator and Cloudinary publisher |
 
+Test steps for teammates (Vietnamese): [TEST_GUIDE.md](TEST_GUIDE.md).
+
 ## Cleaning up
 
 1. Local database: `docker compose --env-file .env.local -f docker-compose.yml -f docker-compose.services.yml down -v`
