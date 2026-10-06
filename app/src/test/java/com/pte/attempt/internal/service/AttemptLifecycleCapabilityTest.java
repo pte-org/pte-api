@@ -8,6 +8,7 @@ import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.attempt.internal.dto.request.ClientCapabilityManifest;
 import com.pte.attempt.internal.dto.request.StartAttemptRequest;
+import com.pte.attempt.internal.exception.AttemptNotFoundException;
 import com.pte.attempt.internal.exception.ExamCapabilityException;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
@@ -36,6 +37,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -120,6 +122,23 @@ class AttemptLifecycleCapabilityTest {
                 .isSameAs(failure);
         verify(capabilityNegotiationService).authorizeExisting(existing, null, caller);
         verify(pinnedItemRepository, never()).countByPinnedSnapshotId(any());
+        verifyNoInteractions(pinnedItemRepository, snapshotPinService, cacheService, timerService);
+        verify(attemptRepository, never()).save(any());
+    }
+
+    @Test
+    void existingStart_wrongTenant_rejectsBeforeCapabilityCheckOrResume() {
+        ExamAttempt existing = inProgressAttempt();
+        existing.setTenantId(UUID.randomUUID());
+        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(sessionId, studentId))
+                .thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.startAttempt(new StartAttemptRequest(sessionId, true), caller))
+                .isInstanceOf(AttemptNotFoundException.class);
+
+        verifyNoInteractions(capabilityNegotiationService, pinnedItemRepository, snapshotPinService,
+                cacheService, timerService);
+        verify(attemptRepository, never()).save(any());
     }
 
     @Test

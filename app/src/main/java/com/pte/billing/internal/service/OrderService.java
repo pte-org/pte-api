@@ -90,6 +90,16 @@ public class OrderService {
                         orders.isFirst(), orders.isLast(), orders.hasNext(), orders.hasPrevious()));
     }
 
+    @Transactional(readOnly = true)
+    public OrderResponse getOrder(UUID publicId, UUID tenantId) {
+        if (publicId == null || tenantId == null) {
+            throw new OrderException(HttpStatus.NOT_FOUND, BillingConstants.ORDER_NOT_FOUND);
+        }
+        return orderRepository.findByPublicIdAndTenantIdAndDeletedFalse(publicId, tenantId)
+                .map(OrderResponse::from)
+                .orElseThrow(() -> new OrderException(HttpStatus.NOT_FOUND, BillingConstants.ORDER_NOT_FOUND));
+    }
+
     private void validatePayOsAmount(BigDecimal amount, String currency) {
         if (amount == null || amount.signum() <= 0) {
             throw invalid(BillingConstants.ORDER_AMOUNT_INVALID);

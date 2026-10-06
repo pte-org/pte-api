@@ -8,6 +8,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -59,6 +60,11 @@ public class Plan extends BaseEntity {
     @Column(nullable = false, length = 32)
     @Enumerated(EnumType.STRING)
     private PlanStatus status = PlanStatus.DRAFT;
+
+    /** Guards delayed admin catalog edits without changing shared BaseEntity semantics. */
+    @Version
+    @Column(nullable = false)
+    private long version;
 
     public void activate() {
         this.status = PlanStatus.ACTIVE;

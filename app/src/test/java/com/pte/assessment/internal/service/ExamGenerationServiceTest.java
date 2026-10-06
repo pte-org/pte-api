@@ -190,6 +190,13 @@ class ExamGenerationServiceTest {
     @Test
     void generate_orderIsSpeakingListeningReadingWriting_thenBySequence() {
         stubUnlimitedStock();
+        // Reverse the fixture so sequence ordering is checked independently of input order.
+        ScoreTemplateResponse template = v5Template();
+        List<ScoreTemplateItemResponse> reversedItems = new ArrayList<>(template.items());
+        java.util.Collections.reverse(reversedItems);
+        when(scoreTemplateService.getActive()).thenReturn(new ScoreTemplateResponse(
+                template.publicId(), template.code(), template.version(), template.name(), template.status(),
+                reversedItems));
         Set<String> allSkills = Set.of("SPEAKING", "WRITING", "READING", "LISTENING");
 
         service.generate("Exam", allSkills, hostCaller);
@@ -197,13 +204,26 @@ class ExamGenerationServiceTest {
         org.mockito.ArgumentCaptor<ExamBlueprint> captor = org.mockito.ArgumentCaptor.forClass(ExamBlueprint.class);
         verify(blueprintRepository).save(captor.capture());
         List<String> sections = captor.getValue().getItems().stream().map(i -> i.getSection().name()).toList();
+        // Generation flow changed explicitly in 1e8fe99 and 3f5329a; V5 sequences apply within sections.
         List<String> order = List.of("SPEAKING", "LISTENING", "READING", "WRITING");
+        assertThat(sections.stream().distinct().toList()).containsExactlyElementsOf(order);
         int lastRank = -1;
         for (String section : sections) {
             int rank = order.indexOf(section);
             assertThat(rank).isGreaterThanOrEqualTo(lastRank);
             lastRank = rank;
         }
+        org.mockito.ArgumentCaptor<PteTaskType> taskTypeCaptor = org.mockito.ArgumentCaptor.forClass(PteTaskType.class);
+        verify(itembankService, org.mockito.Mockito.times(V5_ROWS.size() + 1))
+                .randomPublishedQuestionIds(taskTypeCaptor.capture(), anyInt());
+        List<PteTaskType> expectedTaskTypes = new ArrayList<>();
+        expectedTaskTypes.add(PteTaskType.PERSONAL_INTRODUCTION);
+        V5_ROWS.stream()
+                .sorted(java.util.Comparator.comparingInt((Row row) -> order.indexOf(row.section()))
+                        .thenComparingInt(Row::sequence))
+                .map(row -> PteTaskType.valueOf(row.taskType()))
+                .forEach(expectedTaskTypes::add);
+        assertThat(taskTypeCaptor.getAllValues()).containsExactlyElementsOf(expectedTaskTypes);
         // orderIndex is sequential starting at 0.
         for (int i = 0; i < captor.getValue().getItems().size(); i++) {
             assertThat(captor.getValue().getItems().get(i).getOrderIndex()).isEqualTo(i);

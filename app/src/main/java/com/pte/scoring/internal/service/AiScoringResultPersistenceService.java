@@ -6,6 +6,8 @@ import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
 import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
 import com.pte.scoring.internal.vendor.AiScoreResult;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,11 +19,20 @@ public class AiScoringResultPersistenceService {
 
     private final ScoringAnswerRepository answerRepository;
     private final ScoringSessionStateRepository sessionStateRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
+    @Autowired
     public AiScoringResultPersistenceService(ScoringAnswerRepository answerRepository,
-            ScoringSessionStateRepository sessionStateRepository) {
+            ScoringSessionStateRepository sessionStateRepository, ApplicationEventPublisher eventPublisher) {
         this.answerRepository = answerRepository;
         this.sessionStateRepository = sessionStateRepository;
+        this.eventPublisher = eventPublisher;
+    }
+
+    /** Compatibility constructor for focused persistence tests. */
+    public AiScoringResultPersistenceService(ScoringAnswerRepository answerRepository,
+            ScoringSessionStateRepository sessionStateRepository) {
+        this(answerRepository, sessionStateRepository, null);
     }
 
     @Transactional(readOnly = true)
@@ -40,6 +51,7 @@ public class AiScoringResultPersistenceService {
         answer.markAiScored(result.rawScore(), result.providerCategory(), result.provider(),
                 result.model(), result.providerVersion());
         answerRepository.save(answer);
+        publishProgress(answer);
         return true;
     }
 
@@ -51,7 +63,15 @@ public class AiScoringResultPersistenceService {
         }
         answer.setStatus(ScoringAnswerStatus.SCORING_FAILED);
         answerRepository.save(answer);
+        publishProgress(answer);
         return true;
+    }
+
+    private void publishProgress(ScoringAnswer answer) {
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new com.pte.scoring.ScoringProgressChangedEvent(
+                    answer.getTenantId(), answer.getSessionPublicId()));
+        }
     }
 
     private ScoringAnswer lockAnswer(UUID answerPublicId, UUID attemptPublicId, UUID tenantId, UUID sessionPublicId) {

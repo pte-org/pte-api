@@ -4,8 +4,9 @@ import com.pte.billing.SubscriptionRevokedEvent;
 import com.pte.session.SessionService;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.transaction.event.TransactionPhase;
 
-/** Bridges billing revocation to the session public facade after billing commits. */
+/** Joins billing revocation before commit so session cancellation is atomic. */
 @Component
 public class SubscriptionRevokedSessionListener {
 
@@ -15,8 +16,13 @@ public class SubscriptionRevokedSessionListener {
         this.sessionService = sessionService;
     }
 
-    @TransactionalEventListener
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void onSubscriptionRevoked(SubscriptionRevokedEvent event) {
-        sessionService.cancelScheduledSessionsBySubscription(event.subscriptionPublicId());
+        if (event.tenantPublicId() == null) {
+            sessionService.cancelScheduledSessionsBySubscription(event.subscriptionPublicId());
+            return;
+        }
+        sessionService.cancelScheduledSessionsBySubscription(
+                event.subscriptionPublicId(), event.tenantPublicId());
     }
 }

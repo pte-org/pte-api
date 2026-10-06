@@ -1,0 +1,95 @@
+package com.pte.notification.internal.constant;
+
+/** Stable codes are distinct from approved display copy and existing email constants. */
+public final class InboxConstants {
+    public static final String INVALID_REQUEST = "INBOX_INVALID_REQUEST";
+    public static final String INVALID_REQUEST_MESSAGE = "The notification request is invalid.";
+    public static final String EVENT_CONFLICT = "INBOX_EVENT_CONFLICT";
+    public static final String EVENT_CONFLICT_MESSAGE = "This notification event has already been recorded with different content.";
+    public static final String RECIPIENT_SCOPE_CONFLICT = "INBOX_RECIPIENT_SCOPE_CONFLICT";
+    public static final String RECIPIENT_SCOPE_CONFLICT_MESSAGE = "The notification recipient scope has changed.";
+    public static final String TRANSIENT_FAILURE = "INBOX_DELIVERY_TRANSIENT_FAILURE";
+    public static final String NON_RETRYABLE_FAILURE = "INBOX_DELIVERY_NON_RETRYABLE_FAILURE";
+    public static final String LEASE_EXHAUSTED = "INBOX_DELIVERY_LEASE_EXHAUSTED";
+    public static final String CLAIM_LOST = "INBOX_DELIVERY_CLAIM_LOST";
+    public static final String CLAIM_LOST_MESSAGE = "This notification delivery is no longer owned by the worker.";
+    public static final String ROLE_REQUIRED = "INBOX_ROLE_REQUIRED";
+    public static final String ROLE_REQUIRED_MESSAGE = "An admin or host role is required to access the inbox.";
+    public static final String PLATFORM_ADMIN_REQUIRED_MESSAGE = "A platform admin role is required to manage announcements.";
+    public static final String PAGE_INVALID = "INBOX_PAGE_INVALID";
+    public static final String PAGE_INVALID_MESSAGE = "Page must be zero or greater.";
+    public static final String SIZE_INVALID = "INBOX_SIZE_INVALID";
+    public static final String SIZE_INVALID_MESSAGE = "Page size must be between 1 and 100.";
+    public static final String FILTER_INVALID = "INBOX_FILTER_INVALID";
+    public static final String FILTER_INVALID_MESSAGE = "The notification filter is invalid.";
+    public static final String CATEGORY_INVALID = "INBOX_CATEGORY_INVALID";
+    public static final String CATEGORY_INVALID_MESSAGE = "The notification category is invalid.";
+    public static final String SNAPSHOT_INVALID = "INBOX_SNAPSHOT_INVALID";
+    public static final String SNAPSHOT_INVALID_MESSAGE = "The notification snapshot is invalid or expired.";
+    public static final String ITEM_NOT_FOUND = "INBOX_ITEM_NOT_FOUND";
+    public static final String ITEM_NOT_FOUND_MESSAGE = "The notification was not found.";
+    public static final String ANNOUNCEMENT_NOT_FOUND = "ANNOUNCEMENT_NOT_FOUND";
+    public static final String ANNOUNCEMENT_NOT_FOUND_MESSAGE = "The announcement was not found.";
+    public static final String ANNOUNCEMENT_INVALID = "ANNOUNCEMENT_INVALID";
+    public static final String ANNOUNCEMENT_INVALID_MESSAGE = "The announcement details are invalid.";
+    public static final String ANNOUNCEMENT_VERSION_CONFLICT = "ANNOUNCEMENT_VERSION_CONFLICT";
+    public static final String ANNOUNCEMENT_VERSION_CONFLICT_MESSAGE = "The announcement has changed. Reload it and try again.";
+    public static final String ANNOUNCEMENT_PUBLISHED = "ANNOUNCEMENT_PUBLISHED";
+    public static final String ANNOUNCEMENT_PUBLISHED_MESSAGE = "Published announcements cannot be changed.";
+    public static final String ANNOUNCEMENT_NOT_PUBLISHED = "ANNOUNCEMENT_NOT_PUBLISHED";
+    public static final String ANNOUNCEMENT_NOT_PUBLISHED_MESSAGE = "Only a published announcement can be retried.";
+    public static final String ANNOUNCEMENT_CORRECTION_INVALID = "ANNOUNCEMENT_CORRECTION_INVALID";
+    public static final String ANNOUNCEMENT_CORRECTION_INVALID_MESSAGE = "The correction must reference a published announcement.";
+    public static final String ANNOUNCEMENT_PAGE_INVALID = "ANNOUNCEMENT_PAGE_INVALID";
+    public static final String ANNOUNCEMENT_PAGE_INVALID_MESSAGE = "Announcement page must be zero or greater.";
+    public static final String ANNOUNCEMENT_SIZE_INVALID = "ANNOUNCEMENT_SIZE_INVALID";
+    public static final String ANNOUNCEMENT_SIZE_INVALID_MESSAGE = "Announcement page size must be between 1 and 100.";
+    public static final String ANNOUNCEMENT_AGGREGATE = "ANNOUNCEMENT";
+    public static final String AUDIT_CREATE_DRAFT = "CREATE_DRAFT";
+    public static final String AUDIT_UPDATE_DRAFT = "UPDATE_DRAFT";
+    public static final String AUDIT_DELETE_DRAFT = "DELETE_DRAFT";
+    public static final String AUDIT_PUBLISH = "PUBLISH";
+    public static final String AUDIT_RETRY_DELIVERY = "RETRY_DELIVERY";
+    public static final String AUDIT_CREATE_DRAFT_SUMMARY = "Announcement draft created";
+    public static final String AUDIT_UPDATE_DRAFT_SUMMARY = "Announcement draft updated";
+    public static final String AUDIT_DELETE_DRAFT_SUMMARY = "Announcement draft deleted";
+    public static final String AUDIT_PUBLISH_SUMMARY = "Announcement published to %d eligible hosts";
+    public static final String AUDIT_RETRY_DELIVERY_SUMMARY = "Reset %d failed announcement deliveries";
+    public static final String APPLICATION_NOTIFICATION_TITLE = "New organization application";
+    public static final String APPLICATION_NOTIFICATION_BODY = "Organization '%s' submitted an application for platform review.";
+    public static final String COMMERCIAL_NOTIFICATION_TITLE = "Commercial access updated";
+    public static final String COMMERCIAL_EXAM_BODY = "Your exam package is active from %s. Open the billing target to review access.";
+    public static final String COMMERCIAL_CAPACITY_BODY = "Your student capacity increased by %d slots from %s.";
+    public static final String ORDER_EXPIRED_NOTIFICATION_TITLE = "Payment order expired";
+    public static final String ORDER_EXPIRED_NOTIFICATION_BODY = "Payment order %s expired before payment was confirmed.";
+    public static final String SUBSCRIPTION_REVOKED_NOTIFICATION_TITLE = "Subscription revoked";
+    public static final String SUBSCRIPTION_REVOKED_NOTIFICATION_BODY = "Subscription %s was revoked%s.";
+    public static final String SESSION_CLOSING_SOON_NOTIFICATION_TITLE = "Exam session closing soon";
+    public static final String SESSION_CLOSING_SOON_NOTIFICATION_BODY = "Exam session '%s' closes at %s.";
+    public static final String SESSION_GRADING_COMPLETED_NOTIFICATION_TITLE = "Exam grading completed";
+    public static final String SESSION_GRADING_COMPLETED_NOTIFICATION_BODY =
+            "Grading for exam session '%s' is complete and ready for host review.";
+    public static final String SUPPORT_TICKET_SUBMITTED_NOTIFICATION_TITLE = "New feedback received";
+    public static final String SUPPORT_TICKET_SUBMITTED_NOTIFICATION_BODY =
+            "New %s feedback was submitted for admin review.";
+    public static final String SUPPORT_TICKET_NOTE_ADDED_NOTIFICATION_TITLE = "Admin responded to your feedback";
+    public static final String SUPPORT_TICKET_NOTE_ADDED_NOTIFICATION_BODY =
+            "An admin responded to your %s feedback ticket.";
+    public static final String SUPPORT_TICKET_STATUS_CHANGED_NOTIFICATION_TITLE = "Feedback status updated";
+    public static final String SUPPORT_TICKET_STATUS_CHANGED_NOTIFICATION_BODY =
+            "Your %s feedback ticket is now %s.";
+    public static final int BILLING_REASON_LIMIT = 255;
+    public static final int APPLICATION_NAME_LIMIT = 256;
+    public static final int DEFAULT_PAGE = 0;
+    public static final int DEFAULT_PAGE_SIZE = 20;
+    public static final int RECENT_PAGE_SIZE = 5;
+    public static final int MAX_PAGE_SIZE = 100;
+    public static final long SNAPSHOT_TTL_SECONDS = 900;
+    public static final int SNAPSHOT_CLEANUP_BATCH_LIMIT = 200;
+    public static final int SCHEMA_VERSION = 1;
+    public static final int EVENT_KEY_LIMIT = 255;
+    public static final int TITLE_LIMIT = 150;
+    public static final int BODY_LIMIT = 5000;
+    public static final int RECOVERY_BATCH_LIMIT = 200;
+    private InboxConstants() { }
+}

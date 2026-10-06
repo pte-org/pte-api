@@ -108,6 +108,7 @@ public class ItembankService {
         question.setVisibility(Visibility.SHARED);
         question.setTenantId(null);
         question.setStatus(QuestionStatus.DRAFT);
+        question.setEverPublished(false);
         question.setRevisionGroupPublicId(UUID.randomUUID());
         question.setRevisionNumber(1);
         question.setCurrent(true);
@@ -256,6 +257,7 @@ public class ItembankService {
         revision.setVisibility(source.getVisibility());
         revision.setTenantId(source.getTenantId());
         revision.setStatus(QuestionStatus.DRAFT);
+        revision.setEverPublished(false);
         revision.setRevisionGroupPublicId(source.getRevisionGroupPublicId());
         revision.setRevisionNumber(source.getRevisionNumber() + 1);
         revision.setSupersedesPublicId(source.getPublicId());
@@ -298,6 +300,7 @@ public class ItembankService {
         question.setRejectionReason(null);
         question.setCurrent(true);
         question.setStatus(QuestionStatus.APPROVED);
+        question.setEverPublished(true);
         return toResponse(question);
     }
 
@@ -336,6 +339,7 @@ public class ItembankService {
         question.setRejectionReason(null);
         question.setCurrent(true);
         question.setStatus(QuestionStatus.APPROVED);
+        question.setEverPublished(true);
         return toResponse(question);
     }
 
@@ -366,6 +370,11 @@ public class ItembankService {
     @Transactional
     public QuestionResponse archive(UUID publicId, CurrentUser caller) {
         Question question = loadForPlatformWrite(publicId, caller);
+        if (question.getStatus() == QuestionStatus.ARCHIVED) return toResponse(question);
+        if (!com.pte.itembank.internal.service.QuestionLifecyclePolicy.canArchive(question)) {
+            throw new InvalidQuestionStatusTransitionException();
+        }
+        if (question.getStatus() == QuestionStatus.APPROVED) question.setEverPublished(true);
         question.setStatus(QuestionStatus.ARCHIVED);
         question.setCurrent(false);
         return toResponse(question);

@@ -8,6 +8,7 @@ import com.pte.scoring.internal.repository.ScoringAnswerRepository;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.session.SessionService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +39,7 @@ public class ScoringCommandService {
     private final ScoringMethodResolver scoringMethodResolver;
     private final SessionService sessionService;
     private final ScorePublicationLockService publicationLockService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Autowired
     public ScoringCommandService(ScoringIngestService scoringIngestService,
@@ -46,7 +48,8 @@ public class ScoringCommandService {
                                  AiScoringDispatcher aiScoringDispatcher,
                                  ScoringMethodResolver scoringMethodResolver,
                                  SessionService sessionService,
-                                 ScorePublicationLockService publicationLockService) {
+                                 ScorePublicationLockService publicationLockService,
+                                 ApplicationEventPublisher eventPublisher) {
         this.scoringIngestService = scoringIngestService;
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.objectiveScoringService = objectiveScoringService;
@@ -54,6 +57,19 @@ public class ScoringCommandService {
         this.scoringMethodResolver = scoringMethodResolver;
         this.sessionService = sessionService;
         this.publicationLockService = publicationLockService;
+        this.eventPublisher = eventPublisher;
+    }
+
+    /** Compatibility constructor for focused scoring-command tests. */
+    public ScoringCommandService(ScoringIngestService scoringIngestService,
+                                 ScoringAnswerRepository scoringAnswerRepository,
+                                 ObjectiveScoringService objectiveScoringService,
+                                 AiScoringDispatcher aiScoringDispatcher,
+                                 ScoringMethodResolver scoringMethodResolver,
+                                 SessionService sessionService,
+                                 ScorePublicationLockService publicationLockService) {
+        this(scoringIngestService, scoringAnswerRepository, objectiveScoringService, aiScoringDispatcher,
+                scoringMethodResolver, sessionService, publicationLockService, null);
     }
 
     /** Compatibility constructor for focused scoring-command tests. */
@@ -63,7 +79,7 @@ public class ScoringCommandService {
                                  AiScoringDispatcher aiScoringDispatcher,
                                  ScoringMethodResolver scoringMethodResolver) {
         this(scoringIngestService, scoringAnswerRepository, objectiveScoringService, aiScoringDispatcher,
-                scoringMethodResolver, null, null);
+                scoringMethodResolver, null, null, null);
     }
 
     @Transactional
@@ -110,5 +126,9 @@ public class ScoringCommandService {
                 : objectiveScoringService.score(answer, runtime);
         answer.markScored(rawScore);
         scoringAnswerRepository.save(answer);
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new com.pte.scoring.ScoringProgressChangedEvent(
+                    answer.getTenantId(), answer.getSessionPublicId()));
+        }
     }
 }

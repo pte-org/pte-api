@@ -30,6 +30,12 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     Optional<Order> findByPublicIdAndDeletedFalse(UUID publicId);
 
+    Optional<Order> findByPublicIdAndTenantIdAndDeletedFalse(UUID publicId, UUID tenantId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from Order o where o.publicId = :publicId and o.deleted = false")
+    Optional<Order> findByPublicIdForUpdateAndDeletedFalse(@Param("publicId") UUID publicId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from Order o where o.orderCode = :orderCode and o.deleted = false")
     Optional<Order> findByOrderCodeForUpdate(@Param("orderCode") Long orderCode);

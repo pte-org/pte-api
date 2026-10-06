@@ -13,9 +13,14 @@ import com.pte.tenancy.internal.service.TenantLifecycleService;
 import com.pte.tenancy.internal.service.QuotaTransactionService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /** Public in-process API for tenant data needed by other modules. */
 @Service
@@ -47,14 +52,58 @@ public class TenancyService {
         return tenantRepository.existsByName(name);
     }
 
+    /** Reuses the tenant lock; acquire before identity locks when guarding tenant-owned delivery. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean lockActiveTenant(UUID tenantPublicId) {
+        if (tenantPublicId == null) { return false; }
+        return tenantRepository.findWithLockByPublicId(tenantPublicId)
+                .filter(tenant -> !tenant.isDeleted() && tenant.getStatus() == TenantStatus.ACTIVE)
+                .isPresent();
+    }
+
+    /** Resolves the active/nondeleted tenant subset without exposing the repository. */
+    @Transactional(readOnly = true)
+    public Set<UUID> findActiveTenantIds(Collection<UUID> tenantPublicIds) {
+        if (tenantPublicIds == null || tenantPublicIds.isEmpty()) {
+            return Set.of();
+        }
+        return tenantRepository.findByPublicIdInAndStatusAndDeletedFalse(tenantPublicIds, TenantStatus.ACTIVE)
+                .stream().map(Tenant::getPublicId).collect(Collectors.toUnmodifiableSet());
+    }
+
+    /**
+     * Returns safe tenant identity projections in one repository query. The
+     * deleted bit lets callers render legacy references without treating a
+     * missing/deleted tenant as an empty result.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, TenantSummary> findTenantSummaries(Collection<UUID> tenantPublicIds) {
+        if (tenantPublicIds == null || tenantPublicIds.isEmpty()) {
+            return Map.of();
+        }
+        return tenantRepository.findByPublicIdIn(tenantPublicIds).stream()
+                .collect(Collectors.toUnmodifiableMap(
+                        Tenant::getPublicId,
+                        tenant -> new TenantSummary(tenant.getPublicId(), tenant.getName(), tenant.isDeleted())));
+    }
+
     /** {@code billing.TenantApplicationService.approve()} — creates the tenant an approved application promised. */
     public Tenant createTenant(String name, String organizationType, String code, String taxCode, int studentLimit) {
         return tenantLifecycleService.createFromApplication(name, organizationType, code, taxCode, studentLimit);
     }
 
     /** Billing activation path for STUDENT_CAPACITY plans. */
-    public void grantQuota(UUID tenantPublicId, int amount, String note) {
-        quotaTransactionService.grantForSystem(tenantPublicId, amount, note);
+    public UUID grantQuota(UUID tenantPublicId, int amount, String note) {
+        return quotaTransactionService.grantForSystem(tenantPublicId, amount, note).publicId();
+    }
+
+    /** Returns whether a tenant is active and not soft-deleted for fan-out decisions. */
+    @Transactional(readOnly = true)
+    public boolean isActiveTenant(UUID tenantPublicId) {
+        return tenantPublicId != null
+                && tenantRepository.findByPublicId(tenantPublicId)
+                .filter(tenant -> !tenant.isDeleted() && tenant.getStatus() == TenantStatus.ACTIVE)
+                .isPresent();
     }
 
     /** Returns the current student count and the tenant's effective limit. */

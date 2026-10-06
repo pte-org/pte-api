@@ -29,6 +29,7 @@ import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.util.PasswordGenerator;
 import com.pte.identity.internal.util.UsernameGenerator;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.audit.AuditLogService;
 import com.pte.tenancy.TenancyService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -72,11 +73,12 @@ public class UserService {
     private final UserBulkCreateWriter bulkCreateWriter;
     private final TenancyService tenancyService;
     private final ApplicationEventPublisher eventPublisher;
+    private final AuditLogService auditLogService;
 
     public UserService(UserRepository userRepository, LoginHashRepository loginHashRepository,
                        PasswordEncoder passwordEncoder, UserProvisioningHelper provisioningHelper,
                        UserBulkCreateWriter bulkCreateWriter, TenancyService tenancyService,
-                       ApplicationEventPublisher eventPublisher) {
+                       ApplicationEventPublisher eventPublisher, AuditLogService auditLogService) {
         this.userRepository = userRepository;
         this.loginHashRepository = loginHashRepository;
         this.passwordEncoder = passwordEncoder;
@@ -84,6 +86,7 @@ public class UserService {
         this.bulkCreateWriter = bulkCreateWriter;
         this.tenancyService = tenancyService;
         this.eventPublisher = eventPublisher;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -301,6 +304,8 @@ public class UserService {
                 .orElseThrow(UserNotFoundException::new);
         loginHash.setHash(passwordEncoder.encode(request.newPassword()));
         loginHashRepository.save(loginHash);
+        auditLogService.record(caller, IdentityConstants.USER_AGGREGATE, publicId.toString(),
+                IdentityConstants.USER_PASSWORD_RESET, IdentityConstants.USER_PASSWORD_RESET_SUMMARY);
 
         return UserMapper.toResponse(user);
     }

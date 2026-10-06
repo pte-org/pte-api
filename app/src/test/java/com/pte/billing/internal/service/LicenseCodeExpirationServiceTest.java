@@ -20,7 +20,7 @@ class LicenseCodeExpirationServiceTest {
 
     @Test
     void expireDueCodes_marksOnlyIssuedExpiredCodes() {
-        LicenseCodeExpirationService service = new LicenseCodeExpirationService(licenseCodeRepository);
+        LicenseCodeExpirationService service = new LicenseCodeExpirationService(licenseCodeRepository, java.time.Clock.systemUTC());
         when(licenseCodeRepository.markExpired(org.mockito.ArgumentMatchers.any(), eq(LicenseCodeStatus.ISSUED),
                 eq(LicenseCodeStatus.EXPIRED))).thenReturn(1);
 

@@ -8,7 +8,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 
 /** Marks issued codes expired; redeem still checks the timestamp defensively. */
 @Service
@@ -17,15 +18,17 @@ public class LicenseCodeExpirationService {
     private static final Logger log = LoggerFactory.getLogger(LicenseCodeExpirationService.class);
 
     private final LicenseCodeRepository licenseCodeRepository;
+    private final Clock clock;
 
-    public LicenseCodeExpirationService(LicenseCodeRepository licenseCodeRepository) {
+    public LicenseCodeExpirationService(LicenseCodeRepository licenseCodeRepository, Clock clock) {
         this.licenseCodeRepository = licenseCodeRepository;
+        this.clock = clock;
     }
 
     @Scheduled(cron = "${billing.license-code-expiration.cron:0 15 * * * *}")
     @Transactional
     public int expireDueCodes() {
-        int expired = licenseCodeRepository.markExpired(Instant.now(), LicenseCodeStatus.ISSUED,
+        int expired = licenseCodeRepository.markExpired(clock.instant().truncatedTo(ChronoUnit.MICROS), LicenseCodeStatus.ISSUED,
                 LicenseCodeStatus.EXPIRED);
         if (expired > 0) {
             log.info("Expired {} billing license codes", expired);

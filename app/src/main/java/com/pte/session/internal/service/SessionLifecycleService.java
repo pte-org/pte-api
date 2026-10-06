@@ -4,6 +4,7 @@ import com.pte.assessment.AssessmentService;
 import com.pte.assessment.dto.response.SnapshotResponse;
 import com.pte.billing.BillingService;
 import com.pte.billing.SubscriptionView;
+import com.pte.billing.SubscriptionRevocationImpactQuery.SubscriptionRevocationImpact;
 import com.pte.session.domain.ExamPolicy;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.ReplayPolicy;
@@ -19,6 +20,7 @@ import com.pte.session.internal.dto.request.CreateSessionRequest;
 import com.pte.session.internal.dto.request.PatchExamPolicyRequest;
 import com.pte.session.internal.dto.response.SessionResponse;
 import com.pte.session.dto.response.AttemptRetryPolicyResponse;
+import com.pte.session.dto.response.ClosingSoonSessionView;
 import com.pte.session.internal.exception.HostContextRequiredException;
 import com.pte.session.internal.exception.InvalidPolicyPatchException;
 import com.pte.session.internal.exception.InvalidSessionWindowException;
@@ -27,12 +29,15 @@ import com.pte.session.internal.exception.SessionCapacityInvalidException;
 import com.pte.session.internal.exception.SessionCapacityRequiredException;
 import com.pte.session.internal.exception.SessionNotFoundException;
 import com.pte.session.internal.exception.NotEntitledException;
+import com.pte.session.internal.exception.SessionNotClosedForGradingCohortException;
 import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
 import com.pte.session.internal.exception.SessionNotReadyToOpenException;
 import com.pte.session.internal.exception.SessionSubscriptionCapacityException;
+import com.pte.session.internal.exception.SessionSubscriptionConflictException;
 import com.pte.session.internal.exception.SessionSubscriptionNotFoundException;
 import com.pte.session.internal.exception.SessionTimeConflictException;
 import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionException;
+import com.pte.session.internal.exception.SubscriptionRevocationScopeConflictException;
 import com.pte.session.internal.mapper.SessionMapper;
 import com.pte.session.internal.policy.SessionPolicyResolver;
 import com.pte.session.internal.repository.EnrollmentRepository;
@@ -46,6 +51,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -87,7 +93,7 @@ public class SessionLifecycleService {
         UUID tenantId = requireTenant(caller);
         validateWindow(request.opensAt(), request.closesAt());
 
-        SubscriptionView subscription = activeSubscription(request.subscriptionPublicId(), tenantId);
+        SubscriptionView subscription = lockedActiveSubscription(request.subscriptionPublicId(), tenantId);
         if (request.capacity() == null) {
             throw new SessionCapacityRequiredException();
         }
@@ -141,19 +147,34 @@ public class SessionLifecycleService {
     @Transactional
     public SessionResponse changeSubscription(UUID publicId, ChangeSubscriptionRequest request, CurrentUser caller) {
         UUID tenantId = requireTenant(caller);
-        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
-                .orElseThrow(SessionNotFoundException::new);
-        if (session.getStatus() != SessionStatus.SCHEDULED) {
+        ExamSession observed = observedSession(publicId, tenantId);
+        if (observed.getStatus() != SessionStatus.SCHEDULED) {
             throw new PolicyLockedException();
         }
 
-        List<UUID> lockOrder = List.of(session.getSubscriptionId(), request.subscriptionPublicId()).stream()
+        UUID oldSubscriptionId = observed.getSubscriptionId();
+        UUID targetSubscriptionId = request.subscriptionPublicId();
+        if (oldSubscriptionId == null || targetSubscriptionId == null) {
+            throw new SessionSubscriptionNotFoundException();
+        }
+        List<UUID> lockOrder = List.of(oldSubscriptionId, targetSubscriptionId).stream()
                 .sorted(Comparator.naturalOrder()).toList();
         List<SubscriptionView> lockedSubscriptions = billingService.lockSubscriptions(lockOrder, tenantId);
         SubscriptionView target = lockedSubscriptions.stream()
-                .filter(subscription -> subscription.publicId().equals(request.subscriptionPublicId()))
+                .filter(subscription -> subscription.publicId().equals(targetSubscriptionId))
                 .findFirst()
                 .orElseThrow(SessionSubscriptionNotFoundException::new);
+        lockedSubscriptions.stream()
+                .filter(subscription -> subscription.publicId().equals(oldSubscriptionId))
+                .findFirst()
+                .orElseThrow(SessionSubscriptionNotFoundException::new);
+
+        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(SessionNotFoundException::new);
+        if (session.getStatus() != SessionStatus.SCHEDULED
+                || !oldSubscriptionId.equals(session.getSubscriptionId())) {
+            throw new SessionSubscriptionConflictException();
+        }
 
         long enrollmentCount = enrollmentRepository.countBySessionId(session.getId());
         validateSubscriptionWindowAndCapacity(target, session.getOpensAt(), session.getClosesAt(),
@@ -185,13 +206,58 @@ public class SessionLifecycleService {
                 .map(SessionMapper::toResponse).toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<ClosingSoonSessionView> findDueClosingSoonSessions(Instant now, Instant cutoff) {
+        if (now == null || cutoff == null || !cutoff.isAfter(now)) {
+            return List.of();
+        }
+        return sessionRepository.findDueClosingSoon(now, cutoff).stream()
+                .map(SessionLifecycleService::toClosingSoonView)
+                .toList();
+    }
+
+    /** Locks and revalidates the schedule so a stale reminder candidate cannot be appended. */
+    @Transactional
+    public Optional<ClosingSoonSessionView> lockDueClosingSoonSession(UUID publicId, Instant now, Instant cutoff) {
+        if (publicId == null || now == null || cutoff == null || !cutoff.isAfter(now)) {
+            return Optional.empty();
+        }
+        return sessionRepository.findWithLockByPublicId(publicId)
+                .filter(session -> !session.isDeleted())
+                .filter(session -> session.getStatus() == SessionStatus.OPEN)
+                .filter(session -> !session.getOpensAt().isAfter(now))
+                .filter(session -> session.getClosesAt().isAfter(now) && !session.getClosesAt().isAfter(cutoff))
+                .map(SessionLifecycleService::toClosingSoonView);
+    }
+
+    @Transactional
+    public void lockClosedForGradingCohort(UUID publicId, UUID tenantId) {
+        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(SessionNotFoundException::new);
+        if (session.getStatus() != SessionStatus.CLOSED) {
+            throw new SessionNotClosedForGradingCohortException();
+        }
+    }
+
     @Transactional
     public SessionResponse open(UUID publicId, CurrentUser caller) {
-        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, requireTenant(caller))
+        UUID tenantId = requireTenant(caller);
+        ExamSession observed = observedSession(publicId, tenantId);
+        if (observed.getStatus() != SessionStatus.SCHEDULED) {
+            throw new SessionNotReadyToOpenException();
+        }
+        UUID subscriptionId = observed.getSubscriptionId();
+        SubscriptionView subscription = lockedActiveSubscription(subscriptionId, tenantId);
+        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
                 .orElseThrow(SessionNotFoundException::new);
         if (session.getStatus() != SessionStatus.SCHEDULED) {
             throw new SessionNotReadyToOpenException();
         }
+        if (!java.util.Objects.equals(subscriptionId, session.getSubscriptionId())) {
+            throw new SessionSubscriptionConflictException();
+        }
+        validateSubscriptionWindowAndCapacity(subscription, session.getOpensAt(), session.getClosesAt(),
+                session.getCapacity(), false);
         session.open();
         return SessionMapper.toResponse(session);
     }
@@ -234,16 +300,77 @@ public class SessionLifecycleService {
         return SessionMapper.toResponse(session);
     }
 
+    /** Returns a locked, tenant-scoped impact snapshot for billing revoke preview. */
+    @Transactional
+    public SubscriptionRevocationImpact getSubscriptionRevocationImpact(UUID subscriptionId, UUID tenantId) {
+        if (subscriptionId == null || tenantId == null) {
+            throw new SubscriptionRevocationScopeConflictException();
+        }
+        List<ExamSession> sessions = lockedSubscriptionSessions(subscriptionId, tenantId);
+        List<UUID> scheduled = sessions.stream()
+                .filter(session -> session.getStatus() == SessionStatus.SCHEDULED)
+                .map(ExamSession::getPublicId)
+                .toList();
+        int open = (int) sessions.stream().filter(session -> session.getStatus() == SessionStatus.OPEN).count();
+        int closed = (int) sessions.stream().filter(session -> session.getStatus() == SessionStatus.CLOSED).count();
+        return new SubscriptionRevocationImpact(subscriptionId, tenantId, scheduled,
+                scheduled.size(), open, closed);
+    }
+
     /** Cancels only scheduled sessions tied to a revoked subscription. */
     @Transactional
     public void cancelScheduledSessionsBySubscription(UUID subscriptionId) {
+        if (subscriptionId == null) {
+            throw new SubscriptionRevocationScopeConflictException();
+        }
         for (ExamSession session : sessionRepository.findBySubscriptionIdAndStatus(
                 subscriptionId, SessionStatus.SCHEDULED)) {
             session.cancel();
             List<UUID> students = enrollmentRepository.findBySessionId(session.getId()).stream()
                     .map(enrollment -> enrollment.getStudentPublicId()).toList();
-            eventPublisher.publishEvent(new SessionCancelledEvent(session.getPublicId(), session.getTenantId(), students));
+            eventPublisher.publishEvent(new SessionCancelledEvent(
+                    session.getPublicId(), session.getTenantId(), students));
         }
+        sessionRepository.flush();
+    }
+
+    /** Cancels only tenant-owned scheduled sessions tied to a revoked subscription. */
+    @Transactional
+    public void cancelScheduledSessionsBySubscription(UUID subscriptionId, UUID tenantId) {
+        if (subscriptionId == null || tenantId == null) {
+            throw new SubscriptionRevocationScopeConflictException();
+        }
+        List<ExamSession> sessions = sessionRepository
+                .findWithLockBySubscriptionIdOrderByPublicIdAsc(subscriptionId);
+        for (ExamSession session : sessions) {
+            if (!tenantId.equals(session.getTenantId())) {
+                throw new SubscriptionRevocationScopeConflictException();
+            }
+            if (session.getStatus() != SessionStatus.SCHEDULED) {
+                continue;
+            }
+            session.cancel();
+            List<UUID> students = enrollmentRepository.findBySessionId(session.getId()).stream()
+                    .map(enrollment -> enrollment.getStudentPublicId()).toList();
+            eventPublisher.publishEvent(new SessionCancelledEvent(
+                    session.getPublicId(), session.getTenantId(), students));
+        }
+        sessionRepository.flush();
+    }
+
+    private List<ExamSession> lockedSubscriptionSessions(UUID subscriptionId, UUID tenantId) {
+        List<ExamSession> sessions = sessionRepository
+                .findWithLockBySubscriptionIdOrderByPublicIdAsc(subscriptionId);
+        if (sessions.stream().anyMatch(session -> !tenantId.equals(session.getTenantId()))) {
+            throw new SubscriptionRevocationScopeConflictException();
+        }
+        return sessions;
+    }
+
+    private ExamSession observedSession(UUID publicId, UUID tenantId) {
+        return sessionRepository.findByPublicIdAndTenantId(publicId, tenantId)
+                .orElseGet(() -> sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                        .orElseThrow(SessionNotFoundException::new));
     }
 
     ExamSession findOwned(UUID publicId, CurrentUser caller) {
@@ -307,9 +434,13 @@ public class SessionLifecycleService {
         return session.getStatus() == SessionStatus.CLOSED;
     }
 
-    private SubscriptionView activeSubscription(UUID subscriptionId, UUID tenantId) {
-        if (billingService == null) {
-            throw new IllegalStateException(SessionConstants.BILLING_SERVICE_REQUIRED);
+    private SubscriptionView lockedActiveSubscription(UUID subscriptionId, UUID tenantId) {
+        if (billingService == null || subscriptionId == null) {
+            throw new SessionSubscriptionNotFoundException();
+        }
+        List<SubscriptionView> locked = billingService.lockSubscriptions(List.of(subscriptionId), tenantId);
+        if (!locked.isEmpty()) {
+            return locked.get(0);
         }
         return billingService.getActiveSubscription(subscriptionId, tenantId)
                 .orElseThrow(SessionSubscriptionNotFoundException::new);
@@ -370,5 +501,10 @@ public class SessionLifecycleService {
             throw new HostContextRequiredException();
         }
         return caller.tenantId();
+    }
+
+    private static ClosingSoonSessionView toClosingSoonView(ExamSession session) {
+        return new ClosingSoonSessionView(session.getPublicId(), session.getTenantId(), session.getName(),
+                session.getOpensAt(), session.getClosesAt());
     }
 }

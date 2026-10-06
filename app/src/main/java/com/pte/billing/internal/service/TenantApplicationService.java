@@ -12,7 +12,9 @@ import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.exception.ApplicationNotPendingException;
 import com.pte.billing.internal.exception.RequestedCodeAlreadyUsedException;
 import com.pte.billing.internal.exception.RequestedNameAlreadyUsedException;
+import com.pte.billing.internal.exception.RequestedTaxCodeAlreadyUsedException;
 import com.pte.billing.internal.exception.TenantApplicationNotFoundException;
+import com.pte.billing.internal.exception.TenantApplicationValidationException;
 import com.pte.billing.internal.mapper.TenantApplicationMapper;
 import com.pte.billing.internal.repository.TenantApplicationRepository;
 import com.pte.identity.domain.HostAdminCreated;
@@ -20,6 +22,7 @@ import com.pte.identity.IdentityService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
 import com.pte.tenancy.domain.Tenant;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -88,6 +91,13 @@ public class TenantApplicationService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public TenantApplicationResponse get(UUID applicationPublicId) {
+        return applicationRepository.findByPublicId(applicationPublicId)
+                .map(TenantApplicationMapper::toResponse)
+                .orElseThrow(TenantApplicationNotFoundException::new);
+    }
+
     /**
      * One transaction end to end: application status, the new tenant, and its
      * first HOST_ADMIN either all commit or none do. A failure creating the
@@ -95,18 +105,23 @@ public class TenantApplicationService {
      */
     @Transactional
     public void approve(UUID applicationPublicId, CurrentUser caller) {
-        TenantApplication application = findPending(applicationPublicId);
-        int freeStudentLimit = platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY);
+        TenantApplication application = findPendingForUpdate(applicationPublicId);
+        try {
+            int freeStudentLimit = platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY);
 
-        Tenant tenant = tenancyService.createTenant(application.getOrgName(), application.getOrgType(),
-                application.getRequestedCode(), application.getTaxCode(), freeStudentLimit);
-        HostAdminCreated hostAdmin = identityService.createHostAdmin(
-                tenant.getPublicId(), application.getContactEmail());
+            Tenant tenant = tenancyService.createTenant(application.getOrgName(), application.getOrgType(),
+                    application.getRequestedCode(), application.getTaxCode(), freeStudentLimit);
+            HostAdminCreated hostAdmin = identityService.createHostAdmin(
+                    tenant.getPublicId(), application.getContactEmail());
 
-        application.approve(caller.userId());
-        eventPublisher.publishEvent(new TenantApplicationApprovedEvent(
-                application.getPublicId(), tenant.getPublicId(), application.getOrgName(), tenant.getCode(),
-                application.getContactEmail(), hostAdmin.user().getUsername(), hostAdmin.generatedPassword()));
+            application.approve(caller.userId());
+            applicationRepository.saveAndFlush(application);
+            eventPublisher.publishEvent(new TenantApplicationApprovedEvent(
+                    application.getPublicId(), tenant.getPublicId(), application.getOrgName(), tenant.getCode(),
+                    application.getContactEmail(), hostAdmin.user().getUsername(), hostAdmin.generatedPassword()));
+        } catch (DataIntegrityViolationException ex) {
+            throw translateApprovalConflict(ex);
+        }
     }
 
     /**
@@ -116,20 +131,58 @@ public class TenantApplicationService {
     @Transactional
     public TenantApplicationResponse reject(UUID applicationPublicId, RejectApplicationRequest request,
             CurrentUser caller) {
-        TenantApplication application = findPending(applicationPublicId);
-        application.reject(caller.userId(), request.reason());
+        TenantApplication application = findPendingForUpdate(applicationPublicId);
+        String reason = normalizeRejectReason(request);
+        application.reject(caller.userId(), reason);
+        applicationRepository.saveAndFlush(application);
         eventPublisher.publishEvent(new TenantApplicationRejectedEvent(
                 application.getPublicId(), application.getOrgName(), application.getRequestedCode(),
                 application.getContactEmail(), application.getRejectReason()));
         return TenantApplicationMapper.toResponse(application);
     }
 
-    private TenantApplication findPending(UUID applicationPublicId) {
-        TenantApplication application = applicationRepository.findByPublicId(applicationPublicId)
+    private TenantApplication findPendingForUpdate(UUID applicationPublicId) {
+        TenantApplication application = applicationRepository.findByPublicIdForUpdate(applicationPublicId)
                 .orElseThrow(TenantApplicationNotFoundException::new);
         if (application.getStatus() != TenantApplicationStatus.PENDING) {
             throw new ApplicationNotPendingException();
         }
         return application;
+    }
+
+    private String normalizeRejectReason(RejectApplicationRequest request) {
+        if (request == null || request.reason() == null) {
+            throw new TenantApplicationValidationException(BillingConstants.REJECT_REASON_REQUIRED);
+        }
+        String reason = request.reason().trim();
+        if (reason.isEmpty()) {
+            throw new TenantApplicationValidationException(BillingConstants.REJECT_REASON_REQUIRED);
+        }
+        if (reason.length() > 500) {
+            throw new TenantApplicationValidationException(BillingConstants.REJECT_REASON_MAX);
+        }
+        return reason;
+    }
+
+    private RuntimeException translateApprovalConflict(DataIntegrityViolationException ex) {
+        if (containsConstraint(ex, "tenants_code_key") || containsConstraint(ex, "uk_tenants_code")) {
+            return new RequestedCodeAlreadyUsedException();
+        }
+        if (containsConstraint(ex, "tenants_name_key") || containsConstraint(ex, "uk_tenants_name")) {
+            return new RequestedNameAlreadyUsedException();
+        }
+        if (containsConstraint(ex, "uk_tenants_tax_code")) {
+            return new RequestedTaxCodeAlreadyUsedException();
+        }
+        return ex;
+    }
+
+    private boolean containsConstraint(Throwable throwable, String constraint) {
+        for (Throwable current = throwable; current != null; current = current.getCause()) {
+            if (current.getMessage() != null && current.getMessage().contains(constraint)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -1,0 +1,8 @@
+package com.pte.notification.domain.enums;
+
+/** In-app triggers; intentionally separate from the existing email taxonomy. */
+public enum InboxNotificationType {
+    APPLICATION_SUBMITTED, PLATFORM_ANNOUNCEMENT, SESSION_CLOSING_SOON,
+    SESSION_GRADING_COMPLETED, COMMERCIAL_OUTCOME_CONFIRMED, ORDER_EXPIRED, SUBSCRIPTION_REVOKED,
+    SUPPORT_TICKET_SUBMITTED, SUPPORT_TICKET_NOTE_ADDED, SUPPORT_TICKET_STATUS_CHANGED
+}

@@ -9,7 +9,7 @@ ALTER TABLE exam_sessions ADD COLUMN session_code VARCHAR(24);
 -- Temporary helper, dropped at the end. A function call in the UPDATE's SET
 -- runs once per row; an uncorrelated scalar subquery would run once in total
 -- and give every row the same suffix.
-CREATE FUNCTION v72_random_session_suffix() RETURNS VARCHAR AS $$
+CREATE FUNCTION v80_random_session_suffix() RETURNS VARCHAR AS $$
 DECLARE
     alphabet CONSTANT TEXT := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     result TEXT := '';
@@ -28,7 +28,7 @@ SET session_code = COALESCE(
                 (SELECT t.code FROM tenants t WHERE t.public_id = s.tenant_id), '-', '')), 8), ''),
             'PTE')
         || '-' || to_char(s.opens_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYMMDD')
-        || '-' || v72_random_session_suffix();
+        || '-' || v80_random_session_suffix();
 
 -- Re-randomize the suffix of every duplicate except the first row (by id) of
 -- each code until none remain.
@@ -39,7 +39,7 @@ DECLARE
 BEGIN
     LOOP
         UPDATE exam_sessions s
-        SET session_code = left(s.session_code, length(s.session_code) - 4) || v72_random_session_suffix()
+        SET session_code = left(s.session_code, length(s.session_code) - 4) || v80_random_session_suffix()
         FROM (
             SELECT id, row_number() OVER (PARTITION BY session_code ORDER BY id) AS rn
             FROM exam_sessions
@@ -49,13 +49,13 @@ BEGIN
         EXIT WHEN duplicates = 0;
         iteration := iteration + 1;
         IF iteration >= 20 THEN
-            RAISE EXCEPTION 'V72: session_code duplicates remain after % iterations', iteration;
+            RAISE EXCEPTION 'V80: session_code duplicates remain after % iterations', iteration;
         END IF;
     END LOOP;
 END;
 $$;
 
-DROP FUNCTION v72_random_session_suffix();
+DROP FUNCTION v80_random_session_suffix();
 
 ALTER TABLE exam_sessions ALTER COLUMN session_code SET NOT NULL;
 ALTER TABLE exam_sessions ADD CONSTRAINT uq_exam_sessions_session_code UNIQUE (session_code);

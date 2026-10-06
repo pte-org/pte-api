@@ -41,6 +41,21 @@ class BillingServiceTest {
     }
 
     @Test
+    void getSubscriptionByPublicIdReturnsInactiveTenantOwnedSubscription() {
+        BillingService service = new BillingService(subscriptionRepository);
+        UUID subscriptionId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        Subscription subscription = subscription(subscriptionId, tenantId, SubscriptionStatus.CANCELLED);
+        when(subscriptionRepository.findByPublicIdAndTenantId(subscriptionId, tenantId))
+                .thenReturn(Optional.of(subscription));
+
+        Optional<SubscriptionView> result = service.getSubscription(subscriptionId, tenantId);
+
+        assertThat(result).isPresent().get().extracting(SubscriptionView::status)
+                .isEqualTo(SubscriptionStatus.CANCELLED);
+    }
+
+    @Test
     void lockSubscriptions_usesAscendingPublicIdOrder() {
         BillingService service = new BillingService(subscriptionRepository);
         UUID tenantId = UUID.randomUUID();

@@ -16,11 +16,20 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 
 public interface QuestionRepository extends JpaRepository<Question, Long> {
 
     @EntityGraph(attributePaths = "options")
-    Optional<Question> findWithOptionsByPublicId(UUID publicId);
+    @Query("select q from Question q where q.publicId = :publicId and q.deleted = false")
+    Optional<Question> findWithOptionsByPublicId(@Param("publicId") UUID publicId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select q from Question q where q.publicId = :publicId")
+    Optional<Question> findByPublicIdForUpdate(@Param("publicId") UUID publicId);
+
+    boolean existsByRevisionGroupPublicIdAndPublicIdNot(UUID revisionGroupPublicId, UUID publicId);
 
     @EntityGraph(attributePaths = "options")
     @Query("SELECT q FROM Question q WHERE q.deleted = false "
@@ -58,7 +67,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
             @Param("query") String query, @Param("publicIdQuery") UUID publicIdQuery, Pageable pageable);
 
     @EntityGraph(attributePaths = "options")
-    @Query("SELECT DISTINCT q FROM Question q WHERE q.publicId IN :publicIds")
+    @Query("SELECT DISTINCT q FROM Question q WHERE q.deleted = false AND q.publicId IN :publicIds")
     List<Question> findWithOptionsByPublicIdIn(@Param("publicIds") Collection<UUID> publicIds);
 
     long countByDeletedFalseAndVisibility(Visibility visibility);
@@ -102,7 +111,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT pte_task_type AS taskType, COUNT(*) AS count
             FROM questions
-            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pte_task_type IN (:taskTypes)
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pte_task_type IN (:taskTypes)
             GROUP BY pte_task_type
             """, nativeQuery = true)
     List<TaskTypeCountProjection> countPublishedSharedGroupedByTaskType(@Param("taskTypes") Set<String> taskTypes);
@@ -111,7 +120,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pte_task_type = :taskType
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pte_task_type = :taskType
             ORDER BY random()
             LIMIT :n
             """, nativeQuery = true)
@@ -121,7 +130,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pte_task_type = :taskType
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pte_task_type = :taskType
             ORDER BY public_id
             """, nativeQuery = true)
     List<UUID> publishedSharedIdsByTaskType(@Param("taskType") String taskType);
@@ -129,7 +138,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT task_type_key AS taskType, COUNT(*) AS count
             FROM questions
-            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
               AND task_type_key IN (:taskTypeKeys)
             GROUP BY task_type_key
             """, nativeQuery = true)
@@ -139,7 +148,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
               AND task_type_key = :taskTypeKey
             ORDER BY random()
             LIMIT :n
@@ -150,7 +159,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
               AND task_type_key = :taskTypeKey
             ORDER BY public_id
             """, nativeQuery = true)

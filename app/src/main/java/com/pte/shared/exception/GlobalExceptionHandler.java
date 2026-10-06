@@ -76,6 +76,13 @@ public class GlobalExceptionHandler {
                         SharedConstants.ACCESS_DENIED));
     }
 
+    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleVersionConflict(org.springframework.dao.OptimisticLockingFailureException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(
+                SharedConstants.RESOURCE_VERSION_CONFLICT, SharedConstants.RESOURCE_VERSION_CONFLICT_MESSAGE,
+                SharedConstants.RESOURCE_VERSION_CONFLICT_MESSAGE));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnexpected(Exception ex) {
         log.error("Unhandled exception", ex);

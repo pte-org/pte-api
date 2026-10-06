@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 /** Shared create/update payload for the two mutually exclusive plan families. */
 public record PlanRequest(
         @NotBlank(message = BillingConstants.PLAN_NAME_REQUIRED)
+        @Size(max = 255, message = BillingConstants.PLAN_NAME_MAX)
         String name,
 
         @Size(max = 255, message = BillingConstants.PLAN_DESCRIPTION_MAX)
@@ -27,6 +28,7 @@ public record PlanRequest(
 
         @NotBlank(message = BillingConstants.PLAN_CURRENCY_REQUIRED)
         @Size(min = 3, max = 3, message = BillingConstants.PLAN_CURRENCY_INVALID)
+        @jakarta.validation.constraints.Pattern(regexp = "VND", message = BillingConstants.PLAN_CURRENCY_INVALID)
         String currency,
 
         Integer durationDays,
