@@ -18,6 +18,8 @@ import com.pte.billing.internal.repository.LicenseIssueIntentRepository;
 import com.pte.billing.internal.repository.PlanRepository;
 import com.pte.billing.internal.repository.SubscriptionRepository;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.audit.AuditLogService;
+import com.pte.tenancy.TenancyService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,6 +58,8 @@ class LicenseCodeRevocationServiceTest {
     @Mock private LicenseCodeGenerator generator;
     @Mock private SubscriptionActivationService activationService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private AuditLogService auditLogService;
+    @Mock private TenancyService tenancyService;
 
     private LicenseCodeService service;
     private CurrentUser admin;
@@ -72,6 +76,7 @@ class LicenseCodeRevocationServiceTest {
     void setUp() {
         service = new LicenseCodeService(licenseCodeRepository, planRepository, subscriptionRepository,
                 persistenceService, generator, activationService, eventPublisher,
+                auditLogService, tenancyService,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         admin = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
         codeId = UUID.randomUUID();

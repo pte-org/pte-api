@@ -19,6 +19,8 @@ public interface PlanRepository extends JpaRepository<Plan, Long> {
 
     Optional<Plan> findByPublicId(UUID publicId);
 
+    List<Plan> findByPublicIdIn(Collection<UUID> publicIds);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Plan p where p.publicId = :publicId")
     Optional<Plan> findByPublicIdForUpdate(@Param("publicId") UUID publicId);

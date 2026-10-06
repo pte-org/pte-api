@@ -1,8 +1,8 @@
 package com.pte.billing.internal.controller;
 
 import com.pte.billing.internal.dto.request.IssueLicenseCodeRequest;
-import com.pte.billing.internal.dto.response.LicenseCodeResponse;
 import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
+import com.pte.billing.internal.constant.BillingConstants;
 import org.springframework.web.bind.annotation.RequestHeader;
 import com.pte.billing.internal.service.LicenseCodeService;
 import com.pte.shared.security.CurrentUser;
@@ -18,8 +18,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 /** Platform-admin issue/list/revoke operations for individual activation codes. */
 @RestController
@@ -43,9 +41,13 @@ public class LicenseCodeController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<LicenseCodeResponse>>> list() {
-        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore())
-                .body(ApiResponse.success(licenseCodeService.list(currentUser())));
+    public ResponseEntity<ApiResponse<Void>> listLegacy() {
+        licenseCodeService.ensureLegacyListAccess(currentUser());
+        return ResponseEntity.status(HttpStatus.GONE)
+                .cacheControl(org.springframework.http.CacheControl.noStore())
+                .body(ApiResponse.error(BillingConstants.LICENSE_CODE_LEGACY_LIST_ENDPOINT,
+                        BillingConstants.LICENSE_CODE_LEGACY_LIST_ENDPOINT,
+                        BillingConstants.LICENSE_CODE_LEGACY_LIST_ENDPOINT_MESSAGE));
     }
 
     @PostMapping("/{ignored}/revoke")

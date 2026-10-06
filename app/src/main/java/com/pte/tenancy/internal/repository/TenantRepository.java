@@ -17,6 +17,8 @@ public interface TenantRepository extends JpaRepository<Tenant, Long> {
 
     Optional<Tenant> findByPublicId(UUID publicId);
 
+    List<Tenant> findByPublicIdIn(Collection<UUID> publicIds);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from Tenant t where t.publicId = :publicId")
     Optional<Tenant> findWithLockByPublicId(@Param("publicId") UUID publicId);

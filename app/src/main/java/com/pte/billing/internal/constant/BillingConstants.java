@@ -106,6 +106,16 @@ public final class BillingConstants {
             "LICENSE_CODE_REVOKE_IMPACT_UNAVAILABLE";
     public static final String LICENSE_CODE_REVOKE_LEGACY_ENDPOINT =
             "LICENSE_CODE_REVOKE_LEGACY_ENDPOINT";
+    public static final String LICENSE_CODE_LEGACY_LIST_ENDPOINT =
+            "LICENSE_CODE_LEGACY_LIST_ENDPOINT";
+    public static final String LICENSE_CODE_LEGACY_LIST_ENDPOINT_MESSAGE =
+            "Update the admin portal to use the bounded license-code view.";
+    public static final String LICENSE_CODE_STATUS_INVALID = "LICENSE_CODE_STATUS_INVALID";
+    public static final String LICENSE_CODE_PAGE_INVALID = "LICENSE_CODE_PAGE_INVALID";
+    public static final String LICENSE_CODE_PAGE_SIZE_INVALID = "LICENSE_CODE_PAGE_SIZE_INVALID";
+    public static final String LICENSE_CODE_LOOKUP_NOT_FOUND = "LICENSE_CODE_LOOKUP_NOT_FOUND";
+    public static final String LICENSE_CODE_REVEAL_AUDIT = "LicenseCodeRevealed";
+    public static final String LICENSE_CODE_REVEAL_AUDIT_SUMMARY = "License bearer revealed by an authorized platform administrator.";
 
     public static final int DEFAULT_PENDING_ORDER_TTL_HOURS = 24;
     public static final int DEFAULT_PAYMENT_LINK_TTL_HOURS = 24;

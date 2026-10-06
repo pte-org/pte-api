@@ -12,8 +12,9 @@ import com.pte.billing.domain.Subscription;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.LicenseCodeStatus;
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.dto.response.LicenseCodeResponse;
+import com.pte.billing.internal.dto.response.AdminLicenseCodeSummary;
 import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
+import com.pte.billing.internal.dto.response.LicenseCodeRevealResponse;
 import com.pte.billing.internal.dto.request.ConfirmLicenseRevokeRequest;
 import com.pte.billing.internal.dto.response.LicenseRevokePreviewResponse;
 import com.pte.billing.internal.dto.response.LicenseRevokeResponse;
@@ -23,10 +24,17 @@ import com.pte.billing.internal.exception.PlanNotFoundException;
 import com.pte.billing.internal.repository.LicenseCodeRepository;
 import com.pte.billing.internal.repository.PlanRepository;
 import com.pte.billing.internal.repository.SubscriptionRepository;
+import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.web.PageMeta;
+import com.pte.shared.web.PagedResult;
+import com.pte.tenancy.TenancyService;
+import com.pte.tenancy.TenantSummary;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,16 +47,22 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /** Issues bearer codes and funnels redemption through the single activation path. */
 @Service
 public class LicenseCodeService {
 
     private static final int MAX_ISSUE_ATTEMPTS = 5;
+    private static final int DEFAULT_ADMIN_PAGE_SIZE = 25;
+    private static final int MAX_ADMIN_PAGE_SIZE = 100;
     private static final Duration REVOKE_PREVIEW_TTL = Duration.ofMinutes(5);
 
     private final LicenseCodeRepository licenseCodeRepository;
@@ -58,6 +72,8 @@ public class LicenseCodeService {
     private final LicenseCodeGenerator licenseCodeGenerator;
     private final SubscriptionActivationService subscriptionActivationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final AuditLogService auditLogService;
+    private final TenancyService tenancyService;
     private final Clock clock;
 
     @Autowired
@@ -66,7 +82,8 @@ public class LicenseCodeService {
             LicenseCodePersistenceService licenseCodePersistenceService,
             LicenseCodeGenerator licenseCodeGenerator,
             SubscriptionActivationService subscriptionActivationService,
-            ApplicationEventPublisher eventPublisher, Clock clock) {
+            ApplicationEventPublisher eventPublisher, AuditLogService auditLogService,
+            TenancyService tenancyService, Clock clock) {
         this.licenseCodeRepository = licenseCodeRepository;
         this.planRepository = planRepository;
         this.subscriptionRepository = subscriptionRepository;
@@ -74,6 +91,8 @@ public class LicenseCodeService {
         this.licenseCodeGenerator = licenseCodeGenerator;
         this.subscriptionActivationService = subscriptionActivationService;
         this.eventPublisher = eventPublisher;
+        this.auditLogService = auditLogService;
+        this.tenancyService = tenancyService;
         this.clock = clock;
     }
 
@@ -129,11 +148,94 @@ public class LicenseCodeService {
     }
 
     @Transactional(readOnly = true)
-    public List<LicenseCodeResponse> list(CurrentUser caller) {
+    public PagedResult<AdminLicenseCodeSummary> listForAdmin(Integer requestedPage, Integer requestedSize,
+            String requestedStatus, UUID planId, UUID tenantId, CurrentUser caller) {
         requirePlatformAdmin(caller);
+        int page = requestedPage == null ? 0 : requestedPage;
+        int size = requestedSize == null ? DEFAULT_ADMIN_PAGE_SIZE : requestedSize;
+        if (page < 0) {
+            throw new LicenseCodeException(HttpStatus.BAD_REQUEST, BillingConstants.LICENSE_CODE_PAGE_INVALID);
+        }
+        if (size < 1 || size > MAX_ADMIN_PAGE_SIZE) {
+            throw new LicenseCodeException(HttpStatus.BAD_REQUEST, BillingConstants.LICENSE_CODE_PAGE_SIZE_INVALID);
+        }
+        LicenseCodeStatus status = parseAdminStatus(requestedStatus);
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        return licenseCodeRepository.findTop100ByOrderByIssuedAtDesc().stream()
-                .map(code -> LicenseCodeResponse.from(code, LicenseCodeStateResolver.resolve(code, now)))
+        Page<LicenseCode> result = licenseCodeRepository.findAdminPage(status, planId, tenantId, now,
+                PageRequest.of(page, size));
+        return new PagedResult<>(adminSummaries(result.getContent(), now),
+                new PageMeta(result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages(),
+                        result.isFirst(), result.isLast(), result.hasNext(), result.hasPrevious()));
+    }
+
+    @Transactional(readOnly = true)
+    public AdminLicenseCodeSummary getForAdmin(UUID publicId, CurrentUser caller) {
+        requirePlatformAdmin(caller);
+        LicenseCode code = licenseCodeRepository.findByPublicId(publicId)
+                .filter(candidate -> !candidate.isDeleted())
+                .orElseThrow(() -> new LicenseCodeException(HttpStatus.NOT_FOUND,
+                        BillingConstants.LICENSE_CODE_NOT_FOUND));
+        return adminSummaries(List.of(code), clock.instant().truncatedTo(ChronoUnit.MICROS)).getFirst();
+    }
+
+    @Transactional(readOnly = true)
+    public AdminLicenseCodeSummary lookupForAdmin(String rawCode, CurrentUser caller) {
+        requirePlatformAdmin(caller);
+        String codeValue = normalizeCode(rawCode);
+        LicenseCode code = licenseCodeRepository.findByCode(codeValue)
+                .filter(candidate -> !candidate.isDeleted())
+                .orElseThrow(() -> new LicenseCodeException(HttpStatus.NOT_FOUND,
+                        BillingConstants.LICENSE_CODE_LOOKUP_NOT_FOUND));
+        return adminSummaries(List.of(code), clock.instant().truncatedTo(ChronoUnit.MICROS)).getFirst();
+    }
+
+    /** Returns the bearer only after the caller has passed the platform-admin guard again. */
+    @Transactional
+    public LicenseCodeRevealResponse revealForAdmin(UUID publicId, CurrentUser caller) {
+        requirePlatformAdmin(caller);
+        LicenseCode code = licenseCodeRepository.findByPublicId(publicId)
+                .filter(candidate -> !candidate.isDeleted())
+                .orElseThrow(() -> new LicenseCodeException(HttpStatus.NOT_FOUND,
+                        BillingConstants.LICENSE_CODE_NOT_FOUND));
+        auditLogService.record(caller, "LicenseCode", publicId.toString(),
+                BillingConstants.LICENSE_CODE_REVEAL_AUDIT,
+                BillingConstants.LICENSE_CODE_REVEAL_AUDIT_SUMMARY);
+        return new LicenseCodeRevealResponse(code.getCode());
+    }
+
+    /** Authorizes the controlled retirement response for the old raw-list route. */
+    public void ensureLegacyListAccess(CurrentUser caller) {
+        requirePlatformAdmin(caller);
+    }
+
+    private LicenseCodeStatus parseAdminStatus(String rawStatus) {
+        if (rawStatus == null) {
+            return null;
+        }
+        if (rawStatus.isBlank()) {
+            throw new LicenseCodeException(HttpStatus.BAD_REQUEST, BillingConstants.LICENSE_CODE_STATUS_INVALID);
+        }
+        try {
+            return LicenseCodeStatus.valueOf(rawStatus.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new LicenseCodeException(HttpStatus.BAD_REQUEST, BillingConstants.LICENSE_CODE_STATUS_INVALID);
+        }
+    }
+
+    private List<AdminLicenseCodeSummary> adminSummaries(List<LicenseCode> codes, Instant now) {
+        if (codes.isEmpty()) {
+            return List.of();
+        }
+        Set<UUID> planIds = codes.stream().map(LicenseCode::getPlanId).collect(Collectors.toSet());
+        Map<UUID, Plan> plans = planIds.isEmpty() ? Map.of() : planRepository.findByPublicIdIn(planIds).stream()
+                .collect(Collectors.toUnmodifiableMap(Plan::getPublicId, Function.identity()));
+        Set<UUID> tenantIds = codes.stream().map(LicenseCode::getRedeemedByTenantId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<UUID, TenantSummary> recipients = tenancyService.findTenantSummaries(tenantIds);
+        return codes.stream()
+                .map(code -> AdminLicenseCodeSummary.from(code,
+                        LicenseCodeStateResolver.resolve(code, now),
+                        plans.get(code.getPlanId()), recipients.get(code.getRedeemedByTenantId())))
                 .toList();
     }
 

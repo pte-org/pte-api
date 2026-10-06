@@ -18,12 +18,16 @@ import com.pte.billing.internal.dto.request.ConfirmLicenseRevokeRequest;
 import com.pte.billing.internal.dto.response.LicenseRevokePreviewResponse;
 import com.pte.billing.internal.dto.response.LicenseRevokeResponse;
 import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
+import com.pte.billing.internal.dto.response.AdminLicenseCodeSummary;
 import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
 import com.pte.billing.internal.exception.LicenseCodeException;
 import com.pte.billing.internal.repository.LicenseCodeRepository;
 import com.pte.billing.internal.repository.PlanRepository;
 import com.pte.billing.internal.repository.SubscriptionRepository;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.audit.AuditLogService;
+import com.pte.tenancy.TenancyService;
+import com.pte.tenancy.TenantSummary;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -35,11 +39,14 @@ import org.mockito.Mock;
 import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -74,6 +81,12 @@ class LicenseCodeServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private AuditLogService auditLogService;
+
+    @Mock
+    private TenancyService tenancyService;
 
     private LicenseCodeService service;
 
@@ -140,7 +153,51 @@ class LicenseCodeServiceTest {
     void setUp() {
         service = new LicenseCodeService(licenseCodeRepository, planRepository, subscriptionRepository,
                 licenseCodePersistenceService, licenseCodeGenerator, subscriptionActivationService, eventPublisher,
-                java.time.Clock.systemUTC());
+                auditLogService, tenancyService, java.time.Clock.systemUTC());
+    }
+
+    @Test
+    void adminPageMasksBearerAndBatchEnrichesPlanAndRecipient() {
+        UUID planId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        LicenseCode code = LicenseCode.issue("ABCD-EFGH-JKLM-NPQR-STUV", planId, UUID.randomUUID(),
+                Instant.now(), null);
+        code.setPublicId(UUID.randomUUID());
+        code.markRedeemed(tenantId, Instant.now());
+        Plan plan = activePlan(planId);
+        when(licenseCodeRepository.findAdminPage(eq(LicenseCodeStatus.REDEEMED), eq(planId), eq(tenantId),
+                any(Instant.class), eq(PageRequest.of(0, 25))))
+                .thenReturn(new PageImpl<>(List.of(code), PageRequest.of(0, 25), 1));
+        when(planRepository.findByPublicIdIn(any())).thenReturn(List.of(plan));
+        when(tenancyService.findTenantSummaries(any())).thenReturn(
+                Map.of(tenantId, new TenantSummary(tenantId, "Tenant A", false)));
+
+        AdminLicenseCodeSummary result = service.listForAdmin(0, 25, "redeemed", planId, tenantId,
+                platformAdmin()).data().getFirst();
+
+        assertThat(result.maskedCode()).isEqualTo("•••• STUV");
+        assertThat(result.effectiveStatus()).isEqualTo("REDEEMED");
+        assertThat(result.planName()).isEqualTo(plan.getName());
+        assertThat(result.recipientName()).isEqualTo("Tenant A");
+        assertThat(java.util.Arrays.stream(AdminLicenseCodeSummary.class.getDeclaredFields())
+                .noneMatch(field -> field.getName().equals("code"))).isTrue();
+        verify(planRepository).findByPublicIdIn(any());
+        verify(tenancyService).findTenantSummaries(any());
+    }
+
+    @Test
+    void adminPageRejectsUnboundedInputsAndUnknownStatus() {
+        CurrentUser admin = platformAdmin();
+        assertThatThrownBy(() -> service.listForAdmin(-1, 25, null, null, null, admin))
+                .isInstanceOfSatisfying(LicenseCodeException.class,
+                        ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+        assertThatThrownBy(() -> service.listForAdmin(0, 101, null, null, null, admin))
+                .isInstanceOfSatisfying(LicenseCodeException.class,
+                        ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+        assertThatThrownBy(() -> service.listForAdmin(0, 25, "bearer", null, null, admin))
+                .isInstanceOfSatisfying(LicenseCodeException.class,
+                        ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+        org.mockito.Mockito.verifyNoInteractions(licenseCodeRepository);
     }
 
     @Test

@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -68,6 +69,22 @@ public class TenancyService {
         }
         return tenantRepository.findByPublicIdInAndStatusAndDeletedFalse(tenantPublicIds, TenantStatus.ACTIVE)
                 .stream().map(Tenant::getPublicId).collect(Collectors.toUnmodifiableSet());
+    }
+
+    /**
+     * Returns safe tenant identity projections in one repository query. The
+     * deleted bit lets callers render legacy references without treating a
+     * missing/deleted tenant as an empty result.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, TenantSummary> findTenantSummaries(Collection<UUID> tenantPublicIds) {
+        if (tenantPublicIds == null || tenantPublicIds.isEmpty()) {
+            return Map.of();
+        }
+        return tenantRepository.findByPublicIdIn(tenantPublicIds).stream()
+                .collect(Collectors.toUnmodifiableMap(
+                        Tenant::getPublicId,
+                        tenant -> new TenantSummary(tenant.getPublicId(), tenant.getName(), tenant.isDeleted())));
     }
 
     /** {@code billing.TenantApplicationService.approve()} — creates the tenant an approved application promised. */
