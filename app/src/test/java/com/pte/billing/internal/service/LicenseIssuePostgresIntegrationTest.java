@@ -3,8 +3,10 @@ package com.pte.billing.internal.service;
 import com.pte.billing.domain.*;
 import com.pte.billing.domain.enums.*;
 import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
+import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.repository.*;
 import com.pte.billing.internal.exception.LicenseCodeException;
+import com.pte.billing.internal.exception.SubscriptionActivationException;
 import com.pte.billing.internal.dto.request.PlanTransitionRequest;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.config.ClockConfig;
@@ -137,6 +139,31 @@ class LicenseIssuePostgresIntegrationTest {
         LicenseIssueReceipt replay = service.issue(plan.getPublicId(), null, key, admin);
         assertThat(replay.publicId()).isEqualTo(issued.publicId()); assertThat(replay.status()).isEqualTo("EXPIRED");
         assertThat(replay.replayed()).isTrue();
+    }
+
+    @Test void legacyIssuedCodeOnArchivedPlanFailsClosedAndRollsBackClaim() {
+        Plan plan = plan(PlanType.EXAM_PACKAGE);
+        LicenseCode code = tx(() -> codes.saveAndFlush(LicenseCode.issue(
+                "ARCHIVE-" + UUID.randomUUID().toString().substring(0, 20).toUpperCase(Locale.ROOT),
+                plan.getPublicId(), admin.userId(), Instant.now(), null)));
+        tx(() -> {
+            Plan archived = plans.findByPublicIdForUpdate(plan.getPublicId()).orElseThrow();
+            archived.setStatus(PlanStatus.ARCHIVED);
+            return plans.saveAndFlush(archived);
+        });
+
+        UUID tenant = UUID.randomUUID();
+        assertThatThrownBy(() -> service.redeem(code.getCode(),
+                new CurrentUser(UUID.randomUUID(), tenant, List.of("HOST_ADMIN"))))
+                .isInstanceOf(SubscriptionActivationException.class)
+                .hasMessage(BillingConstants.SUBSCRIPTION_PLAN_NOT_ACTIVE);
+
+        LicenseCode retained = tx(() -> codes.findByPublicId(code.getPublicId()).orElseThrow());
+        assertThat(retained.getStatus()).isEqualTo(LicenseCodeStatus.ISSUED);
+        assertThat(retained.getRedeemedByTenantId()).isNull();
+        assertThat(retained.getSubscriptionId()).isNull();
+        assertThat(tx(() -> subscriptions.findAll().stream()
+                .filter(subscription -> tenant.equals(subscription.getTenantId())).count())).isZero();
     }
 
     @Test void capacityNewIssueIsBlockedButLegacyCodeStillGrantsQuota() {
