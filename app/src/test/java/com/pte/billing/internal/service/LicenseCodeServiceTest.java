@@ -186,6 +186,28 @@ class LicenseCodeServiceTest {
     }
 
     @Test
+    void adminPageAllowsIssuedCodeWithoutRecipient() {
+        UUID planId = UUID.randomUUID();
+        LicenseCode code = LicenseCode.issue("ABCD-EFGH-JKLM-NPQR-STUV", planId, UUID.randomUUID(),
+                Instant.now(), null);
+        code.setPublicId(UUID.randomUUID());
+        Plan plan = activePlan(planId);
+        when(licenseCodeRepository.findAdminPage(eq(LicenseCodeStatus.ISSUED), eq(null), eq(null),
+                any(Instant.class), eq(PageRequest.of(0, 25))))
+                .thenReturn(new PageImpl<>(List.of(code), PageRequest.of(0, 25), 1));
+        when(planRepository.findByPublicIdIn(any())).thenReturn(List.of(plan));
+        when(tenancyService.findTenantSummaries(any())).thenReturn(Map.of());
+
+        AdminLicenseCodeSummary result = service.listForAdmin(0, 25, "issued", null, null,
+                platformAdmin()).data().getFirst();
+
+        assertThat(result.effectiveStatus()).isEqualTo("ISSUED");
+        assertThat(result.recipientPublicId()).isNull();
+        assertThat(result.recipientName()).isNull();
+        assertThat(result.planName()).isEqualTo(plan.getName());
+    }
+
+    @Test
     void adminPageRejectsUnboundedInputsAndUnknownStatus() {
         CurrentUser admin = platformAdmin();
         assertThatThrownBy(() -> service.listForAdmin(-1, 25, null, null, null, admin))

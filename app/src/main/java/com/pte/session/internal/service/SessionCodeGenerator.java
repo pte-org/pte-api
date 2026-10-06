@@ -16,7 +16,7 @@ import java.util.UUID;
 /**
  * Generates the human-readable exam code {@code {TENANT}-{YYMMDD}-{RAND4}}
  * (e.g. {@code FPT-261010-K7QM}) that hosts share and students type instead
- * of the session UUID. Migration V72 backfills existing rows with the same
+ * of the session UUID. Migration V80 backfills existing rows with the same
  * format — keep the two in sync.
  */
 @Component

@@ -233,9 +233,13 @@ public class LicenseCodeService {
                 .filter(Objects::nonNull).collect(Collectors.toSet());
         Map<UUID, TenantSummary> recipients = tenancyService.findTenantSummaries(tenantIds);
         return codes.stream()
-                .map(code -> AdminLicenseCodeSummary.from(code,
-                        LicenseCodeStateResolver.resolve(code, now),
-                        plans.get(code.getPlanId()), recipients.get(code.getRedeemedByTenantId())))
+                .map(code -> {
+                    UUID recipientId = code.getRedeemedByTenantId();
+                    return AdminLicenseCodeSummary.from(code,
+                            LicenseCodeStateResolver.resolve(code, now),
+                            plans.get(code.getPlanId()),
+                            recipientId == null ? null : recipients.get(recipientId));
+                })
                 .toList();
     }
 
