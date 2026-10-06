@@ -49,6 +49,10 @@ public class ExamSession extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
+    /** Human-readable exam code ({TENANT}-{YYMMDD}-{RAND4}); set once at creation, never changed. */
+    @Column(name = "session_code", nullable = false, unique = true, updatable = false, length = 24)
+    private String sessionCode;
+
     @Column(nullable = false)
     private UUID tenantId;
 

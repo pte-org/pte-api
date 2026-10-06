@@ -116,6 +116,36 @@ class OrderServiceTest {
         verifyNoPayOsCalls();
     }
 
+    @Test
+    void getOrderReturnsExactTenantOwnedOrder() {
+        UUID tenantId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        Order order = Order.pending(tenantId, UUID.randomUUID(), 1_000_000_003L,
+                new BigDecimal("50000.00"), "VND");
+        order.setPublicId(orderId);
+        when(orderRepository.findByPublicIdAndTenantIdAndDeletedFalse(orderId, tenantId))
+                .thenReturn(Optional.of(order));
+
+        OrderResponse response = service.getOrder(orderId, tenantId);
+
+        assertThat(response.publicId()).isEqualTo(orderId);
+        assertThat(response.tenantId()).isEqualTo(tenantId);
+    }
+
+    @Test
+    void getOrderDoesNotFallbackToAnotherTenant() {
+        UUID tenantId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        when(orderRepository.findByPublicIdAndTenantIdAndDeletedFalse(orderId, tenantId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getOrder(orderId, tenantId))
+                .isInstanceOfSatisfying(OrderException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(ex.getMessage()).isEqualTo(BillingConstants.ORDER_NOT_FOUND);
+                });
+    }
+
     private Plan activePlan(UUID publicId) {
         Plan plan = new Plan();
         plan.setPublicId(publicId);

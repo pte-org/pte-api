@@ -25,5 +25,8 @@ public record QuestionResponse(
         boolean current,
         long version,
         String rejectionReason,
-        String taskTypeKey) {
+        String taskTypeKey,
+        boolean canDeleteDraft,
+        boolean canArchive,
+        String deleteBlockReason) {
 }

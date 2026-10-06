@@ -42,3 +42,5 @@ docker-compose.local-test.yml
 scripts/seed-e2e.state.json
 *.key.*
 *.key
+
+.claude/

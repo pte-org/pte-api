@@ -7,6 +7,10 @@ import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.OrderStatus;
 import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
+import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
+import com.pte.billing.CommercialActivationTarget;
+import com.pte.billing.CommercialOutcomeConfirmedEvent;
+import com.pte.billing.CommercialOutcomeType;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.exception.PaymentWebhookException;
 import com.pte.billing.internal.repository.OrderRepository;
@@ -18,10 +22,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -53,6 +59,9 @@ class PayOsWebhookServiceTest {
     @Mock
     private SubscriptionActivationService subscriptionActivationService;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
     private PayOsWebhookService service;
 
@@ -60,7 +69,7 @@ class PayOsWebhookServiceTest {
     void setUp() {
         service = new PayOsWebhookService(jsonMapper, payOsClient,
                 paymentTransactionPersistenceService, orderRepository, planRepository,
-                subscriptionActivationService);
+                subscriptionActivationService, eventPublisher);
     }
 
     @Test
@@ -77,6 +86,10 @@ class PayOsWebhookServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(orderRepository.findByOrderCodeForUpdate(ORDER_CODE)).thenReturn(Optional.of(order));
         when(planRepository.findByPublicId(planId)).thenReturn(Optional.of(plan));
+        when(subscriptionActivationService.activate(tenantId, plan, ActivationSource.PAYMENT))
+                .thenReturn(SubscriptionActivationResponse.fromSubscription(tenantId, planId,
+                        "PTE-EXAM-2026-ABC123", Instant.now(), Instant.now().plusSeconds(3600),
+                        25, "ACTIVE", ActivationSource.PAYMENT.name()));
 
         service.handle(payload);
         service.handle(payload);
@@ -84,7 +97,39 @@ class PayOsWebhookServiceTest {
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
         verify(subscriptionActivationService, times(1))
                 .activate(tenantId, plan, ActivationSource.PAYMENT);
+        verify(eventPublisher, times(1)).publishEvent(any(CommercialOutcomeConfirmedEvent.class));
         verify(orderRepository, times(2)).findByOrderCodeForUpdate(ORDER_CODE);
+    }
+
+    @Test
+    void handle_successfulPaymentPublishesOneCombinedOutcomeWithExactOrderTarget() {
+        UUID tenantId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        Order order = Order.pending(tenantId, planId, ORDER_CODE, new BigDecimal("50000.00"), "VND");
+        order.setPublicId(orderId);
+        Plan plan = activePlan(planId);
+        String payload = successfulPayload(ORDER_CODE, "signed");
+        when(payOsClient.verifyWebhookSignature(any(JsonNode.class), org.mockito.ArgumentMatchers.eq("signed")))
+                .thenReturn(true);
+        when(paymentTransactionPersistenceService.record(any(PaymentTransaction.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderRepository.findByOrderCodeForUpdate(ORDER_CODE)).thenReturn(Optional.of(order));
+        when(planRepository.findByPublicId(planId)).thenReturn(Optional.of(plan));
+        when(subscriptionActivationService.activate(tenantId, plan, ActivationSource.PAYMENT))
+                .thenReturn(SubscriptionActivationResponse.fromSubscription(tenantId, planId,
+                        "PTE-EXAM-2026-ABC123", Instant.now(), Instant.now().plusSeconds(3600),
+                        25, "ACTIVE", ActivationSource.PAYMENT.name()));
+
+        service.handle(payload);
+
+        ArgumentCaptor<CommercialOutcomeConfirmedEvent> captor =
+                ArgumentCaptor.forClass(CommercialOutcomeConfirmedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().tenantPublicId()).isEqualTo(tenantId);
+        assertThat(captor.getValue().outcomeType()).isEqualTo(CommercialOutcomeType.EXAM_PACKAGE);
+        assertThat(captor.getValue().targetType()).isEqualTo(CommercialActivationTarget.ORDER);
+        assertThat(captor.getValue().targetPublicId()).isEqualTo(orderId);
     }
 
     @Test

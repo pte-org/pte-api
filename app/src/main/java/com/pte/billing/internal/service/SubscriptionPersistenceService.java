@@ -3,12 +3,13 @@ package com.pte.billing.internal.service;
 import com.pte.billing.domain.Subscription;
 import com.pte.billing.internal.repository.SubscriptionRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Isolates each license-key insert in its own transaction so a rare unique-key
- * collision can be retried after PostgreSQL aborts the failed transaction.
+ * Keeps subscription creation in the caller's transaction. The subscription,
+ * access/quota transition and its notification intent must commit or roll back
+ * together; a database uniqueness conflict is allowed to abort the whole
+ * business transition so a caller can safely retry the original operation.
  */
 @Service
 public class SubscriptionPersistenceService {
@@ -19,7 +20,7 @@ public class SubscriptionPersistenceService {
         this.subscriptionRepository = subscriptionRepository;
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public Subscription save(Subscription subscription) {
         return subscriptionRepository.saveAndFlush(subscription);
     }

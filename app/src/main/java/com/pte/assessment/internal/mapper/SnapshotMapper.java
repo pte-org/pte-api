@@ -69,7 +69,8 @@ public final class SnapshotMapper {
                 taskTypeKey,
                 item.getTaskTypeDisplayName(),
                 item.getTaskTypeCode() != null ? item.getTaskTypeCode() : taskTypeKey,
-                item.runtimeProfile(), item.getRuntimeMappingVersion(), runtimeMappingStatus(item));
+                item.runtimeProfile(), item.getRuntimeMappingVersion(), runtimeMappingStatus(item),
+                item.getSourceQuestionPublicId());
     }
 
     private static String runtimeMappingStatus(SnapshotItem item) {

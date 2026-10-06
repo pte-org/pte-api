@@ -37,6 +37,8 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -71,7 +73,9 @@ public class ExaminerScoringService {
     private final AttemptService attemptService;
     private final MediaService mediaService;
     private final EntityManager entityManager;
+    private final ApplicationEventPublisher eventPublisher;
 
+    @Autowired
     public ExaminerScoringService(ExaminerWorkQueueRepository workQueueRepository,
             ExaminerAttemptAssignmentRepository assignmentRepository,
             ScoringAnswerRepository scoringAnswerRepository,
@@ -79,7 +83,8 @@ public class ExaminerScoringService {
             ScoringSessionStateRepository sessionStateRepository,
             ScoringEligibilityQueryService eligibilityQueryService,
             AnswerPayloadDecoder answerPayloadDecoder, IdentityService identityService,
-            AttemptService attemptService, MediaService mediaService, EntityManager entityManager) {
+            AttemptService attemptService, MediaService mediaService, EntityManager entityManager,
+            ApplicationEventPublisher eventPublisher) {
         this.workQueueRepository = workQueueRepository;
         this.assignmentRepository = assignmentRepository;
         this.scoringAnswerRepository = scoringAnswerRepository;
@@ -91,6 +96,21 @@ public class ExaminerScoringService {
         this.attemptService = attemptService;
         this.mediaService = mediaService;
         this.entityManager = entityManager;
+        this.eventPublisher = eventPublisher;
+    }
+
+    /** Compatibility constructor for focused Examiner workflow tests. */
+    public ExaminerScoringService(ExaminerWorkQueueRepository workQueueRepository,
+            ExaminerAttemptAssignmentRepository assignmentRepository,
+            ScoringAnswerRepository scoringAnswerRepository,
+            ExaminerAnswerScoreRepository examinerAnswerScoreRepository,
+            ScoringSessionStateRepository sessionStateRepository,
+            ScoringEligibilityQueryService eligibilityQueryService,
+            AnswerPayloadDecoder answerPayloadDecoder, IdentityService identityService,
+            AttemptService attemptService, MediaService mediaService, EntityManager entityManager) {
+        this(workQueueRepository, assignmentRepository, scoringAnswerRepository, examinerAnswerScoreRepository,
+                sessionStateRepository, eligibilityQueryService, answerPayloadDecoder, identityService,
+                attemptService, mediaService, entityManager, null);
     }
 
     @Transactional(readOnly = true)
@@ -205,6 +225,10 @@ public class ExaminerScoringService {
         ExaminerAnswerScore saved = examinerAnswerScoreRepository.saveAndFlush(new ExaminerAnswerScore(
                 answer.getAnswerPublicId(), answer.getAttemptPublicId(), answer.getSessionPublicId(),
                 answer.getTenantId(), examiner.userId(), request.score(), Instant.now()));
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new com.pte.scoring.ScoringProgressChangedEvent(
+                    answer.getTenantId(), answer.getSessionPublicId()));
+        }
         return toSubmission(saved);
     }
 

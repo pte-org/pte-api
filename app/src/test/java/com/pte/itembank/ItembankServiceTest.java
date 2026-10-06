@@ -360,10 +360,11 @@ class ItembankServiceTest {
     }
 
     @Test
-    void archive_fromDraftOrApproved_succeeds() {
+    void archive_fromRestoredDraftOrApproved_succeeds() {
         UUID draftId = UUID.randomUUID();
         Question draft = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
         draft.setStatus(QuestionStatus.DRAFT);
+        draft.setEverPublished(true);
         when(questionRepository.findWithOptionsByPublicId(draftId)).thenReturn(Optional.of(draft));
 
         service.archive(draftId, platformCaller);
@@ -378,6 +379,20 @@ class ItembankServiceTest {
         service.archive(approvedId, platformCaller);
 
         assertThat(approved.getStatus()).isEqualTo(QuestionStatus.ARCHIVED);
+    }
+
+    @Test
+    void archive_newOrUnknownDraft_isRejected() {
+        for (Boolean provenance : new Boolean[] {false, null}) {
+            UUID publicId = UUID.randomUUID();
+            Question draft = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+            draft.setStatus(QuestionStatus.DRAFT);
+            draft.setEverPublished(provenance);
+            when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(draft));
+            assertThatThrownBy(() -> service.archive(publicId, platformCaller))
+                    .isInstanceOf(com.pte.itembank.internal.exception.InvalidQuestionStatusTransitionException.class);
+            assertThat(draft.getStatus()).isEqualTo(QuestionStatus.DRAFT);
+        }
     }
 
     @Test

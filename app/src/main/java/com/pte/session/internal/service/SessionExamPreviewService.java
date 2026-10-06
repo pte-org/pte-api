@@ -68,7 +68,8 @@ public class SessionExamPreviewService {
                 resolveMedia(item.imagePromptRef(), tenantId, mediaUrls),
                 item.minWordCount(),
                 item.maxWordCount(),
-                parseOptions(item.optionsJson()));
+                parseOptions(item.optionsJson()),
+                item.sourceQuestionPublicId());
     }
 
     private String resolveMedia(UUID mediaPublicId, UUID tenantId, Map<UUID, String> cache) {

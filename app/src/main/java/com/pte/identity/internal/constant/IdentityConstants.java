@@ -22,6 +22,9 @@ public final class IdentityConstants {
     public static final String FORBIDDEN_ROLE_ASSIGNMENT = "FORBIDDEN_ROLE_ASSIGNMENT";
     public static final String FORBIDDEN_USER_MANAGEMENT = "FORBIDDEN_USER_MANAGEMENT";
     public static final String FORBIDDEN_PASSWORD_RESET = "FORBIDDEN_PASSWORD_RESET";
+    public static final String USER_AGGREGATE = "User";
+    public static final String USER_PASSWORD_RESET = "UserPasswordReset";
+    public static final String USER_PASSWORD_RESET_SUMMARY = "Authorized administrator reset the password.";
     public static final String INVALID_EXAM_STAFF_QUERY = "INVALID_EXAM_STAFF_QUERY";
     public static final String DUPLICATE_EMAIL_IN_BATCH = "DUPLICATE_EMAIL_IN_BATCH";
     public static final String ROSTER_FILE_REQUIRED = "ROSTER_FILE_REQUIRED";

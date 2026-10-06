@@ -105,6 +105,7 @@ public class ExamOrchestrationService {
     private final IdentityService identityService;
     private final StartedAttemptLookup startedAttemptLookup;
     private final AuditLogService auditLogService;
+    private final SessionCodeGenerator sessionCodeGenerator;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public ExamOrchestrationService(ExamSessionRepository sessionRepository,
@@ -122,7 +123,8 @@ public class ExamOrchestrationService {
             EnrollmentModuleService enrollmentModuleService,
             IdentityService identityService,
             StartedAttemptLookup startedAttemptLookup,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+            SessionCodeGenerator sessionCodeGenerator) {
         this.sessionRepository = sessionRepository;
         this.sourceRepository = sourceRepository;
         this.memberRepository = memberRepository;
@@ -139,13 +141,14 @@ public class ExamOrchestrationService {
         this.identityService = identityService;
         this.startedAttemptLookup = startedAttemptLookup;
         this.auditLogService = auditLogService;
+        this.sessionCodeGenerator = sessionCodeGenerator;
     }
 
     @Transactional
     public SessionResponse createDraft(CreateExamDraftRequest request, CurrentUser caller) {
         UUID tenantId = requireTenant(caller);
         validateWindow(request.opensAt(), request.closesAt());
-        SubscriptionView subscription = activeSubscription(request.subscriptionPublicId(), tenantId);
+        SubscriptionView subscription = lockedActiveSubscription(request.subscriptionPublicId(), tenantId);
         validateSubscriptionWindowAndCapacity(subscription, request.opensAt(), request.closesAt(), request.capacity());
         var template = scoreTemplateService.findActiveByPublicId(request.templatePublicId())
                 .orElseThrow(() -> new ExamDraftConfigurationException(SessionConstants.EXAM_TEMPLATE_ACTIVE_REQUIRED));
@@ -175,6 +178,7 @@ public class ExamOrchestrationService {
         session.setPolicy(ExamPolicy.forMode(mode));
         session.getPolicy().setLockdownMode(SessionPolicyResolver.resolveForCreate(mode, request.lockdownMode()));
         session.setStatus(SessionStatus.DRAFT);
+        session.setSessionCode(sessionCodeGenerator.generate(tenantId, request.opensAt()));
         ExamSession saved = sessionRepository.saveAndFlush(session);
         auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, saved.getPublicId().toString(),
                 SessionConstants.EVENT_EXAM_DRAFT_CREATED, saved.getName());
@@ -183,7 +187,37 @@ public class ExamOrchestrationService {
 
     @Transactional
     public SessionResponse updateDraft(UUID publicId, PatchExamDraftRequest request, CurrentUser caller) {
-        ExamSession session = ownedForEdit(publicId, caller);
+        UUID tenantId = requireTenant(caller);
+        ExamSession observed = observedSession(publicId, caller);
+        if (request.expectedVersion() != null
+                && !request.expectedVersion().equals(observed.getDraftVersion())) {
+            throw new ExamDraftVersionConflictException();
+        }
+        UUID targetSubscriptionId = request.subscriptionPublicId() == null
+                ? observed.getSubscriptionId() : request.subscriptionPublicId();
+        if (observed.getSubscriptionId() == null || targetSubscriptionId == null) {
+            throw new SessionSubscriptionNotFoundException();
+        }
+        List<UUID> subscriptionLockOrder = List.of(observed.getSubscriptionId(), targetSubscriptionId)
+                .stream().sorted().toList();
+        List<SubscriptionView> lockedSubscriptions = billingService.lockSubscriptions(
+                subscriptionLockOrder, tenantId);
+        SubscriptionView currentSubscription = lockedSubscriptions.stream()
+                .filter(subscription -> subscription.publicId().equals(observed.getSubscriptionId()))
+                .findFirst()
+                .orElseGet(() -> exactOrActiveSubscription(observed.getSubscriptionId(), tenantId));
+        SubscriptionView lockedSubscription = lockedSubscriptions.stream()
+                .filter(subscription -> subscription.publicId().equals(targetSubscriptionId))
+                .findFirst()
+                .orElseGet(() -> exactOrActiveSubscription(targetSubscriptionId, tenantId));
+        ExamSession session = lockedSession(publicId, caller, tenantId);
+        if (session.getStatus() != SessionStatus.DRAFT) {
+            throw new ExamDraftNotEditableException();
+        }
+        if (!java.util.Objects.equals(observed.getSubscriptionId(), session.getSubscriptionId())
+                || !java.util.Objects.equals(currentSubscription.publicId(), session.getSubscriptionId())) {
+            throw new com.pte.session.internal.exception.SessionSubscriptionConflictException();
+        }
         if (request.expectedVersion() != null && !request.expectedVersion().equals(session.getDraftVersion())) {
             throw new ExamDraftVersionConflictException();
         }
@@ -205,9 +239,8 @@ public class ExamOrchestrationService {
             session.setTemplateVersion(selectedTemplate.version());
         }
         if (request.subscriptionPublicId() != null) {
-            SubscriptionView subscription = activeSubscription(request.subscriptionPublicId(), caller.tenantId());
-            session.setSubscriptionId(subscription.publicId());
-            session.setLicenseKey(subscription.licenseKey());
+            session.setSubscriptionId(lockedSubscription.publicId());
+            session.setLicenseKey(lockedSubscription.licenseKey());
         }
         if (request.opensAt() != null) session.setOpensAt(request.opensAt());
         if (request.closesAt() != null) session.setClosesAt(request.closesAt());
@@ -257,8 +290,8 @@ public class ExamOrchestrationService {
         }
         validateWindow(session.getOpensAt(), session.getClosesAt());
         validateConfiguration(session.getExamMode(), session.getFormMode(), session.getReusePolicy(), session.getSeriesKey());
-        SubscriptionView subscription = activeSubscription(session.getSubscriptionId(), caller.tenantId());
-        validateSubscriptionWindowAndCapacity(subscription, session.getOpensAt(), session.getClosesAt(), session.getCapacity());
+        validateSubscriptionWindowAndCapacity(lockedSubscription, session.getOpensAt(),
+                session.getClosesAt(), session.getCapacity());
         ExamSession saved = sessionRepository.saveAndFlush(session);
         auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, saved.getPublicId().toString(),
                 SessionConstants.EVENT_EXAM_DRAFT_UPDATED, saved.getName());
@@ -412,7 +445,14 @@ public class ExamOrchestrationService {
 
     @Transactional
     public SessionResponse publish(UUID sessionPublicId, CurrentUser caller) {
-        ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
+        UUID tenantId = requireTenant(caller);
+        ExamSession observed = observedSession(sessionPublicId, caller);
+        SubscriptionView lockedSubscription = lockedActiveSubscription(
+                observed.getSubscriptionId(), tenantId);
+        ExamSession session = lockedSession(sessionPublicId, caller, tenantId);
+        if (!java.util.Objects.equals(lockedSubscription.publicId(), session.getSubscriptionId())) {
+            throw new com.pte.session.internal.exception.SessionSubscriptionConflictException();
+        }
         if (session.getStatus() != SessionStatus.READY || session.getSnapshotPublicId() == null) {
             throw new GenerationNotReadyException();
         }
@@ -693,9 +733,32 @@ public class ExamOrchestrationService {
                 member.getPriorStatus());
     }
 
-    private SubscriptionView activeSubscription(UUID publicId, UUID tenantId) {
+    private SubscriptionView lockedActiveSubscription(UUID publicId, UUID tenantId) {
+        if (publicId == null || tenantId == null) {
+            throw new SessionSubscriptionNotFoundException();
+        }
+        List<SubscriptionView> locked = billingService.lockSubscriptions(List.of(publicId), tenantId);
+        if (!locked.isEmpty()) {
+            return locked.get(0);
+        }
         return billingService.getActiveSubscription(publicId, tenantId)
                 .orElseThrow(SessionSubscriptionNotFoundException::new);
+    }
+
+    private SubscriptionView exactOrActiveSubscription(UUID publicId, UUID tenantId) {
+        return billingService.getSubscription(publicId, tenantId)
+                .or(() -> billingService.getActiveSubscription(publicId, tenantId))
+                .orElseThrow(SessionSubscriptionNotFoundException::new);
+    }
+
+    private ExamSession observedSession(UUID publicId, CurrentUser caller) {
+        return sessionRepository.findByPublicIdAndTenantId(publicId, caller.tenantId())
+                .orElseGet(() -> sessionLifecycleService.findOwnedWithLock(publicId, caller));
+    }
+
+    private ExamSession lockedSession(UUID publicId, CurrentUser caller, UUID tenantId) {
+        return sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseGet(() -> sessionLifecycleService.findOwnedWithLock(publicId, caller));
     }
 
     private void validateSubscriptionWindowAndCapacity(SubscriptionView subscription, Instant opensAt,

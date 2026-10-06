@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -76,6 +77,39 @@ public class IdentityService implements StudentCountProvider {
 
     public List<User> findByTenantIdAndRole(UUID tenantId, Role role) {
         return userRepository.findByTenantIdAndRolesContaining(tenantId, role);
+    }
+
+    /** Returns active, nondeleted members for an owned role fan-out contract. */
+    @Transactional(readOnly = true)
+    public List<IdentityRoleMember> findActiveRoleMembers(Role role) {
+        if (role == null) {
+            return List.of();
+        }
+        return userRepository.findActiveMembersByRole(role, UserStatus.ACTIVE).stream()
+                .map(user -> new IdentityRoleMember(user.getPublicId(), user.getTenantId()))
+                .toList();
+    }
+
+    /** Returns active, nondeleted members of one role in one tenant. */
+    @Transactional(readOnly = true)
+    public List<IdentityRoleMember> findActiveRoleMembers(UUID tenantId, Role role) {
+        if (tenantId == null || role == null) {
+            return List.of();
+        }
+        return userRepository.findByTenantIdAndRolesContaining(tenantId, role).stream()
+                .filter(user -> !user.isDeleted() && user.getStatus() == UserStatus.ACTIVE)
+                .map(user -> new IdentityRoleMember(user.getPublicId(), user.getTenantId()))
+                .toList();
+    }
+
+    /** Holds existing identity row serialization while a role-owned write commits. Null tenant is exact platform scope. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean lockActiveRoleMember(UUID publicId, UUID tenantId, Role role) {
+        if (publicId == null || role == null) { return false; }
+        return userRepository.findWithLockByPublicId(publicId)
+                .filter(user -> !user.isDeleted() && user.getStatus() == UserStatus.ACTIVE)
+                .filter(user -> Objects.equals(user.getTenantId(), tenantId) && user.getRoles().contains(role))
+                .isPresent();
     }
 
     /** Returns only active EXAMINER identities in the supplied tenant; invalid IDs are omitted. */

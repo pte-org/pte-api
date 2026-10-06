@@ -10,13 +10,18 @@ import com.pte.scoring.dto.response.ScoreSourceAuditResponse;
 import com.pte.scoring.dto.response.HostScoreReviewResponse;
 import com.pte.scoring.dto.response.ReportScoringAnswerView;
 import com.pte.scoring.dto.response.ReportPublicationScoringView;
+import com.pte.scoring.dto.request.FinalizeGradingCohortRequest;
+import com.pte.scoring.dto.response.GradingCohortPreviewResponse;
+import com.pte.scoring.dto.response.GradingCohortResponse;
 import com.pte.scoring.internal.service.ExaminerWorkQueryService;
 import com.pte.scoring.internal.service.ScorePublicationLockService;
 import com.pte.scoring.internal.service.ScoreSourceSelectionService;
+import com.pte.scoring.internal.service.GradingCohortService;
 import com.pte.scoring.internal.service.ScoredAnswerQueryService;
 import com.pte.scoring.internal.service.ScoringEligibilityQueryService;
 import com.pte.scoring.internal.service.ScoringReviewReadQueryService;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 import java.util.Optional;
@@ -41,19 +46,34 @@ public class ScoringService {
     private final ScoringReviewReadQueryService scoringReviewReadQueryService;
     private final ScoreSourceSelectionService scoreSourceSelectionService;
     private final ScorePublicationLockService scorePublicationLockService;
+    private final GradingCohortService gradingCohortService;
 
+    @Autowired
     public ScoringService(ScoredAnswerQueryService scoredAnswerQueryService,
             ScoringEligibilityQueryService scoringEligibilityQueryService,
             ExaminerWorkQueryService examinerWorkQueryService,
             ScoringReviewReadQueryService scoringReviewReadQueryService,
             ScoreSourceSelectionService scoreSourceSelectionService,
-            ScorePublicationLockService scorePublicationLockService) {
+            ScorePublicationLockService scorePublicationLockService,
+            GradingCohortService gradingCohortService) {
         this.scoredAnswerQueryService = scoredAnswerQueryService;
         this.scoringEligibilityQueryService = scoringEligibilityQueryService;
         this.examinerWorkQueryService = examinerWorkQueryService;
         this.scoringReviewReadQueryService = scoringReviewReadQueryService;
         this.scoreSourceSelectionService = scoreSourceSelectionService;
         this.scorePublicationLockService = scorePublicationLockService;
+        this.gradingCohortService = gradingCohortService;
+    }
+
+    /** Compatibility constructor for focused facade tests. */
+    public ScoringService(ScoredAnswerQueryService scoredAnswerQueryService,
+            ScoringEligibilityQueryService scoringEligibilityQueryService,
+            ExaminerWorkQueryService examinerWorkQueryService,
+            ScoringReviewReadQueryService scoringReviewReadQueryService,
+            ScoreSourceSelectionService scoreSourceSelectionService,
+            ScorePublicationLockService scorePublicationLockService) {
+        this(scoredAnswerQueryService, scoringEligibilityQueryService, examinerWorkQueryService,
+                scoringReviewReadQueryService, scoreSourceSelectionService, scorePublicationLockService, null);
     }
 
     public List<ScoredAnswerView> getScoredAnswersForAttempt(UUID attemptPublicId, UUID tenantId) {
@@ -118,5 +138,14 @@ public class ScoringService {
             UUID proposedPublicationPublicId) {
         return scorePublicationLockService.lockForPublication(tenantId, sessionPublicId,
                 proposedPublicationPublicId);
+    }
+
+    public GradingCohortPreviewResponse previewGradingCohort(UUID sessionPublicId, UUID tenantId) {
+        return gradingCohortService.preview(sessionPublicId, tenantId);
+    }
+
+    public GradingCohortResponse finalizeGradingCohort(UUID sessionPublicId, UUID tenantId, UUID actorPublicId,
+            FinalizeGradingCohortRequest request) {
+        return gradingCohortService.finalizeCohort(sessionPublicId, tenantId, actorPublicId, request);
     }
 }

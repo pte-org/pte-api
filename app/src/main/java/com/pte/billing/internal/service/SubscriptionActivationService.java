@@ -24,7 +24,7 @@ import java.util.UUID;
 @Service
 public class SubscriptionActivationService {
 
-    private static final int MAX_LICENSE_KEY_ATTEMPTS = 5;
+    private static final int MAX_LICENSE_KEY_PRECHECK_ATTEMPTS = 5;
 
     private final SubscriptionPersistenceService subscriptionPersistenceService;
     private final SubscriptionRepository subscriptionRepository;
@@ -51,9 +51,10 @@ public class SubscriptionActivationService {
 
         if (plan.getType() == PlanType.STUDENT_CAPACITY) {
             int slots = plan.getExtraStudentSlots();
-            tenancyService.grantQuota(tenantId, slots,
+            UUID quotaTransactionId = tenancyService.grantQuota(tenantId, slots,
                     "Activated STUDENT_CAPACITY plan " + plan.getPublicId());
-            return SubscriptionActivationResponse.forStudentCapacity(tenantId, plan.getPublicId(), slots);
+            return SubscriptionActivationResponse.forStudentCapacity(tenantId, plan.getPublicId(), slots,
+                    quotaTransactionId);
         }
 
         Instant startsAt = Instant.now();
@@ -67,12 +68,16 @@ public class SubscriptionActivationService {
                 subscription.getExpiresAt(),
                 subscription.getMaxStudentsPerSession(),
                 subscription.getStatus().name(),
-                subscription.getActivationSource().name());
+                subscription.getActivationSource().name(),
+                subscription.getPublicId());
     }
 
     private Subscription saveWithUniqueLicenseKey(UUID tenantId, Plan plan, ActivationSource source,
             Instant startsAt, Instant expiresAt) {
-        for (int attempt = 1; attempt <= MAX_LICENSE_KEY_ATTEMPTS; attempt++) {
+        // The pre-check can discard a generated key without touching the DB.
+        // A uniqueness race during save aborts this whole transaction; retrying
+        // only the repository call would leave the caller's transition rollback-only.
+        for (int attempt = 1; attempt <= MAX_LICENSE_KEY_PRECHECK_ATTEMPTS; attempt++) {
             String licenseKey = licenseKeyGenerator.generate(plan, startsAt);
             if (subscriptionRepository.existsByLicenseKey(licenseKey)) {
                 continue;
@@ -90,10 +95,12 @@ public class SubscriptionActivationService {
             try {
                 return subscriptionPersistenceService.save(subscription);
             } catch (DataIntegrityViolationException ex) {
-                if (attempt == MAX_LICENSE_KEY_ATTEMPTS) {
-                    throw new SubscriptionActivationException(HttpStatus.INTERNAL_SERVER_ERROR,
-                            BillingConstants.LICENSE_KEY_GENERATION_FAILED, ex);
-                }
+                // The participating transaction is rollback-only after a
+                // uniqueness violation. Do not continue inside it: callers
+                // retry the complete business transition, including its
+                // payment/license linkage and BEFORE_COMMIT intent.
+                throw new SubscriptionActivationException(HttpStatus.INTERNAL_SERVER_ERROR,
+                        BillingConstants.LICENSE_KEY_GENERATION_FAILED, ex);
             }
         }
         throw new SubscriptionActivationException(HttpStatus.INTERNAL_SERVER_ERROR,
@@ -110,7 +117,7 @@ public class SubscriptionActivationService {
         if (source == null) {
             throw invalid(BillingConstants.SUBSCRIPTION_SOURCE_REQUIRED);
         }
-        if (plan.getStatus() != PlanStatus.ACTIVE) {
+        if (plan.isDeleted() || plan.getStatus() != PlanStatus.ACTIVE) {
             throw new SubscriptionActivationException(HttpStatus.CONFLICT,
                     BillingConstants.SUBSCRIPTION_PLAN_NOT_ACTIVE);
         }

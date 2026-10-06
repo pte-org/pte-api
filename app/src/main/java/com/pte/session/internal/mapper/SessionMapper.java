@@ -18,6 +18,7 @@ public final class SessionMapper {
         boolean legacySession = session.getExamMode() == null;
         return new SessionResponse(
                 session.getPublicId(),
+                session.getSessionCode(),
                 session.getName(),
                 session.getTenantId(),
                 session.getSubscriptionId(),

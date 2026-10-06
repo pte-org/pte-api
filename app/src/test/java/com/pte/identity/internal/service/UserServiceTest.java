@@ -5,6 +5,7 @@ import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
 import com.pte.identity.internal.domain.LoginHash;
+import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.identity.internal.dto.request.BulkCreateUserRow;
 import com.pte.identity.internal.dto.request.BulkCreateUsersRequest;
 import com.pte.identity.internal.dto.request.ChangePasswordRequest;
@@ -21,6 +22,7 @@ import com.pte.tenancy.internal.exception.StudentLimitExceededException;
 import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.audit.AuditLogService;
 import com.pte.tenancy.TenancyService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -78,13 +80,16 @@ class UserServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private AuditLogService auditLogService;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private UserService userService;
 
     @BeforeEach
     void setUp() {
         userService = new UserService(userRepository, loginHashRepository, passwordEncoder,
-                provisioningHelper, bulkCreateWriter, tenancyService, eventPublisher);
+                provisioningHelper, bulkCreateWriter, tenancyService, eventPublisher, auditLogService);
     }
 
     private User userWithId(Long id, UUID publicId, UUID tenantId) {
@@ -169,6 +174,9 @@ class UserServiceTest {
         assertThat(passwordEncoder.matches("OldPassword123", loginHash.getHash())).isFalse();
         assertThat(passwordEncoder.matches("NewPassword456", loginHash.getHash())).isTrue();
         verify(loginHashRepository, times(1)).save(loginHash);
+        verify(auditLogService).record(eq(caller), eq(IdentityConstants.USER_AGGREGATE),
+                eq(userPublicId.toString()), eq(IdentityConstants.USER_PASSWORD_RESET),
+                eq(IdentityConstants.USER_PASSWORD_RESET_SUMMARY));
     }
 
     @Test

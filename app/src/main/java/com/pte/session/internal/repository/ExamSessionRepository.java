@@ -28,10 +28,29 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> 
     Optional<ExamSession> findWithLockByPublicIdAndTenantId(@Param("publicId") UUID publicId,
                                                              @Param("tenantId") UUID tenantId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM ExamSession s WHERE s.publicId = :publicId AND s.deleted = false")
+    Optional<ExamSession> findWithLockByPublicId(@Param("publicId") UUID publicId);
+
     /** No tenant filter: used by the trusted application-call surface, not a host-scoped caller. */
     Optional<ExamSession> findByPublicId(UUID publicId);
 
     List<ExamSession> findByTenantId(UUID tenantId);
+
+    @Query("SELECT s FROM ExamSession s WHERE s.deleted = false "
+            + "AND s.status = com.pte.session.domain.enums.SessionStatus.OPEN "
+            + "AND s.opensAt <= :now AND s.closesAt > :now AND s.closesAt <= :cutoff "
+            + "ORDER BY s.closesAt ASC, s.id ASC")
+    List<ExamSession> findDueClosingSoon(@Param("now") Instant now, @Param("cutoff") Instant cutoff);
+
+    /** Global check (deleted rows included) — codes are unique across all tenants. */
+    boolean existsBySessionCode(String sessionCode);
+
+    /**
+     * Student code lookup. Unlike the other session queries this one filters
+     * {@code deleted}: a deleted session whose enrollments survived must not resolve.
+     */
+    Optional<ExamSession> findBySessionCodeAndTenantIdAndDeletedFalse(String sessionCode, UUID tenantId);
 
     @Query("SELECT s FROM ExamSession s WHERE s.subscriptionId = :subscriptionId "
             + "AND s.status IN (com.pte.session.domain.enums.SessionStatus.SCHEDULED, "
@@ -45,4 +64,15 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> 
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<ExamSession> findBySubscriptionIdAndStatus(UUID subscriptionId, SessionStatus status);
+
+    /**
+     * Locks every non-deleted session in public-id order. Billing holds the
+     * subscription lock before invoking this query, so revoke and session
+     * writers use one deterministic hierarchy.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM ExamSession s WHERE s.subscriptionId = :subscriptionId "
+            + "AND s.deleted = false ORDER BY s.publicId ASC")
+    List<ExamSession> findWithLockBySubscriptionIdOrderByPublicIdAsc(
+            @Param("subscriptionId") UUID subscriptionId);
 }

@@ -3,9 +3,15 @@ package com.pte.billing.internal.service;
 import com.pte.billing.domain.Order;
 import com.pte.billing.domain.PaymentTransaction;
 import com.pte.billing.domain.Plan;
+import com.pte.billing.CommercialActivationSource;
+import com.pte.billing.CommercialActivationTarget;
+import com.pte.billing.CommercialOutcomeConfirmedEvent;
+import com.pte.billing.CommercialOutcomeType;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.OrderStatus;
+import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.internal.constant.BillingConstants;
+import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
 import com.pte.billing.internal.exception.PaymentWebhookException;
 import com.pte.billing.internal.exception.PlanNotFoundException;
 import com.pte.billing.internal.repository.OrderRepository;
@@ -13,6 +19,7 @@ import com.pte.billing.internal.repository.PlanRepository;
 import com.pte.billing.internal.vendor.payos.PayOsClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -29,17 +36,20 @@ public class PayOsWebhookService {
     private final OrderRepository orderRepository;
     private final PlanRepository planRepository;
     private final SubscriptionActivationService subscriptionActivationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public PayOsWebhookService(JsonMapper jsonMapper, PayOsClient payOsClient,
             PaymentTransactionPersistenceService paymentTransactionPersistenceService,
             OrderRepository orderRepository, PlanRepository planRepository,
-            SubscriptionActivationService subscriptionActivationService) {
+            SubscriptionActivationService subscriptionActivationService,
+            ApplicationEventPublisher eventPublisher) {
         this.jsonMapper = jsonMapper;
         this.payOsClient = payOsClient;
         this.paymentTransactionPersistenceService = paymentTransactionPersistenceService;
         this.orderRepository = orderRepository;
         this.planRepository = planRepository;
         this.subscriptionActivationService = subscriptionActivationService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -80,8 +90,18 @@ public class PayOsWebhookService {
         verifyOrderAmounts(order, payload.path("data"));
         Plan plan = planRepository.findByPublicId(order.getPlanId())
                 .orElseThrow(PlanNotFoundException::new);
-        subscriptionActivationService.activate(order.getTenantId(), plan, ActivationSource.PAYMENT);
+        SubscriptionActivationResponse activation = subscriptionActivationService.activate(
+                order.getTenantId(), plan, ActivationSource.PAYMENT);
         order.markPaid(Instant.now());
+        eventPublisher.publishEvent(new CommercialOutcomeConfirmedEvent(
+                order.getTenantId(),
+                plan.getPublicId(),
+                plan.getType() == PlanType.EXAM_PACKAGE
+                        ? CommercialOutcomeType.EXAM_PACKAGE : CommercialOutcomeType.STUDENT_CAPACITY,
+                CommercialActivationSource.PAYMENT,
+                CommercialActivationTarget.ORDER,
+                order.getPublicId(),
+                activation.grantedStudentSlots()));
         transaction.markProcessed();
     }
 

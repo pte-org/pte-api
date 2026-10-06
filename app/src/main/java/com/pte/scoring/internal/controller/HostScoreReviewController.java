@@ -2,6 +2,9 @@ package com.pte.scoring.internal.controller;
 
 import com.pte.scoring.ScoringService;
 import com.pte.scoring.dto.request.SelectScoreSourceRequest;
+import com.pte.scoring.dto.request.FinalizeGradingCohortRequest;
+import com.pte.scoring.dto.response.GradingCohortPreviewResponse;
+import com.pte.scoring.dto.response.GradingCohortResponse;
 import com.pte.scoring.dto.response.HostScoreReviewResponse;
 import com.pte.scoring.dto.response.ScoreSourceSelectionPreviewResponse;
 import com.pte.scoring.dto.response.ScoreSourceSelectionResultResponse;
@@ -58,6 +61,22 @@ public class HostScoreReviewController {
     public ApiResponse<List<ScoreSourceAuditResponse>> getSourceSelectionAudits(
             @PathVariable UUID sessionPublicId) {
         return ApiResponse.success(scoringService.getScoreSourceSelectionAudits(sessionPublicId, currentUser()));
+    }
+
+    @GetMapping("/{sessionPublicId}/grading-cohort/preview")
+    public ApiResponse<GradingCohortPreviewResponse> previewGradingCohort(@PathVariable UUID sessionPublicId) {
+        CurrentUser caller = currentUser();
+        sessionService.verifyHostAccess(sessionPublicId, caller.tenantId());
+        return ApiResponse.success(scoringService.previewGradingCohort(sessionPublicId, caller.tenantId()));
+    }
+
+    @PostMapping("/{sessionPublicId}/grading-cohort/finalize")
+    public ApiResponse<GradingCohortResponse> finalizeGradingCohort(@PathVariable UUID sessionPublicId,
+            @RequestBody FinalizeGradingCohortRequest request) {
+        CurrentUser caller = currentUser();
+        sessionService.verifyHostAccess(sessionPublicId, caller.tenantId());
+        return ApiResponse.success(scoringService.finalizeGradingCohort(sessionPublicId, caller.tenantId(),
+                caller.userId(), request));
     }
 
     private CurrentUser currentUser() {

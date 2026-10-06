@@ -131,13 +131,14 @@ class AttemptLifecycleServicePlayAudioTest {
 
         when(attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
             .thenReturn(Optional.of(attempt));
-        org.mockito.Mockito.lenient().when(pinnedItemRepository.findByPinnedSnapshotIdAndOrderIndex(snapshot.getId(), 0))
+        org.mockito.Mockito.lenient().when(pinnedItemRepository.findByPublicId(pinnedItemPublicId))
             .thenReturn(Optional.of(item));
     }
 
     @Test
     @DisplayName("locks the ExamAttempt row and never touches TimerService")
     void playAudio_locksExamAttemptRow_neverTouchesTimerService() {
+        stubRequestedItem();
         when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
 
         AudioPlayResponse response = attemptLifecycleService.playAudio(attemptPublicId, pinnedItemPublicId, "req-1", caller);
@@ -150,6 +151,7 @@ class AttemptLifecycleServicePlayAudioTest {
     @Test
     @DisplayName("first play increments playCount and persists the attempt")
     void playAudio_firstPlay_incrementsPlayCount() {
+        stubRequestedItem();
         when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
         when(attemptRepository.save(any(ExamAttempt.class))).thenReturn(attempt);
 
@@ -164,6 +166,7 @@ class AttemptLifecycleServicePlayAudioTest {
     @Test
     @DisplayName("repeated request with the same playRequestId replays the prior outcome without incrementing again")
     void playAudio_sameRequestIdReplayed_doesNotIncrementAgain() {
+        stubRequestedItem();
         attempt.setPlayCount(1);
         attempt.setLastPlayRequestId("req-1");
         attempt.setLastPlayAllowed(true);
@@ -179,6 +182,7 @@ class AttemptLifecycleServicePlayAudioTest {
     @Test
     @DisplayName("replay limit exceeded throws and persists the rejected attempt (allowed=false)")
     void playAudio_replayLimitExceeded_throws() {
+        stubRequestedItem();
         attempt.setPlayCount(2); // policy limit is 2
         when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
         when(attemptRepository.save(any(ExamAttempt.class))).thenReturn(attempt);
@@ -187,23 +191,31 @@ class AttemptLifecycleServicePlayAudioTest {
             .isInstanceOf(ReplayLimitExceededException.class);
 
         assertThat(attempt.getLastPlayAllowed()).isFalse();
+        assertThat(attempt.getPlayCount()).isEqualTo(2);
+        assertThat(attempt.getLastPlayRequestId()).isEqualTo("req-2");
         verify(attemptRepository).save(attempt);
     }
 
     @Test
     @DisplayName("expired audio URL throws before any replay-count logic runs")
     void playAudio_audioUrlExpired_throws() {
+        stubRequestedItem();
         item.setAudioUrl("https://api.cloudinary.com/v1_1/test/video/download?type=authenticated");
         item.setAudioUrlExpiresAt(Instant.now().minusSeconds(1));
         when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
 
         assertThatThrownBy(() -> attemptLifecycleService.playAudio(attemptPublicId, pinnedItemPublicId, "req-1", caller))
             .isInstanceOf(AudioUrlExpiredException.class);
+
+        assertThat(attempt.getPlayCount()).isZero();
+        assertThat(attempt.getLastPlayRequestId()).isNull();
+        verify(attemptRepository, never()).save(any());
     }
 
     @Test
     @DisplayName("public legacy audio remains playable when its stored zero-TTL timestamp is in the past")
     void playAudio_publicLegacyAudio_ignoresStaleExpiryTimestamp() {
+        stubRequestedItem();
         item.setAudioUrl("https://cdn.example.com/public/lecture.mp3");
         item.setAudioUrlExpiresAt(Instant.now().minusSeconds(1));
         when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
@@ -216,13 +228,57 @@ class AttemptLifecycleServicePlayAudioTest {
     }
 
     @Test
-    @DisplayName("a pinnedItemPublicId that isn't the current item throws NotCurrentTaskException")
+    @DisplayName("an unknown pinnedItemPublicId throws NotCurrentTaskException without consuming replay allowance")
     void playAudio_notCurrentItem_throws() {
         when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
         UUID staleItemPublicId = UUID.randomUUID();
+        when(pinnedItemRepository.findByPublicId(staleItemPublicId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> attemptLifecycleService.playAudio(attemptPublicId, staleItemPublicId, "req-1", caller))
             .isInstanceOf(NotCurrentTaskException.class);
+
+        assertThat(attempt.getPlayCount()).isZero();
+        assertThat(attempt.getLastPlayRequestId()).isNull();
+        verify(attemptRepository, never()).save(any());
+        verifyNoInteractions(timerService);
+    }
+
+    @Test
+    @DisplayName("an item from another snapshot is rejected even when replaying an allowed request")
+    void playAudio_itemFromAnotherSnapshot_throwsBeforeReplayingAllowedRequest() {
+        PinnedExamSnapshot otherSnapshot = new PinnedExamSnapshot();
+        otherSnapshot.setId(2L);
+        item.setPinnedSnapshot(otherSnapshot);
+        attempt.setPlayCount(1);
+        attempt.setLastPlayRequestId("req-1");
+        attempt.setLastPlayAllowed(true);
+        stubRequestedItem();
+        when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
+
+        assertThatThrownBy(() -> attemptLifecycleService.playAudio(attemptPublicId, pinnedItemPublicId, "req-1", caller))
+                .isInstanceOf(NotCurrentTaskException.class);
+
+        assertThat(attempt.getPlayCount()).isEqualTo(1);
+        assertThat(attempt.getLastPlayRequestId()).isEqualTo("req-1");
+        assertThat(attempt.getLastPlayAllowed()).isTrue();
+        verify(attemptRepository, never()).save(any());
+        verifyNoInteractions(timerService);
+    }
+
+    @Test
+    @DisplayName("client navigation to another item in the same snapshot allows audio without advancing the task timer")
+    void playAudio_sameSnapshotDifferentOrderIndex_allowsClientNavigation() {
+        item.setOrderIndex(1);
+        stubRequestedItem();
+        when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
+
+        AudioPlayResponse response = attemptLifecycleService.playAudio(attemptPublicId, pinnedItemPublicId, "req-1", caller);
+
+        assertThat(response.audioUrl()).isEqualTo("https://res.cloudinary.com/test/signed-audio");
+        assertThat(attempt.getCurrentOrderIndex()).isZero();
+        assertThat(attempt.getPlayCount()).isEqualTo(1);
+        verify(attemptRepository).save(attempt);
+        verifyNoInteractions(timerService);
     }
 
     @Test
@@ -234,11 +290,13 @@ class AttemptLifecycleServicePlayAudioTest {
             .isInstanceOf(AttemptAlreadyCompleteException.class);
 
         verify(attemptRepository, never()).findWithLockById(any());
+        verifyNoInteractions(pinnedItemRepository, timerService);
     }
 
     @Test
     @DisplayName("UNLIMITED replay policy (limit sentinel < 0) never rejects regardless of playCount")
     void playAudio_unlimitedPolicy_neverRejects() {
+        stubRequestedItem();
         attempt.getPinnedSnapshot().setReplayPolicyType("UNLIMITED");
         attempt.setPlayCount(50);
         when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
@@ -248,5 +306,9 @@ class AttemptLifecycleServicePlayAudioTest {
 
         assertThat(response.audioUrl()).isEqualTo("https://res.cloudinary.com/test/signed-audio");
         assertThat(attempt.getPlayCount()).isEqualTo(51);
+    }
+
+    private void stubRequestedItem() {
+        when(pinnedItemRepository.findByPublicId(pinnedItemPublicId)).thenReturn(Optional.of(item));
     }
 }

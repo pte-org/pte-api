@@ -3,6 +3,12 @@ package com.pte.itembank.internal.constant;
 /** Centralized codes/labels for itembank. */
 public final class ItembankConstants {
 
+    public static final String QUESTION_DELETE_NOT_ALLOWED = "QUESTION_DELETE_NOT_ALLOWED";
+    public static final String QUESTION_DELETE_NOT_ALLOWED_MESSAGE = "Only a new, never-published draft without revision history can be deleted. Legacy drafts with unknown history are protected.";
+    public static final String QUESTION_AGGREGATE = "Question";
+    public static final String QUESTION_DRAFT_DELETED = "QuestionDraftDeleted";
+    public static final String QUESTION_DRAFT_DELETED_SUMMARY = "Unused question draft removed.";
+
     public static final String QUESTION_NOT_FOUND = "QUESTION_NOT_FOUND";
     public static final String INVALID_QUESTION_FIELDS = "INVALID_QUESTION_FIELDS";
     public static final String INVALID_QUESTION_TYPE = "INVALID_QUESTION_TYPE";

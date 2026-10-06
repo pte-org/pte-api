@@ -91,6 +91,8 @@ class ExamOrchestrationServiceTest {
     private StartedAttemptLookup startedAttemptLookup;
     @Mock
     private AuditLogService auditLogService;
+    @Mock
+    private SessionCodeGenerator sessionCodeGenerator;
 
     private ExamOrchestrationService service;
     private UUID tenantId;
@@ -105,7 +107,8 @@ class ExamOrchestrationServiceTest {
         service = new ExamOrchestrationService(sessionRepository, sourceRepository, memberRepository,
                 jobRepository, formRepository, formAssignmentRepository, enrollmentRepository,
                 sessionLifecycleService, enrollmentService, assessmentService, scoreTemplateService,
-                billingService, enrollmentModuleService, identityService, startedAttemptLookup, auditLogService);
+                billingService, enrollmentModuleService, identityService, startedAttemptLookup, auditLogService,
+                sessionCodeGenerator);
         tenantId = UUID.randomUUID();
         templateId = UUID.randomUUID();
         subscriptionId = UUID.randomUUID();
@@ -117,6 +120,7 @@ class ExamOrchestrationServiceTest {
     @Test
     void createDraft_defaultsOfficialExamToUniqueFormAndStartedSeriesExclusion() {
         stubTemplateAndSubscription();
+        when(sessionCodeGenerator.generate(tenantId, opensAt)).thenReturn("FPT-261010-K7QM");
         when(sessionRepository.saveAndFlush(any())).thenAnswer(invocation -> {
             var session = invocation.getArgument(0, com.pte.session.domain.ExamSession.class);
             session.setPublicId(UUID.randomUUID());
@@ -135,6 +139,7 @@ class ExamOrchestrationServiceTest {
         assertThat(response.templatePublicId()).isEqualTo(templateId);
         assertThat(response.templateVersion()).isEqualTo(3);
         assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
+        assertThat(response.sessionCode()).isEqualTo("FPT-261010-K7QM");
         verify(auditLogService).record(hostAdmin, SessionConstants.AGGREGATE_EXAM_SESSION,
                 response.publicId().toString(), SessionConstants.EVENT_EXAM_DRAFT_CREATED, "HK1 mock");
     }
@@ -222,6 +227,25 @@ class ExamOrchestrationServiceTest {
 
         assertThat(session.getExamMode()).isEqualTo(ExamMode.OFFICIAL_EXAM);
         assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
+    }
+
+    @Test
+    void updateDraft_rescheduleKeepsSessionCode() {
+        ExamSession session = draftSession(ExamMode.PRACTICE,
+                com.pte.session.domain.enums.LockdownMode.STANDARD);
+        session.setSessionCode("FPT-261010-K7QM");
+        when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
+        when(scoreTemplateService.getByPublicId(templateId)).thenReturn(templateResponse());
+        stubSubscriptionForDraft();
+        when(sessionRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.updateDraft(session.getPublicId(), new PatchExamDraftRequest(
+                null, null, null, opensAt.plusSeconds(1800), closesAt.plusSeconds(1800), null, null, null, null,
+                null, 0L), hostAdmin);
+
+        assertThat(session.getOpensAt()).isEqualTo(opensAt.plusSeconds(1800));
+        assertThat(response.sessionCode()).isEqualTo("FPT-261010-K7QM");
+        verify(sessionCodeGenerator, never()).generate(any(), any());
     }
 
     @Test

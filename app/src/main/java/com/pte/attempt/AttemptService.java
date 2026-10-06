@@ -5,6 +5,8 @@ import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.attempt.dto.response.AttemptExaminerPromptView;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.attempt.dto.response.AttemptSecurityEventView;
+import com.pte.attempt.dto.response.AttemptGradingCandidateView;
+import com.pte.attempt.dto.response.AttemptGradingCoverageView;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import com.pte.attempt.internal.service.AttemptSummaryQueryService;
@@ -12,6 +14,7 @@ import com.pte.attempt.internal.service.AttemptExaminerPromptQueryService;
 import com.pte.attempt.internal.service.ProctorCommandService;
 import com.pte.attempt.internal.service.SubmittedAnswerQueryService;
 import com.pte.attempt.internal.service.AttemptSecurityAuditQueryService;
+import com.pte.attempt.internal.service.AttemptGradingQueryService;
 import com.pte.shared.StartedAttemptLookup;
 import org.springframework.stereotype.Service;
 
@@ -45,19 +48,22 @@ public class AttemptService implements StartedAttemptLookup {
     private final AttemptExaminerPromptQueryService attemptExaminerPromptQueryService;
     private final ExamAttemptRepository examAttemptRepository;
     private final AttemptSecurityAuditQueryService attemptSecurityAuditQueryService;
+    private final AttemptGradingQueryService attemptGradingQueryService;
 
     public AttemptService(ProctorCommandService proctorCommandService,
                           SubmittedAnswerQueryService submittedAnswerQueryService,
                           AttemptSummaryQueryService attemptSummaryQueryService,
                           AttemptExaminerPromptQueryService attemptExaminerPromptQueryService,
                           ExamAttemptRepository examAttemptRepository,
-                          AttemptSecurityAuditQueryService attemptSecurityAuditQueryService) {
+                          AttemptSecurityAuditQueryService attemptSecurityAuditQueryService,
+                          AttemptGradingQueryService attemptGradingQueryService) {
         this.proctorCommandService = proctorCommandService;
         this.submittedAnswerQueryService = submittedAnswerQueryService;
         this.attemptSummaryQueryService = attemptSummaryQueryService;
         this.attemptExaminerPromptQueryService = attemptExaminerPromptQueryService;
         this.examAttemptRepository = examAttemptRepository;
         this.attemptSecurityAuditQueryService = attemptSecurityAuditQueryService;
+        this.attemptGradingQueryService = attemptGradingQueryService;
     }
 
     /** Silent no-op if the attempt doesn't exist or isn't IN_PROGRESS — a stale/duplicate/late command is not an error. */
@@ -103,6 +109,17 @@ public class AttemptService implements StartedAttemptLookup {
         return attemptSummaryQueryService.getScoreContexts(attemptPublicIds);
     }
 
+    /** Candidate lifecycle snapshot for a CLOSED session's immutable grading cohort. */
+    public List<AttemptGradingCandidateView> getGradingCandidatesForSession(UUID sessionPublicId, UUID tenantId) {
+        return attemptGradingQueryService.findCandidates(sessionPublicId, tenantId);
+    }
+
+    /** Expected pinned item identities; scoring must not infer completeness from answer-row counts. */
+    public Map<UUID, AttemptGradingCoverageView> getGradingCoverage(Collection<UUID> attemptPublicIds,
+            UUID sessionPublicId, UUID tenantId) {
+        return attemptGradingQueryService.findCoverage(attemptPublicIds, sessionPublicId, tenantId);
+    }
+
     /** Public cross-module read surface for the normalized student security audit. */
     public List<AttemptSecurityEventView> getSecurityEventsForSession(UUID sessionPublicId, UUID tenantId,
                                                                         Instant cursorAt, UUID cursorId,
@@ -119,6 +136,11 @@ public class AttemptService implements StartedAttemptLookup {
             UUID tenantId, Collection<UUID> pinnedItemPublicIds) {
         return attemptExaminerPromptQueryService.findForExaminer(attemptPublicId, sessionPublicId, tenantId,
                 pinnedItemPublicIds);
+    }
+
+    /** Returns true if an attempt with the given publicId exists in the given tenant — used by cross-module entity reference validation. */
+    public boolean attemptExistsForTenant(UUID attemptPublicId, UUID tenantId) {
+        return examAttemptRepository.existsByPublicIdAndTenantId(attemptPublicId, tenantId);
     }
 
     /** Batch conflict read for session publish; no attempt content crosses the module boundary. */

@@ -14,4 +14,8 @@ public class LicenseCodeException extends DomainException {
         super(status, code);
         initCause(cause);
     }
+
+    public LicenseCodeException(HttpStatus status, String code, String userMessage) {
+        super(status, code, null, userMessage);
+    }
 }

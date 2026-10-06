@@ -8,6 +8,7 @@ import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.attempt.internal.dto.request.ClientCapabilityManifest;
 import com.pte.attempt.internal.dto.request.StartAttemptRequest;
+import com.pte.attempt.internal.exception.AttemptNotFoundException;
 import com.pte.attempt.internal.exception.ExamCapabilityException;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
@@ -36,6 +37,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -92,8 +94,8 @@ class AttemptLifecycleCapabilityTest {
         });
         when(timerService.resolveEffectivePrepSeconds(any())).thenReturn(10);
         when(timerService.resolveEffectiveResponseSeconds(any(), any(), anyList())).thenReturn(20);
-        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicId(sessionId, studentId))
-                .thenReturn(Optional.empty());
+        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+                sessionId, studentId)).thenReturn(Optional.empty());
         when(capabilityNegotiationService.authorizeStart(sessionId, studentId, manifest(), caller))
                 .thenReturn("AUDIO_RECORDING@1");
         when(snapshotPinService.pin(any(), eq(sessionId), eq(studentId))).thenReturn(pinned);
@@ -110,8 +112,8 @@ class AttemptLifecycleCapabilityTest {
     @Test
     void existingStart_checksCapabilitiesAfterOwnershipBeforeResume() {
         ExamAttempt existing = inProgressAttempt();
-        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicId(sessionId, studentId))
-                .thenReturn(Optional.of(existing));
+        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+                sessionId, studentId)).thenReturn(Optional.of(existing));
         ExamCapabilityException failure = new ExamCapabilityException(
                 AttemptConstants.EXAM_REQUIRES_APP_UPDATE, List.of("AUDIO_RECORDING"));
         doThrow(failure).when(capabilityNegotiationService).authorizeExisting(existing, null, caller);
@@ -120,6 +122,23 @@ class AttemptLifecycleCapabilityTest {
                 .isSameAs(failure);
         verify(capabilityNegotiationService).authorizeExisting(existing, null, caller);
         verify(pinnedItemRepository, never()).countByPinnedSnapshotId(any());
+        verifyNoInteractions(pinnedItemRepository, snapshotPinService, cacheService, timerService);
+        verify(attemptRepository, never()).save(any());
+    }
+
+    @Test
+    void existingStart_wrongTenant_rejectsBeforeCapabilityCheckOrResume() {
+        ExamAttempt existing = inProgressAttempt();
+        existing.setTenantId(UUID.randomUUID());
+        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(sessionId, studentId))
+                .thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.startAttempt(new StartAttemptRequest(sessionId, true), caller))
+                .isInstanceOf(AttemptNotFoundException.class);
+
+        verifyNoInteractions(capabilityNegotiationService, pinnedItemRepository, snapshotPinService,
+                cacheService, timerService);
+        verify(attemptRepository, never()).save(any());
     }
 
     @Test
