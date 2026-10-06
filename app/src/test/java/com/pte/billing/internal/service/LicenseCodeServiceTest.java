@@ -7,13 +7,16 @@ import com.pte.billing.CommercialActivationTarget;
 import com.pte.billing.CommercialOutcomeConfirmedEvent;
 import com.pte.billing.CommercialOutcomeType;
 import com.pte.billing.SubscriptionRevokedEvent;
+import com.pte.billing.SubscriptionRevocationImpactQuery;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.LicenseCodeStatus;
 import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.domain.enums.SubscriptionStatus;
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.dto.response.LicenseCodeResponse;
+import com.pte.billing.internal.dto.request.ConfirmLicenseRevokeRequest;
+import com.pte.billing.internal.dto.response.LicenseRevokePreviewResponse;
+import com.pte.billing.internal.dto.response.LicenseRevokeResponse;
 import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
 import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
 import com.pte.billing.internal.exception.LicenseCodeException;
@@ -281,26 +284,35 @@ class LicenseCodeServiceTest {
 
     @Test
     void revoke_redeemedCodeCancelsLinkedSubscription() {
-        LicenseCode code = issuedCode("ABCD-EFGH-JKLM-NPQR-STUV");
-        code.markRedeemed(UUID.randomUUID(), Instant.now());
+        UUID tenantId = UUID.randomUUID();
         UUID subscriptionId = UUID.randomUUID();
-        code.linkSubscription(subscriptionId);
         Subscription subscription = new Subscription();
         subscription.setPublicId(subscriptionId);
-        UUID tenantId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
+        LicenseCode code = LicenseCode.issue("ABCD-EFGH-JKLM-NPQR-STUV", planId,
+                UUID.randomUUID(), Instant.now(), null);
+        code.setPublicId(UUID.randomUUID());
+        code.markRedeemed(tenantId, Instant.now());
+        code.linkSubscription(subscriptionId);
         subscription.setTenantId(tenantId);
         subscription.setPlanId(planId);
         subscription.setStatus(SubscriptionStatus.ACTIVE);
-        when(licenseCodeRepository.findByCodeForUpdate(code.getCode())).thenReturn(Optional.of(code));
-        when(subscriptionRepository.findByPublicId(subscriptionId)).thenReturn(Optional.of(subscription));
+        when(licenseCodeRepository.findWithLockByPublicId(code.getPublicId())).thenReturn(Optional.of(code));
+        when(planRepository.findByPublicId(planId)).thenReturn(Optional.of(activePlan(planId)));
+        when(subscriptionRepository.findWithLockByPublicIdAndTenantId(subscriptionId, tenantId))
+                .thenReturn(Optional.of(subscription));
         when(subscriptionRepository.saveAndFlush(subscription)).thenReturn(subscription);
         when(licenseCodeRepository.saveAndFlush(code)).thenReturn(code);
+        stubImpact(subscriptionId, tenantId);
 
-        LicenseCodeResponse response = service.revoke(code.getCode(), "fraud review", platformAdmin());
+        CurrentUser admin = platformAdmin();
+        LicenseRevokePreviewResponse preview = service.previewRevoke(code.getPublicId(), admin);
+        LicenseRevokeResponse response = service.revoke(code.getPublicId(), new ConfirmLicenseRevokeRequest(
+                "fraud review", preview.scopeDigest(), preview.previewExpiresAt(), preview.effectiveState(),
+                preview.planId(), preview.subscriptionPublicId(), preview.subscriptionStatus(), true, true, true),
+                admin);
 
         assertThat(response.status()).isEqualTo(LicenseCodeStatus.REVOKED.name());
-        assertThat(response.revokeReason()).isEqualTo("fraud review");
         assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.CANCELLED);
         verify(subscriptionRepository).saveAndFlush(subscription);
         ArgumentCaptor<SubscriptionRevokedEvent> eventCaptor = ArgumentCaptor.forClass(SubscriptionRevokedEvent.class);
@@ -314,12 +326,18 @@ class LicenseCodeServiceTest {
     @Test
     void revoke_issuedCodeDoesNotTouchSubscriptions() {
         LicenseCode code = issuedCode("ABCD-EFGH-JKLM-NPQR-STUV");
-        when(licenseCodeRepository.findByCodeForUpdate(code.getCode())).thenReturn(Optional.of(code));
+        code.setPublicId(UUID.randomUUID());
+        when(licenseCodeRepository.findWithLockByPublicId(code.getPublicId())).thenReturn(Optional.of(code));
+        when(planRepository.findByPublicId(code.getPlanId())).thenReturn(Optional.of(activePlan(code.getPlanId())));
         when(licenseCodeRepository.saveAndFlush(code)).thenReturn(code);
 
-        service.revoke(code.getCode(), "manual cancellation", platformAdmin());
+        CurrentUser admin = platformAdmin();
+        LicenseRevokePreviewResponse preview = service.previewRevoke(code.getPublicId(), admin);
+        LicenseRevokeResponse response = service.revoke(code.getPublicId(), new ConfirmLicenseRevokeRequest(
+                "manual cancellation", preview.scopeDigest(), preview.previewExpiresAt(), preview.effectiveState(),
+                preview.planId(), null, null, false, true, true), admin);
 
-        assertThat(code.getStatus()).isEqualTo(LicenseCodeStatus.REVOKED);
+        assertThat(response.status()).isEqualTo(LicenseCodeStatus.REVOKED.name());
         verifyNoSubscriptionCalls();
     }
 
@@ -358,6 +376,18 @@ class LicenseCodeServiceTest {
 
     private void verifyNoSubscriptionCalls() {
         verify(subscriptionRepository, never()).findByPublicId(any());
+        verify(subscriptionRepository, never()).findWithLockByPublicIdAndTenantId(any(), any());
         verify(subscriptionRepository, never()).saveAndFlush(any(Subscription.class));
+    }
+
+    private void stubImpact(UUID subscriptionId, UUID tenantId) {
+        org.mockito.Mockito.doAnswer(invocation -> {
+            Object event = invocation.getArgument(0);
+            if (event instanceof SubscriptionRevocationImpactQuery query) {
+                query.respond(SubscriptionRevocationImpactQuery.SubscriptionRevocationImpact.empty(
+                        subscriptionId, tenantId));
+            }
+            return null;
+        }).when(eventPublisher).publishEvent(any(Object.class));
     }
 }

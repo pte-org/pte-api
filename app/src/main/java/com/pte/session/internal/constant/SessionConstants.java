@@ -31,6 +31,14 @@ public final class SessionConstants {
     public static final String CLASS_ASSIGNMENT_NOT_ALLOWED = "CLASS_ASSIGNMENT_NOT_ALLOWED";
     public static final String CLASS_ASSIGNMENT_NOT_FOUND = "CLASS_ASSIGNMENT_NOT_FOUND";
     public static final String SESSION_SUBSCRIPTION_NOT_FOUND = "SESSION_SUBSCRIPTION_NOT_FOUND";
+    public static final String SUBSCRIPTION_REVOCATION_SCOPE_CONFLICT =
+            "SUBSCRIPTION_REVOCATION_SCOPE_CONFLICT";
+    public static final String SUBSCRIPTION_REVOCATION_SCOPE_CONFLICT_FRIENDLY =
+            "The subscription no longer owns the same exam session scope.";
+    public static final String SESSION_SUBSCRIPTION_CHANGED =
+            "SESSION_SUBSCRIPTION_CHANGED";
+    public static final String SESSION_SUBSCRIPTION_CHANGED_FRIENDLY =
+            "This exam subscription changed while the operation was in progress. Refresh and try again.";
     public static final String SESSION_SUBSCRIPTION_NOT_FOUND_FRIENDLY =
             "The selected subscription could not be found or is no longer active.";
     public static final String SESSION_WINDOW_OUTSIDE_SUBSCRIPTION = "SESSION_WINDOW_OUTSIDE_SUBSCRIPTION";

@@ -25,6 +25,10 @@ public interface LicenseCodeRepository extends JpaRepository<LicenseCode, Long> 
     @Query("select code from LicenseCode code where code.code = :codeValue")
     Optional<LicenseCode> findByCodeForUpdate(@Param("codeValue") String codeValue);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select code from LicenseCode code where code.publicId = :publicId and code.deleted = false")
+    Optional<LicenseCode> findWithLockByPublicId(@Param("publicId") java.util.UUID publicId);
+
     List<LicenseCode> findTop100ByOrderByIssuedAtDesc();
 
     /**

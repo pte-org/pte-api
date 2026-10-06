@@ -1,7 +1,10 @@
 package com.pte.billing.internal.controller;
 
 import com.pte.billing.internal.dto.request.IssueLicenseCodeRequest;
+import com.pte.billing.internal.dto.request.ConfirmLicenseRevokeRequest;
 import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
+import com.pte.billing.internal.dto.response.LicenseRevokePreviewResponse;
+import com.pte.billing.internal.dto.response.LicenseRevokeResponse;
 import com.pte.billing.internal.service.LicenseCodeService;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -10,6 +13,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/admin/license-codes")
@@ -26,5 +31,16 @@ public class AdminLicenseCodeController {
                 CurrentUserContext.required());
         return ResponseEntity.status(receipt.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
                 .body(ApiResponse.success(receipt));
+    }
+
+    @GetMapping("/{publicId}/revoke-preview")
+    public ApiResponse<LicenseRevokePreviewResponse> revokePreview(@PathVariable UUID publicId) {
+        return ApiResponse.success(service.previewRevoke(publicId, CurrentUserContext.required()));
+    }
+
+    @PostMapping("/{publicId}/revoke")
+    public ApiResponse<LicenseRevokeResponse> revoke(@PathVariable UUID publicId,
+            @Valid @RequestBody ConfirmLicenseRevokeRequest request) {
+        return ApiResponse.success(service.revoke(publicId, request, CurrentUserContext.required()));
     }
 }

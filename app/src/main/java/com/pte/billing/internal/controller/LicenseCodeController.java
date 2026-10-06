@@ -1,7 +1,6 @@
 package com.pte.billing.internal.controller;
 
 import com.pte.billing.internal.dto.request.IssueLicenseCodeRequest;
-import com.pte.billing.internal.dto.request.RevokeLicenseCodeRequest;
 import com.pte.billing.internal.dto.response.LicenseCodeResponse;
 import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -49,10 +48,10 @@ public class LicenseCodeController {
                 .body(ApiResponse.success(licenseCodeService.list(currentUser())));
     }
 
-    @PostMapping("/{code}/revoke")
-    public ApiResponse<LicenseCodeResponse> revoke(@PathVariable String code,
-            @Valid @RequestBody RevokeLicenseCodeRequest request) {
-        return ApiResponse.success(licenseCodeService.revoke(code, request.reason(), currentUser()));
+    @PostMapping("/{ignored}/revoke")
+    public ApiResponse<Void> revokeLegacy(@PathVariable String ignored) {
+        licenseCodeService.rejectLegacyRevoke(currentUser());
+        return ApiResponse.success(null);
     }
 
     private CurrentUser currentUser() {

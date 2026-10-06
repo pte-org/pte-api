@@ -24,7 +24,7 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     Optional<Subscription> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT s FROM Subscription s WHERE s.publicId = :publicId AND s.tenantId = :tenantId")
+    @Query("SELECT s FROM Subscription s WHERE s.publicId = :publicId AND s.tenantId = :tenantId AND s.deleted = false")
     Optional<Subscription> findWithLockByPublicIdAndTenantId(@Param("publicId") UUID publicId,
                                                                @Param("tenantId") UUID tenantId);
 

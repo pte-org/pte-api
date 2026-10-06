@@ -4,6 +4,7 @@ import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
 import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.session.dto.response.ClosingSoonSessionView;
+import com.pte.billing.SubscriptionRevocationImpactQuery.SubscriptionRevocationImpact;
 import com.pte.session.internal.service.EntitlementService;
 import com.pte.session.internal.service.SessionLifecycleService;
 import org.springframework.stereotype.Service;
@@ -108,5 +109,17 @@ public class SessionService {
     /** Cancels scheduled sessions for a revoked subscription; open/closed sessions are untouched. */
     public void cancelScheduledSessionsBySubscription(UUID subscriptionId) {
         sessionLifecycleService.cancelScheduledSessionsBySubscription(subscriptionId);
+    }
+
+    /** Cancels only tenant-owned scheduled sessions inside the billing transaction. */
+    public void cancelScheduledSessionsBySubscription(UUID subscriptionId, UUID tenantId) {
+        sessionLifecycleService.cancelScheduledSessionsBySubscription(subscriptionId, tenantId);
+    }
+
+    /** Returns a locked, tenant-scoped impact snapshot for billing revoke preview. */
+    @Transactional
+    public SubscriptionRevocationImpact getSubscriptionRevocationImpact(
+            UUID subscriptionId, UUID tenantId) {
+        return sessionLifecycleService.getSubscriptionRevocationImpact(subscriptionId, tenantId);
     }
 }

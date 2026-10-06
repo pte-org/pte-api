@@ -55,4 +55,15 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> 
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<ExamSession> findBySubscriptionIdAndStatus(UUID subscriptionId, SessionStatus status);
+
+    /**
+     * Locks every non-deleted session in public-id order. Billing holds the
+     * subscription lock before invoking this query, so revoke and session
+     * writers use one deterministic hierarchy.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM ExamSession s WHERE s.subscriptionId = :subscriptionId "
+            + "AND s.deleted = false ORDER BY s.publicId ASC")
+    List<ExamSession> findWithLockBySubscriptionIdOrderByPublicIdAsc(
+            @Param("subscriptionId") UUID subscriptionId);
 }
