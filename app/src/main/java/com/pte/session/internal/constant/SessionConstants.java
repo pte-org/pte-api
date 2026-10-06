@@ -22,6 +22,7 @@ public final class SessionConstants {
     public static final String HOST_CONTEXT_REQUIRED = "HOST_CONTEXT_REQUIRED";
     public static final String INVALID_SESSION_WINDOW = "INVALID_SESSION_WINDOW";
     public static final String NOT_ENTITLED = "NOT_ENTITLED";
+    public static final String INVALID_SESSION_CODE = "INVALID_SESSION_CODE";
     public static final String PROCTOR_NOT_ASSIGNED = "PROCTOR_NOT_ASSIGNED";
     public static final String POLICY_LOCKED = "POLICY_LOCKED";
     public static final String INVALID_POLICY_PATCH = "INVALID_POLICY_PATCH";
@@ -135,6 +136,7 @@ public final class SessionConstants {
     public static final String LIMITED_REPLAY_COUNT_INVALID = "Limited replay count must be >= 1";
     public static final String EXAM_POLICY_INCOMPLETE = "ExamPolicy is incomplete — expected all fields set together";
     public static final String STRICT_LOCKDOWN_NOT_ALLOWED_FOR_PRACTICE = "LockdownMode.STRICT is not allowed for PRACTICE exams";
+    public static final String SESSION_CODE_GENERATION_FAILED = "Could not generate a unique exam session code";
     public static final String LOCKDOWN_MODE_INVALID_FOR_EXAM_MODE = "LOCKDOWN_MODE_INVALID_FOR_EXAM_MODE";
     public static final String LOCKDOWN_MODE_INVALID_FOR_EXAM_MODE_FRIENDLY =
             "The selected lockdown mode is not allowed for this exam mode.";

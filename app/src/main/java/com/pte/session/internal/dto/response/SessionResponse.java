@@ -11,6 +11,7 @@ import java.util.UUID;
 
 public record SessionResponse(
         UUID publicId,
+        String sessionCode,
         String name,
         UUID tenantId,
         UUID subscriptionPublicId,
@@ -35,7 +36,7 @@ public record SessionResponse(
     public SessionResponse(UUID publicId, String name, UUID tenantId, UUID subscriptionPublicId,
             UUID snapshotPublicId, Instant opensAt, Instant closesAt, String status,
             ExamPolicyResponse policy, Integer capacity) {
-        this(publicId, name, tenantId, subscriptionPublicId, snapshotPublicId, opensAt, closesAt, status, policy,
+        this(publicId, null, name, tenantId, subscriptionPublicId, snapshotPublicId, opensAt, closesAt, status, policy,
                 capacity, null, null, null, null, null, null, null, 0L, Set.of(), 0);
     }
 }

@@ -94,8 +94,8 @@ class AttemptLifecycleCapabilityTest {
         });
         when(timerService.resolveEffectivePrepSeconds(any())).thenReturn(10);
         when(timerService.resolveEffectiveResponseSeconds(any(), any(), anyList())).thenReturn(20);
-        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(sessionId, studentId))
-                .thenReturn(Optional.empty());
+        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+                sessionId, studentId)).thenReturn(Optional.empty());
         when(capabilityNegotiationService.authorizeStart(sessionId, studentId, manifest(), caller))
                 .thenReturn("AUDIO_RECORDING@1");
         when(snapshotPinService.pin(any(), eq(sessionId), eq(studentId))).thenReturn(pinned);
@@ -112,8 +112,8 @@ class AttemptLifecycleCapabilityTest {
     @Test
     void existingStart_checksCapabilitiesAfterOwnershipBeforeResume() {
         ExamAttempt existing = inProgressAttempt();
-        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(sessionId, studentId))
-                .thenReturn(Optional.of(existing));
+        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+                sessionId, studentId)).thenReturn(Optional.of(existing));
         ExamCapabilityException failure = new ExamCapabilityException(
                 AttemptConstants.EXAM_REQUIRES_APP_UPDATE, List.of("AUDIO_RECORDING"));
         doThrow(failure).when(capabilityNegotiationService).authorizeExisting(existing, null, caller);

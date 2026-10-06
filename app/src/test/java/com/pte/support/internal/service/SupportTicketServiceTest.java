@@ -8,6 +8,7 @@ import com.pte.support.domain.SupportTicketNote;
 import com.pte.support.domain.enums.TicketCategory;
 import com.pte.support.domain.enums.TicketEntityType;
 import com.pte.support.domain.enums.TicketStatus;
+import com.pte.support.internal.constant.SupportConstants;
 import com.pte.support.internal.dto.request.AddNoteRequest;
 import com.pte.support.internal.dto.request.SubmitTicketRequest;
 import com.pte.support.internal.dto.request.UpdateTicketStatusRequest;
@@ -213,6 +214,53 @@ class SupportTicketServiceTest {
         assertThat(response.publicId()).isEqualTo(publicId);
         assertThat(response.notes()).hasSize(1);
         assertThat(response.notes().get(0).content()).isEqualTo("Admin note content");
+    }
+
+    @Test
+    void closeForHost_openOwnTicket_closesAndAudits() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = caller(tenantId);
+        SupportTicket ticket = ticketFor(tenantId);
+        UUID publicId = ticket.getPublicId();
+
+        when(ticketRepository.findByPublicIdAndTenantId(publicId, tenantId)).thenReturn(Optional.of(ticket));
+        when(noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(publicId)).thenReturn(List.of());
+
+        SupportTicketResponse response = service.closeForHost(publicId, caller);
+
+        assertThat(response.status()).isEqualTo(TicketStatus.CLOSED);
+        verify(auditLogService).record(eq(caller), eq(SupportConstants.AGGREGATE_SUPPORT_TICKET),
+                eq(publicId.toString()), eq(SupportConstants.EVENT_TICKET_CLOSED), any());
+    }
+
+    @Test
+    void closeForHost_ticketAlreadyPickedUpByAdmin_throwsInvalidTransition() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = caller(tenantId);
+        SupportTicket ticket = ticketFor(tenantId);
+        ticket.setStatus(TicketStatus.IN_PROGRESS);
+        UUID publicId = ticket.getPublicId();
+
+        when(ticketRepository.findByPublicIdAndTenantId(publicId, tenantId)).thenReturn(Optional.of(ticket));
+
+        assertThatThrownBy(() -> service.closeForHost(publicId, caller))
+                .isInstanceOf(InvalidStatusTransitionException.class);
+        assertThat(ticket.getStatus()).isEqualTo(TicketStatus.IN_PROGRESS);
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void closeForHost_differentTenantTicket_throwsNotFound() {
+        UUID callerTenantId = UUID.randomUUID();
+        UUID publicId = UUID.randomUUID();
+        CurrentUser caller = caller(callerTenantId);
+
+        when(ticketRepository.findByPublicIdAndTenantId(publicId, callerTenantId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.closeForHost(publicId, caller))
+                .isInstanceOf(SupportTicketNotFoundException.class);
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any());
     }
 
     // --- Phase 3: Admin API tests ---

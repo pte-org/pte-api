@@ -131,6 +131,8 @@ class AttemptLifecycleServicePlayAudioTest {
 
         when(attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
             .thenReturn(Optional.of(attempt));
+        org.mockito.Mockito.lenient().when(pinnedItemRepository.findByPublicId(pinnedItemPublicId))
+            .thenReturn(Optional.of(item));
     }
 
     @Test

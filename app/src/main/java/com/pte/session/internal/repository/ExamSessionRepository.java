@@ -43,6 +43,15 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> 
             + "ORDER BY s.closesAt ASC, s.id ASC")
     List<ExamSession> findDueClosingSoon(@Param("now") Instant now, @Param("cutoff") Instant cutoff);
 
+    /** Global check (deleted rows included) — codes are unique across all tenants. */
+    boolean existsBySessionCode(String sessionCode);
+
+    /**
+     * Student code lookup. Unlike the other session queries this one filters
+     * {@code deleted}: a deleted session whose enrollments survived must not resolve.
+     */
+    Optional<ExamSession> findBySessionCodeAndTenantIdAndDeletedFalse(String sessionCode, UUID tenantId);
+
     @Query("SELECT s FROM ExamSession s WHERE s.subscriptionId = :subscriptionId "
             + "AND s.status IN (com.pte.session.domain.enums.SessionStatus.SCHEDULED, "
             + "com.pte.session.domain.enums.SessionStatus.OPEN) "

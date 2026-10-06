@@ -72,17 +72,20 @@ public class SessionLifecycleService {
     private final AssessmentService assessmentService;
     private final BillingService billingService;
     private final ApplicationEventPublisher eventPublisher;
+    private final SessionCodeGenerator sessionCodeGenerator;
 
     public SessionLifecycleService(ExamSessionRepository sessionRepository,
             EnrollmentRepository enrollmentRepository,
             AssessmentService assessmentService,
             BillingService billingService,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            SessionCodeGenerator sessionCodeGenerator) {
         this.sessionRepository = sessionRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.assessmentService = assessmentService;
         this.billingService = billingService;
         this.eventPublisher = eventPublisher;
+        this.sessionCodeGenerator = sessionCodeGenerator;
     }
 
     @Transactional
@@ -130,6 +133,7 @@ public class SessionLifecycleService {
             policy.setLockdownMode(request.lockdownMode());
         }
         session.setPolicy(policy);
+        session.setSessionCode(sessionCodeGenerator.generate(tenantId, request.opensAt()));
 
         try {
             ExamSession saved = sessionRepository.save(session);
