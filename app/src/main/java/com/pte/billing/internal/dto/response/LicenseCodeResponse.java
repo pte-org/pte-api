@@ -19,11 +19,16 @@ public record LicenseCodeResponse(
         String revokeReason) {
 
     public static LicenseCodeResponse from(LicenseCode licenseCode) {
+        return from(licenseCode, licenseCode.getStatus());
+    }
+
+    public static LicenseCodeResponse from(LicenseCode licenseCode,
+            com.pte.billing.domain.enums.LicenseCodeStatus effectiveStatus) {
         return new LicenseCodeResponse(
                 licenseCode.getPublicId(),
                 licenseCode.getCode(),
                 licenseCode.getPlanId(),
-                licenseCode.getStatus().name(),
+                effectiveStatus.name(),
                 licenseCode.getIssuedBy(),
                 licenseCode.getIssuedAt(),
                 licenseCode.getCodeExpiresAt(),

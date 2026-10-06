@@ -280,21 +280,7 @@ public class PlanService {
         }
 
         if (type == PlanType.EXAM_PACKAGE) {
-            if (!positive(durationDays)) {
-                throw new PlanValidationException(BillingConstants.EXAM_DURATION_REQUIRED);
-            }
-            if (durationDays > MAX_EXAM_DURATION_DAYS) {
-                throw new PlanValidationException(BillingConstants.EXAM_DURATION_LIMIT_EXCEEDED);
-            }
-            if (!positive(maxStudentsPerSession)) {
-                throw new PlanValidationException(BillingConstants.EXAM_MAX_STUDENTS_REQUIRED);
-            }
-            if (maxStudentsPerSession > BillingConstants.MAX_STUDENT_COUNT) {
-                throw new PlanValidationException(BillingConstants.EXAM_MAX_STUDENTS_LIMIT_EXCEEDED);
-            }
-            if (extraStudentSlots != null) {
-                throw new PlanValidationException(BillingConstants.EXAM_EXTRA_STUDENT_SLOTS_FORBIDDEN);
-            }
+            validateExamBenefits(durationDays, maxStudentsPerSession, extraStudentSlots);
             return;
         }
 
@@ -312,7 +298,15 @@ public class PlanService {
         }
     }
 
-    private boolean positive(Integer value) {
+    static void validateExamBenefits(Integer durationDays, Integer maxStudentsPerSession, Integer extraStudentSlots) {
+        if (!positive(durationDays)) throw new PlanValidationException(BillingConstants.EXAM_DURATION_REQUIRED);
+        if (durationDays > MAX_EXAM_DURATION_DAYS) throw new PlanValidationException(BillingConstants.EXAM_DURATION_LIMIT_EXCEEDED);
+        if (!positive(maxStudentsPerSession)) throw new PlanValidationException(BillingConstants.EXAM_MAX_STUDENTS_REQUIRED);
+        if (maxStudentsPerSession > BillingConstants.MAX_STUDENT_COUNT) throw new PlanValidationException(BillingConstants.EXAM_MAX_STUDENTS_LIMIT_EXCEEDED);
+        if (extraStudentSlots != null) throw new PlanValidationException(BillingConstants.EXAM_EXTRA_STUDENT_SLOTS_FORBIDDEN);
+    }
+
+    private static boolean positive(Integer value) {
         return value != null && value > 0;
     }
 }

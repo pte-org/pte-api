@@ -41,7 +41,8 @@ import static org.mockito.Mockito.*;
 @DataJpaTest(showSql = false, properties = {"spring.jpa.hibernate.ddl-auto=validate", "logging.level.root=ERROR"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@Import({PlanService.class, QuestionDeletionService.class, AuditLogService.class, LicenseCodePersistenceService.class})
+@Import({PlanService.class, QuestionDeletionService.class, AuditLogService.class, LicenseCodePersistenceService.class,
+        com.pte.shared.config.ClockConfig.class})
 @EnabledIfSystemProperty(named = "lifecycle.test.db.url", matches = ".+")
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
 class ArchiveLifecyclePostgresIntegrationTest {
@@ -139,7 +140,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
         for (int i = 0; i < 10; i++) {
             Plan plan = plan(PlanStatus.ACTIVE);
             LicenseCode code = LicenseCode.issue("TEST-" + UUID.randomUUID().toString().substring(0, 20), plan.getPublicId(), admin.userId(), Instant.now(), null);
-            List<Throwable> results = race(() -> issuance.save(code),
+            List<Throwable> results = race(() -> issuance.issue(code, UUID.randomUUID(), "0".repeat(64)),
                     () -> planService.archive(plan.getPublicId(), new PlanTransitionRequest(plan.getVersion())));
             assertThat(results.stream().filter(t -> t != null).count()).isEqualTo(1);
             boolean archived = tx(() -> plans.findByPublicId(plan.getPublicId()).orElseThrow().getStatus() == PlanStatus.ARCHIVED);
@@ -169,7 +170,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
                     plan.getPublicId(), admin.userId(), Instant.now(), null);
             PlanUpdateRequest edit = new PlanUpdateRequest(plan.getName(), null, "EXAM_PACKAGE", BigDecimal.TEN,
                     "VND", 60, 40, null, plan.getVersion());
-            List<Throwable> results = race(() -> issuance.save(code), () -> planService.update(plan.getPublicId(), edit));
+            List<Throwable> results = race(() -> issuance.issue(code, UUID.randomUUID(), "0".repeat(64)), () -> planService.update(plan.getPublicId(), edit));
             assertThat(results.getFirst()).isNull();
             if (results.get(1) != null) assertThat(results.get(1)).isInstanceOf(PlanLifecycleException.class);
             Plan persisted = tx(() -> plans.findByPublicId(plan.getPublicId()).orElseThrow());

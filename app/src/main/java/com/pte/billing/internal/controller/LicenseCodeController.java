@@ -3,6 +3,8 @@ package com.pte.billing.internal.controller;
 import com.pte.billing.internal.dto.request.IssueLicenseCodeRequest;
 import com.pte.billing.internal.dto.request.RevokeLicenseCodeRequest;
 import com.pte.billing.internal.dto.response.LicenseCodeResponse;
+import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
+import org.springframework.web.bind.annotation.RequestHeader;
 import com.pte.billing.internal.service.LicenseCodeService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
@@ -33,15 +35,18 @@ public class LicenseCodeController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<LicenseCodeResponse>> issue(
-            @Valid @RequestBody IssueLicenseCodeRequest request) {
-        LicenseCodeResponse response = licenseCodeService.issue(request.planId(), request.codeExpiresAt(), currentUser());
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
+    public ResponseEntity<ApiResponse<LicenseIssueReceipt>> issue(
+            @RequestHeader(value = "Idempotency-Key", required = false) String key, @Valid @RequestBody IssueLicenseCodeRequest request) {
+        LicenseIssueReceipt response = licenseCodeService.issue(request.planId(), request.codeExpiresAt(),
+                IssueLicenseCodeRequest.parseIdempotencyKey(key), currentUser());
+        return ResponseEntity.status(response.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
+                .body(ApiResponse.success(response));
     }
 
     @GetMapping
-    public ApiResponse<List<LicenseCodeResponse>> list() {
-        return ApiResponse.success(licenseCodeService.list(currentUser()));
+    public ResponseEntity<ApiResponse<List<LicenseCodeResponse>>> list() {
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore())
+                .body(ApiResponse.success(licenseCodeService.list(currentUser())));
     }
 
     @PostMapping("/{code}/revoke")

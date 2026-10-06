@@ -14,6 +14,7 @@ import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.domain.enums.SubscriptionStatus;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.dto.response.LicenseCodeResponse;
+import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
 import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
 import com.pte.billing.internal.exception.LicenseCodeException;
 import com.pte.billing.internal.repository.LicenseCodeRepository;
@@ -73,47 +74,106 @@ class LicenseCodeServiceTest {
 
     private LicenseCodeService service;
 
+    @Test void replayDoesNotValidateCurrentPlanOrGenerateAnotherCode() {
+        UUID planId = UUID.randomUUID();
+        UUID key = UUID.randomUUID();
+        CurrentUser admin = platformAdmin();
+        LicenseIssueReceipt receipt = new LicenseIssueReceipt(UUID.randomUUID(), planId, "ISSUED", "EXPIRED",
+                Instant.EPOCH, Instant.EPOCH.plusSeconds(1), true);
+        when(licenseCodePersistenceService.replay(eq(admin.userId()), eq(key), any())).thenReturn(Optional.of(receipt));
+        assertThat(service.issue(planId, receipt.codeExpiresAt(), key, admin)).isSameAs(receipt);
+        verify(licenseCodeGenerator, never()).generate();
+        verify(planRepository, never()).findByPublicId(any());
+    }
+
+    @Test void replayStillRequiresCurrentPlatformAuthorization() {
+        assertThatThrownBy(() -> service.issue(UUID.randomUUID(), null, UUID.randomUUID(), hostAdmin(UUID.randomUUID())))
+                .isInstanceOfSatisfying(LicenseCodeException.class, ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+        org.mockito.Mockito.verifyNoInteractions(licenseCodePersistenceService);
+    }
+
+    @Test void finerThanMicrosecondPrecisionFailsBeforeIntentLookup() {
+        assertThatThrownBy(() -> service.issue(UUID.randomUUID(), Instant.parse("2030-01-01T00:00:00.000000001Z"),
+                UUID.randomUUID(), platformAdmin())).isInstanceOfSatisfying(LicenseCodeException.class,
+                        ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+        org.mockito.Mockito.verifyNoInteractions(licenseCodePersistenceService);
+    }
+
+    @Test void unrelatedIntegrityFailureIsNeverRetriedAsCodeCollision() {
+        when(licenseCodeGenerator.generate()).thenReturn("FIXTURE");
+        when(licenseCodePersistenceService.issue(any(), any(), any())).thenThrow(
+                new org.springframework.dao.DataIntegrityViolationException("foreign key fixture"));
+        assertThatThrownBy(() -> service.issue(UUID.randomUUID(), null, UUID.randomUUID(), platformAdmin()))
+                .isInstanceOfSatisfying(LicenseCodeException.class, ex ->
+                        assertThat(ex.getMessage()).isEqualTo(BillingConstants.LICENSE_CODE_ISSUE_FAILED));
+        verify(licenseCodeGenerator, org.mockito.Mockito.times(1)).generate();
+    }
+
+    @Test void recognizedCodeCollisionRetriesWholeTransaction() {
+        when(licenseCodeGenerator.generate()).thenReturn("COLLISION", "SUCCESS");
+        var violation = new org.hibernate.exception.ConstraintViolationException("fixture", new java.sql.SQLException(),
+                "license_codes_code_key");
+        LicenseIssueReceipt receipt = new LicenseIssueReceipt(UUID.randomUUID(), UUID.randomUUID(), "ISSUED", "ISSUED",
+                Instant.EPOCH, null, false);
+        when(licenseCodePersistenceService.issue(any(), any(), any()))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("fixture", violation)).thenReturn(receipt);
+        assertThat(service.issue(receipt.planId(), null, UUID.randomUUID(), platformAdmin())).isEqualTo(receipt);
+        verify(licenseCodeGenerator, org.mockito.Mockito.times(2)).generate();
+    }
+
+    @Test void effectiveExpiryHasExactMicrosecondBoundaryAndKeepsRedeemedState() {
+        Instant now = Instant.parse("2030-01-01T00:00:00Z");
+        for (long offset : new long[]{-1, 0, 1}) {
+            LicenseCode code = LicenseCode.issue("FIXTURE", UUID.randomUUID(), UUID.randomUUID(), Instant.EPOCH,
+                    now.plus(offset, java.time.temporal.ChronoUnit.MICROS));
+            assertThat(LicenseCodeStateResolver.resolve(code, now))
+                    .isEqualTo(offset > 0 ? LicenseCodeStatus.ISSUED : LicenseCodeStatus.EXPIRED);
+            code.markRedeemed(UUID.randomUUID(), Instant.EPOCH);
+            assertThat(LicenseCodeStateResolver.resolve(code, now)).isEqualTo(LicenseCodeStatus.REDEEMED);
+        }
+    }
+
     @BeforeEach
     void setUp() {
         service = new LicenseCodeService(licenseCodeRepository, planRepository, subscriptionRepository,
-                licenseCodePersistenceService, licenseCodeGenerator, subscriptionActivationService, eventPublisher);
+                licenseCodePersistenceService, licenseCodeGenerator, subscriptionActivationService, eventPublisher,
+                java.time.Clock.systemUTC());
     }
 
     @Test
     void issue_returnsGeneratedCodeForActivePlan() {
         UUID planId = UUID.randomUUID();
         UUID adminId = UUID.randomUUID();
-        Instant expiry = Instant.now().plusSeconds(3600);
-        when(planRepository.findByPublicId(planId)).thenReturn(Optional.of(activePlan(planId)));
+        Instant expiry = Instant.now().plusSeconds(3600).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         when(licenseCodeGenerator.generate()).thenReturn("ABCD-EFGH-JKLM-NPQR-STUV");
-        when(licenseCodePersistenceService.save(any(LicenseCode.class))).thenAnswer(invocation -> {
+        when(licenseCodePersistenceService.issue(any(LicenseCode.class), any(), any())).thenAnswer(invocation -> {
             LicenseCode code = invocation.getArgument(0);
             code.setPublicId(UUID.randomUUID());
-            return code;
+            return new LicenseIssueReceipt(code.getPublicId(), code.getPlanId(), "ISSUED", "ISSUED",
+                    code.getIssuedAt(), code.getCodeExpiresAt(), false);
         });
 
-        LicenseCodeResponse response = service.issue(planId, expiry,
+        LicenseIssueReceipt response = service.issue(planId, expiry, UUID.randomUUID(),
                 new CurrentUser(adminId, null, List.of("PLATFORM_ADMIN")));
 
-        assertThat(response.code()).isEqualTo("ABCD-EFGH-JKLM-NPQR-STUV");
+        assertThat(response.replayed()).isFalse();
         assertThat(response.planId()).isEqualTo(planId);
-        assertThat(response.issuedBy()).isEqualTo(adminId);
         assertThat(response.status()).isEqualTo(LicenseCodeStatus.ISSUED.name());
     }
 
     @Test
     void issue_rejectsInactivePlan() {
         UUID planId = UUID.randomUUID();
-        Plan plan = activePlan(planId);
-        plan.setStatus(PlanStatus.ARCHIVED);
-        when(planRepository.findByPublicId(planId)).thenReturn(Optional.of(plan));
+        when(licenseCodeGenerator.generate()).thenReturn("FIXTURE");
+        when(licenseCodePersistenceService.issue(any(), any(), any())).thenThrow(
+                new LicenseCodeException(HttpStatus.CONFLICT, BillingConstants.LICENSE_CODE_PLAN_NOT_ACTIVE));
 
-        assertThatThrownBy(() -> service.issue(planId, null, platformAdmin()))
+        assertThatThrownBy(() -> service.issue(planId, null, UUID.randomUUID(), platformAdmin()))
                 .isInstanceOfSatisfying(LicenseCodeException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
                     assertThat(ex.getMessage()).isEqualTo(BillingConstants.LICENSE_CODE_PLAN_NOT_ACTIVE);
                 });
-        verify(licenseCodeGenerator, never()).generate();
+        verify(planRepository, never()).findByPublicId(any());
     }
 
     @Test

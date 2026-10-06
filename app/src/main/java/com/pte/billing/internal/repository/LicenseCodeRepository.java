@@ -15,6 +15,8 @@ import java.util.Optional;
 
 public interface LicenseCodeRepository extends JpaRepository<LicenseCode, Long> {
 
+    Optional<LicenseCode> findByPublicId(java.util.UUID publicId);
+
     boolean existsByCode(String code);
 
     Optional<LicenseCode> findByCode(String code);

@@ -10,9 +10,9 @@ import com.pte.billing.domain.Plan;
 import com.pte.billing.domain.Subscription;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.LicenseCodeStatus;
-import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.dto.response.LicenseCodeResponse;
+import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
 import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
 import com.pte.billing.internal.exception.LicenseCodeException;
 import com.pte.billing.internal.exception.PlanNotFoundException;
@@ -28,6 +28,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.Clock;
+import java.time.temporal.ChronoUnit;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -45,6 +51,7 @@ public class LicenseCodeService {
     private final LicenseCodeGenerator licenseCodeGenerator;
     private final SubscriptionActivationService subscriptionActivationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
     @Autowired
     public LicenseCodeService(LicenseCodeRepository licenseCodeRepository, PlanRepository planRepository,
@@ -52,7 +59,7 @@ public class LicenseCodeService {
             LicenseCodePersistenceService licenseCodePersistenceService,
             LicenseCodeGenerator licenseCodeGenerator,
             SubscriptionActivationService subscriptionActivationService,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher, Clock clock) {
         this.licenseCodeRepository = licenseCodeRepository;
         this.planRepository = planRepository;
         this.subscriptionRepository = subscriptionRepository;
@@ -60,49 +67,66 @@ public class LicenseCodeService {
         this.licenseCodeGenerator = licenseCodeGenerator;
         this.subscriptionActivationService = subscriptionActivationService;
         this.eventPublisher = eventPublisher;
+        this.clock = clock;
     }
 
-    public LicenseCodeResponse issue(UUID planPublicId, Instant codeExpiresAt, CurrentUser caller) {
+    public LicenseIssueReceipt issue(UUID planPublicId, Instant codeExpiresAt, UUID key, CurrentUser caller) {
         requirePlatformAdmin(caller);
         if (planPublicId == null) {
             throw invalid(BillingConstants.LICENSE_CODE_PLAN_REQUIRED);
         }
-        Instant now = Instant.now();
-        if (codeExpiresAt != null && !codeExpiresAt.isAfter(now)) {
-            throw invalid(BillingConstants.LICENSE_CODE_EXPIRY_INVALID);
+        if (key == null) {
+            throw new LicenseCodeException(HttpStatus.BAD_REQUEST, BillingConstants.LICENSE_CODE_IDEMPOTENCY_KEY_REQUIRED);
         }
-
-        Plan plan = planRepository.findByPublicId(planPublicId)
-                .filter(p -> !p.isDeleted())
-                .orElseThrow(PlanNotFoundException::new);
-        if (plan.getStatus() != PlanStatus.ACTIVE) {
-            throw new LicenseCodeException(HttpStatus.CONFLICT, BillingConstants.LICENSE_CODE_PLAN_NOT_ACTIVE);
+        if (codeExpiresAt != null && codeExpiresAt.getNano() % 1000 != 0) {
+            throw new LicenseCodeException(HttpStatus.BAD_REQUEST, BillingConstants.LICENSE_CODE_EXPIRY_PRECISION_INVALID);
         }
-
+        String fingerprint = fingerprint(planPublicId, codeExpiresAt);
+        var prior = licenseCodePersistenceService.replay(caller.userId(), key, fingerprint);
+        if (prior.isPresent()) return prior.get();
+        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         for (int attempt = 1; attempt <= MAX_ISSUE_ATTEMPTS; attempt++) {
             String code = licenseCodeGenerator.generate();
-            if (licenseCodeRepository.existsByCode(code)) {
-                continue;
-            }
             LicenseCode licenseCode = LicenseCode.issue(code, planPublicId, caller.userId(), now, codeExpiresAt);
             try {
-                return LicenseCodeResponse.from(licenseCodePersistenceService.save(licenseCode));
+                return licenseCodePersistenceService.issue(licenseCode, key, fingerprint);
             } catch (DataIntegrityViolationException ex) {
-                if (attempt == MAX_ISSUE_ATTEMPTS) {
+                if (constraint(ex, BillingConstants.LICENSE_ISSUE_INTENT_CONSTRAINT)) {
+                    var winner = licenseCodePersistenceService.replay(caller.userId(), key, fingerprint);
+                    if (winner.isPresent()) return winner.get();
+                } else if (!constraint(ex, "license_codes_code_key") && !constraint(ex, "uk_license_codes_code")) {
                     throw new LicenseCodeException(HttpStatus.INTERNAL_SERVER_ERROR,
-                            BillingConstants.LICENSE_CODE_GENERATION_FAILED, ex);
+                            BillingConstants.LICENSE_CODE_ISSUE_FAILED, ex);
                 }
             }
         }
-        throw new LicenseCodeException(HttpStatus.INTERNAL_SERVER_ERROR,
-                BillingConstants.LICENSE_CODE_GENERATION_FAILED);
+        throw new LicenseCodeException(HttpStatus.SERVICE_UNAVAILABLE, BillingConstants.LICENSE_CODE_ISSUE_RETRYABLE);
+    }
+
+    private String fingerprint(UUID planId, Instant expiry) {
+        try {
+            String canonical = planId + "\n" + (expiry == null ? "null" : expiry.toString());
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
+    private boolean constraint(Throwable failure, String name) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof org.hibernate.exception.ConstraintViolationException violation
+                    && name.equals(violation.getConstraintName())) return true;
+        }
+        return false;
     }
 
     @Transactional(readOnly = true)
     public List<LicenseCodeResponse> list(CurrentUser caller) {
         requirePlatformAdmin(caller);
+        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         return licenseCodeRepository.findTop100ByOrderByIssuedAtDesc().stream()
-                .map(LicenseCodeResponse::from)
+                .map(code -> LicenseCodeResponse.from(code, LicenseCodeStateResolver.resolve(code, now)))
                 .toList();
     }
 
@@ -110,7 +134,7 @@ public class LicenseCodeService {
     public SubscriptionActivationResponse redeem(String rawCode, CurrentUser caller) {
         UUID tenantId = requireHostTenant(caller);
         String codeValue = normalizeCode(rawCode);
-        Instant now = Instant.now();
+        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
 
         int updated = licenseCodeRepository.markRedeemed(codeValue, tenantId, now,
                 LicenseCodeStatus.ISSUED, LicenseCodeStatus.REDEEMED);
@@ -165,7 +189,8 @@ public class LicenseCodeService {
         if (licenseCode.getStatus() == LicenseCodeStatus.REVOKED) {
             throw new LicenseCodeException(HttpStatus.CONFLICT, BillingConstants.LICENSE_CODE_ALREADY_REVOKED);
         }
-        if (licenseCode.getStatus() == LicenseCodeStatus.EXPIRED) {
+        if (LicenseCodeStateResolver.resolve(licenseCode, clock.instant().truncatedTo(ChronoUnit.MICROS))
+                == LicenseCodeStatus.EXPIRED) {
             throw new LicenseCodeException(HttpStatus.CONFLICT, BillingConstants.LICENSE_CODE_NOT_REVOCABLE);
         }
 
@@ -197,8 +222,7 @@ public class LicenseCodeService {
         if (licenseCode.getStatus() == LicenseCodeStatus.REDEEMED) {
             return new LicenseCodeException(HttpStatus.CONFLICT, BillingConstants.LICENSE_CODE_ALREADY_REDEEMED);
         }
-        if (licenseCode.getStatus() == LicenseCodeStatus.EXPIRED
-                || (licenseCode.getCodeExpiresAt() != null && !licenseCode.getCodeExpiresAt().isAfter(now))) {
+        if (LicenseCodeStateResolver.resolve(licenseCode, now) == LicenseCodeStatus.EXPIRED) {
             return new LicenseCodeException(HttpStatus.GONE, BillingConstants.LICENSE_CODE_EXPIRED);
         }
         return new LicenseCodeException(HttpStatus.CONFLICT, BillingConstants.LICENSE_CODE_NOT_REDEEMABLE);
