@@ -86,6 +86,46 @@ The script is idempotent â€” rerun it any time to recreate the test tenant,
 
 It seeds two published questions, each in its own session: a `READ_ALOUD` question (text-only) and a `REPEAT_SENTENCE` question (with a real uploaded audio file as its prompt â€” see `scripts/fixtures/repeat_sentence_sample.wav`; pass `-RepeatSentenceAudioFixturePath` to use a different file). `ExamAttempt`s are one-shot per (student, session) â€” once a session's attempt is submitted/completed, that student can't restart it; re-run the script with a different `-SessionName`/`-RepeatSentenceSessionName` to seed a fresh session instead.
 
+## Demo data: 22 task types, PRACTICE and OFFICIAL flows
+
+`scripts/seed-e2e.ps1` mentioned above no longer exists; use the scripts below. This demo data is for
+internal class demos only: some audio comes from third-party question-bank URLs and must not be
+redistributed.
+
+What you get: 67 questions (3 for each of the 22 scored task types + 1 Personal Introduction), the
+PTE Score Table V5 template (per-type counts capped at 3), a demo tenant, and 6 OPEN exams: 5 PRACTICE
+(`DEMO22 PRACTICE - Full/Speaking/Writing/Reading/Listening`) and 1 `DEMO22 OFFICIAL` (STRICT lockdown,
+proctor required, replay once).
+
+**Run it** (stack from "Option 2" above must be up and the app healthy). Put two local-only passwords in
+`.env.local` as `PTE_ADMIN_PASSWORD` and `PTE_SEED_PASSWORD` (they are not read by compose), then:
+
+```powershell
+.\scripts\demo22\seed-demo22.ps1
+```
+
+Everything for this demo lives in `scripts/demo22/` (see its README); delete that folder to remove it.
+
+It creates the platform admin `admin@test.local` if missing, loads the questions, activates the template,
+creates the exams and verifies them as the student. Every step is idempotent. Logins afterwards (password
+`PTE_SEED_PASSWORD`): `host.demo22@test.local`, `student.demo22@test.local`, `proctor.demo22@test.local`.
+Start attempts with `deviceCheckConfirmed=true`; the exams require the device check.
+
+**On another machine:** clone this repo, create `.env.local` from `.env.example` (the `CLOUDINARY_*` values
+only need to be non-empty - nothing is uploaded or signed when playing the seeded media), start the stack,
+then run `.\scripts\demo22\seed-demo22.ps1`. No Cloudinary account is needed; the media links are public and stored in
+`scripts/demo22/data/demo22-seed.sql`. Requires Docker and PowerShell 5.1+.
+
+**Individual steps:** `seed-demo22-questions.ps1`, `seed-demo22-template.ps1` (use `-MaxPerType 12` for the
+exact table counts once the bank is larger), `seed-demo22-sessions.ps1`, `verify-demo22.ps1 -StartPracticeAttempt`.
+Activating the template retires any other ACTIVE template; already generated exams keep their own copy.
+
+**Maintainers only** (changing the content): edit `scripts/demo22/data/gap-content.json`, then run
+`scripts\demo22\tools\generate-demo22-media.ps1` (Windows text-to-speech + Python Pillow),
+`scripts\demo22\tools\publish-demo22-media.ps1` (uploads to the Cloudinary account in `.env.local`, folder `pte/demo22`,
+public delivery) and `node scripts/demo22/tools/build-demo22-questions.js` to regenerate `demo22-questions.json` and
+`demo22-seed.sql`. Delete the `pte/demo22` Cloudinary folder when the demo is over.
+
 ## Timezone (UTC, fleet-wide)
 
 As of 2026-08-05, every service forces its JVM default timezone to UTC as

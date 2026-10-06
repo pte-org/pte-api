@@ -1,0 +1,86 @@
+﻿{
+    "demo22-di-1.png":  {
+                            "url":  "https://res.cloudinary.com/dkqjq2nj2/image/upload/v1791280253/pte/demo22/demo22-di-1.png",
+                            "publicId":  "pte/demo22/demo22-di-1",
+                            "assetId":  "92427514484b3f93a864cb48393e4643",
+                            "sizeBytes":  22003,
+                            "durationSeconds":  null
+                        },
+    "demo22-di-2.png":  {
+                            "url":  "https://res.cloudinary.com/dkqjq2nj2/image/upload/v1791280254/pte/demo22/demo22-di-2.png",
+                            "publicId":  "pte/demo22/demo22-di-2",
+                            "assetId":  "29007c89e46f788cf7f0af4d4bc85a40",
+                            "sizeBytes":  24896,
+                            "durationSeconds":  null
+                        },
+    "demo22-di-3.png":  {
+                            "url":  "https://res.cloudinary.com/dkqjq2nj2/image/upload/v1791280256/pte/demo22/demo22-di-3.png",
+                            "publicId":  "pte/demo22/demo22-di-3",
+                            "assetId":  "e9b871a712b61b5af811adfe21c95f14",
+                            "sizeBytes":  29712,
+                            "durationSeconds":  null
+                        },
+    "demo22-fib-ti-1.wav":  {
+                                "url":  "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280259/pte/demo22/demo22-fib-ti-1.wav",
+                                "publicId":  "pte/demo22/demo22-fib-ti-1",
+                                "assetId":  "78a8c52088c7af115ff5e677ee9c1f5a",
+                                "sizeBytes":  930818,
+                                "durationSeconds":  22
+                            },
+    "demo22-fib-ti-2.wav":  {
+                                "url":  "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280263/pte/demo22/demo22-fib-ti-2.wav",
+                                "publicId":  "pte/demo22/demo22-fib-ti-2",
+                                "assetId":  "c0b606d277fc17865db5414e7a0e9c27",
+                                "sizeBytes":  798952,
+                                "durationSeconds":  19
+                            },
+    "demo22-fib-ti-3.wav":  {
+                                "url":  "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280267/pte/demo22/demo22-fib-ti-3.wav",
+                                "publicId":  "pte/demo22/demo22-fib-ti-3",
+                                "assetId":  "68b6c8e905126043dbdf1adbd0acf0f3",
+                                "sizeBytes":  766118,
+                                "durationSeconds":  18
+                            },
+    "demo22-hiw-1.wav":  {
+                             "url":  "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280270/pte/demo22/demo22-hiw-1.wav",
+                             "publicId":  "pte/demo22/demo22-hiw-1",
+                             "assetId":  "54081f489ccb7141b0ee451e6d079837",
+                             "sizeBytes":  714722,
+                             "durationSeconds":  17
+                         },
+    "demo22-hiw-2.wav":  {
+                             "url":  "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280274/pte/demo22/demo22-hiw-2.wav",
+                             "publicId":  "pte/demo22/demo22-hiw-2",
+                             "assetId":  "d743baf67bfb3176486b732de9d33ee9",
+                             "sizeBytes":  694454,
+                             "durationSeconds":  16
+                         },
+    "demo22-hiw-3.wav":  {
+                             "url":  "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280277/pte/demo22/demo22-hiw-3.wav",
+                             "publicId":  "pte/demo22/demo22-hiw-3",
+                             "assetId":  "df19528e8a044641e653cc049532c48a",
+                             "sizeBytes":  643104,
+                             "durationSeconds":  15
+                         },
+    "demo22-sgd-1.wav":  {
+                             "url":  "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280282/pte/demo22/demo22-sgd-1.wav",
+                             "publicId":  "pte/demo22/demo22-sgd-1",
+                             "assetId":  "c074b415d34b9fde75cbe3a1a49de5fe",
+                             "sizeBytes":  3729750,
+                             "durationSeconds":  85
+                         },
+    "demo22-sgd-2.wav":  {
+                             "url":  "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280287/pte/demo22/demo22-sgd-2.wav",
+                             "publicId":  "pte/demo22/demo22-sgd-2",
+                             "assetId":  "93f604b7af293ca5bdea3918319bb838",
+                             "sizeBytes":  3014086,
+                             "durationSeconds":  69
+                         },
+    "demo22-sgd-3.wav":  {
+                             "url":  "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280293/pte/demo22/demo22-sgd-3.wav",
+                             "publicId":  "pte/demo22/demo22-sgd-3",
+                             "assetId":  "7f6a6dc3df0a52728b8b32d8320c6953",
+                             "sizeBytes":  2861528,
+                             "durationSeconds":  65
+                         }
+}

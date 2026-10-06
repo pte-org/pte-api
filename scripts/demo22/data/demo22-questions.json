@@ -1,0 +1,2400 @@
+{
+  "schemaVersion": "demo22-questions-v1",
+  "perTaskType": 3,
+  "note": "Demo data for an internal class demo. External audio URLs come from pte-doc/data/question-import; local media is published by publish-demo22-media.ps1. Contains no secrets.",
+  "questions": [
+    {
+      "section": "SPEAKING",
+      "key": "PERSONAL_INTRODUCTION-1",
+      "taskTypeKey": "PERSONAL_INTRODUCTION",
+      "title": "DEMO22 - PERSONAL_INTRODUCTION - 1",
+      "promptText": "Please introduce yourself to the examiner. You may talk about where you come from, what you study or do for work, your interests, and your plans for the future.",
+      "referenceAnswerText": null,
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "READ_ALOUD-1",
+      "taskTypeKey": "READ_ALOUD",
+      "title": "DEMO22 - READ_ALOUD - 1",
+      "promptText": "Hopefully, this will treat and prevent acne and other skin diseases and reduce antibiotic use. Naked Biome is entering clinical trials to see if its approach is safe and effective.",
+      "referenceAnswerText": null,
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "READ_ALOUD-2",
+      "taskTypeKey": "READ_ALOUD",
+      "title": "DEMO22 - READ_ALOUD - 2",
+      "promptText": "Researchers have found a way to convert the aromatic substance vanillin into a redox-active electrolyte material for liquid batteries. The technology is an important step towards ecologically sustainable energy storage.",
+      "referenceAnswerText": null,
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "READ_ALOUD-3",
+      "taskTypeKey": "READ_ALOUD",
+      "title": "DEMO22 - READ_ALOUD - 3",
+      "promptText": "Straddling Asia and Europe across the strait, the old city of Istanbul, Turkey, has embraced diverse cultural influences. Known for its monumental architecture, Istanbul has become a cherished travel destination.",
+      "referenceAnswerText": null,
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "REPEAT_SENTENCE-1",
+      "taskTypeKey": "REPEAT_SENTENCE",
+      "title": "DEMO22 - REPEAT_SENTENCE - 1",
+      "promptText": null,
+      "referenceAnswerText": "Next time, we'll discuss the influence of the media on public policy.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/repeat_sentences/audios/rs_1_R/original/80d61986bc743b56a9df121975b490a1/rs_1_R.mp3?1666596339",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "REPEAT_SENTENCE-2",
+      "taskTypeKey": "REPEAT_SENTENCE",
+      "title": "DEMO22 - REPEAT_SENTENCE - 2",
+      "promptText": null,
+      "referenceAnswerText": "He would yell if he was interrupted while painting.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/repeat_sentences/audios/rs_62/original/698c58a1dec463dae169ac4658931ae9/rs_62.wav",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "REPEAT_SENTENCE-3",
+      "taskTypeKey": "REPEAT_SENTENCE",
+      "title": "DEMO22 - REPEAT_SENTENCE - 3",
+      "promptText": null,
+      "referenceAnswerText": "Please come to the next seminar properly prepared.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/repeat_sentences/audios/rs_21_volume/original/b5d81050694741c5e9cb03ce9133fef6/rs_21_volume.mp3?1623376600",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "DESCRIBE_IMAGE-1",
+      "taskTypeKey": "DESCRIBE_IMAGE",
+      "title": "DEMO22 - DESCRIBE_IMAGE - 1",
+      "promptText": null,
+      "referenceAnswerText": "The bar chart shows the average monthly rainfall in Newtown from January to June. Rainfall is highest in January at 78 millimetres and falls steadily every month, reaching its lowest point of 25 millimetres in June.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": null,
+      "image": {
+        "localFile": "demo22-di-1.png",
+        "contentType": "image/png",
+        "url": "https://res.cloudinary.com/dkqjq2nj2/image/upload/v1791280253/pte/demo22/demo22-di-1.png",
+        "publicId": "pte/demo22/demo22-di-1",
+        "assetId": "92427514484b3f93a864cb48393e4643",
+        "sizeBytes": 22003,
+        "durationSeconds": null
+      }
+    },
+    {
+      "section": "SPEAKING",
+      "key": "DESCRIBE_IMAGE-2",
+      "taskTypeKey": "DESCRIBE_IMAGE",
+      "title": "DEMO22 - DESCRIBE_IMAGE - 2",
+      "promptText": null,
+      "referenceAnswerText": "The line graph shows how many people shopped online in a small country between 2019 and 2023. The number rose every year, from 120 thousand to 440 thousand, with the sharpest increase between 2020 and 2021.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": null,
+      "image": {
+        "localFile": "demo22-di-2.png",
+        "contentType": "image/png",
+        "url": "https://res.cloudinary.com/dkqjq2nj2/image/upload/v1791280254/pte/demo22/demo22-di-2.png",
+        "publicId": "pte/demo22/demo22-di-2",
+        "assetId": "29007c89e46f788cf7f0af4d4bc85a40",
+        "sizeBytes": 24896,
+        "durationSeconds": null
+      }
+    },
+    {
+      "section": "SPEAKING",
+      "key": "DESCRIBE_IMAGE-3",
+      "taskTypeKey": "DESCRIBE_IMAGE",
+      "title": "DEMO22 - DESCRIBE_IMAGE - 3",
+      "promptText": null,
+      "referenceAnswerText": "The pie chart shows how a household spends its monthly income. Housing takes the largest share at 35 percent, followed by food at 25 percent, while leisure accounts for the smallest share at only 10 percent.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": null,
+      "image": {
+        "localFile": "demo22-di-3.png",
+        "contentType": "image/png",
+        "url": "https://res.cloudinary.com/dkqjq2nj2/image/upload/v1791280256/pte/demo22/demo22-di-3.png",
+        "publicId": "pte/demo22/demo22-di-3",
+        "assetId": "e9b871a712b61b5af811adfe21c95f14",
+        "sizeBytes": 29712,
+        "durationSeconds": null
+      }
+    },
+    {
+      "section": "SPEAKING",
+      "key": "RE_TELL_LECTURE-1",
+      "taskTypeKey": "RE_TELL_LECTURE",
+      "title": "DEMO22 - RE_TELL_LECTURE - 1",
+      "promptText": null,
+      "referenceAnswerText": "So there are two theories for how the gas giants formed. One is the same theory I showed you just now core accretion, right. And the other is called disk instability and one of our colleagues at DTM has done a lot of work on that and so it's unclear exactly how they formed but you're right what we're trying to do the reason we're trying to get the higher and higher pressure in the lab is because we are trying to understand more about the pressure inside the gas giants. It's thought that the gas giants also have a metallic core, but maybe the metallic core not made of iron. Hydrogen, for example becomes metallic at a certain pressure. So it's very possible that the insides of these planets could have metallic cores, could have hydrogen cores, could have rocky portions we're not sure. But the higher pressure we can get in the lab, the closer we can get understanding the interiors of the gas giants and the exoplanet that are so big.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/retell_lectures/audios/rl_53_volume/original/926a023b88203c5960aa29589bc96397/rl_53_volume.mp3?1623377562",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "RE_TELL_LECTURE-2",
+      "taskTypeKey": "RE_TELL_LECTURE",
+      "title": "DEMO22 - RE_TELL_LECTURE - 2",
+      "promptText": null,
+      "referenceAnswerText": "Hello everyone. Today's lecture is about setting up a website. I'm going to be focusing on things that you need to consider to ensure your website really adds value to the people using it.\nSo - there are three main areas you need to think about. The first and most important thing is who is your target audience? When you're creating a new website you really need to think about who the users are and what\ninformation they'll be looking for. What we do when we set up websites is to group users based on their needs. So, for a website in the academic community, for example, we may have groups such as researchers and administrators, and this helps us design the site and add information that is relevant to each group.\nThe second point is accessibility. The main thing here is to ensure your website can be found. And you can do this by making sure it can be reached from areas on the web where your target audience are also active. So this may mean providing links on other websites or maybe using social media.\nAnd thirdly - retention-making sure your target audience return to your website regularly. You do this by ensuring it gives them a reason to come back. So it's important to keep the site up-to-date and make sure it provides the latest news and interesting information and so on.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/retell_lectures/audios/rl_3_volume/original/2cb5fba891fb6ea888c6406fe4487913/rl_3_volume.mp3?1623377565",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "RE_TELL_LECTURE-3",
+      "taskTypeKey": "RE_TELL_LECTURE",
+      "title": "DEMO22 - RE_TELL_LECTURE - 3",
+      "promptText": null,
+      "referenceAnswerText": "Super-symmetry is a mathematical idea that people have developed an effort to understand the sharpest organising principle for the fundamental constituents of matter. You see, we have learned that particles that seem to be different, can actually secretly be united by certain symmetry principles. So we use the fact that there are symmetric objects in the world like a sphere or basketball. You turn a sphere, and even though you've transformed it, it looks the same fundamentally. We found that certain particles when you transform one particle into another, even though looks like the identity of the particle has changed, overall the equations describing it they don't change at all at an underlying level of symmetry, but we've not been able to do is find a symmetry that would relate certain kinds of particles, namely matter particles and force particles. Matter particles are particles like electrons, muons and quarks, force particles are like photons and gluons and WZ bosons. Super-symmetry is a symmetry that actually relates to these two kinds, these two classes of particles. And people have proven that super-symmetry is the last possible symmetry of the fundamental particles that are mathematics, reality has not yet been shown to make use of it. So people are now trying to see whether that symmetry might actually be working in the world can be found evidence for it in our understanding of fundamental particles.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/retell_lectures/audios/rl_27_volume/original/41963402a776c4dfe22338dbe5af4452/rl_27_volume.mp3?1623377571",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "ANSWER_SHORT_QUESTION-1",
+      "taskTypeKey": "ANSWER_SHORT_QUESTION",
+      "title": "DEMO22 - ANSWER_SHORT_QUESTION - 1",
+      "promptText": "Who discovered gravity?",
+      "referenceAnswerText": null,
+      "correctAnswerText": "Newton",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/answer_questions/audios/2126/1856/asq_1856-1703292162_6790802.mp3",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "ANSWER_SHORT_QUESTION-2",
+      "taskTypeKey": "ANSWER_SHORT_QUESTION",
+      "title": "DEMO22 - ANSWER_SHORT_QUESTION - 2",
+      "promptText": "Who cuts men's hair?",
+      "referenceAnswerText": null,
+      "correctAnswerText": "Barber / hairdresser",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/answer_questions/audios/162/162/1585883979-asq_162-en-US-Wavenet-C.mp3",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "ANSWER_SHORT_QUESTION-3",
+      "taskTypeKey": "ANSWER_SHORT_QUESTION",
+      "title": "DEMO22 - ANSWER_SHORT_QUESTION - 3",
+      "promptText": "How do butterflies fly?",
+      "referenceAnswerText": null,
+      "correctAnswerText": "Flutter",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/answer_questions/audios/asq_231-GB/original/7753058999fa67064fb9775759fe5193/asq_231-GB.mp3?1575356760",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "SUMMARIZE_GROUP_DISCUSSION-1",
+      "taskTypeKey": "SUMMARIZE_GROUP_DISCUSSION",
+      "title": "DEMO22 - SUMMARIZE_GROUP_DISCUSSION - 1",
+      "promptText": null,
+      "referenceAnswerText": "I think working from home is the best change in modern work. People save hours of travel every day and have more time for their families. I agree it saves time, but I see a problem. Many employees feel isolated at home, and it is harder for new staff to learn from colleagues. That is true, yet companies can solve this. A hybrid model, with two or three office days a week, keeps teams connected and still reduces commuting. Hybrid sounds fair, but not every manager trusts staff who are out of sight. Some still measure hours instead of results. Exactly. If managers focus on results, remote work succeeds. If they focus on presence, it fails. There is also the cost. Offices are expensive, and a smaller office could save a company a great deal of money. Those savings could pay for better home equipment and for regular team meetings in person. So we all accept that flexibility matters, but we disagree about how much time people should spend in the office.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": "demo22-sgd-1.wav",
+        "contentType": "audio/wav",
+        "url": "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280282/pte/demo22/demo22-sgd-1.wav",
+        "publicId": "pte/demo22/demo22-sgd-1",
+        "assetId": "c074b415d34b9fde75cbe3a1a49de5fe",
+        "sizeBytes": 3729750,
+        "durationSeconds": 85
+      },
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "SUMMARIZE_GROUP_DISCUSSION-2",
+      "taskTypeKey": "SUMMARIZE_GROUP_DISCUSSION",
+      "title": "DEMO22 - SUMMARIZE_GROUP_DISCUSSION - 2",
+      "promptText": null,
+      "referenceAnswerText": "Our city should spend more money on public transport. Buses and trains reduce traffic and cut air pollution. I support better transport, but the money has to come from somewhere. Higher taxes would upset many residents. Perhaps the fares could rise slightly for people who can afford it, while students and older people keep cheap tickets. Cheap tickets matter. If a ticket costs too much, people go back to using their cars. Cars will not disappear soon, though. Many people live far from any station and need a way to get home. Then we need local feeder buses and safe bicycle lanes, not just new train lines. A good network also attracts businesses, so the investment returns money to the city over time. I agree with that, as long as the plan is clear about costs and the work is finished on schedule.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": "demo22-sgd-2.wav",
+        "contentType": "audio/wav",
+        "url": "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280287/pte/demo22/demo22-sgd-2.wav",
+        "publicId": "pte/demo22/demo22-sgd-2",
+        "assetId": "93f604b7af293ca5bdea3918319bb838",
+        "sizeBytes": 3014086,
+        "durationSeconds": 69
+      },
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "SUMMARIZE_GROUP_DISCUSSION-3",
+      "taskTypeKey": "SUMMARIZE_GROUP_DISCUSSION",
+      "title": "DEMO22 - SUMMARIZE_GROUP_DISCUSSION - 3",
+      "promptText": null,
+      "referenceAnswerText": "School uniforms make every student look equal. Nobody feels judged for the clothes their family can or cannot afford. That is a fair point, but uniforms also limit personal expression. Teenagers want to show who they are. I think uniforms save time in the morning, and parents do not have to buy many fashionable clothes. They also create a sense of belonging, like a team wearing the same colours. However, uniforms are not free. Some schools require expensive items that must be bought from one shop. Then schools could allow simple clothes in a few agreed colours, which would be cheaper and more flexible. That compromise keeps equality without forcing every family to spend a lot. I would accept that, provided students can still choose how they dress on special days.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": "demo22-sgd-3.wav",
+        "contentType": "audio/wav",
+        "url": "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280293/pte/demo22/demo22-sgd-3.wav",
+        "publicId": "pte/demo22/demo22-sgd-3",
+        "assetId": "7f6a6dc3df0a52728b8b32d8320c6953",
+        "sizeBytes": 2861528,
+        "durationSeconds": 65
+      },
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "RESPOND_TO_A_SITUATION-1",
+      "taskTypeKey": "RESPOND_TO_A_SITUATION",
+      "title": "DEMO22 - RESPOND_TO_A_SITUATION - 1",
+      "promptText": "You have submitted a wrong file to your manager. Please apologize to him for it.",
+      "referenceAnswerText": "Respected manager, I hope you are doing well.\nI would like to discuss an issue we have encountered with my submitted file.\nIt appears that I mistakenly sent you the incorrect file, and I sincerely apologize for this careless mistake.\nI would appreciate your opinion on this matter. Thank you for your consideration.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/respond_situations/audios/108/99/rts_99-1753078863_1691177.mp3",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "RESPOND_TO_A_SITUATION-2",
+      "taskTypeKey": "RESPOND_TO_A_SITUATION",
+      "title": "DEMO22 - RESPOND_TO_A_SITUATION - 2",
+      "promptText": "Your flatmate doesn't follow the schedule to complete housework. What would you say to him or her?",
+      "referenceAnswerText": "Hey flatmate, I want to talk to you about something.\nWe seem to have a little issue with our housework schedule.\nIt's like you haven't finished your housework following our agreed schedule.\nAnd I'd like to know what you think.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/respond_situations/audios/115/110/rts_(c)_110-1757686870_634246.mp3",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "SPEAKING",
+      "key": "RESPOND_TO_A_SITUATION-3",
+      "taskTypeKey": "RESPOND_TO_A_SITUATION",
+      "title": "DEMO22 - RESPOND_TO_A_SITUATION - 3",
+      "promptText": "You are ten minutes late for a meeting because of a traffic jam. How should you explain to your colleagues?",
+      "referenceAnswerText": "Hey everyone, I want to talk to you about something.\nWe seem to have a little issue with my arrival for the meeting.\nIt's like I was stuck in a traffic jam, which made me ten minutes late for this meeting.\nAnd I'd like to know what you think.",
+      "correctAnswerText": null,
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/respond_situations/audios/92/91/rts_91-1750494225_45763.mp3",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "WRITING",
+      "key": "SUMMARIZE_WRITTEN_TEXT-1",
+      "taskTypeKey": "SUMMARIZE_WRITTEN_TEXT",
+      "title": "DEMO22 - SUMMARIZE_WRITTEN_TEXT - 1",
+      "promptText": "As we have already seen, the American economy is increasingly global and effects of a downturn in one area of the world can immediately affect the value of American stocks at home. Throughout the first half of the year, it was widely speculated that Federal Reserve Chairman Alan Greenspan would choose to raise interest rates in the US to cool down the economy a bit and prevent inflation from creeping in. By late September, though, he was coming under increasing pressure to lower interest rates to fend off deflationary pressure. What happened?",
+      "referenceAnswerText": "the American economy is increasingly global, with a downturn in one area of the world able to immediately affect the value of American stocks at home, and although it was widely speculated that Greenspan would choose to raise interest rates in the US to cool down the economy and prevent inflation, he was coming under increasing pressure to lower interest rates to fend off deflationary pressure.",
+      "correctAnswerText": null,
+      "minWordCount": 5,
+      "maxWordCount": 75,
+      "options": [],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "WRITING",
+      "key": "SUMMARIZE_WRITTEN_TEXT-2",
+      "taskTypeKey": "SUMMARIZE_WRITTEN_TEXT",
+      "title": "DEMO22 - SUMMARIZE_WRITTEN_TEXT - 2",
+      "promptText": "In order to have a competitive edge, athletes often use drugs with high athletic performance.\nThe National Honey Board recently found that honey has the same functions but less negative impact. This clinical trial is the third in a series of studies focusing on the use of honey by athletes. The first study (involving 71 subjects) determined that honey has a milder effect on blood sugar than other popular forms of carbohydrate gel.\nThe second study in the series (with 39 weight trained subjects) investigated the combination of honey with a protein supplement and suggested that honey speeds muscle recovery after a workout.",
+      "referenceAnswerText": "Honey, with the same functions as drugs used by athletes for high athletic performance and less negative impact, has a milder effect on blood sugar than other popular forms of carbohydrate gel, and speeds muscle recovery after a workout.",
+      "correctAnswerText": null,
+      "minWordCount": 5,
+      "maxWordCount": 75,
+      "options": [],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "WRITING",
+      "key": "SUMMARIZE_WRITTEN_TEXT-3",
+      "taskTypeKey": "SUMMARIZE_WRITTEN_TEXT",
+      "title": "DEMO22 - SUMMARIZE_WRITTEN_TEXT - 3",
+      "promptText": "Negotiation is a common process in business to mainly solve business conflicts between both parties. Compromise is a basic negotiation state in which both parties give up something that they want in order to get something else they want more. Compromise usually occurs in unfair parties when there is a fixed pie to be divided up, and whatever on one side gets, the other side loses.\nIn compromise situations, neither side gets all of what they really want, but they each make concessions in order to reach an agreement that is acceptable to both. Both parties usually can reach a win-win situation through compromise. However, negotiation cannot resolve all the conflict if one party is unwilling to resolve the problem.",
+      "referenceAnswerText": "Negotiation is a common process in business to mainly solve business conflicts between both parties, and compromise is a basic negotiation state in which both parties give up something, which usually occurs in unfair parties when there is a fixed pie to be divided up, so they each make concessions to reach an agreement that is acceptable to both, but negotiation cannot resolve the conflict if one party is unwilling to resolve the problem.",
+      "correctAnswerText": null,
+      "minWordCount": 5,
+      "maxWordCount": 75,
+      "options": [],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "WRITING",
+      "key": "WRITE_ESSAY-1",
+      "taskTypeKey": "WRITE_ESSAY",
+      "title": "DEMO22 - WRITE_ESSAY - 1",
+      "promptText": "Working employees have paid leave. Is it good or bad?",
+      "referenceAnswerText": null,
+      "correctAnswerText": null,
+      "minWordCount": 200,
+      "maxWordCount": 300,
+      "options": [],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "WRITING",
+      "key": "WRITE_ESSAY-2",
+      "taskTypeKey": "WRITE_ESSAY",
+      "title": "DEMO22 - WRITE_ESSAY - 2",
+      "promptText": "Globalization is important. What is your opinion? Give your reasons.",
+      "referenceAnswerText": null,
+      "correctAnswerText": null,
+      "minWordCount": 200,
+      "maxWordCount": 300,
+      "options": [],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "WRITING",
+      "key": "WRITE_ESSAY-3",
+      "taskTypeKey": "WRITE_ESSAY",
+      "title": "DEMO22 - WRITE_ESSAY - 3",
+      "promptText": "What potential challenges do students face in online learning environments?",
+      "referenceAnswerText": null,
+      "correctAnswerText": null,
+      "minWordCount": 200,
+      "maxWordCount": 300,
+      "options": [],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "FILL_IN_THE_BLANKS_DROPDOWN-1",
+      "taskTypeKey": "FILL_IN_THE_BLANKS_DROPDOWN",
+      "title": "DEMO22 - FILL_IN_THE_BLANKS_DROPDOWN - 1",
+      "promptText": "Research has suggested that major stressors in our lives are life {{1}} , for example, moving house, marriage or relationship breakdown. Work-related factors, {{2}} unemployment and boredom, are also common {{3}} of stress. Differences in personality may also {{4}} a part.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "1.changes, 2.including, 3.causes, 4.play",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "collections",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": 0,
+          "correctGapIndex": null
+        },
+        {
+          "text": "expectations",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": 0,
+          "correctGapIndex": null
+        },
+        {
+          "text": "appearances",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": 0,
+          "correctGapIndex": null
+        },
+        {
+          "text": "changes",
+          "correct": true,
+          "orderIndex": 3,
+          "blankIndex": 0,
+          "correctGapIndex": null
+        },
+        {
+          "text": "have included",
+          "correct": false,
+          "orderIndex": 4,
+          "blankIndex": 1,
+          "correctGapIndex": null
+        },
+        {
+          "text": "including",
+          "correct": true,
+          "orderIndex": 5,
+          "blankIndex": 1,
+          "correctGapIndex": null
+        },
+        {
+          "text": "include",
+          "correct": false,
+          "orderIndex": 6,
+          "blankIndex": 1,
+          "correctGapIndex": null
+        },
+        {
+          "text": "included",
+          "correct": false,
+          "orderIndex": 7,
+          "blankIndex": 1,
+          "correctGapIndex": null
+        },
+        {
+          "text": "conferences",
+          "correct": false,
+          "orderIndex": 8,
+          "blankIndex": 2,
+          "correctGapIndex": null
+        },
+        {
+          "text": "courses",
+          "correct": false,
+          "orderIndex": 9,
+          "blankIndex": 2,
+          "correctGapIndex": null
+        },
+        {
+          "text": "causes",
+          "correct": true,
+          "orderIndex": 10,
+          "blankIndex": 2,
+          "correctGapIndex": null
+        },
+        {
+          "text": "factors",
+          "correct": false,
+          "orderIndex": 11,
+          "blankIndex": 2,
+          "correctGapIndex": null
+        },
+        {
+          "text": "act",
+          "correct": false,
+          "orderIndex": 12,
+          "blankIndex": 3,
+          "correctGapIndex": null
+        },
+        {
+          "text": "play",
+          "correct": true,
+          "orderIndex": 13,
+          "blankIndex": 3,
+          "correctGapIndex": null
+        },
+        {
+          "text": "list",
+          "correct": false,
+          "orderIndex": 14,
+          "blankIndex": 3,
+          "correctGapIndex": null
+        },
+        {
+          "text": "give",
+          "correct": false,
+          "orderIndex": 15,
+          "blankIndex": 3,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "FILL_IN_THE_BLANKS_DROPDOWN-2",
+      "taskTypeKey": "FILL_IN_THE_BLANKS_DROPDOWN",
+      "title": "DEMO22 - FILL_IN_THE_BLANKS_DROPDOWN - 2",
+      "promptText": "Farmers {{1}} fertilize their fields to ensure healthy crop growth. Fertilizer {{2}} a strong effect on agricultural productivity. The real {{3}} is that farmers often do not know {{4}} fertilizer they should use, which can lead either to poor yields or to harmful overuse.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "1.should, 2.has, 3.problem, 4.how much",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "must",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": 0,
+          "correctGapIndex": null
+        },
+        {
+          "text": "should",
+          "correct": true,
+          "orderIndex": 1,
+          "blankIndex": 0,
+          "correctGapIndex": null
+        },
+        {
+          "text": "need",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": 0,
+          "correctGapIndex": null
+        },
+        {
+          "text": "can",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": 0,
+          "correctGapIndex": null
+        },
+        {
+          "text": "had",
+          "correct": false,
+          "orderIndex": 4,
+          "blankIndex": 1,
+          "correctGapIndex": null
+        },
+        {
+          "text": "has",
+          "correct": true,
+          "orderIndex": 5,
+          "blankIndex": 1,
+          "correctGapIndex": null
+        },
+        {
+          "text": "have",
+          "correct": false,
+          "orderIndex": 6,
+          "blankIndex": 1,
+          "correctGapIndex": null
+        },
+        {
+          "text": "having",
+          "correct": false,
+          "orderIndex": 7,
+          "blankIndex": 1,
+          "correctGapIndex": null
+        },
+        {
+          "text": "problem",
+          "correct": true,
+          "orderIndex": 8,
+          "blankIndex": 2,
+          "correctGapIndex": null
+        },
+        {
+          "text": "question",
+          "correct": false,
+          "orderIndex": 9,
+          "blankIndex": 2,
+          "correctGapIndex": null
+        },
+        {
+          "text": "conclusion",
+          "correct": false,
+          "orderIndex": 10,
+          "blankIndex": 2,
+          "correctGapIndex": null
+        },
+        {
+          "text": "answer",
+          "correct": false,
+          "orderIndex": 11,
+          "blankIndex": 2,
+          "correctGapIndex": null
+        },
+        {
+          "text": "how much",
+          "correct": true,
+          "orderIndex": 12,
+          "blankIndex": 3,
+          "correctGapIndex": null
+        },
+        {
+          "text": "how many",
+          "correct": false,
+          "orderIndex": 13,
+          "blankIndex": 3,
+          "correctGapIndex": null
+        },
+        {
+          "text": "however",
+          "correct": false,
+          "orderIndex": 14,
+          "blankIndex": 3,
+          "correctGapIndex": null
+        },
+        {
+          "text": "so much",
+          "correct": false,
+          "orderIndex": 15,
+          "blankIndex": 3,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "FILL_IN_THE_BLANKS_DROPDOWN-3",
+      "taskTypeKey": "FILL_IN_THE_BLANKS_DROPDOWN",
+      "title": "DEMO22 - FILL_IN_THE_BLANKS_DROPDOWN - 3",
+      "promptText": "Climate is the word we {{1}} for weather over a long period of time. The desert has a dry climate because there is very little rain. The UK {{2}} a ‘temperate climate’, {{3}} means winters are, overall, mild and {{4}} , generally, don’t get too hot.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "1.use, 2.has, 3.which, 4.summers",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "estimate",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": 0,
+          "correctGapIndex": null
+        },
+        {
+          "text": "predict",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": 0,
+          "correctGapIndex": null
+        },
+        {
+          "text": "describe",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": 0,
+          "correctGapIndex": null
+        },
+        {
+          "text": "use",
+          "correct": true,
+          "orderIndex": 3,
+          "blankIndex": 0,
+          "correctGapIndex": null
+        },
+        {
+          "text": "is",
+          "correct": false,
+          "orderIndex": 4,
+          "blankIndex": 1,
+          "correctGapIndex": null
+        },
+        {
+          "text": "are",
+          "correct": false,
+          "orderIndex": 5,
+          "blankIndex": 1,
+          "correctGapIndex": null
+        },
+        {
+          "text": "has",
+          "correct": true,
+          "orderIndex": 6,
+          "blankIndex": 1,
+          "correctGapIndex": null
+        },
+        {
+          "text": "be",
+          "correct": false,
+          "orderIndex": 7,
+          "blankIndex": 1,
+          "correctGapIndex": null
+        },
+        {
+          "text": "what",
+          "correct": false,
+          "orderIndex": 8,
+          "blankIndex": 2,
+          "correctGapIndex": null
+        },
+        {
+          "text": "these",
+          "correct": false,
+          "orderIndex": 9,
+          "blankIndex": 2,
+          "correctGapIndex": null
+        },
+        {
+          "text": "that",
+          "correct": false,
+          "orderIndex": 10,
+          "blankIndex": 2,
+          "correctGapIndex": null
+        },
+        {
+          "text": "which",
+          "correct": true,
+          "orderIndex": 11,
+          "blankIndex": 2,
+          "correctGapIndex": null
+        },
+        {
+          "text": "summers",
+          "correct": true,
+          "orderIndex": 12,
+          "blankIndex": 3,
+          "correctGapIndex": null
+        },
+        {
+          "text": "winter",
+          "correct": false,
+          "orderIndex": 13,
+          "blankIndex": 3,
+          "correctGapIndex": null
+        },
+        {
+          "text": "desert",
+          "correct": false,
+          "orderIndex": 14,
+          "blankIndex": 3,
+          "correctGapIndex": null
+        },
+        {
+          "text": "dessert",
+          "correct": false,
+          "orderIndex": 15,
+          "blankIndex": 3,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "MC_READING_MULTIPLE-1",
+      "taskTypeKey": "MC_READING_MULTIPLE",
+      "title": "DEMO22 - MC_READING_MULTIPLE - 1",
+      "promptText": "By the laws of probability, most decisions made under pressure should be flawed ones, yet psychologists have found that people routinely make correct judgments most of the time, even with limited information. One of Gladwell's surprising points is that we can actually learn how to make better snap judgments, in the same way that we can learn logical, deliberative thinking. But first we have to accept the idea that thinking long and hard about something does not always deliver us better results, and that the brain actually evolved to make us think on our feet.\n\nWhich of the following does the passage tell us about decision making?",
+      "referenceAnswerText": null,
+      "correctAnswerText": "The brain is designed to enable quick decision making.\nQuick decision making can be improved.",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "The brain is designed to enable quick decision making.",
+          "correct": true,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Quick decision making can be improved.",
+          "correct": true,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Quick decision making routinely leads to error.",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "To make correct decisions we require all relevant information.",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Thinking things through thoroughly will lead to greater success.",
+          "correct": false,
+          "orderIndex": 4,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "MC_READING_MULTIPLE-2",
+      "taskTypeKey": "MC_READING_MULTIPLE",
+      "title": "DEMO22 - MC_READING_MULTIPLE - 2",
+      "promptText": "Since 1980, the use of wind to produce electricity has been growing rapidly. In 1994 there were nearly 20,000 wind turbines worldwide, most grouped in clusters called wind farms that collectively produced 3,000 megawatts of electricity. Most were in Denmark (which got 3 percent of its electricity from wind turbines) and California (where 17,000 machines produced 1 percent of the state's electricity, enough to meet the residential needs of a city as large as San Francisco). In principle, all the power needs of the United States could be provided by exploiting the wind potential of just three states—North Dakota, South Dakota, and Texas.\n\nBased on the information in the paragraph, which of the following best explains the term wind farms?",
+      "referenceAnswerText": null,
+      "correctAnswerText": "Types of power plant common in Denmark and California\nCollections of wind turbines producing electric power",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "Farms using windmills to pump water",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Research centers exploring the uses of wind",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Types of power plant common in Denmark and California",
+          "correct": true,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Collections of wind turbines producing electric power",
+          "correct": true,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "MC_READING_MULTIPLE-3",
+      "taskTypeKey": "MC_READING_MULTIPLE",
+      "title": "DEMO22 - MC_READING_MULTIPLE - 3",
+      "promptText": "The differences in feeding preferences lead, in turn, to differences in migratory habits. The wildebeests follow, in their migration, the pattern of local rainfall. The other species do likewise. But when a new area is fueled by rain, the mammals migrate toward it in a set order to exploit it. The larger, less fastidious feeders, the zebras, move in first; the choosier, smaller wildebeests come later; and the smallest species of all, Thomson's gazelle, arrives last. The later species all depend on the preparations of the earlier one, for the actions of the zebra alter the vegetation to suit the stomachs of the wildebeest, topi, and gazelle.\n\nAccording to the passage, which of the following is true of wildebeests?",
+      "referenceAnswerText": null,
+      "correctAnswerText": "They tend to choose feeding areas in which the vegetation has been worn down.\nThey are relatively choosier than larger herbivores.",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "They eat more stem matter than zebras do.",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "They are able to digest large food particles if the food is of a high quality.",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "They tend to choose feeding areas in which the vegetation has been worn down.",
+          "correct": true,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "They are likely to choose low-quality food to eat in periods when the quantity of rainfall is low.",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "They are relatively choosier than larger herbivores.",
+          "correct": true,
+          "orderIndex": 4,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "RE_ORDER_PARAGRAPHS-1",
+      "taskTypeKey": "RE_ORDER_PARAGRAPHS",
+      "title": "DEMO22 - RE_ORDER_PARAGRAPHS - 1",
+      "promptText": null,
+      "referenceAnswerText": null,
+      "correctAnswerText": "2, 3, 4, 1",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "The topic you choose should be supported by a range of sources.",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "The source should be cited under APA guidelines, and the final draft should be written in APA styles.",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "The final draft is due one week before the final exam.",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "A requirement of Humanities 104 is to write a persuasive paper on a topic of your choice.",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "RE_ORDER_PARAGRAPHS-2",
+      "taskTypeKey": "RE_ORDER_PARAGRAPHS",
+      "title": "DEMO22 - RE_ORDER_PARAGRAPHS - 2",
+      "promptText": null,
+      "referenceAnswerText": null,
+      "correctAnswerText": "4, 1, 3, 2",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "At the same time, turboprop propulsion began to appear for smaller commuter planes, making it possible to serve small-volume routes in a much wider range of weather conditions.",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "After World War II, especially in North America, there was a boom in general aviation, both private and commercial, as thousands of pilots were released from military service and much inexpensive war-surplus transport and training aircraft became available.",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "By the 1950s, the development of civil jets grew, beginning with the de Havilland Comet, though the first widely used passenger jet was the Boeing 707 because it was much more economical than other aircraft at that time.",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Manufacturers such as Cessna, Piper, and Beechcraft expanded production to provide light aircraft for the new middle-class market.",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "RE_ORDER_PARAGRAPHS-3",
+      "taskTypeKey": "RE_ORDER_PARAGRAPHS",
+      "title": "DEMO22 - RE_ORDER_PARAGRAPHS - 3",
+      "promptText": null,
+      "referenceAnswerText": null,
+      "correctAnswerText": "2, 3, 4, 1",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "Journalists try to be fair and objective by presenting all sides of a particular issue.",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Practically speaking, however, it is about as difficult to present all sides of an issue as it is to invite candidates from all political parties to a presidential debate.",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Some perspectives ultimately are not included.",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Although experts like journalists are expected to be unbiased they invariably share the system biases of the disciplines and cultures in which they work.",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "FILL_IN_THE_BLANKS_DRAG_AND_DROP-1",
+      "taskTypeKey": "FILL_IN_THE_BLANKS_DRAG_AND_DROP",
+      "title": "DEMO22 - FILL_IN_THE_BLANKS_DRAG_AND_DROP - 1",
+      "promptText": "Today, many companies emphasize {{1}} in their operations. For example, packaging should be made from recyclable materials to ensure proper {{2}} . In households, using energy-efficient kitchen {{3}} helps reduce environmental impact.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "1.sustainability, 2.disposal, 3.appliances",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "sustainability",
+          "correct": true,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": 0
+        },
+        {
+          "text": "maintenance",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "gauge",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "appliances",
+          "correct": true,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": 2
+        },
+        {
+          "text": "bargain",
+          "correct": false,
+          "orderIndex": 4,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "disposal",
+          "correct": true,
+          "orderIndex": 5,
+          "blankIndex": null,
+          "correctGapIndex": 1
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "FILL_IN_THE_BLANKS_DRAG_AND_DROP-2",
+      "taskTypeKey": "FILL_IN_THE_BLANKS_DRAG_AND_DROP",
+      "title": "DEMO22 - FILL_IN_THE_BLANKS_DRAG_AND_DROP - 2",
+      "promptText": "The place had both mountains and a {{1}} . Every year, over 3.5 million {{2}} come to enjoy the scenery. There are also several miles of {{3}} that wind through the area.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "1.forest, 2.visitors, 3.trails",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "visitors",
+          "correct": true,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": 1
+        },
+        {
+          "text": "forest",
+          "correct": true,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": 0
+        },
+        {
+          "text": "desert",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "kilometers",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "travelers",
+          "correct": false,
+          "orderIndex": 4,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "trails",
+          "correct": true,
+          "orderIndex": 5,
+          "blankIndex": null,
+          "correctGapIndex": 2
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "FILL_IN_THE_BLANKS_DRAG_AND_DROP-3",
+      "taskTypeKey": "FILL_IN_THE_BLANKS_DRAG_AND_DROP",
+      "title": "DEMO22 - FILL_IN_THE_BLANKS_DRAG_AND_DROP - 3",
+      "promptText": "With the popularity of the gender equality campaign and the cultural change, the {{1}} roles of men as the {{2}} , and of women in which they stay at home, are {{3}} today.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "1.traditional, 2.earner, 3.challenged",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "authority",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "traditional",
+          "correct": true,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": 0
+        },
+        {
+          "text": "earner",
+          "correct": true,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": 1
+        },
+        {
+          "text": "appreciated",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "protested",
+          "correct": false,
+          "orderIndex": 4,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "challenged",
+          "correct": true,
+          "orderIndex": 5,
+          "blankIndex": null,
+          "correctGapIndex": 2
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "MC_READING_SINGLE-1",
+      "taskTypeKey": "MC_READING_SINGLE",
+      "title": "DEMO22 - MC_READING_SINGLE - 1",
+      "promptText": "Many argue that art cannot be defined. We could go about this in several ways. Art is often considered as the process or product of deliberately arranging elements in a way that appeals to the senses or emotions. It encompasses a diverse range of human activities, creations and ways of expression, including music, literature, film, sculpture and paintings. The meaning of art is explored in a branch of philosophy known as aesthetics. At least, that is what Wikipedia claims.\n\nWhat is the main idea of the passage?",
+      "referenceAnswerText": null,
+      "correctAnswerText": "Art is a difficult and complex form to explain.",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "Art is a difficult and complex form to explain.",
+          "correct": true,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Wikipedia defines art under aesthetics, which is a branch of philosophy.",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Music, literature, film and sculpture do not define art.",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Art is directed in a way that it deliberately appeals to the emotions of people.",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "MC_READING_SINGLE-2",
+      "taskTypeKey": "MC_READING_SINGLE",
+      "title": "DEMO22 - MC_READING_SINGLE - 2",
+      "promptText": "It is believed that Cushitic-speaking people were the first ethnic group to migrate to today’s Kenya. It is believed that they moved in from northern Africa somewhere around 2000 BCE. Then came the Arab Traders who started frequenting the Kenyan coast way back in the first century CE (Common Era). The Kenyan coast served host to communities of iron workers, subsistence farmers, hunters and fishermen who supported the economy with agriculture, fishing, metal production and trade with foreign countries.\n\nWhich of the following statements is not true with reference to Kenya?",
+      "referenceAnswerText": null,
+      "correctAnswerText": "Cushitic speaking people moved into today’s Kenyan territory around 2000 years ago.",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "Settlers from Arab Countries constitute a significant fraction of Kenya’s population today.",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Cushitic speaking people moved into today’s Kenyan territory around 2000 years ago.",
+          "correct": true,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Arab traders started paying regular visits to Kenya ever since the turn of the Common Era.",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "The Kenyan coast has over the centuries served host to diverse communities and cultures.",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "READING",
+      "key": "MC_READING_SINGLE-3",
+      "taskTypeKey": "MC_READING_SINGLE",
+      "title": "DEMO22 - MC_READING_SINGLE - 3",
+      "promptText": "Governments, business and many types of institutions collect, organise and record statistics. Statistics capture vital information about such things as the economy, population and the environment and therefore allow meaningful comparisons to be made. This can then inform decisions and plans made about such issues which in turn become public policies. While it may be the issues behind the statistics, rather than the statistics as such that command the public's attention, it must be recognised that it is the figures that inform these issues.\n\nThe author considers statistics to be important because",
+      "referenceAnswerText": null,
+      "correctAnswerText": "they assist in driving public issues.",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "they are recorded by official organisations.",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "the general public have an interest in them.",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "they are affected by plans and policies.",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "they assist in driving public issues.",
+          "correct": true,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": null,
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "SUMMARIZE_SPOKEN_TEXT-1",
+      "taskTypeKey": "SUMMARIZE_SPOKEN_TEXT",
+      "title": "DEMO22 - SUMMARIZE_SPOKEN_TEXT - 1",
+      "promptText": "How people can recognize human faces? this is a hard but brilliant question. People should appreciate something. People can get visual information from faces and put a name on it. We can tell one’s identity, age, work, health condition, politics, and friends. Recognizing faces is amazing, difficult and a clever thing. In conclusion, people can get a lot out of faces.",
+      "referenceAnswerText": null,
+      "correctAnswerText": null,
+      "minWordCount": 50,
+      "maxWordCount": 70,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/ssts/audios/b6c43729326b4798bf1a80f7e2010a94/original/ba90715e25bd14afc2f2ff0aedb7e406/b6c43729326b4798bf1a80f7e2010a94.mp3",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "SUMMARIZE_SPOKEN_TEXT-2",
+      "taskTypeKey": "SUMMARIZE_SPOKEN_TEXT",
+      "title": "DEMO22 - SUMMARIZE_SPOKEN_TEXT - 2",
+      "promptText": "About the importance of tea, one of the three most popular drinks in England in which the others are chocolate and coffee. Drinking tea in England was a symbol of social freedom, was very expensive and could only be ordered by men in public. Men had tea in coffee houses, making trades and chatting business, while women could only drink tea in private places or wait for their husbands to bring tea back home.",
+      "referenceAnswerText": "Tea is one of the three most popular drinks in England. Drinking tea in England was a symbol of social freedom. It was also very expensive and could only be ordered by men in public. To be more specific, men had tea in coffee houses, while women could only drink tea in private places.",
+      "correctAnswerText": null,
+      "minWordCount": 50,
+      "maxWordCount": 70,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/ssts/audios/323/293/sst_293-1768814852_2227535.mp3",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "SUMMARIZE_SPOKEN_TEXT-3",
+      "taskTypeKey": "SUMMARIZE_SPOKEN_TEXT",
+      "title": "DEMO22 - SUMMARIZE_SPOKEN_TEXT - 3",
+      "promptText": "When this dog approaches some food, another dog's playful snarls are played back. The dog seems curious, but the sound doesn't stop it from taking the bone. Here a dog hears the growls of a dog being approached by a stranger, but these don't deter it from grabbing the bone either. In another scenario the sound of a dog protecting its food is played back. This time the dog backs off. These experiments suggest the dogs can distinguish between different types of growls.",
+      "referenceAnswerText": "This lecture mainly talks about dogs growling. Firstly, the speaker emphasizes a dog's curious snarls don't stop another one from taking the bone. Also, she mentions the growls of a dog being approached by a stranger don't deter it from grabbing the bone either. Lastly, the speaker believes these experiments suggest the dogs can distinguish between different types of growls. In conclusion, this lecture is very informative.",
+      "correctAnswerText": null,
+      "minWordCount": 50,
+      "maxWordCount": 70,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/ssts/audios/5028642d31174e1d872ce7ef67835947_volume/original/21e658d39a2845a29986dd20df879be4/5028642d31174e1d872ce7ef67835947_volume.mp3?1623378873",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "MC_LISTENING_MULTIPLE-1",
+      "taskTypeKey": "MC_LISTENING_MULTIPLE",
+      "title": "DEMO22 - MC_LISTENING_MULTIPLE - 1",
+      "promptText": "All domestic dogs belong to a single species that descended from wolves—despite vast differences in size, appearance, behavior and temperament among breeds.\nWhile dogs first became domesticated tens of thousands of years ago, the breeds we know today are largely the result of selection for certain traits by humans over the past several hundred years. “We have an enormous amount of diversity within the same species, and we can rarely observe such diversity in nature. So it’s a wonderful system to understand how evolution works within a short period of time.”\nEvolutionary biologist László Garamszegi of the Institute of Ecology and Botany in Hungary. He says that our playing with dogs is a key component of the human-canine bond.\n\nWhat are the characteristics of dogs in this passage?",
+      "referenceAnswerText": null,
+      "correctAnswerText": "All dogs evolved from wolves.\nPlay can help dogs bond with humans.",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "Dogs are loyal to their owners.",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "All dogs evolved from wolves.",
+          "correct": true,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "After domestication, dogs naturally evolved into different breeds without human's involvement.",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Play can help dogs bond with humans.",
+          "correct": true,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Dogs of the same species have similar habits.",
+          "correct": false,
+          "orderIndex": 4,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/lmcqs/mcm/audios/4._Dogs_volume/original/e91a065d5d3667b957c28ee2d5311712/4._Dogs_volume.mp3?1643118571",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "MC_LISTENING_MULTIPLE-2",
+      "taskTypeKey": "MC_LISTENING_MULTIPLE",
+      "title": "DEMO22 - MC_LISTENING_MULTIPLE - 2",
+      "promptText": "Woodblocks used for pictorial illustration became fairly common in 15th century Europe, but had been used long before that for printing designs on textiJes. Most of these were simple in design and quite crudely cut, but some were skillfully drawn and cut, while others even contained pictorial imagery.\nRecords show that woodblock printing on fabrics was practised by the Egyptians as early as 2000 years BC. The oldest existing printed fabric, which is Egyptian, dates from the 4th century. At the same time, the craft seems to have been widely established, even commonplace, elsewhere: for example, in India, Mexico and Peru, where the same techniques continue to be practised today. And the technique was almost certainly used by both the Japanese and the Chinese too.\n\nWhich of these countries still use woodblock printing on fabrics?",
+      "referenceAnswerText": null,
+      "correctAnswerText": "Peru\nIndia\nMexico",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "Japan",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Peru",
+          "correct": true,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "India",
+          "correct": true,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Egypt",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "China",
+          "correct": false,
+          "orderIndex": 4,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Mexico",
+          "correct": true,
+          "orderIndex": 5,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/lmcqs/mcm/audios/1.14_volume/original/18596a92e8a0d8a2444c56cf6d088fc1/1.14_volume.mp3?1623319375",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "MC_LISTENING_MULTIPLE-3",
+      "taskTypeKey": "MC_LISTENING_MULTIPLE",
+      "title": "DEMO22 - MC_LISTENING_MULTIPLE - 3",
+      "promptText": "All mammals have hair—commonly called fur when it's on your cat or a koala. And the thickness of individual hairs varies from species to species. For example, elephant hairs are more than four times thicker than a strand from an adult human.\n\"Normally, when the animal is larger, the hair tends to be thicker.\"\nUniversity of California, San Diego, materials scientist Wen Yang. She's interested in how biological structures like hair hold up under stress. That interest comes from a desire to design better synthetic materials.\nYang's team tested the tensile strength of hair from eight different mammal species, including humans. They subjected those hairs to increasing levels of tension until the fibers broke. The researchers assumed that thick hair—from giraffes, elephants and boars, for example, would be more robust. But they were wrong.\n\nWhich of the following statements about hair are correct?",
+      "referenceAnswerText": null,
+      "correctAnswerText": "Generally speaking, the size of an animal is directly proportional to the thickness of its hair.\nDifferent species have different hair thickness.",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "Generally speaking, the size of an animal is directly proportional to the thickness of its hair.",
+          "correct": true,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Cats have thicker hairs than elephants.",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "The function of hairs is to protect the body.",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Different species have different hair thickness.",
+          "correct": true,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "The thick hairs on giraffes, elephants are stronger than small animals.",
+          "correct": false,
+          "orderIndex": 4,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/lmcqs/mcm/audios/6._Hair_volume/original/876bce9bca4318411a18090a54e98d7c/6._Hair_volume.mp3?1643119860",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "FILL_IN_THE_BLANKS_TYPE_IN-1",
+      "taskTypeKey": "FILL_IN_THE_BLANKS_TYPE_IN",
+      "title": "DEMO22 - FILL_IN_THE_BLANKS_TYPE_IN - 1",
+      "promptText": "Urban gardens are becoming more {{0}} in large cities. Residents use {{1}} and empty lots to grow vegetables, herbs and flowers. These projects reduce food costs, improve air {{2}} and bring {{3}} together. Many schools now run small gardens so that {{4}} can learn where their food comes from.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "[\"popular\",\"rooftops\",\"quality\",\"neighbours\",\"children\"]",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": "demo22-fib-ti-1.wav",
+        "contentType": "audio/wav",
+        "url": "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280259/pte/demo22/demo22-fib-ti-1.wav",
+        "publicId": "pte/demo22/demo22-fib-ti-1",
+        "assetId": "78a8c52088c7af115ff5e677ee9c1f5a",
+        "sizeBytes": 930818,
+        "durationSeconds": 22
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "FILL_IN_THE_BLANKS_TYPE_IN-2",
+      "taskTypeKey": "FILL_IN_THE_BLANKS_TYPE_IN",
+      "title": "DEMO22 - FILL_IN_THE_BLANKS_TYPE_IN - 2",
+      "promptText": "Sleep plays a {{0}} role in memory and learning. During deep sleep the brain {{1}} the information collected during the day and stores the {{2}} parts. Students who sleep less than six hours often struggle to {{3}} and perform worse in {{4}} than their well rested classmates.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "[\"vital\",\"sorts\",\"important\",\"concentrate\",\"examinations\"]",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": "demo22-fib-ti-2.wav",
+        "contentType": "audio/wav",
+        "url": "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280263/pte/demo22/demo22-fib-ti-2.wav",
+        "publicId": "pte/demo22/demo22-fib-ti-2",
+        "assetId": "c0b606d277fc17865db5414e7a0e9c27",
+        "sizeBytes": 798952,
+        "durationSeconds": 19
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "FILL_IN_THE_BLANKS_TYPE_IN-3",
+      "taskTypeKey": "FILL_IN_THE_BLANKS_TYPE_IN",
+      "title": "DEMO22 - FILL_IN_THE_BLANKS_TYPE_IN - 3",
+      "promptText": "The invention of the {{0}} press changed how {{1}} spread across Europe. Books that once took months to {{2}} by hand could be produced in days. As {{3}} fell, more people learned to read, and new ideas about science and {{4}} travelled quickly between cities.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "[\"printing\",\"knowledge\",\"copy\",\"prices\",\"religion\"]",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": "demo22-fib-ti-3.wav",
+        "contentType": "audio/wav",
+        "url": "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280267/pte/demo22/demo22-fib-ti-3.wav",
+        "publicId": "pte/demo22/demo22-fib-ti-3",
+        "assetId": "68b6c8e905126043dbdf1adbd0acf0f3",
+        "sizeBytes": 766118,
+        "durationSeconds": 18
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "HIGHLIGHT_CORRECT_SUMMARY-1",
+      "taskTypeKey": "HIGHLIGHT_CORRECT_SUMMARY",
+      "title": "DEMO22 - HIGHLIGHT_CORRECT_SUMMARY - 1",
+      "promptText": "To enjoy a harmonious union with someone, we should ensure that we have plenty of sources of excitement, reassurance and stimulation outside of them. When we hit problems, we should be able to lean on other supports. The demand that another person compensates us for all that’s alarming, wearing or deficient in our lives is a mechanism for systematically destroying any relationship. Our conflicts and disappointments will at once feel more manageable when we stop asking our partner to function always as our long lost other half. The more we can survive without a relationship the greater will be that relationship’s chances of survival and fulfillment. We will truly give love a chance when we stop believing it can single-handedly save us.\n\nClick on the paragraph that best relates to the recording.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "The chance of survival and fulfillment of a relationship will be great, if we can survive without it. When we stop believing that love alone can save us, we will truly give love a chance.",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "To enjoy a harmonious union with someone, we should ensure that we spend enough time with him or her. Also, whenever we have problems, we need to go to our best friend for support.",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "The chance of survival and fulfillment of a relationship will be great, if we can survive without it. When we stop believing that love alone can save us, we will truly give love a chance.",
+          "correct": true,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "The demand that another person helps us with alarming and wearing things in our lives may not destroy a relationship. However, we are not encouraged to seek for help every time.",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Our conflicts and disappointments will at once feel more manageable when we ask our partners to support us. If they are not able to help us anymore, the relationship will be immediately broken.",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/lmcqs/hcs/audios/20220125-HCS-1.mp3_volume/original/01778252940d2c23942bf2ea3ee1c8d3/20220125-HCS-1.mp3_volume.mp3?1643192909",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "HIGHLIGHT_CORRECT_SUMMARY-2",
+      "taskTypeKey": "HIGHLIGHT_CORRECT_SUMMARY",
+      "title": "DEMO22 - HIGHLIGHT_CORRECT_SUMMARY - 2",
+      "promptText": "A new investigation into shark populations in the waters off Australia has discoyered that there are two distinct species of Great White shark, one to the east and one to the west of Bass Strait. This was discovered by tagging large numbers of sharks in the coastal waters all round Australia. Rather to the investigators' surprise, they found that while sharks from the east side certainly travelled to the west side of the continent and vice versa, they always returned to their home areas to breed. The two types of shark were found to have a distinct genetic make up, indicating that interbreeding has not taken place. The implication of these research findings is that sharks may be more susceptible to changes in local marine environments than had previously been thought.\n\nClick on the paragraph that best relates to the recording.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "A recent research study has shown that Australian Great White shark populations have remained surprisingly distinct as, despite traveling long distances. these sharks do not breed away from their original areas. This means that local shark habitats may have a greater effect on sharks than has been believed up to now.",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "There are fewer Great White sharks in Australian waters than was once believed. This is because tagging has shown that sharks travel considerable distances, and a shark recorded east of Bass Strait one week is often recorded west of Bass Strait the next. However, sharks always return to their place of origin to breed.",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "A recent research study has shown that Australian Great White shark populations have remained surprisingly distinct as, despite traveling long distances. these sharks do not breed away from their original areas. This means that local shark habitats may have a greater effect on sharks than has been believed up to now.",
+          "correct": true,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "There is a greater variety in the Great White shark populations in Australian waters than was previously thought to be the case. This means that some types of shark are actually more endangered than was believed. Scientists are therefore developing conservation programs which will help to protect these threatened species.",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "An investigation of Great White sharks in Australian waters has come up with some unexpected conclusions. as it found that the genetic make-up of sharks in one area was quite distinct from those found elsewhere. This made scientists realize that sharks do not swim as far away from their home areas as used to be thought.",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/lmcqs/hcs/audios/HCS_152/original/21904e733c801ca0b04b271622a07a1c/HCS_152.mp3",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "HIGHLIGHT_CORRECT_SUMMARY-3",
+      "taskTypeKey": "HIGHLIGHT_CORRECT_SUMMARY",
+      "title": "DEMO22 - HIGHLIGHT_CORRECT_SUMMARY - 3",
+      "promptText": "I actually want to caution against using the word ‘romance’. To me, romance can signify a lot of passion, chaos, instability — like we see in the movies. But this isn't always healthy. Romance can be part of a relationship, but we should make sure that it's not the definitive part. To me, the three great characteristics of a relationship are first, healthy communication. Are you able to express your needs, desires, and issues without a great deal of conflict? And is the other person open to hearing it? Number two is equality. Do you feel like an equal to your partner? Are you both putting in equal effort? And finally number three is trust. Do you feel your partner is loyal? Are you loyal to your partner? Do you ultimately have a safe relationship?\n\nClick on the paragraph that best relates to the recording.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "Romance can be a part of a relationship, but it’s not everything. Healthy communication, equality and trust are all very important in a relationship.",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "Romance can be a part of a relationship, but it’s not everything. Healthy communication, equality and trust are all very important in a relationship.",
+          "correct": true,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Romance can signify a lot of passion, but people will eventually get tired in a relationship, especially when it has lasted for a long time. So it’s important that we should always find something new, to make the relationship fresh.",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Romance consists of many things, including communication, equality and trust. Without these great characteristics, romance cannot survive within a relationship.",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Romance mainly exists in the movies, and we don’t often see it in our daily life. This is because it can cause more chaos and instability than passion, which is not healthy for a relationship.",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/lmcqs/hcs/audios/8.mp3_volume/original/7521a5d6dcc6615096c92a0adb35a928/8.mp3_volume.mp3?1643367792",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "MC_LISTENING_SINGLE-1",
+      "taskTypeKey": "MC_LISTENING_SINGLE",
+      "title": "DEMO22 - MC_LISTENING_SINGLE - 1",
+      "promptText": "The atmosphere is a mixture of different gases and air assaults. We usually call it air. The atmosphere is very important to our lives, and we cannot live without it. Almost every living creature on earth breathes it. It surrounds earth and protects us from deadly rays and radiation from space.\n\nWhat is the talk mainly about?",
+      "referenceAnswerText": null,
+      "correctAnswerText": "The functions of air",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "Radiation from the sun",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "The functions of air",
+          "correct": true,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "The collision of meteorites",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "The range of the atmosphere",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/lmcqs/mcs/audios/mcs38_volume/original/3cc8139b94fd195d665576f4f2c6a014/mcs38_volume.mp3?1623319716",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "MC_LISTENING_SINGLE-2",
+      "taskTypeKey": "MC_LISTENING_SINGLE",
+      "title": "DEMO22 - MC_LISTENING_SINGLE - 2",
+      "promptText": "There is a small town in belgium called waterloo. This small town became very famous because of napoleon's last battle. A lot of his soldiers were killed and injured at waterloo. As a result, he was removed from his emperors throne and sent to St. Helena, where he died in eighteen twenty one.\n\nWhat is the main topic of the talk?",
+      "referenceAnswerText": null,
+      "correctAnswerText": "Why Waterloo became well known",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "How Napoleon died",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Napoleon's final battle",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Why Waterloo became well known",
+          "correct": true,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Napoleon's banishment to Waterloo",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/lmcqs/mcs/audios/mcs37_01_volume/original/ec88906bd25f54a58a830d2d65dc269a/mcs37_01_volume.mp3?1623319699",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "MC_LISTENING_SINGLE-3",
+      "taskTypeKey": "MC_LISTENING_SINGLE",
+      "title": "DEMO22 - MC_LISTENING_SINGLE - 3",
+      "promptText": "A throbbing, pounding headache. Bright zigzagging lines across your field of vision. Sensitivity to light, lingering fatigue, disrupted sleep. A migraine can include any of these symptoms. While an incapacitating headache is one of the most common experiences of migraine, the word “headache” doesn’t really capture the wide array of experiences a migraine can entail. No two are alike, and some don’t even involve a headache.\n\nWhat does the speaker say about the symptoms of migraine?",
+      "referenceAnswerText": null,
+      "correctAnswerText": "Migraine may include a variety of symptoms.",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "Disrupted sleep is the most common experience of migraine.",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Migraine may include a variety of symptoms.",
+          "correct": true,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Headache is always involved in migraine.",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "Light sensitivity is not the symptom of migraine.",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/lmcqs/mcs/audios/20220120-MCS-L-5_volume/original/a87d0df484e7cd07e1d672a6bc93b961/20220120-MCS-L-5_volume.mp3?1642756904",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "SELECT_MISSING_WORD-1",
+      "taskTypeKey": "SELECT_MISSING_WORD",
+      "title": "DEMO22 - SELECT_MISSING_WORD - 1",
+      "promptText": "Let's see what's happening on the seabed. Ok. So these really remarkable features are known as black smokers. Don't forget, we're now two and a half kilometers down. The light. It's all pitch black. What we're seeing is the lights from the submersible. So imagine you're looking at this out from your porthole and it supports...\n\nAt the end of the recording the lost word or group of words has been replaced by a beep. Select the correct option to complete the recording.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "all this fabulous life",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "a very tall structure",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "fish which need light",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "you can’t see anything",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "all this fabulous life",
+          "correct": true,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/lmcqs/smw/audios/smw54_volume/original/d7ea8fcd045f9ea647735e6db1cc02fb/smw54_volume.mp3?1623319838",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "SELECT_MISSING_WORD-2",
+      "taskTypeKey": "SELECT_MISSING_WORD",
+      "title": "DEMO22 - SELECT_MISSING_WORD - 2",
+      "promptText": "The word science comes from a latin verb. Meaning to know science is a way of knowing. It emerges from our curiosity about ourselves and our world. Striving to understand is one of our basic drives who are scientists. Scientists are people who ask questions about nature and who believe that these questions can be answered. Scientists are explorers who are passionate about.\n\nAt the end of the recording the lost word or group of words has been replaced by a beep. Select the correct option to complete the recording.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "discovery",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "math",
+          "correct": false,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "discovery",
+          "correct": true,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "space",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "humanity",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/lmcqs/smw/audios/129SMW25_volume/original/1c61b3dbbadec646807745371fb0e5c3/129SMW25_volume.mp3?1623319683",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "SELECT_MISSING_WORD-3",
+      "taskTypeKey": "SELECT_MISSING_WORD",
+      "title": "DEMO22 - SELECT_MISSING_WORD - 3",
+      "promptText": "Listening to the soft rustle of the leaves, it's a sound that you simply cannot hear without silence. What you can sense in the noisy environment becomes suddenly vivid in the quiet. How clear and pure the sound is! It's fascinating, but it's also soothing. Suddenly, it's as if another realm has touched your auditory sense and you think, hey I hadn't realized that something so faint, so subtle could be so ...\n\nAt the end of the recording the lost word or group of words has been replaced by a beep. Select the correct option to complete the recording.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "calming",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [
+        {
+          "text": "calming",
+          "correct": true,
+          "orderIndex": 0,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "illusory",
+          "correct": false,
+          "orderIndex": 1,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "disturbing",
+          "correct": false,
+          "orderIndex": 2,
+          "blankIndex": null,
+          "correctGapIndex": null
+        },
+        {
+          "text": "inaudible",
+          "correct": false,
+          "orderIndex": 3,
+          "blankIndex": null,
+          "correctGapIndex": null
+        }
+      ],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/lmcqs/smw/audios/smw_132/original/7f0143fbbd6b8edcd748c112981358fc/smw_132.mp3?1732265018",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "HIGHLIGHT_INCORRECT_WORDS-1",
+      "taskTypeKey": "HIGHLIGHT_INCORRECT_WORDS",
+      "title": "DEMO22 - HIGHLIGHT_INCORRECT_WORDS - 1",
+      "promptText": "Climate scientists warn that local temperatures will continue to rise unless countries increase their carbon emissions. Many governments have refused to invest in renewable energy, but progress has been faster than expected, and experts say minor action is still needed.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "[4,12,19,29,35]",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": "demo22-hiw-1.wav",
+        "contentType": "audio/wav",
+        "url": "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280270/pte/demo22/demo22-hiw-1.wav",
+        "publicId": "pte/demo22/demo22-hiw-1",
+        "assetId": "54081f489ccb7141b0ee451e6d079837",
+        "sizeBytes": 714722,
+        "durationSeconds": 17
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "HIGHLIGHT_INCORRECT_WORDS-2",
+      "taskTypeKey": "HIGHLIGHT_INCORRECT_WORDS",
+      "title": "DEMO22 - HIGHLIGHT_INCORRECT_WORDS - 2",
+      "promptText": "The museum opens at ten in the morning and closes at five in the afternoon. Visitors can join a virtual tour every day, or explore the exhibitions on their own. Tickets for students are double price, and children under twelve enter free of charge.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "[4,19,22,34,39]",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": "demo22-hiw-2.wav",
+        "contentType": "audio/wav",
+        "url": "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280274/pte/demo22/demo22-hiw-2.wav",
+        "publicId": "pte/demo22/demo22-hiw-2",
+        "assetId": "d743baf67bfb3176486b732de9d33ee9",
+        "sizeBytes": 694454,
+        "durationSeconds": 16
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "HIGHLIGHT_INCORRECT_WORDS-3",
+      "taskTypeKey": "HIGHLIGHT_INCORRECT_WORDS",
+      "title": "DEMO22 - HIGHLIGHT_INCORRECT_WORDS - 3",
+      "promptText": "Last winter our family flew to the coast for two weeks. We stayed in a large cottage near the beach and spent most days fishing and walking along the cliffs. In the evenings we cooked fish on an open stove and watched the sun go down.",
+      "referenceAnswerText": null,
+      "correctAnswerText": "[1,4,15,24,39]",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": "demo22-hiw-3.wav",
+        "contentType": "audio/wav",
+        "url": "https://res.cloudinary.com/dkqjq2nj2/video/upload/v1791280277/pte/demo22/demo22-hiw-3.wav",
+        "publicId": "pte/demo22/demo22-hiw-3",
+        "assetId": "df19528e8a044641e653cc049532c48a",
+        "sizeBytes": 643104,
+        "durationSeconds": 15
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "WRITE_FROM_DICTATION-1",
+      "taskTypeKey": "WRITE_FROM_DICTATION",
+      "title": "DEMO22 - WRITE_FROM_DICTATION - 1",
+      "promptText": null,
+      "referenceAnswerText": null,
+      "correctAnswerText": "The artists and conservative politicians follow their own rules in politics.",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/wfds/audios/1_volume/original/e4474bf55776dc823ad5b98767808287/1_volume.mp3?1752374160",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "WRITE_FROM_DICTATION-2",
+      "taskTypeKey": "WRITE_FROM_DICTATION",
+      "title": "DEMO22 - WRITE_FROM_DICTATION - 2",
+      "promptText": null,
+      "referenceAnswerText": null,
+      "correctAnswerText": "Please confirm that you have received the textbook.",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/wfds/audios/2_volume/original/29433519eb67ac86b2f667b18520e39c/2_volume.mp3?1752374219",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    },
+    {
+      "section": "LISTENING",
+      "key": "WRITE_FROM_DICTATION-3",
+      "taskTypeKey": "WRITE_FROM_DICTATION",
+      "title": "DEMO22 - WRITE_FROM_DICTATION - 3",
+      "promptText": null,
+      "referenceAnswerText": null,
+      "correctAnswerText": "The change of policy will have a great effect on society.",
+      "minWordCount": null,
+      "maxWordCount": null,
+      "options": [],
+      "audio": {
+        "localFile": null,
+        "contentType": "audio/mpeg",
+        "url": "https://dl26yht2ovo33.cloudfront.net/public/system/wfds/audios/3_volume/original/6eb748cb31090af98521167773536865/3_volume.mp3?1629186439",
+        "publicId": null,
+        "assetId": null,
+        "sizeBytes": null,
+        "durationSeconds": null
+      },
+      "image": null
+    }
+  ]
+}

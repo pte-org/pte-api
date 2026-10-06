@@ -1,0 +1,122 @@
+{
+  "_comment": "Self-authored demo content for the 5 task types with no usable source data. Audio is synthesized from these texts (scripts/tools/generate-demo22-media.ps1) so transcripts match the recordings exactly.",
+  "personalIntroduction": [
+    {
+      "key": "pi-1",
+      "text": "Please introduce yourself to the examiner. You may talk about where you come from, what you study or do for work, your interests, and your plans for the future."
+    }
+  ],
+  "fillInTheBlanksTypeIn": [
+    {
+      "key": "fib-ti-1",
+      "title": "DEMO22 - Urban Gardens",
+      "text": "Urban gardens are becoming more popular in large cities. Residents use rooftops and empty lots to grow vegetables, herbs and flowers. These projects reduce food costs, improve air quality and bring neighbours together. Many schools now run small gardens so that children can learn where their food comes from.",
+      "blanks": ["popular", "rooftops", "quality", "neighbours", "children"]
+    },
+    {
+      "key": "fib-ti-2",
+      "title": "DEMO22 - Sleep and Memory",
+      "text": "Sleep plays a vital role in memory and learning. During deep sleep the brain sorts the information collected during the day and stores the important parts. Students who sleep less than six hours often struggle to concentrate and perform worse in examinations than their well rested classmates.",
+      "blanks": ["vital", "sorts", "important", "concentrate", "examinations"]
+    },
+    {
+      "key": "fib-ti-3",
+      "title": "DEMO22 - The Printing Press",
+      "text": "The invention of the printing press changed how knowledge spread across Europe. Books that once took months to copy by hand could be produced in days. As prices fell, more people learned to read, and new ideas about science and religion travelled quickly between cities.",
+      "blanks": ["printing", "knowledge", "copy", "prices", "religion"]
+    }
+  ],
+  "highlightIncorrectWords": [
+    {
+      "key": "hiw-1",
+      "title": "DEMO22 - Climate Warning",
+      "text": "Climate scientists warn that global temperatures will continue to rise unless countries reduce their carbon emissions. Many governments have promised to invest in renewable energy, but progress has been slower than expected, and experts say urgent action is still needed.",
+      "replacements": { "global": "local", "reduce": "increase", "promised": "refused", "slower": "faster", "urgent": "minor" }
+    },
+    {
+      "key": "hiw-2",
+      "title": "DEMO22 - Museum Visit",
+      "text": "The museum opens at nine in the morning and closes at five in the afternoon. Visitors can join a guided tour every hour, or explore the exhibitions on their own. Tickets for students are half price, and children under six enter free of charge.",
+      "replacements": { "nine": "ten", "guided": "virtual", "hour": "day", "half": "double", "six": "twelve" }
+    },
+    {
+      "key": "hiw-3",
+      "title": "DEMO22 - Summer Holiday",
+      "text": "Last summer our family travelled to the coast for two weeks. We stayed in a small cottage near the beach and spent most days swimming and walking along the cliffs. In the evenings we cooked fish on an open fire and watched the sun go down.",
+      "replacements": { "summer": "winter", "travelled": "flew", "small": "large", "swimming": "fishing", "fire": "stove" }
+    }
+  ],
+  "summarizeGroupDiscussion": [
+    {
+      "key": "sgd-1",
+      "title": "DEMO22 - Working From Home",
+      "turns": [
+        ["A", "I think working from home is the best change in modern work. People save hours of travel every day and have more time for their families."],
+        ["B", "I agree it saves time, but I see a problem. Many employees feel isolated at home, and it is harder for new staff to learn from colleagues."],
+        ["C", "That is true, yet companies can solve this. A hybrid model, with two or three office days a week, keeps teams connected and still reduces commuting."],
+        ["A", "Hybrid sounds fair, but not every manager trusts staff who are out of sight. Some still measure hours instead of results."],
+        ["B", "Exactly. If managers focus on results, remote work succeeds. If they focus on presence, it fails."],
+        ["C", "There is also the cost. Offices are expensive, and a smaller office could save a company a great deal of money."],
+        ["A", "Those savings could pay for better home equipment and for regular team meetings in person."],
+        ["B", "So we all accept that flexibility matters, but we disagree about how much time people should spend in the office."]
+      ]
+    },
+    {
+      "key": "sgd-2",
+      "title": "DEMO22 - Public Transport",
+      "turns": [
+        ["A", "Our city should spend more money on public transport. Buses and trains reduce traffic and cut air pollution."],
+        ["B", "I support better transport, but the money has to come from somewhere. Higher taxes would upset many residents."],
+        ["C", "Perhaps the fares could rise slightly for people who can afford it, while students and older people keep cheap tickets."],
+        ["A", "Cheap tickets matter. If a ticket costs too much, people go back to using their cars."],
+        ["B", "Cars will not disappear soon, though. Many people live far from any station and need a way to get home."],
+        ["C", "Then we need local feeder buses and safe bicycle lanes, not just new train lines."],
+        ["A", "A good network also attracts businesses, so the investment returns money to the city over time."],
+        ["B", "I agree with that, as long as the plan is clear about costs and the work is finished on schedule."]
+      ]
+    },
+    {
+      "key": "sgd-3",
+      "title": "DEMO22 - School Uniforms",
+      "turns": [
+        ["A", "School uniforms make every student look equal. Nobody feels judged for the clothes their family can or cannot afford."],
+        ["B", "That is a fair point, but uniforms also limit personal expression. Teenagers want to show who they are."],
+        ["C", "I think uniforms save time in the morning, and parents do not have to buy many fashionable clothes."],
+        ["A", "They also create a sense of belonging, like a team wearing the same colours."],
+        ["B", "However, uniforms are not free. Some schools require expensive items that must be bought from one shop."],
+        ["C", "Then schools could allow simple clothes in a few agreed colours, which would be cheaper and more flexible."],
+        ["A", "That compromise keeps equality without forcing every family to spend a lot."],
+        ["B", "I would accept that, provided students can still choose how they dress on special days."]
+      ]
+    }
+  ],
+  "describeImage": [
+    {
+      "key": "di-1",
+      "title": "DEMO22 - Monthly Rainfall (bar chart)",
+      "kind": "bar",
+      "heading": "Average monthly rainfall in Newtown (mm)",
+      "labels": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+      "values": [78, 64, 52, 41, 33, 25],
+      "reference": "The bar chart shows the average monthly rainfall in Newtown from January to June. Rainfall is highest in January at 78 millimetres and falls steadily every month, reaching its lowest point of 25 millimetres in June."
+    },
+    {
+      "key": "di-2",
+      "title": "DEMO22 - Online Shoppers (line chart)",
+      "kind": "line",
+      "heading": "Online shoppers in a small country (thousands)",
+      "labels": ["2019", "2020", "2021", "2022", "2023"],
+      "values": [120, 190, 310, 365, 440],
+      "reference": "The line graph shows how many people shopped online in a small country between 2019 and 2023. The number rose every year, from 120 thousand to 440 thousand, with the sharpest increase between 2020 and 2021."
+    },
+    {
+      "key": "di-3",
+      "title": "DEMO22 - Household Spending (pie chart)",
+      "kind": "pie",
+      "heading": "How a household spends its monthly income (%)",
+      "labels": ["Housing", "Food", "Transport", "Savings", "Leisure"],
+      "values": [35, 25, 15, 15, 10],
+      "reference": "The pie chart shows how a household spends its monthly income. Housing takes the largest share at 35 percent, followed by food at 25 percent, while leisure accounts for the smallest share at only 10 percent."
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "_comment": "PTE Content Question Types & Score Information Table V5 (Official Release). count = Numbers column; answerSeconds = upper bound of the Answer time column; weights are the Speaking/Writing/Reading/Listening columns (each column sums to exactly 100; Overall = sum / 4, computed by the API).",
+  "items": [
+    { "sequence": 1,  "taskType": "READ_ALOUD",                       "section": "SPEAKING",  "min": 6,  "max": 7,  "prepSeconds": 35, "answerSeconds": 35,   "speaking": 14, "writing": 0,    "reading": 0,  "listening": 0 },
+    { "sequence": 2,  "taskType": "REPEAT_SENTENCE",                  "section": "SPEAKING",  "min": 10, "max": 12, "prepSeconds": 0,  "answerSeconds": 15,   "speaking": 20, "writing": 0,    "reading": 0,  "listening": 19 },
+    { "sequence": 3,  "taskType": "DESCRIBE_IMAGE",                   "section": "SPEAKING",  "min": 5,  "max": 6,  "prepSeconds": 25, "answerSeconds": 40,   "speaking": 34, "writing": 0,    "reading": 0,  "listening": 0 },
+    { "sequence": 4,  "taskType": "RE_TELL_LECTURE",                  "section": "SPEAKING",  "min": 2,  "max": 3,  "prepSeconds": 10, "answerSeconds": 40,   "speaking": 11, "writing": 0,    "reading": 0,  "listening": 10 },
+    { "sequence": 5,  "taskType": "ANSWER_SHORT_QUESTION",            "section": "SPEAKING",  "min": 5,  "max": 6,  "prepSeconds": 0,  "answerSeconds": 10,   "speaking": 0,  "writing": 0,    "reading": 0,  "listening": 5 },
+    { "sequence": 6,  "taskType": "SUMMARIZE_GROUP_DISCUSSION",       "section": "SPEAKING",  "min": 2,  "max": 3,  "prepSeconds": 10, "answerSeconds": 120,  "speaking": 13, "writing": 0,    "reading": 0,  "listening": 15 },
+    { "sequence": 7,  "taskType": "RESPOND_TO_A_SITUATION",           "section": "SPEAKING",  "min": 2,  "max": 3,  "prepSeconds": 10, "answerSeconds": 40,   "speaking": 8,  "writing": 0,    "reading": 0,  "listening": 0 },
+    { "sequence": 8,  "taskType": "SUMMARIZE_WRITTEN_TEXT",           "section": "WRITING",   "min": 2,  "max": 2,  "prepSeconds": 0,  "answerSeconds": 600,  "speaking": 0,  "writing": 25.5, "reading": 19, "listening": 0 },
+    { "sequence": 9,  "taskType": "WRITE_ESSAY",                      "section": "WRITING",   "min": 1,  "max": 1,  "prepSeconds": 0,  "answerSeconds": 1200, "speaking": 0,  "writing": 25.5, "reading": 0,  "listening": 0 },
+    { "sequence": 10, "taskType": "FILL_IN_THE_BLANKS_DROPDOWN",      "section": "READING",   "min": 5,  "max": 6,  "prepSeconds": 0,  "answerSeconds": 120,  "speaking": 0,  "writing": 0,    "reading": 28, "listening": 0 },
+    { "sequence": 11, "taskType": "MC_READING_MULTIPLE",              "section": "READING",   "min": 2,  "max": 3,  "prepSeconds": 0,  "answerSeconds": 90,   "speaking": 0,  "writing": 0,    "reading": 6,  "listening": 0 },
+    { "sequence": 12, "taskType": "RE_ORDER_PARAGRAPHS",              "section": "READING",   "min": 2,  "max": 3,  "prepSeconds": 0,  "answerSeconds": 120,  "speaking": 0,  "writing": 0,    "reading": 8,  "listening": 0 },
+    { "sequence": 13, "taskType": "FILL_IN_THE_BLANKS_DRAG_AND_DROP", "section": "READING",   "min": 4,  "max": 5,  "prepSeconds": 0,  "answerSeconds": 120,  "speaking": 0,  "writing": 0,    "reading": 18, "listening": 0 },
+    { "sequence": 14, "taskType": "MC_READING_SINGLE",                "section": "READING",   "min": 2,  "max": 3,  "prepSeconds": 0,  "answerSeconds": 90,   "speaking": 0,  "writing": 0,    "reading": 2,  "listening": 0 },
+    { "sequence": 15, "taskType": "SUMMARIZE_SPOKEN_TEXT",            "section": "LISTENING", "min": 1,  "max": 1,  "prepSeconds": 0,  "answerSeconds": 600,  "speaking": 0,  "writing": 23,   "reading": 0,  "listening": 10 },
+    { "sequence": 16, "taskType": "MC_LISTENING_MULTIPLE",            "section": "LISTENING", "min": 2,  "max": 3,  "prepSeconds": 0,  "answerSeconds": 90,   "speaking": 0,  "writing": 0,    "reading": 0,  "listening": 4 },
+    { "sequence": 17, "taskType": "FILL_IN_THE_BLANKS_TYPE_IN",       "section": "LISTENING", "min": 2,  "max": 3,  "prepSeconds": 0,  "answerSeconds": 120,  "speaking": 0,  "writing": 0,    "reading": 0,  "listening": 9 },
+    { "sequence": 18, "taskType": "HIGHLIGHT_CORRECT_SUMMARY",        "section": "LISTENING", "min": 2,  "max": 3,  "prepSeconds": 0,  "answerSeconds": 90,   "speaking": 0,  "writing": 0,    "reading": 3,  "listening": 1 },
+    { "sequence": 19, "taskType": "MC_LISTENING_SINGLE",              "section": "LISTENING", "min": 2,  "max": 3,  "prepSeconds": 0,  "answerSeconds": 90,   "speaking": 0,  "writing": 0,    "reading": 0,  "listening": 1 },
+    { "sequence": 20, "taskType": "SELECT_MISSING_WORD",              "section": "LISTENING", "min": 1,  "max": 2,  "prepSeconds": 0,  "answerSeconds": 90,   "speaking": 0,  "writing": 0,    "reading": 0,  "listening": 1 },
+    { "sequence": 21, "taskType": "HIGHLIGHT_INCORRECT_WORDS",        "section": "LISTENING", "min": 2,  "max": 3,  "prepSeconds": 0,  "answerSeconds": 120,  "speaking": 0,  "writing": 0,    "reading": 16, "listening": 11 },
+    { "sequence": 22, "taskType": "WRITE_FROM_DICTATION",             "section": "LISTENING", "min": 3,  "max": 4,  "prepSeconds": 0,  "answerSeconds": 120,  "speaking": 0,  "writing": 26,   "reading": 0,  "listening": 14 }
+  ]
+}
