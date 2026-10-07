@@ -3,20 +3,21 @@ package com.pte.practice.internal.service;
 import com.pte.identity.PracticeIdentityService;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
+import com.pte.practice.internal.domain.PracticeSessionItem;
 import com.pte.practice.internal.domain.PracticeSessionOperation;
 import com.pte.practice.internal.domain.enums.PracticeSessionOperationType;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.request.PracticeCapabilityManifest;
+import com.pte.practice.internal.dto.request.PracticeAnswerRequest;
+import com.pte.practice.internal.dto.request.PracticeSaveAndExitRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionActionRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionStartRequest;
-import com.pte.practice.internal.dto.response.PracticeCatalogResponse;
-import com.pte.practice.internal.dto.response.PracticeCatalogSectionResponse;
-import com.pte.practice.internal.dto.response.PracticeCatalogTaskResponse;
 import com.pte.practice.internal.dto.response.PracticeSessionResponse;
 import com.pte.practice.internal.exception.PracticeIdempotencyException;
 import com.pte.practice.internal.exception.PracticeNotEntitledException;
 import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.exception.PracticeSessionNotFoundException;
+import com.pte.practice.internal.mapper.PracticeSessionResponseMapper;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
 import com.pte.practice.internal.repository.PracticeSessionOperationRepository;
 import com.pte.shared.security.CurrentUser;
@@ -34,7 +35,6 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.HexFormat;
@@ -52,6 +52,8 @@ public class PracticeSessionService {
     private final PracticeSessionPersistenceService sessionPersistenceService;
     private final PracticeSessionOperationRepository operationRepository;
     private final PracticeCatalogService catalogService;
+    private final PracticeSessionItemService itemService;
+    private final PracticeSessionResponseMapper responseMapper;
     private final PracticeEntitlementService entitlementService;
     private final PracticeIdentityService identityService;
     private final Clock clock;
@@ -60,11 +62,14 @@ public class PracticeSessionService {
             PracticeSessionPersistenceService sessionPersistenceService,
             PracticeSessionOperationRepository operationRepository,
             PracticeCatalogService catalogService, PracticeEntitlementService entitlementService,
+            PracticeSessionItemService itemService, PracticeSessionResponseMapper responseMapper,
             PracticeIdentityService identityService, Clock clock) {
         this.sessionRepository = sessionRepository;
         this.sessionPersistenceService = sessionPersistenceService;
         this.operationRepository = operationRepository;
         this.catalogService = catalogService;
+        this.itemService = itemService;
+        this.responseMapper = responseMapper;
         this.entitlementService = entitlementService;
         this.identityService = identityService;
         this.clock = clock;
@@ -81,7 +86,7 @@ public class PracticeSessionService {
                 caller.userId(), idempotencyKey);
         if (existing.isPresent()) {
             assertSameRequest(existing.get(), requestHash);
-            return toResponse(existing.get());
+            return responseMapper.toResponse(existing.get());
         }
 
         catalogService.requireStartable(request.productCode(), request.safeTaskTypeCodes(), request.capabilities());
@@ -104,13 +109,13 @@ public class PracticeSessionService {
         session.setStartRequestHash(requestHash);
         session.setStatus(PracticeSessionStatus.OVERVIEW);
         try {
-            return toResponse(sessionPersistenceService.saveStart(session));
+            return responseMapper.toResponse(sessionPersistenceService.saveStart(session));
         } catch (DataIntegrityViolationException ex) {
             return sessionRepository
                     .findByStudentPublicIdAndStartIdempotencyKeyAndDeletedFalse(caller.userId(), idempotencyKey)
                     .map(winner -> {
                         assertSameRequest(winner, requestHash);
-                        return toResponse(winner);
+                        return responseMapper.toResponse(winner);
                     })
                     .orElseThrow(() -> new PracticeSessionException(HttpStatus.SERVICE_UNAVAILABLE,
                             PracticeConstants.PRACTICE_SESSION_NOT_STARTABLE,
@@ -122,7 +127,7 @@ public class PracticeSessionService {
     public PracticeSessionResponse get(UUID publicId, CurrentUser caller) {
         PracticeSession session = findOwned(publicId, caller.userId());
         expireIfNeeded(session);
-        return toResponse(session);
+        return responseMapper.toResponse(session);
     }
 
     @Transactional
@@ -137,7 +142,7 @@ public class PracticeSessionService {
                         session.getId(), PracticeSessionOperationType.BEGIN, idempotencyKey);
         if (existingOperation.isPresent()) {
             assertSameHash(existingOperation.get().getRequestHash(), requestHash);
-            return toResponse(session);
+            return responseMapper.toResponse(session);
         }
         requireVersion(session, request.clientVersion());
         if (session.getStatus() != PracticeSessionStatus.OVERVIEW) {
@@ -147,9 +152,11 @@ public class PracticeSessionService {
                 new PracticeCapabilityManifest(splitCsv(session.getClientCapabilities()), null));
 
         Instant now = clock.instant();
+        itemService.createItemsIfNeeded(session);
         session.setStatus(PracticeSessionStatus.IN_PROGRESS);
         session.setStartedAt(now);
         session.setDeadlineAt(now.plusSeconds(session.getTimeLimitSeconds()));
+        session.setLastActivityAt(now);
         saveOperation(session, PracticeSessionOperationType.BEGIN, idempotencyKey, requestHash);
         return saveAndMap(session);
     }
@@ -166,7 +173,7 @@ public class PracticeSessionService {
                         session.getId(), PracticeSessionOperationType.HEARTBEAT, idempotencyKey);
         if (existingOperation.isPresent()) {
             assertSameHash(existingOperation.get().getRequestHash(), requestHash);
-            return toResponse(session);
+            return responseMapper.toResponse(session);
         }
         if (session.getStatus() == PracticeSessionStatus.EXPIRED
                 || isPastDeadline(session, clock.instant())) {
@@ -179,8 +186,117 @@ public class PracticeSessionService {
         if (session.getStatus() != PracticeSessionStatus.IN_PROGRESS) {
             throw notStartable();
         }
+        session.setLastActivityAt(clock.instant());
         saveOperation(session, PracticeSessionOperationType.HEARTBEAT, idempotencyKey, requestHash);
         return saveAndMap(session);
+    }
+
+    @Transactional
+    public PracticeSessionResponse answer(UUID publicId, UUID itemPublicId, PracticeAnswerRequest request,
+            String rawIdempotencyKey, CurrentUser caller) {
+        String idempotencyKey = requireIdempotencyKey(rawIdempotencyKey);
+        PracticeSession session = findOwnedForUpdate(publicId, caller.userId());
+        String requestHash = answerRequestHash(itemPublicId, request);
+        entitlementService.assertUnlocked(caller, session.getTenantId());
+        var existingOperation = operationRepository
+                .findByPracticeSessionIdAndOperationTypeAndIdempotencyKeyAndDeletedFalse(
+                        session.getId(), PracticeSessionOperationType.ANSWER, idempotencyKey);
+        if (existingOperation.isPresent()) {
+            assertSameHash(existingOperation.get().getRequestHash(), requestHash);
+            return responseMapper.toResponse(session);
+        }
+        requireLiveInProgress(session, request.clientVersion());
+        Instant now = clock.instant();
+        PracticeSessionItem item = itemService.findForUpdate(session, itemPublicId);
+        itemService.answer(item, request, now);
+        itemService.completeIfFinished(session, now);
+        session.setLastActivityAt(now);
+        saveOperation(session, PracticeSessionOperationType.ANSWER, idempotencyKey, requestHash);
+        return saveAndMap(session);
+    }
+
+    @Transactional
+    public PracticeSessionResponse skip(UUID publicId, UUID itemPublicId, PracticeSessionActionRequest request,
+            String rawIdempotencyKey, CurrentUser caller) {
+        String idempotencyKey = requireIdempotencyKey(rawIdempotencyKey);
+        PracticeSession session = findOwnedForUpdate(publicId, caller.userId());
+        String requestHash = itemActionRequestHash(itemPublicId, request);
+        entitlementService.assertUnlocked(caller, session.getTenantId());
+        var existingOperation = operationRepository
+                .findByPracticeSessionIdAndOperationTypeAndIdempotencyKeyAndDeletedFalse(
+                        session.getId(), PracticeSessionOperationType.SKIP, idempotencyKey);
+        if (existingOperation.isPresent()) {
+            assertSameHash(existingOperation.get().getRequestHash(), requestHash);
+            return responseMapper.toResponse(session);
+        }
+        requireLiveInProgress(session, request.clientVersion());
+        Instant now = clock.instant();
+        PracticeSessionItem item = itemService.findForUpdate(session, itemPublicId);
+        itemService.skip(item, now);
+        itemService.completeIfFinished(session, now);
+        session.setLastActivityAt(now);
+        saveOperation(session, PracticeSessionOperationType.SKIP, idempotencyKey, requestHash);
+        return saveAndMap(session);
+    }
+
+    @Transactional
+    public PracticeSessionResponse saveAndExit(UUID publicId, PracticeSaveAndExitRequest request,
+            String rawIdempotencyKey, CurrentUser caller) {
+        String idempotencyKey = requireIdempotencyKey(rawIdempotencyKey);
+        PracticeSession session = findOwnedForUpdate(publicId, caller.userId());
+        String requestHash = saveAndExitRequestHash(request);
+        entitlementService.assertUnlocked(caller, session.getTenantId());
+        var existingOperation = operationRepository
+                .findByPracticeSessionIdAndOperationTypeAndIdempotencyKeyAndDeletedFalse(
+                        session.getId(), PracticeSessionOperationType.SAVE_AND_EXIT, idempotencyKey);
+        if (existingOperation.isPresent()) {
+            assertSameHash(existingOperation.get().getRequestHash(), requestHash);
+            return responseMapper.toResponse(session);
+        }
+        requireVersion(session, request.clientVersion());
+        if (session.getStatus() != PracticeSessionStatus.OVERVIEW
+                && session.getStatus() != PracticeSessionStatus.IN_PROGRESS) {
+            throw notStartable();
+        }
+        if (session.getStatus() == PracticeSessionStatus.IN_PROGRESS
+                && isPastDeadline(session, clock.instant())) {
+            expire(session);
+            saveAndMap(session);
+            throw new PracticeSessionException(HttpStatus.GONE, PracticeConstants.PRACTICE_SESSION_EXPIRED,
+                    PracticeConstants.PRACTICE_SESSION_EXPIRED_MESSAGE);
+        }
+
+        if (request.itemPublicId() == null && request.payload() != null && !request.payload().isBlank()) {
+            throw invalidAnswerRequest();
+        }
+        if (request.itemPublicId() != null && request.payload() != null && !request.payload().isBlank()) {
+            PracticeSessionItem item = itemService.findForUpdate(session, request.itemPublicId());
+            itemService.saveDraft(item, request.payload(), request.confidence());
+        }
+
+        boolean hasProgress = itemService.hasProgress(session);
+        Instant now = clock.instant();
+        if (!hasProgress) {
+            session.setStatus(PracticeSessionStatus.DISCARDED);
+            session.setDiscardedAt(now);
+        }
+        session.setLastActivityAt(now);
+        saveOperation(session, PracticeSessionOperationType.SAVE_AND_EXIT, idempotencyKey, requestHash);
+        return saveAndMap(session);
+    }
+
+    private void requireLiveInProgress(PracticeSession session, long expectedVersion) {
+        if (session.getStatus() == PracticeSessionStatus.EXPIRED
+                || isPastDeadline(session, clock.instant())) {
+            expire(session);
+            saveAndMap(session);
+            throw new PracticeSessionException(HttpStatus.GONE, PracticeConstants.PRACTICE_SESSION_EXPIRED,
+                    PracticeConstants.PRACTICE_SESSION_EXPIRED_MESSAGE);
+        }
+        requireVersion(session, expectedVersion);
+        if (session.getStatus() != PracticeSessionStatus.IN_PROGRESS) {
+            throw notStartable();
+        }
     }
 
     private void saveOperation(PracticeSession session, PracticeSessionOperationType operationType,
@@ -195,7 +311,7 @@ public class PracticeSessionService {
 
     private PracticeSessionResponse saveAndMap(PracticeSession session) {
         try {
-            return toResponse(sessionRepository.saveAndFlush(session));
+            return responseMapper.toResponse(sessionRepository.saveAndFlush(session));
         } catch (OptimisticLockingFailureException ex) {
             throw new PracticeSessionException(HttpStatus.CONFLICT,
                     PracticeConstants.PRACTICE_STALE_SESSION_VERSION,
@@ -254,6 +370,12 @@ public class PracticeSessionService {
                 PracticeConstants.PRACTICE_SESSION_NOT_STARTABLE_MESSAGE);
     }
 
+    private PracticeSessionException invalidAnswerRequest() {
+        return new PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
+                PracticeConstants.PRACTICE_ANSWER_INVALID,
+                PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
+    }
+
     private String requireIdempotencyKey(String rawKey) {
         if (rawKey == null || rawKey.isBlank()) {
             throw new PracticeIdempotencyException(HttpStatus.BAD_REQUEST,
@@ -293,6 +415,23 @@ public class PracticeSessionService {
         return sha256(String.valueOf(request.clientVersion()));
     }
 
+    private String itemActionRequestHash(UUID itemPublicId, PracticeSessionActionRequest request) {
+        return sha256(String.join("\n", String.valueOf(itemPublicId),
+                String.valueOf(request.clientVersion())));
+    }
+
+    private String answerRequestHash(UUID itemPublicId, PracticeAnswerRequest request) {
+        return sha256(String.join("\n", String.valueOf(itemPublicId),
+                String.valueOf(request.clientVersion()), safe(request.payload()),
+                request.confidence() == null ? "" : request.confidence().name()));
+    }
+
+    private String saveAndExitRequestHash(PracticeSaveAndExitRequest request) {
+        return sha256(String.join("\n", String.valueOf(request.clientVersion()),
+                String.valueOf(request.itemPublicId()), safe(request.payload()),
+                request.confidence() == null ? "" : request.confidence().name()));
+    }
+
     private String sha256(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
@@ -315,39 +454,6 @@ public class PracticeSessionService {
         }
         return Arrays.stream(csv.split(","))
                 .filter(value -> !value.isBlank()).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-    }
-
-    private PracticeSessionResponse toResponse(PracticeSession session) {
-        PracticeCatalogResponse catalog = catalogService.getCatalog();
-        Set<String> selected = splitCsv(session.getSelectedTaskTypes());
-        List<PracticeCatalogSectionResponse> sections = selected.isEmpty()
-                ? catalog.sections()
-                : catalog.sections().stream()
-                        .map(section -> new PracticeCatalogSectionResponse(section.code(), section.displayName(),
-                                section.taskTypes().stream().filter(task -> selected.contains(task.code())).toList()))
-                        .filter(section -> !section.taskTypes().isEmpty())
-                        .toList();
-        PracticeSessionStatus status = session.getStatus();
-        return new PracticeSessionResponse(
-                session.getPublicId(),
-                session.getSourceType(),
-                session.getProductCode(),
-                session.getTitle(),
-                session.getTenantId(),
-                session.getCatalogVersion(),
-                session.getTimeLimitSeconds(),
-                status,
-                versionOf(session),
-                session.getStartedAt(),
-                session.getDeadlineAt(),
-                session.getCompletedAt(),
-                session.getDiscardedAt(),
-                status == PracticeSessionStatus.OVERVIEW || status == PracticeSessionStatus.IN_PROGRESS,
-                status == PracticeSessionStatus.OVERVIEW,
-                status == PracticeSessionStatus.OVERVIEW ? PracticeConstants.PRACTICE_NEXT_ACTION : null,
-                0,
-                0,
-                sections);
     }
 
     private long versionOf(PracticeSession session) {

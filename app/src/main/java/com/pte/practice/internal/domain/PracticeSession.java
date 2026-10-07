@@ -85,6 +85,9 @@ public class PracticeSession extends BaseEntity {
     @Column(name = "discarded_at")
     private Instant discardedAt;
 
+    @Column(name = "last_activity_at")
+    private Instant lastActivityAt;
+
     @Version
     private Long version;
 }

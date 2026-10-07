@@ -117,13 +117,32 @@ public class PracticeCatalogService {
             Map<String, PracticeCatalogTaskResponse> byCode = index(getCatalog());
             boolean contentNotReady = preflight.blockedTaskTypes().stream()
                     .map(byCode::get)
-                    .anyMatch(task -> task != null && task.availability() == PracticeCatalogAvailability.VISIBLE);
+                    .anyMatch(task -> task != null
+                            && PracticeConstants.PRACTICE_CONTENT_NOT_READY.equals(task.unavailableReason()));
             throw new PracticeCatalogException(HttpStatus.UNPROCESSABLE_ENTITY,
                     contentNotReady ? PracticeConstants.PRACTICE_CONTENT_NOT_READY
                             : PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME,
                     contentNotReady ? PracticeConstants.PRACTICE_CONTENT_NOT_READY_MESSAGE
                             : PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME_MESSAGE);
         }
+    }
+
+    /**
+     * Resolves the immutable task contracts that will be pinned into a
+     * session. The returned order is deterministic and never includes
+     * unavailable or non-allowlisted tasks.
+     */
+    @Transactional(readOnly = true)
+    public List<PracticeCatalogTaskResponse> resolveStartableTasks(String productCode,
+            Collection<String> taskTypeCodes, PracticeCapabilityManifest capabilities) {
+        requireStartable(productCode, taskTypeCodes, capabilities);
+        Map<String, PracticeCatalogTaskResponse> byCode = index(getCatalog());
+        List<String> requested = normalizeCodes(taskTypeCodes);
+        return (requested.isEmpty() ? byCode.values().stream()
+                .filter(task -> task.availability() == PracticeCatalogAvailability.RUNNABLE)
+                .sorted(Comparator.comparing(PracticeCatalogTaskResponse::section)
+                        .thenComparing(PracticeCatalogTaskResponse::code))
+                .toList() : requested.stream().map(byCode::get).toList());
     }
 
     private PracticeCatalogTaskResponse mapDefinition(QuestionTypeResponse definition) {
@@ -135,14 +154,16 @@ public class PracticeCatalogService {
         }
         boolean allowlisted = profile != null && TaskRuntimeProfileRegistry.isAllowlistedContract(profile);
         boolean serverReady = definition.readiness() == null || definition.readiness().serverReady();
-        boolean runnable = allowlisted && profile.active() && serverReady;
+        boolean phase05RuntimeSupported = isPhase05RuntimeSupported(profile);
+        boolean runtimeActive = profile != null && profile.active();
+        boolean runnable = allowlisted && runtimeActive && serverReady && phase05RuntimeSupported;
         PracticeCatalogAvailability availability = runnable
                 ? PracticeCatalogAvailability.RUNNABLE
                 : allowlisted ? PracticeCatalogAvailability.VISIBLE : PracticeCatalogAvailability.UNAVAILABLE;
         String reason = availability == PracticeCatalogAvailability.RUNNABLE ? null
-                : availability == PracticeCatalogAvailability.VISIBLE
-                        ? PracticeConstants.PRACTICE_CONTENT_NOT_READY
-                        : PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME;
+                : !phase05RuntimeSupported || !allowlisted
+                        ? PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME
+                        : PracticeConstants.PRACTICE_CONTENT_NOT_READY;
         return toTask(code, definition.displayName(), section, definition.scored(), profile,
                 availability, reason,
                 definition.readiness() == null ? PracticeConstants.PRACTICE_RUNTIME_CONTRACT_READY_STATUS :
@@ -245,6 +266,11 @@ public class PracticeCatalogService {
         } catch (RuntimeException ex) {
             return null;
         }
+    }
+
+    private boolean isPhase05RuntimeSupported(TaskRuntimeProfileDescriptor profile) {
+        return profile != null
+                && PracticeConstants.PRACTICE_CLIENT_SUPPORTED_RENDERER_KEYS.contains(profile.rendererKey());
     }
 
     private void requireProduct(String productCode) {

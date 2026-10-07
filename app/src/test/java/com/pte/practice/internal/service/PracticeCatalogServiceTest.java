@@ -69,15 +69,27 @@ class PracticeCatalogServiceTest {
     }
 
     @Test
+    void taskWithoutRuntimeProfileIsReturnedAsUnavailableInsteadOfFailingCatalogLoad() {
+        when(questionTypeService.list(true)).thenReturn(List.of(
+                withRuntime("UNKNOWN_RUNTIME_TASK", "READING", null)));
+
+        PracticeCatalogTaskResponse task = find(service.getCatalog(), "UNKNOWN_RUNTIME_TASK");
+
+        assertThat(task.availability()).isEqualTo(PracticeCatalogAvailability.UNAVAILABLE);
+        assertThat(task.unavailableReason()).isEqualTo("PRACTICE_UNSUPPORTED_RUNTIME");
+        assertThat(task.rendererKey()).isNull();
+    }
+
+    @Test
     void preflightReportsMissingDeviceCapabilitiesBeforeStart() {
-        when(questionTypeService.list(true)).thenReturn(List.of(active("READ_ALOUD", "SPEAKING")));
+        when(questionTypeService.list(true)).thenReturn(List.of(active("MC_READING_SINGLE", "READING")));
 
         PracticePreflightResponse response = service.preflight(new PracticePreflightRequest(
-                "PTE_CORE_PRACTICE", Set.of("READ_ALOUD"), null));
+                "PTE_CORE_PRACTICE", Set.of("MC_READING_SINGLE"), null));
 
         assertThat(response.ready()).isFalse();
         assertThat(response.blockedTaskTypes()).isEmpty();
-        assertThat(response.missingCapabilities()).contains("AUDIO_RECORDING");
+        assertThat(response.missingCapabilities()).contains("OPTION_SELECTION");
     }
 
     @Test

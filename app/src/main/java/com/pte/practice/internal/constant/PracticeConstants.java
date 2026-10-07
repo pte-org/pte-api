@@ -1,5 +1,7 @@
 package com.pte.practice.internal.constant;
 
+import java.util.Set;
+
 /** Stable practice-auth, catalog, session and validation constants. */
 public final class PracticeConstants {
 
@@ -33,6 +35,8 @@ public final class PracticeConstants {
     public static final String PRACTICE_CAPABILITY_MISMATCH = "PRACTICE_CAPABILITY_MISMATCH";
     public static final String PRACTICE_CONTENT_NOT_READY = "PRACTICE_CONTENT_NOT_READY";
     public static final String PRACTICE_CONFIDENCE_REQUIRED = "PRACTICE_CONFIDENCE_REQUIRED";
+    public static final String PRACTICE_ANSWER_INVALID = "PRACTICE_ANSWER_INVALID";
+    public static final String PRACTICE_ANSWER_PAYLOAD_REQUIRED = "PRACTICE_ANSWER_PAYLOAD_REQUIRED";
     public static final String PRACTICE_PRODUCT_NOT_FOUND = "PRACTICE_PRODUCT_NOT_FOUND";
 
     public static final String PRACTICE_IDEMPOTENCY_KEY_REQUIRED_MESSAGE =
@@ -55,6 +59,10 @@ public final class PracticeConstants {
             "This practice content is not ready yet.";
     public static final String PRACTICE_CONFIDENCE_REQUIRED_MESSAGE =
             "Choose a confidence level before submitting an answered practice item.";
+    public static final String PRACTICE_ANSWER_INVALID_MESSAGE =
+            "This answer does not match the selected practice task.";
+    public static final String PRACTICE_ANSWER_PAYLOAD_REQUIRED_MESSAGE =
+            "Provide an answer before submitting this practice item.";
     public static final String PRACTICE_PRODUCT_NOT_FOUND_MESSAGE =
             "The requested practice product is not available.";
 
@@ -75,8 +83,17 @@ public final class PracticeConstants {
     public static final String PRACTICE_UNKNOWN_TASK_CODE = "UNKNOWN";
     public static final String PRACTICE_SHA256_UNAVAILABLE = "SHA-256 is unavailable";
     public static final String PRACTICE_CATALOG_VERSION = "2026.10";
+    public static final Set<String> PRACTICE_CLIENT_SUPPORTED_RENDERER_KEYS = Set.of(
+            "SUMMARIZE_WRITTEN_TEXT_V1",
+            "WRITE_ESSAY_V1",
+            "MC_READING_SINGLE_V1",
+            "MC_READING_MULTIPLE_V1",
+            "RE_ORDER_PARAGRAPHS_V1",
+            "FILL_IN_THE_BLANKS_DRAG_AND_DROP_V1",
+            "FILL_IN_THE_BLANKS_DROPDOWN_V1");
     public static final int PRACTICE_TIME_LIMIT_SECONDS = 3_600;
     public static final int MAX_IDEMPOTENCY_KEY_LENGTH = 128;
+    public static final int MAX_ANSWER_PAYLOAD_LENGTH = 16_384;
 
     public static final String PRACTICE_EMAIL_SUBJECT = "Your PTE Practice verification code";
     public static final String PRACTICE_EMAIL_BODY_TEMPLATE =

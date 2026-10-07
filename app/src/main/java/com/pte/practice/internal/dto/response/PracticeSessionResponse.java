@@ -27,7 +27,8 @@ public record PracticeSessionResponse(
         String nextAction,
         int answeredItemCount,
         int totalItemCount,
-        List<PracticeCatalogSectionResponse> sections) {
+        List<PracticeCatalogSectionResponse> sections,
+        PracticeTaskResponse currentTask) {
 
     public PracticeSessionResponse {
         sections = sections == null ? List.of() : List.copyOf(sections);

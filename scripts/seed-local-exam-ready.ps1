@@ -58,12 +58,16 @@ function Invoke-SeedApi {
         [Parameter(Mandatory = $true)][ValidateSet("GET", "POST", "PUT", "PATCH", "DELETE")][string]$Method,
         [Parameter(Mandatory = $true)][string]$Path,
         [string]$Token,
-        [AllowNull()][object]$Body
+        [AllowNull()][object]$Body,
+        [hashtable]$AdditionalHeaders = @{}
     )
 
     $headers = @{}
     if (-not [string]::IsNullOrWhiteSpace($Token)) {
         $headers["Authorization"] = "Bearer $Token"
+    }
+    foreach ($header in $AdditionalHeaders.GetEnumerator()) {
+        $headers[$header.Key] = $header.Value
     }
 
     $request = @{
@@ -132,6 +136,48 @@ function Get-Slug {
         $slug = "local"
     }
     return $slug.Substring(0, [Math]::Min(20, $slug.Length))
+}
+
+function Get-DeterministicGuid {
+    param([Parameter(Mandatory = $true)][string]$Value)
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Value))
+        return ([Guid]::new([byte[]]$hash[0..15])).ToString()
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
+function Invoke-WithSeedMutex {
+    param(
+        [Parameter(Mandatory = $true)][string]$Key,
+        [Parameter(Mandatory = $true)][scriptblock]$Action
+    )
+
+    $mutexName = "Local\PteLocalSeedPlan-$((Get-Slug $Key))"
+    $mutex = [System.Threading.Mutex]::new($false, $mutexName)
+    $acquired = $false
+    try {
+        try {
+            $acquired = $mutex.WaitOne([TimeSpan]::FromMinutes(2))
+        }
+        catch [System.Threading.AbandonedMutexException] {
+            $acquired = $true
+        }
+        if (-not $acquired) {
+            throw "Another local exam seed is already creating a plan for SeedKey '$Key'."
+        }
+        return & $Action
+    }
+    finally {
+        if ($acquired) {
+            $mutex.ReleaseMutex()
+        }
+        $mutex.Dispose()
+    }
 }
 
 function Find-UserByEmail {
@@ -243,9 +289,23 @@ function Ensure-ActivePlan {
     param([string]$Name)
 
     $plans = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/plans" -Token $script:AdminToken)
-    $plan = $plans | Where-Object { $_.name -eq $Name } | Select-Object -First 1
-    if ($null -eq $plan -or "$($plan.status)".ToUpperInvariant() -eq "ARCHIVED") {
-        $planName = if ($null -eq $plan) { $Name } else { "$Name $(Get-Date -Format yyyyMMddHHmmss)" }
+    $plan = $plans |
+        Where-Object {
+            ($_.name -eq $Name -or $_.name -like "$Name EXAM_PACKAGE*") -and
+            "$($_.type)".ToUpperInvariant() -eq "EXAM_PACKAGE" -and
+            "$($_.status)".ToUpperInvariant() -ne "ARCHIVED"
+        } |
+        Sort-Object { if ($_.name -eq $Name) { 0 } else { 1 } } |
+        Select-Object -First 1
+    if ($null -eq $plan) {
+        $planName = $Name
+        if ($null -ne ($plans | Where-Object { $_.name -eq $Name })) {
+            $suffix = 1
+            do {
+                $planName = if ($suffix -eq 1) { "$Name EXAM_PACKAGE" } else { "$Name EXAM_PACKAGE $suffix" }
+                $suffix++
+            } while ($null -ne ($plans | Where-Object { $_.name -eq $planName }))
+        }
         $plan = Invoke-SeedApi -Method POST -Path "/api/v1/plans" -Token $script:AdminToken -Body @{
             name                   = $planName
             description            = "Local seed exam package"
@@ -257,7 +317,9 @@ function Ensure-ActivePlan {
         }
     }
     if ("$($plan.status)".ToUpperInvariant() -eq "DRAFT") {
-        $plan = Invoke-SeedApi -Method POST -Path "/api/v1/plans/$($plan.publicId)/activation" -Token $script:AdminToken
+        $plan = Invoke-SeedApi -Method POST -Path "/api/v1/plans/$($plan.publicId)/activation" -Token $script:AdminToken -Body @{
+            expectedVersion = [long]$plan.version
+        }
     }
     if ("$($plan.status)".ToUpperInvariant() -ne "ACTIVE") {
         throw "Seed plan '$($plan.name)' is not active."
@@ -266,7 +328,10 @@ function Ensure-ActivePlan {
 }
 
 function Ensure-Subscription {
-    param([string]$PlanId)
+    param(
+        [string]$PlanId,
+        [string]$SeedKey
+    )
 
     $subscriptions = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/subscriptions" -Token $script:HostToken)
     $now = [DateTimeOffset]::UtcNow
@@ -281,12 +346,47 @@ function Ensure-Subscription {
         return $subscription
     }
 
-    $expires = $now.AddDays(30).ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $license = Invoke-SeedApi -Method POST -Path "/api/v1/license-codes" -Token $script:AdminToken -Body @{
-        planId        = $PlanId
-        codeExpiresAt = $expires
+    $expires = $now.Date.AddDays(30).AddHours(23).AddMinutes(59).AddSeconds(59).ToString("yyyy-MM-ddTHH:mm:ssZ")
+    # The plan is owned by this SeedKey, so an outstanding code here represents
+    # an incomplete prior seed attempt and must be reused before issuing again.
+    $issuedPage = Invoke-SeedApi -Method GET -Path "/api/v1/admin/license-codes?planId=$PlanId&status=ISSUED&size=20" -Token $script:AdminToken
+    $issuedCode = if ($null -ne $issuedPage -and $issuedPage.PSObject.Properties.Name -contains "data") {
+        Get-Array $issuedPage.data |
+            Sort-Object { [DateTimeOffset]$_.issuedAt } -Descending |
+            Select-Object -First 1
     }
-    $null = Invoke-SeedApi -Method POST -Path "/api/v1/license-code-redemptions" -Token $script:HostToken -Body @{ code = $license.code }
+    else {
+        $null
+    }
+    if ($null -ne $issuedCode) {
+        $licensePublicId = $issuedCode.publicId
+    }
+    else {
+        $idempotencyKey = Get-DeterministicGuid -Value "PTE_LOCAL_LICENSE|$SeedKey|$PlanId|$expires"
+        $licenseReceipt = Invoke-SeedApi -Method POST -Path "/api/v1/license-codes" -Token $script:AdminToken -Body @{
+            planId        = $PlanId
+            codeExpiresAt = $expires
+        } -AdditionalHeaders @{ "Idempotency-Key" = $idempotencyKey }
+        $licensePublicId = $licenseReceipt.publicId
+    }
+
+    $licenseReveal = Invoke-SeedApi -Method POST -Path "/api/v1/admin/license-codes/$licensePublicId/reveal" -Token $script:AdminToken
+    if ([string]::IsNullOrWhiteSpace($licenseReveal.code)) {
+        throw "The issued license code could not be revealed for local redemption."
+    }
+    try {
+        $null = Invoke-SeedApi -Method POST -Path "/api/v1/license-code-redemptions" -Token $script:HostToken -Body @{ code = $licenseReveal.code }
+    }
+    catch {
+        $subscriptions = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/subscriptions" -Token $script:HostToken)
+        $subscription = $subscriptions |
+            Where-Object { $_.planId -eq $PlanId -and "$($_.status)".ToUpperInvariant() -eq "ACTIVE" } |
+            Select-Object -First 1
+        if ($null -eq $subscription) {
+            throw
+        }
+        return $subscription
+    }
     $subscriptions = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/subscriptions" -Token $script:HostToken)
     $subscription = $subscriptions |
         Where-Object { $_.planId -eq $PlanId -and "$($_.status)".ToUpperInvariant() -eq "ACTIVE" } |
@@ -365,8 +465,8 @@ $class = Ensure-Class -OrganizationId $script:OrganizationId -ProgramId $program
 $null = Ensure-ClassMembership -OrganizationId $script:OrganizationId -ProgramId $program.publicId -ClassId $class.publicId -StudentId $studentUser.publicId
 
 Write-Host "== Creating or reusing active exam package =="
-$plan = Ensure-ActivePlan -Name $planName
-$subscription = Ensure-Subscription -PlanId $plan.publicId
+$plan = Invoke-WithSeedMutex -Key $SeedKey -Action { Ensure-ActivePlan -Name $planName }
+$subscription = Ensure-Subscription -PlanId $plan.publicId -SeedKey $SeedKey
 
 Write-Host "== Finding the active seeded template =="
 $templates = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/score-templates" -Token $script:AdminToken)

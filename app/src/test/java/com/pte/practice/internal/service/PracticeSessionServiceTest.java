@@ -5,10 +5,15 @@ import com.pte.identity.PracticeMembershipStatus;
 import com.pte.identity.domain.UserStatus;
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
+import com.pte.attempt.ResponseConfidence;
 import com.pte.practice.internal.domain.PracticeSession;
+import com.pte.practice.internal.domain.PracticeSessionItem;
 import com.pte.practice.internal.domain.PracticeSessionOperation;
+import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionOperationType;
+import com.pte.practice.internal.dto.request.PracticeAnswerRequest;
+import com.pte.practice.internal.dto.request.PracticeSaveAndExitRequest;
 import com.pte.practice.internal.dto.request.PracticeCapabilityManifest;
 import com.pte.practice.internal.dto.request.PracticeSessionActionRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionStartRequest;
@@ -17,7 +22,9 @@ import com.pte.practice.internal.exception.PracticeIdempotencyException;
 import com.pte.practice.internal.exception.PracticeNotEntitledException;
 import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.exception.PracticeSessionNotFoundException;
+import com.pte.practice.internal.mapper.PracticeSessionResponseMapper;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
+import com.pte.practice.internal.repository.PracticeSessionItemRepository;
 import com.pte.practice.internal.repository.PracticeSessionOperationRepository;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,6 +56,8 @@ class PracticeSessionServiceTest {
     @Mock
     private PracticeSessionPersistenceService sessionPersistenceService;
     @Mock
+    private PracticeSessionItemRepository itemRepository;
+    @Mock
     private PracticeSessionOperationRepository operationRepository;
     @Mock
     private QuestionTypeService questionTypeService;
@@ -56,7 +65,10 @@ class PracticeSessionServiceTest {
     private PracticeEntitlementService entitlementService;
     @Mock
     private PracticeIdentityService identityService;
+    @Mock
+    private PracticeAnswerValidationService answerValidationService;
 
+    private PracticeCatalogService catalogService;
     private PracticeSessionService service;
     private CurrentUser caller;
     private UUID tenantId;
@@ -72,13 +84,17 @@ class PracticeSessionServiceTest {
         caller = new CurrentUser(studentId, null, List.of("STUDENT"));
         lenient().when(questionTypeService.list(true)).thenReturn(List.of(
                 new com.pte.itembank.dto.response.QuestionTypeResponse(
-                        UUID.randomUUID(), "READ_ALOUD", "Read Aloud", "RA", "SPEAKING", true,
-                        true, 1, false, false, true, false, true, false, false, false,
-                        TaskRuntimeProfileRegistry.descriptorFor("READ_ALOUD"), "READ_ALOUD", "READ_ALOUD",
-                        "READ_ALOUD_V1", 1, null, null)));
+                        UUID.randomUUID(), "MC_READING_SINGLE", "Multiple-choice Reading (Single)", "MCS",
+                        "READING", true, true, 1, false, false, true, true, false, false, true, false,
+                        TaskRuntimeProfileRegistry.descriptorFor("MC_READING_SINGLE"), "MC_READING_SINGLE",
+                        "MC_READING_SINGLE", "MC_READING_SINGLE_V1", 1, null, null)));
+        catalogService = new PracticeCatalogService(questionTypeService);
+        PracticeSessionItemService itemService = new PracticeSessionItemService(itemRepository, catalogService,
+                answerValidationService);
+        PracticeSessionResponseMapper responseMapper = new PracticeSessionResponseMapper(catalogService, itemService);
         service = new PracticeSessionService(sessionRepository, sessionPersistenceService, operationRepository,
-                new PracticeCatalogService(questionTypeService),
-                entitlementService, identityService, Clock.fixed(now, ZoneOffset.UTC));
+                catalogService, entitlementService, itemService, responseMapper, identityService,
+                Clock.fixed(now, ZoneOffset.UTC));
     }
 
     @Test
@@ -124,8 +140,8 @@ class PracticeSessionServiceTest {
     void beginRequiresTheCurrentOptimisticVersionAndStartsTheDeadline() {
         PracticeSession session = savedSession();
         session.setVersion(2L);
-        session.setSelectedTaskTypes("READ_ALOUD");
-        session.setClientCapabilities("AUDIO_RECORDING");
+        session.setSelectedTaskTypes("MC_READING_SINGLE");
+        session.setClientCapabilities("OPTION_SELECTION");
         when(sessionRepository.findWithLockByPublicIdAndStudentPublicId(sessionId, caller.userId()))
                 .thenReturn(Optional.of(session));
         when(sessionRepository.saveAndFlush(any(PracticeSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -147,8 +163,8 @@ class PracticeSessionServiceTest {
         PracticeSession session = savedSession();
         session.setId(42L);
         session.setVersion(0L);
-        session.setSelectedTaskTypes("READ_ALOUD");
-        session.setClientCapabilities("AUDIO_RECORDING");
+        session.setSelectedTaskTypes("MC_READING_SINGLE");
+        session.setClientCapabilities("OPTION_SELECTION");
         when(sessionRepository.findWithLockByPublicIdAndStudentPublicId(sessionId, caller.userId()))
                 .thenReturn(Optional.of(session));
         when(sessionRepository.saveAndFlush(any(PracticeSession.class)))
@@ -218,9 +234,106 @@ class PracticeSessionServiceTest {
                 .isInstanceOf(PracticeSessionNotFoundException.class);
     }
 
+    @Test
+    void answerPersistsStudentPayloadAndCompletesTheLastItem() {
+        PracticeSession session = savedSession();
+        session.setId(42L);
+        session.setStatus(PracticeSessionStatus.IN_PROGRESS);
+        session.setVersion(0L);
+        PracticeSessionItem item = pendingItem(session);
+        when(sessionRepository.findWithLockByPublicIdAndStudentPublicId(sessionId, caller.userId()))
+                .thenReturn(Optional.of(session));
+        when(itemRepository.findWithLockByPublicIdAndPracticeSessionId(item.getPublicId(), 42L))
+                .thenReturn(Optional.of(item));
+        when(itemRepository.findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(42L))
+                .thenReturn(List.of(item));
+        when(sessionRepository.saveAndFlush(any(PracticeSession.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        PracticeSessionResponse response = service.answer(sessionId, item.getPublicId(),
+                new PracticeAnswerRequest(0L, "{\"selectedOption\":\"a\"}", ResponseConfidence.HIGH),
+                "answer-1", caller);
+
+        assertThat(item.getStatus()).isEqualTo(PracticeSessionItemStatus.ANSWERED);
+        assertThat(item.getSavedPayload()).isEqualTo("{\"selectedOption\":\"a\"}");
+        assertThat(response.status()).isEqualTo(PracticeSessionStatus.COMPLETED);
+        assertThat(response.answeredItemCount()).isEqualTo(1);
+    }
+
+    @Test
+    void skipDoesNotRequireConfidenceAndMarksTheItemSkipped() {
+        PracticeSession session = savedSession();
+        session.setId(42L);
+        session.setStatus(PracticeSessionStatus.IN_PROGRESS);
+        session.setVersion(0L);
+        PracticeSessionItem item = pendingItem(session);
+        when(sessionRepository.findWithLockByPublicIdAndStudentPublicId(sessionId, caller.userId()))
+                .thenReturn(Optional.of(session));
+        when(itemRepository.findWithLockByPublicIdAndPracticeSessionId(item.getPublicId(), 42L))
+                .thenReturn(Optional.of(item));
+        when(itemRepository.findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(42L))
+                .thenReturn(List.of(item));
+        when(sessionRepository.saveAndFlush(any(PracticeSession.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        PracticeSessionResponse response = service.skip(sessionId, item.getPublicId(),
+                new PracticeSessionActionRequest(0L), "skip-1", caller);
+
+        assertThat(item.getStatus()).isEqualTo(PracticeSessionItemStatus.SKIPPED);
+        assertThat(response.status()).isEqualTo(PracticeSessionStatus.COMPLETED);
+        assertThat(response.answeredItemCount()).isZero();
+    }
+
+    @Test
+    void saveAndExitDiscardsAnUnansweredSession() {
+        PracticeSession session = savedSession();
+        session.setId(42L);
+        session.setStatus(PracticeSessionStatus.IN_PROGRESS);
+        session.setVersion(0L);
+        PracticeSessionItem item = pendingItem(session);
+        when(sessionRepository.findWithLockByPublicIdAndStudentPublicId(sessionId, caller.userId()))
+                .thenReturn(Optional.of(session));
+        when(itemRepository.findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(42L))
+                .thenReturn(List.of(item));
+        when(sessionRepository.saveAndFlush(any(PracticeSession.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        PracticeSessionResponse response = service.saveAndExit(sessionId,
+                new PracticeSaveAndExitRequest(0L, null, null, null), "exit-1", caller);
+
+        assertThat(response.status()).isEqualTo(PracticeSessionStatus.DISCARDED);
+        assertThat(response.discardedAt()).isEqualTo(now);
+    }
+
+    @Test
+    void saveAndExitPersistsTheCurrentDraftWithoutAnsweringTheItem() {
+        PracticeSession session = savedSession();
+        session.setId(42L);
+        session.setStatus(PracticeSessionStatus.IN_PROGRESS);
+        session.setVersion(0L);
+        PracticeSessionItem item = pendingItem(session);
+        when(sessionRepository.findWithLockByPublicIdAndStudentPublicId(sessionId, caller.userId()))
+                .thenReturn(Optional.of(session));
+        when(itemRepository.findWithLockByPublicIdAndPracticeSessionId(item.getPublicId(), 42L))
+                .thenReturn(Optional.of(item));
+        when(itemRepository.findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(42L))
+                .thenReturn(List.of(item));
+        when(sessionRepository.saveAndFlush(any(PracticeSession.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        PracticeSessionResponse response = service.saveAndExit(sessionId,
+                new PracticeSaveAndExitRequest(0L, item.getPublicId(), "{\"selectedOption\":\"a\"}",
+                        ResponseConfidence.HIGH), "exit-draft-1", caller);
+
+        assertThat(response.status()).isEqualTo(PracticeSessionStatus.IN_PROGRESS);
+        assertThat(item.getStatus()).isEqualTo(PracticeSessionItemStatus.PENDING);
+        assertThat(item.getSavedPayload()).isEqualTo("{\"selectedOption\":\"a\"}");
+        assertThat(item.getConfidence()).isEqualTo(ResponseConfidence.HIGH);
+    }
+
     private PracticeSessionStartRequest startRequest() {
         return new PracticeSessionStartRequest("PTE_CORE_PRACTICE", tenantId,
-                Set.of("READ_ALOUD"), new PracticeCapabilityManifest(Set.of("AUDIO_RECORDING"), "1.0.0"));
+                Set.of("MC_READING_SINGLE"), new PracticeCapabilityManifest(Set.of("OPTION_SELECTION"), "1.0.0"));
     }
 
     private PracticeIdentityService.PracticeIdentityView identity() {
@@ -241,5 +354,20 @@ class PracticeSessionServiceTest {
         session.setStartIdempotencyKey("start-1");
         session.setStartRequestHash("unused");
         return session;
+    }
+
+    private PracticeSessionItem pendingItem(PracticeSession session) {
+        PracticeSessionItem item = new PracticeSessionItem();
+        item.setPublicId(UUID.randomUUID());
+        item.setPracticeSessionId(session.getId());
+        item.setOrderIndex(0);
+        item.setTaskCode("MC_READING_SINGLE");
+        item.setDisplayName("Multiple-choice Reading (Single)");
+        item.setSection("READING");
+        item.setRendererKey("MC_READING_SINGLE_V1");
+        item.setContractVersion(1);
+        item.setAnswerSchemaVersion(1);
+        item.setStatus(PracticeSessionItemStatus.PENDING);
+        return item;
     }
 }

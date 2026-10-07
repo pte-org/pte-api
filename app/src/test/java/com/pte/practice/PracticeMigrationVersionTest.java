@@ -39,4 +39,18 @@ class PracticeMigrationVersionTest {
                 .contains("-- Rollback policy: disable practice entry")
                 .doesNotContain("DROP TABLE");
     }
+
+    @Test
+    void sessionItemsMigrationIsAdditiveAndDoesNotStoreCorrectAnswers() throws IOException {
+        String sql = new ClassPathResource("db/migration/V84__practice_session_items_and_activity.sql")
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(sql).contains("ADD COLUMN last_activity_at")
+                .contains("CREATE TABLE practice_session_items")
+                .contains("saved_payload TEXT")
+                .contains("uk_practice_session_item_order")
+                .contains("-- Rollback policy: disable practice entry")
+                .doesNotContain("correct_answer")
+                .doesNotContain("DROP TABLE");
+    }
 }

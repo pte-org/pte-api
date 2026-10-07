@@ -1,6 +1,8 @@
 package com.pte.practice.internal.controller;
 
 import com.pte.practice.internal.constant.PracticeConstants;
+import com.pte.practice.internal.dto.request.PracticeAnswerRequest;
+import com.pte.practice.internal.dto.request.PracticeSaveAndExitRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionActionRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionStartRequest;
 import com.pte.practice.internal.dto.response.PracticeSessionResponse;
@@ -63,6 +65,38 @@ public class PracticeSessionController {
             String idempotencyKey,
             @Valid @RequestBody PracticeSessionActionRequest request) {
         return ApiResponse.success(sessionService.heartbeat(publicId, request, idempotencyKey,
+                CurrentUserContext.required()));
+    }
+
+    @PostMapping("/{publicId}/items/{itemPublicId}/answer")
+    public ApiResponse<PracticeSessionResponse> answer(
+            @PathVariable UUID publicId,
+            @PathVariable UUID itemPublicId,
+            @RequestHeader(value = PracticeConstants.IDEMPOTENCY_KEY_HEADER, required = false)
+            String idempotencyKey,
+            @Valid @RequestBody PracticeAnswerRequest request) {
+        return ApiResponse.success(sessionService.answer(publicId, itemPublicId, request, idempotencyKey,
+                CurrentUserContext.required()));
+    }
+
+    @PostMapping("/{publicId}/items/{itemPublicId}/skip")
+    public ApiResponse<PracticeSessionResponse> skip(
+            @PathVariable UUID publicId,
+            @PathVariable UUID itemPublicId,
+            @RequestHeader(value = PracticeConstants.IDEMPOTENCY_KEY_HEADER, required = false)
+            String idempotencyKey,
+            @Valid @RequestBody PracticeSessionActionRequest request) {
+        return ApiResponse.success(sessionService.skip(publicId, itemPublicId, request, idempotencyKey,
+                CurrentUserContext.required()));
+    }
+
+    @PostMapping("/{publicId}/save-and-exit")
+    public ApiResponse<PracticeSessionResponse> saveAndExit(
+            @PathVariable UUID publicId,
+            @RequestHeader(value = PracticeConstants.IDEMPOTENCY_KEY_HEADER, required = false)
+            String idempotencyKey,
+            @Valid @RequestBody PracticeSaveAndExitRequest request) {
+        return ApiResponse.success(sessionService.saveAndExit(publicId, request, idempotencyKey,
                 CurrentUserContext.required()));
     }
 }
