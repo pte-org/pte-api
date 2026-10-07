@@ -4,6 +4,7 @@ import com.pte.attempt.domain.AttemptAnswer;
 import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.domain.enums.AnswerStatus;
+import com.pte.attempt.ResponseConfidence;
 import com.pte.attempt.internal.exception.AnswerAlreadySubmittedException;
 import com.pte.attempt.internal.repository.AttemptAnswerRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -35,6 +36,13 @@ public class AnswerSubmitService {
      */
     @Transactional
     public AttemptAnswer submit(ExamAttempt attempt, PinnedItem item, String payload) {
+        return submit(attempt, item, payload, null);
+    }
+
+    /** Additive confidence-aware path shared by official compatibility and practice execution. */
+    @Transactional
+    public AttemptAnswer submit(ExamAttempt attempt, PinnedItem item, String payload,
+            ResponseConfidence confidence) {
         AttemptAnswer answer = attemptAnswerRepository.findByAttemptIdAndPinnedItemId(attempt.getId(), item.getId())
                 .orElseGet(() -> {
                     AttemptAnswer created = new AttemptAnswer();
@@ -45,6 +53,7 @@ public class AnswerSubmitService {
         answer.setPayload(payload);
         answer.setStatus(AnswerStatus.SUBMITTED);
         answer.setExpired(false);
+        answer.setConfidence(confidence);
         try {
             return attemptAnswerRepository.save(answer);
         } catch (DataIntegrityViolationException ex) {

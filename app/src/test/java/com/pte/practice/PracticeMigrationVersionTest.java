@@ -22,4 +22,21 @@ class PracticeMigrationVersionTest {
                 .contains("-- Rollback policy: disable the practice auth feature")
                 .doesNotContain("normalized_email VARCHAR");
     }
+
+    @Test
+    void catalogSessionMigrationKeepsPracticeSeparateAndConfidenceAdditive() throws IOException {
+        String sql = new ClassPathResource("db/migration/V83__practice_catalog_and_session_boundary.sql")
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(sql).contains("CREATE TABLE practice_sessions")
+                .contains("identity_public_id UUID NOT NULL")
+                .contains("source_type VARCHAR(16) NOT NULL")
+                .contains("CREATE TABLE practice_session_attempts")
+                .contains("CREATE TABLE practice_session_operations")
+                .contains("uk_practice_session_operation_key")
+                .contains("ALTER TABLE attempt_answers")
+                .contains("ADD COLUMN confidence VARCHAR(16)")
+                .contains("-- Rollback policy: disable practice entry")
+                .doesNotContain("DROP TABLE");
+    }
 }
