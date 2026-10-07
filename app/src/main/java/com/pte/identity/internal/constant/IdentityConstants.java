@@ -56,6 +56,8 @@ public final class IdentityConstants {
     public static final String REFRESH_TOKEN_REQUIRED = "Refresh token is required";
     public static final String CURRENT_PASSWORD_REQUIRED = "Current password is required";
     public static final String NEW_PASSWORD_REQUIRED = "New password is required";
+    public static final String PRACTICE_IDENTITY_NOT_FOUND = "PRACTICE_IDENTITY_NOT_FOUND";
+    public static final String PRACTICE_IDENTITY_EMAIL_MISMATCH = "PRACTICE_IDENTITY_EMAIL_MISMATCH";
 
     public static final String JWT_DECODER_BUILD_FAILED = "Failed to build JWT decoder";
     public static final String RSA_KEY_GENERATION_FAILED = "RSA key generation failed";
@@ -67,6 +69,9 @@ public final class IdentityConstants {
     public static final String TOKEN_ISSUER = "pte-iam";
     public static final long ACCESS_TOKEN_TTL_SECONDS = 900L;      // 15 minutes
     public static final long REFRESH_TOKEN_TTL_SECONDS = 604_800L; // 7 days
+
+    public static final String PRACTICE_AUTH_REQUEST_PATH = "/api/v1/auth/practice/request";
+    public static final String PRACTICE_AUTH_VERIFY_PATH = "/api/v1/auth/practice/verify";
 
     private IdentityConstants() {
     }

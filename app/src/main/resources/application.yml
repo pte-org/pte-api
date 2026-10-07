@@ -13,6 +13,14 @@ rate-limit:
   per-second: ${RATE_LIMIT_PER_SECOND:40}
   redeem-per-second: ${REDEEM_RATE_LIMIT_PER_SECOND:5}
 
+practice:
+  web:
+    enabled: ${PRACTICE_WEB_ENABLED:false}
+  email-auth:
+    enabled: ${PRACTICE_EMAIL_AUTH_ENABLED:false}
+  strict-entitlement:
+    enabled: ${PRACTICE_STRICT_ENTITLEMENT_ENABLED:false}
+
 billing:
   payos:
     client-id: ${PAYOS_CLIENT_ID}

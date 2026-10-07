@@ -1,6 +1,9 @@
 package com.pte.billing;
 
 import com.pte.billing.domain.enums.SubscriptionStatus;
+import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.enums.PlanType;
+import com.pte.billing.internal.repository.PlanRepository;
 import com.pte.billing.internal.repository.SubscriptionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,6 +12,7 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -19,9 +23,11 @@ import java.util.UUID;
 public class BillingService {
 
     private final SubscriptionRepository subscriptionRepository;
+    private final PlanRepository planRepository;
 
-    public BillingService(SubscriptionRepository subscriptionRepository) {
+    public BillingService(SubscriptionRepository subscriptionRepository, PlanRepository planRepository) {
         this.subscriptionRepository = subscriptionRepository;
+        this.planRepository = planRepository;
     }
 
     /** Returns empty when the key is unknown, tenant-owned elsewhere, expired, or cancelled. */
@@ -95,5 +101,29 @@ public class BillingService {
                 .filter(subscription -> !subscription.isDeleted())
                 .map(SubscriptionView::from)
                 .toList();
+    }
+
+    /**
+     * Returns whether the tenant has a currently usable EXAM_PACKAGE
+     * subscription. Plan type is checked here so callers do not reach into the
+     * billing repositories or accidentally treat capacity-only grants as exam
+     * access.
+     */
+    @Transactional(readOnly = true)
+    public boolean hasActiveExamPackageSubscription(UUID tenantId) {
+        if (tenantId == null) {
+            return false;
+        }
+        List<SubscriptionView> subscriptions = listActiveSubscriptions(tenantId);
+        if (subscriptions.isEmpty()) {
+            return false;
+        }
+        Set<UUID> planIds = subscriptions.stream()
+                .map(SubscriptionView::planId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        return planRepository.findByPublicIdIn(planIds).stream()
+                .map(Plan::getType)
+                .anyMatch(PlanType.EXAM_PACKAGE::equals);
     }
 }

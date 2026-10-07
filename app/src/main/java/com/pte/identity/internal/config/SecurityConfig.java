@@ -1,5 +1,6 @@
 package com.pte.identity.internal.config;
 
+import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.shared.security.ResourceServerJwt;
 import com.pte.shared.web.RateLimitFilter;
 import io.github.bucket4j.distributed.proxy.ProxyManager;
@@ -52,6 +53,7 @@ public class SecurityConfig {
     private static final List<String> PUBLIC_PATHS = List.of(
             "/api/v1/auth/login", "/api/v1/auth/login-options",
             "/api/v1/auth/refresh", "/api/v1/auth/logout",
+            IdentityConstants.PRACTICE_AUTH_REQUEST_PATH, IdentityConstants.PRACTICE_AUTH_VERIFY_PATH,
             "/actuator/health", "/actuator/health/**", "/ws/**",
             "/api/v1/applications", "/api/v1/plans", "/api/v1/webhooks/payos");
 

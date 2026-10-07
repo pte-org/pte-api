@@ -43,6 +43,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     List<User> findByPublicIdInAndTenantIdAndDeletedFalse(List<UUID> publicIds, UUID tenantId);
 
+    List<User> findByPublicIdInAndDeletedFalse(List<UUID> publicIds);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.publicId in :publicIds and u.tenantId = :tenantId "
             + "and u.deleted = false order by u.id")
@@ -76,6 +78,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
 
     List<User> findByEmailIn(List<String> emails);
+
+    List<User> findByEmailIgnoreCaseAndDeletedFalse(String email);
 
     List<User> findByTenantIdAndEmailIn(UUID tenantId, List<String> emails);
 

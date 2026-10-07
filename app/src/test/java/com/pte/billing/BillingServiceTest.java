@@ -1,9 +1,12 @@
 package com.pte.billing;
 
 import com.pte.billing.domain.Subscription;
+import com.pte.billing.domain.Plan;
 import com.pte.billing.domain.enums.ActivationSource;
+import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.domain.enums.SubscriptionStatus;
 import com.pte.billing.internal.repository.SubscriptionRepository;
+import com.pte.billing.internal.repository.PlanRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
@@ -26,9 +29,12 @@ class BillingServiceTest {
     @Mock
     private SubscriptionRepository subscriptionRepository;
 
+    @Mock
+    private PlanRepository planRepository;
+
     @Test
     void getActiveSubscriptionByPublicId_scopesToTenantAndChecksUsableWindow() {
-        BillingService service = new BillingService(subscriptionRepository);
+        BillingService service = new BillingService(subscriptionRepository, planRepository);
         UUID subscriptionId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         Subscription subscription = subscription(subscriptionId, tenantId, SubscriptionStatus.ACTIVE);
@@ -42,7 +48,7 @@ class BillingServiceTest {
 
     @Test
     void getSubscriptionByPublicIdReturnsInactiveTenantOwnedSubscription() {
-        BillingService service = new BillingService(subscriptionRepository);
+        BillingService service = new BillingService(subscriptionRepository, planRepository);
         UUID subscriptionId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         Subscription subscription = subscription(subscriptionId, tenantId, SubscriptionStatus.CANCELLED);
@@ -57,7 +63,7 @@ class BillingServiceTest {
 
     @Test
     void lockSubscriptions_usesAscendingPublicIdOrder() {
-        BillingService service = new BillingService(subscriptionRepository);
+        BillingService service = new BillingService(subscriptionRepository, planRepository);
         UUID tenantId = UUID.randomUUID();
         UUID low = UUID.fromString("00000000-0000-0000-0000-000000000001");
         UUID high = UUID.fromString("00000000-0000-0000-0000-000000000002");
@@ -72,6 +78,26 @@ class BillingServiceTest {
         InOrder order = inOrder(subscriptionRepository);
         order.verify(subscriptionRepository).findWithLockByPublicIdAndTenantId(eq(low), eq(tenantId));
         order.verify(subscriptionRepository).findWithLockByPublicIdAndTenantId(eq(high), eq(tenantId));
+    }
+
+    @Test
+    void activeExamPackageIsDifferentFromCapacityOnlyPlan() {
+        BillingService service = new BillingService(subscriptionRepository, planRepository);
+        UUID tenantId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        Subscription subscription = subscription(UUID.randomUUID(), tenantId, SubscriptionStatus.ACTIVE);
+        subscription.setPlanId(planId);
+        Plan plan = new Plan();
+        plan.setPublicId(planId);
+        plan.setType(PlanType.EXAM_PACKAGE);
+        when(subscriptionRepository
+                .findByTenantIdAndStatusAndStartsAtLessThanEqualAndExpiresAtGreaterThanOrderByCreatedAtDesc(
+                        eq(tenantId), eq(SubscriptionStatus.ACTIVE), org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of(subscription));
+        when(planRepository.findByPublicIdIn(java.util.Set.of(planId))).thenReturn(List.of(plan));
+
+        assertThat(service.hasActiveExamPackageSubscription(tenantId)).isTrue();
     }
 
     private Subscription subscription(UUID publicId, UUID tenantId, SubscriptionStatus status) {
