@@ -42,7 +42,7 @@ public final class SessionMapper {
     }
 
     /**
-     * ExamPolicy.forMode() sets every field, while backfillLegacyDefaults()
+     * ExamPolicy.realExamDefault() sets every field, while backfillLegacyDefaults()
      * restores the four pre-lockdown fields and deliberately leaves lockdown
      * mode for session-boundary resolution. A partially-null policy still means
      * corrupted state, so fail loudly instead of silently weakening it.

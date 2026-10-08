@@ -9,12 +9,10 @@ import com.pte.session.domain.ExamPolicy;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.ReplayPolicy;
 import com.pte.session.domain.enums.ExamMode;
-import com.pte.session.domain.enums.LockdownMode;
 import com.pte.session.domain.enums.ReplayPolicyType;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.event.SessionCancelledEvent;
 import com.pte.session.dto.response.ExamPolicyResponse;
-import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.dto.request.ChangeSubscriptionRequest;
 import com.pte.session.internal.dto.request.CreateSessionRequest;
 import com.pte.session.internal.dto.request.PatchExamPolicyRequest;
@@ -124,14 +122,8 @@ public class SessionLifecycleService {
         session.setExamMode(mode);
         session.setFormMode(com.pte.session.domain.enums.FormMode.SHARED_FORM);
         session.setReusePolicy(com.pte.session.domain.enums.ReusePolicy.ALLOW);
-        ExamPolicy policy = ExamPolicy.forMode(mode);
-
-        if (request.lockdownMode() != null) {
-            if (mode == ExamMode.PRACTICE && request.lockdownMode() == LockdownMode.STRICT) {
-                throw new IllegalArgumentException(SessionConstants.STRICT_LOCKDOWN_NOT_ALLOWED_FOR_PRACTICE);
-            }
-            policy.setLockdownMode(request.lockdownMode());
-        }
+        ExamPolicy policy = ExamPolicy.realExamDefault();
+        policy.setLockdownMode(SessionPolicyResolver.resolveForCreate(request.lockdownMode()));
         session.setPolicy(policy);
         session.setSessionCode(sessionCodeGenerator.generate(tenantId, request.opensAt()));
 
@@ -288,7 +280,7 @@ public class SessionLifecycleService {
         }
         if (request.lockdownMode() != null) {
             policy.setLockdownMode(SessionPolicyResolver.resolveForPolicyPatch(
-                    session.getExamMode(), policy.getLockdownMode(), request.lockdownMode()));
+                    policy.getLockdownMode(), request.lockdownMode()));
         }
         return SessionMapper.toPolicy(policy, session.getExamMode(), session.getExamMode() == null);
     }

@@ -86,7 +86,7 @@ class EntitlementServiceTest {
         UUID studentPublicId = UUID.randomUUID();
         ExamSession session = openSession(sessionPublicId, UUID.randomUUID());
         session.setExamMode(null);
-        ExamPolicy legacyPolicy = ExamPolicy.practiceDefault();
+        ExamPolicy legacyPolicy = ExamPolicy.mockTestDefault();
         legacyPolicy.setLockdownMode(null);
         session.setPolicy(legacyPolicy);
         when(sessionRepository.findByPublicId(sessionPublicId)).thenReturn(Optional.of(session));

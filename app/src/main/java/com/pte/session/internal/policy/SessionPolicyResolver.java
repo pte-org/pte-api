@@ -10,54 +10,43 @@ public final class SessionPolicyResolver {
     private SessionPolicyResolver() {
     }
 
-    /** New canonical draft create: null is the compatibility default for the requested mode. */
-    public static LockdownMode resolveForCreate(ExamMode examMode, LockdownMode requested) {
-        ExamMode effectiveMode = effectiveExamMode(examMode);
-        return validate(effectiveMode, requested == null ? defaultFor(effectiveMode) : requested);
+    /** New canonical draft create: null is the OFFICIAL_EXAM default. */
+    public static LockdownMode resolveForCreate(LockdownMode requested) {
+        return requested == null ? LockdownMode.STRICT : validate(requested);
     }
 
     /**
-     * Draft patch semantics distinguish a mode transition from an unrelated patch:
-     * a transition derives the new mode default, while an unchanged mode retains
-     * the current effective policy when no lockdown value was supplied.
+     * Draft patch: a supplied lockdown value is validated; otherwise the
+     * current effective policy is retained. {@code legacyState} marks a row
+     * persisted before exam mode was recorded, whose null lockdown defaults.
      */
-    public static LockdownMode resolveForDraftPatch(ExamMode previousMode, LockdownMode current,
-            ExamMode requestedMode, LockdownMode requestedLockdownMode) {
-        ExamMode previous = effectiveExamMode(previousMode);
-        ExamMode next = effectiveExamMode(requestedMode == null ? previous : requestedMode);
+    public static LockdownMode resolveForDraftPatch(boolean legacyState, LockdownMode current,
+            LockdownMode requestedLockdownMode) {
         if (requestedLockdownMode != null) {
-            return validate(next, requestedLockdownMode);
+            return validate(requestedLockdownMode);
         }
-        if (previous != next) {
-            return defaultFor(next);
-        }
-        return resolveEffectiveLockdownMode(next, current, previousMode == null);
+        return resolveEffectiveLockdownMode(ExamMode.OFFICIAL_EXAM, current, legacyState);
     }
 
     /** Null is deliberately a no-op for the partial policy endpoint. */
-    public static LockdownMode resolveForPolicyPatch(ExamMode examMode, LockdownMode current,
-            LockdownMode requested) {
+    public static LockdownMode resolveForPolicyPatch(LockdownMode current, LockdownMode requested) {
         if (requested == null) {
             return current;
         }
-        return validate(effectiveExamMode(examMode), requested);
+        return validate(requested);
     }
 
     /**
      * Resolves persisted state before it is exposed or pinned. Legacy null values
-     * use the documented mode-aware default; non-legacy null values fail closed.
+     * use the documented default; non-legacy null values fail closed.
      */
     public static LockdownMode resolveEffectiveLockdownMode(ExamMode examMode,
             LockdownMode persistedLockdownMode, boolean legacyState) {
-        ExamMode effectiveMode = effectiveExamMode(examMode);
         if (persistedLockdownMode == null) {
             if (!legacyState) {
                 throw InvalidLockdownModeException.required();
             }
-            if (examMode == null) {
-                return LockdownMode.STANDARD;
-            }
-            return defaultFor(effectiveMode);
+            return examMode == null ? LockdownMode.STANDARD : LockdownMode.STRICT;
         }
         // Rows created before exam_mode was introduced may carry the old
         // MOCK_TEST/STANDARD policy. Preserve that explicit legacy value; rows
@@ -65,25 +54,13 @@ public final class SessionPolicyResolver {
         if (legacyState && examMode == null) {
             return persistedLockdownMode;
         }
-        return validate(effectiveMode, persistedLockdownMode);
+        return validate(persistedLockdownMode);
     }
 
-    public static ExamMode effectiveExamMode(ExamMode examMode) {
-        return examMode == null ? ExamMode.OFFICIAL_EXAM : examMode;
-    }
-
-    private static LockdownMode defaultFor(ExamMode examMode) {
-        return examMode == ExamMode.PRACTICE ? LockdownMode.NONE : LockdownMode.STRICT;
-    }
-
-    private static LockdownMode validate(ExamMode examMode, LockdownMode lockdownMode) {
-        if (examMode == ExamMode.OFFICIAL_EXAM && lockdownMode != LockdownMode.STRICT) {
+    private static LockdownMode validate(LockdownMode lockdownMode) {
+        if (lockdownMode != LockdownMode.STRICT) {
             throw new InvalidLockdownModeException(
                     "OFFICIAL_EXAM sessions require LockdownMode.STRICT");
-        }
-        if (examMode == ExamMode.PRACTICE && lockdownMode == LockdownMode.STRICT) {
-            throw new InvalidLockdownModeException(
-                    "PRACTICE sessions cannot use LockdownMode.STRICT");
         }
         return lockdownMode;
     }

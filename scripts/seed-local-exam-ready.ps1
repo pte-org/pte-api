@@ -491,7 +491,7 @@ if ($null -eq $session) {
         subscriptionPublicId = $subscription.publicId
         opensAt              = $createOpensAt
         closesAt             = $closesAt
-        examMode             = "PRACTICE"
+        examMode             = "OFFICIAL_EXAM"
         formMode             = "SHARED_FORM"
         reusePolicy          = "ALLOW"
         capacity             = 1
