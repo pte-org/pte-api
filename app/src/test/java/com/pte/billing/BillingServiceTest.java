@@ -7,6 +7,10 @@ import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.domain.enums.SubscriptionStatus;
 import com.pte.billing.internal.repository.SubscriptionRepository;
 import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.shared.security.CurrentUser;
+import com.pte.shared.web.PagedResult;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
@@ -21,6 +25,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -98,6 +103,24 @@ class BillingServiceTest {
         when(planRepository.findByPublicIdIn(java.util.Set.of(planId))).thenReturn(List.of(plan));
 
         assertThat(service.hasActiveExamPackageSubscription(tenantId)).isTrue();
+    }
+
+    @Test
+    void platformManagerSubscriptionReadAppliesTenantFilterServerSide() {
+        BillingService service = new BillingService(subscriptionRepository, planRepository);
+        UUID tenantId = UUID.randomUUID();
+        Subscription subscription = subscription(UUID.randomUUID(), tenantId, SubscriptionStatus.ACTIVE);
+        when(subscriptionRepository.findByDeletedFalseAndTenantIdOrderByCreatedAtDesc(eq(tenantId), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new PageImpl<>(List.of(subscription), PageRequest.of(0, 20), 1));
+
+        PagedResult<SubscriptionView> result = service.listPlatformSubscriptions(
+                new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_MANAGER")), 0, 20, tenantId);
+
+        assertThat(result.data()).extracting(SubscriptionView::tenantId).containsExactly(tenantId);
+        verify(subscriptionRepository).findByDeletedFalseAndTenantIdOrderByCreatedAtDesc(eq(tenantId),
+                org.mockito.ArgumentMatchers.any());
+        org.mockito.Mockito.verify(subscriptionRepository, org.mockito.Mockito.never())
+                .findByDeletedFalseOrderByCreatedAtDesc(org.mockito.ArgumentMatchers.any());
     }
 
     private Subscription subscription(UUID publicId, UUID tenantId, SubscriptionStatus status) {

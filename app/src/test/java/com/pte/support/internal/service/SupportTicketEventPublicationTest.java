@@ -78,7 +78,7 @@ class SupportTicketEventPublicationTest {
 
         assertThatThrownBy(() -> service.updateStatus(ticket.getPublicId(),
                 new UpdateTicketStatusRequest(TicketStatus.IN_PROGRESS),
-                new CurrentUser(UUID.randomUUID(), tenantId, List.of("SYSTEM_ADMIN"))))
+                new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_MANAGER"))))
                 .isInstanceOf(InvalidStatusTransitionException.class);
         verify(eventPublisher, never()).publishEvent(any());
     }
@@ -95,7 +95,7 @@ class SupportTicketEventPublicationTest {
         when(noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(ticket.getPublicId())).thenReturn(List.of(note));
 
         service.addNote(ticket.getPublicId(), new AddNoteRequest("Private raw note"),
-                new CurrentUser(UUID.randomUUID(), tenantId, List.of("SYSTEM_ADMIN")));
+                new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_MANAGER")));
 
         ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher).publishEvent(captor.capture());

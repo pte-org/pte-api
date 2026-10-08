@@ -60,12 +60,15 @@ class AnnouncementServiceTest {
 
     private AnnouncementService service;
     private CurrentUser admin;
+    private CurrentUser manager;
 
     @BeforeEach
     void setUp() {
         service = new AnnouncementService(store, appender, delivery, identity, tenancy, audit,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         admin = new CurrentUser(ADMIN, null, List.of("PLATFORM_ADMIN"));
+        manager = new CurrentUser(UUID.fromString("00000000-0000-0000-0000-000000000508"), null,
+                List.of("PLATFORM_MANAGER"));
     }
 
     @Test
@@ -79,6 +82,25 @@ class AnnouncementServiceTest {
 
         assertThat(service.create(admin, request).publicId()).isEqualTo(ANNOUNCEMENT);
         verify(audit).record(eq(admin), eq("ANNOUNCEMENT"), anyString(), eq("CREATE_DRAFT"), any());
+    }
+
+    @Test
+    void managerCanCreateAndPublishAnnouncementDraft() {
+        AnnouncementCreateRequest request = new AnnouncementCreateRequest("Maintenance", "Restart at 03:00",
+                InboxCategory.MAINTENANCE, InboxImportance.IMPORTANT, NOW, NOW.plusSeconds(3600), null);
+        when(store.insert(any(), eq(manager.userId()), eq("Maintenance"), eq("Restart at 03:00"),
+                eq(InboxCategory.MAINTENANCE), eq(InboxImportance.IMPORTANT), eq(NOW), eq(NOW.plusSeconds(3600)),
+                eq(null), any(Instant.class))).thenReturn(draft(0L));
+        when(store.lockForUpdate(ANNOUNCEMENT)).thenReturn(Optional.of(draft(0L)));
+        when(identity.findActiveRoleMembers(Role.HOST_ADMIN)).thenReturn(List.of());
+        when(tenancy.findActiveTenantIds(Set.of())).thenReturn(Set.of());
+        when(appender.append(any(InboxNotificationRequested.class))).thenReturn(CONTENT);
+        when(store.markPublished(eq(ANNOUNCEMENT), eq(0L), eq(CONTENT), eq(NOW))).thenReturn(Optional.of(published(1L)));
+
+        assertThat(service.create(manager, request).publicId()).isEqualTo(ANNOUNCEMENT);
+        assertThat(service.publish(manager, ANNOUNCEMENT, new AnnouncementPublishRequest(0L)).published()).isTrue();
+        verify(audit).record(eq(manager), eq("ANNOUNCEMENT"), eq(ANNOUNCEMENT.toString()),
+                eq(InboxConstants.AUDIT_PUBLISH), any());
     }
 
     @Test

@@ -75,6 +75,14 @@ class SupportTicketServiceTest {
         return new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
     }
 
+    private CurrentUser platformAdmin() {
+        return new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
+    }
+
+    private CurrentUser platformManager() {
+        return new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_MANAGER"));
+    }
+
     private SupportTicket ticketFor(UUID tenantId) {
         SupportTicket ticket = new SupportTicket();
         ticket.setPublicId(UUID.randomUUID());
@@ -263,12 +271,28 @@ class SupportTicketServiceTest {
         verify(auditLogService, never()).record(any(), any(), any(), any(), any());
     }
 
-    // --- Phase 3: Admin API tests ---
+    // --- Platform operations API tests ---
+
+    @Test
+    void managerCanUpdateStatusAndCarryActorIntoAudit() {
+        CurrentUser manager = platformManager();
+        SupportTicket ticket = ticketFor(UUID.randomUUID());
+        UUID publicId = ticket.getPublicId();
+
+        when(ticketRepository.findByPublicId(publicId)).thenReturn(Optional.of(ticket));
+        when(noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(publicId)).thenReturn(List.of());
+
+        SupportTicketResponse response = service.updateStatus(publicId,
+                new UpdateTicketStatusRequest(TicketStatus.IN_PROGRESS), manager);
+
+        assertThat(response.status()).isEqualTo(TicketStatus.IN_PROGRESS);
+        verify(auditLogService).record(eq(manager), any(), eq(publicId.toString()), any(), any());
+    }
 
     @Test
     void updateStatus_openToInProgress_transitionsAndAudits() {
         UUID tenantId = UUID.randomUUID();
-        CurrentUser admin = caller(tenantId);
+        CurrentUser admin = platformAdmin();
         SupportTicket ticket = ticketFor(tenantId);
         UUID publicId = ticket.getPublicId();
 
@@ -285,7 +309,7 @@ class SupportTicketServiceTest {
     @Test
     void updateStatus_inProgressToResolved_transitionsAndAudits() {
         UUID tenantId = UUID.randomUUID();
-        CurrentUser admin = caller(tenantId);
+        CurrentUser admin = platformAdmin();
         SupportTicket ticket = ticketFor(tenantId);
         ticket.setStatus(TicketStatus.IN_PROGRESS);
         UUID publicId = ticket.getPublicId();
@@ -303,7 +327,7 @@ class SupportTicketServiceTest {
     @Test
     void updateStatus_resolvedToOpen_throwsInvalidTransition() {
         UUID tenantId = UUID.randomUUID();
-        CurrentUser admin = caller(tenantId);
+        CurrentUser admin = platformAdmin();
         SupportTicket ticket = ticketFor(tenantId);
         ticket.setStatus(TicketStatus.RESOLVED);
         UUID publicId = ticket.getPublicId();
@@ -319,7 +343,7 @@ class SupportTicketServiceTest {
     @Test
     void updateStatus_unknownTicketPublicId_throwsNotFound() {
         UUID publicId = UUID.randomUUID();
-        CurrentUser admin = caller(UUID.randomUUID());
+        CurrentUser admin = platformAdmin();
 
         when(ticketRepository.findByPublicId(publicId)).thenReturn(Optional.empty());
 
@@ -332,7 +356,7 @@ class SupportTicketServiceTest {
     void addNote_savesNoteWithAdminPublicId() {
         UUID tenantId = UUID.randomUUID();
         UUID adminUserId = UUID.randomUUID();
-        CurrentUser admin = new CurrentUser(adminUserId, tenantId, List.of("SYSTEM_ADMIN"));
+        CurrentUser admin = new CurrentUser(adminUserId, null, List.of("PLATFORM_ADMIN"));
         SupportTicket ticket = ticketFor(tenantId);
         ticket.setId(42L);
         UUID publicId = ticket.getPublicId();
@@ -355,7 +379,7 @@ class SupportTicketServiceTest {
     @Test
     void addNote_multipleNotes_allPersisted() {
         UUID tenantId = UUID.randomUUID();
-        CurrentUser admin = caller(tenantId);
+        CurrentUser admin = platformAdmin();
         SupportTicket ticket = ticketFor(tenantId);
         ticket.setId(7L);
         UUID publicId = ticket.getPublicId();
@@ -389,7 +413,8 @@ class SupportTicketServiceTest {
         when(ticketRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(ticket1, ticket2)));
 
-        PagedResult<SupportTicketSummaryResponse> result = service.listAllForAdmin(null, null, null, 0, 10);
+        PagedResult<SupportTicketSummaryResponse> result = service.listAllForAdmin(null, null, null, 0, 10,
+                platformManager());
 
         assertThat(result.data()).hasSize(2);
         verify(ticketRepository).findAll(any(Specification.class), any(Pageable.class));

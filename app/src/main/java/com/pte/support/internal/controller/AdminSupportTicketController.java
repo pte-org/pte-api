@@ -25,7 +25,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/admin/support-tickets")
-@PreAuthorize("hasRole('PLATFORM_ADMIN')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER')")
 public class AdminSupportTicketController {
 
     private final SupportTicketService supportTicketService;
@@ -41,12 +41,13 @@ public class AdminSupportTicketController {
             @RequestParam(required = false) UUID tenantId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(supportTicketService.listAllForAdmin(status, category, tenantId, page, size));
+        return ApiResponse.success(supportTicketService.listAllForAdmin(status, category, tenantId, page, size,
+                CurrentUserContext.required()));
     }
 
     @GetMapping("/{id}")
     public ApiResponse<SupportTicketResponse> getDetail(@PathVariable UUID id) {
-        return ApiResponse.success(supportTicketService.getDetailForAdmin(id));
+        return ApiResponse.success(supportTicketService.getDetailForAdmin(id, CurrentUserContext.required()));
     }
 
     @PatchMapping("/{id}")

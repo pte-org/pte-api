@@ -162,6 +162,19 @@ class PlanServiceTest {
     }
 
     @Test
+    void platformManagerCanCreateDraftAndAuditActor() {
+        CurrentUser manager = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_MANAGER"));
+
+        PlanResponse response = service.create(new PlanRequest("Manager plan", null, "STUDENT_CAPACITY",
+                BigDecimal.ZERO, "VND", null, null, 10), manager);
+
+        assertThat(response.status()).isEqualTo("DRAFT");
+        verify(auditLogService).record(manager, BillingConstants.PLAN_AGGREGATE,
+                response.publicId().toString(), BillingConstants.AUDIT_PLAN_TRANSITION,
+                BillingConstants.PLAN_CREATED_SUMMARY);
+    }
+
+    @Test
     void activateOnlyAllowsDraftPlansAndReturnsIncrementedVersion() {
         UUID publicId = UUID.randomUUID();
         Plan plan = plan(publicId, PlanStatus.DRAFT);

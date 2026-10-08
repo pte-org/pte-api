@@ -11,9 +11,15 @@ import com.pte.billing.internal.exception.PlanNotFoundException;
 import com.pte.billing.internal.repository.OrderRepository;
 import com.pte.billing.internal.repository.PlanRepository;
 import com.pte.billing.internal.vendor.payos.PayOsClient;
+import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.web.PageMeta;
 import com.pte.shared.web.PagedResult;
+import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.PlatformOperation;
+import com.pte.shared.security.PlatformOperationPolicy;
+import com.pte.shared.constant.SharedConstants;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -25,7 +31,7 @@ import java.math.BigDecimal;
 import java.util.Locale;
 import java.util.UUID;
 
-/** Creates PayOS orders and exposes only the current tenant's order history. */
+/** Creates PayOS orders and exposes tenant or platform-scoped order projections. */
 @Service
 public class OrderService {
 
@@ -33,13 +39,23 @@ public class OrderService {
     private final PlanRepository planRepository;
     private final OrderPersistenceService orderPersistenceService;
     private final PayOsClient payOsClient;
+    private final AuditLogService auditLogService;
 
+    @Autowired
     public OrderService(OrderRepository orderRepository, PlanRepository planRepository,
-            OrderPersistenceService orderPersistenceService, PayOsClient payOsClient) {
+            OrderPersistenceService orderPersistenceService, PayOsClient payOsClient,
+            AuditLogService auditLogService) {
         this.orderRepository = orderRepository;
         this.planRepository = planRepository;
         this.orderPersistenceService = orderPersistenceService;
         this.payOsClient = payOsClient;
+        this.auditLogService = auditLogService;
+    }
+
+    /** Compatibility constructor for focused billing tests. */
+    public OrderService(OrderRepository orderRepository, PlanRepository planRepository,
+            OrderPersistenceService orderPersistenceService, PayOsClient payOsClient) {
+        this(orderRepository, planRepository, orderPersistenceService, payOsClient, null);
     }
 
     public OrderResponse createOrder(UUID tenantId, UUID planPublicId) {
@@ -91,6 +107,26 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
+    public PagedResult<OrderResponse> listPlatformOrders(int requestedPage, int requestedSize, CurrentUser caller) {
+        return listPlatformOrders(requestedPage, requestedSize, null, caller);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<OrderResponse> listPlatformOrders(int requestedPage, int requestedSize, UUID tenantId,
+            CurrentUser caller) {
+        requirePlatformRead(caller);
+        int page = Math.max(0, requestedPage);
+        int size = requestedSize <= 0 ? 20 : Math.min(requestedSize, 100);
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Order> orders = tenantId == null
+                ? orderRepository.findByDeletedFalseOrderByCreatedAtDesc(pageable)
+                : orderRepository.findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(tenantId, pageable);
+        return new PagedResult<>(orders.map(OrderResponse::from).getContent(),
+                new PageMeta(orders.getNumber(), orders.getSize(), orders.getTotalElements(), orders.getTotalPages(),
+                        orders.isFirst(), orders.isLast(), orders.hasNext(), orders.hasPrevious()));
+    }
+
+    @Transactional(readOnly = true)
     public OrderResponse getOrder(UUID publicId, UUID tenantId) {
         if (publicId == null || tenantId == null) {
             throw new OrderException(HttpStatus.NOT_FOUND, BillingConstants.ORDER_NOT_FOUND);
@@ -116,5 +152,16 @@ public class OrderService {
 
     private OrderException invalid(String code) {
         return new OrderException(HttpStatus.UNPROCESSABLE_ENTITY, code);
+    }
+
+    private void requirePlatformRead(CurrentUser caller) {
+        if (PlatformOperationPolicy.can(caller, PlatformOperation.COMMERCIAL_READ)) {
+            return;
+        }
+        if (auditLogService != null && caller != null) {
+            auditLogService.recordFailure(caller, BillingConstants.ORDER_AGGREGATE, "unknown",
+                    SharedConstants.AUDIT_AUTHORIZATION_DENIED, PlatformOperation.COMMERCIAL_READ.name());
+        }
+        throw new org.springframework.security.access.AccessDeniedException(SharedConstants.ACCESS_DENIED);
     }
 }

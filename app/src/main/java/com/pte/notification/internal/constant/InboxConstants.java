@@ -15,7 +15,8 @@ public final class InboxConstants {
     public static final String CLAIM_LOST_MESSAGE = "This notification delivery is no longer owned by the worker.";
     public static final String ROLE_REQUIRED = "INBOX_ROLE_REQUIRED";
     public static final String ROLE_REQUIRED_MESSAGE = "An admin or host role is required to access the inbox.";
-    public static final String PLATFORM_ADMIN_REQUIRED_MESSAGE = "A platform admin role is required to manage announcements.";
+    public static final String PLATFORM_OPERATION_REQUIRED_MESSAGE =
+            "A platform administrator or platform manager role is required for this operation.";
     public static final String PAGE_INVALID = "INBOX_PAGE_INVALID";
     public static final String PAGE_INVALID_MESSAGE = "Page must be zero or greater.";
     public static final String SIZE_INVALID = "INBOX_SIZE_INVALID";

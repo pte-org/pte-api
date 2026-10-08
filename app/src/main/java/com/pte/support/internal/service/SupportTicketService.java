@@ -2,6 +2,9 @@ package com.pte.support.internal.service;
 
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.PlatformOperation;
+import com.pte.shared.security.PlatformOperationPolicy;
+import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.web.PageMeta;
 import com.pte.shared.web.PagedResult;
 import com.pte.support.domain.SupportTicket;
@@ -115,6 +118,7 @@ public class SupportTicketService {
 
     @Transactional
     public SupportTicketResponse updateStatus(UUID publicId, UpdateTicketStatusRequest request, CurrentUser caller) {
+        requirePlatformOperation(caller, PlatformOperation.SUPPORT_MUTATE, "SUPPORT_STATUS_UPDATE");
         SupportTicket ticket = ticketRepository.findByPublicId(publicId)
                 .orElseThrow(SupportTicketNotFoundException::new);
         TicketStatus previousStatus = ticket.getStatus();
@@ -136,6 +140,7 @@ public class SupportTicketService {
 
     @Transactional
     public SupportTicketResponse addNote(UUID publicId, AddNoteRequest request, CurrentUser caller) {
+        requirePlatformOperation(caller, PlatformOperation.SUPPORT_MUTATE, "SUPPORT_NOTE_ADD");
         SupportTicket ticket = ticketRepository.findByPublicId(publicId)
                 .orElseThrow(SupportTicketNotFoundException::new);
         SupportTicketNote note = new SupportTicketNote();
@@ -156,6 +161,13 @@ public class SupportTicketService {
     @Transactional(readOnly = true)
     public PagedResult<SupportTicketSummaryResponse> listAllForAdmin(TicketStatus status, TicketCategory category,
             UUID tenantId, int page, int size) {
+        return listAllForAdmin(status, category, tenantId, page, size, null);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<SupportTicketSummaryResponse> listAllForAdmin(TicketStatus status, TicketCategory category,
+            UUID tenantId, int page, int size, CurrentUser caller) {
+        requirePlatformOperation(caller, PlatformOperation.SUPPORT_READ, "SUPPORT_READ");
         int cappedSize = Math.min(size <= 0 ? DEFAULT_PAGE_SIZE : size, MAX_PAGE_SIZE);
         PageRequest pageRequest = PageRequest.of(Math.max(0, page), cappedSize,
                 Sort.by(Sort.Order.desc("createdAt")));
@@ -172,6 +184,12 @@ public class SupportTicketService {
 
     @Transactional(readOnly = true)
     public SupportTicketResponse getDetailForAdmin(UUID publicId) {
+        return getDetailForAdmin(publicId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public SupportTicketResponse getDetailForAdmin(UUID publicId, CurrentUser caller) {
+        requirePlatformOperation(caller, PlatformOperation.SUPPORT_READ, "SUPPORT_READ");
         SupportTicket ticket = ticketRepository.findByPublicId(publicId)
                 .orElseThrow(SupportTicketNotFoundException::new);
         List<SupportTicketNote> notes = noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(ticket.getPublicId());
@@ -192,5 +210,19 @@ public class SupportTicketService {
 
     private static Specification<SupportTicket> byCategoryOptional(TicketCategory category) {
         return (root, query, cb) -> category == null ? cb.conjunction() : cb.equal(root.get("category"), category);
+    }
+
+    private void requirePlatformOperation(CurrentUser caller, PlatformOperation operation, String action) {
+        if (caller == null) {
+            return;
+        }
+        if (PlatformOperationPolicy.can(caller, operation)) {
+            return;
+        }
+        if (auditLogService != null) {
+            auditLogService.recordFailure(caller, SupportConstants.AGGREGATE_SUPPORT_TICKET, "unknown",
+                    SharedConstants.AUDIT_AUTHORIZATION_DENIED, action);
+        }
+        throw new org.springframework.security.access.AccessDeniedException(SharedConstants.ACCESS_DENIED);
     }
 }
