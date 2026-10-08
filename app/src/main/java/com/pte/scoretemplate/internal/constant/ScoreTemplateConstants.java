@@ -24,6 +24,14 @@ public final class ScoreTemplateConstants {
     public static final String TEMPLATE_FEASIBILITY_DEPENDENCIES_NOT_CONFIGURED =
             "Template feasibility dependencies are not configured";
     public static final String TEMPLATE_READ_SERVICE_NOT_CONFIGURED = "Score template read service is not configured";
+    public static final String ACADEMIC_DRAFT_WRITE_REQUIRED =
+            "Only academic staff, academic managers, or platform admins may manage academic drafts";
+    public static final String ACADEMIC_REVIEW_REQUIRED =
+            "Only an academic manager may review another author's score template";
+    public static final String ACADEMIC_PUBLISH_REQUIRED =
+            "Only an academic manager may activate another author's score template";
+    public static final String ACADEMIC_SELF_APPROVAL_FORBIDDEN =
+            "An academic manager cannot approve or activate their own score template";
 
     public static final String NAME_REQUIRED = "Template name is required";
     public static final String ITEMS_REQUIRED = "A template needs at least one item";
@@ -52,10 +60,12 @@ public final class ScoreTemplateConstants {
 
     public static final String AUDIT_AGGREGATE_TYPE = "SCORE_TEMPLATE";
     public static final String AUDIT_CREATED = "CREATED";
+    public static final String AUDIT_UPDATED = "UPDATED";
     public static final String AUDIT_CLONED = "CLONED";
     public static final String AUDIT_SUBMITTED = "SUBMITTED_FOR_APPROVAL";
     public static final String AUDIT_APPROVED = "APPROVED_FOR_ACTIVATION";
     public static final String AUDIT_REJECTED = "REJECTED_TO_DRAFT";
+    public static final String AUDIT_DELETED = "DELETED_DRAFT";
     public static final String AUDIT_ACTIVATED = "ACTIVATED";
     public static final String AUDIT_RETIRED = "RETIRED";
     public static final String AUDIT_VALIDATION_FAILED = "VALIDATION_FAILED";

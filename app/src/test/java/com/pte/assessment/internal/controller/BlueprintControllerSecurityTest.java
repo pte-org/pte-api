@@ -20,7 +20,8 @@ class BlueprintControllerSecurityTest {
         PreAuthorize annotation = BlueprintController.class.getAnnotation(PreAuthorize.class);
 
         assertThat(annotation).isNotNull();
-        assertThat(annotation.value()).isEqualTo("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')");
+        assertThat(annotation.value()).isEqualTo(
+                "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')");
     }
 
     @Test
@@ -29,7 +30,7 @@ class BlueprintControllerSecurityTest {
             PreAuthorize methodLevel = method.getAnnotation(PreAuthorize.class);
             if (method.getName().equals("approve") || method.getName().equals("reject")) {
                 assertThat(methodLevel).isNotNull();
-                assertThat(methodLevel.value()).isEqualTo("hasRole('PLATFORM_ADMIN')");
+                assertThat(methodLevel.value()).isEqualTo("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')");
             } else {
                 assertThat(methodLevel)
                         .as("method %s must not broaden the controller's platform-only restriction", method.getName())

@@ -16,7 +16,12 @@ import com.pte.media.internal.repository.MediaObjectRepository;
 import com.pte.shared.practice.PracticeMediaBindingPort;
 import com.pte.shared.practice.PracticeMediaConstants;
 import com.pte.shared.practice.PracticeResponseMediaValidator;
+import com.pte.shared.audit.AuditLogService;
+import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.SecurityCapability;
+import com.pte.shared.security.SecurityPolicy;
+import com.pte.shared.security.SecurityRoles;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
@@ -54,6 +59,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
     private final String authoringFolder;
     private final String submissionFolder;
     private final PracticeMediaBindingPort practiceMediaBindingService;
+    private final AuditLogService auditLogService;
 
     @Autowired
     public CloudinaryMediaService(MediaObjectRepository repository,
@@ -62,20 +68,28 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
             @Value("${cloudinary.api-secret:}") String apiSecret,
             @Value("${cloudinary.authoring-folder:pte/authoring}") String authoringFolder,
             @Value("${cloudinary.submission-folder:pte/submissions}") String submissionFolder,
-            PracticeMediaBindingPort practiceMediaBindingService) {
+            PracticeMediaBindingPort practiceMediaBindingService, AuditLogService auditLogService) {
         this(repository, cloudName, apiKey, apiSecret, authoringFolder, submissionFolder,
-                practiceMediaBindingService, true);
+                practiceMediaBindingService, auditLogService, true);
     }
 
     /** Kept for focused media tests and legacy callers that do not exercise practice binding. */
     public CloudinaryMediaService(MediaObjectRepository repository, String cloudName, String apiKey,
             String apiSecret, String authoringFolder, String submissionFolder) {
-        this(repository, cloudName, apiKey, apiSecret, authoringFolder, submissionFolder, null, false);
+        this(repository, cloudName, apiKey, apiSecret, authoringFolder, submissionFolder, null, null, false);
+    }
+
+    /** Compatibility constructor for tests/callers that provide practice binding only. */
+    public CloudinaryMediaService(MediaObjectRepository repository, String cloudName, String apiKey,
+            String apiSecret, String authoringFolder, String submissionFolder,
+            PracticeMediaBindingPort practiceMediaBindingService) {
+        this(repository, cloudName, apiKey, apiSecret, authoringFolder, submissionFolder,
+                practiceMediaBindingService, null, false);
     }
 
     private CloudinaryMediaService(MediaObjectRepository repository, String cloudName, String apiKey,
             String apiSecret, String authoringFolder, String submissionFolder,
-            PracticeMediaBindingPort practiceMediaBindingService, boolean ignored) {
+            PracticeMediaBindingPort practiceMediaBindingService, AuditLogService auditLogService, boolean ignored) {
         this.repository = repository;
         this.cloudName = cloudName;
         this.apiKey = apiKey;
@@ -83,6 +97,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
         this.authoringFolder = authoringFolder;
         this.submissionFolder = submissionFolder;
         this.practiceMediaBindingService = practiceMediaBindingService;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -90,10 +105,10 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
         boolean authoringMedia = isAuthoringAssetKind(request.assetKind());
         boolean studentResponse = MediaConstants.STUDENT_RESPONSE_AUDIO.equals(request.assetKind());
         if (authoringMedia && !isPlatformAuthor(caller)) {
-            throw new AccessDeniedException(MediaConstants.PLATFORM_AUTHOR_REQUIRED_FOR_QUESTION_MEDIA);
+            deny(caller, MediaConstants.ACADEMIC_DRAFT_WRITE_REQUIRED_FOR_QUESTION_MEDIA);
         }
-        if (studentResponse && !caller.hasRole("STUDENT")) {
-            throw new AccessDeniedException(MediaConstants.STUDENT_REQUIRED_FOR_RESPONSE_AUDIO);
+        if (studentResponse && !caller.hasRole(SecurityRoles.STUDENT)) {
+            deny(caller, MediaConstants.STUDENT_REQUIRED_FOR_RESPONSE_AUDIO);
         }
         if (!authoringMedia && !studentResponse) {
             throw new UnsupportedContentTypeException();
@@ -302,8 +317,8 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
         if (!contentTypeAllowed || media.isAudioPrompt() != audio) {
             throw new UnsupportedContentTypeException();
         }
-        if (!caller.hasRole("PLATFORM_ADMIN") && !media.getOwnerPublicId().equals(caller.userId())) {
-            throw new AccessDeniedException(MediaConstants.MEDIA_ASSET_OWNED_BY_ANOTHER_AUTHOR);
+        if (!caller.hasRole(SecurityRoles.PLATFORM_ADMIN) && !media.getOwnerPublicId().equals(caller.userId())) {
+            deny(caller, MediaConstants.MEDIA_ASSET_OWNED_BY_ANOTHER_AUTHOR);
         }
     }
 
@@ -373,7 +388,15 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
     }
 
     private boolean isPlatformAuthor(CurrentUser caller) {
-        return caller.hasRole("PLATFORM_ADMIN") || caller.hasRole("PLATFORM_AUTHOR");
+        return SecurityPolicy.hasCapability(caller, SecurityCapability.ACADEMIC_DRAFT_WRITE);
+    }
+
+    private void deny(CurrentUser caller, String message) {
+        if (auditLogService != null && caller != null) {
+            auditLogService.recordFailure(caller, "MEDIA", "authoring",
+                    SharedConstants.AUDIT_AUTHORIZATION_DENIED, message);
+        }
+        throw new AccessDeniedException(message);
     }
 
     private String sign(String payload) {

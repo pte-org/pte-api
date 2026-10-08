@@ -129,6 +129,10 @@ public class QuestionTypeDefinition extends BaseEntity {
     @Column(name = "lifecycle_status", nullable = false, length = 16)
     private String lifecycleStatus = "ACTIVE";
 
+    /** Platform academic author; null is retained for legacy catalog rows. */
+    @Column(name = "author_user_public_id")
+    private java.util.UUID authorUserPublicId;
+
     @Column(name = "first_published_at")
     private java.time.Instant firstPublishedAt;
 

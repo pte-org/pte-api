@@ -28,7 +28,11 @@ import com.pte.scoretemplate.internal.constant.ScoreTemplateConstants;
 import com.pte.scoretemplate.internal.mapper.ScoreTemplateMapper;
 import com.pte.scoretemplate.internal.repository.ScoreTemplateRepository;
 import com.pte.shared.audit.AuditLogService;
+import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.SecurityPolicy;
+import com.pte.shared.security.SecurityRoles;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -120,6 +124,7 @@ public class ScoreTemplateAdminService {
 
     @Transactional
     public ScoreTemplateResponse createDraft(CreateScoreTemplateRequest request, CurrentUser caller) {
+        requireDraftCreate(caller);
         String code = request.code().trim();
         repository.findAllByCodeForUpdate(code);
         int nextVersion = repository.findMaxVersionByCode(code) + 1;
@@ -130,6 +135,7 @@ public class ScoreTemplateAdminService {
         draft.setName(request.name().trim());
         draft.setStatus(ScoreTemplateStatus.DRAFT);
         draft.setTemplatePolicy(parsePolicy(request.templatePolicy()));
+        draft.setAuthorUserPublicId(caller == null ? null : caller.userId());
 
         ScoreTemplate saved = saveOrTranslateConflict(draft);
         audit(caller, ScoreTemplateConstants.AUDIT_CREATED, saved,
@@ -145,6 +151,7 @@ public class ScoreTemplateAdminService {
 
     @Transactional
     public ScoreTemplateResponse cloneToDraft(UUID sourcePublicId, CurrentUser caller) {
+        requireDraftCreate(caller);
         ScoreTemplate source = findByPublicId(sourcePublicId);
         // Locks every row of this code family first, closing the TOCTOU window
         // against a concurrent clone/activate on the same family (phase-01 Risks).
@@ -157,6 +164,7 @@ public class ScoreTemplateAdminService {
         draft.setName(source.getName());
         draft.setStatus(ScoreTemplateStatus.DRAFT);
         draft.setTemplatePolicy(source.getTemplatePolicy());
+        draft.setAuthorUserPublicId(caller == null ? null : caller.userId());
         source.getItems().forEach(item -> draft.addItem(copyItem(item)));
 
         ScoreTemplate saved = saveOrTranslateConflict(draft);
@@ -183,6 +191,7 @@ public class ScoreTemplateAdminService {
             CurrentUser caller) {
         ScoreTemplate template = findByPublicId(draftPublicId);
         requireDraft(template);
+        requireDraftModification(caller, template);
         try {
             template.setName(request.name());
             if (request.templatePolicy() != null) {
@@ -200,7 +209,10 @@ public class ScoreTemplateAdminService {
                 ScoreTemplateActivationValidator.validateSkillWeightTotals(template);
             }
             validateCatalog(template, false);
-            return ScoreTemplateMapper.toResponse(repository.save(template));
+            ScoreTemplate saved = repository.save(template);
+            audit(caller, ScoreTemplateConstants.AUDIT_UPDATED, saved,
+                    "Updated draft version " + saved.getVersion());
+            return ScoreTemplateMapper.toResponse(saved);
         } catch (ScoreTemplateValidationException ex) {
             auditValidationFailure(caller, template, ex);
             throw ex;
@@ -217,6 +229,7 @@ public class ScoreTemplateAdminService {
     public ScoreTemplateResponse submitApproval(UUID publicId, CurrentUser caller) {
         ScoreTemplate template = findByPublicId(publicId);
         requireDraft(template);
+        requireDraftModification(caller, template);
         try {
             validateCatalog(template);
             ScoreTemplateActivationValidator.validate(template);
@@ -242,6 +255,7 @@ public class ScoreTemplateAdminService {
     @Transactional
     public ScoreTemplateResponse approve(UUID publicId, CurrentUser caller) {
         ScoreTemplate template = findByPublicId(publicId);
+        requireReview(caller, template);
         requirePendingApproval(template);
         try {
             validateCatalog(template);
@@ -268,6 +282,7 @@ public class ScoreTemplateAdminService {
     @Transactional
     public ScoreTemplateResponse reject(UUID publicId, RejectScoreTemplateRequest request, CurrentUser caller) {
         ScoreTemplate template = findByPublicId(publicId);
+        requireReview(caller, template);
         requirePendingApproval(template);
         template.setRejectionReason(request.reason().trim());
         template.setStatus(ScoreTemplateStatus.DRAFT);
@@ -280,8 +295,15 @@ public class ScoreTemplateAdminService {
     /** Deletes a DRAFT; ACTIVE and RETIRED versions remain immutable and auditable. */
     @Transactional
     public void deleteDraft(UUID publicId) {
+        deleteDraft(publicId, null);
+    }
+
+    @Transactional
+    public void deleteDraft(UUID publicId, CurrentUser caller) {
         ScoreTemplate template = findByPublicId(publicId);
         requireDraft(template);
+        requireDraftModification(caller, template);
+        audit(caller, ScoreTemplateConstants.AUDIT_DELETED, template, "Deleted draft version " + template.getVersion());
         repository.delete(template);
     }
 
@@ -308,6 +330,7 @@ public class ScoreTemplateAdminService {
     public ScoreTemplateResponse activate(UUID publicId, CurrentUser caller) {
         ScoreTemplate target = findByPublicId(publicId);
         requireDraft(target);
+        requirePublish(caller, target);
         try {
             validateCatalog(target);
             ScoreTemplateActivationValidator.validate(target);
@@ -358,6 +381,51 @@ public class ScoreTemplateAdminService {
         if (template.getStatus() != ScoreTemplateStatus.PENDING_APPROVAL) {
             throw new ScoreTemplateValidationException(ScoreTemplateConstants.TEMPLATE_NOT_PENDING_APPROVAL);
         }
+    }
+
+    private void requireDraftCreate(CurrentUser caller) {
+        if (caller != null && !SecurityPolicy.canCreateAcademicDraft(caller)) {
+            deny(caller, null, ScoreTemplateConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
+        }
+    }
+
+    private void requireDraftModification(CurrentUser caller, ScoreTemplate template) {
+        if (caller != null && !SecurityPolicy.canModifyAcademicDraft(caller, template.getAuthorUserPublicId())) {
+            deny(caller, template, ScoreTemplateConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
+        }
+    }
+
+    private void requireReview(CurrentUser caller, ScoreTemplate template) {
+        if (caller == null || SecurityPolicy.canReviewAcademic(caller, template.getAuthorUserPublicId())) {
+            return;
+        }
+        if (caller.hasRole(SecurityRoles.ACADEMIC_MANAGER)
+                && template.getAuthorUserPublicId() != null
+                && template.getAuthorUserPublicId().equals(caller.userId())) {
+            deny(caller, template, ScoreTemplateConstants.ACADEMIC_SELF_APPROVAL_FORBIDDEN);
+        }
+        deny(caller, template, ScoreTemplateConstants.ACADEMIC_REVIEW_REQUIRED);
+    }
+
+    private void requirePublish(CurrentUser caller, ScoreTemplate template) {
+        if (caller == null || SecurityPolicy.canPublishAcademic(caller, template.getAuthorUserPublicId())) {
+            return;
+        }
+        if (caller.hasRole(SecurityRoles.ACADEMIC_MANAGER)
+                && template.getAuthorUserPublicId() != null
+                && template.getAuthorUserPublicId().equals(caller.userId())) {
+            deny(caller, template, ScoreTemplateConstants.ACADEMIC_SELF_APPROVAL_FORBIDDEN);
+        }
+        deny(caller, template, ScoreTemplateConstants.ACADEMIC_PUBLISH_REQUIRED);
+    }
+
+    private void deny(CurrentUser caller, ScoreTemplate template, String message) {
+        if (auditLogService != null && caller != null) {
+            auditLogService.recordFailure(caller, ScoreTemplateConstants.AUDIT_AGGREGATE_TYPE,
+                    template == null ? "unknown" : String.valueOf(template.getPublicId()),
+                    SharedConstants.AUDIT_AUTHORIZATION_DENIED, message);
+        }
+        throw new AccessDeniedException(message);
     }
 
     private boolean isCustom(ScoreTemplate template) {

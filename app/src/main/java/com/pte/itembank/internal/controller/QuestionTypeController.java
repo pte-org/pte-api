@@ -6,6 +6,8 @@ import com.pte.itembank.dto.request.UpdateQuestionTypeRequest;
 import com.pte.itembank.dto.response.QuestionTypeResponse;
 import com.pte.itembank.dto.response.SupportedQuestionTypeResponse;
 import com.pte.shared.web.ApiResponse;
+import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.CurrentUserContext;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,7 +26,7 @@ import java.util.UUID;
 /** Platform question-type catalog used by the question bank and admin UI. */
 @RestController
 @RequestMapping("/api/v1/question-types")
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
 public class QuestionTypeController {
 
     private final QuestionTypeService service;
@@ -52,19 +54,23 @@ public class QuestionTypeController {
     @PostMapping
     public ApiResponse<QuestionTypeResponse> create(
             @Valid @RequestBody CreateQuestionTypeRequest request) {
-        return ApiResponse.success(service.create(request));
+        return ApiResponse.success(service.create(request, currentUser()));
     }
 
     @PutMapping("/{publicId}")
     public ApiResponse<QuestionTypeResponse> update(@PathVariable UUID publicId,
                                                      @Valid @RequestBody UpdateQuestionTypeRequest request) {
-        return ApiResponse.success(service.update(publicId, request));
+        return ApiResponse.success(service.update(publicId, request, currentUser()));
     }
 
     @DeleteMapping("/{publicId}")
     public ApiResponse<Void> delete(@PathVariable UUID publicId) {
-        service.delete(publicId);
+        service.delete(publicId, currentUser());
         return ApiResponse.success(null);
+    }
+
+    private CurrentUser currentUser() {
+        return CurrentUserContext.required();
     }
 
 }
