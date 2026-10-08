@@ -53,4 +53,18 @@ class PracticeMigrationVersionTest {
                 .doesNotContain("correct_answer")
                 .doesNotContain("DROP TABLE");
     }
+
+    @Test
+    void responseMediaBindingMigrationIsAdditiveAndKeepsRollbackNonDestructive() throws IOException {
+        String sql = new ClassPathResource("db/migration/V85__practice_response_media_binding.sql")
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(sql).contains("practice_session_public_id UUID")
+                .contains("practice_item_public_id UUID")
+                .contains("purpose VARCHAR(64)")
+                .contains("idx_media_objects_practice_binding")
+                .contains("-- Rollback policy: retain media rows")
+                .doesNotContain("DROP TABLE")
+                .doesNotContain("DELETE FROM");
+    }
 }

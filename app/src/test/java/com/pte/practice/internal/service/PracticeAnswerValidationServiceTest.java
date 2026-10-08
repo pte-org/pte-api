@@ -45,9 +45,21 @@ class PracticeAnswerValidationServiceTest {
 
     @Test
     void unsupportedMediaRendererIsNotAcceptedAsAnObjectiveAnswer() {
-        assertThatThrownBy(() -> service.validate("READ_ALOUD_V1",
+        assertThatThrownBy(() -> service.validate("MC_LISTENING_SINGLE_V1",
                 "{\"text\":\"hello\"}", ResponseConfidence.HIGH))
                 .hasFieldOrPropertyWithValue("code", "PRACTICE_UNSUPPORTED_RUNTIME");
+    }
+
+    @Test
+    void recordingPayloadRequiresAValidatedMediaReferenceAndDuration() {
+        String mediaId = java.util.UUID.randomUUID().toString();
+        assertThatCode(() -> service.validate("READ_ALOUD_V1", "{\"mediaPublicId\":\""
+                + mediaId + "\",\"durationSeconds\":12}", ResponseConfidence.HIGH))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> service.validate("READ_ALOUD_V1",
+                "{\"mediaPublicId\":\"" + mediaId + "\",\"durationSeconds\":121}",
+                ResponseConfidence.HIGH))
+                .hasFieldOrPropertyWithValue("code", "PRACTICE_ANSWER_INVALID");
     }
 
     @Test

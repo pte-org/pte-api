@@ -9,11 +9,18 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Collection;
 import java.util.UUID;
 
 public interface PracticeSessionItemRepository extends JpaRepository<PracticeSessionItem, Long> {
 
     List<PracticeSessionItem> findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(Long practiceSessionId);
+
+    List<PracticeSessionItem> findByPracticeSessionIdInAndDeletedFalseOrderByPracticeSessionIdAscOrderIndexAsc(
+            Collection<Long> practiceSessionIds);
+
+    Optional<PracticeSessionItem> findByPublicIdAndPracticeSessionIdAndDeletedFalse(
+            UUID publicId, Long practiceSessionId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""

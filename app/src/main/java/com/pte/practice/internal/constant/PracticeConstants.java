@@ -8,6 +8,7 @@ public final class PracticeConstants {
     public static final String PRACTICE_AUTH_BASE_PATH = "/api/v1/auth/practice";
     public static final String PRACTICE_ENTITLEMENT_PATH = "/api/v1/student/practice/entitlement";
     public static final String PRACTICE_CATALOG_PATH = "/api/v1/student/practice/catalog";
+    public static final String PRACTICE_PROGRESS_PATH = "/api/v1/student/practice/progress";
     public static final String PRACTICE_SESSION_PATH = "/api/v1/student/practice/sessions";
     public static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
     public static final String PRACTICE_WEB_ENABLED_PROPERTY = "practice.web.enabled";
@@ -38,6 +39,9 @@ public final class PracticeConstants {
     public static final String PRACTICE_ANSWER_INVALID = "PRACTICE_ANSWER_INVALID";
     public static final String PRACTICE_ANSWER_PAYLOAD_REQUIRED = "PRACTICE_ANSWER_PAYLOAD_REQUIRED";
     public static final String PRACTICE_PRODUCT_NOT_FOUND = "PRACTICE_PRODUCT_NOT_FOUND";
+    public static final String PRACTICE_MEDIA_BINDING_REQUIRED = "PRACTICE_MEDIA_BINDING_REQUIRED";
+    public static final String PRACTICE_MEDIA_SESSION_NOT_LIVE = "PRACTICE_MEDIA_SESSION_NOT_LIVE";
+    public static final String PRACTICE_MEDIA_ITEM_NOT_RECORDABLE = "PRACTICE_MEDIA_ITEM_NOT_RECORDABLE";
 
     public static final String PRACTICE_IDEMPOTENCY_KEY_REQUIRED_MESSAGE =
             "Retry this practice action with a stable Idempotency-Key.";
@@ -65,6 +69,12 @@ public final class PracticeConstants {
             "Provide an answer before submitting this practice item.";
     public static final String PRACTICE_PRODUCT_NOT_FOUND_MESSAGE =
             "The requested practice product is not available.";
+    public static final String PRACTICE_MEDIA_BINDING_REQUIRED_MESSAGE =
+            "This recording must belong to the active practice task.";
+    public static final String PRACTICE_MEDIA_SESSION_NOT_LIVE_MESSAGE =
+            "The practice session is no longer accepting recordings.";
+    public static final String PRACTICE_MEDIA_ITEM_NOT_RECORDABLE_MESSAGE =
+            "This practice task does not accept a recording.";
 
     public static final String PRACTICE_PRODUCT_CODE = "PTE_CORE_PRACTICE";
     public static final String PRACTICE_PRODUCT_TITLE = "PTE Core Practice";
@@ -84,6 +94,8 @@ public final class PracticeConstants {
     public static final String PRACTICE_SHA256_UNAVAILABLE = "SHA-256 is unavailable";
     public static final String PRACTICE_CATALOG_VERSION = "2026.10";
     public static final Set<String> PRACTICE_CLIENT_SUPPORTED_RENDERER_KEYS = Set.of(
+            "PERSONAL_INTRODUCTION_V1",
+            "READ_ALOUD_V1",
             "SUMMARIZE_WRITTEN_TEXT_V1",
             "WRITE_ESSAY_V1",
             "MC_READING_SINGLE_V1",
@@ -91,7 +103,11 @@ public final class PracticeConstants {
             "RE_ORDER_PARAGRAPHS_V1",
             "FILL_IN_THE_BLANKS_DRAG_AND_DROP_V1",
             "FILL_IN_THE_BLANKS_DROPDOWN_V1");
+    public static final Set<String> PRACTICE_RECORDING_RENDERER_KEYS = Set.of(
+            "PERSONAL_INTRODUCTION_V1",
+            "READ_ALOUD_V1");
     public static final int PRACTICE_TIME_LIMIT_SECONDS = 3_600;
+    public static final int PRACTICE_PROGRESS_MAX_SESSIONS = 100;
     public static final int MAX_IDEMPOTENCY_KEY_LENGTH = 128;
     public static final int MAX_ANSWER_PAYLOAD_LENGTH = 16_384;
 

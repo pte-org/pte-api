@@ -8,9 +8,14 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 public interface PracticeSessionRepository extends JpaRepository<PracticeSession, Long> {
+
+    List<PracticeSession> findTop100ByStudentPublicIdAndDeletedFalseOrderByCreatedAtDesc(UUID studentPublicId);
+
+    long countByStudentPublicIdAndDeletedFalse(UUID studentPublicId);
 
     Optional<PracticeSession> findByStudentPublicIdAndStartIdempotencyKeyAndDeletedFalse(
             UUID studentPublicId, String startIdempotencyKey);

@@ -3,6 +3,7 @@ package com.pte.practice.internal.service;
 import com.pte.attempt.ResponseConfidence;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.exception.PracticeSessionException;
+import com.pte.shared.practice.PracticeMediaConstants;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Shared practice answer boundary for Phase 05/06. Blank payloads represent a
@@ -109,6 +111,10 @@ public class PracticeAnswerValidationService {
         } else if (isTextResponse(rendererKey)) {
             requireOnlyFields(root, "text");
             requireNonBlankText(root, "text");
+        } else if (isRecordingResponse(rendererKey)) {
+            requireOnlyFields(root, "mediaPublicId", "durationSeconds");
+            requireUuid(root, "mediaPublicId");
+            requireDuration(root);
         } else {
             throw new PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
                     PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME,
@@ -129,9 +135,48 @@ public class PracticeAnswerValidationService {
                 || "WRITE_ESSAY_V1".equals(rendererKey);
     }
 
+    private boolean isRecordingResponse(String rendererKey) {
+        return PracticeConstants.PRACTICE_RECORDING_RENDERER_KEYS.contains(rendererKey);
+    }
+
+    /** Extracts the already-validated recording reference for the media boundary. */
+    public UUID requireRecordedMediaPublicId(String rendererKey, String payload) {
+        if (!isRecordingResponse(rendererKey)) {
+            throw new PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME,
+                    PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME_MESSAGE);
+        }
+        try {
+            JsonNode root = objectMapper.readTree(payload);
+            return UUID.fromString(root.path("mediaPublicId").asText());
+        } catch (Exception ex) {
+            throw invalidPayload(PracticeConstants.PRACTICE_ANSWER_INVALID,
+                    PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
+        }
+    }
+
     private void requireNonBlankText(JsonNode root, String field) {
         JsonNode value = root.path(field);
         if (!value.isTextual() || value.asText().isBlank() || value.asText().length() > 16_384) {
+            throw invalidPayload(PracticeConstants.PRACTICE_ANSWER_INVALID,
+                    PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
+        }
+    }
+
+    private void requireUuid(JsonNode root, String field) {
+        try {
+            UUID.fromString(root.path(field).asText());
+        } catch (Exception ex) {
+            throw invalidPayload(PracticeConstants.PRACTICE_ANSWER_INVALID,
+                    PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
+        }
+    }
+
+    private void requireDuration(JsonNode root) {
+        JsonNode value = root.path("durationSeconds");
+        int duration = value.asInt(-1);
+        if (!value.isNumber() || value.asDouble() != duration || duration <= 0
+                || duration > PracticeMediaConstants.MAX_RESPONSE_DURATION_SECONDS) {
             throw invalidPayload(PracticeConstants.PRACTICE_ANSWER_INVALID,
                     PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
         }
@@ -167,9 +212,10 @@ public class PracticeAnswerValidationService {
         });
     }
 
-    private void requireOnlyFields(JsonNode root, String expectedField) {
+    private void requireOnlyFields(JsonNode root, String... expectedFields) {
         Set<String> fields = new HashSet<>(root.propertyNames());
-        if (fields.size() != 1 || !fields.contains(expectedField)) {
+        Set<String> expected = Set.of(expectedFields);
+        if (fields.size() != expected.size() || !fields.equals(expected)) {
             throw invalidPayload(PracticeConstants.PRACTICE_ANSWER_INVALID,
                     PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
         }

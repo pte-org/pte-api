@@ -12,6 +12,9 @@ import com.pte.practice.internal.dto.response.PracticeCatalogTaskResponse;
 import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.exception.PracticeSessionNotFoundException;
 import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.shared.security.CurrentUser;
+import com.pte.shared.practice.PracticeResponseMediaValidator;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -34,12 +37,21 @@ public class PracticeSessionItemService {
     private final PracticeSessionItemRepository itemRepository;
     private final PracticeCatalogService catalogService;
     private final PracticeAnswerValidationService answerValidationService;
+    private final PracticeResponseMediaValidator mediaValidator;
 
     public PracticeSessionItemService(PracticeSessionItemRepository itemRepository,
             PracticeCatalogService catalogService, PracticeAnswerValidationService answerValidationService) {
+        this(itemRepository, catalogService, answerValidationService, null);
+    }
+
+    @Autowired
+    public PracticeSessionItemService(PracticeSessionItemRepository itemRepository,
+            PracticeCatalogService catalogService, PracticeAnswerValidationService answerValidationService,
+            PracticeResponseMediaValidator mediaValidator) {
         this.itemRepository = itemRepository;
         this.catalogService = catalogService;
         this.answerValidationService = answerValidationService;
+        this.mediaValidator = mediaValidator;
     }
 
     public void createItemsIfNeeded(PracticeSession session) {
@@ -90,10 +102,12 @@ public class PracticeSessionItemService {
         }
     }
 
-    public void answer(PracticeSessionItem item, PracticeAnswerRequest request, Instant now) {
+    public void answer(PracticeSession session, PracticeSessionItem item, PracticeAnswerRequest request,
+            CurrentUser caller, Instant now) {
         requirePending(item);
         answerValidationService.validate(item.getRendererKey(), item.getAnswerSchemaVersion(),
                 request.payload(), request.confidence());
+        validateRecordedMedia(session, item, request.payload(), caller);
         item.setSavedPayload(request.payload());
         item.setConfidence(request.confidence());
         item.setStatus(PracticeSessionItemStatus.ANSWERED);
@@ -101,9 +115,11 @@ public class PracticeSessionItemService {
         itemRepository.saveAndFlush(item);
     }
 
-    public void saveDraft(PracticeSessionItem item, String payload, ResponseConfidence confidence) {
+    public void saveDraft(PracticeSession session, PracticeSessionItem item, String payload,
+            ResponseConfidence confidence, CurrentUser caller) {
         requirePending(item);
         answerValidationService.validateDraft(item.getRendererKey(), item.getAnswerSchemaVersion(), payload, confidence);
+        validateRecordedMedia(session, item, payload, caller);
         item.setSavedPayload(payload);
         item.setConfidence(confidence);
         itemRepository.saveAndFlush(item);
@@ -133,6 +149,20 @@ public class PracticeSessionItemService {
         return new PracticeSessionException(HttpStatus.CONFLICT,
                 PracticeConstants.PRACTICE_SESSION_NOT_STARTABLE,
                 PracticeConstants.PRACTICE_SESSION_NOT_STARTABLE_MESSAGE);
+    }
+
+    private void validateRecordedMedia(PracticeSession session, PracticeSessionItem item,
+            String payload, CurrentUser caller) {
+        if (!PracticeConstants.PRACTICE_RECORDING_RENDERER_KEYS.contains(item.getRendererKey())) {
+            return;
+        }
+        if (mediaValidator == null) {
+            throw new PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME,
+                    PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME_MESSAGE);
+        }
+        UUID mediaPublicId = answerValidationService.requireRecordedMediaPublicId(item.getRendererKey(), payload);
+        mediaValidator.validatePracticeResponseAudio(mediaPublicId, session.getPublicId(), item.getPublicId(), caller);
     }
 
     private Set<String> splitCsv(String csv) {

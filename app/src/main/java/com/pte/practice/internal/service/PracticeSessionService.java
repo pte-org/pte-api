@@ -208,7 +208,7 @@ public class PracticeSessionService {
         requireLiveInProgress(session, request.clientVersion());
         Instant now = clock.instant();
         PracticeSessionItem item = itemService.findForUpdate(session, itemPublicId);
-        itemService.answer(item, request, now);
+        itemService.answer(session, item, request, caller, now);
         itemService.completeIfFinished(session, now);
         session.setLastActivityAt(now);
         saveOperation(session, PracticeSessionOperationType.ANSWER, idempotencyKey, requestHash);
@@ -271,7 +271,7 @@ public class PracticeSessionService {
         }
         if (request.itemPublicId() != null && request.payload() != null && !request.payload().isBlank()) {
             PracticeSessionItem item = itemService.findForUpdate(session, request.itemPublicId());
-            itemService.saveDraft(item, request.payload(), request.confidence());
+            itemService.saveDraft(session, item, request.payload(), request.confidence(), caller);
         }
 
         boolean hasProgress = itemService.hasProgress(session);
