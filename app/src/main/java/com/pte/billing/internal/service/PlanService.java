@@ -16,6 +16,10 @@ import com.pte.billing.internal.mapper.PlanMapper;
 import com.pte.billing.internal.repository.PlanRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.PlatformOperation;
+import com.pte.shared.security.PlatformOperationPolicy;
+import com.pte.shared.constant.SharedConstants;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,13 +43,25 @@ public class PlanService {
     private final PlanRepository planRepository;
     private final AuditLogService auditLogService;
 
+    @Autowired
     public PlanService(PlanRepository planRepository, AuditLogService auditLogService) {
         this.planRepository = planRepository;
         this.auditLogService = auditLogService;
     }
 
+    /** Compatibility constructor for existing focused tests. */
+    public PlanService(PlanRepository planRepository) {
+        this(planRepository, null);
+    }
+
     @Transactional
     public PlanResponse create(PlanRequest request) {
+        return create(request, null);
+    }
+
+    @Transactional
+    public PlanResponse create(PlanRequest request, CurrentUser caller) {
+        require(caller, PlatformOperation.PLAN_DRAFT_WRITE);
         if (request == null) {
             throw new PlanValidationException(BillingConstants.PLAN_NAME_REQUIRED);
         }
@@ -56,16 +72,30 @@ public class PlanService {
         Plan plan = new Plan();
         apply(plan, request.name(), request.description(), request.price(), request.currency(), type,
                 request.durationDays(), request.maxStudentsPerSession(), request.extraStudentSlots());
-        return response(persist(plan));
+        PlanResponse result = response(persist(plan));
+        audit(caller, BillingConstants.AUDIT_PLAN_TRANSITION, plan.getPublicId(), BillingConstants.PLAN_CREATED_SUMMARY);
+        return result;
     }
 
     @Transactional(readOnly = true)
     public PlanResponse get(UUID publicId) {
+        return get(publicId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public PlanResponse get(UUID publicId, CurrentUser caller) {
+        require(caller, PlatformOperation.PLAN_READ_ALL);
         return response(find(publicId));
     }
 
     @Transactional(readOnly = true)
     public List<PlanResponse> listForAdmin() {
+        return listForAdmin(null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PlanResponse> listForAdmin(CurrentUser caller) {
+        require(caller, PlatformOperation.PLAN_READ_ALL);
         return responses(planRepository.findAllByOrderByCreatedAtDesc().stream()
                 .filter(plan -> !plan.isDeleted())
                 .toList());
@@ -80,6 +110,12 @@ public class PlanService {
 
     @Transactional
     public PlanResponse update(UUID publicId, PlanUpdateRequest request) {
+        return update(publicId, request, null);
+    }
+
+    @Transactional
+    public PlanResponse update(UUID publicId, PlanUpdateRequest request, CurrentUser caller) {
+        require(caller, PlatformOperation.PLAN_DRAFT_WRITE);
         if (request == null) {
             throw new PlanValidationException(BillingConstants.PLAN_VERSION_REQUIRED);
         }
@@ -104,11 +140,19 @@ public class PlanService {
 
         apply(plan, request.name(), request.description(), request.price(), request.currency(), type,
                 request.durationDays(), request.maxStudentsPerSession(), request.extraStudentSlots());
-        return response(persist(plan));
+        PlanResponse result = response(persist(plan));
+        audit(caller, BillingConstants.AUDIT_PLAN_TRANSITION, publicId, BillingConstants.PLAN_UPDATED_SUMMARY);
+        return result;
     }
 
     @Transactional
     public PlanResponse activate(UUID publicId, PlanTransitionRequest request) {
+        return activate(publicId, request, null);
+    }
+
+    @Transactional
+    public PlanResponse activate(UUID publicId, PlanTransitionRequest request, CurrentUser caller) {
+        require(caller, PlatformOperation.PLAN_PUBLISH);
         if (request == null) {
             throw new PlanValidationException(BillingConstants.PLAN_VERSION_REQUIRED);
         }
@@ -120,11 +164,19 @@ public class PlanService {
         validate(plan.getName(), plan.getDescription(), plan.getPrice(), plan.getCurrency(), plan.getType(),
                 plan.getDurationDays(), plan.getMaxStudentsPerSession(), plan.getExtraStudentSlots());
         plan.activate();
-        return response(persist(plan));
+        PlanResponse result = response(persist(plan));
+        audit(caller, BillingConstants.AUDIT_PLAN_TRANSITION, publicId, BillingConstants.PLAN_ACTIVATED_SUMMARY);
+        return result;
     }
 
     @Transactional
     public PlanResponse archive(UUID publicId, PlanTransitionRequest request) {
+        return archive(publicId, request, null);
+    }
+
+    @Transactional
+    public PlanResponse archive(UUID publicId, PlanTransitionRequest request, CurrentUser caller) {
+        require(caller, PlatformOperation.PLAN_PUBLISH);
         if (request == null) {
             throw new PlanValidationException(BillingConstants.PLAN_VERSION_REQUIRED);
         }
@@ -139,15 +191,14 @@ public class PlanService {
         }
         requireNoOutstandingCodes(plan);
         plan.archive();
-        return response(persist(plan));
+        PlanResponse result = response(persist(plan));
+        audit(caller, BillingConstants.AUDIT_PLAN_TRANSITION, publicId, BillingConstants.PLAN_ARCHIVED_SUMMARY);
+        return result;
     }
 
     @Transactional
     public void deleteDraft(UUID publicId, CurrentUser caller) {
-        if (!caller.isPlatformUser() || !caller.hasRole("PLATFORM_ADMIN")) {
-            throw new org.springframework.security.access.AccessDeniedException(
-                    com.pte.shared.constant.SharedConstants.ACCESS_DENIED);
-        }
+        require(caller, PlatformOperation.PLAN_DRAFT_WRITE);
         Plan plan = planRepository.findByPublicIdForUpdate(publicId)
                 .orElseThrow(PlanNotFoundException::new);
         if (plan.isDeleted()) {
@@ -162,8 +213,7 @@ public class PlanService {
                     BillingConstants.PLAN_HAS_REFERENCES_MESSAGE);
         }
         plan.setDeleted(true);
-        auditLogService.record(caller, BillingConstants.PLAN_AGGREGATE, publicId.toString(),
-                BillingConstants.PLAN_DRAFT_DELETED, BillingConstants.PLAN_DRAFT_DELETED_SUMMARY);
+        audit(caller, BillingConstants.PLAN_DRAFT_DELETED, publicId, BillingConstants.PLAN_DRAFT_DELETED_SUMMARY);
     }
 
     private Plan find(UUID publicId) {
@@ -308,5 +358,25 @@ public class PlanService {
 
     private static boolean positive(Integer value) {
         return value != null && value > 0;
+    }
+
+    private void require(CurrentUser caller, PlatformOperation operation) {
+        if (caller == null) {
+            return;
+        }
+        if (PlatformOperationPolicy.can(caller, operation)) {
+            return;
+        }
+        if (auditLogService != null) {
+            auditLogService.recordFailure(caller, BillingConstants.PLAN_AGGREGATE, "unknown",
+                    SharedConstants.AUDIT_AUTHORIZATION_DENIED, operation.name());
+        }
+        throw new org.springframework.security.access.AccessDeniedException(SharedConstants.ACCESS_DENIED);
+    }
+
+    private void audit(CurrentUser caller, String action, UUID publicId, String summary) {
+        if (auditLogService != null && caller != null && publicId != null) {
+            auditLogService.record(caller, BillingConstants.PLAN_AGGREGATE, publicId.toString(), action, summary);
+        }
     }
 }

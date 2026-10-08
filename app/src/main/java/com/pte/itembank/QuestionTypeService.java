@@ -26,6 +26,9 @@ import com.pte.itembank.internal.mapper.QuestionTypeMapper;
 import com.pte.itembank.internal.repository.QuestionTypeRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.SecurityPolicy;
+import com.pte.shared.security.SecurityRoles;
+import com.pte.shared.constant.SharedConstants;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -165,6 +168,7 @@ public class QuestionTypeService {
 
     @Transactional
     public QuestionTypeResponse createTaskType(CreateTaskTypeRequest request, CurrentUser caller) {
+        requireDraftWrite(caller);
         String taskTypeKey = normalizeKeyForApi(request.taskTypeKey());
         String normalizedDisplayName = normalizeDisplayNameForApi(request.displayName());
         if (repository.findByTaskTypeKey(taskTypeKey).isPresent()) {
@@ -185,9 +189,12 @@ public class QuestionTypeService {
         definition.setShortName(request.shortName().trim());
         definition.setSection(section);
         definition.setScored(contract.scoringEnabled());
-        definition.setActive(request.active());
+        boolean administratorOverride = caller != null && caller.hasRole(SecurityRoles.PLATFORM_ADMIN);
+        definition.setActive(administratorOverride && Boolean.TRUE.equals(request.active()));
         definition.setDisplayOrder(request.displayOrder());
-        definition.setLifecycleStatus(Boolean.TRUE.equals(request.active()) ? "ACTIVE" : "INACTIVE");
+        definition.setAuthorUserPublicId(caller == null ? null : caller.userId());
+        definition.setLifecycleStatus(administratorOverride && Boolean.TRUE.equals(request.active())
+                ? "ACTIVE" : "DRAFT");
         applyRuntimeContract(definition, contract);
         try {
             QuestionTypeResponse response = QuestionTypeMapper.toResponse(repository.save(definition), contract, false);
@@ -214,6 +221,11 @@ public class QuestionTypeService {
     @Transactional
     public QuestionTypeResponse updateTaskType(UUID publicId, UpdateTaskTypeRequest request, CurrentUser caller) {
         QuestionTypeDefinition definition = findByPublicId(publicId);
+        requireDraftModification(caller, definition);
+        if (caller != null && !caller.hasRole(SecurityRoles.PLATFORM_ADMIN)
+                && "ACTIVE".equals(definition.getLifecycleStatus())) {
+            deny(caller, publicId, ItembankConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
+        }
         String taskTypeKey = definition.getTaskTypeKey() == null ? definition.getCode() : definition.getTaskTypeKey();
         String normalizedDisplayName = normalizeDisplayNameForApi(request.displayName());
         if (repository.findByNormalizedDisplayName(normalizedDisplayName)
@@ -239,8 +251,10 @@ public class QuestionTypeService {
         definition.setNormalizedDisplayName(normalizedDisplayName);
         definition.setShortName(request.shortName().trim());
         definition.setDisplayOrder(request.displayOrder());
-        definition.setActive(request.active());
-        definition.setLifecycleStatus(Boolean.TRUE.equals(request.active()) ? "ACTIVE" : "INACTIVE");
+        boolean administratorOverride = caller != null && caller.hasRole(SecurityRoles.PLATFORM_ADMIN);
+        definition.setActive(administratorOverride && Boolean.TRUE.equals(request.active()));
+        definition.setLifecycleStatus(administratorOverride && Boolean.TRUE.equals(request.active())
+                ? "ACTIVE" : "DRAFT");
         if (runtimeChange) {
             PteSection section = parseSection(request.section());
             TaskRuntimeContractDescriptor contract = resolveContract(request.screenKey(), request.contractVersion());
@@ -265,6 +279,40 @@ public class QuestionTypeService {
     }
 
     @Transactional
+    public QuestionTypeResponse submitTaskType(UUID publicId, CurrentUser caller) {
+        QuestionTypeDefinition definition = findByPublicId(publicId);
+        requireDraftModification(caller, definition);
+        if (!"DRAFT".equals(definition.getLifecycleStatus())) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    ItembankConstants.TASK_TYPE_RUNTIME_LOCKED_MESSAGE);
+        }
+        definition.setActive(false);
+        definition.setLifecycleStatus("PENDING_APPROVAL");
+        QuestionTypeDefinition saved = repository.save(definition);
+        audit(caller, ItembankConstants.TASK_TYPE_SUBMITTED, publicId,
+                "Submitted task type for academic approval");
+        return QuestionTypeMapper.toResponse(saved, resolveDynamicContract(saved), isRuntimeLocked(saved));
+    }
+
+    @Transactional
+    public QuestionTypeResponse approveTaskType(UUID publicId, CurrentUser caller) {
+        QuestionTypeDefinition definition = findByPublicId(publicId);
+        requireGovernance(caller, definition.getAuthorUserPublicId());
+        if (!"PENDING_APPROVAL".equals(definition.getLifecycleStatus())) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    ItembankConstants.TASK_TYPE_RUNTIME_LOCKED_MESSAGE);
+        }
+        definition.setActive(true);
+        definition.setLifecycleStatus("ACTIVE");
+        QuestionTypeDefinition saved = repository.save(definition);
+        audit(caller, ItembankConstants.TASK_TYPE_APPROVED, publicId,
+                "Approved and activated task type");
+        audit(caller, ItembankConstants.TASK_TYPE_PUBLISHED, publicId,
+                "Published task type runtime catalog entry");
+        return QuestionTypeMapper.toResponse(saved, resolveDynamicContract(saved), isRuntimeLocked(saved));
+    }
+
+    @Transactional
     public void retireTaskType(UUID publicId) {
         retireTaskType(publicId, null);
     }
@@ -272,6 +320,7 @@ public class QuestionTypeService {
     @Transactional
     public void retireTaskType(UUID publicId, CurrentUser caller) {
         QuestionTypeDefinition definition = findByPublicId(publicId);
+        requireGovernance(caller, definition.getAuthorUserPublicId());
         definition.setActive(false);
         definition.setLifecycleStatus("RETIRED");
         repository.save(definition);
@@ -303,6 +352,12 @@ public class QuestionTypeService {
      */
     @Transactional
     public QuestionTypeResponse create(CreateQuestionTypeRequest request) {
+        return create(request, null);
+    }
+
+    @Transactional
+    public QuestionTypeResponse create(CreateQuestionTypeRequest request, CurrentUser caller) {
+        requireDraftWrite(caller);
         String code = TaskTypeCodeCompatibility.requireCanonicalCode(request.code());
         PteTaskType taskType = TaskTypeCodeCompatibility.parse(code);
         validateSection(taskType, request.section());
@@ -326,31 +381,64 @@ public class QuestionTypeService {
         definition.setScored(taskType.isScored());
         definition.setActive(request.active());
         definition.setDisplayOrder(request.displayOrder());
+        definition.setAuthorUserPublicId(caller == null ? null : caller.userId());
+        if (caller != null && !caller.hasRole(SecurityRoles.PLATFORM_ADMIN)) {
+            definition.setActive(false);
+            definition.setLifecycleStatus("DRAFT");
+        } else {
+            definition.setLifecycleStatus(Boolean.TRUE.equals(request.active()) ? "ACTIVE" : "INACTIVE");
+        }
         applyCanonicalRequirements(definition, taskType);
 
         definition = repository.save(definition);
+        audit(caller, ItembankConstants.TASK_TYPE_CREATED, definition.getPublicId(),
+                "Created standard task type " + code);
         return QuestionTypeMapper.toResponse(definition, resolveProfile(definition.getCode()));
     }
 
     @Transactional
     public QuestionTypeResponse update(UUID publicId, UpdateQuestionTypeRequest request) {
+        return update(publicId, request, null);
+    }
+
+    @Transactional
+    public QuestionTypeResponse update(UUID publicId, UpdateQuestionTypeRequest request, CurrentUser caller) {
         QuestionTypeDefinition definition = findByPublicId(publicId);
+        requireDraftModification(caller, definition);
+        if (caller != null && !caller.hasRole(SecurityRoles.PLATFORM_ADMIN)
+                && "ACTIVE".equals(definition.getLifecycleStatus())) {
+            deny(caller, publicId, ItembankConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
+        }
         definition.setDisplayName(request.displayName().trim());
         definition.setShortName(request.shortName().trim());
         definition.setDisplayOrder(request.displayOrder());
         definition.setActive(request.active());
+        if (caller != null && !caller.hasRole(SecurityRoles.PLATFORM_ADMIN)) {
+            definition.setActive(false);
+            definition.setLifecycleStatus("DRAFT");
+        }
         applyCanonicalRequirements(definition, TaskTypeCodeCompatibility.parse(definition.getCode()));
         definition = repository.save(definition);
+        audit(caller, ItembankConstants.TASK_TYPE_UPDATED, publicId,
+                "Updated standard task type " + definition.getCode());
         return QuestionTypeMapper.toResponse(definition, resolveProfile(definition.getCode()));
     }
 
     /** Soft-deletes a type so existing question rows keep their stable FK key. */
     @Transactional
     public void delete(UUID publicId) {
+        delete(publicId, null);
+    }
+
+    @Transactional
+    public void delete(UUID publicId, CurrentUser caller) {
         QuestionTypeDefinition definition = findByPublicId(publicId);
+        requireGovernance(caller, definition.getAuthorUserPublicId());
         definition.setActive(false);
         definition.setDeleted(true);
         repository.save(definition);
+        audit(caller, ItembankConstants.TASK_TYPE_RETIRED, publicId,
+                "Deleted standard task type " + definition.getCode());
     }
 
     @Transactional(readOnly = true)
@@ -369,6 +457,44 @@ public class QuestionTypeService {
     private QuestionTypeDefinition findByPublicId(UUID publicId) {
         return repository.findByPublicIdAndDeletedFalse(publicId)
                 .orElseThrow(QuestionTypeNotFoundException::new);
+    }
+
+    private void requireDraftWrite(CurrentUser caller) {
+        // Null keeps the old in-process compatibility overloads usable by
+        // migrations/tests; HTTP controllers always provide an authenticated
+        // caller and therefore take the real authorization path.
+        if (caller != null && !SecurityPolicy.canCreateAcademicDraft(caller)) {
+            deny(caller, null, ItembankConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
+        }
+    }
+
+    private void requireDraftModification(CurrentUser caller, QuestionTypeDefinition definition) {
+        if (caller != null && !SecurityPolicy.canModifyAcademicDraft(caller, definition.getAuthorUserPublicId())) {
+            deny(caller, definition.getPublicId(), ItembankConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
+        }
+    }
+
+    private void requireGovernance(CurrentUser caller, UUID authorUserPublicId) {
+        if (caller == null) {
+            return;
+        }
+        if (SecurityPolicy.canPublishAcademic(caller, authorUserPublicId)) {
+            return;
+        }
+        if (caller.hasRole(SecurityRoles.ACADEMIC_MANAGER)
+                && authorUserPublicId != null && authorUserPublicId.equals(caller.userId())) {
+            deny(caller, null, ItembankConstants.ACADEMIC_SELF_APPROVAL_FORBIDDEN);
+        }
+        deny(caller, null, ItembankConstants.ACADEMIC_PUBLISH_REQUIRED);
+    }
+
+    private void deny(CurrentUser caller, UUID aggregateId, String message) {
+        if (auditLogService != null && caller != null) {
+            auditLogService.recordFailure(caller, ItembankConstants.TASK_TYPE_AUDIT_AGGREGATE,
+                    aggregateId == null ? "unknown" : aggregateId.toString(),
+                    SharedConstants.AUDIT_AUTHORIZATION_DENIED, message);
+        }
+        throw new org.springframework.security.access.AccessDeniedException(message);
     }
 
     private void validateSection(PteTaskType taskType, String section) {

@@ -19,10 +19,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Platform-admin issue/list/revoke operations for individual activation codes. */
+/** Platform activation-code operations; sensitive reveal/revoke stays admin-only. */
 @RestController
 @RequestMapping("/api/v1/license-codes")
-@PreAuthorize("hasRole('PLATFORM_ADMIN')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER')")
 public class LicenseCodeController {
 
     private final LicenseCodeService licenseCodeService;
@@ -41,6 +41,7 @@ public class LicenseCodeController {
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ResponseEntity<ApiResponse<Void>> listLegacy() {
         licenseCodeService.ensureLegacyListAccess(currentUser());
         return ResponseEntity.status(HttpStatus.GONE)
@@ -51,6 +52,7 @@ public class LicenseCodeController {
     }
 
     @PostMapping("/{ignored}/revoke")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<Void> revokeLegacy(@PathVariable String ignored) {
         licenseCodeService.rejectLegacyRevoke(currentUser());
         return ApiResponse.success(null);

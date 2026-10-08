@@ -1,6 +1,7 @@
 package com.pte.assessment.internal.service;
 
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.SecurityPolicy;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -25,10 +26,18 @@ public class AssessmentAccessPolicy {
     }
 
     public boolean canAuthor(CurrentUser caller) {
-        return caller != null && (caller.hasRole("PLATFORM_ADMIN") || caller.hasRole("PLATFORM_AUTHOR"));
+        return SecurityPolicy.canCreateAcademicDraft(caller);
     }
 
-    public boolean canApprove(CurrentUser caller) {
-        return caller != null && caller.hasRole("PLATFORM_ADMIN");
+    public boolean canModifyDraft(CurrentUser caller, UUID authorUserPublicId) {
+        return SecurityPolicy.canModifyAcademicDraft(caller, authorUserPublicId);
+    }
+
+    public boolean canApprove(CurrentUser caller, UUID authorUserPublicId) {
+        return SecurityPolicy.canReviewAcademic(caller, authorUserPublicId);
+    }
+
+    public boolean canPublish(CurrentUser caller, UUID authorUserPublicId) {
+        return SecurityPolicy.canPublishAcademic(caller, authorUserPublicId);
     }
 }

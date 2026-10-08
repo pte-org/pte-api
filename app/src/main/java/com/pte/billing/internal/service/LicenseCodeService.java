@@ -26,6 +26,9 @@ import com.pte.billing.internal.repository.PlanRepository;
 import com.pte.billing.internal.repository.SubscriptionRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.PlatformOperation;
+import com.pte.shared.security.PlatformOperationPolicy;
+import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.web.PageMeta;
 import com.pte.shared.web.PagedResult;
 import com.pte.tenancy.TenancyService;
@@ -97,7 +100,7 @@ public class LicenseCodeService {
     }
 
     public LicenseIssueReceipt issue(UUID planPublicId, Instant codeExpiresAt, UUID key, CurrentUser caller) {
-        requirePlatformAdmin(caller);
+        requirePlatformOperation(caller, PlatformOperation.LICENSE_ISSUE);
         if (planPublicId == null) {
             throw invalid(BillingConstants.LICENSE_CODE_PLAN_REQUIRED);
         }
@@ -115,7 +118,13 @@ public class LicenseCodeService {
             String code = licenseCodeGenerator.generate();
             LicenseCode licenseCode = LicenseCode.issue(code, planPublicId, caller.userId(), now, codeExpiresAt);
             try {
-                return licenseCodePersistenceService.issue(licenseCode, key, fingerprint);
+                LicenseIssueReceipt receipt = licenseCodePersistenceService.issue(licenseCode, key, fingerprint);
+                if (auditLogService != null) {
+                    auditLogService.record(caller, BillingConstants.LICENSE_CODE_AGGREGATE,
+                            String.valueOf(licenseCode.getPublicId() == null ? key : licenseCode.getPublicId()),
+                            BillingConstants.AUDIT_LICENSE_ISSUE, BillingConstants.LICENSE_CODE_ISSUE_AUDIT_SUMMARY);
+                }
+                return receipt;
             } catch (DataIntegrityViolationException ex) {
                 if (constraint(ex, BillingConstants.LICENSE_ISSUE_INTENT_CONSTRAINT)) {
                     var winner = licenseCodePersistenceService.replay(caller.userId(), key, fingerprint);
@@ -150,7 +159,7 @@ public class LicenseCodeService {
     @Transactional(readOnly = true)
     public PagedResult<AdminLicenseCodeSummary> listForAdmin(Integer requestedPage, Integer requestedSize,
             String requestedStatus, UUID planId, UUID tenantId, CurrentUser caller) {
-        requirePlatformAdmin(caller);
+        requirePlatformOperation(caller, PlatformOperation.LICENSE_MASKED_READ);
         int page = requestedPage == null ? 0 : requestedPage;
         int size = requestedSize == null ? DEFAULT_ADMIN_PAGE_SIZE : requestedSize;
         if (page < 0) {
@@ -170,7 +179,7 @@ public class LicenseCodeService {
 
     @Transactional(readOnly = true)
     public AdminLicenseCodeSummary getForAdmin(UUID publicId, CurrentUser caller) {
-        requirePlatformAdmin(caller);
+        requirePlatformOperation(caller, PlatformOperation.LICENSE_MASKED_READ);
         LicenseCode code = licenseCodeRepository.findByPublicId(publicId)
                 .filter(candidate -> !candidate.isDeleted())
                 .orElseThrow(() -> new LicenseCodeException(HttpStatus.NOT_FOUND,
@@ -180,7 +189,7 @@ public class LicenseCodeService {
 
     @Transactional(readOnly = true)
     public AdminLicenseCodeSummary lookupForAdmin(String rawCode, CurrentUser caller) {
-        requirePlatformAdmin(caller);
+        requirePlatformOperation(caller, PlatformOperation.LICENSE_MASKED_READ);
         String codeValue = normalizeCode(rawCode);
         LicenseCode code = licenseCodeRepository.findByCode(codeValue)
                 .filter(candidate -> !candidate.isDeleted())
@@ -197,7 +206,7 @@ public class LicenseCodeService {
                 .filter(candidate -> !candidate.isDeleted())
                 .orElseThrow(() -> new LicenseCodeException(HttpStatus.NOT_FOUND,
                         BillingConstants.LICENSE_CODE_NOT_FOUND));
-        auditLogService.record(caller, "LicenseCode", publicId.toString(),
+        auditLogService.record(caller, BillingConstants.LICENSE_CODE_AGGREGATE, publicId.toString(),
                 BillingConstants.LICENSE_CODE_REVEAL_AUDIT,
                 BillingConstants.LICENSE_CODE_REVEAL_AUDIT_SUMMARY);
         return new LicenseCodeRevealResponse(code.getCode());
@@ -542,6 +551,18 @@ public class LicenseCodeService {
                 || !caller.hasRole("PLATFORM_ADMIN")) {
             throw new LicenseCodeException(HttpStatus.FORBIDDEN, BillingConstants.LICENSE_CODE_PLATFORM_ADMIN_REQUIRED);
         }
+    }
+
+    private void requirePlatformOperation(CurrentUser caller, PlatformOperation operation) {
+        if (PlatformOperationPolicy.can(caller, operation)) {
+            return;
+        }
+        if (auditLogService != null && caller != null) {
+            auditLogService.recordFailure(caller, BillingConstants.LICENSE_CODE_AGGREGATE, "unknown",
+                    SharedConstants.AUDIT_AUTHORIZATION_DENIED, BillingConstants.LICENSE_CODE_PLATFORM_OPERATION_REQUIRED);
+        }
+        throw new LicenseCodeException(HttpStatus.FORBIDDEN,
+                BillingConstants.LICENSE_CODE_PLATFORM_OPERATION_REQUIRED);
     }
 
     private String normalizeCode(String rawCode) {

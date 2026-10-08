@@ -24,8 +24,8 @@ import java.util.UUID;
  * no JWT in front of it — see {@code SecurityConfig.PUBLIC_PATHS}, which
  * permits exactly the literal path {@code /applications} (this class maps no
  * other method there, so that doesn't accidentally open anything else).
- * Everything under {@code /admin/applications} stays PLATFORM_ADMIN-only,
- * same as {@code TenantController}.
+ * The authenticated list/review endpoints are available to the explicit
+ * platform operations roles; the public submit route remains unauthenticated.
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -44,26 +44,26 @@ public class TenantApplicationController {
     }
 
     @GetMapping("/applications")
-    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER')")
     public ApiResponse<List<TenantApplicationResponse>> list() {
-        return ApiResponse.success(applicationService.list());
+        return ApiResponse.success(applicationService.list(currentUser()));
     }
 
     @GetMapping("/applications/{publicId}")
-    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER')")
     public ApiResponse<TenantApplicationResponse> get(@PathVariable UUID publicId) {
-        return ApiResponse.success(applicationService.get(publicId));
+        return ApiResponse.success(applicationService.get(publicId, currentUser()));
     }
 
     @PostMapping("/applications/{publicId}/approval")
-    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER')")
     public ApiResponse<Void> approve(@PathVariable UUID publicId) {
         applicationService.approve(publicId, currentUser());
         return ApiResponse.success(null);
     }
 
     @PostMapping("/applications/{publicId}/rejection")
-    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER')")
     public ApiResponse<TenantApplicationResponse> reject(@PathVariable UUID publicId,
             @Valid @RequestBody RejectApplicationRequest request) {
         return ApiResponse.success(applicationService.reject(publicId, request, currentUser()));

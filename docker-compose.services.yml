@@ -37,6 +37,10 @@ services:
       # com.pte.identity.internal.config.SecurityConfig (gateway-removal) —
       # browser FE origins allowed to call this app directly.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      # com.pte.practice (student practice web) — default-off rollout controls.
+      PRACTICE_WEB_ENABLED: ${PRACTICE_WEB_ENABLED:-false}
+      PRACTICE_EMAIL_AUTH_ENABLED: ${PRACTICE_EMAIL_AUTH_ENABLED:-false}
+      PRACTICE_STRICT_ENTITLEMENT_ENABLED: ${PRACTICE_STRICT_ENTITLEMENT_ENABLED:-false}
       # com.pte.shared.web.RateLimitFilter (gateway-removal) — per-tenant
       # request ceiling, ported from gateway's Redis token-bucket as a
       # simpler fixed-window counter.

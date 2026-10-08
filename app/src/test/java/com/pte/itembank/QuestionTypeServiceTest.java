@@ -7,6 +7,7 @@ import com.pte.itembank.dto.request.UpdateQuestionTypeRequest;
 import com.pte.itembank.dto.response.QuestionTypeResponse;
 import com.pte.itembank.dto.response.SupportedQuestionTypeResponse;
 import com.pte.itembank.internal.repository.QuestionTypeRepository;
+import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -152,6 +153,40 @@ class QuestionTypeServiceTest {
         assertThat(definition.isDeleted()).isTrue();
         assertThat(definition.isActive()).isFalse();
         verify(repository).save(definition);
+    }
+
+    @Test
+    void create_standardTaskType_byAcademicStaffIsAnOwnedDraft() {
+        UUID staffId = UUID.randomUUID();
+        CurrentUser staff = new CurrentUser(staffId, null, List.of("ACADEMIC_STAFF"));
+        when(repository.findByCode("PERSONAL_INTRODUCTION")).thenReturn(Optional.empty());
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        QuestionTypeResponse result = service.create(new CreateQuestionTypeRequest(
+                "PERSONAL_INTRODUCTION", "Personal Introduction", "PI", "SPEAKING", 1, true), staff);
+
+        assertThat(result.active()).isFalse();
+        org.mockito.ArgumentCaptor<QuestionTypeDefinition> captor =
+                org.mockito.ArgumentCaptor.forClass(QuestionTypeDefinition.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getAuthorUserPublicId()).isEqualTo(staffId);
+        assertThat(captor.getValue().getLifecycleStatus()).isEqualTo("DRAFT");
+    }
+
+    @Test
+    void academicStaffCannotMutateAnActiveStandardTaskType() {
+        UUID publicId = UUID.randomUUID();
+        UUID staffId = UUID.randomUUID();
+        CurrentUser staff = new CurrentUser(staffId, null, List.of("ACADEMIC_STAFF"));
+        QuestionTypeDefinition definition = definition("READ_ALOUD", true);
+        definition.setPublicId(publicId);
+        definition.setLifecycleStatus("ACTIVE");
+        when(repository.findByPublicIdAndDeletedFalse(publicId)).thenReturn(Optional.of(definition));
+
+        assertThatThrownBy(() -> service.update(publicId, new UpdateQuestionTypeRequest(
+                "Changed", "CH", 1, true,
+                false, false, false, false, false, false, false, false), staff))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
     }
 
     private QuestionTypeDefinition definition(String code, boolean active) {

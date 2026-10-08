@@ -20,12 +20,20 @@ public final class AssessmentConstants {
     public static final String BLUEPRINT_ITEM_INVALID = "Blueprint contains an invalid or unavailable question";
     public static final String BLUEPRINT_DUPLICATE_QUESTION = "A question cannot appear more than once in a blueprint";
     public static final String BLUEPRINT_TEMPLATE_COMPLIANCE_INVALID = "Blueprint does not match the active PTE template counts";
-    public static final String BLUEPRINT_APPROVAL_PLATFORM_ADMIN_REQUIRED =
-            "Only platform admins may approve blueprints";
-    public static final String BLUEPRINT_REJECTION_PLATFORM_ADMIN_REQUIRED =
-            "Only platform admins may reject blueprints";
-    public static final String BLUEPRINT_AUTHOR_PLATFORM_AUTHOR_REQUIRED =
-            "Only platform authors may manage blueprints";
+    public static final String ACADEMIC_DRAFT_WRITE_REQUIRED =
+            "Only academic staff, academic managers, or platform admins may manage academic drafts";
+    public static final String ACADEMIC_REVIEW_REQUIRED =
+            "Only an academic manager may review another author's blueprint";
+    public static final String ACADEMIC_PUBLISH_REQUIRED =
+            "Only an academic manager may publish another author's blueprint";
+    public static final String ACADEMIC_SELF_APPROVAL_FORBIDDEN =
+            "An academic manager cannot approve or publish their own blueprint";
+    public static final String AUDIT_AGGREGATE_BLUEPRINT = "EXAM_BLUEPRINT";
+    public static final String AUDIT_CREATED = "CREATED";
+    public static final String AUDIT_UPDATED = "UPDATED";
+    public static final String AUDIT_SUBMITTED = "SUBMITTED_FOR_APPROVAL";
+    public static final String AUDIT_APPROVED = "APPROVED_AND_PUBLISHED";
+    public static final String AUDIT_REJECTED = "REJECTED_TO_DRAFT";
     public static final String SNAPSHOT_OPTIONS_SERIALIZATION_FAILED = "Failed to serialize snapshot options";
     public static final String PINNED_QUESTION_OPTIONS_DECODE_FAILED = "Pinned question options could not be decoded";
     public static final String EXAMINER_PROMPT_DEPENDENCIES_NOT_CONFIGURED =

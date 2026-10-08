@@ -18,6 +18,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -106,6 +107,18 @@ class TenantLifecycleServiceTest {
         when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
 
         TenantResponse response = service.suspend(publicId);
+
+        assertThat(response.status()).isEqualTo("SUSPENDED");
+    }
+
+    @Test
+    void platformManagerCanSuspendTenant() {
+        UUID publicId = UUID.randomUUID();
+        Tenant tenant = activeTenant(publicId);
+        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+
+        TenantResponse response = service.suspend(publicId,
+                new com.pte.shared.security.CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_MANAGER")));
 
         assertThat(response.status()).isEqualTo("SUSPENDED");
     }

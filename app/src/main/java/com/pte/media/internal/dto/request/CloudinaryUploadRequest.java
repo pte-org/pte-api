@@ -6,12 +6,21 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Max;
 
+import java.util.UUID;
+
 public record CloudinaryUploadRequest(
         @NotBlank(message = MediaConstants.CONTENT_TYPE_REQUIRED) String contentType,
         @NotBlank String assetKind,
-        @NotNull @Positive @Max(MediaConstants.MAX_SUBMISSION_BYTES) Long sizeBytes) {
+        @NotNull @Positive @Max(MediaConstants.MAX_SUBMISSION_BYTES) Long sizeBytes,
+        UUID practiceSessionId,
+        UUID practiceItemId,
+        String purpose) {
+
+    public CloudinaryUploadRequest(String contentType, String assetKind, Long sizeBytes) {
+        this(contentType, assetKind, sizeBytes, null, null, null);
+    }
 
     public CloudinaryUploadRequest(String contentType, String assetKind) {
-        this(contentType, assetKind, 1L);
+        this(contentType, assetKind, 1L, null, null, null);
     }
 }

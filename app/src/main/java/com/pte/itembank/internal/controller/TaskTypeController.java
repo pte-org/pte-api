@@ -30,7 +30,7 @@ import java.util.UUID;
 /** Canonical logical task-type catalog; implementation details stay server-owned. */
 @RestController
 @RequestMapping("/api/v1/task-types")
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
 public class TaskTypeController {
 
     private final QuestionTypeService service;
@@ -81,6 +81,17 @@ public class TaskTypeController {
     public ApiResponse<QuestionTypeResponse> update(@PathVariable UUID publicId,
             @Valid @RequestBody UpdateTaskTypeRequest request) {
         return ApiResponse.success(service.updateTaskType(publicId, request, currentUser()));
+    }
+
+    @PostMapping("/{publicId}/submit-approval")
+    public ApiResponse<QuestionTypeResponse> submitApproval(@PathVariable UUID publicId) {
+        return ApiResponse.success(service.submitTaskType(publicId, currentUser()));
+    }
+
+    @PostMapping("/{publicId}/approve")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
+    public ApiResponse<QuestionTypeResponse> approve(@PathVariable UUID publicId) {
+        return ApiResponse.success(service.approveTaskType(publicId, currentUser()));
     }
 
     @DeleteMapping("/{publicId}")

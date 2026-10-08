@@ -183,7 +183,7 @@ class TenantApplicationServiceTest {
         when(tenancyService.createTenant("Acme School", "SCHOOL", "acme", "0123456789", 75)).thenReturn(tenant);
         when(identityService.createHostAdmin(tenant.getPublicId(), "contact@acme.example")).thenReturn(hostAdmin);
 
-        CurrentUser caller = new CurrentUser(reviewerId, null, List.of("PLATFORM_ADMIN"));
+        CurrentUser caller = new CurrentUser(reviewerId, null, List.of("PLATFORM_MANAGER"));
         service.approve(applicationId, caller);
 
         assertThat(application.getStatus()).isEqualTo(TenantApplicationStatus.APPROVED);

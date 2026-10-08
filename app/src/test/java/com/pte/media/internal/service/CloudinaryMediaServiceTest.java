@@ -7,6 +7,8 @@ import com.pte.media.internal.dto.request.CloudinaryUploadRequest;
 import com.pte.media.internal.dto.response.CloudinaryUploadResponse;
 import com.pte.media.internal.repository.MediaObjectRepository;
 import com.pte.media.internal.constant.MediaConstants;
+import com.pte.shared.practice.PracticeMediaBindingPort;
+import com.pte.shared.practice.PracticeMediaConstants;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +40,9 @@ class CloudinaryMediaServiceTest {
     @Mock
     private MediaObjectRepository repository;
 
+    @Mock
+    private PracticeMediaBindingPort practiceMediaBindingService;
+
     @Test
     void studentResponseUploadUsesPublicSubmissionFolderAndStudentOwnership() throws Exception {
         when(repository.save(any(MediaObject.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -45,8 +50,11 @@ class CloudinaryMediaServiceTest {
         UUID tenantId = UUID.randomUUID();
 
         CloudinaryMediaService service = service();
+        UUID sessionId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
         CloudinaryUploadResponse response = service.requestUpload(
-                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.STUDENT_RESPONSE_AUDIO, 1024L),
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.STUDENT_RESPONSE_AUDIO, 1024L,
+                        sessionId, itemId, PracticeMediaConstants.RESPONSE_AUDIO_PURPOSE),
                 new CurrentUser(studentId, tenantId, List.of("STUDENT")));
 
         assertThat(response.folder()).isEqualTo("pte/submissions");
@@ -66,6 +74,9 @@ class CloudinaryMediaServiceTest {
         assertThat(media.getOwnerPublicId()).isEqualTo(studentId);
         assertThat(media.getTenantId()).isEqualTo(tenantId);
         assertThat(media.isAudioPrompt()).isFalse();
+        assertThat(media.getPracticeSessionPublicId()).isEqualTo(sessionId);
+        assertThat(media.getPracticeItemPublicId()).isEqualTo(itemId);
+        assertThat(media.getPurpose()).isEqualTo(PracticeMediaConstants.RESPONSE_AUDIO_PURPOSE);
         assertThat(media.getCloudinaryPublicId()).isEqualTo(response.publicId());
         assertThat(media.getCloudinaryDeliveryType()).isEqualTo(CloudinaryDeliveryType.UPLOAD);
     }
@@ -81,6 +92,29 @@ class CloudinaryMediaServiceTest {
     }
 
     @Test
+    void academicStaffCanRequestAuthoringMedia() {
+        when(repository.save(any(MediaObject.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        UUID staffId = UUID.randomUUID();
+
+        CloudinaryUploadResponse response = service().requestUpload(
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.AUDIO_PROMPT, 1024L),
+                new CurrentUser(staffId, null, List.of("ACADEMIC_STAFF")));
+
+        assertThat(response.folder()).isEqualTo("pte/authoring");
+        ArgumentCaptor<MediaObject> captor = ArgumentCaptor.forClass(MediaObject.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getOwnerPublicId()).isEqualTo(staffId);
+    }
+
+    @Test
+    void platformManagerCannotRequestAuthoringMedia() {
+        assertThatThrownBy(() -> service().requestUpload(
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.AUDIO_PROMPT, 1024L),
+                new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_MANAGER"))))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
     void hostCannotRequestStudentResponseUpload() {
         CloudinaryMediaService service = service();
 
@@ -88,6 +122,17 @@ class CloudinaryMediaServiceTest {
                 new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.STUDENT_RESPONSE_AUDIO, 1024L),
                 new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("HOST_ADMIN"))))
                 .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void studentResponseUploadRejectsAnUnboundPracticeRequest() {
+        CloudinaryMediaService service = service();
+
+        assertThatThrownBy(() -> service.requestUpload(
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV,
+                        MediaConstants.STUDENT_RESPONSE_AUDIO, 1024L),
+                new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("STUDENT"))))
+                .isInstanceOf(com.pte.media.internal.exception.UnsupportedContentTypeException.class);
     }
 
     @Test
@@ -187,7 +232,7 @@ class CloudinaryMediaServiceTest {
 
     private CloudinaryMediaService service() {
         return new CloudinaryMediaService(repository, "test-cloud", "test-key", "test-secret",
-                "pte/authoring", "pte/submissions");
+                "pte/authoring", "pte/submissions", practiceMediaBindingService);
     }
 
     private Map<String, String> query(String rawQuery) {

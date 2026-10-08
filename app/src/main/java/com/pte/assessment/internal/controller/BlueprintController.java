@@ -23,7 +23,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/blueprints")
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
 public class BlueprintController {
 
     private final BlueprintService blueprintService;
@@ -49,13 +49,13 @@ public class BlueprintController {
     }
 
     @PostMapping({"/{publicId}/approval", "/{publicId}/approve"})
-    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
     public ApiResponse<SnapshotResponse> approve(@PathVariable UUID publicId) {
         return ApiResponse.success(blueprintService.approve(publicId, currentUser()));
     }
 
     @PostMapping({"/{publicId}/rejection", "/{publicId}/reject"})
-    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
     public ApiResponse<BlueprintResponse> reject(@PathVariable UUID publicId,
             @Valid @RequestBody RejectBlueprintRequest request) {
         return ApiResponse.success(blueprintService.reject(publicId, request, currentUser()));

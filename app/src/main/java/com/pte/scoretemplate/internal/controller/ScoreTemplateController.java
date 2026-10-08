@@ -50,46 +50,46 @@ public class ScoreTemplateController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
     public ApiResponse<List<ScoreTemplateResponse>> list() {
         return ApiResponse.success(adminService.listAll());
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
     public ApiResponse<ScoreTemplateResponse> create(
             @Valid @RequestBody CreateScoreTemplateRequest request) {
         return ApiResponse.success(adminService.createDraft(request, currentUser()));
     }
 
     @GetMapping("/{publicId}")
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
     public ApiResponse<ScoreTemplateResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(adminService.getForEdit(publicId));
     }
 
     @PostMapping("/{publicId}/clone")
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
     public ApiResponse<ScoreTemplateResponse> clone(@PathVariable UUID publicId) {
         return ApiResponse.success(adminService.cloneToDraft(publicId, currentUser()));
     }
 
     @PutMapping("/{publicId}/items")
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
     public ApiResponse<ScoreTemplateResponse> replaceItems(@PathVariable UUID publicId,
                                                             @Valid @RequestBody ReplaceScoreTemplateItemsRequest request) {
         return ApiResponse.success(adminService.replaceItems(publicId, request, currentUser()));
     }
 
     @DeleteMapping("/{publicId}")
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
     public ApiResponse<Void> delete(@PathVariable UUID publicId) {
-        adminService.deleteDraft(publicId);
+        adminService.deleteDraft(publicId, currentUser());
         return ApiResponse.success(null);
     }
 
     @PostMapping("/{publicId}/activate")
-    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
     public ApiResponse<ScoreTemplateResponse> activate(@PathVariable UUID publicId) {
         if (!rolloutProperties.isCustomTemplateActivationEnabled()
                 && adminService.isCustomTemplate(publicId)) {
@@ -108,26 +108,26 @@ public class ScoreTemplateController {
     }
 
     @PostMapping("/{publicId}/submit-approval")
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
     public ApiResponse<ScoreTemplateResponse> submitApproval(@PathVariable UUID publicId) {
         return ApiResponse.success(adminService.submitApproval(publicId, currentUser()));
     }
 
     @PostMapping("/{publicId}/approve")
-    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
     public ApiResponse<ScoreTemplateResponse> approve(@PathVariable UUID publicId) {
         return ApiResponse.success(adminService.approve(publicId, currentUser()));
     }
 
     @PostMapping("/{publicId}/reject")
-    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
     public ApiResponse<ScoreTemplateResponse> reject(@PathVariable UUID publicId,
             @Valid @RequestBody RejectScoreTemplateRequest request) {
         return ApiResponse.success(adminService.reject(publicId, request, currentUser()));
     }
 
     @GetMapping("/{publicId}/feasibility")
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
     public ApiResponse<ScoreTemplateFeasibilityResponse> feasibility(@PathVariable UUID publicId) {
         return ApiResponse.success(scoreTemplateService.getTemplateFeasibility(publicId));
     }

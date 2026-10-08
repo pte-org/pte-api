@@ -20,6 +20,9 @@ import com.pte.notification.internal.repository.InboxAnnouncementStore.Announcem
 import com.pte.notification.internal.repository.InboxDeliveryStore;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.PlatformOperation;
+import com.pte.shared.security.PlatformOperationPolicy;
+import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.web.PageMeta;
 import com.pte.shared.web.PagedResult;
 import com.pte.tenancy.TenancyService;
@@ -36,7 +39,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/** PLATFORM_ADMIN-only announcement lifecycle and immutable fan-out boundary. */
+/** Platform announcement lifecycle and immutable fan-out boundary. */
 @Service
 @Transactional(timeout = 15)
 public class AnnouncementService {
@@ -61,7 +64,7 @@ public class AnnouncementService {
     }
 
     public PagedResult<AnnouncementResponse> list(CurrentUser caller, int requestedPage, int requestedSize) {
-        requireAdmin(caller);
+        requireOperation(caller, PlatformOperation.ANNOUNCEMENT_READ, "ANNOUNCEMENT_READ");
         int page = requestedPage < 0 ? invalidPage() : requestedPage;
         int size = requestedSize < 1 || requestedSize > InboxConstants.MAX_PAGE_SIZE ? invalidSize() : requestedSize;
         long offsetLong = (long) page * size;
@@ -77,7 +80,7 @@ public class AnnouncementService {
     }
 
     public AnnouncementResponse create(CurrentUser caller, AnnouncementCreateRequest request) {
-        requireAdmin(caller);
+        requireOperation(caller, PlatformOperation.ANNOUNCEMENT_DRAFT_WRITE, "ANNOUNCEMENT_CREATE_DRAFT");
         if (request == null) {
             throw invalid(InboxConstants.ANNOUNCEMENT_INVALID, InboxConstants.ANNOUNCEMENT_INVALID_MESSAGE);
         }
@@ -100,12 +103,12 @@ public class AnnouncementService {
     }
 
     public AnnouncementResponse get(CurrentUser caller, UUID publicId) {
-        requireAdmin(caller);
+        requireOperation(caller, PlatformOperation.ANNOUNCEMENT_READ, "ANNOUNCEMENT_READ");
         return store.find(publicId).map(AnnouncementService::toResponse).orElseThrow(this::notFound);
     }
 
     public AnnouncementResponse update(CurrentUser caller, UUID publicId, AnnouncementUpdateRequest request) {
-        requireAdmin(caller);
+        requireOperation(caller, PlatformOperation.ANNOUNCEMENT_DRAFT_WRITE, "ANNOUNCEMENT_UPDATE_DRAFT");
         if (request == null) {
             throw invalid(InboxConstants.ANNOUNCEMENT_INVALID, InboxConstants.ANNOUNCEMENT_INVALID_MESSAGE);
         }
@@ -127,7 +130,7 @@ public class AnnouncementService {
     }
 
     public void delete(CurrentUser caller, UUID publicId, AnnouncementDeleteRequest request) {
-        requireAdmin(caller);
+        requireOperation(caller, PlatformOperation.ANNOUNCEMENT_DRAFT_WRITE, "ANNOUNCEMENT_DELETE_DRAFT");
         AnnouncementRow current = store.find(publicId).orElseThrow(this::notFound);
         requireDraft(current);
         if (request == null || request.expectedDraftVersion() == null
@@ -140,14 +143,14 @@ public class AnnouncementService {
     }
 
     public AnnouncementAudiencePreviewResponse preview(CurrentUser caller, UUID publicId) {
-        requireAdmin(caller);
+        requireOperation(caller, PlatformOperation.ANNOUNCEMENT_READ, "ANNOUNCEMENT_PREVIEW");
         store.find(publicId).orElseThrow(this::notFound);
         Audience audience = resolveAudience();
         return new AnnouncementAudiencePreviewResponse(audience.tenantIds().size(), audience.recipients().size());
     }
 
     public AnnouncementResponse publish(CurrentUser caller, UUID publicId, AnnouncementPublishRequest request) {
-        requireAdmin(caller);
+        requireOperation(caller, PlatformOperation.ANNOUNCEMENT_PUBLISH, "ANNOUNCEMENT_PUBLISH");
         AnnouncementRow current = store.lockForUpdate(publicId).orElseThrow(this::notFound);
         if (current.published()) {
             return toResponse(current);
@@ -172,7 +175,7 @@ public class AnnouncementService {
     }
 
     public AnnouncementResponse retryDelivery(CurrentUser caller, UUID publicId) {
-        requireAdmin(caller);
+        requireOperation(caller, PlatformOperation.ANNOUNCEMENT_RETRY, "ANNOUNCEMENT_RETRY");
         AnnouncementRow current = store.find(publicId).orElseThrow(this::notFound);
         if (!current.published()) {
             throw invalid(InboxConstants.ANNOUNCEMENT_NOT_PUBLISHED, InboxConstants.ANNOUNCEMENT_NOT_PUBLISHED_MESSAGE);
@@ -218,10 +221,15 @@ public class AnnouncementService {
         return value != null && !value.isBlank() && value.length() <= max && value.indexOf('\0') < 0;
     }
 
-    private void requireAdmin(CurrentUser caller) {
-        if (caller == null || caller.userId() == null || !caller.hasRole("PLATFORM_ADMIN") || caller.tenantId() != null) {
-            throw new AccessDeniedException(InboxConstants.PLATFORM_ADMIN_REQUIRED_MESSAGE);
+    private void requireOperation(CurrentUser caller, PlatformOperation operation, String action) {
+        if (PlatformOperationPolicy.can(caller, operation)) {
+            return;
         }
+        if (caller != null) {
+            audit.recordFailure(caller, InboxConstants.ANNOUNCEMENT_AGGREGATE, "unknown",
+                    SharedConstants.AUDIT_AUTHORIZATION_DENIED, action);
+        }
+        throw new AccessDeniedException(InboxConstants.PLATFORM_OPERATION_REQUIRED_MESSAGE);
     }
 
     private void requireDraft(AnnouncementRow row) {

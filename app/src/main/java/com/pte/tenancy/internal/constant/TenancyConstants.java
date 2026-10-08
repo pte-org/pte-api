@@ -39,6 +39,14 @@ public final class TenancyConstants {
     public static final String EVENT_TENANT_SUSPENDED = "TenantSuspended";
     public static final String EVENT_TENANT_REACTIVATED = "TenantReactivated";
     public static final String EVENT_TENANT_BRANDING_UPDATED = "TenantBrandingUpdated";
+    public static final String OPERATION_TENANT_ONBOARD = "TENANT_ONBOARD";
+    public static final String OPERATION_TENANT_SUSPEND = "TENANT_SUSPEND";
+    public static final String OPERATION_TENANT_REACTIVATE = "TENANT_REACTIVATE";
+    public static final String OPERATION_TENANT_BRANDING = "TENANT_BRANDING";
+    public static final String AUDIT_TENANT_ONBOARDED_SUMMARY = "Onboarded tenant";
+    public static final String AUDIT_TENANT_SUSPENDED_SUMMARY = "Suspended tenant";
+    public static final String AUDIT_TENANT_REACTIVATED_SUMMARY = "Reactivated tenant";
+    public static final String AUDIT_TENANT_BRANDING_UPDATED_SUMMARY = "Updated tenant branding";
 
     public static final String AGGREGATE_ORGANIZATION = "Organization";
     public static final String EVENT_ORGANIZATION_CREATED = "OrganizationCreated";

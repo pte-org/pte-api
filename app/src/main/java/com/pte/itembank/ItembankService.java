@@ -25,6 +25,9 @@ import com.pte.itembank.internal.service.ItembankAccessPolicy;
 import com.pte.itembank.internal.service.QuestionValidationHelper;
 import com.pte.media.MediaService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.SecurityRoles;
+import com.pte.shared.audit.AuditLogService;
+import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.web.PageMeta;
 import com.pte.shared.web.PagedResult;
 import org.springframework.data.domain.Page;
@@ -68,16 +71,24 @@ public class ItembankService {
     private final ItembankAccessPolicy accessPolicy;
     private final MediaService mediaService;
     private final QuestionTypeService questionTypeService;
+    private final AuditLogService auditLogService;
 
     @Autowired
     public ItembankService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
                            ItembankAccessPolicy accessPolicy, MediaService mediaService,
-                           QuestionTypeService questionTypeService) {
+                           QuestionTypeService questionTypeService, AuditLogService auditLogService) {
         this.questionRepository = questionRepository;
         this.validationHelper = validationHelper;
         this.accessPolicy = accessPolicy;
         this.mediaService = mediaService;
         this.questionTypeService = questionTypeService;
+        this.auditLogService = auditLogService;
+    }
+
+    public ItembankService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
+            ItembankAccessPolicy accessPolicy, MediaService mediaService,
+            QuestionTypeService questionTypeService) {
+        this(questionRepository, validationHelper, accessPolicy, mediaService, questionTypeService, null);
     }
 
     /** Compatibility constructor for focused itembank unit tests without media wiring. */
@@ -89,7 +100,7 @@ public class ItembankService {
     @Transactional
     public QuestionResponse create(CreateQuestionRequest request, CurrentUser caller) {
         if (!accessPolicy.canWrite(caller)) {
-            throw new AccessDeniedException("Only platform users may write the shared question bank");
+            deny(caller, null, ItembankConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
         }
 
         String taskTypeKey = resolveTaskTypeKey(request);
@@ -107,6 +118,7 @@ public class ItembankService {
         question.setTaskTypeSection(resolveTaskTypeSection(taskTypeKey, taskType));
         question.setVisibility(Visibility.SHARED);
         question.setTenantId(null);
+        question.setAuthorUserPublicId(caller.userId());
         question.setStatus(QuestionStatus.DRAFT);
         question.setEverPublished(false);
         question.setRevisionGroupPublicId(UUID.randomUUID());
@@ -124,7 +136,9 @@ public class ItembankService {
 
         validationHelper.validate(question);
         validateMediaReferences(question, caller);
-        return toResponse(questionRepository.save(question));
+        Question saved = questionRepository.save(question);
+        audit(caller, ItembankConstants.AUDIT_CREATED, saved, "Created question draft");
+        return toResponse(saved);
     }
 
     /** Also used by {@code assessment} to confirm a blueprint item's question exists and is readable by the caller — the returned value is discarded there. */
@@ -239,6 +253,7 @@ public class ItembankService {
                 request.minWordCount(), request.maxWordCount(), request.options());
         validationHelper.validate(question);
         validateMediaReferences(question, caller);
+        audit(caller, ItembankConstants.AUDIT_UPDATED, question, "Updated question draft");
         return toResponse(question);
     }
 
@@ -256,6 +271,7 @@ public class ItembankService {
                 ? source.getPteTaskType().getSection().name() : source.getTaskTypeSection());
         revision.setVisibility(source.getVisibility());
         revision.setTenantId(source.getTenantId());
+        revision.setAuthorUserPublicId(caller.userId());
         revision.setStatus(QuestionStatus.DRAFT);
         revision.setEverPublished(false);
         revision.setRevisionGroupPublicId(source.getRevisionGroupPublicId());
@@ -268,7 +284,10 @@ public class ItembankService {
                         .map(option -> new OptionRequest(option.getText(), option.isCorrect(), option.getOrderIndex(),
                                 option.getBlankIndex(), option.getCorrectGapIndex()))
                         .toList());
-        return toResponse(questionRepository.save(revision));
+        Question saved = questionRepository.save(revision);
+        audit(caller, ItembankConstants.AUDIT_REVISION_CREATED, saved,
+                "Created question revision " + saved.getRevisionNumber());
+        return toResponse(saved);
     }
 
     @Transactional
@@ -281,16 +300,18 @@ public class ItembankService {
         validateMediaReferences(question, caller);
         question.setRejectionReason(null);
         question.setStatus(QuestionStatus.PENDING_APPROVAL);
+        audit(caller, ItembankConstants.AUDIT_SUBMITTED, question, "Submitted question for approval");
         return toResponse(question);
     }
 
     @Transactional
     public QuestionResponse approve(UUID publicId, CurrentUser caller) {
         if (!accessPolicy.canApprove(caller)) {
-            throw new AccessDeniedException("Only platform admins may approve questions");
+            deny(caller, publicId, ItembankConstants.ACADEMIC_REVIEW_REQUIRED);
         }
         Question question = questionRepository.findWithOptionsByPublicId(publicId)
                 .orElseThrow(QuestionNotFoundException::new);
+        requireAcademicReview(caller, question.getAuthorUserPublicId());
         if (question.getStatus() != QuestionStatus.PENDING_APPROVAL) {
             throw new InvalidQuestionStatusTransitionException();
         }
@@ -301,21 +322,24 @@ public class ItembankService {
         question.setCurrent(true);
         question.setStatus(QuestionStatus.APPROVED);
         question.setEverPublished(true);
+        audit(caller, ItembankConstants.AUDIT_APPROVED, question, "Approved question");
         return toResponse(question);
     }
 
     @Transactional
     public QuestionResponse reject(UUID publicId, RejectQuestionRequest request, CurrentUser caller) {
         if (!accessPolicy.canApprove(caller)) {
-            throw new AccessDeniedException("Only platform admins may reject questions");
+            deny(caller, publicId, ItembankConstants.ACADEMIC_REVIEW_REQUIRED);
         }
         Question question = questionRepository.findWithOptionsByPublicId(publicId)
                 .orElseThrow(QuestionNotFoundException::new);
+        requireAcademicReview(caller, question.getAuthorUserPublicId());
         if (question.getStatus() != QuestionStatus.PENDING_APPROVAL) {
             throw new InvalidQuestionStatusTransitionException();
         }
         question.setStatus(QuestionStatus.DRAFT);
         question.setRejectionReason(request.reason());
+        audit(caller, ItembankConstants.AUDIT_REJECTED, question, "Rejected question: " + request.reason());
         return toResponse(question);
     }
 
@@ -323,10 +347,11 @@ public class ItembankService {
     @Transactional
     public QuestionResponse publish(UUID publicId, CurrentUser caller) {
         if (!accessPolicy.canApprove(caller)) {
-            throw new AccessDeniedException("Only platform admins may publish questions");
+            deny(caller, publicId, ItembankConstants.ACADEMIC_PUBLISH_REQUIRED);
         }
         Question question = questionRepository.findWithOptionsByPublicId(publicId)
                 .orElseThrow(QuestionNotFoundException::new);
+        requireAcademicPublish(caller, question.getAuthorUserPublicId());
         if (question.getStatus() == QuestionStatus.APPROVED) {
             return toResponse(question);
         }
@@ -340,6 +365,7 @@ public class ItembankService {
         question.setCurrent(true);
         question.setStatus(QuestionStatus.APPROVED);
         question.setEverPublished(true);
+        audit(caller, ItembankConstants.AUDIT_PUBLISHED, question, "Published question");
         return toResponse(question);
     }
 
@@ -370,6 +396,9 @@ public class ItembankService {
     @Transactional
     public QuestionResponse archive(UUID publicId, CurrentUser caller) {
         Question question = loadForPlatformWrite(publicId, caller);
+        if (question.getStatus() == QuestionStatus.APPROVED || Boolean.TRUE.equals(question.getEverPublished())) {
+            requireArchiveGovernance(caller, question.getAuthorUserPublicId());
+        }
         if (question.getStatus() == QuestionStatus.ARCHIVED) return toResponse(question);
         if (!com.pte.itembank.internal.service.QuestionLifecyclePolicy.canArchive(question)) {
             throw new InvalidQuestionStatusTransitionException();
@@ -377,6 +406,7 @@ public class ItembankService {
         if (question.getStatus() == QuestionStatus.APPROVED) question.setEverPublished(true);
         question.setStatus(QuestionStatus.ARCHIVED);
         question.setCurrent(false);
+        audit(caller, ItembankConstants.AUDIT_ARCHIVED, question, "Archived question");
         return toResponse(question);
     }
 
@@ -384,6 +414,9 @@ public class ItembankService {
     @Transactional
     public QuestionResponse unarchive(UUID publicId, CurrentUser caller) {
         Question question = loadForPlatformWrite(publicId, caller);
+        if (Boolean.TRUE.equals(question.getEverPublished())) {
+            requireArchiveGovernance(caller, question.getAuthorUserPublicId());
+        }
         if (question.getStatus() != QuestionStatus.ARCHIVED) {
             throw new InvalidQuestionStatusTransitionException();
         }
@@ -399,6 +432,7 @@ public class ItembankService {
                 .existsByRevisionGroupPublicIdAndCurrentTrueAndPublicIdNot(
                         question.getRevisionGroupPublicId(), question.getPublicId());
         question.setCurrent(!groupHasCurrentElsewhere);
+        audit(caller, ItembankConstants.AUDIT_UNARCHIVED, question, "Restored question to draft");
         return toResponse(question);
     }
 
@@ -457,10 +491,60 @@ public class ItembankService {
     private Question loadForPlatformWrite(UUID publicId, CurrentUser caller) {
         Question question = questionRepository.findWithOptionsByPublicId(publicId)
                 .orElseThrow(QuestionNotFoundException::new);
-        if (!caller.isPlatformUser()) {
-            throw new AccessDeniedException("Only platform users may write the shared question bank");
+        if (!accessPolicy.canModifyDraft(caller, question.getAuthorUserPublicId())) {
+            deny(caller, publicId, ItembankConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
         }
         return question;
+    }
+
+    private void requireAcademicReview(CurrentUser caller, UUID authorUserPublicId) {
+        if (accessPolicy.canReview(caller, authorUserPublicId)) {
+            return;
+        }
+        if (caller != null && caller.hasRole(SecurityRoles.ACADEMIC_MANAGER)
+                && authorUserPublicId != null && authorUserPublicId.equals(caller.userId())) {
+            deny(caller, null, ItembankConstants.ACADEMIC_SELF_APPROVAL_FORBIDDEN);
+        }
+        deny(caller, null, ItembankConstants.ACADEMIC_REVIEW_REQUIRED);
+    }
+
+    private void requireAcademicPublish(CurrentUser caller, UUID authorUserPublicId) {
+        if (accessPolicy.canPublish(caller, authorUserPublicId)) {
+            return;
+        }
+        if (caller != null && caller.hasRole(SecurityRoles.ACADEMIC_MANAGER)
+                && authorUserPublicId != null && authorUserPublicId.equals(caller.userId())) {
+            deny(caller, null, ItembankConstants.ACADEMIC_SELF_APPROVAL_FORBIDDEN);
+        }
+        deny(caller, null, ItembankConstants.ACADEMIC_PUBLISH_REQUIRED);
+    }
+
+    private void requireArchiveGovernance(CurrentUser caller, UUID authorUserPublicId) {
+        // Preserve the legacy author's narrow archive compatibility window for
+        // ownerless historical rows; it does not grant review/publish rights.
+        if (caller != null && caller.hasRole(SecurityRoles.ACADEMIC_STAFF) && authorUserPublicId == null) {
+            return;
+        }
+        requireAcademicPublish(caller, authorUserPublicId);
+    }
+
+    private void audit(CurrentUser caller, String action, Question question, String summary) {
+        if (auditLogService == null || caller == null || question == null) {
+            return;
+        }
+        String text = summary == null ? "" : summary;
+        auditLogService.record(caller, ItembankConstants.QUESTION_AGGREGATE,
+                String.valueOf(question.getPublicId()), action,
+                text.length() <= 500 ? text : text.substring(0, 500));
+    }
+
+    private void deny(CurrentUser caller, UUID aggregateId, String message) {
+        if (auditLogService != null && caller != null) {
+            auditLogService.recordFailure(caller, ItembankConstants.QUESTION_AGGREGATE,
+                    aggregateId == null ? "unknown" : aggregateId.toString(),
+                    SharedConstants.AUDIT_AUTHORIZATION_DENIED, message);
+        }
+        throw new AccessDeniedException(message);
     }
 
     /**

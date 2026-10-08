@@ -22,7 +22,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/admin/license-codes")
-@PreAuthorize("hasRole('PLATFORM_ADMIN')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER')")
 public class AdminLicenseCodeController {
     private final LicenseCodeService service;
 
@@ -60,6 +60,7 @@ public class AdminLicenseCodeController {
     }
 
     @PostMapping("/{publicId}/reveal")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ResponseEntity<ApiResponse<LicenseCodeRevealResponse>> reveal(@PathVariable UUID publicId) {
         return ResponseEntity.ok()
                 .cacheControl(org.springframework.http.CacheControl.noStore())
@@ -68,11 +69,13 @@ public class AdminLicenseCodeController {
     }
 
     @GetMapping("/{publicId}/revoke-preview")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<LicenseRevokePreviewResponse> revokePreview(@PathVariable UUID publicId) {
         return ApiResponse.success(service.previewRevoke(publicId, CurrentUserContext.required()));
     }
 
     @PostMapping("/{publicId}/revoke")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     public ApiResponse<LicenseRevokeResponse> revoke(@PathVariable UUID publicId,
             @Valid @RequestBody ConfirmLicenseRevokeRequest request) {
         return ApiResponse.success(service.revoke(publicId, request, CurrentUserContext.required()));

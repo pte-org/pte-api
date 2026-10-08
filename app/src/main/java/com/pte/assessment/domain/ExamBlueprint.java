@@ -40,6 +40,10 @@ public class ExamBlueprint extends BaseEntity {
     @Column
     private UUID tenantId;
 
+    /** Academic author; null is retained for legacy ownerless blueprints. */
+    @Column(name = "author_user_public_id")
+    private UUID authorUserPublicId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private BlueprintStatus status = BlueprintStatus.DRAFT;

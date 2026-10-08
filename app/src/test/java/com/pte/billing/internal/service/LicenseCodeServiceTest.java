@@ -186,7 +186,7 @@ class LicenseCodeServiceTest {
     }
 
     @Test
-    void adminPageAllowsIssuedCodeWithoutRecipient() {
+    void managerPageAllowsIssuedCodeWithoutRecipient() {
         UUID planId = UUID.randomUUID();
         LicenseCode code = LicenseCode.issue("ABCD-EFGH-JKLM-NPQR-STUV", planId, UUID.randomUUID(),
                 Instant.now(), null);
@@ -199,7 +199,7 @@ class LicenseCodeServiceTest {
         when(tenancyService.findTenantSummaries(any())).thenReturn(Map.of());
 
         AdminLicenseCodeSummary result = service.listForAdmin(0, 25, "issued", null, null,
-                platformAdmin()).data().getFirst();
+                platformManager()).data().getFirst();
 
         assertThat(result.effectiveStatus()).isEqualTo("ISSUED");
         assertThat(result.recipientPublicId()).isNull();
@@ -241,6 +241,37 @@ class LicenseCodeServiceTest {
         assertThat(response.replayed()).isFalse();
         assertThat(response.planId()).isEqualTo(planId);
         assertThat(response.status()).isEqualTo(LicenseCodeStatus.ISSUED.name());
+    }
+
+    @Test
+    void managerCanIssueLicenseAndReceivesOnlySafeReceipt() {
+        UUID planId = UUID.randomUUID();
+        when(licenseCodeGenerator.generate()).thenReturn("ABCD-EFGH-JKLM-NPQR-STUV");
+        when(licenseCodePersistenceService.issue(any(LicenseCode.class), any(), any())).thenAnswer(invocation -> {
+            LicenseCode code = invocation.getArgument(0);
+            code.setPublicId(UUID.randomUUID());
+            return new LicenseIssueReceipt(code.getPublicId(), code.getPlanId(), "ISSUED", "ISSUED",
+                    code.getIssuedAt(), code.getCodeExpiresAt(), false);
+        });
+
+        LicenseIssueReceipt response = service.issue(planId, null, UUID.randomUUID(), platformManager());
+
+        assertThat(response.planId()).isEqualTo(planId);
+        assertThat(java.util.Arrays.stream(LicenseIssueReceipt.class.getDeclaredFields())
+                .noneMatch(field -> field.getName().equals("code"))).isTrue();
+    }
+
+    @Test
+    void managerCannotRevealOrPreviewRevokeLicense() {
+        UUID codeId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.revealForAdmin(codeId, platformManager()))
+                .isInstanceOfSatisfying(LicenseCodeException.class,
+                        ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+        assertThatThrownBy(() -> service.previewRevoke(codeId, platformManager()))
+                .isInstanceOfSatisfying(LicenseCodeException.class,
+                        ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+        org.mockito.Mockito.verifyNoInteractions(licenseCodeRepository);
     }
 
     @Test
@@ -447,6 +478,10 @@ class LicenseCodeServiceTest {
 
     private CurrentUser platformAdmin() {
         return new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
+    }
+
+    private CurrentUser platformManager() {
+        return new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_MANAGER"));
     }
 
     private CurrentUser hostAdmin(UUID tenantId) {

@@ -28,7 +28,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/questions")
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
 public class QuestionController {
 
     private final ItembankService itembankService;
@@ -89,20 +89,20 @@ public class QuestionController {
     }
 
     @PostMapping({"/{publicId}/approval", "/{publicId}/approve"})
-    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
     public ApiResponse<QuestionResponse> approve(@PathVariable UUID publicId) {
         return ApiResponse.success(itembankService.approve(publicId, currentUser()));
     }
 
     @PostMapping({"/{publicId}/rejection", "/{publicId}/reject"})
-    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
     public ApiResponse<QuestionResponse> reject(@PathVariable UUID publicId,
             @Valid @RequestBody RejectQuestionRequest request) {
         return ApiResponse.success(itembankService.reject(publicId, request, currentUser()));
     }
 
     @PostMapping("/{publicId}/publish")
-    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
     public ApiResponse<QuestionResponse> publish(@PathVariable UUID publicId) {
         return ApiResponse.success(itembankService.publish(publicId, currentUser()));
     }

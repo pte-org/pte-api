@@ -87,6 +87,21 @@ public class TenancyService {
                         tenant -> new TenantSummary(tenant.getPublicId(), tenant.getName(), tenant.isDeleted())));
     }
 
+    /** Returns safe tenant identity and organization-type projections in one query. */
+    @Transactional(readOnly = true)
+    public Map<UUID, TenantOrganizationSummary> findTenantOrganizationSummaries(
+            Collection<UUID> tenantPublicIds) {
+        if (tenantPublicIds == null || tenantPublicIds.isEmpty()) {
+            return Map.of();
+        }
+        return tenantRepository.findByPublicIdIn(tenantPublicIds).stream()
+                .collect(Collectors.toUnmodifiableMap(
+                        Tenant::getPublicId,
+                        tenant -> new TenantOrganizationSummary(
+                                tenant.getPublicId(), tenant.getName(), tenant.getOrganizationType(),
+                                tenant.isDeleted())));
+    }
+
     /** {@code billing.TenantApplicationService.approve()} — creates the tenant an approved application promised. */
     public Tenant createTenant(String name, String organizationType, String code, String taxCode, int studentLimit) {
         return tenantLifecycleService.createFromApplication(name, organizationType, code, taxCode, studentLimit);

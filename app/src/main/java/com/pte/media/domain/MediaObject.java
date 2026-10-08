@@ -72,6 +72,16 @@ public class MediaObject extends BaseEntity {
     @Column(name = "size_bytes")
     private Long sizeBytes;
 
+    /** Practice ownership boundary for student response recordings. */
+    @Column(name = "practice_session_public_id")
+    private UUID practiceSessionPublicId;
+
+    @Column(name = "practice_item_public_id")
+    private UUID practiceItemPublicId;
+
+    @Column(name = "purpose", length = 64)
+    private String purpose;
+
     public void markUploaded() {
         this.status = MediaStatus.UPLOADED;
     }

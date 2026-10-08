@@ -29,6 +29,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByPublicId(UUID publicId);
 
+    Optional<User> findByPublicIdAndDeletedFalse(UUID publicId);
+
     Optional<User> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -43,6 +45,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     List<User> findByPublicIdInAndTenantIdAndDeletedFalse(List<UUID> publicIds, UUID tenantId);
 
+    List<User> findByPublicIdInAndDeletedFalse(List<UUID> publicIds);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.publicId in :publicIds and u.tenantId = :tenantId "
             + "and u.deleted = false order by u.id")
@@ -50,6 +54,13 @@ public interface UserRepository extends JpaRepository<User, Long> {
             @Param("tenantId") UUID tenantId);
 
     List<User> findByTenantId(UUID tenantId);
+
+    @Query("select distinct u from User u join u.roles userRole "
+            + "where u.tenantId is null and u.deleted = false and userRole in :platformRoles "
+            + "and (:role is null or userRole = :role) "
+            + "and (:status is null or u.status = :status)")
+    Page<User> findPageForPlatformUsers(@Param("platformRoles") Set<Role> platformRoles,
+            @Param("role") Role role, @Param("status") UserStatus status, Pageable pageable);
 
     @Query("""
             select distinct u
@@ -76,6 +87,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
 
     List<User> findByEmailIn(List<String> emails);
+
+    List<User> findByEmailIgnoreCaseAndDeletedFalse(String email);
 
     List<User> findByTenantIdAndEmailIn(UUID tenantId, List<String> emails);
 
