@@ -50,6 +50,10 @@ public class ScoreTemplate extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
+    /** Platform academic author; null is retained for legacy templates. */
+    @Column(name = "author_user_public_id")
+    private java.util.UUID authorUserPublicId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ScoreTemplateStatus status = ScoreTemplateStatus.DRAFT;

@@ -92,6 +92,29 @@ class CloudinaryMediaServiceTest {
     }
 
     @Test
+    void academicStaffCanRequestAuthoringMedia() {
+        when(repository.save(any(MediaObject.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        UUID staffId = UUID.randomUUID();
+
+        CloudinaryUploadResponse response = service().requestUpload(
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.AUDIO_PROMPT, 1024L),
+                new CurrentUser(staffId, null, List.of("ACADEMIC_STAFF")));
+
+        assertThat(response.folder()).isEqualTo("pte/authoring");
+        ArgumentCaptor<MediaObject> captor = ArgumentCaptor.forClass(MediaObject.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getOwnerPublicId()).isEqualTo(staffId);
+    }
+
+    @Test
+    void platformManagerCannotRequestAuthoringMedia() {
+        assertThatThrownBy(() -> service().requestUpload(
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.AUDIO_PROMPT, 1024L),
+                new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_MANAGER"))))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
     void hostCannotRequestStudentResponseUpload() {
         CloudinaryMediaService service = service();
 

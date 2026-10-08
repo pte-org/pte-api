@@ -57,6 +57,10 @@ public class Question extends BaseEntity {
     @Column
     private UUID tenantId;
 
+    /** Platform academic author; null is retained for legacy ownerless rows. */
+    @Column(name = "author_user_public_id")
+    private UUID authorUserPublicId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private QuestionStatus status = QuestionStatus.DRAFT;

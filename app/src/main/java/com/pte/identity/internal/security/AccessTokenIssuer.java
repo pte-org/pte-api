@@ -4,6 +4,7 @@ import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.shared.security.SecurityClaims;
+import com.pte.shared.security.SecurityRoles;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -30,7 +31,8 @@ public class AccessTokenIssuer {
 
     public String issue(User user) {
         Instant now = Instant.now();
-        List<String> roles = user.getRoles().stream().map(Role::name).toList();
+        List<String> roles = SecurityRoles.canonicalizeRoles(
+                user.getRoles().stream().map(Role::name).toList());
 
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
                 .issuer(IdentityConstants.TOKEN_ISSUER)

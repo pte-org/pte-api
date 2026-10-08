@@ -4,6 +4,9 @@ import com.pte.identity.domain.Role;
 import com.pte.identity.internal.exception.ForbiddenRoleAssignmentException;
 import com.pte.identity.internal.exception.ForbiddenUserManagementException;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.SecurityCapability;
+import com.pte.shared.security.SecurityPolicy;
+import com.pte.shared.security.SecurityRoles;
 import org.springframework.stereotype.Component;
 
 import java.util.EnumSet;
@@ -23,8 +26,10 @@ public class UserProvisioningHelper {
     private static final Set<Role> HOST_ASSIGNABLE_ROLES =
             EnumSet.of(Role.PROCTOR, Role.EXAMINER, Role.STUDENT);
 
-    /** A platform admin may provision only the root account for a tenant. */
+    /** The legacy user endpoint may provision only a tenant root for a platform admin. */
     private static final Set<Role> PLATFORM_ASSIGNABLE_ROLES = Set.of(Role.HOST_ADMIN);
+    private static final Set<Role> PLATFORM_ROLE_ASSIGNABLE_ROLES = EnumSet.of(
+            Role.PLATFORM_MANAGER, Role.ACADEMIC_MANAGER, Role.ACADEMIC_STAFF);
 
     /** The same hierarchy is used for user lookup and lifecycle management. */
     private static final Set<Role> HOST_MANAGEABLE_ROLES = HOST_ASSIGNABLE_ROLES;
@@ -53,6 +58,38 @@ public class UserProvisioningHelper {
             throw new ForbiddenRoleAssignmentException();
         }
         return roles;
+    }
+
+    public void authorizePlatformUserManagement(CurrentUser caller) {
+        if (!SecurityPolicy.hasCapability(caller, SecurityCapability.PLATFORM_USER_MANAGE)) {
+            throw new ForbiddenUserManagementException();
+        }
+    }
+
+    public Set<Role> resolvePlatformRoles(CurrentUser caller, List<String> roleNames) {
+        authorizePlatformUserManagement(caller);
+        Set<Role> roles = parseRoles(roleNames);
+        if (roles.isEmpty() || !PLATFORM_ROLE_ASSIGNABLE_ROLES.containsAll(roles)) {
+            throw new ForbiddenRoleAssignmentException();
+        }
+        return roles;
+    }
+
+    public void authorizePlatformTarget(CurrentUser caller, Set<Role> targetRoles) {
+        authorizePlatformUserManagement(caller);
+        if (!isPlatformTarget(targetRoles) || targetRoles.contains(Role.PLATFORM_ADMIN)) {
+            throw new ForbiddenUserManagementException();
+        }
+    }
+
+    public boolean isPlatformTarget(Set<Role> targetRoles) {
+        return targetRoles != null && !targetRoles.isEmpty()
+                && targetRoles.stream().allMatch(role -> SecurityRoles.isPlatformRole(role.name()));
+    }
+
+    public Set<Role> platformRoleValues() {
+        return EnumSet.of(Role.PLATFORM_ADMIN, Role.PLATFORM_MANAGER, Role.ACADEMIC_MANAGER,
+                Role.ACADEMIC_STAFF, Role.PLATFORM_AUTHOR);
     }
 
     /** Bulk user creation is a student-provisioning operation owned by a Host. */
@@ -99,20 +136,32 @@ public class UserProvisioningHelper {
     }
 
     private boolean isPlatformAdmin(CurrentUser caller) {
-        return caller != null && caller.hasRole(Role.PLATFORM_ADMIN.name()) && caller.tenantId() == null;
+        return caller != null && SecurityPolicy.hasValidScope(caller)
+                && caller.hasRole(Role.PLATFORM_ADMIN.name()) && caller.tenantId() == null;
     }
 
     private boolean isHostAdmin(CurrentUser caller) {
-        return caller != null && caller.hasRole(Role.HOST_ADMIN.name()) && caller.tenantId() != null;
+        return caller != null && SecurityPolicy.hasValidScope(caller)
+                && caller.hasRole(Role.HOST_ADMIN.name()) && caller.tenantId() != null;
     }
 
     private Set<Role> parseRoles(List<String> roleNames) {
+        if (roleNames == null || roleNames.isEmpty()) {
+            return Set.of();
+        }
         try {
             Set<Role> roles = EnumSet.noneOf(Role.class);
-            roleNames.forEach(name -> roles.add(Role.valueOf(name)));
+            roleNames.forEach(name -> {
+                String canonicalName = SecurityRoles.canonicalize(name);
+                if (canonicalName == null || canonicalName.isBlank()) {
+                    throw new ForbiddenRoleAssignmentException();
+                }
+                roles.add(Role.valueOf(canonicalName));
+            });
             return roles;
         } catch (IllegalArgumentException ex) {
             throw new ForbiddenRoleAssignmentException();
         }
     }
+
 }

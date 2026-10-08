@@ -401,6 +401,70 @@ class ScoreTemplateAdminServiceTest {
                 eq("CLONED"), any());
     }
 
+    @Test
+    void createDraft_byAcademicStaffStoresTheAuthenticatedAuthor() {
+        UUID staffId = UUID.randomUUID();
+        CurrentUser staff = new CurrentUser(staffId, null, List.of("ACADEMIC_STAFF"));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.createDraft(new CreateScoreTemplateRequest("CUSTOM", "Custom template"), staff);
+
+        org.mockito.ArgumentCaptor<ScoreTemplate> captor =
+                org.mockito.ArgumentCaptor.forClass(ScoreTemplate.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getAuthorUserPublicId()).isEqualTo(staffId);
+        assertThat(captor.getValue().getStatus()).isEqualTo(ScoreTemplateStatus.DRAFT);
+    }
+
+    @Test
+    void academicStaffCannotActivateOwnTemplate() {
+        UUID templateId = UUID.randomUUID();
+        UUID staffId = UUID.randomUUID();
+        ScoreTemplate template = fullyValidTemplate(templateId, "CUSTOM", 1, ScoreTemplateStatus.DRAFT);
+        template.setAuthorUserPublicId(staffId);
+        when(repository.findWithItemsByPublicId(templateId)).thenReturn(Optional.of(template));
+        CurrentUser staff = new CurrentUser(staffId, null, List.of("ACADEMIC_STAFF"));
+
+        assertThatThrownBy(() -> service.activate(templateId, staff))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    }
+
+    @Test
+    void academicManagerCannotApproveOwnTemplate() {
+        UUID templateId = UUID.randomUUID();
+        UUID managerId = UUID.randomUUID();
+        ScoreTemplate template = fullyValidTemplate(templateId, "CUSTOM", 1, ScoreTemplateStatus.PENDING_APPROVAL);
+        template.setAuthorUserPublicId(managerId);
+        when(repository.findWithItemsByPublicId(templateId)).thenReturn(Optional.of(template));
+        CurrentUser manager = new CurrentUser(managerId, null, List.of("ACADEMIC_MANAGER"));
+
+        assertThatThrownBy(() -> service.approve(templateId, manager))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    }
+
+    @Test
+    void academicManagerCanApproveAndActivateAnotherAuthorsVersion() {
+        UUID staffId = UUID.randomUUID();
+        CurrentUser manager = new CurrentUser(UUID.randomUUID(), null, List.of("ACADEMIC_MANAGER"));
+        UUID templateId = UUID.randomUUID();
+        ScoreTemplate template = fullyValidTemplate(templateId, "CUSTOM", 1, ScoreTemplateStatus.PENDING_APPROVAL);
+        template.setAuthorUserPublicId(staffId);
+        template.getItems().forEach(item -> item.setSection(
+                PteTaskType.valueOf(item.getTaskType()).getSection().name()));
+        when(repository.findWithItemsByPublicId(templateId)).thenReturn(Optional.of(template));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ScoreTemplateResponse approved = service.approve(templateId, manager);
+        assertThat(approved.status()).isEqualTo("DRAFT");
+
+        template.setStatus(ScoreTemplateStatus.DRAFT);
+        when(repository.findAllByCodeForUpdate("CUSTOM")).thenReturn(List.of(template));
+        when(repository.findWithItemsByStatus(ScoreTemplateStatus.ACTIVE)).thenReturn(Optional.empty());
+        ScoreTemplateResponse active = service.activate(templateId, manager);
+
+        assertThat(active.status()).isEqualTo("ACTIVE");
+    }
+
     private ScoreTemplateItemRequest sampleItemRequest() {
         return new ScoreTemplateItemRequest("READ_ALOUD", "SPEAKING", 0, 6, 7, 35, 40,
                 BigDecimal.valueOf(9), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);

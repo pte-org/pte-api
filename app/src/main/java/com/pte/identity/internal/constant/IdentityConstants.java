@@ -22,6 +22,20 @@ public final class IdentityConstants {
     public static final String FORBIDDEN_ROLE_ASSIGNMENT = "FORBIDDEN_ROLE_ASSIGNMENT";
     public static final String FORBIDDEN_USER_MANAGEMENT = "FORBIDDEN_USER_MANAGEMENT";
     public static final String FORBIDDEN_PASSWORD_RESET = "FORBIDDEN_PASSWORD_RESET";
+    public static final String PLATFORM_USER_AGGREGATE = "PlatformUser";
+    public static final String PLATFORM_USER_CREATED = "PlatformUserCreated";
+    public static final String PLATFORM_USER_ROLES_UPDATED = "PlatformUserRolesUpdated";
+    public static final String PLATFORM_USER_SUSPENDED = "PlatformUserSuspended";
+    public static final String PLATFORM_USER_REACTIVATED = "PlatformUserReactivated";
+    public static final String PLATFORM_AUTHORIZATION_DENIED = "PlatformAuthorizationDenied";
+    public static final String PLATFORM_AUTHORIZATION_AGGREGATE_ID = "authorization";
+    public static final String PLATFORM_ROLE_ASSIGNMENT_AGGREGATE_ID = "role-assignment";
+    public static final String PLATFORM_USER_CREATED_SUMMARY = "Platform user created.";
+    public static final String PLATFORM_USER_ROLES_UPDATED_SUMMARY = "Platform user roles updated.";
+    public static final String PLATFORM_USER_SUSPENDED_SUMMARY = "Platform user suspended.";
+    public static final String PLATFORM_USER_REACTIVATED_SUMMARY = "Platform user reactivated.";
+    public static final String PLATFORM_AUTHORIZATION_DENIED_SUMMARY =
+            "Platform-user management authorization denied.";
     public static final String USER_AGGREGATE = "User";
     public static final String USER_PASSWORD_RESET = "UserPasswordReset";
     public static final String USER_PASSWORD_RESET_SUMMARY = "Authorized administrator reset the password.";

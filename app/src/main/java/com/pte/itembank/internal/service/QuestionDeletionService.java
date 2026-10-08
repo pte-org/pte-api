@@ -8,6 +8,7 @@ import com.pte.itembank.internal.repository.QuestionRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.SecurityPolicy;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,10 +27,21 @@ public class QuestionDeletionService {
 
     @Transactional
     public void deleteDraft(UUID publicId, CurrentUser caller) {
-        if (!caller.isPlatformUser() || !(caller.hasRole("PLATFORM_ADMIN") || caller.hasRole("PLATFORM_AUTHOR"))) {
+        // Reject callers that can never delete an academic draft before
+        // looking up the resource. This preserves the deny-by-default
+        // boundary and avoids leaking whether an arbitrary id exists.
+        if (!SecurityPolicy.canModifyAcademicDraft(caller, null)) {
             throw new AccessDeniedException(SharedConstants.ACCESS_DENIED);
         }
         Question question = questions.findByPublicIdForUpdate(publicId).orElseThrow(QuestionNotFoundException::new);
+        if (!SecurityPolicy.canModifyAcademicDraft(caller, question.getAuthorUserPublicId())) {
+            if (caller != null) {
+                audit.recordFailure(caller, ItembankConstants.QUESTION_AGGREGATE, publicId.toString(),
+                        SharedConstants.AUDIT_AUTHORIZATION_DENIED,
+                        ItembankConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
+            }
+            throw new AccessDeniedException(ItembankConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
+        }
         if (question.getTenantId() != null || question.getVisibility() != com.pte.itembank.domain.enums.Visibility.SHARED) {
             throw new QuestionNotFoundException();
         }

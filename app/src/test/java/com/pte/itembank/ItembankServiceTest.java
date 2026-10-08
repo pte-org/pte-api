@@ -22,6 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -307,6 +308,58 @@ class ItembankServiceTest {
         assertThatThrownBy(() -> service.publish(publicId, hostCaller))
                 .isInstanceOf(AccessDeniedException.class);
         assertThat(question.getStatus()).isEqualTo(QuestionStatus.DRAFT);
+    }
+
+    @Test
+    void create_byAcademicStaffStoresTheAuthenticatedAuthor() {
+        UUID staffId = UUID.randomUUID();
+        CurrentUser staff = new CurrentUser(staffId, null, List.of("ACADEMIC_STAFF"));
+        when(questionRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        QuestionResponse response = service.create(new CreateQuestionRequest(
+                "READ_ALOUD", "title", "prompt", null, null, null, null, null, null, null), staff);
+
+        ArgumentCaptor<Question> captor = ArgumentCaptor.forClass(Question.class);
+        org.mockito.Mockito.verify(questionRepository).save(captor.capture());
+        assertThat(captor.getValue().getAuthorUserPublicId()).isEqualTo(staffId);
+        assertThat(response.status()).isEqualTo("DRAFT");
+    }
+
+    @Test
+    void academicManagerCannotApproveOwnQuestion() {
+        UUID managerId = UUID.randomUUID();
+        CurrentUser manager = new CurrentUser(managerId, null, List.of("ACADEMIC_MANAGER"));
+        UUID publicId = UUID.randomUUID();
+        Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        question.setPublicId(publicId);
+        question.setStatus(QuestionStatus.PENDING_APPROVAL);
+        question.setAuthorUserPublicId(managerId);
+        when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
+
+        assertThatThrownBy(() -> service.approve(publicId, manager))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage(com.pte.itembank.internal.constant.ItembankConstants.ACADEMIC_SELF_APPROVAL_FORBIDDEN);
+    }
+
+    @Test
+    void academicManagerCanApproveAnotherAuthorsQuestion() {
+        UUID authorId = UUID.randomUUID();
+        CurrentUser manager = new CurrentUser(UUID.randomUUID(), null, List.of("ACADEMIC_MANAGER"));
+        UUID publicId = UUID.randomUUID();
+        Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        question.setPublicId(publicId);
+        question.setStatus(QuestionStatus.PENDING_APPROVAL);
+        question.setAuthorUserPublicId(authorId);
+        question.setPromptText("read this aloud");
+        question.setRevisionGroupPublicId(UUID.randomUUID());
+        when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
+        when(questionRepository.findByRevisionGroupPublicIdAndCurrentTrueAndPublicIdNot(any(), any()))
+                .thenReturn(List.of());
+
+        QuestionResponse response = service.approve(publicId, manager);
+
+        assertThat(response.status()).isEqualTo("APPROVED");
+        assertThat(question.getAuthorUserPublicId()).isEqualTo(authorId);
     }
 
     @Test

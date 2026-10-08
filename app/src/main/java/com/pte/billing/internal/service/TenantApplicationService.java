@@ -20,6 +20,10 @@ import com.pte.billing.internal.repository.TenantApplicationRepository;
 import com.pte.identity.domain.HostAdminCreated;
 import com.pte.identity.IdentityService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.PlatformOperation;
+import com.pte.shared.security.PlatformOperationPolicy;
+import com.pte.shared.audit.AuditLogService;
+import com.pte.shared.constant.SharedConstants;
 import com.pte.tenancy.TenancyService;
 import com.pte.tenancy.domain.Tenant;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -43,15 +47,26 @@ public class TenantApplicationService {
     private final IdentityService identityService;
     private final PlatformSettingService platformSettingService;
     private final ApplicationEventPublisher eventPublisher;
+    private final AuditLogService auditLogService;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public TenantApplicationService(TenantApplicationRepository applicationRepository,
             TenancyService tenancyService, IdentityService identityService,
-            PlatformSettingService platformSettingService, ApplicationEventPublisher eventPublisher) {
+            PlatformSettingService platformSettingService, ApplicationEventPublisher eventPublisher,
+            AuditLogService auditLogService) {
         this.applicationRepository = applicationRepository;
         this.tenancyService = tenancyService;
         this.identityService = identityService;
         this.platformSettingService = platformSettingService;
         this.eventPublisher = eventPublisher;
+        this.auditLogService = auditLogService;
+    }
+
+    /** Compatibility constructor for existing focused tests and public submit wiring. */
+    public TenantApplicationService(TenantApplicationRepository applicationRepository,
+            TenancyService tenancyService, IdentityService identityService,
+            PlatformSettingService platformSettingService, ApplicationEventPublisher eventPublisher) {
+        this(applicationRepository, tenancyService, identityService, platformSettingService, eventPublisher, null);
     }
 
     /**
@@ -86,6 +101,12 @@ public class TenantApplicationService {
 
     @Transactional(readOnly = true)
     public List<TenantApplicationResponse> list() {
+        return list(null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TenantApplicationResponse> list(CurrentUser caller) {
+        requireOperation(caller, PlatformOperation.APPLICATION_READ, BillingConstants.AUDIT_APPLICATION_READ);
         return applicationRepository.findAllByOrderByCreatedAtDesc().stream()
                 .map(TenantApplicationMapper::toResponse)
                 .toList();
@@ -93,6 +114,12 @@ public class TenantApplicationService {
 
     @Transactional(readOnly = true)
     public TenantApplicationResponse get(UUID applicationPublicId) {
+        return get(applicationPublicId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public TenantApplicationResponse get(UUID applicationPublicId, CurrentUser caller) {
+        requireOperation(caller, PlatformOperation.APPLICATION_READ, BillingConstants.AUDIT_APPLICATION_READ);
         return applicationRepository.findByPublicId(applicationPublicId)
                 .map(TenantApplicationMapper::toResponse)
                 .orElseThrow(TenantApplicationNotFoundException::new);
@@ -105,6 +132,7 @@ public class TenantApplicationService {
      */
     @Transactional
     public void approve(UUID applicationPublicId, CurrentUser caller) {
+        requireOperation(caller, PlatformOperation.APPLICATION_REVIEW, BillingConstants.AUDIT_APPLICATION_REVIEW);
         TenantApplication application = findPendingForUpdate(applicationPublicId);
         try {
             int freeStudentLimit = platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY);
@@ -116,6 +144,8 @@ public class TenantApplicationService {
 
             application.approve(caller.userId());
             applicationRepository.saveAndFlush(application);
+            audit(caller, BillingConstants.AUDIT_APPLICATION_REVIEW, application.getPublicId(),
+                    BillingConstants.AUDIT_APPLICATION_APPROVED_SUMMARY);
             eventPublisher.publishEvent(new TenantApplicationApprovedEvent(
                     application.getPublicId(), tenant.getPublicId(), application.getOrgName(), tenant.getCode(),
                     application.getContactEmail(), hostAdmin.user().getUsername(), hostAdmin.generatedPassword()));
@@ -131,10 +161,13 @@ public class TenantApplicationService {
     @Transactional
     public TenantApplicationResponse reject(UUID applicationPublicId, RejectApplicationRequest request,
             CurrentUser caller) {
+        requireOperation(caller, PlatformOperation.APPLICATION_REVIEW, BillingConstants.AUDIT_APPLICATION_REVIEW);
         TenantApplication application = findPendingForUpdate(applicationPublicId);
         String reason = normalizeRejectReason(request);
         application.reject(caller.userId(), reason);
         applicationRepository.saveAndFlush(application);
+        audit(caller, BillingConstants.AUDIT_APPLICATION_REVIEW, application.getPublicId(),
+                BillingConstants.AUDIT_APPLICATION_REJECTED_SUMMARY);
         eventPublisher.publishEvent(new TenantApplicationRejectedEvent(
                 application.getPublicId(), application.getOrgName(), application.getRequestedCode(),
                 application.getContactEmail(), application.getRejectReason()));
@@ -184,5 +217,28 @@ public class TenantApplicationService {
             }
         }
         return false;
+    }
+
+    private void requireOperation(CurrentUser caller, PlatformOperation operation, String action) {
+        // Null is retained only for legacy in-process compatibility overloads;
+        // HTTP controllers always resolve an authenticated platform caller.
+        if (caller == null) {
+            return;
+        }
+        if (PlatformOperationPolicy.can(caller, operation)) {
+            return;
+        }
+        if (auditLogService != null && caller != null) {
+            auditLogService.recordFailure(caller, BillingConstants.TENANT_APPLICATION_AGGREGATE, "unknown",
+                    SharedConstants.AUDIT_AUTHORIZATION_DENIED, action);
+        }
+        throw new org.springframework.security.access.AccessDeniedException(SharedConstants.ACCESS_DENIED);
+    }
+
+    private void audit(CurrentUser caller, String action, UUID aggregateId, String summary) {
+        if (auditLogService != null && caller != null) {
+            auditLogService.record(caller, BillingConstants.TENANT_APPLICATION_AGGREGATE,
+                    aggregateId.toString(), action, summary);
+        }
     }
 }

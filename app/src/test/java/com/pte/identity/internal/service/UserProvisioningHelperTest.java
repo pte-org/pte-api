@@ -69,6 +69,29 @@ class UserProvisioningHelperTest {
     }
 
     @Test
+    void resolveAndAuthorizeRoles_legacyUserEndpoint_cannotGrantAcademicStaff() {
+        assertThatThrownBy(() -> helper.resolveAndAuthorizeRoles(platformAdmin(), List.of("ACADEMIC_STAFF")))
+                .isInstanceOf(ForbiddenRoleAssignmentException.class);
+    }
+
+    @Test
+    void resolvePlatformRoles_onlyPlatformAdmin_canGrantCanonicalAcademicRoles() {
+        Set<Role> roles = helper.resolvePlatformRoles(platformAdmin(), List.of("ACADEMIC_MANAGER"));
+
+        assertThat(roles).containsExactly(Role.ACADEMIC_MANAGER);
+        assertThatThrownBy(() -> helper.resolvePlatformRoles(
+                new CurrentUser(UUID.randomUUID(), null, List.of("ACADEMIC_MANAGER")),
+                List.of("ACADEMIC_STAFF")))
+                .isInstanceOf(ForbiddenUserManagementException.class);
+    }
+
+    @Test
+    void roleCatalog_containsAllCanonicalPlatformRoles() {
+        assertThat(java.util.Arrays.stream(Role.values()).map(Enum::name))
+                .contains("PLATFORM_ADMIN", "PLATFORM_MANAGER", "ACADEMIC_MANAGER", "ACADEMIC_STAFF");
+    }
+
+    @Test
     void resolveAndAuthorizeRoles_unknownRoleName_throws() {
         CurrentUser caller = platformAdmin();
 
@@ -114,6 +137,19 @@ class UserProvisioningHelperTest {
         helper.validateTenantScope(platformAdmin(), tenantId, Set.of(Role.HOST_ADMIN));
 
         assertThatThrownBy(() -> helper.validateTenantScope(platformAdmin(), null, Set.of(Role.HOST_ADMIN)))
+                .isInstanceOf(ForbiddenRoleAssignmentException.class);
+    }
+
+    @Test
+    void resolveAndAuthorizeRoles_nullRoleName_throwsDomainException() {
+        assertThatThrownBy(() -> helper.resolveAndAuthorizeRoles(platformAdmin(), java.util.Arrays.asList((String) null)))
+                .isInstanceOf(ForbiddenRoleAssignmentException.class);
+    }
+
+    @Test
+    void validateTenantScope_legacyUserEndpoint_cannotCreatePlatformAcademicRole() {
+        assertThatThrownBy(() -> helper.validateTenantScope(
+                platformAdmin(), null, Set.of(Role.ACADEMIC_STAFF)))
                 .isInstanceOf(ForbiddenRoleAssignmentException.class);
     }
 

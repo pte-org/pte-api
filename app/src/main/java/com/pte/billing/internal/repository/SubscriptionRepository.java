@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Page;
 
 import java.time.Instant;
 import java.util.List;
@@ -22,6 +24,10 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     Optional<Subscription> findByPublicId(UUID publicId);
 
     Optional<Subscription> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
+
+    Page<Subscription> findByDeletedFalseOrderByCreatedAtDesc(Pageable pageable);
+
+    Page<Subscription> findByDeletedFalseAndTenantIdOrderByCreatedAtDesc(UUID tenantId, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM Subscription s WHERE s.publicId = :publicId AND s.tenantId = :tenantId AND s.deleted = false")

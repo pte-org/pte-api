@@ -25,6 +25,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     Page<Order> findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(UUID tenantId, Pageable pageable);
 
+    Page<Order> findByDeletedFalseOrderByCreatedAtDesc(Pageable pageable);
+
     List<Order> findByStatusAndDeletedFalseAndCreatedAtLessThanEqual(OrderStatus status,
             Instant createdAt);
 

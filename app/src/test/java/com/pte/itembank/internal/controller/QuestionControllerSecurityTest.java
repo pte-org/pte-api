@@ -18,7 +18,8 @@ class QuestionControllerSecurityTest {
         PreAuthorize annotation = QuestionController.class.getAnnotation(PreAuthorize.class);
 
         assertThat(annotation).isNotNull();
-        assertThat(annotation.value()).isEqualTo("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')");
+        assertThat(annotation.value()).isEqualTo(
+                "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')");
     }
 
     @Test
@@ -28,7 +29,7 @@ class QuestionControllerSecurityTest {
             if (method.getName().equals("approve") || method.getName().equals("reject")
                     || method.getName().equals("publish")) {
                 assertThat(methodLevel).isNotNull();
-                assertThat(methodLevel.value()).isEqualTo("hasRole('PLATFORM_ADMIN')");
+                assertThat(methodLevel.value()).isEqualTo("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')");
             } else {
                 assertThat(methodLevel)
                         .as("method %s must not broaden the controller's platform-only restriction", method.getName())

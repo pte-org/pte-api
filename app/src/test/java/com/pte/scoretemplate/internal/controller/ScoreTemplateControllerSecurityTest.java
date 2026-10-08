@@ -15,13 +15,14 @@ class ScoreTemplateControllerSecurityTest {
 
     @Test
     void draftAndFeasibilityEndpointsAllowAuthors_butActivationRequiresAdmin() {
-        String authorOrAdmin = "hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')";
+        String authorOrAdmin =
+                "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')";
         for (String method : new String[] {"list", "create", "get", "clone", "replaceItems", "delete",
                 "submitApproval", "feasibility"}) {
             assertRole(method, authorOrAdmin);
         }
         for (String method : new String[] {"activate", "approve", "reject"}) {
-            assertRole(method, "hasRole('PLATFORM_ADMIN')");
+            assertRole(method, "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')");
         }
         assertRole("activeForHost", "hasRole('HOST_ADMIN')");
     }

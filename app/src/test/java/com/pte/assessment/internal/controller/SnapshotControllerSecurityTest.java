@@ -20,7 +20,8 @@ class SnapshotControllerSecurityTest {
         PreAuthorize annotation = SnapshotController.class.getAnnotation(PreAuthorize.class);
 
         assertThat(annotation).isNotNull();
-        assertThat(annotation.value()).isEqualTo("hasAnyRole('PLATFORM_ADMIN','PLATFORM_AUTHOR')");
+        assertThat(annotation.value()).isEqualTo(
+                "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')");
     }
 
     @Test

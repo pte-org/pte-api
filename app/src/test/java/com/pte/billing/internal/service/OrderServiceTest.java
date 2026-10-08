@@ -7,6 +7,7 @@ import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.dto.response.OrderResponse;
+import com.pte.billing.internal.dto.response.PlatformOrderResponse;
 import com.pte.billing.internal.exception.OrderException;
 import com.pte.billing.internal.repository.OrderRepository;
 import com.pte.billing.internal.repository.PlanRepository;
@@ -17,9 +18,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -143,7 +147,36 @@ class OrderServiceTest {
                 .isInstanceOfSatisfying(OrderException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
                     assertThat(ex.getMessage()).isEqualTo(BillingConstants.ORDER_NOT_FOUND);
-                });
+        });
+    }
+
+    @Test
+    void platformManagerOrderReadAppliesTenantFilterServerSide() {
+        UUID tenantId = UUID.randomUUID();
+        Order order = Order.pending(tenantId, UUID.randomUUID(), 1_000_000_004L,
+                new BigDecimal("50000.00"), "VND");
+        when(orderRepository.findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(eq(tenantId), any()))
+                .thenReturn(new PageImpl<>(List.of(order), PageRequest.of(0, 20), 1));
+
+        var result = service.listPlatformOrders(0, 20, tenantId,
+                new com.pte.shared.security.CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_MANAGER")));
+
+        assertThat(result.data()).hasSize(1);
+        assertThat(result.data().getFirst().tenantId()).isEqualTo(tenantId);
+        verify(orderRepository).findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(eq(tenantId), any());
+        verify(orderRepository, never()).findByDeletedFalseOrderByCreatedAtDesc(any());
+    }
+
+    @Test
+    void platformOrderProjectionDoesNotExposeTenantPaymentLink() {
+        OrderResponse tenantOrder = new OrderResponse(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                100L, new BigDecimal("50000.00"), "VND", "PENDING", "https://pay.example/secret", null, null);
+
+        PlatformOrderResponse projection = PlatformOrderResponse.from(tenantOrder);
+
+        assertThat(java.util.Arrays.stream(PlatformOrderResponse.class.getDeclaredFields())
+                .noneMatch(field -> field.getName().equals("paymentLinkUrl"))).isTrue();
+        assertThat(projection.status()).isEqualTo("PENDING");
     }
 
     private Plan activePlan(UUID publicId) {

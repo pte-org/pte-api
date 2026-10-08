@@ -6,6 +6,11 @@ package com.pte.identity.domain;
  */
 public enum Role {
     PLATFORM_ADMIN,
+    PLATFORM_MANAGER,
+    ACADEMIC_MANAGER,
+    ACADEMIC_STAFF,
+    /** @deprecated use ACADEMIC_STAFF; retained during the role migration window. */
+    @Deprecated
     PLATFORM_AUTHOR,
     HOST_ADMIN,
     PROCTOR,

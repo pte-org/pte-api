@@ -42,6 +42,9 @@ public final class ItembankConstants {
     public static final String TASK_TYPE_UPDATED = "UPDATED";
     public static final String TASK_TYPE_RUNTIME_UPDATED = "RUNTIME_CONTRACT_UPDATED";
     public static final String TASK_TYPE_RETIRED = "RETIRED";
+    public static final String TASK_TYPE_SUBMITTED = "SUBMITTED_FOR_APPROVAL";
+    public static final String TASK_TYPE_APPROVED = "APPROVED";
+    public static final String TASK_TYPE_PUBLISHED = "PUBLISHED";
     public static final String TASK_TYPE_DUPLICATE_REJECTED = "DUPLICATE_REJECTED";
     public static final String TASK_TYPE_RUNTIME_LOCK_CONFLICT = "RUNTIME_LOCK_CONFLICT";
     public static final String TASK_TYPE_LEGACY_ADAPTER_USED = "LEGACY_ADAPTER_USED";
@@ -57,6 +60,26 @@ public final class ItembankConstants {
     public static final String INVALID_QUESTION_STATUS_TRANSITION = "INVALID_QUESTION_STATUS_TRANSITION";
     public static final String QUESTION_REJECTION_REASON_REQUIRED = "Question rejection reason is required";
     public static final String QUESTION_VERSION_CONFLICT = "QUESTION_VERSION_CONFLICT";
+
+    public static final String ACADEMIC_DRAFT_WRITE_REQUIRED =
+            "Only academic staff, academic managers, or platform admins may manage academic drafts";
+    public static final String ACADEMIC_REVIEW_REQUIRED =
+            "Only an academic manager may review another author's academic resource";
+    public static final String ACADEMIC_PUBLISH_REQUIRED =
+            "Only an academic manager may publish another author's academic resource";
+    public static final String ACADEMIC_SELF_APPROVAL_FORBIDDEN =
+            "An academic manager cannot approve or publish their own resource";
+    public static final String ACADEMIC_LEGACY_OWNER_REQUIRED =
+            "Legacy ownerless academic resources require platform-admin override";
+    public static final String AUDIT_CREATED = "CREATED";
+    public static final String AUDIT_UPDATED = "UPDATED";
+    public static final String AUDIT_REVISION_CREATED = "REVISION_CREATED";
+    public static final String AUDIT_SUBMITTED = "SUBMITTED_FOR_APPROVAL";
+    public static final String AUDIT_APPROVED = "APPROVED";
+    public static final String AUDIT_REJECTED = "REJECTED_TO_DRAFT";
+    public static final String AUDIT_PUBLISHED = "PUBLISHED";
+    public static final String AUDIT_ARCHIVED = "ARCHIVED";
+    public static final String AUDIT_UNARCHIVED = "UNARCHIVED";
 
     public static final String OPTION_TEXT_REQUIRED = "Option text is required";
     public static final String TASK_TYPE_REQUIRED = "Task type is required";

@@ -27,8 +27,23 @@ public final class BillingConstants {
     public static final String PLAN_MUST_BE_ACTIVE_TO_ARCHIVE_MESSAGE = "Only active plans can be archived. Delete unused drafts instead.";
     public static final String PLAN_ACTIVE_TYPE_IMMUTABLE_MESSAGE = "Create a new plan to change the type of an active plan.";
     public static final String PLAN_AGGREGATE = "Plan";
+    public static final String ORDER_AGGREGATE = "Order";
+    public static final String SUBSCRIPTION_AGGREGATE = "Subscription";
     public static final String PLAN_DRAFT_DELETED = "PlanDraftDeleted";
     public static final String PLAN_DRAFT_DELETED_SUMMARY = "Unused plan draft removed.";
+
+    public static final String TENANT_APPLICATION_AGGREGATE = "TENANT_APPLICATION";
+    public static final String AUDIT_APPLICATION_READ = "READ_APPLICATION";
+    public static final String AUDIT_APPLICATION_REVIEW = "REVIEW_APPLICATION";
+    public static final String AUDIT_APPLICATION_APPROVED_SUMMARY = "Approved tenant application";
+    public static final String AUDIT_APPLICATION_REJECTED_SUMMARY = "Rejected tenant application";
+    public static final String AUDIT_TENANT_LIFECYCLE = "TENANT_LIFECYCLE";
+    public static final String AUDIT_PLAN_TRANSITION = "PLAN_TRANSITION";
+    public static final String PLAN_CREATED_SUMMARY = "Created plan draft";
+    public static final String PLAN_UPDATED_SUMMARY = "Updated plan";
+    public static final String PLAN_ACTIVATED_SUMMARY = "Activated plan";
+    public static final String PLAN_ARCHIVED_SUMMARY = "Archived plan";
+    public static final String AUDIT_LICENSE_ISSUE = "LICENSE_ISSUE";
 
     public static final String TENANT_APPLICATION_NOT_FOUND = "TENANT_APPLICATION_NOT_FOUND";
     public static final String TENANT_APPLICATION_INVALID = "TENANT_APPLICATION_INVALID";
@@ -79,6 +94,8 @@ public final class BillingConstants {
     public static final String LICENSE_CODE_REQUIRED = "LICENSE_CODE_REQUIRED";
     public static final String LICENSE_CODE_NOT_FOUND = "LICENSE_CODE_NOT_FOUND";
     public static final String LICENSE_CODE_PLAN_REQUIRED = "LICENSE_CODE_PLAN_REQUIRED";
+    public static final String LICENSE_CODE_AGGREGATE = "LicenseCode";
+    public static final String LICENSE_CODE_ISSUE_AUDIT_SUMMARY = "Issued masked license code";
     public static final String LICENSE_CODE_PLAN_NOT_ACTIVE = "LICENSE_CODE_PLAN_NOT_ACTIVE";
     public static final String LICENSE_CODE_EXPIRY_INVALID = "LICENSE_CODE_EXPIRY_INVALID";
     public static final String LICENSE_CODE_REVOKE_REASON_REQUIRED = "LICENSE_CODE_REVOKE_REASON_REQUIRED";
@@ -91,6 +108,7 @@ public final class BillingConstants {
     public static final String LICENSE_CODE_NOT_REVOCABLE = "LICENSE_CODE_NOT_REVOCABLE";
     public static final String LICENSE_CODE_TENANT_REQUIRED = "LICENSE_CODE_TENANT_REQUIRED";
     public static final String LICENSE_CODE_PLATFORM_ADMIN_REQUIRED = "LICENSE_CODE_PLATFORM_ADMIN_REQUIRED";
+    public static final String LICENSE_CODE_PLATFORM_OPERATION_REQUIRED = "LICENSE_CODE_PLATFORM_OPERATION_REQUIRED";
     public static final String LICENSE_CODE_HOST_ADMIN_REQUIRED = "LICENSE_CODE_HOST_ADMIN_REQUIRED";
     public static final String LICENSE_CODE_GENERATION_FAILED = "LICENSE_CODE_GENERATION_FAILED";
     public static final String LICENSE_CODE_SUBSCRIPTION_NOT_FOUND = "LICENSE_CODE_SUBSCRIPTION_NOT_FOUND";

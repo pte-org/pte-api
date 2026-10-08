@@ -22,6 +22,9 @@ import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.SecurityRoles;
+import com.pte.shared.audit.AuditLogService;
+import com.pte.shared.constant.SharedConstants;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -48,21 +51,23 @@ public class BlueprintService {
     private final ItembankService itembankService;
     private final ScoreTemplateService scoreTemplateService;
     private final SnapshotPublishService snapshotPublishService;
+    private final AuditLogService auditLogService;
 
     @Autowired
     public BlueprintService(ExamBlueprintRepository blueprintRepository, AssessmentAccessPolicy accessPolicy,
             ItembankService itembankService, ScoreTemplateService scoreTemplateService,
-            SnapshotPublishService snapshotPublishService) {
+            SnapshotPublishService snapshotPublishService, AuditLogService auditLogService) {
         this.blueprintRepository = blueprintRepository;
         this.accessPolicy = accessPolicy;
         this.itembankService = itembankService;
         this.scoreTemplateService = scoreTemplateService;
         this.snapshotPublishService = snapshotPublishService;
+        this.auditLogService = auditLogService;
     }
 
     /** Compatibility constructor for read-only unit tests and audit callers. */
     public BlueprintService(ExamBlueprintRepository blueprintRepository, AssessmentAccessPolicy accessPolicy) {
-        this(blueprintRepository, accessPolicy, null, null, null);
+        this(blueprintRepository, accessPolicy, null, null, null, null);
     }
 
     @Transactional
@@ -71,8 +76,11 @@ public class BlueprintService {
         ExamBlueprint blueprint = new ExamBlueprint();
         blueprint.setName(request.name().trim());
         blueprint.setTenantId(caller.tenantId());
+        blueprint.setAuthorUserPublicId(caller.userId());
         replaceItems(blueprint, request.items(), Boolean.TRUE.equals(request.preserveOrder()));
-        return BlueprintMapper.toResponse(blueprintRepository.save(blueprint));
+        BlueprintResponse response = BlueprintMapper.toResponse(blueprintRepository.save(blueprint));
+        audit(caller, AssessmentConstants.AUDIT_CREATED, blueprint, "Created blueprint draft");
+        return response;
     }
 
     @Transactional
@@ -83,6 +91,7 @@ public class BlueprintService {
         blueprint.setName(request.name().trim());
         replaceItems(blueprint, request.items(), Boolean.TRUE.equals(request.preserveOrder()));
         blueprint.setRejectionReason(null);
+        audit(caller, AssessmentConstants.AUDIT_UPDATED, blueprint, "Updated blueprint draft");
         return BlueprintMapper.toResponse(blueprint);
     }
 
@@ -93,31 +102,31 @@ public class BlueprintService {
         validateItems(blueprint);
         blueprint.setRejectionReason(null);
         blueprint.setStatus(BlueprintStatus.PENDING_APPROVAL);
+        audit(caller, AssessmentConstants.AUDIT_SUBMITTED, blueprint, "Submitted blueprint for approval");
         return BlueprintMapper.toResponse(blueprint);
     }
 
     @Transactional
     public SnapshotResponse approve(UUID publicId, CurrentUser caller) {
-        if (!accessPolicy.canApprove(caller)) {
-            throw new AccessDeniedException(AssessmentConstants.BLUEPRINT_APPROVAL_PLATFORM_ADMIN_REQUIRED);
-        }
         ExamBlueprint blueprint = blueprintRepository.findWithItemsByPublicId(publicId)
                 .orElseThrow(BlueprintNotFoundException::new);
+        requireReview(caller, blueprint);
         requireStatus(blueprint, BlueprintStatus.PENDING_APPROVAL);
         validateItems(blueprint);
-        return snapshotPublishService.publish(publicId, caller);
+        SnapshotResponse response = snapshotPublishService.publish(publicId, caller);
+        audit(caller, AssessmentConstants.AUDIT_APPROVED, blueprint, "Approved blueprint and published snapshot");
+        return response;
     }
 
     @Transactional
     public BlueprintResponse reject(UUID publicId, RejectBlueprintRequest request, CurrentUser caller) {
-        if (!accessPolicy.canApprove(caller)) {
-            throw new AccessDeniedException(AssessmentConstants.BLUEPRINT_REJECTION_PLATFORM_ADMIN_REQUIRED);
-        }
         ExamBlueprint blueprint = blueprintRepository.findWithItemsByPublicId(publicId)
                 .orElseThrow(BlueprintNotFoundException::new);
+        requireReview(caller, blueprint);
         requireStatus(blueprint, BlueprintStatus.PENDING_APPROVAL);
         blueprint.setStatus(BlueprintStatus.DRAFT);
         blueprint.setRejectionReason(request.reason().trim());
+        audit(caller, AssessmentConstants.AUDIT_REJECTED, blueprint, "Rejected blueprint: " + blueprint.getRejectionReason());
         return BlueprintMapper.toResponse(blueprint);
     }
 
@@ -146,13 +155,46 @@ public class BlueprintService {
         if (!accessPolicy.canRead(blueprint.getTenantId(), blueprint.getTenantId() == null, caller)) {
             throw new BlueprintNotFoundException();
         }
+        if (!accessPolicy.canModifyDraft(caller, blueprint.getAuthorUserPublicId())) {
+            throw new BlueprintNotFoundException();
+        }
         return blueprint;
     }
 
     private void requireAuthor(CurrentUser caller) {
         if (!accessPolicy.canAuthor(caller)) {
-            throw new AccessDeniedException(AssessmentConstants.BLUEPRINT_AUTHOR_PLATFORM_AUTHOR_REQUIRED);
+            deny(caller, null, AssessmentConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
         }
+    }
+
+    private void requireReview(CurrentUser caller, ExamBlueprint blueprint) {
+        if (accessPolicy.canApprove(caller, blueprint.getAuthorUserPublicId())) {
+            return;
+        }
+        if (caller != null && caller.hasRole(SecurityRoles.ACADEMIC_MANAGER)
+                && blueprint.getAuthorUserPublicId() != null
+                && blueprint.getAuthorUserPublicId().equals(caller.userId())) {
+            deny(caller, blueprint.getPublicId(), AssessmentConstants.ACADEMIC_SELF_APPROVAL_FORBIDDEN);
+        }
+        deny(caller, blueprint.getPublicId(), AssessmentConstants.ACADEMIC_REVIEW_REQUIRED);
+    }
+
+    private void audit(CurrentUser caller, String action, ExamBlueprint blueprint, String summary) {
+        if (auditLogService == null || caller == null || blueprint == null) {
+            return;
+        }
+        auditLogService.record(caller, AssessmentConstants.AUDIT_AGGREGATE_BLUEPRINT,
+                String.valueOf(blueprint.getPublicId()), action,
+                summary.length() <= 500 ? summary : summary.substring(0, 500));
+    }
+
+    private void deny(CurrentUser caller, UUID aggregateId, String message) {
+        if (auditLogService != null && caller != null) {
+            auditLogService.recordFailure(caller, AssessmentConstants.AUDIT_AGGREGATE_BLUEPRINT,
+                    aggregateId == null ? "unknown" : aggregateId.toString(),
+                    SharedConstants.AUDIT_AUTHORIZATION_DENIED, message);
+        }
+        throw new AccessDeniedException(message);
     }
 
     private void requireStatus(ExamBlueprint blueprint, BlueprintStatus expected) {
