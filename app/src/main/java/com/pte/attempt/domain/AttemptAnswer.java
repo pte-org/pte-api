@@ -1,6 +1,7 @@
 package com.pte.attempt.domain;
 
 import com.pte.attempt.domain.enums.AnswerStatus;
+import com.pte.attempt.ResponseConfidence;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -51,4 +52,9 @@ public class AttemptAnswer extends BaseEntity {
 
     @Column(nullable = false)
     private boolean expired = false;
+
+    /** Nullable for legacy/official submissions; practice may require it at its boundary. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private ResponseConfidence confidence;
 }

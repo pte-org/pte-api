@@ -282,7 +282,7 @@ public class AttemptLifecycleService {
         ExamAttempt attempt = findOwned(attemptPublicId, caller);
         lockOpenSession(attempt);
         requireIntegrityLevel(attempt, "STANDARD");
-        return processAnswer(attempt, request.pinnedItemPublicId(), request.payload(), caller);
+        return processAnswer(attempt, request.pinnedItemPublicId(), request.payload(), request.confidence(), caller);
     }
 
     /** Persists an answer draft while leaving the current task pointer unchanged. */
@@ -291,7 +291,7 @@ public class AttemptLifecycleService {
         ExamAttempt attempt = findOwned(attemptPublicId, caller);
         lockOpenSession(attempt);
         requireIntegrityLevel(attempt, "STANDARD");
-        return saveAnswerWithoutAdvance(attempt, request.pinnedItemPublicId(), request.payload(), caller);
+        return saveAnswerWithoutAdvance(attempt, request.pinnedItemPublicId(), request.payload(), request.confidence(), caller);
     }
 
     /**
@@ -308,7 +308,7 @@ public class AttemptLifecycleService {
         lockOpenSession(attempt);
         requireIntegrityLevel(attempt, "STRICT");
         String payload = submissionDecryptionService.decrypt(request, encryptionKeyProvider.getPrivateKey());
-        return processAnswer(attempt, request.pinnedItemPublicId(), payload, caller);
+        return processAnswer(attempt, request.pinnedItemPublicId(), payload, null, caller);
     }
 
     /** STRICT-pinned counterpart to {@link #saveAnswer}; the answer is decrypted and saved without advancing. */
@@ -319,7 +319,7 @@ public class AttemptLifecycleService {
         lockOpenSession(attempt);
         requireIntegrityLevel(attempt, "STRICT");
         String payload = submissionDecryptionService.decrypt(request, encryptionKeyProvider.getPrivateKey());
-        return saveAnswerWithoutAdvance(attempt, request.pinnedItemPublicId(), payload, caller);
+        return saveAnswerWithoutAdvance(attempt, request.pinnedItemPublicId(), payload, null, caller);
     }
 
     /** Request shape (plain vs. encrypted) is server-decided by the pinned level, never client-chosen. */
@@ -330,6 +330,7 @@ public class AttemptLifecycleService {
     }
 
     private AttemptTaskResponse processAnswer(ExamAttempt attempt, UUID pinnedItemPublicId, String payload,
+                                               com.pte.attempt.ResponseConfidence confidence,
                                                CurrentUser caller) {
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
             throw new AttemptAlreadyCompleteException();
@@ -349,12 +350,14 @@ public class AttemptLifecycleService {
             throw new NotCurrentTaskException();
         }
 
-        answerSubmitService.submit(attempt, currentItem, payload);
+        persistAnswer(attempt, currentItem, payload, confidence);
         return advanceAfterCurrent(attempt, caller);
     }
 
     private AttemptTaskResponse saveAnswerWithoutAdvance(ExamAttempt attempt, UUID pinnedItemPublicId,
-                                                          String payload, CurrentUser caller) {
+                                                          String payload,
+                                                          com.pte.attempt.ResponseConfidence confidence,
+                                                          CurrentUser caller) {
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
             throw new AttemptAlreadyCompleteException();
         }
@@ -365,8 +368,19 @@ public class AttemptLifecycleService {
                 .orElseThrow(NotCurrentTaskException::new);
         // Saving an answer does not move the task pointer. Allow background
         // sync for every section; mode restrictions apply only to navigation.
-        answerSubmitService.submit(attempt, answerItem, payload);
+        persistAnswer(attempt, answerItem, payload, confidence);
         return advanceUntilLiveOrComplete(attempt, caller);
+    }
+
+    private void persistAnswer(ExamAttempt attempt, PinnedItem item, String payload,
+            com.pte.attempt.ResponseConfidence confidence) {
+        if (confidence == null) {
+            // Preserve the established official call shape and behavior for
+            // clients that do not send the additive practice field.
+            answerSubmitService.submit(attempt, item, payload);
+        } else {
+            answerSubmitService.submit(attempt, item, payload, confidence);
+        }
     }
 
     private boolean isManualNavigationAllowed(String examMode, String section) {

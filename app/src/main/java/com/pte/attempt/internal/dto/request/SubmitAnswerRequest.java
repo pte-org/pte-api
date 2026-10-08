@@ -1,6 +1,7 @@
 package com.pte.attempt.internal.dto.request;
 
 import com.pte.attempt.internal.constant.AttemptConstants;
+import com.pte.attempt.ResponseConfidence;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.UUID;
@@ -21,5 +22,11 @@ public record SubmitAnswerRequest(
          * path already treats a blank payload as a normal (if content-less) answer
          * end-to-end.
          */
-        String payload) {
+        String payload,
+        ResponseConfidence confidence) {
+
+    /** Keeps official clients compiled against the two-field request shape working. */
+    public SubmitAnswerRequest(UUID pinnedItemPublicId, String payload) {
+        this(pinnedItemPublicId, payload, null);
+    }
 }
