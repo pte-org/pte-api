@@ -9,8 +9,12 @@ import java.util.UUID;
  */
 public record CurrentUser(UUID userId, UUID tenantId, List<String> roles) {
 
+    public CurrentUser {
+        roles = SecurityRoles.canonicalizeRoles(roles);
+    }
+
     public boolean hasRole(String role) {
-        return roles != null && roles.contains(role);
+        return SecurityRoles.hasRole(roles, role);
     }
 
     public boolean isPlatformUser() {

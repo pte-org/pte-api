@@ -22,7 +22,8 @@ import java.util.UUID;
 
 /**
  * A platform user. {@code tenantId} is null for platform-level users
- * (PLATFORM_ADMIN/AUTHOR) and set for tenant-scoped users (host/proctor/student).
+ * (PLATFORM_ADMIN or another platform role) and set for tenant-scoped users
+ * (host/proctor/student).
  */
 @Entity
 @Table(name = "users", indexes = {
