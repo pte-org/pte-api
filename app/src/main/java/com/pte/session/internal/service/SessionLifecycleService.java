@@ -194,7 +194,7 @@ public class SessionLifecycleService {
 
     @Transactional(readOnly = true)
     public List<SessionResponse> list(CurrentUser caller) {
-        return sessionRepository.findByTenantId(requireTenant(caller)).stream()
+        return sessionRepository.findByTenantIdOrderByCreatedAtDescIdDesc(requireTenant(caller)).stream()
                 .map(SessionMapper::toResponse).toList();
     }
 
