@@ -5,7 +5,7 @@ package com.pte.session.domain.enums;
  * Pinned at StartAttempt; never re-fetched during an attempt's lifetime.
  */
 public enum LockdownMode {
-    /** No lockdown enforcement (PRACTICE mode default). */
+    /** No lockdown enforcement. */
     NONE,
 
     /** Warning-only mode - violations detected and reported but not blocked (MOCK_TEST default). */

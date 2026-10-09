@@ -21,7 +21,8 @@ class SessionMapperTest {
         session.setOpensAt(Instant.parse("2026-10-10T01:00:00Z"));
         session.setClosesAt(Instant.parse("2026-10-10T03:00:00Z"));
         session.setCapacity(5);
-        session.setExamMode(com.pte.session.domain.enums.ExamMode.PRACTICE);
+        session.setExamMode(com.pte.session.domain.enums.ExamMode.OFFICIAL_EXAM);
+        session.setPolicy(com.pte.session.domain.ExamPolicy.realExamDefault());
 
         SessionResponse response = SessionMapper.toResponse(session);
 

@@ -2,6 +2,7 @@ package com.pte.itembank.internal.repository;
 
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.domain.enums.Visibility;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -44,6 +45,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
               AND (:taskTypeKey IS NULL OR q.taskTypeKey = :taskTypeKey)
               AND (:section IS NULL OR q.taskTypeSection = :section)
               AND (:status IS NULL OR q.status = :status)
+              AND (:pool IS NULL OR q.pool = :pool)
               AND (:query = ''
                    OR q.title IS NOT NULL AND LOWER(q.title) LIKE CONCAT('%', :query, '%')
                    OR q.promptText IS NOT NULL AND LOWER(q.promptText) LIKE CONCAT('%', :query, '%')
@@ -57,6 +59,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
               AND (:taskTypeKey IS NULL OR q.taskTypeKey = :taskTypeKey)
               AND (:section IS NULL OR q.taskTypeSection = :section)
               AND (:status IS NULL OR q.status = :status)
+              AND (:pool IS NULL OR q.pool = :pool)
               AND (:query = ''
                    OR q.title IS NOT NULL AND LOWER(q.title) LIKE CONCAT('%', :query, '%')
                    OR q.promptText IS NOT NULL AND LOWER(q.promptText) LIKE CONCAT('%', :query, '%')
@@ -64,7 +67,8 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
             """)
     Page<UUID> findPagePublicIds(@Param("taskTypeKey") String taskTypeKey,
             @Param("section") String section, @Param("status") QuestionStatus status,
-            @Param("query") String query, @Param("publicIdQuery") UUID publicIdQuery, Pageable pageable);
+            @Param("pool") QuestionPool pool, @Param("query") String query,
+            @Param("publicIdQuery") UUID publicIdQuery, Pageable pageable);
 
     @EntityGraph(attributePaths = "options")
     @Query("SELECT DISTINCT q FROM Question q WHERE q.deleted = false AND q.publicId IN :publicIds")
@@ -91,7 +95,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("SELECT q.pteTaskType, COUNT(q) FROM Question q "
             + "WHERE q.deleted = false AND q.visibility = :visibility "
             + "AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED "
-            + "AND q.current = true "
+            + "AND q.current = true AND q.pool = com.pte.itembank.domain.enums.QuestionPool.EXAM "
             + "AND q.pteTaskType IN :taskTypes GROUP BY q.pteTaskType")
     List<Object[]> countByVisibilityAndTaskTypeIn(@Param("visibility") Visibility visibility,
                                                     @Param("taskTypes") Set<PteTaskType> taskTypes);
@@ -99,7 +103,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("SELECT COUNT(q) FROM Question q WHERE q.deleted = false "
             + "AND q.visibility = com.pte.itembank.domain.enums.Visibility.SHARED "
             + "AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED "
-            + "AND q.current = true "
+            + "AND q.current = true AND q.pool = com.pte.itembank.domain.enums.QuestionPool.EXAM "
             + "AND q.pteTaskType = :taskType")
     long countAvailableByTaskType(@Param("taskType") PteTaskType taskType);
 
@@ -107,11 +111,13 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
      * Exam-generation pool count, grouped by task type. Literal
      * {@code visibility = 'SHARED'} — the generation pool never depends on
      * which tenant's host is asking (Plan B, 2026-09-17 platform-only decision).
+     * Every exam-generation query below also pins {@code pool = 'EXAM'} so
+     * PRACTICE questions never reach an exam.
      */
     @Query(value = """
             SELECT pte_task_type AS taskType, COUNT(*) AS count
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pte_task_type IN (:taskTypes)
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pool = 'EXAM' AND pte_task_type IN (:taskTypes)
             GROUP BY pte_task_type
             """, nativeQuery = true)
     List<TaskTypeCountProjection> countPublishedSharedGroupedByTaskType(@Param("taskTypes") Set<String> taskTypes);
@@ -120,7 +126,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pte_task_type = :taskType
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pool = 'EXAM' AND pte_task_type = :taskType
             ORDER BY random()
             LIMIT :n
             """, nativeQuery = true)
@@ -130,7 +136,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pte_task_type = :taskType
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pool = 'EXAM' AND pte_task_type = :taskType
             ORDER BY public_id
             """, nativeQuery = true)
     List<UUID> publishedSharedIdsByTaskType(@Param("taskType") String taskType);
@@ -138,7 +144,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT task_type_key AS taskType, COUNT(*) AS count
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pool = 'EXAM'
               AND task_type_key IN (:taskTypeKeys)
             GROUP BY task_type_key
             """, nativeQuery = true)
@@ -148,7 +154,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pool = 'EXAM'
               AND task_type_key = :taskTypeKey
             ORDER BY random()
             LIMIT :n
@@ -159,7 +165,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pool = 'EXAM'
               AND task_type_key = :taskTypeKey
             ORDER BY public_id
             """, nativeQuery = true)

@@ -1,7 +1,6 @@
 package com.pte.session.internal.service;
 
 import com.pte.session.domain.ExamSession;
-import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.domain.enums.FormMode;
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
@@ -18,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -38,33 +38,39 @@ public class EntitlementService {
     private final EnrollmentRepository enrollmentRepository;
     private final ProctorAssignmentRepository proctorAssignmentRepository;
     private final FormAssignmentRepository formAssignmentRepository;
+    private final Clock clock;
 
     @Autowired
     public EntitlementService(ExamSessionRepository sessionRepository, EnrollmentRepository enrollmentRepository,
                               ProctorAssignmentRepository proctorAssignmentRepository,
-                              FormAssignmentRepository formAssignmentRepository) {
+                              FormAssignmentRepository formAssignmentRepository, Clock clock) {
         this.sessionRepository = sessionRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.proctorAssignmentRepository = proctorAssignmentRepository;
         this.formAssignmentRepository = formAssignmentRepository;
+        this.clock = clock;
     }
 
     /** Compatibility constructor for focused session unit tests. */
     public EntitlementService(ExamSessionRepository sessionRepository, EnrollmentRepository enrollmentRepository,
-                              ProctorAssignmentRepository proctorAssignmentRepository) {
-        this(sessionRepository, enrollmentRepository, proctorAssignmentRepository, null);
+                              ProctorAssignmentRepository proctorAssignmentRepository, Clock clock) {
+        this(sessionRepository, enrollmentRepository, proctorAssignmentRepository, null, clock);
     }
 
+    /**
+     * Gates every new attempt (preflight and start). Enrollment is checked
+     * before status and time so a non-enrolled caller always gets the same
+     * NOT_ENTITLED and learns nothing about the session's schedule.
+     */
     @Transactional(readOnly = true)
     public EntitlementResponse checkEntitlement(UUID sessionPublicId, UUID studentPublicId) {
         ExamSession session = sessionRepository.findByPublicId(sessionPublicId)
                 .orElseThrow(NotEntitledException::new);
-        if (session.getStatus() != SessionStatus.OPEN) {
-            throw new NotEntitledException();
-        }
         if (!isEnrolled(session, studentPublicId)) {
             throw new NotEntitledException();
         }
+        SessionEntryGate.requireOpen(session);
+        SessionEntryGate.requireWithinWindow(session, clock.instant());
         UUID snapshotPublicId = session.getSnapshotPublicId();
         if (session.getFormMode() == FormMode.UNIQUE_FORM_PER_STUDENT && formAssignmentRepository != null) {
             snapshotPublicId = formAssignmentRepository.findBySessionIdAndStudentPublicId(session.getId(), studentPublicId)

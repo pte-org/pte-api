@@ -4,6 +4,7 @@ import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.QuestionOption;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.PteSection;
+import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.request.CreateQuestionRequest;
@@ -57,7 +58,8 @@ import java.util.stream.Collectors;
  * through the repository directly (Phase 05 Design Constraints).
  *
  * <p>Platform-owned question authoring and lookup. Every question is SHARED;
- * only platform users may write the bank, while generation reads APPROVED items.
+ * only platform users may write the bank, while generation reads APPROVED items
+ * from the {@link QuestionPool#EXAM} pool only.
  */
 @Service
 public class ItembankService {
@@ -117,6 +119,7 @@ public class ItembankService {
         question.setTaskTypeKey(taskTypeKey);
         question.setTaskTypeSection(resolveTaskTypeSection(taskTypeKey, taskType));
         question.setVisibility(Visibility.SHARED);
+        question.setPool(parsePool(request.pool()));
         question.setTenantId(null);
         question.setAuthorUserPublicId(caller.userId());
         question.setStatus(QuestionStatus.DRAFT);
@@ -183,15 +186,22 @@ public class ItembankService {
                 .toList();
     }
 
-    /** Server-side question-bank search used by the common paginated UI. */
     @Transactional(readOnly = true)
     public PagedResult<QuestionResponse> listAccessible(CurrentUser caller, int requestedPage, int requestedSize,
             String taskType, String section, String status, String query) {
+        return listAccessible(caller, requestedPage, requestedSize, taskType, section, status, query, null);
+    }
+
+    /** Server-side question-bank search used by the common paginated UI. */
+    @Transactional(readOnly = true)
+    public PagedResult<QuestionResponse> listAccessible(CurrentUser caller, int requestedPage, int requestedSize,
+            String taskType, String section, String status, String query, String pool) {
         int page = normalizePage(requestedPage);
         int size = normalizePageSize(requestedSize);
         String requestedTaskTypeKey = parseOptionalTaskTypeKey(taskType);
         PteSection requestedSection = parseOptionalSection(section);
         QuestionStatus requestedStatus = parseOptionalStatus(status);
+        QuestionPool requestedPool = parseOptionalPool(pool);
         String normalizedQuery = normalizeQuery(query);
         UUID publicIdQuery = parsePublicIdQuery(query);
         Pageable pageable = PageRequest.of(page, size,
@@ -201,6 +211,7 @@ public class ItembankService {
                 requestedTaskTypeKey,
                 requestedSection == null ? null : requestedSection.name(),
                 requestedStatus,
+                requestedPool,
                 normalizedQuery,
                 publicIdQuery,
                 pageable);
@@ -270,6 +281,7 @@ public class ItembankService {
         revision.setTaskTypeSection(source.getTaskTypeSection() == null && source.getPteTaskType() != null
                 ? source.getPteTaskType().getSection().name() : source.getTaskTypeSection());
         revision.setVisibility(source.getVisibility());
+        revision.setPool(source.getPool());
         revision.setTenantId(source.getTenantId());
         revision.setAuthorUserPublicId(caller.userId());
         revision.setStatus(QuestionStatus.DRAFT);
@@ -551,6 +563,9 @@ public class ItembankService {
      * Trusted application call — no {@link CurrentUser}/visibility check, matching
      * the pre-split behavior: a question only reaches a blueprint (and so becomes
      * freezable) after {@link #get} already gated it at blueprint-build time.
+     * Only current APPROVED questions of the {@link QuestionPool#EXAM} pool can be
+     * frozen, so a PRACTICE question never enters an exam snapshot — not even a
+     * hand-picked one.
      * Options come back already in delivery order — rotated one position for
      * {@code RE_ORDER_PARAGRAPHS} so the natural (already-ascending) authored
      * order isn't served pre-solved to the student.
@@ -560,7 +575,7 @@ public class ItembankService {
         Question question = questionRepository.findWithOptionsByPublicId(questionPublicId)
                 .orElseThrow(QuestionNotFoundException::new);
         if (question.getVisibility() != Visibility.SHARED || question.getStatus() != QuestionStatus.APPROVED
-                || !question.isCurrent()) {
+                || !question.isCurrent() || question.getPool() != QuestionPool.EXAM) {
             throw new QuestionNotFoundException();
         }
         return toFreezeView(question);
@@ -682,6 +697,23 @@ public class ItembankService {
         }
         try {
             return QuestionStatus.valueOf(value.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new QuestionValidationException(ItembankConstants.INVALID_QUESTION_FIELDS);
+        }
+    }
+
+    /** Creation pool: omitted means EXAM, anything other than EXAM/PRACTICE is rejected. */
+    private QuestionPool parsePool(String value) {
+        QuestionPool pool = parseOptionalPool(value);
+        return pool == null ? QuestionPool.EXAM : pool;
+    }
+
+    private QuestionPool parseOptionalPool(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return QuestionPool.valueOf(value.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             throw new QuestionValidationException(ItembankConstants.INVALID_QUESTION_FIELDS);
         }

@@ -28,5 +28,6 @@ public record QuestionResponse(
         String taskTypeKey,
         boolean canDeleteDraft,
         boolean canArchive,
-        String deleteBlockReason) {
+        String deleteBlockReason,
+        String pool) {
 }

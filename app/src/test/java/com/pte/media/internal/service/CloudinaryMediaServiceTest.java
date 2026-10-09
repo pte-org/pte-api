@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
@@ -50,11 +51,8 @@ class CloudinaryMediaServiceTest {
         UUID tenantId = UUID.randomUUID();
 
         CloudinaryMediaService service = service();
-        UUID sessionId = UUID.randomUUID();
-        UUID itemId = UUID.randomUUID();
         CloudinaryUploadResponse response = service.requestUpload(
-                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.STUDENT_RESPONSE_AUDIO, 1024L,
-                        sessionId, itemId, PracticeMediaConstants.RESPONSE_AUDIO_PURPOSE),
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.STUDENT_RESPONSE_AUDIO, 1024L),
                 new CurrentUser(studentId, tenantId, List.of("STUDENT")));
 
         assertThat(response.folder()).isEqualTo("pte/submissions");
@@ -74,11 +72,61 @@ class CloudinaryMediaServiceTest {
         assertThat(media.getOwnerPublicId()).isEqualTo(studentId);
         assertThat(media.getTenantId()).isEqualTo(tenantId);
         assertThat(media.isAudioPrompt()).isFalse();
+        assertThat(media.getPracticeSessionPublicId()).isNull();
+        assertThat(media.getPracticeItemPublicId()).isNull();
+        assertThat(media.getPurpose()).isNull();
+        assertThat(media.getCloudinaryPublicId()).isEqualTo(response.publicId());
+        assertThat(media.getCloudinaryDeliveryType()).isEqualTo(CloudinaryDeliveryType.UPLOAD);
+        verifyNoInteractions(practiceMediaBindingService);
+    }
+
+    @Test
+    void examAttemptResponseUploadKeepsTheSubmissionSizeLimit() {
+        when(repository.save(any(MediaObject.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        CurrentUser student = new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("STUDENT"));
+
+        CloudinaryUploadResponse response = service().requestUpload(
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.STUDENT_RESPONSE_AUDIO,
+                        MediaConstants.MAX_SUBMISSION_BYTES),
+                student);
+
+        assertThat(response.folder()).isEqualTo("pte/submissions");
+        assertThatThrownBy(() -> service().requestUpload(
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.STUDENT_RESPONSE_AUDIO,
+                        MediaConstants.MAX_SUBMISSION_BYTES + 1),
+                student))
+                .isInstanceOf(com.pte.media.internal.exception.UnsupportedContentTypeException.class);
+    }
+
+    @Test
+    void practiceResponseUploadBindsTheRecordingToTheLivePracticeItem() {
+        when(repository.save(any(MediaObject.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        CurrentUser student = new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("STUDENT"));
+        UUID sessionId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+
+        service().requestUpload(
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.STUDENT_RESPONSE_AUDIO, 1024L,
+                        sessionId, itemId, PracticeMediaConstants.RESPONSE_AUDIO_PURPOSE),
+                student);
+
+        verify(practiceMediaBindingService).assertCanUseResponseAudio(sessionId, itemId, student);
+        ArgumentCaptor<MediaObject> captor = ArgumentCaptor.forClass(MediaObject.class);
+        verify(repository).save(captor.capture());
+        MediaObject media = captor.getValue();
         assertThat(media.getPracticeSessionPublicId()).isEqualTo(sessionId);
         assertThat(media.getPracticeItemPublicId()).isEqualTo(itemId);
         assertThat(media.getPurpose()).isEqualTo(PracticeMediaConstants.RESPONSE_AUDIO_PURPOSE);
-        assertThat(media.getCloudinaryPublicId()).isEqualTo(response.publicId());
-        assertThat(media.getCloudinaryDeliveryType()).isEqualTo(CloudinaryDeliveryType.UPLOAD);
+    }
+
+    @Test
+    void practiceResponseUploadKeepsThePracticeSizeLimit() {
+        assertThatThrownBy(() -> service().requestUpload(
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.STUDENT_RESPONSE_AUDIO,
+                        MediaConstants.MAX_PRACTICE_RESPONSE_BYTES + 1, UUID.randomUUID(), UUID.randomUUID(),
+                        PracticeMediaConstants.RESPONSE_AUDIO_PURPOSE),
+                new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("STUDENT"))))
+                .isInstanceOf(com.pte.media.internal.exception.UnsupportedContentTypeException.class);
     }
 
     @Test
@@ -125,14 +173,26 @@ class CloudinaryMediaServiceTest {
     }
 
     @Test
-    void studentResponseUploadRejectsAnUnboundPracticeRequest() {
+    void studentResponseUploadRejectsAPartiallyBoundPracticeRequest() {
         CloudinaryMediaService service = service();
+        CurrentUser student = new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("STUDENT"));
 
         assertThatThrownBy(() -> service.requestUpload(
-                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV,
-                        MediaConstants.STUDENT_RESPONSE_AUDIO, 1024L),
-                new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("STUDENT"))))
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.STUDENT_RESPONSE_AUDIO, 1024L,
+                        UUID.randomUUID(), null, PracticeMediaConstants.RESPONSE_AUDIO_PURPOSE),
+                student))
                 .isInstanceOf(com.pte.media.internal.exception.UnsupportedContentTypeException.class);
+        assertThatThrownBy(() -> service.requestUpload(
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.STUDENT_RESPONSE_AUDIO, 1024L,
+                        null, null, PracticeMediaConstants.RESPONSE_AUDIO_PURPOSE),
+                student))
+                .isInstanceOf(com.pte.media.internal.exception.UnsupportedContentTypeException.class);
+        assertThatThrownBy(() -> service.requestUpload(
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.STUDENT_RESPONSE_AUDIO, 1024L,
+                        UUID.randomUUID(), UUID.randomUUID(), "OTHER_PURPOSE"),
+                student))
+                .isInstanceOf(com.pte.media.internal.exception.UnsupportedContentTypeException.class);
+        verifyNoInteractions(practiceMediaBindingService, repository);
     }
 
     @Test

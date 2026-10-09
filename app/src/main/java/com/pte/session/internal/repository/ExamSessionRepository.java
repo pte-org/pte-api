@@ -35,7 +35,8 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> 
     /** No tenant filter: used by the trusted application-call surface, not a host-scoped caller. */
     Optional<ExamSession> findByPublicId(UUID publicId);
 
-    List<ExamSession> findByTenantId(UUID tenantId);
+    /** Newest first — the host exam list shows sessions in this order by default. */
+    List<ExamSession> findByTenantIdOrderByCreatedAtDescIdDesc(UUID tenantId);
 
     @Query("SELECT s FROM ExamSession s WHERE s.deleted = false "
             + "AND s.status = com.pte.session.domain.enums.SessionStatus.OPEN "

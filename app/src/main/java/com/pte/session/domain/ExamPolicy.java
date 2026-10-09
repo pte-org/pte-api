@@ -15,7 +15,7 @@ import lombok.Setter;
 
 /**
  * Session-scoped exam policy, resolved once from {@link ExamMode} at session
- * creation (see {@link #forMode(ExamMode)}) and immutable thereafter except
+ * creation (see {@link #realExamDefault()}) and immutable thereafter except
  * via the pre-open {@code PATCH /sessions/{id}/policy} override. Pinned
  * read-only into attempt's pinned snapshot at StartAttempt — never re-fetched
  * for an attempt's lifetime.
@@ -69,24 +69,13 @@ public class ExamPolicy {
         }
     }
 
-    public static ExamPolicy practiceDefault() {
-        return build(ReplayPolicy.unlimited(), true, false, AnswerIntegrityLevel.STANDARD, LockdownMode.NONE);
-    }
-
     public static ExamPolicy mockTestDefault() {
         return build(ReplayPolicy.limited(3), true, false, AnswerIntegrityLevel.STANDARD, LockdownMode.STANDARD);
     }
 
+    /** Default for {@link ExamMode#OFFICIAL_EXAM}, resolved exactly once at session-create time. */
     public static ExamPolicy realExamDefault() {
         return build(ReplayPolicy.limited(1), true, true, AnswerIntegrityLevel.STRICT, LockdownMode.STRICT);
-    }
-
-    /** Pure mapping, resolved exactly once at session-create time. */
-    public static ExamPolicy forMode(ExamMode mode) {
-        return switch (mode) {
-            case PRACTICE -> practiceDefault();
-            case OFFICIAL_EXAM -> realExamDefault();
-        };
     }
 
     private static ExamPolicy build(ReplayPolicy replayPolicy, boolean deviceCheckRequired,

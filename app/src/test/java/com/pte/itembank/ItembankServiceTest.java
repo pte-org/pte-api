@@ -3,6 +3,7 @@ package com.pte.itembank;
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.QuestionOption;
 import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.request.CreateQuestionRequest;
@@ -146,7 +147,7 @@ class ItembankServiceTest {
         question.setTaskTypeSection("SPEAKING");
         PageRequest pageable = PageRequest.of(1, 1);
         when(questionRepository.findPagePublicIds(eq("READ_ALOUD"), eq("SPEAKING"), eq(QuestionStatus.APPROVED),
-                eq("read"), isNull(UUID.class), any(Pageable.class)))
+                isNull(QuestionPool.class), eq("read"), isNull(UUID.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(publicId), pageable, 3));
         when(questionRepository.findWithOptionsByPublicIdIn(List.of(publicId))).thenReturn(List.of(question));
 
@@ -551,6 +552,87 @@ class ItembankServiceTest {
         assertThatThrownBy(() -> ItembankService.class.getMethod(
                 "randomPublishedQuestionIds", PteTaskType.class, int.class, CurrentUser.class))
                 .isInstanceOf(NoSuchMethodException.class);
+    }
+
+    // ------------------------------------------------------------------
+    // pool — fixed at creation, EXAM-only for exam generation
+    // ------------------------------------------------------------------
+
+    @Test
+    void create_withoutPool_defaultsToExam() {
+        when(questionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        QuestionResponse response = service.create(new CreateQuestionRequest(
+                "READ_ALOUD", "title", "prompt", null, null, null, null, null, null, null), platformCaller);
+
+        assertThat(response.pool()).isEqualTo("EXAM");
+    }
+
+    @Test
+    void create_withPracticePool_persistsPracticePool() {
+        when(questionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        QuestionResponse response = service.create(new CreateQuestionRequest(
+                "READ_ALOUD", null, "title", "prompt", null, null, null, null, null, null, null, "practice"),
+                platformCaller);
+
+        assertThat(response.pool()).isEqualTo("PRACTICE");
+    }
+
+    @Test
+    void create_withUnknownPool_rejected() {
+        CreateQuestionRequest request = new CreateQuestionRequest(
+                "READ_ALOUD", null, "title", "prompt", null, null, null, null, null, null, null, "MOCK");
+
+        assertThatThrownBy(() -> service.create(request, platformCaller))
+                .isInstanceOf(QuestionValidationException.class);
+    }
+
+    @Test
+    void createRevision_keepsTheSourcePool() {
+        UUID publicId = UUID.randomUUID();
+        Question source = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        source.setPublicId(publicId);
+        source.setPool(QuestionPool.PRACTICE);
+        source.setCurrent(true);
+        source.setTaskTypeKey("READ_ALOUD");
+        source.setTaskTypeSection("SPEAKING");
+        source.setRevisionGroupPublicId(UUID.randomUUID());
+        source.setAuthorUserPublicId(platformAdminCaller.userId());
+        when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(source));
+        when(questionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        QuestionResponse revision = service.createRevision(publicId, platformAdminCaller);
+
+        assertThat(revision.pool()).isEqualTo("PRACTICE");
+    }
+
+    @Test
+    void listAccessiblePage_passesThePoolFilterToTheRepository() {
+        when(questionRepository.findPagePublicIds(isNull(), isNull(), isNull(), eq(QuestionPool.PRACTICE), eq(""),
+                isNull(UUID.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        PagedResult<QuestionResponse> result = service.listAccessible(
+                platformCaller, 0, 20, null, null, null, null, "PRACTICE");
+
+        assertThat(result.data()).isEmpty();
+    }
+
+    @Test
+    void listAccessiblePage_unknownPoolFilter_rejected() {
+        assertThatThrownBy(() -> service.listAccessible(platformCaller, 0, 20, null, null, null, null, "MOCK"))
+                .isInstanceOf(QuestionValidationException.class);
+    }
+
+    @Test
+    void freeze_practiceQuestionIsNeverAvailableForExams() {
+        UUID publicId = UUID.randomUUID();
+        Question question = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        question.setPool(QuestionPool.PRACTICE);
+        when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(question));
+
+        assertThatThrownBy(() -> service.freeze(publicId)).isInstanceOf(QuestionNotFoundException.class);
     }
 
     private TaskTypeCountProjection projection(String taskType, long count) {

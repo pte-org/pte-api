@@ -11,94 +11,68 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SessionPolicyResolverTest {
 
     @Test
-    void create_practiceWithNull_defaultsToNone() {
-        assertThat(SessionPolicyResolver.resolveForCreate(ExamMode.PRACTICE, null))
-                .isEqualTo(LockdownMode.NONE);
-    }
-
-    @Test
-    void create_practiceWithStandard_preservesStandard() {
-        assertThat(SessionPolicyResolver.resolveForCreate(ExamMode.PRACTICE, LockdownMode.STANDARD))
-                .isEqualTo(LockdownMode.STANDARD);
-    }
-
-    @Test
-    void create_practiceWithStrict_isRejected() {
-        assertInvalid(() -> SessionPolicyResolver.resolveForCreate(ExamMode.PRACTICE, LockdownMode.STRICT));
-    }
-
-    @Test
-    void create_officialWithNull_defaultsToStrict() {
-        assertThat(SessionPolicyResolver.resolveForCreate(ExamMode.OFFICIAL_EXAM, null))
+    void create_withNull_defaultsToStrict() {
+        assertThat(SessionPolicyResolver.resolveForCreate(null))
                 .isEqualTo(LockdownMode.STRICT);
     }
 
     @Test
-    void create_officialWithStrict_isAllowed() {
-        assertThat(SessionPolicyResolver.resolveForCreate(ExamMode.OFFICIAL_EXAM, LockdownMode.STRICT))
+    void create_withStrict_isAllowed() {
+        assertThat(SessionPolicyResolver.resolveForCreate(LockdownMode.STRICT))
                 .isEqualTo(LockdownMode.STRICT);
     }
 
     @Test
-    void create_officialWithNoneOrStandard_isRejected() {
-        assertInvalid(() -> SessionPolicyResolver.resolveForCreate(ExamMode.OFFICIAL_EXAM, LockdownMode.NONE));
-        assertInvalid(() -> SessionPolicyResolver.resolveForCreate(ExamMode.OFFICIAL_EXAM, LockdownMode.STANDARD));
+    void create_withNoneOrStandard_isRejected() {
+        assertInvalid(() -> SessionPolicyResolver.resolveForCreate(LockdownMode.NONE));
+        assertInvalid(() -> SessionPolicyResolver.resolveForCreate(LockdownMode.STANDARD));
     }
 
     @Test
-    void draftPatch_sameModeWithoutLockdown_preservesStandard() {
+    void draftPatch_withoutLockdown_preservesCurrentStrict() {
         assertThat(SessionPolicyResolver.resolveForDraftPatch(
-                ExamMode.PRACTICE, LockdownMode.STANDARD, null, null))
-                .isEqualTo(LockdownMode.STANDARD);
-    }
-
-    @Test
-    void draftPatch_modeChangeWithoutLockdown_derivesNewModeDefault() {
-        assertThat(SessionPolicyResolver.resolveForDraftPatch(
-                ExamMode.PRACTICE, LockdownMode.STANDARD, ExamMode.OFFICIAL_EXAM, null))
+                false, LockdownMode.STRICT, null))
                 .isEqualTo(LockdownMode.STRICT);
-        assertThat(SessionPolicyResolver.resolveForDraftPatch(
-                ExamMode.OFFICIAL_EXAM, LockdownMode.STRICT, ExamMode.PRACTICE, null))
-                .isEqualTo(LockdownMode.NONE);
     }
 
     @Test
-    void draftPatch_explicitInvalidValue_isRejectedForEffectiveMode() {
+    void draftPatch_legacyNullLockdown_defaultsToStrict() {
+        assertThat(SessionPolicyResolver.resolveForDraftPatch(true, null, null))
+                .isEqualTo(LockdownMode.STRICT);
+    }
+
+    @Test
+    void draftPatch_explicitNonStrictValue_isRejected() {
         assertInvalid(() -> SessionPolicyResolver.resolveForDraftPatch(
-                ExamMode.PRACTICE, LockdownMode.NONE, ExamMode.OFFICIAL_EXAM, LockdownMode.STANDARD));
+                false, LockdownMode.STRICT, LockdownMode.STANDARD));
         assertInvalid(() -> SessionPolicyResolver.resolveForDraftPatch(
-                ExamMode.OFFICIAL_EXAM, LockdownMode.STRICT, ExamMode.PRACTICE, LockdownMode.STRICT));
+                false, LockdownMode.STRICT, LockdownMode.NONE));
     }
 
     @Test
     void policyPatch_nullIsNoOp() {
-        assertThat(SessionPolicyResolver.resolveForPolicyPatch(
-                ExamMode.PRACTICE, LockdownMode.STANDARD, null))
-                .isEqualTo(LockdownMode.STANDARD);
+        assertThat(SessionPolicyResolver.resolveForPolicyPatch(LockdownMode.STRICT, null))
+                .isEqualTo(LockdownMode.STRICT);
     }
 
     @Test
-    void policyPatch_invalidCombinations_areRejected() {
-        assertInvalid(() -> SessionPolicyResolver.resolveForPolicyPatch(
-                ExamMode.PRACTICE, LockdownMode.NONE, LockdownMode.STRICT));
-        assertInvalid(() -> SessionPolicyResolver.resolveForPolicyPatch(
-                ExamMode.OFFICIAL_EXAM, LockdownMode.STRICT, LockdownMode.NONE));
-        assertInvalid(() -> SessionPolicyResolver.resolveForPolicyPatch(
-                ExamMode.OFFICIAL_EXAM, LockdownMode.STRICT, LockdownMode.STANDARD));
+    void policyPatch_nonStrictValues_areRejected() {
+        assertInvalid(() -> SessionPolicyResolver.resolveForPolicyPatch(LockdownMode.STRICT, LockdownMode.NONE));
+        assertInvalid(() -> SessionPolicyResolver.resolveForPolicyPatch(LockdownMode.STRICT, LockdownMode.STANDARD));
     }
 
     @Test
     void legacyNullPolicy_resolvesByExamMode() {
         assertThat(SessionPolicyResolver.resolveEffectiveLockdownMode(
-                ExamMode.PRACTICE, null, true)).isEqualTo(LockdownMode.NONE);
-        assertThat(SessionPolicyResolver.resolveEffectiveLockdownMode(
                 ExamMode.OFFICIAL_EXAM, null, true)).isEqualTo(LockdownMode.STRICT);
+        assertThat(SessionPolicyResolver.resolveEffectiveLockdownMode(
+                null, null, true)).isEqualTo(LockdownMode.STANDARD);
     }
 
     @Test
     void nonLegacyNullPolicy_failsClosed() {
         assertThatThrownBy(() -> SessionPolicyResolver.resolveEffectiveLockdownMode(
-                ExamMode.PRACTICE, null, false))
+                ExamMode.OFFICIAL_EXAM, null, false))
                 .isInstanceOf(InvalidLockdownModeException.class);
     }
 

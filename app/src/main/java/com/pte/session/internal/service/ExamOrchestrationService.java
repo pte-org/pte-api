@@ -154,9 +154,10 @@ public class ExamOrchestrationService {
                 .orElseThrow(() -> new ExamDraftConfigurationException(SessionConstants.EXAM_TEMPLATE_ACTIVE_REQUIRED));
 
         ExamMode mode = request.examMode() == null ? ExamMode.OFFICIAL_EXAM : request.examMode();
-        FormMode formMode = request.formMode() == null ? defaultFormMode(mode) : request.formMode();
-        ReusePolicy reusePolicy = request.reusePolicy() == null ? defaultReusePolicy(mode) : request.reusePolicy();
-        validateConfiguration(mode, formMode, reusePolicy, request.seriesKey());
+        FormMode formMode = request.formMode() == null ? FormMode.UNIQUE_FORM_PER_STUDENT : request.formMode();
+        ReusePolicy reusePolicy = request.reusePolicy() == null
+                ? ReusePolicy.EXCLUDE_STARTED_IN_SERIES : request.reusePolicy();
+        validateConfiguration(reusePolicy, request.seriesKey());
 
         ExamSession session = new ExamSession();
         session.setName(request.name().trim());
@@ -170,13 +171,13 @@ public class ExamOrchestrationService {
         session.setReusePolicy(reusePolicy);
         session.setSeriesKey(normalizeSeriesKey(request.seriesKey()));
         Set<String> templateSkills = resolveTemplateSkills(template);
-        session.setSelectedSkills(resolveSelectedSkills(request.selectedSkills(), templateSkills, mode));
+        session.setSelectedSkills(resolveSelectedSkills(request.selectedSkills(), templateSkills));
         session.setMaxRetriesPerStudent(resolveRetryCount(request.maxRetriesPerStudent()));
         session.setOpensAt(request.opensAt());
         session.setClosesAt(request.closesAt());
         session.setCapacity(request.capacity());
-        session.setPolicy(ExamPolicy.forMode(mode));
-        session.getPolicy().setLockdownMode(SessionPolicyResolver.resolveForCreate(mode, request.lockdownMode()));
+        session.setPolicy(ExamPolicy.realExamDefault());
+        session.getPolicy().setLockdownMode(SessionPolicyResolver.resolveForCreate(request.lockdownMode()));
         session.setStatus(SessionStatus.DRAFT);
         session.setSessionCode(sessionCodeGenerator.generate(tenantId, request.opensAt()));
         ExamSession saved = sessionRepository.saveAndFlush(session);
@@ -221,7 +222,7 @@ public class ExamOrchestrationService {
         if (request.expectedVersion() != null && !request.expectedVersion().equals(session.getDraftVersion())) {
             throw new ExamDraftVersionConflictException();
         }
-        ExamMode previousMode = session.getExamMode();
+        boolean legacyPolicyState = session.getExamMode() == null;
         LockdownMode previousLockdownMode = session.getPolicy() == null ? null : session.getPolicy().getLockdownMode();
         UUID previousTemplatePublicId = session.getTemplatePublicId();
         Integer previousTemplateVersion = session.getTemplateVersion();
@@ -248,18 +249,12 @@ public class ExamOrchestrationService {
             if (request.capacity() <= 0) throw new SessionCapacityInvalidException();
             session.setCapacity(request.capacity());
         }
-        ExamMode requestedMode = request.examMode();
-        ExamMode nextMode = requestedMode == null ? previousMode : requestedMode;
-        boolean modeChanged = SessionPolicyResolver.effectiveExamMode(previousMode)
-                != SessionPolicyResolver.effectiveExamMode(nextMode);
         LockdownMode resolvedLockdownMode = SessionPolicyResolver.resolveForDraftPatch(
-                previousMode, previousLockdownMode, requestedMode, request.lockdownMode());
-        if (requestedMode != null) {
-            session.setExamMode(requestedMode);
+                legacyPolicyState, previousLockdownMode, request.lockdownMode());
+        if (request.examMode() != null) {
+            session.setExamMode(request.examMode());
         }
-        if (modeChanged) {
-            session.setPolicy(ExamPolicy.forMode(nextMode));
-        } else if (session.getPolicy() == null) {
+        if (session.getPolicy() == null) {
             throw new ExamDraftConfigurationException(SessionConstants.EXAM_POLICY_INCOMPLETE);
         }
         session.getPolicy().setLockdownMode(resolvedLockdownMode);
@@ -277,19 +272,17 @@ public class ExamOrchestrationService {
                 || !java.util.Objects.equals(previousTemplateVersion, session.getTemplateVersion());
         Set<String> currentSkills = session.getSelectedSkills() == null
                 ? Set.of() : new LinkedHashSet<>(session.getSelectedSkills());
-        boolean resetSkillsToFull = templateChanged || currentSkills.isEmpty()
-                || (modeChanged && session.getExamMode() != ExamMode.PRACTICE
-                        && !currentSkills.equals(templateSkills));
+        boolean resetSkillsToFull = templateChanged || currentSkills.isEmpty();
         List<String> requestedSkills = request.selectedSkills();
         if (requestedSkills == null && !resetSkillsToFull) {
             requestedSkills = new ArrayList<>(currentSkills);
         }
-        session.setSelectedSkills(resolveSelectedSkills(requestedSkills, templateSkills, session.getExamMode()));
+        session.setSelectedSkills(resolveSelectedSkills(requestedSkills, templateSkills));
         if (request.maxRetriesPerStudent() != null) {
             session.setMaxRetriesPerStudent(resolveRetryCount(request.maxRetriesPerStudent()));
         }
         validateWindow(session.getOpensAt(), session.getClosesAt());
-        validateConfiguration(session.getExamMode(), session.getFormMode(), session.getReusePolicy(), session.getSeriesKey());
+        validateConfiguration(session.getReusePolicy(), session.getSeriesKey());
         validateSubscriptionWindowAndCapacity(lockedSubscription, session.getOpensAt(),
                 session.getClosesAt(), session.getCapacity());
         ExamSession saved = sessionRepository.saveAndFlush(session);
@@ -777,7 +770,7 @@ public class ExamOrchestrationService {
             throw new InvalidSessionWindowException();
     }
 
-    private void validateConfiguration(ExamMode mode, FormMode formMode, ReusePolicy reusePolicy, String seriesKey) {
+    private void validateConfiguration(ReusePolicy reusePolicy, String seriesKey) {
         if (reusePolicy != ReusePolicy.ALLOW && (seriesKey == null || seriesKey.isBlank())) {
             throw new ExamDraftConfigurationException(SessionConstants.EXAM_SERIES_REQUIRED);
         }
@@ -804,7 +797,7 @@ public class ExamOrchestrationService {
         return skills;
     }
 
-    private Set<String> resolveSelectedSkills(List<String> requestedSkills, Set<String> templateSkills, ExamMode mode) {
+    private Set<String> resolveSelectedSkills(List<String> requestedSkills, Set<String> templateSkills) {
         if (requestedSkills == null) {
             return new LinkedHashSet<>(templateSkills);
         }
@@ -821,7 +814,7 @@ public class ExamOrchestrationService {
                 throw new ExamDraftConfigurationException(SessionConstants.SKILLS_DUPLICATE);
             }
         }
-        if (mode != ExamMode.PRACTICE && !selectedSkills.equals(templateSkills)) {
+        if (!selectedSkills.equals(templateSkills)) {
             throw new ExamDraftConfigurationException(SessionConstants.SKILLS_FULL_TEMPLATE_REQUIRED);
         }
         return selectedSkills;
@@ -839,14 +832,6 @@ public class ExamOrchestrationService {
             throw new ExamDraftConfigurationException(SessionConstants.RETRY_COUNT_INVALID);
         }
         return retries;
-    }
-
-    private FormMode defaultFormMode(ExamMode mode) {
-        return mode == ExamMode.PRACTICE ? FormMode.SHARED_FORM : FormMode.UNIQUE_FORM_PER_STUDENT;
-    }
-
-    private ReusePolicy defaultReusePolicy(ExamMode mode) {
-        return mode == ExamMode.PRACTICE ? ReusePolicy.ALLOW : ReusePolicy.EXCLUDE_STARTED_IN_SERIES;
     }
 
     private String normalizeSeriesKey(String value) {

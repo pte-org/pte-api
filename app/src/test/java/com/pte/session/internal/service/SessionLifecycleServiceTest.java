@@ -24,6 +24,8 @@ import com.pte.session.internal.exception.SessionSubscriptionCapacityException;
 import com.pte.session.internal.exception.SessionSubscriptionNotFoundException;
 import com.pte.session.internal.exception.SessionTimeConflictException;
 import com.pte.session.internal.exception.NotEntitledException;
+import com.pte.session.internal.exception.SessionClosedException;
+import com.pte.session.internal.exception.SessionNotStartedException;
 import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
 import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionException;
 import com.pte.session.internal.mapper.SessionMapper;
@@ -223,7 +225,7 @@ class SessionLifecycleServiceTest {
     // ------------------------------------------------------------------
 
     @Test
-    void create_setsLockdownModeToNone_whenExamModeIsPractice() {
+    void create_withoutExamMode_defaultsToOfficialStrict() {
         stubActiveSubscription(200);
         when(sessionRepository.findFirstOverlapping(any(), any(), any(), any())).thenReturn(Optional.empty());
         when(assessmentService.generateAndPublish(any(), any(), any())).thenReturn(snapshotSummary());
@@ -234,12 +236,13 @@ class SessionLifecycleServiceTest {
         });
 
         SessionResponse response = service.create(
-                new CreateSessionRequest("Practice Session", subscriptionId, Set.of("SPEAKING"),
+                new CreateSessionRequest("Default Session", subscriptionId, Set.of("SPEAKING"),
                         Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
-                        ExamMode.PRACTICE, null, 100),
+                        null, null, 100),
                 hostAdmin);
 
-        assertThat(response.policy().lockdownMode()).isEqualTo("NONE");
+        assertThat(response.examMode()).isEqualTo(ExamMode.OFFICIAL_EXAM);
+        assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
     }
 
     @Test
@@ -263,7 +266,7 @@ class SessionLifecycleServiceTest {
     }
 
     @Test
-    void create_withTeacherOverride_strictOnPractice_rejected() {
+    void create_withTeacherOverride_nonStrictOnOfficial_rejectedBeforeSave() {
         stubActiveSubscription(200);
         when(sessionRepository.findFirstOverlapping(any(), any(), any(), any())).thenReturn(Optional.empty());
         when(assessmentService.generateAndPublish(any(), any(), any())).thenReturn(snapshotSummary());
@@ -271,11 +274,11 @@ class SessionLifecycleServiceTest {
         assertThatThrownBy(() -> service.create(
                 new CreateSessionRequest("Invalid Combo", subscriptionId, Set.of("SPEAKING"),
                         Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
-                        ExamMode.PRACTICE, LockdownMode.STRICT, 100),
+                        ExamMode.OFFICIAL_EXAM, LockdownMode.STANDARD, 100),
                 hostAdmin))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("STRICT")
-                .hasMessageContaining("PRACTICE");
+                .isInstanceOf(com.pte.session.internal.exception.InvalidLockdownModeException.class);
+
+        verify(sessionRepository, never()).save(any());
     }
 
     @Test
@@ -461,15 +464,15 @@ class SessionLifecycleServiceTest {
     }
 
     @Test
-    void patchPolicy_practiceStrict_isRejected() {
+    void patchPolicy_officialStandard_isRejected() {
         ExamSession session = existingSession(SessionStatus.SCHEDULED, 100);
-        session.setExamMode(ExamMode.PRACTICE);
-        session.setPolicy(ExamPolicy.practiceDefault());
+        session.setExamMode(ExamMode.OFFICIAL_EXAM);
+        session.setPolicy(ExamPolicy.realExamDefault());
         when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
                 .thenReturn(Optional.of(session));
 
         assertThatThrownBy(() -> service.patchPolicy(session.getPublicId(),
-                new PatchExamPolicyRequest(null, null, null, null, null, LockdownMode.STRICT), hostAdmin))
+                new PatchExamPolicyRequest(null, null, null, null, null, LockdownMode.STANDARD), hostAdmin))
                 .isInstanceOf(com.pte.session.internal.exception.InvalidLockdownModeException.class);
     }
 
@@ -507,12 +510,12 @@ class SessionLifecycleServiceTest {
 
     @Test
     void toPolicy_legacyNullLockdown_resolvesFromExamMode() {
-        ExamPolicy practice = ExamPolicy.practiceDefault();
-        practice.setLockdownMode(null);
+        ExamPolicy legacy = ExamPolicy.mockTestDefault();
+        legacy.setLockdownMode(null);
         ExamPolicy official = ExamPolicy.realExamDefault();
         official.setLockdownMode(null);
 
-        assertThat(SessionMapper.toPolicy(practice, ExamMode.PRACTICE, true).lockdownMode()).isEqualTo("NONE");
+        assertThat(SessionMapper.toPolicy(legacy, null, true).lockdownMode()).isEqualTo("STANDARD");
         assertThat(SessionMapper.toPolicy(official, ExamMode.OFFICIAL_EXAM, true).lockdownMode()).isEqualTo("STRICT");
     }
 
@@ -535,6 +538,25 @@ class SessionLifecycleServiceTest {
                 .thenReturn(Optional.of(session));
 
         assertThatThrownBy(() -> service.lockOpenForAttemptOperation(session.getPublicId(), tenantId))
+                .isInstanceOf(SessionClosedException.class);
+    }
+
+    @Test
+    void attemptMutationLockRejectsSessionNotYetOpened() {
+        ExamSession session = existingSession(SessionStatus.SCHEDULED, 100);
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> service.lockOpenForAttemptOperation(session.getPublicId(), tenantId))
+                .isInstanceOf(SessionNotStartedException.class);
+    }
+
+    @Test
+    void attemptMutationLockRejectsUnknownSession() {
+        UUID publicId = UUID.randomUUID();
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.lockOpenForAttemptOperation(publicId, tenantId))
                 .isInstanceOf(NotEntitledException.class);
     }
 

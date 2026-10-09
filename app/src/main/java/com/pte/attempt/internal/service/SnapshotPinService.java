@@ -71,8 +71,9 @@ public class SnapshotPinService {
     }
 
     public PinnedExamSnapshot pin(ExamAttempt attempt, UUID sessionPublicId, UUID studentPublicId) {
-        // Throws session's own NotEntitledException (403) unmodified if the
-        // student isn't enrolled or the session isn't OPEN — no defensive
+        // Throws session's own 403 unmodified if the student isn't enrolled
+        // (NOT_ENTITLED), or the session isn't OPEN or is outside its
+        // opensAt/closesAt window (SESSION_NOT_STARTED/SESSION_CLOSED) — no defensive
         // null-check needed, unlike the pre-split HTTP call this replaces:
         // an in-process call either returns a fully-populated response or
         // throws, it never returns null/malformed data.
