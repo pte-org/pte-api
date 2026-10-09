@@ -398,9 +398,7 @@ public class SessionLifecycleService {
     public void lockOpenForAttemptOperation(UUID publicId, UUID tenantId) {
         ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
                 .orElseThrow(NotEntitledException::new);
-        if (session.getStatus() != SessionStatus.OPEN) {
-            throw new NotEntitledException();
-        }
+        SessionEntryGate.requireOpen(session);
     }
 
     @Transactional(readOnly = true)

@@ -24,6 +24,8 @@ import com.pte.session.internal.exception.SessionSubscriptionCapacityException;
 import com.pte.session.internal.exception.SessionSubscriptionNotFoundException;
 import com.pte.session.internal.exception.SessionTimeConflictException;
 import com.pte.session.internal.exception.NotEntitledException;
+import com.pte.session.internal.exception.SessionClosedException;
+import com.pte.session.internal.exception.SessionNotStartedException;
 import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
 import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionException;
 import com.pte.session.internal.mapper.SessionMapper;
@@ -536,6 +538,25 @@ class SessionLifecycleServiceTest {
                 .thenReturn(Optional.of(session));
 
         assertThatThrownBy(() -> service.lockOpenForAttemptOperation(session.getPublicId(), tenantId))
+                .isInstanceOf(SessionClosedException.class);
+    }
+
+    @Test
+    void attemptMutationLockRejectsSessionNotYetOpened() {
+        ExamSession session = existingSession(SessionStatus.SCHEDULED, 100);
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> service.lockOpenForAttemptOperation(session.getPublicId(), tenantId))
+                .isInstanceOf(SessionNotStartedException.class);
+    }
+
+    @Test
+    void attemptMutationLockRejectsUnknownSession() {
+        UUID publicId = UUID.randomUUID();
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.lockOpenForAttemptOperation(publicId, tenantId))
                 .isInstanceOf(NotEntitledException.class);
     }
 

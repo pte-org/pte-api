@@ -4,7 +4,7 @@ import com.pte.session.internal.constant.SessionConstants;
 import com.pte.shared.exception.DomainException;
 import org.springframework.http.HttpStatus;
 
-/** Student is not enrolled, or the session isn't open, for the requested attempt. */
+/** Student is not enrolled in the requested session, or the session does not exist. */
 public class NotEntitledException extends DomainException {
 
     public NotEntitledException() {

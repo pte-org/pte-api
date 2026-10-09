@@ -39,7 +39,7 @@ public class SessionService {
         this.sessionLifecycleService = sessionLifecycleService;
     }
 
-    /** Throws if the session isn't OPEN or the student isn't enrolled — never returns a false/empty result for "not entitled". */
+    /** Throws if the student isn't enrolled, or the session isn't OPEN or is outside its opensAt/closesAt window — never returns a false/empty result for "not entitled". */
     public EntitlementResponse checkEntitlement(UUID sessionPublicId, UUID studentPublicId) {
         return entitlementService.checkEntitlement(sessionPublicId, studentPublicId);
     }

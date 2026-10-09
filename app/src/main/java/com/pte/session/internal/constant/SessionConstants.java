@@ -22,6 +22,12 @@ public final class SessionConstants {
     public static final String HOST_CONTEXT_REQUIRED = "HOST_CONTEXT_REQUIRED";
     public static final String INVALID_SESSION_WINDOW = "INVALID_SESSION_WINDOW";
     public static final String NOT_ENTITLED = "NOT_ENTITLED";
+    public static final String SESSION_NOT_STARTED = "SESSION_NOT_STARTED";
+    public static final String SESSION_NOT_STARTED_FRIENDLY =
+            "This exam has not opened yet. Please come back at the scheduled start time.";
+    public static final String SESSION_CLOSED = "SESSION_CLOSED";
+    public static final String SESSION_CLOSED_FRIENDLY =
+            "This exam has already closed.";
     public static final String INVALID_SESSION_CODE = "INVALID_SESSION_CODE";
     public static final String PROCTOR_NOT_ASSIGNED = "PROCTOR_NOT_ASSIGNED";
     public static final String POLICY_LOCKED = "POLICY_LOCKED";
