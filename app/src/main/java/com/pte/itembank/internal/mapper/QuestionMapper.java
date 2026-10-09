@@ -46,7 +46,8 @@ public final class QuestionMapper {
                         ? question.getPteTaskType().name() : question.getTaskTypeKey(),
                 QuestionLifecyclePolicy.canDeleteDraft(question),
                 QuestionLifecyclePolicy.canArchive(question),
-                QuestionLifecyclePolicy.canDeleteDraft(question) ? null : ItembankConstants.QUESTION_DELETE_NOT_ALLOWED);
+                QuestionLifecyclePolicy.canDeleteDraft(question) ? null : ItembankConstants.QUESTION_DELETE_NOT_ALLOWED,
+                question.getPool().name());
     }
 
     private static OptionResponse toOption(QuestionOption option) {

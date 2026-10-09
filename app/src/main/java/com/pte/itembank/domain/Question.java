@@ -1,6 +1,7 @@
 package com.pte.itembank.domain;
 
 import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.domain.enums.Visibility;
 import com.pte.shared.domain.BaseEntity;
@@ -53,6 +54,11 @@ public class Question extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Visibility visibility;
+
+    /** Immutable after insert: a question belongs to exactly one pool for its whole life. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16, updatable = false)
+    private QuestionPool pool = QuestionPool.EXAM;
 
     @Column
     private UUID tenantId;
