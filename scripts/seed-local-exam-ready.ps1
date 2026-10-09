@@ -556,9 +556,11 @@ if (-not [bool]$preflightAttempt.canStart) {
 
 $attempt = $null
 if (-not $SkipStartAttempt) {
+    # OFFICIAL_EXAM sessions require a device check; pte-app confirms it on
+    # its device-check screen before starting, so the seed does the same.
     $attempt = Invoke-SeedApi -Method POST -Path "/api/v1/attempts" -Token $studentToken -Body @{
         sessionPublicId       = $session.publicId
-        deviceCheckConfirmed  = $false
+        deviceCheckConfirmed  = $true
         capabilityManifest    = $manifest
     }
 }

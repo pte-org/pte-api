@@ -113,14 +113,18 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
         if (!authoringMedia && !studentResponse) {
             throw new UnsupportedContentTypeException();
         }
-        if (studentResponse) {
+        // Official exam attempts upload unbound response audio; only a request that
+        // claims a practice binding must prove it against the live practice item.
+        boolean practiceResponse = studentResponse && hasPracticeBinding(request);
+        if (practiceResponse) {
             requirePracticeBinding(request);
             practiceMediaBindingService.assertCanUseResponseAudio(
                     request.practiceSessionId(), request.practiceItemId(), caller);
         }
         validateContentType(request.contentType(), request.assetKind());
-        long maxBytes = studentResponse ? MediaConstants.MAX_PRACTICE_RESPONSE_BYTES
-                : MediaConstants.MAX_AUTHORING_BYTES;
+        long maxBytes = !studentResponse ? MediaConstants.MAX_AUTHORING_BYTES
+                : practiceResponse ? MediaConstants.MAX_PRACTICE_RESPONSE_BYTES
+                        : MediaConstants.MAX_SUBMISSION_BYTES;
         if (request.sizeBytes() == null || request.sizeBytes() <= 0
                 || request.sizeBytes() > maxBytes) {
             throw new UnsupportedContentTypeException();
@@ -146,7 +150,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
         media.setCloudinaryResourceType(resourceType);
         media.setCloudinaryDeliveryType(CloudinaryDeliveryType.UPLOAD);
         media.setSizeBytes(request.sizeBytes());
-        if (studentResponse) {
+        if (practiceResponse) {
             media.setPracticeSessionPublicId(request.practiceSessionId());
             media.setPracticeItemPublicId(request.practiceItemId());
             media.setPurpose(request.purpose());
@@ -357,6 +361,12 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
         if (!allowed) {
             throw new UnsupportedContentTypeException();
         }
+    }
+
+    private boolean hasPracticeBinding(CloudinaryUploadRequest request) {
+        return request.practiceSessionId() != null
+                || request.practiceItemId() != null
+                || request.purpose() != null;
     }
 
     private void requirePracticeBinding(CloudinaryUploadRequest request) {
