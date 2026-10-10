@@ -4,6 +4,7 @@ import com.pte.enrollment.domain.ClassMembership;
 import com.pte.enrollment.domain.enums.ClassStatus;
 import com.pte.enrollment.domain.enums.ProgramStatus;
 import com.pte.enrollment.domain.StudentClass;
+import com.pte.enrollment.dto.response.StudentAssignmentView;
 import com.pte.enrollment.internal.exception.ProgramNotFoundException;
 import com.pte.enrollment.internal.exception.StudentClassNotFoundException;
 import com.pte.enrollment.internal.repository.ClassMembershipRepository;
@@ -41,6 +42,22 @@ public class EnrollmentModuleService {
     public EnrollmentModuleService(StudentClassRepository studentClassRepository,
                                    ClassMembershipRepository classMembershipRepository) {
         this(studentClassRepository, classMembershipRepository, null);
+    }
+
+    /** Returns only the student's current membership; it is not used for attempt history. */
+    @Transactional(readOnly = true)
+    public StudentAssignmentView findCurrentStudentAssignment(UUID tenantId, UUID studentPublicId) {
+        if (tenantId == null || studentPublicId == null) {
+            return null;
+        }
+        return classMembershipRepository.findByTenantIdAndStudentPublicId(tenantId, studentPublicId)
+                .filter(membership -> !membership.isDeleted())
+                .map(membership -> new StudentAssignmentView(
+                        membership.getStudentClass().getPublicId(),
+                        membership.getStudentClass().getName(),
+                        membership.getStudentClass().getProgram().getPublicId(),
+                        membership.getStudentClass().getProgram().getName()))
+                .orElse(null);
     }
 
     /**

@@ -18,6 +18,10 @@ public interface ClassMembershipRepository extends JpaRepository<ClassMembership
 
     List<ClassMembership> findByTenantIdAndStudentPublicIdIn(UUID tenantId, List<UUID> studentPublicIds);
 
+    /** Current assignment read for the tenant student workspace. */
+    @EntityGraph(attributePaths = {"studentClass", "studentClass.program"})
+    Optional<ClassMembership> findByTenantIdAndStudentPublicId(UUID tenantId, UUID studentPublicId);
+
     /** Used by {@code StudentClass} archive/deactivate's active-members guard. */
     boolean existsByTenantIdAndStudentClass_PublicId(UUID tenantId, UUID classPublicId);
 
