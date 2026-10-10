@@ -56,6 +56,7 @@ public interface StudentRosterRepository extends Repository<StudentClass, Long> 
                    OR LOWER(COALESCE(u.student_code, '')) LIKE CONCAT('%', :search, '%'))
               AND (:programPublicId IS NULL OR p.public_id = :programPublicId)
               AND (:classPublicId IS NULL OR c.public_id = :classPublicId)
+              AND (:status = 'ALL' OR u.status = :status)
               AND (:assignmentStatus = 'ALL'
                    OR (:assignmentStatus = 'ASSIGNED' AND m.id IS NOT NULL)
                    OR (:assignmentStatus = 'UNASSIGNED' AND m.id IS NULL))
@@ -101,6 +102,7 @@ public interface StudentRosterRepository extends Repository<StudentClass, Long> 
                    OR LOWER(COALESCE(u.student_code, '')) LIKE CONCAT('%', :search, '%'))
               AND (:programPublicId IS NULL OR p.public_id = :programPublicId)
               AND (:classPublicId IS NULL OR c.public_id = :classPublicId)
+              AND (:status = 'ALL' OR u.status = :status)
               AND (:assignmentStatus = 'ALL'
                    OR (:assignmentStatus = 'ASSIGNED' AND m.id IS NOT NULL)
                    OR (:assignmentStatus = 'UNASSIGNED' AND m.id IS NULL))
@@ -110,6 +112,7 @@ public interface StudentRosterRepository extends Repository<StudentClass, Long> 
             @Param("search") String search,
             @Param("programPublicId") UUID programPublicId,
             @Param("classPublicId") UUID classPublicId,
+            @Param("status") String status,
             @Param("assignmentStatus") String assignmentStatus,
             @Param("sort") String sort,
             @Param("direction") String direction,

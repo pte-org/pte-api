@@ -33,11 +33,12 @@ public class StudentRosterController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) UUID programPublicId,
             @RequestParam(required = false) UUID classPublicId,
+            @RequestParam(required = false) String status,
             @RequestParam(required = false) String assignmentStatus,
             @RequestParam(required = false) String sort,
             @RequestParam(required = false) String direction) {
         CurrentUser caller = CurrentUserContext.required();
         return ApiResponse.success(queryService.search(page, size, search, programPublicId, classPublicId,
-                assignmentStatus, sort, direction, caller));
+                status, assignmentStatus, sort, direction, caller));
     }
 }

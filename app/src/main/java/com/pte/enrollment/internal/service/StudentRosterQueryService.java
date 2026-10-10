@@ -33,6 +33,14 @@ public class StudentRosterQueryService {
     public PagedResult<StudentRosterRowResponse> search(int requestedPage, int requestedSize, String search,
             UUID programPublicId, UUID classPublicId, String assignmentStatus, String sort, String direction,
             CurrentUser caller) {
+        return search(requestedPage, requestedSize, search, programPublicId, classPublicId, null,
+                assignmentStatus, sort, direction, caller);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<StudentRosterRowResponse> search(int requestedPage, int requestedSize, String search,
+            UUID programPublicId, UUID classPublicId, String status, String assignmentStatus, String sort,
+            String direction, CurrentUser caller) {
         UUID tenantId = caller.tenantId();
         if (tenantId == null) {
             return emptyPage(normalizePage(requestedPage), normalizeSize(requestedSize));
@@ -41,13 +49,14 @@ public class StudentRosterQueryService {
         int page = normalizePage(requestedPage);
         int size = normalizeSize(requestedSize);
         String normalizedSearch = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
+        String normalizedStatus = parse(status, "ALL", "ALL", "ACTIVE", "SUSPENDED");
         String normalizedAssignmentStatus = parse(assignmentStatus, "ALL", "ALL", "ASSIGNED", "UNASSIGNED");
         String normalizedSort = parse(sort, "CREATED_AT", "CREATED_AT", "FULL_NAME", "STUDENT_CODE");
         String normalizedDirection = parse(direction, "DESC", "ASC", "DESC");
 
         Page<StudentRosterRow> result = rosterRepository.findPageForTenant(
-                tenantId, normalizedSearch, programPublicId, classPublicId, normalizedAssignmentStatus,
-                normalizedSort, normalizedDirection, PageRequest.of(page, size));
+                tenantId, normalizedSearch, programPublicId, classPublicId, normalizedStatus,
+                normalizedAssignmentStatus, normalizedSort, normalizedDirection, PageRequest.of(page, size));
         return new PagedResult<>(result.map(StudentRosterQueryService::toResponse).getContent(),
                 new PageMeta(result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages(),
                         result.isFirst(), result.isLast(), result.hasNext(), result.hasPrevious()));
