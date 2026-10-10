@@ -26,6 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -81,19 +82,27 @@ public class PlatformUserService {
 
     @Transactional(readOnly = true)
     public PagedResult<UserResponse> list(int requestedPage, int requestedSize, CurrentUser caller) {
-        return list(requestedPage, requestedSize, null, null, caller);
+        return list(requestedPage, requestedSize, null, null, null, caller);
     }
 
     @Transactional(readOnly = true)
     public PagedResult<UserResponse> list(int requestedPage, int requestedSize, String role,
             String status, CurrentUser caller) {
+        return list(requestedPage, requestedSize, null, role, status, caller);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<UserResponse> list(int requestedPage, int requestedSize, String search,
+            String role, String status, CurrentUser caller) {
         requirePlatformUserManagement(caller);
         int page = Math.max(DEFAULT_PAGE, requestedPage);
         int size = requestedSize <= 0 ? DEFAULT_SIZE : Math.min(requestedSize, MAX_SIZE);
         Role roleFilter = parseRoleFilter(role);
         UserStatus statusFilter = parseStatusFilter(status);
+        String normalizedSearch = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
         var result = userRepository.findPageForPlatformUsers(provisioningHelper.platformRoleValues(),
-                roleFilter, statusFilter, org.springframework.data.domain.PageRequest.of(page, size));
+                roleFilter, statusFilter, normalizedSearch,
+                org.springframework.data.domain.PageRequest.of(page, size));
         return new PagedResult<>(result.map(UserMapper::toResponse).getContent(),
                 new PageMeta(result.getNumber(), result.getSize(), result.getTotalElements(),
                         result.getTotalPages(), result.isFirst(), result.isLast(), result.hasNext(),

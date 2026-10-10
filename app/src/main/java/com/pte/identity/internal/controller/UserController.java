@@ -3,6 +3,7 @@ package com.pte.identity.internal.controller;
 import com.pte.identity.internal.dto.request.BulkCreateUsersRequest;
 import com.pte.identity.internal.dto.request.CreateUserRequest;
 import com.pte.identity.internal.dto.request.ResetPasswordRequest;
+import com.pte.identity.internal.dto.request.UpdateStudentProfileRequest;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
 import com.pte.identity.internal.dto.response.GeneratedCredentialsResponse;
 import com.pte.identity.internal.dto.response.UserDirectoryEntryResponse;
@@ -18,6 +19,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -58,6 +60,12 @@ public class UserController {
     @GetMapping("/{publicId}")
     public ApiResponse<UserResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(userService.get(publicId, currentUser()));
+    }
+
+    @PatchMapping("/{publicId}")
+    public ApiResponse<UserResponse> updateStudentProfile(@PathVariable UUID publicId,
+            @Valid @RequestBody UpdateStudentProfileRequest request) {
+        return ApiResponse.success(userService.updateStudentProfile(publicId, request, currentUser()));
     }
 
     @GetMapping

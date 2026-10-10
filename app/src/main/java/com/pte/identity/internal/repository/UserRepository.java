@@ -58,9 +58,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("select distinct u from User u join u.roles userRole "
             + "where u.tenantId is null and u.deleted = false and userRole in :platformRoles "
             + "and (:role is null or userRole = :role) "
-            + "and (:status is null or u.status = :status)")
+            + "and (:status is null or u.status = :status) "
+            + "and (:search = '' "
+            + "or lower(coalesce(u.fullName, '')) like concat('%', :search, '%') "
+            + "or lower(coalesce(u.email, '')) like concat('%', :search, '%') "
+            + "or lower(coalesce(u.username, '')) like concat('%', :search, '%'))")
     Page<User> findPageForPlatformUsers(@Param("platformRoles") Set<Role> platformRoles,
-            @Param("role") Role role, @Param("status") UserStatus status, Pageable pageable);
+            @Param("role") Role role, @Param("status") UserStatus status, @Param("search") String search,
+            Pageable pageable);
 
     @Query("""
             select distinct u

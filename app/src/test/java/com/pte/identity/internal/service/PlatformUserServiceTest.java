@@ -16,6 +16,8 @@ import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -28,7 +30,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -104,6 +108,20 @@ class PlatformUserServiceTest {
                 .isInstanceOf(ForbiddenUserManagementException.class);
         verify(auditLogService).recordFailure(eq(caller), eq(IdentityConstants.PLATFORM_USER_AGGREGATE),
                 eq("authorization"), eq(IdentityConstants.PLATFORM_AUTHORIZATION_DENIED), any(String.class));
+    }
+
+    @Test
+    void list_normalizesSearchBeforeQueryingRepository() {
+        CurrentUser caller = admin();
+        when(provisioningHelper.platformRoleValues())
+                .thenReturn(Set.of(Role.PLATFORM_MANAGER, Role.ACADEMIC_MANAGER, Role.ACADEMIC_STAFF));
+        when(userRepository.findPageForPlatformUsers(anySet(), isNull(), isNull(), eq("academic staff"),
+                any(Pageable.class))).thenReturn(Page.empty());
+
+        service.list(0, 20, "  Academic Staff  ", "", "", caller);
+
+        verify(userRepository).findPageForPlatformUsers(anySet(), isNull(), isNull(), eq("academic staff"),
+                any(Pageable.class));
     }
 
     @Test
