@@ -19,6 +19,7 @@ import com.pte.session.internal.dto.request.PatchExamPolicyRequest;
 import com.pte.session.internal.dto.response.SessionResponse;
 import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.session.dto.response.ClosingSoonSessionView;
+import com.pte.session.dto.response.SessionSummaryView;
 import com.pte.session.internal.exception.HostContextRequiredException;
 import com.pte.session.internal.exception.InvalidPolicyPatchException;
 import com.pte.session.internal.exception.InvalidSessionWindowException;
@@ -49,6 +50,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -196,6 +198,18 @@ public class SessionLifecycleService {
     public List<SessionResponse> list(CurrentUser caller) {
         return sessionRepository.findByTenantIdOrderByCreatedAtDescIdDesc(requireTenant(caller)).stream()
                 .map(SessionMapper::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<SessionSummaryView> findSummaries(Collection<UUID> publicIds, UUID tenantId) {
+        if (publicIds == null || publicIds.isEmpty() || tenantId == null) {
+            return List.of();
+        }
+        return sessionRepository.findByTenantIdAndPublicIdInAndDeletedFalse(tenantId, publicIds.stream().distinct().toList())
+                .stream()
+                .map(session -> new SessionSummaryView(session.getPublicId(), session.getName(),
+                        session.getSessionCode(), session.getStatus().name()))
+                .toList();
     }
 
     @Transactional(readOnly = true)

@@ -2,6 +2,7 @@ package com.pte.attempt;
 
 import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.attempt.dto.response.AttemptSummaryView;
+import com.pte.attempt.dto.response.StudentAttemptHistoryView;
 import com.pte.attempt.dto.response.AttemptExaminerPromptView;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.attempt.dto.response.AttemptSecurityEventView;
@@ -9,6 +10,7 @@ import com.pte.attempt.dto.response.AttemptGradingCandidateView;
 import com.pte.attempt.dto.response.AttemptGradingCoverageView;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
+import com.pte.attempt.internal.repository.ExamAttemptSpecifications;
 import com.pte.attempt.internal.service.AttemptSummaryQueryService;
 import com.pte.attempt.internal.service.AttemptExaminerPromptQueryService;
 import com.pte.attempt.internal.service.ProctorCommandService;
@@ -16,7 +18,12 @@ import com.pte.attempt.internal.service.SubmittedAnswerQueryService;
 import com.pte.attempt.internal.service.AttemptSecurityAuditQueryService;
 import com.pte.attempt.internal.service.AttemptGradingQueryService;
 import com.pte.shared.StartedAttemptLookup;
+import com.pte.shared.web.PageMeta;
+import com.pte.shared.web.PagedResult;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Collection;
@@ -107,6 +114,24 @@ public class AttemptService implements StartedAttemptLookup {
     /** Batch pinned scoring contexts for report publication; attempt contents stay inside this module. */
     public Map<UUID, AttemptScoreContextView> getScoreContexts(Collection<UUID> attemptPublicIds) {
         return attemptSummaryQueryService.getScoreContexts(attemptPublicIds);
+    }
+
+    /** Tenant-scoped attempt history read; it never creates or loads a report. */
+    @Transactional(readOnly = true)
+    public PagedResult<StudentAttemptHistoryView> findStudentHistory(UUID studentPublicId, UUID tenantId,
+            int requestedPage, int requestedSize, Instant from, Instant to, AttemptStatus status) {
+        int page = Math.max(requestedPage, 0);
+        int size = requestedSize <= 0 ? 20 : Math.min(requestedSize, 100);
+        var result = examAttemptRepository.findAll(
+                ExamAttemptSpecifications.forStudent(tenantId, studentPublicId, from, to, status),
+                PageRequest.of(page, size,
+                        Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))));
+        return new PagedResult<>(result.map(attempt -> new StudentAttemptHistoryView(
+                attempt.getPublicId(), attempt.getSessionPublicId(), attempt.getStudentPublicId(),
+                attempt.getTenantId(), attempt.getAttemptNumber(), attempt.getStatus().name(),
+                attempt.getCreatedAt(), attempt.getStartedAt(), attempt.getSubmittedAt())).getContent(),
+                new PageMeta(result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages(),
+                        result.isFirst(), result.isLast(), result.hasNext(), result.hasPrevious()));
     }
 
     /** Candidate lifecycle snapshot for a CLOSED session's immutable grading cohort. */

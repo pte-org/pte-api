@@ -4,6 +4,7 @@ import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
 import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.session.dto.response.ClosingSoonSessionView;
+import com.pte.session.dto.response.SessionSummaryView;
 import com.pte.billing.SubscriptionRevocationImpactQuery.SubscriptionRevocationImpact;
 import com.pte.session.internal.service.EntitlementService;
 import com.pte.session.internal.service.SessionLifecycleService;
@@ -13,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 import java.time.Instant;
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 
 /**
@@ -96,6 +98,12 @@ public class SessionService {
     /** Trusted notification read surface; the lifecycle service revalidates before append. */
     public List<ClosingSoonSessionView> findDueClosingSoonSessions(Instant now, Instant cutoff) {
         return sessionLifecycleService.findDueClosingSoonSessions(now, cutoff);
+    }
+
+    /** Reads tenant-owned session labels in one batch for activity projections. */
+    @Transactional(readOnly = true)
+    public List<SessionSummaryView> findSummaries(Collection<UUID> publicIds, UUID tenantId) {
+        return sessionLifecycleService.findSummaries(publicIds, tenantId);
     }
 
     /** Locks and revalidates one candidate inside the caller's transaction. */

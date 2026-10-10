@@ -38,6 +38,8 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> 
     /** Newest first — the host exam list shows sessions in this order by default. */
     List<ExamSession> findByTenantIdOrderByCreatedAtDescIdDesc(UUID tenantId);
 
+    List<ExamSession> findByTenantIdAndPublicIdInAndDeletedFalse(UUID tenantId, List<UUID> publicIds);
+
     @Query("SELECT s FROM ExamSession s WHERE s.deleted = false "
             + "AND s.status = com.pte.session.domain.enums.SessionStatus.OPEN "
             + "AND s.opensAt <= :now AND s.closesAt > :now AND s.closesAt <= :cutoff "

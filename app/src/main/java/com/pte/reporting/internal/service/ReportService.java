@@ -72,7 +72,8 @@ public class ReportService {
             return List.of();
         }
         return attemptReportRepository
-                .findByStudentPublicIdAndTenantIdAndPublishedTrueOrderByPublishedAtDesc(caller.userId(), caller.tenantId())
+                .findByStudentPublicIdAndTenantIdAndPublishedTrueAndDeletedFalseOrderByPublishedAtDesc(
+                        caller.userId(), caller.tenantId())
                 .stream()
                 .map(report -> ReportMapper.toResponse(report, publishedSummary(report)))
                 .toList();
