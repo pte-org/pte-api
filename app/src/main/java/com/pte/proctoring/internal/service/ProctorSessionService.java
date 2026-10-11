@@ -37,16 +37,22 @@ public class ProctorSessionService {
     @Transactional
     public ProctorSessionResponse open(UUID sessionPublicId, CurrentUser caller) {
         UUID proctorPublicId = caller.userId();
+        UUID tenantId = caller.tenantId();
+        // Lock session and check OPEN + window first to eliminate race with Host revocation
+        sessionService.lockOpenWithinWindowForProctorOperation(sessionPublicId, tenantId);
+        // Reauthorize assignment under the session lock
+        ProctorAssignmentCheckResponse assignment = sessionService.checkProctorAssignment(sessionPublicId, proctorPublicId);
+
         return proctorSessionRepository
                 .findBySessionPublicIdAndProctorPublicIdAndTenantIdAndStatus(
-                        sessionPublicId, proctorPublicId, caller.tenantId(), ProctorSessionStatus.ACTIVE)
+                        sessionPublicId, proctorPublicId, tenantId, ProctorSessionStatus.ACTIVE)
                 .map(mapper::toResponse)
-                .orElseGet(() -> openNew(sessionPublicId, proctorPublicId));
+                .orElseGet(() -> openNewWithAssignment(sessionPublicId, proctorPublicId, assignment.tenantId()));
     }
 
     @Transactional
     public void close(UUID proctorSessionPublicId, CurrentUser caller) {
-        ProctorSession session = findOwned(proctorSessionPublicId, caller.userId(), caller.tenantId());
+        ProctorSession session = findOwnedWithLock(proctorSessionPublicId, caller.userId(), caller.tenantId());
         if (session.isActive()) {
             session.end();
             proctorSessionRepository.save(session);
@@ -58,15 +64,16 @@ public class ProctorSessionService {
                 .orElseThrow(ProctorSessionNotFoundException::new);
     }
 
-    private ProctorSessionResponse openNew(UUID sessionPublicId, UUID proctorPublicId) {
-        // Propagates session's own ProctorNotAssignedException (403) unmodified
-        // when the caller isn't assigned — same externally observable behavior
-        // as the pre-split assignment-check-then-fetch path, without the network call.
-        ProctorAssignmentCheckResponse assignment = sessionService.checkProctorAssignment(sessionPublicId, proctorPublicId);
+    ProctorSession findOwnedWithLock(UUID publicId, UUID proctorPublicId, UUID tenantId) {
+        return proctorSessionRepository.findWithLockByPublicIdAndProctorPublicIdAndTenantId(publicId, proctorPublicId, tenantId)
+                .orElseThrow(ProctorSessionNotFoundException::new);
+    }
+
+    private ProctorSessionResponse openNewWithAssignment(UUID sessionPublicId, UUID proctorPublicId, UUID tenantId) {
         ProctorSession session = new ProctorSession();
         session.setSessionPublicId(sessionPublicId);
         session.setProctorPublicId(proctorPublicId);
-        session.setTenantId(assignment.tenantId());
+        session.setTenantId(tenantId);
         ProctorSession saved = proctorSessionRepository.save(session);
         return mapper.toResponse(saved);
     }
