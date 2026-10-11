@@ -18,6 +18,11 @@ import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<User, Long> {
 
+    @Query("select (count(u) > 0) from User u where u.tenantId = :tenantId and u.deleted = false "
+            + "and lower(trim(u.email)) = :email and u.publicId <> :excludedId")
+    boolean existsCanonicalEmail(@Param("tenantId") UUID tenantId, @Param("email") String email,
+            @Param("excludedId") UUID excludedId);
+
     List<User> findByUsername(String username);
 
     Optional<User> findByUsernameAndTenantId(String username, UUID tenantId);
