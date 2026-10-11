@@ -41,6 +41,7 @@ import com.pte.session.internal.policy.SessionPolicyResolver;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -84,6 +85,7 @@ public class SessionLifecycleService {
                 sessionCodeGenerator, Clock.systemUTC());
     }
 
+    @Autowired
     public SessionLifecycleService(ExamSessionRepository sessionRepository,
             EnrollmentRepository enrollmentRepository,
             AssessmentService assessmentService,
