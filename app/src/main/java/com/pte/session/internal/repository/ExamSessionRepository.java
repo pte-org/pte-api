@@ -13,7 +13,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> {
+public interface ExamSessionRepository extends JpaRepository<ExamSession, Long>,
+        org.springframework.data.jpa.repository.JpaSpecificationExecutor<ExamSession> {
 
     Optional<ExamSession> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 
