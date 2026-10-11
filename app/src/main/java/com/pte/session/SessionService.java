@@ -5,8 +5,12 @@ import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
 import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.session.dto.response.ClosingSoonSessionView;
 import com.pte.billing.SubscriptionRevocationImpactQuery.SubscriptionRevocationImpact;
+import com.pte.session.dto.response.MonitoringEnrollmentView;
+import com.pte.session.dto.response.ProctorMonitoringSessionView;
 import com.pte.session.internal.service.EntitlementService;
+import com.pte.session.internal.service.ProctorMonitoringQueryService;
 import com.pte.session.internal.service.SessionLifecycleService;
+import com.pte.shared.web.PagedResult;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,10 +37,15 @@ public class SessionService {
 
     private final EntitlementService entitlementService;
     private final SessionLifecycleService sessionLifecycleService;
+    private final ProctorMonitoringQueryService proctorMonitoringQueryService;
 
-    public SessionService(EntitlementService entitlementService, SessionLifecycleService sessionLifecycleService) {
+    public SessionService(
+            EntitlementService entitlementService,
+            SessionLifecycleService sessionLifecycleService,
+            ProctorMonitoringQueryService proctorMonitoringQueryService) {
         this.entitlementService = entitlementService;
         this.sessionLifecycleService = sessionLifecycleService;
+        this.proctorMonitoringQueryService = proctorMonitoringQueryService;
     }
 
     /** Throws if the student isn't enrolled, or the session isn't OPEN or is outside its opensAt/closesAt window — never returns a false/empty result for "not entitled". */
@@ -75,6 +84,12 @@ public class SessionService {
     @Transactional
     public void lockOpenForAttemptOperation(UUID sessionPublicId, UUID tenantId) {
         sessionLifecycleService.lockOpenForAttemptOperation(sessionPublicId, tenantId);
+    }
+
+    /** Locks the session row and asserts session is OPEN and within active exam window for proctoring operations. */
+    @Transactional
+    public void lockOpenWithinWindowForProctorOperation(UUID sessionPublicId, UUID tenantId) {
+        sessionLifecycleService.lockOpenWithinWindowForProctorOperation(sessionPublicId, tenantId);
     }
 
     /** Reads the retry policy through the session module after its row has been locked for this attempt operation. */
@@ -126,5 +141,38 @@ public class SessionService {
     public SubscriptionRevocationImpact getSubscriptionRevocationImpact(
             UUID subscriptionId, UUID tenantId) {
         return sessionLifecycleService.getSubscriptionRevocationImpact(subscriptionId, tenantId);
+    }
+
+    /** Reads session metadata and assignment role for an assigned proctor. */
+    public Optional<ProctorMonitoringSessionView> getMonitoringSession(
+            UUID sessionPublicId, UUID proctorPublicId, UUID tenantId) {
+        return proctorMonitoringQueryService.getMonitoringSession(sessionPublicId, proctorPublicId, tenantId);
+    }
+
+    /** Returns paginated assigned sessions for the proctor within tenant. */
+    public PagedResult<ProctorMonitoringSessionView> getAssignedSessionsForProctor(
+            UUID proctorPublicId, UUID tenantId, int page, int size) {
+        return proctorMonitoringQueryService.getAssignedSessions(proctorPublicId, tenantId, page, size);
+    }
+
+    /** Returns paginated student enrollments for an exam session within tenant. */
+    public PagedResult<MonitoringEnrollmentView> getMonitoringEnrollments(
+            UUID sessionPublicId, UUID tenantId, int page, int size) {
+        return proctorMonitoringQueryService.getEnrollments(sessionPublicId, tenantId, page, size);
+    }
+
+    /** Total count of active student enrollments for an exam session. */
+    public long countMonitoringEnrollments(UUID sessionPublicId, UUID tenantId) {
+        return proctorMonitoringQueryService.countEnrollments(sessionPublicId, tenantId);
+    }
+
+    /** Checks whether a student is actively enrolled in an exam session. */
+    public boolean isStudentEnrolledInSession(UUID sessionPublicId, UUID studentPublicId, UUID tenantId) {
+        return proctorMonitoringQueryService.isStudentEnrolled(sessionPublicId, studentPublicId, tenantId);
+    }
+
+    /** Checks whether a proctor is actively assigned to an exam session. */
+    public boolean isProctorAssignedToSession(UUID sessionPublicId, UUID proctorPublicId, UUID tenantId) {
+        return proctorMonitoringQueryService.isProctorAssigned(sessionPublicId, proctorPublicId, tenantId);
     }
 }
