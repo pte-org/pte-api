@@ -21,11 +21,14 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final StompAuthChannelInterceptor authChannelInterceptor;
+    private final ProctorOutboundAuthorizationInterceptor outboundAuthorizationInterceptor;
     private final String[] allowedOriginPatterns;
 
     public WebSocketConfig(StompAuthChannelInterceptor authChannelInterceptor,
+                           ProctorOutboundAuthorizationInterceptor outboundAuthorizationInterceptor,
                            @Value("${proctor.ws.allowed-origin-patterns:http://localhost:*}") String[] allowedOriginPatterns) {
         this.authChannelInterceptor = authChannelInterceptor;
+        this.outboundAuthorizationInterceptor = outboundAuthorizationInterceptor;
         this.allowedOriginPatterns = allowedOriginPatterns;
     }
 
@@ -43,5 +46,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
         registration.interceptors(authChannelInterceptor);
+    }
+
+    @Override
+    public void configureClientOutboundChannel(ChannelRegistration registration) {
+        registration.interceptors(outboundAuthorizationInterceptor);
     }
 }
