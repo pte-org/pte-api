@@ -12,6 +12,9 @@ import java.util.UUID;
 
 public interface ScoringSessionStateRepository extends JpaRepository<ScoringSessionState, Long> {
 
+    java.util.List<StaffPublicationRow> findByTenantIdAndSessionPublicIdInAndDeletedFalse(
+            UUID tenantId, java.util.List<UUID> sessionIds);
+
     Optional<ScoringSessionState> findByTenantIdAndSessionPublicId(UUID tenantId, UUID sessionPublicId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

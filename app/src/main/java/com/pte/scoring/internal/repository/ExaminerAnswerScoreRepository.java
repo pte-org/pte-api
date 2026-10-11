@@ -9,6 +9,19 @@ import java.util.UUID;
 
 public interface ExaminerAnswerScoreRepository extends JpaRepository<ExaminerAnswerScore, Long> {
 
+    List<StaffScoreRow> findByTenantIdAndAnswerPublicIdInAndDeletedFalse(UUID tenantId, List<UUID> answerIds);
+
+    @org.springframework.data.jpa.repository.Query("select s.attemptPublicId as attemptPublicId, count(s.id) as scoreCount "
+            + "from ExaminerAnswerScore s where s.tenantId = :tenantId and s.sessionPublicId in :sessionIds "
+            + "and s.examinerPublicId = :examinerId and s.attemptPublicId in :attemptIds and s.deleted = false "
+            + "group by s.attemptPublicId")
+    List<StaffScoreCount> countStaffScores(@org.springframework.data.repository.query.Param("tenantId") UUID tenantId,
+            @org.springframework.data.repository.query.Param("sessionIds") List<UUID> sessionIds,
+            @org.springframework.data.repository.query.Param("examinerId") UUID examinerId,
+            @org.springframework.data.repository.query.Param("attemptIds") List<UUID> attemptIds);
+
+    interface StaffScoreCount { UUID getAttemptPublicId(); long getScoreCount(); }
+
     Optional<ExaminerAnswerScore> findByAnswerPublicIdAndTenantId(UUID answerPublicId, UUID tenantId);
 
     List<ExaminerAnswerScore> findByTenantIdAndSessionPublicId(UUID tenantId, UUID sessionPublicId);

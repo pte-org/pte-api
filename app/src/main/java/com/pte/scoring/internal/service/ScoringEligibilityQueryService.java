@@ -54,4 +54,9 @@ public class ScoringEligibilityQueryService {
                 .filter(ScoringMethod::isAiScored)
                 .isPresent();
     }
+
+    java.util.Optional<Boolean> resolvePinnedEligibility(UUID templateId, String taskType) {
+        return scoringMethodResolver.resolve(templateId, taskType)
+                .map(ScoringMethod::isAiScored);
+    }
 }
