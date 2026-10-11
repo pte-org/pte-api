@@ -239,7 +239,7 @@ public class EnrollmentService {
 
     @Transactional
     public void unassignProctor(UUID sessionPublicId, UUID assignmentPublicId, CurrentUser caller) {
-        ExamSession session = sessionLifecycleService.findOwned(sessionPublicId, caller);
+        ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
         ProctorAssignment assignment = proctorAssignmentRepository.findByPublicId(assignmentPublicId)
                 .orElseThrow(ProctorAssignmentNotFoundException::new);
         if (!assignment.getSession().getId().equals(session.getId())) {

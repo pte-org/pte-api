@@ -46,6 +46,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -71,6 +72,7 @@ public class SessionLifecycleService {
     private final BillingService billingService;
     private final ApplicationEventPublisher eventPublisher;
     private final SessionCodeGenerator sessionCodeGenerator;
+    private final Clock clock;
 
     public SessionLifecycleService(ExamSessionRepository sessionRepository,
             EnrollmentRepository enrollmentRepository,
@@ -78,12 +80,24 @@ public class SessionLifecycleService {
             BillingService billingService,
             ApplicationEventPublisher eventPublisher,
             SessionCodeGenerator sessionCodeGenerator) {
+        this(sessionRepository, enrollmentRepository, assessmentService, billingService, eventPublisher,
+                sessionCodeGenerator, Clock.systemUTC());
+    }
+
+    public SessionLifecycleService(ExamSessionRepository sessionRepository,
+            EnrollmentRepository enrollmentRepository,
+            AssessmentService assessmentService,
+            BillingService billingService,
+            ApplicationEventPublisher eventPublisher,
+            SessionCodeGenerator sessionCodeGenerator,
+            Clock clock) {
         this.sessionRepository = sessionRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.assessmentService = assessmentService;
         this.billingService = billingService;
         this.eventPublisher = eventPublisher;
         this.sessionCodeGenerator = sessionCodeGenerator;
+        this.clock = clock != null ? clock : Clock.systemUTC();
     }
 
     @Transactional
@@ -399,6 +413,14 @@ public class SessionLifecycleService {
         ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
                 .orElseThrow(NotEntitledException::new);
         SessionEntryGate.requireOpen(session);
+    }
+
+    @Transactional
+    public void lockOpenWithinWindowForProctorOperation(UUID publicId, UUID tenantId) {
+        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(NotEntitledException::new);
+        SessionEntryGate.requireOpen(session);
+        SessionEntryGate.requireWithinWindow(session, clock.instant());
     }
 
     @Transactional(readOnly = true)
