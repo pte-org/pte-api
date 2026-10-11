@@ -7,15 +7,21 @@ import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.attempt.dto.response.AttemptSecurityEventView;
 import com.pte.attempt.dto.response.AttemptGradingCandidateView;
 import com.pte.attempt.dto.response.AttemptGradingCoverageView;
+import com.pte.attempt.dto.response.MonitoringAttemptSummaryView;
+import com.pte.attempt.dto.response.MonitoringAttemptView;
+import com.pte.attempt.dto.response.MonitoringRosterAggregateView;
+import com.pte.attempt.dto.response.ProctorIntegrityReportView;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
+import com.pte.attempt.internal.service.AttemptGradingQueryService;
+import com.pte.attempt.internal.service.AttemptMonitoringQueryService;
 import com.pte.attempt.internal.service.AttemptSummaryQueryService;
 import com.pte.attempt.internal.service.AttemptExaminerPromptQueryService;
 import com.pte.attempt.internal.service.ProctorCommandService;
 import com.pte.attempt.internal.service.SubmittedAnswerQueryService;
 import com.pte.attempt.internal.service.AttemptSecurityAuditQueryService;
-import com.pte.attempt.internal.service.AttemptGradingQueryService;
 import com.pte.shared.StartedAttemptLookup;
+import com.pte.shared.web.PagedResult;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -49,6 +55,7 @@ public class AttemptService implements StartedAttemptLookup {
     private final ExamAttemptRepository examAttemptRepository;
     private final AttemptSecurityAuditQueryService attemptSecurityAuditQueryService;
     private final AttemptGradingQueryService attemptGradingQueryService;
+    private final AttemptMonitoringQueryService attemptMonitoringQueryService;
 
     public AttemptService(ProctorCommandService proctorCommandService,
                           SubmittedAnswerQueryService submittedAnswerQueryService,
@@ -56,7 +63,8 @@ public class AttemptService implements StartedAttemptLookup {
                           AttemptExaminerPromptQueryService attemptExaminerPromptQueryService,
                           ExamAttemptRepository examAttemptRepository,
                           AttemptSecurityAuditQueryService attemptSecurityAuditQueryService,
-                          AttemptGradingQueryService attemptGradingQueryService) {
+                          AttemptGradingQueryService attemptGradingQueryService,
+                          AttemptMonitoringQueryService attemptMonitoringQueryService) {
         this.proctorCommandService = proctorCommandService;
         this.submittedAnswerQueryService = submittedAnswerQueryService;
         this.attemptSummaryQueryService = attemptSummaryQueryService;
@@ -64,6 +72,7 @@ public class AttemptService implements StartedAttemptLookup {
         this.examAttemptRepository = examAttemptRepository;
         this.attemptSecurityAuditQueryService = attemptSecurityAuditQueryService;
         this.attemptGradingQueryService = attemptGradingQueryService;
+        this.attemptMonitoringQueryService = attemptMonitoringQueryService;
     }
 
     /** Silent no-op if the attempt doesn't exist or isn't IN_PROGRESS — a stale/duplicate/late command is not an error. */
@@ -156,5 +165,37 @@ public class AttemptService implements StartedAttemptLookup {
                 .stream()
                 .map(com.pte.attempt.domain.ExamAttempt::getStudentPublicId)
                 .collect(Collectors.toSet());
+    }
+
+    /** Batch resolves latest attempt snapshots for a page of enrolled students on an exam session. */
+    public Map<UUID, MonitoringAttemptView> getLatestAttemptsForStudents(
+            UUID sessionPublicId, UUID tenantId, Collection<UUID> studentPublicIds) {
+        return attemptMonitoringQueryService.findLatestAttemptsForStudents(sessionPublicId, tenantId, studentPublicIds);
+    }
+
+    /** Returns bounded attempt history for a specific enrolled student on an exam session. */
+    public PagedResult<MonitoringAttemptSummaryView> getAttemptHistoryForStudent(
+            UUID sessionPublicId, UUID studentPublicId, UUID tenantId, int page, int size) {
+        return attemptMonitoringQueryService.findAttemptHistoryForStudent(sessionPublicId, studentPublicId, tenantId, page, size);
+    }
+
+    /** Whole-session enrolled-latest status aggregate joining the exported Session membership view. */
+    public MonitoringRosterAggregateView getRosterAggregate(UUID sessionPublicId, UUID tenantId) {
+        return attemptMonitoringQueryService.getRosterAggregate(sessionPublicId, tenantId);
+    }
+
+    /** Inspects data integrity for an exam session (duplicate memberships, tied attempts, orphan attempts). */
+    public ProctorIntegrityReportView checkProctorIntegrity(UUID sessionPublicId, UUID tenantId) {
+        return attemptMonitoringQueryService.checkIntegrity(sessionPublicId, tenantId);
+    }
+
+    /** Applies a scoped force-submit command verifying exact attempt, session, and tenant. Returns true if submitted, false if already submitted (no-op). */
+    public boolean forceSubmitScoped(UUID attemptPublicId, UUID sessionPublicId, UUID tenantId) {
+        return proctorCommandService.forceSubmitScoped(attemptPublicId, sessionPublicId, tenantId);
+    }
+
+    /** Checks whether an attempt belongs to the given exam session and tenant. */
+    public boolean attemptBelongsToSession(UUID attemptPublicId, UUID sessionPublicId, UUID tenantId) {
+        return proctorCommandService.attemptBelongsToSession(attemptPublicId, sessionPublicId, tenantId);
     }
 }
