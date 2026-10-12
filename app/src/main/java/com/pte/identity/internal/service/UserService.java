@@ -10,6 +10,7 @@ import com.pte.identity.internal.dto.request.BulkCreateUsersRequest;
 import com.pte.identity.internal.dto.request.ChangePasswordRequest;
 import com.pte.identity.internal.dto.request.CreateUserRequest;
 import com.pte.identity.internal.dto.request.ResetPasswordRequest;
+import com.pte.identity.internal.dto.request.UpdateStudentProfileRequest;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse.CreatedUser;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse.RowError;
@@ -18,6 +19,7 @@ import com.pte.identity.internal.dto.response.UserDirectoryEntryResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.DuplicateEmailInBatchException;
 import com.pte.identity.internal.exception.EmailAlreadyUsedException;
+import com.pte.identity.internal.exception.ForbiddenUserManagementException;
 import com.pte.identity.internal.exception.ForbiddenPasswordResetException;
 import com.pte.identity.internal.exception.InvalidLoginException;
 import com.pte.identity.internal.exception.UserNotFoundException;
@@ -236,6 +238,37 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserResponse get(UUID publicId, CurrentUser caller) {
         return UserMapper.toResponse(findScoped(publicId, caller));
+    }
+
+    /** Updates only the profile fields allowed by the tenant student workspace. */
+    @Transactional
+    public UserResponse updateStudentProfile(UUID publicId, UpdateStudentProfileRequest request,
+            CurrentUser caller) {
+        if (caller == null || caller.tenantId() == null || !caller.hasRole(Role.HOST_ADMIN.name())) {
+            throw new ForbiddenUserManagementException();
+        }
+        User user = userRepository.findWithLockByPublicIdAndTenantId(publicId, caller.tenantId())
+                .orElseThrow(UserNotFoundException::new);
+        if (!user.getRoles().contains(Role.STUDENT)) {
+            throw new ForbiddenUserManagementException();
+        }
+
+        String email = normalizeOptional(request.email());
+        if (email != null) {
+            boolean usedByAnotherUser = userRepository.findByTenantIdAndEmailIn(caller.tenantId(), List.of(email))
+                    .stream()
+                    .anyMatch(candidate -> !candidate.getPublicId().equals(publicId)
+                            && email.equalsIgnoreCase(candidate.getEmail()));
+            if (usedByAnotherUser) {
+                throw new EmailAlreadyUsedException();
+            }
+        }
+
+        user.setFullName(request.fullName().trim());
+        user.setEmail(email);
+        user.setPhone(normalizeOptional(request.phone()));
+        user.setDateOfBirth(request.dateOfBirth());
+        return UserMapper.toResponse(user);
     }
 
     @Transactional(readOnly = true)
