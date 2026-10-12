@@ -15,11 +15,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * The only door other modules use to reach {@code identity}. {@code
@@ -121,6 +124,15 @@ public class IdentityService implements StudentCountProvider {
                 .filter(user -> user.getStatus() == UserStatus.ACTIVE && user.getRoles().contains(Role.EXAMINER))
                 .map(user -> new ExaminerIdentityView(user.getPublicId(), user.getFullName(), user.getEmail()))
                 .toList();
+    }
+
+    /** Display names of the tenant's users, keyed by public id; unknown or deleted ids are omitted. */
+    public Map<UUID, String> findFullNames(UUID tenantId, Collection<UUID> userPublicIds) {
+        if (tenantId == null || userPublicIds == null || userPublicIds.isEmpty()) {
+            return Map.of();
+        }
+        return userRepository.findByPublicIdInAndTenantIdAndDeletedFalse(List.copyOf(userPublicIds), tenantId).stream()
+                .collect(Collectors.toMap(User::getPublicId, User::getFullName));
     }
 
     /**

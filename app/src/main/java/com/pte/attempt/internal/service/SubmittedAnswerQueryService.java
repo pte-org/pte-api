@@ -1,6 +1,7 @@
 package com.pte.attempt.internal.service;
 
 import com.pte.attempt.domain.AttemptAnswer;
+import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.attempt.internal.repository.AttemptAnswerRepository;
 import org.springframework.stereotype.Service;
@@ -33,11 +34,13 @@ public class SubmittedAnswerQueryService {
     }
 
     private static SubmittedAnswerView toView(AttemptAnswer answer) {
+        PinnedItem item = answer.getPinnedItem();
         return new SubmittedAnswerView(answer.getPublicId(), answer.getAttempt().getPublicId(),
-                answer.getPinnedItem().getPublicId(), answer.getAttempt().getSessionPublicId(),
-                answer.getAttempt().getTenantId(), answer.getPinnedItem().getPinnedSnapshot().getScoreTemplatePublicId(),
-                answer.getPinnedItem().getTaskType(), answer.getPayload(),
-                answer.getPinnedItem().getCorrectAnswerText(), answer.getPinnedItem().getOptionsJson(),
-                answer.isExpired());
+                item.getPublicId(), answer.getAttempt().getSessionPublicId(),
+                answer.getAttempt().getTenantId(), item.getPinnedSnapshot().getScoreTemplatePublicId(),
+                item.getTaskType(), answer.getPayload(),
+                item.getCorrectAnswerText(), item.getOptionsJson(),
+                answer.isExpired(), item.getPromptText(), item.getReferenceAnswerText(), item.getImagePromptRef(),
+                item.getMinWordCount(), item.getMaxWordCount());
     }
 }
