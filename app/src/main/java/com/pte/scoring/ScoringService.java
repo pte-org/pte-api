@@ -148,4 +148,18 @@ public class ScoringService {
             FinalizeGradingCohortRequest request) {
         return gradingCohortService.finalizeCohort(sessionPublicId, tenantId, actorPublicId, request);
     }
+
+    public java.util.Optional<com.pte.scoring.dto.response.SessionCohortPublicationView> getCohortPublicationView(
+            UUID sessionPublicId, UUID tenantId) {
+        return gradingCohortService != null
+                ? gradingCohortService.getCohortPublicationView(sessionPublicId, tenantId)
+                : java.util.Optional.empty();
+    }
+
+    public java.util.Optional<List<String>> evaluateManualPublicationBlockers(
+            UUID sessionPublicId, UUID tenantId) {
+        return gradingCohortService != null
+                ? gradingCohortService.evaluateManualPublicationBlockers(sessionPublicId, tenantId)
+                : java.util.Optional.empty();
+    }
 }
