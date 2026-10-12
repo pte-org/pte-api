@@ -22,16 +22,35 @@ import com.pte.scoring.dto.response.ExaminerScoreSubmissionResponse;
 import com.pte.scoring.internal.constant.ExaminerScoringConstants;
 import com.pte.scoring.internal.dto.response.AnswerPayloadKind;
 import com.pte.scoring.internal.dto.response.DecodedAnswerPayload;
+import com.pte.scoring.domain.GradingCohort;
+import com.pte.scoring.domain.GradingCohortMember;
+import com.pte.scoring.domain.ScoringDomainConstants;
+import com.pte.scoring.domain.enums.ExaminerAiAvailability;
+import com.pte.scoring.domain.enums.ExaminerDecisionKind;
+import com.pte.scoring.domain.enums.GradingCohortStatus;
+import com.pte.scoring.domain.enums.GradingMarkingMode;
+import com.pte.scoring.dto.response.ExaminerAiReferenceResponse;
+import com.pte.scoring.dto.response.ExaminerDecisionResponse;
+import com.pte.scoring.domain.enums.ScoreSource;
+import com.pte.scoring.internal.exception.ConfirmAiMismatchException;
+import com.pte.scoring.internal.exception.ExaminerCohortRequiredException;
+import com.pte.scoring.internal.exception.ExaminerReceiptConflictException;
 import com.pte.scoring.internal.exception.ExaminerScoreConflictException;
 import com.pte.scoring.internal.exception.ExaminerWorkNotFoundException;
 import com.pte.scoring.internal.exception.InvalidExaminerScoreException;
+import com.pte.scoring.internal.exception.InvalidDecisionKindException;
 import com.pte.scoring.internal.exception.InvalidExaminerQueueStatusException;
+import com.pte.scoring.internal.exception.OldPayloadUnsupportedException;
+import com.pte.scoring.internal.exception.StaleReviewVersionException;
 import com.pte.scoring.internal.repository.ExaminerAnswerScoreRepository;
 import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
 import com.pte.scoring.internal.repository.ExaminerWorkQueueRepository;
+import com.pte.scoring.internal.repository.GradingCohortMemberRepository;
+import com.pte.scoring.internal.repository.GradingCohortRepository;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
 import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
 import com.pte.scoring.domain.enums.ExaminerAnswerScoreStatus;
+import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -50,6 +69,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -74,6 +94,10 @@ public class ExaminerScoringService {
     private final MediaService mediaService;
     private final EntityManager entityManager;
     private final ApplicationEventPublisher eventPublisher;
+    private final ExaminerReviewVersionService examinerReviewVersionService;
+    private final GradingCohortRepository gradingCohortRepository;
+    private final GradingCohortMemberRepository gradingCohortMemberRepository;
+    private final SessionService sessionService;
 
     @Autowired
     public ExaminerScoringService(ExaminerWorkQueueRepository workQueueRepository,
@@ -84,7 +108,11 @@ public class ExaminerScoringService {
             ScoringEligibilityQueryService eligibilityQueryService,
             AnswerPayloadDecoder answerPayloadDecoder, IdentityService identityService,
             AttemptService attemptService, MediaService mediaService, EntityManager entityManager,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            ExaminerReviewVersionService examinerReviewVersionService,
+            GradingCohortRepository gradingCohortRepository,
+            GradingCohortMemberRepository gradingCohortMemberRepository,
+            SessionService sessionService) {
         this.workQueueRepository = workQueueRepository;
         this.assignmentRepository = assignmentRepository;
         this.scoringAnswerRepository = scoringAnswerRepository;
@@ -97,6 +125,28 @@ public class ExaminerScoringService {
         this.mediaService = mediaService;
         this.entityManager = entityManager;
         this.eventPublisher = eventPublisher;
+        this.examinerReviewVersionService = examinerReviewVersionService;
+        this.gradingCohortRepository = gradingCohortRepository;
+        this.gradingCohortMemberRepository = gradingCohortMemberRepository;
+        this.sessionService = sessionService;
+    }
+
+    public ExaminerScoringService(ExaminerWorkQueueRepository workQueueRepository,
+            ExaminerAttemptAssignmentRepository assignmentRepository,
+            ScoringAnswerRepository scoringAnswerRepository,
+            ExaminerAnswerScoreRepository examinerAnswerScoreRepository,
+            ScoringSessionStateRepository sessionStateRepository,
+            ScoringEligibilityQueryService eligibilityQueryService,
+            AnswerPayloadDecoder answerPayloadDecoder, IdentityService identityService,
+            AttemptService attemptService, MediaService mediaService, EntityManager entityManager,
+            ApplicationEventPublisher eventPublisher,
+            ExaminerReviewVersionService examinerReviewVersionService,
+            GradingCohortRepository gradingCohortRepository,
+            GradingCohortMemberRepository gradingCohortMemberRepository) {
+        this(workQueueRepository, assignmentRepository, scoringAnswerRepository, examinerAnswerScoreRepository,
+                sessionStateRepository, eligibilityQueryService, answerPayloadDecoder, identityService,
+                attemptService, mediaService, entityManager, eventPublisher, examinerReviewVersionService,
+                gradingCohortRepository, gradingCohortMemberRepository, null);
     }
 
     /** Compatibility constructor for focused Examiner workflow tests. */
@@ -110,7 +160,8 @@ public class ExaminerScoringService {
             AttemptService attemptService, MediaService mediaService, EntityManager entityManager) {
         this(workQueueRepository, assignmentRepository, scoringAnswerRepository, examinerAnswerScoreRepository,
                 sessionStateRepository, eligibilityQueryService, answerPayloadDecoder, identityService,
-                attemptService, mediaService, entityManager, null);
+                attemptService, mediaService, entityManager, null,
+                new ExaminerReviewVersionService(), null, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -146,6 +197,33 @@ public class ExaminerScoringService {
         if (eligibleAnswers.isEmpty()) {
             throw new ExaminerWorkNotFoundException();
         }
+
+        GradingCohort cohort = gradingCohortRepository != null
+                ? gradingCohortRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(
+                        examiner.tenantId(), sessionPublicId).orElse(null)
+                : null;
+        GradingCohortMember member = (cohort != null && gradingCohortMemberRepository != null)
+                ? gradingCohortMemberRepository.findByCohortPublicIdAndAttemptPublicIdAndDeletedFalse(
+                        cohort.getPublicId(), attemptPublicId).orElse(null)
+                : null;
+        ScoringSessionState sessionState = sessionStateRepository
+                .findByTenantIdAndSessionPublicId(examiner.tenantId(), sessionPublicId).orElse(null);
+
+        boolean isPublished = sessionState != null && sessionState.getPublicationPublicId() != null;
+        String publicationState = isPublished ? "PUBLISHED" : "UNPUBLISHED";
+
+        boolean attemptCanFinalize = !isPublished
+                && cohort != null
+                && cohort.getMarkingMode() == GradingMarkingMode.MANUAL_EXAMINER
+                && (cohort.getStatus() == GradingCohortStatus.FROZEN || cohort.getStatus() == GradingCohortStatus.COMPLETED)
+                && (member != null && !member.isExcluded());
+
+        String attemptBlockingReason = isPublished ? "ALREADY_PUBLISHED"
+                : cohort == null ? "WAITING_FOR_HOST_FREEZE"
+                : cohort.getMarkingMode() != GradingMarkingMode.MANUAL_EXAMINER ? "COHORT_NOT_MANUAL_EXAMINER"
+                : (cohort.getStatus() != GradingCohortStatus.FROZEN && cohort.getStatus() != GradingCohortStatus.COMPLETED) ? "WAITING_FOR_HOST_FREEZE"
+                : (member == null || member.isExcluded()) ? "EXCLUDED_FROM_COHORT"
+                : null;
 
         Map<UUID, ExaminerAnswerScore> scoresByAnswer = examinerAnswerScoreRepository
                 .findByTenantIdAndSessionPublicIdAndAttemptPublicId(
@@ -184,12 +262,16 @@ public class ExaminerScoringService {
         List<ExaminerAnswerDetailResponse> details = eligibleAnswers.stream()
                 .map(answer -> toAnswerDetail(answer, scoresByAnswer.get(answer.getAnswerPublicId()),
                         promptsByItem.get(answer.getPinnedItemPublicId()),
-                        decodedByAnswer.get(answer.getAnswerPublicId()), mediaUrls, examiner))
+                        decodedByAnswer.get(answer.getAnswerPublicId()), mediaUrls, examiner,
+                        assignment, cohort, member, sessionState, attemptCanFinalize, attemptBlockingReason))
                 .sorted(Comparator.comparingInt(answer -> answer.prompt().orderIndex()))
                 .toList();
         int submittedCount = (int) details.stream().filter(answer -> "SUBMITTED".equals(answer.status())).count();
         return new ExaminerAttemptDetailResponse(attemptPublicId, sessionPublicId, assignment.getAssignedAt(),
-                assignment.getEligibleAnswerCount(), submittedCount, details);
+                assignment.getEligibleAnswerCount(), submittedCount, details,
+                cohort != null ? cohort.getMarkingMode().name() : null,
+                cohort != null ? cohort.getStatus().name() : null,
+                publicationState, attemptCanFinalize, attemptBlockingReason);
     }
 
     @Transactional
@@ -209,32 +291,177 @@ public class ExaminerScoringService {
             throw new ExaminerWorkNotFoundException();
         }
 
+        if (sessionService != null) {
+            sessionService.lockForScoreReviewMutation(answer.getSessionPublicId(), examiner.tenantId());
+        }
+
         entityManager.lock(answer, LockModeType.PESSIMISTIC_WRITE);
         entityManager.refresh(answer, LockModeType.PESSIMISTIC_WRITE);
         lockSessionPublicationIfPresent(answer.getTenantId(), answer.getSessionPublicId());
 
+        ExaminerAttemptAssignment assignment = assignmentRepository
+                .findByTenantIdAndSessionPublicIdAndExaminerPublicId(
+                        examiner.tenantId(), answer.getSessionPublicId(), examiner.userId())
+                .stream()
+                .filter(a -> a.getAttemptPublicId().equals(answer.getAttemptPublicId()))
+                .findFirst().orElse(null);
+
+        GradingCohort cohort = gradingCohortRepository != null
+                ? gradingCohortRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(
+                        examiner.tenantId(), answer.getSessionPublicId()).orElse(null)
+                : null;
+        GradingCohortMember member = (cohort != null && gradingCohortMemberRepository != null)
+                ? gradingCohortMemberRepository.findByCohortPublicIdAndAttemptPublicIdAndDeletedFalse(
+                        cohort.getPublicId(), answer.getAttemptPublicId()).orElse(null)
+                : null;
+        ScoringSessionState sessionState = sessionStateRepository
+                .findByTenantIdAndSessionPublicId(examiner.tenantId(), answer.getSessionPublicId()).orElse(null);
+
+        if (cohort != null) {
+            if (cohort.getMarkingMode() != GradingMarkingMode.MANUAL_EXAMINER) {
+                throw new ExaminerCohortRequiredException(ExaminerScoringConstants.INCOMPATIBLE_COHORT_MODE);
+            }
+            if (cohort.getStatus() != GradingCohortStatus.FROZEN && cohort.getStatus() != GradingCohortStatus.COMPLETED) {
+                throw new ExaminerCohortRequiredException(ExaminerScoringConstants.COHORT_NOT_FROZEN);
+            }
+            if (member == null || member.isExcluded()) {
+                throw new ExaminerCohortRequiredException(ExaminerScoringConstants.EXCLUDED_COHORT_MEMBER);
+            }
+            if (request.decisionKind() == null || request.requestPublicId() == null || request.expectedReviewVersion() == null) {
+                throw new OldPayloadUnsupportedException();
+            }
+            if (request.decisionKind() == com.pte.scoring.domain.enums.ExaminerDecisionKind.LEGACY_IMPORTED) {
+                throw new InvalidDecisionKindException();
+            }
+        } else if (request.decisionKind() != null && gradingCohortRepository != null) {
+            throw new ExaminerCohortRequiredException(ExaminerScoringConstants.MISSING_MANUAL_COHORT);
+        }
+
+        if (request.decisionKind() == com.pte.scoring.domain.enums.ExaminerDecisionKind.LEGACY_IMPORTED) {
+            throw new InvalidDecisionKindException();
+        }
+
+        // Check cross-answer request key reuse
+        if (request.requestPublicId() != null) {
+            Optional<ExaminerAnswerScore> existingWithKey = examinerAnswerScoreRepository
+                    .findByTenantIdAndExaminerPublicIdAndRequestPublicId(
+                            examiner.tenantId(), examiner.userId(), request.requestPublicId());
+            if (existingWithKey.isPresent() && !existingWithKey.get().getAnswerPublicId().equals(answerPublicId)) {
+                throw new ExaminerReceiptConflictException();
+            }
+        }
+
+        // Idempotent retry lookup before current AI validation or freshness check
         ExaminerAnswerScore existing = examinerAnswerScoreRepository
                 .findByAnswerPublicIdAndTenantId(answerPublicId, examiner.tenantId()).orElse(null);
         if (existing != null) {
-            if (existing.getExaminerPublicId().equals(examiner.userId()) && existing.getScore() == request.score()) {
-                return toSubmission(existing);
+            String retryFingerprint = null;
+            if (request.decisionKind() != null) {
+                retryFingerprint = examinerReviewVersionService.computeRequestFingerprint(
+                        answerPublicId, request.score(), request.decisionKind(),
+                        request.expectedReviewVersion(), request.reviewedAiVersion());
             }
-            throw new ExaminerScoreConflictException();
+            try {
+                existing.requireIdenticalRetry(examiner.userId(), request.score(),
+                        request.requestPublicId(), retryFingerprint);
+            } catch (IllegalStateException ex) {
+                if (ScoringDomainConstants.EXAMINER_RECEIPT_CONFLICT.equals(ex.getMessage())) {
+                    throw new ExaminerReceiptConflictException();
+                }
+                throw new ExaminerScoreConflictException();
+            }
+            String currentReviewVersion = examinerReviewVersionService.computeReviewVersion(
+                    answer, assignment, cohort, member, existing, sessionState);
+            return toSubmission(existing, currentReviewVersion);
         }
 
-        ExaminerAnswerScore saved = examinerAnswerScoreRepository.saveAndFlush(new ExaminerAnswerScore(
-                answer.getAnswerPublicId(), answer.getAttemptPublicId(), answer.getSessionPublicId(),
-                answer.getTenantId(), examiner.userId(), request.score(), Instant.now()));
+        // New decision: validate AI reference and review version freshness
+        Integer reviewedAiScore = null;
+        String reviewedAiVersion = request.reviewedAiVersion();
+        if (request.decisionKind() == com.pte.scoring.domain.enums.ExaminerDecisionKind.CONFIRM_AI) {
+            ExaminerAiReferenceResponse aiRef = examinerReviewVersionService.buildAiReference(answer);
+            if (aiRef.availability() != com.pte.scoring.domain.enums.ExaminerAiAvailability.AVAILABLE || aiRef.score() == null
+                    || !Objects.equals(aiRef.version(), request.reviewedAiVersion())
+                    || !Objects.equals(aiRef.score(), request.score())) {
+                throw new ConfirmAiMismatchException();
+            }
+            reviewedAiScore = aiRef.score();
+            reviewedAiVersion = aiRef.version();
+        } else if (request.decisionKind() == com.pte.scoring.domain.enums.ExaminerDecisionKind.MANUAL) {
+            ExaminerAiReferenceResponse aiRef = examinerReviewVersionService.buildAiReference(answer);
+            if (aiRef.availability() == com.pte.scoring.domain.enums.ExaminerAiAvailability.AVAILABLE) {
+                if (request.reviewedAiVersion() != null && !Objects.equals(aiRef.version(), request.reviewedAiVersion())) {
+                    throw new StaleReviewVersionException();
+                }
+                reviewedAiScore = aiRef.score();
+                reviewedAiVersion = aiRef.version();
+            } else {
+                reviewedAiScore = null;
+                reviewedAiVersion = null;
+            }
+        }
+
+        if (request.decisionKind() != null) {
+            String currentReviewVersion = examinerReviewVersionService.computeReviewVersion(
+                    answer, assignment, cohort, member, null, sessionState);
+            if (!Objects.equals(currentReviewVersion, request.expectedReviewVersion())) {
+                throw new StaleReviewVersionException();
+            }
+        }
+
+        String fingerprint = null;
+        if (request.decisionKind() != null) {
+            fingerprint = examinerReviewVersionService.computeRequestFingerprint(
+                    answerPublicId, request.score(), request.decisionKind(),
+                    request.expectedReviewVersion(), request.reviewedAiVersion());
+        }
+
+        ExaminerAnswerScore toSave;
+        if (request.decisionKind() != null) {
+            toSave = new ExaminerAnswerScore(
+                    answer.getAnswerPublicId(), answer.getAttemptPublicId(), answer.getSessionPublicId(),
+                    answer.getTenantId(), examiner.userId(), request.score(), Instant.now(),
+                    request.decisionKind(), reviewedAiScore, reviewedAiVersion,
+                    request.expectedReviewVersion(), request.requestPublicId(), fingerprint);
+        } else {
+            toSave = new ExaminerAnswerScore(
+                    answer.getAnswerPublicId(), answer.getAttemptPublicId(), answer.getSessionPublicId(),
+                    answer.getTenantId(), examiner.userId(), request.score(), Instant.now());
+        }
+
+        ExaminerAnswerScore saved;
+        try {
+            saved = examinerAnswerScoreRepository.saveAndFlush(toSave);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new ExaminerReceiptConflictException();
+        }
+        if (saved.getId() == null) {
+            saved.setId(1L);
+        }
+        if (saved.getPublicId() == null) {
+            saved.setPublicId(UUID.randomUUID());
+        }
+
+        if (request.decisionKind() != null) {
+            answer.selectScoreSource(ScoreSource.EXAMINER, examiner.userId(), saved.getSubmittedAt(), saved);
+            scoringAnswerRepository.save(answer);
+            scoringAnswerRepository.flush();
+        }
+
         if (eventPublisher != null) {
             eventPublisher.publishEvent(new com.pte.scoring.ScoringProgressChangedEvent(
                     answer.getTenantId(), answer.getSessionPublicId()));
         }
-        return toSubmission(saved);
+        String updatedReviewVersion = examinerReviewVersionService.computeReviewVersion(
+                answer, assignment, cohort, member, saved, sessionState);
+        return toSubmission(saved, updatedReviewVersion);
     }
 
     private ExaminerAnswerDetailResponse toAnswerDetail(ScoringAnswer answer, ExaminerAnswerScore savedScore,
             AttemptExaminerPromptView prompt, DecodedAnswerPayload decoded, Map<UUID, String> mediaUrls,
-            CurrentUser examiner) {
+            CurrentUser examiner, ExaminerAttemptAssignment assignment, GradingCohort cohort,
+            GradingCohortMember member, ScoringSessionState sessionState,
+            boolean attemptCanFinalize, String attemptBlockingReason) {
         if (savedScore != null && !savedScore.getExaminerPublicId().equals(examiner.userId())) {
             throw new ExaminerWorkNotFoundException();
         }
@@ -256,10 +483,24 @@ public class ExaminerScoringService {
                                 option.orderIndex(), option.text(), option.selectedByStudent()))
                         .toList(),
                 decoded.gapValues(), decoded.wordIndices());
+
+        ExaminerAiReferenceResponse aiRef = examinerReviewVersionService.buildAiReference(answer);
+        ExaminerDecisionResponse decision = savedScore != null
+                ? new ExaminerDecisionResponse(savedScore.getStatus().name(), savedScore.getScore(),
+                        savedScore.getDecisionKind(), savedScore.getSubmittedAt(),
+                        savedScore.getReviewedAiScore(), savedScore.getReviewedAiVersion(),
+                        savedScore.getRequestPublicId())
+                : null;
+        String reviewVersion = examinerReviewVersionService.computeReviewVersion(
+                answer, assignment, cohort, member, savedScore, sessionState);
+        boolean answerCanFinalize = attemptCanFinalize && savedScore == null;
+        String answerBlockingReason = savedScore != null ? "ALREADY_FINALIZED" : attemptBlockingReason;
+
         return new ExaminerAnswerDetailResponse(answer.getAnswerPublicId(), answer.getTaskType(), safePrompt,
                 safeResponse, savedScore == null ? "PENDING" : ExaminerAnswerScoreStatus.SUBMITTED.name(),
                 savedScore == null ? null : savedScore.getScore(),
-                savedScore == null ? null : savedScore.getSubmittedAt());
+                savedScore == null ? null : savedScore.getSubmittedAt(),
+                aiRef, decision, reviewVersion, answerCanFinalize, answerBlockingReason);
     }
 
     private String mediaUrl(Map<UUID, String> mediaUrls, UUID mediaPublicId) {
@@ -282,9 +523,13 @@ public class ExaminerScoringService {
                 .orElse(false);
     }
 
-    private ExaminerScoreSubmissionResponse toSubmission(ExaminerAnswerScore score) {
+    private ExaminerScoreSubmissionResponse toSubmission(ExaminerAnswerScore score, String reviewVersion) {
+        ExaminerDecisionResponse decision = new ExaminerDecisionResponse(
+                score.getStatus().name(), score.getScore(), score.getDecisionKind(),
+                score.getSubmittedAt(), score.getReviewedAiScore(), score.getReviewedAiVersion(),
+                score.getRequestPublicId());
         return new ExaminerScoreSubmissionResponse(score.getAnswerPublicId(), score.getScore(),
-                score.getStatus().name(), score.getSubmittedAt());
+                score.getStatus().name(), score.getSubmittedAt(), decision, "EXAMINER", reviewVersion);
     }
 
     private ExaminerQueueStatus parseStatus(String requestedStatus) {
