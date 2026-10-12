@@ -180,12 +180,13 @@ public class AttendanceCommandService {
         Long currentEffectiveVersion = optRow.map(SessionAttendance::getVersion).orElse(0L);
         AttendanceStatus currentEffectiveStatus = AttendanceStatus.UNMARKED;
 
-        if (optRow.isPresent()) {
-            SessionAttendance row = optRow.get();
-            if (enrollment.getPublicId().equals(row.getEnrollmentPublicId())) {
-                currentEffectiveStatus = row.getStatus();
-            }
+        boolean isCurrentEnrollment = optRow.isPresent()
+                && enrollment.getPublicId().equals(optRow.get().getEnrollmentPublicId());
+        if (isCurrentEnrollment) {
+            currentEffectiveStatus = optRow.get().getStatus();
         }
+
+        boolean enrollmentChanged = optRow.isPresent() && !isCurrentEnrollment;
 
         if (!request.expectedVersion().equals(currentEffectiveVersion)) {
             throw new AttendanceConflictException("Attendance version conflict: expected " + request.expectedVersion()
@@ -208,7 +209,7 @@ public class AttendanceCommandService {
         String actorRole = isHost ? "HOST_ADMIN" : "PROCTOR";
 
         // 8. No-op execution vs Mutation
-        if (request.status() == currentEffectiveStatus) {
+        if (request.status() == currentEffectiveStatus && !enrollmentChanged) {
             SessionAttendanceCommand cmd = new SessionAttendanceCommand();
             cmd.setTenantId(tenantId);
             cmd.setSession(session);
@@ -242,9 +243,16 @@ public class AttendanceCommandService {
             row.setSession(session);
             row.setTenantId(tenantId);
             row.setStudentPublicId(studentPublicId);
+            row.setIdentityStatus("UNVERIFIED");
+            row.setIdentityNote(null);
         }
 
         row.setEnrollmentPublicId(enrollment.getPublicId());
+        if (enrollmentChanged) {
+            // Reset previous enrollment's identity verification state and note
+            row.setIdentityStatus("UNVERIFIED");
+            row.setIdentityNote(null);
+        }
         row.setStatus(request.status());
         row.setVersion(nextVersion);
         row.setLastActorPublicId(caller.userId());
@@ -439,6 +447,11 @@ public class AttendanceCommandService {
             appliedVersion = currentEffectiveVersion + 1;
             // Crucial fix: always bind row to current active enrollment generation
             row.setEnrollmentPublicId(enrollment.getPublicId());
+            if (enrollmentChanged) {
+                // Reset previous enrollment's attendance status and note before updating identity
+                row.setStatus(AttendanceStatus.UNMARKED);
+                row.setLastReasonOrNote(null);
+            }
             row.setIdentityStatus(newStatus);
             row.setIdentityNote(canonicalNote);
             row.setLastActorPublicId(caller.userId());
@@ -602,7 +615,7 @@ public class AttendanceCommandService {
             }
         }
 
-        // C1: Re-enrolled student displays UNMARKED while retaining existing monotonic version
+        // C1: Re-enrolled student displays UNMARKED and UNVERIFIED while retaining existing monotonic version
         return new AttendanceRowView(
                 studentPublicId,
                 enrollment.getPublicId(),
@@ -618,8 +631,8 @@ public class AttendanceCommandService {
                 null,
                 null,
                 null,
-                optRow.map(SessionAttendance::getIdentityStatus).orElse("UNVERIFIED"),
-                optRow.map(SessionAttendance::getIdentityNote).orElse(null)
+                "UNVERIFIED",
+                null
         );
     }
 
