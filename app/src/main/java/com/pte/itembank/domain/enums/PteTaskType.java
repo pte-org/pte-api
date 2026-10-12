@@ -34,7 +34,8 @@ public enum PteTaskType {
     FILL_IN_THE_BLANKS_DROPDOWN(PteSection.READING, true, false, false, true, true, true, false),
 
     // ---- Listening ----
-    SUMMARIZE_SPOKEN_TEXT(PteSection.LISTENING, true, true, false, false, false, false, true),
+    // The AI scores the summary against the lecture transcript, which is not in the audio file.
+    SUMMARIZE_SPOKEN_TEXT(PteSection.LISTENING, true, true, false, true, false, false, true),
     MC_LISTENING_SINGLE(PteSection.LISTENING, true, true, false, false, true, true, false),
     MC_LISTENING_MULTIPLE(PteSection.LISTENING, true, true, false, false, true, true, false),
     FILL_IN_THE_BLANKS_TYPE_IN(PteSection.LISTENING, true, true, false, true, false, true, false),
@@ -95,5 +96,10 @@ public enum PteTaskType {
 
     public boolean requiresWordCount() {
         return requiresWordCount;
+    }
+
+    /** The AI scores a repeated sentence against the reference text. */
+    public boolean requiresReferenceAnswer() {
+        return this == REPEAT_SENTENCE;
     }
 }

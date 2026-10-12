@@ -57,6 +57,7 @@ public final class ItembankConstants {
     public static final String OPTIONS_REQUIRED = "OPTIONS_REQUIRED";
     public static final String CORRECT_OPTION_REQUIRED = "CORRECT_OPTION_REQUIRED";
     public static final String CORRECT_ANSWER_REQUIRED = "CORRECT_ANSWER_REQUIRED";
+    public static final String REFERENCE_ANSWER_REQUIRED = "REFERENCE_ANSWER_REQUIRED";
     public static final String INVALID_QUESTION_STATUS_TRANSITION = "INVALID_QUESTION_STATUS_TRANSITION";
     public static final String QUESTION_REJECTION_REASON_REQUIRED = "Question rejection reason is required";
     public static final String QUESTION_VERSION_CONFLICT = "QUESTION_VERSION_CONFLICT";
