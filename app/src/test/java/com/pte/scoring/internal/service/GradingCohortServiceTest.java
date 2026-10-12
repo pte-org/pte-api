@@ -37,6 +37,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
@@ -68,8 +70,8 @@ class GradingCohortServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(sessionService.isSessionClosed(sessionId, tenantId)).thenReturn(true);
-        service = new GradingCohortService(sessionService, attemptService, ingestService, answerRepository,
+        lenient().when(sessionService.isSessionClosed(sessionId, tenantId)).thenReturn(true);
+        service =new GradingCohortService(sessionService, attemptService, ingestService, answerRepository,
                 assignmentRepository, examinerScoreRepository, cohortRepository, memberRepository, evaluator,
                 eventPublisher, Clock.fixed(Instant.parse("2026-10-03T10:00:00Z"), ZoneOffset.UTC));
     }
@@ -123,6 +125,25 @@ class GradingCohortServiceTest {
         assertThat(result.complete()).isTrue();
         verify(sessionService, times(2)).lockClosedForGradingCohort(sessionId, tenantId);
         verify(eventPublisher).publishEvent(any(SessionGradingCompletedEvent.class));
+    }
+
+    @Test
+    void reconcilingACompletedCohortNeitherAnnouncesCompletionAgainNorRewritesAnswers() {
+        var cohort = new com.pte.scoring.domain.GradingCohort(tenantId, sessionId, actorId, "preview-v1",
+                GradingMarkingMode.AI_ONLY, Instant.parse("2026-10-03T08:00:00Z"));
+        cohort.complete(Instant.parse("2026-10-03T09:00:00Z"));
+        when(cohortRepository.findForUpdate(tenantId, sessionId)).thenReturn(Optional.of(cohort));
+        when(evaluator.evaluate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new GradingEvaluation(true, 1, 0, 1, 1, List.of()));
+
+        service.reconcileIfPresent(sessionId, tenantId);
+
+        verify(cohortRepository, never()).saveAndFlush(any());
+        verify(eventPublisher, never()).publishEvent(any());
+        // Reconcile runs inside the AI worker's commit, so it only inserts new answers and never
+        // updates existing rows another worker may hold locked.
+        verify(ingestService).ingestForSession(sessionId, tenantId);
+        verify(ingestService, never()).ingestForScoring(any(), any());
     }
 
     @Test

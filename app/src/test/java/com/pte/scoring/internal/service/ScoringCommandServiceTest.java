@@ -15,12 +15,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -63,8 +65,7 @@ class ScoringCommandServiceTest {
         UUID tenantId = UUID.randomUUID();
 
         ScoringAnswer objectiveAnswer = answer(ScoringConstants.TASK_TYPE_MC_READING_SINGLE);
-        when(scoringAnswerRepository.findBySessionPublicIdAndTenantIdAndStatus(
-                sessionPublicId, tenantId, ScoringAnswerStatus.PENDING))
+        when(scoringAnswerRepository.findScoringWork(eq(sessionPublicId), eq(tenantId), any()))
                 .thenReturn(List.of(objectiveAnswer));
         stubMethod(objectiveAnswer, ScoringMethod.OBJECTIVE);
         when(objectiveScoringService.supports(ScoringMethod.OBJECTIVE)).thenReturn(true);
@@ -72,7 +73,7 @@ class ScoringCommandServiceTest {
 
         service.requestScoring(sessionPublicId, tenantId);
 
-        verify(scoringIngestService).ingestForSession(sessionPublicId, tenantId);
+        verify(scoringIngestService).ingestForScoring(sessionPublicId, tenantId);
     }
 
     @Test
@@ -92,7 +93,7 @@ class ScoringCommandServiceTest {
                 .isInstanceOf(ScoreSourceSelectionException.class);
 
         verify(sessionService).lockForScoreReviewMutation(sessionPublicId, tenantId);
-        verify(scoringIngestService, never()).ingestForSession(sessionPublicId, tenantId);
+        verify(scoringIngestService, never()).ingestForScoring(sessionPublicId, tenantId);
     }
 
     @Test
@@ -101,8 +102,7 @@ class ScoringCommandServiceTest {
         UUID tenantId = UUID.randomUUID();
 
         ScoringAnswer objectiveAnswer = answer(ScoringConstants.TASK_TYPE_MC_READING_SINGLE);
-        when(scoringAnswerRepository.findBySessionPublicIdAndTenantIdAndStatus(
-                sessionPublicId, tenantId, ScoringAnswerStatus.PENDING))
+        when(scoringAnswerRepository.findScoringWork(eq(sessionPublicId), eq(tenantId), any()))
                 .thenReturn(List.of(objectiveAnswer));
         stubMethod(objectiveAnswer, ScoringMethod.OBJECTIVE);
         when(objectiveScoringService.supports(ScoringMethod.OBJECTIVE)).thenReturn(true);
@@ -123,8 +123,7 @@ class ScoringCommandServiceTest {
         UUID tenantId = UUID.randomUUID();
 
         ScoringAnswer aiAnswer = answer(ScoringConstants.TASK_TYPE_READ_ALOUD);
-        when(scoringAnswerRepository.findBySessionPublicIdAndTenantIdAndStatus(
-                sessionPublicId, tenantId, ScoringAnswerStatus.PENDING))
+        when(scoringAnswerRepository.findScoringWork(eq(sessionPublicId), eq(tenantId), any()))
                 .thenReturn(List.of(aiAnswer));
         stubMethod(aiAnswer, ScoringMethod.AI_SPEECH);
         when(objectiveScoringService.supports(ScoringMethod.AI_SPEECH)).thenReturn(false);
@@ -138,13 +137,36 @@ class ScoringCommandServiceTest {
     }
 
     @Test
+    void requestScoring_redispatchesFailedAndStaleAiAnswersPickedWithTheDispatchersCutoff() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        Instant staleBefore = Instant.parse("2026-10-11T09:50:00Z");
+        ScoringAnswer failed = answer(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        failed.setStatus(ScoringAnswerStatus.SCORING_FAILED);
+        ScoringAnswer stale = answer(ScoringConstants.TASK_TYPE_REPEAT_SENTENCE);
+        stale.setStatus(ScoringAnswerStatus.AI_SCORING);
+        when(aiScoringDispatcher.staleBefore()).thenReturn(staleBefore);
+        when(scoringAnswerRepository.findScoringWork(sessionPublicId, tenantId, staleBefore))
+                .thenReturn(List.of(failed, stale));
+        stubMethod(failed, ScoringMethod.AI_SPEECH);
+        stubMethod(stale, ScoringMethod.AI_SPEECH);
+        when(objectiveScoringService.supports(ScoringMethod.AI_SPEECH)).thenReturn(false);
+        when(aiScoringDispatcher.supports(ScoringMethod.AI_SPEECH)).thenReturn(true);
+
+        service.requestScoring(sessionPublicId, tenantId);
+
+        verify(aiScoringDispatcher).dispatch(failed, ScoringMethod.AI_SPEECH);
+        verify(aiScoringDispatcher).dispatch(stale, ScoringMethod.AI_SPEECH);
+        verify(scoringAnswerRepository, never()).save(any());
+    }
+
+    @Test
     void requestScoring_unscoredScoringMethod_leavesAnswerPending() {
         UUID sessionPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
 
         ScoringAnswer unscoredAnswer = answer(ScoringConstants.TASK_TYPE_PERSONAL_INTRODUCTION);
-        when(scoringAnswerRepository.findBySessionPublicIdAndTenantIdAndStatus(
-                sessionPublicId, tenantId, ScoringAnswerStatus.PENDING))
+        when(scoringAnswerRepository.findScoringWork(eq(sessionPublicId), eq(tenantId), any()))
                 .thenReturn(List.of(unscoredAnswer));
         stubMethod(unscoredAnswer, ScoringMethod.UNSCORED);
         when(objectiveScoringService.supports(ScoringMethod.UNSCORED)).thenReturn(false);
@@ -165,8 +187,7 @@ class ScoringCommandServiceTest {
         UUID tenantId = UUID.randomUUID();
 
         ScoringAnswer unknownAnswer = answer("UNKNOWN_TASK_TYPE");
-        when(scoringAnswerRepository.findBySessionPublicIdAndTenantIdAndStatus(
-                sessionPublicId, tenantId, ScoringAnswerStatus.PENDING))
+        when(scoringAnswerRepository.findScoringWork(eq(sessionPublicId), eq(tenantId), any()))
                 .thenReturn(List.of(unknownAnswer));
         when(scoringMethodResolver.resolve(SCORE_TEMPLATE_ID, "UNKNOWN_TASK_TYPE")).thenReturn(Optional.empty());
 
@@ -186,8 +207,7 @@ class ScoringCommandServiceTest {
         ScoringAnswer objectiveAnswer = answer(ScoringConstants.TASK_TYPE_MC_READING_SINGLE);
         ScoringAnswer aiAnswer = answer(ScoringConstants.TASK_TYPE_READ_ALOUD);
 
-        when(scoringAnswerRepository.findBySessionPublicIdAndTenantIdAndStatus(
-                sessionPublicId, tenantId, ScoringAnswerStatus.PENDING))
+        when(scoringAnswerRepository.findScoringWork(eq(sessionPublicId), eq(tenantId), any()))
                 .thenReturn(List.of(objectiveAnswer, aiAnswer));
         stubMethod(objectiveAnswer, ScoringMethod.OBJECTIVE);
         stubMethod(aiAnswer, ScoringMethod.AI_SPEECH);
