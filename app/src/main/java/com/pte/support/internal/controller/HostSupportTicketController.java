@@ -1,6 +1,7 @@
 package com.pte.support.internal.controller;
 
 import com.pte.shared.security.CurrentUserContext;
+import com.pte.shared.security.CurrentUser;
 import com.pte.shared.web.ApiResponse;
 import com.pte.shared.web.PagedResult;
 import com.pte.support.domain.enums.TicketCategory;
@@ -41,10 +42,13 @@ public class HostSupportTicketController {
     public ApiResponse<PagedResult<SupportTicketSummaryResponse>> list(
             @RequestParam(required = false) TicketStatus status,
             @RequestParam(required = false) TicketCategory category,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(supportTicketService.listForHost(status, category, page, size,
-                CurrentUserContext.required()));
+        CurrentUser caller = CurrentUserContext.required();
+        return ApiResponse.success(search == null || search.isBlank()
+                ? supportTicketService.listForHost(status, category, page, size, caller)
+                : supportTicketService.listForHost(status, category, search, page, size, caller));
     }
 
     @GetMapping("/{id}")
