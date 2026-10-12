@@ -10,5 +10,6 @@ public record HostScoreReviewResponse(
         int unassignedAttemptCount,
         int pendingExaminerAnswerCount,
         int unavailableSelectedAnswerCount,
+        int rescorableAnswerCount,
         List<HostScoreReviewView> answers) {
 }

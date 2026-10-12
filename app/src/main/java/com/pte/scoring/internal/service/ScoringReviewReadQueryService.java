@@ -12,6 +12,7 @@ import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.dto.response.HostScoreReviewResponse;
 import com.pte.scoring.dto.response.HostScoreReviewView;
 import com.pte.scoring.dto.response.ReportScoringAnswerView;
+import com.pte.scoring.internal.repository.AiDetailFlags;
 import com.pte.scoring.internal.repository.ExaminerAnswerScoreRepository;
 import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
@@ -23,6 +24,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -40,17 +42,22 @@ public class ScoringReviewReadQueryService {
     private final ExaminerAttemptAssignmentRepository assignmentRepository;
     private final ScoringSessionStateRepository sessionStateRepository;
     private final ScoringMethodResolver scoringMethodResolver;
+    private final AiScoreDetailQueryService aiDetails;
+    private final AiScoringDispatcher aiScoringDispatcher;
 
     public ScoringReviewReadQueryService(ScoringAnswerRepository scoringAnswerRepository,
             ExaminerAnswerScoreRepository examinerAnswerScoreRepository,
             ExaminerAttemptAssignmentRepository assignmentRepository,
             ScoringSessionStateRepository sessionStateRepository,
-            ScoringMethodResolver scoringMethodResolver) {
+            ScoringMethodResolver scoringMethodResolver, AiScoreDetailQueryService aiDetails,
+            AiScoringDispatcher aiScoringDispatcher) {
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.examinerAnswerScoreRepository = examinerAnswerScoreRepository;
         this.assignmentRepository = assignmentRepository;
         this.sessionStateRepository = sessionStateRepository;
         this.scoringMethodResolver = scoringMethodResolver;
+        this.aiDetails = aiDetails;
+        this.aiScoringDispatcher = aiScoringDispatcher;
     }
 
     @Transactional(readOnly = true)
@@ -64,10 +71,14 @@ public class ScoringReviewReadQueryService {
                 .findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId).stream()
                 .collect(Collectors.toMap(ExaminerAttemptAssignment::getAttemptPublicId,
                         ExaminerAttemptAssignment::getExaminerPublicId));
+        Map<UUID, AiDetailFlags> aiFlags = aiDetails.findFlags(tenantId,
+                answers.stream().map(ScoringAnswer::getAnswerPublicId).toList());
         List<HostScoreReviewView> items = answers.stream()
                 .map(answer -> toHostReview(answer, examinerScores.get(answer.getAnswerPublicId()),
-                        assignedExaminers.get(answer.getAttemptPublicId())))
+                        assignedExaminers.get(answer.getAttemptPublicId()), aiFlags.get(answer.getAnswerPublicId())))
                 .toList();
+        Instant staleBefore = aiScoringDispatcher.staleBefore();
+        int rescorableCount = (int) answers.stream().filter(answer -> answer.isRescorable(staleBefore)).count();
 
         Set<UUID> aiEligibleAttempts = answers.stream().filter(this::isAiEligible)
                 .map(ScoringAnswer::getAttemptPublicId).collect(Collectors.toSet());
@@ -84,7 +95,7 @@ public class ScoringReviewReadQueryService {
         return new HostScoreReviewResponse(reviewVersion(answers, examinerScores), locked,
                 aiEligibleAttempts.size(), assignedAttemptCount,
                 Math.max(0, aiEligibleAttempts.size() - assignedAttemptCount), pendingExaminerCount,
-                unavailableSelectedCount, items);
+                unavailableSelectedCount, rescorableCount, items);
     }
 
     @Transactional(readOnly = true)
@@ -112,7 +123,7 @@ public class ScoringReviewReadQueryService {
     }
 
     private HostScoreReviewView toHostReview(ScoringAnswer answer, ExaminerAnswerScore examinerScore,
-            UUID assignedExaminerPublicId) {
+            UUID assignedExaminerPublicId, AiDetailFlags aiFlags) {
         ScoringMethod method = methodFor(answer);
         boolean aiAvailable = isAiScored(method) && answer.hasPublishableAiScore();
         boolean examinerAvailable = isSubmitted(examinerScore);
@@ -125,7 +136,11 @@ public class ScoringReviewReadQueryService {
                 examinerScore == null ? null : examinerScore.getScore(),
                 examinerScore == null ? "NOT_SUBMITTED" : examinerScore.getStatus().name(),
                 assignedExaminerPublicId, examinerAvailable, answer.getTeacherScore(),
-                name(answer.getSelectedScoreSource()), answer.getLockVersion());
+                name(answer.getSelectedScoreSource()), answer.getLockVersion(),
+                aiFlags != null && aiFlags.fallback(),
+                // The reason belongs to the last failed run; it is stale once the answer is queued again.
+                aiFlags != null && answer.getStatus() == ScoringAnswerStatus.SCORING_FAILED
+                        ? name(aiFlags.failureReason()) : null);
     }
 
     private ReportScoringAnswerView toReportInput(ScoringAnswer answer, ExaminerAnswerScore examinerScore) {

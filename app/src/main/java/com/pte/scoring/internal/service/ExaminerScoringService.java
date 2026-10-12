@@ -11,6 +11,7 @@ import com.pte.scoring.domain.ScoringSessionState;
 import com.pte.scoring.domain.enums.ExaminerAnswerContentKind;
 import com.pte.scoring.domain.enums.ExaminerQueueStatus;
 import com.pte.scoring.dto.request.SubmitExaminerScoreRequest;
+import com.pte.scoring.dto.response.AiScoreDetailResponse;
 import com.pte.scoring.dto.response.ExaminerAnswerDetailResponse;
 import com.pte.scoring.dto.response.ExaminerAnswerPayloadResponse;
 import com.pte.scoring.dto.response.ExaminerAttemptDetailResponse;
@@ -74,6 +75,7 @@ public class ExaminerScoringService {
     private final MediaService mediaService;
     private final EntityManager entityManager;
     private final ApplicationEventPublisher eventPublisher;
+    private final AiScoreDetailQueryService aiDetails;
 
     @Autowired
     public ExaminerScoringService(ExaminerWorkQueueRepository workQueueRepository,
@@ -84,7 +86,7 @@ public class ExaminerScoringService {
             ScoringEligibilityQueryService eligibilityQueryService,
             AnswerPayloadDecoder answerPayloadDecoder, IdentityService identityService,
             AttemptService attemptService, MediaService mediaService, EntityManager entityManager,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher, AiScoreDetailQueryService aiDetails) {
         this.workQueueRepository = workQueueRepository;
         this.assignmentRepository = assignmentRepository;
         this.scoringAnswerRepository = scoringAnswerRepository;
@@ -97,6 +99,7 @@ public class ExaminerScoringService {
         this.mediaService = mediaService;
         this.entityManager = entityManager;
         this.eventPublisher = eventPublisher;
+        this.aiDetails = aiDetails;
     }
 
     /** Compatibility constructor for focused Examiner workflow tests. */
@@ -110,7 +113,7 @@ public class ExaminerScoringService {
             AttemptService attemptService, MediaService mediaService, EntityManager entityManager) {
         this(workQueueRepository, assignmentRepository, scoringAnswerRepository, examinerAnswerScoreRepository,
                 sessionStateRepository, eligibilityQueryService, answerPayloadDecoder, identityService,
-                attemptService, mediaService, entityManager, null);
+                attemptService, mediaService, entityManager, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -181,10 +184,14 @@ public class ExaminerScoringService {
                         examiner.tenantId()).entrySet().stream()
                         .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> entry.getValue().url()));
 
+        // Only reached after the assignment check, and keyed by the verified answers rather than a client id.
+        Map<UUID, AiScoreDetailResponse> aiByAnswer = aiDetails == null ? Map.of()
+                : aiDetails.findAll(examiner.tenantId(), eligibleAnswers);
         List<ExaminerAnswerDetailResponse> details = eligibleAnswers.stream()
                 .map(answer -> toAnswerDetail(answer, scoresByAnswer.get(answer.getAnswerPublicId()),
                         promptsByItem.get(answer.getPinnedItemPublicId()),
-                        decodedByAnswer.get(answer.getAnswerPublicId()), mediaUrls, examiner))
+                        decodedByAnswer.get(answer.getAnswerPublicId()), mediaUrls, examiner,
+                        aiByAnswer.getOrDefault(answer.getAnswerPublicId(), AiScoreDetailResponse.pending())))
                 .sorted(Comparator.comparingInt(answer -> answer.prompt().orderIndex()))
                 .toList();
         int submittedCount = (int) details.stream().filter(answer -> "SUBMITTED".equals(answer.status())).count();
@@ -234,7 +241,7 @@ public class ExaminerScoringService {
 
     private ExaminerAnswerDetailResponse toAnswerDetail(ScoringAnswer answer, ExaminerAnswerScore savedScore,
             AttemptExaminerPromptView prompt, DecodedAnswerPayload decoded, Map<UUID, String> mediaUrls,
-            CurrentUser examiner) {
+            CurrentUser examiner, AiScoreDetailResponse ai) {
         if (savedScore != null && !savedScore.getExaminerPublicId().equals(examiner.userId())) {
             throw new ExaminerWorkNotFoundException();
         }
@@ -259,7 +266,7 @@ public class ExaminerScoringService {
         return new ExaminerAnswerDetailResponse(answer.getAnswerPublicId(), answer.getTaskType(), safePrompt,
                 safeResponse, savedScore == null ? "PENDING" : ExaminerAnswerScoreStatus.SUBMITTED.name(),
                 savedScore == null ? null : savedScore.getScore(),
-                savedScore == null ? null : savedScore.getSubmittedAt());
+                savedScore == null ? null : savedScore.getSubmittedAt(), ai);
     }
 
     private String mediaUrl(Map<UUID, String> mediaUrls, UUID mediaPublicId) {
