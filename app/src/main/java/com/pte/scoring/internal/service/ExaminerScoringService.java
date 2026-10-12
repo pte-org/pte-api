@@ -19,9 +19,11 @@ import com.pte.scoring.dto.response.ExaminerPromptResponse;
 import com.pte.scoring.dto.response.ExaminerQueueResponse;
 import com.pte.scoring.dto.response.ExaminerResponseOptionResponse;
 import com.pte.scoring.dto.response.ExaminerScoreSubmissionResponse;
+import com.pte.scoring.dto.response.ExaminerWorkspaceOverviewResponse;
 import com.pte.scoring.internal.constant.ExaminerScoringConstants;
 import com.pte.scoring.internal.dto.response.AnswerPayloadKind;
 import com.pte.scoring.internal.dto.response.DecodedAnswerPayload;
+import com.pte.scoring.internal.repository.ExaminerWorkspaceReadRepository;
 import com.pte.scoring.domain.GradingCohort;
 import com.pte.scoring.domain.GradingCohortMember;
 import com.pte.scoring.domain.ScoringDomainConstants;
@@ -98,6 +100,9 @@ public class ExaminerScoringService {
     private final GradingCohortRepository gradingCohortRepository;
     private final GradingCohortMemberRepository gradingCohortMemberRepository;
     private final SessionService sessionService;
+    private final ExaminerWorkspaceReadRepository readRepository;
+    private final ExaminerWorkspaceQueryService examinerWorkspaceQueryService;
+    private final java.time.Clock clock;
 
     @Autowired
     public ExaminerScoringService(ExaminerWorkQueueRepository workQueueRepository,
@@ -112,7 +117,10 @@ public class ExaminerScoringService {
             ExaminerReviewVersionService examinerReviewVersionService,
             GradingCohortRepository gradingCohortRepository,
             GradingCohortMemberRepository gradingCohortMemberRepository,
-            SessionService sessionService) {
+            SessionService sessionService,
+            ExaminerWorkspaceReadRepository readRepository,
+            ExaminerWorkspaceQueryService examinerWorkspaceQueryService,
+            java.time.Clock clock) {
         this.workQueueRepository = workQueueRepository;
         this.assignmentRepository = assignmentRepository;
         this.scoringAnswerRepository = scoringAnswerRepository;
@@ -129,6 +137,28 @@ public class ExaminerScoringService {
         this.gradingCohortRepository = gradingCohortRepository;
         this.gradingCohortMemberRepository = gradingCohortMemberRepository;
         this.sessionService = sessionService;
+        this.readRepository = readRepository;
+        this.examinerWorkspaceQueryService = examinerWorkspaceQueryService;
+        this.clock = clock != null ? clock : java.time.Clock.systemUTC();
+    }
+
+    public ExaminerScoringService(ExaminerWorkQueueRepository workQueueRepository,
+            ExaminerAttemptAssignmentRepository assignmentRepository,
+            ScoringAnswerRepository scoringAnswerRepository,
+            ExaminerAnswerScoreRepository examinerAnswerScoreRepository,
+            ScoringSessionStateRepository sessionStateRepository,
+            ScoringEligibilityQueryService eligibilityQueryService,
+            AnswerPayloadDecoder answerPayloadDecoder, IdentityService identityService,
+            AttemptService attemptService, MediaService mediaService, EntityManager entityManager,
+            ApplicationEventPublisher eventPublisher,
+            ExaminerReviewVersionService examinerReviewVersionService,
+            GradingCohortRepository gradingCohortRepository,
+            GradingCohortMemberRepository gradingCohortMemberRepository,
+            SessionService sessionService) {
+        this(workQueueRepository, assignmentRepository, scoringAnswerRepository, examinerAnswerScoreRepository,
+                sessionStateRepository, eligibilityQueryService, answerPayloadDecoder, identityService,
+                attemptService, mediaService, entityManager, eventPublisher, examinerReviewVersionService,
+                gradingCohortRepository, gradingCohortMemberRepository, sessionService, null, null, null);
     }
 
     public ExaminerScoringService(ExaminerWorkQueueRepository workQueueRepository,
@@ -165,6 +195,19 @@ public class ExaminerScoringService {
     }
 
     @Transactional(readOnly = true)
+    public ExaminerWorkspaceOverviewResponse getWorkspaceOverview(CurrentUser caller) {
+        CurrentUser examiner = requireActiveExaminer(caller);
+        if (examinerWorkspaceQueryService != null) {
+            return examinerWorkspaceQueryService.getWorkspaceOverview(examiner);
+        }
+        if (readRepository != null) {
+            return readRepository.getWorkspaceOverview(examiner.tenantId(), examiner.userId(),
+                    clock != null ? clock.instant() : Instant.now());
+        }
+        throw new UnsupportedOperationException("Workspace overview read repository not configured");
+    }
+
+    @Transactional(readOnly = true)
     public ExaminerQueueResponse listWork(String requestedStatus, UUID sessionPublicId, Integer requestedPage,
             Integer requestedSize, CurrentUser caller) {
         CurrentUser examiner = requireActiveExaminer(caller);
@@ -172,8 +215,14 @@ public class ExaminerScoringService {
         int page = requestedPage == null || requestedPage < 0 ? 0 : requestedPage;
         int size = requestedSize == null || requestedSize <= 0 ? DEFAULT_PAGE_SIZE
                 : Math.min(requestedSize, MAX_PAGE_SIZE);
-        Page<com.pte.scoring.dto.response.ExaminerQueueItemResponse> result = workQueueRepository.findQueue(
-                examiner.tenantId(), examiner.userId(), sessionPublicId, status.name(), PageRequest.of(page, size));
+        Page<com.pte.scoring.dto.response.ExaminerQueueItemResponse> result;
+        if (readRepository != null) {
+            result = readRepository.findQueue(
+                    examiner.tenantId(), examiner.userId(), sessionPublicId, status.name(), PageRequest.of(page, size));
+        } else {
+            result = workQueueRepository.findQueue(
+                    examiner.tenantId(), examiner.userId(), sessionPublicId, status.name(), PageRequest.of(page, size));
+        }
         return new ExaminerQueueResponse(result.getContent(), result.getNumber(), result.getSize(),
                 result.getTotalElements(), result.getTotalPages());
     }

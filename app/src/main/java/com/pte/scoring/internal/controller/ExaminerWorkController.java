@@ -4,6 +4,7 @@ import com.pte.scoring.dto.request.SubmitExaminerScoreRequest;
 import com.pte.scoring.dto.response.ExaminerAttemptDetailResponse;
 import com.pte.scoring.dto.response.ExaminerQueueResponse;
 import com.pte.scoring.dto.response.ExaminerScoreSubmissionResponse;
+import com.pte.scoring.dto.response.ExaminerWorkspaceOverviewResponse;
 import com.pte.scoring.internal.service.ExaminerScoringService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
@@ -33,6 +34,11 @@ public class ExaminerWorkController {
 
     public ExaminerWorkController(ExaminerScoringService examinerScoringService) {
         this.examinerScoringService = examinerScoringService;
+    }
+
+    @GetMapping("/overview")
+    public ApiResponse<ExaminerWorkspaceOverviewResponse> getOverview() {
+        return ApiResponse.success(examinerScoringService.getWorkspaceOverview(currentUser()));
     }
 
     @GetMapping
