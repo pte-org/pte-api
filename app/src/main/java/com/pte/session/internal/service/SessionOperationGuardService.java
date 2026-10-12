@@ -20,10 +20,6 @@ public class SessionOperationGuardService {
     private final ExamSessionRepository sessionRepository;
     private final Clock clock;
 
-    public SessionOperationGuardService(ExamSessionRepository sessionRepository) {
-        this(sessionRepository, Clock.systemUTC());
-    }
-
     public SessionOperationGuardService(ExamSessionRepository sessionRepository, Clock clock) {
         this.sessionRepository = sessionRepository;
         this.clock = clock != null ? clock : Clock.systemUTC();
