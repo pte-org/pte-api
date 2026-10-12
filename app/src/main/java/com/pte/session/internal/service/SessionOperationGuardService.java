@@ -8,6 +8,7 @@ import com.pte.session.internal.exception.NotEntitledException;
 import com.pte.session.internal.exception.SessionNotClosedForGradingCohortException;
 import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
 import com.pte.session.internal.repository.ExamSessionRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
@@ -20,6 +21,11 @@ public class SessionOperationGuardService {
     private final ExamSessionRepository sessionRepository;
     private final Clock clock;
 
+    public SessionOperationGuardService(ExamSessionRepository sessionRepository) {
+        this(sessionRepository, Clock.systemUTC());
+    }
+
+    @Autowired
     public SessionOperationGuardService(ExamSessionRepository sessionRepository, Clock clock) {
         this.sessionRepository = sessionRepository;
         this.clock = clock != null ? clock : Clock.systemUTC();
