@@ -21,6 +21,8 @@ public final class SessionConstants {
     public static final String PROCTOR_ASSIGNMENT_NOT_FOUND = "PROCTOR_ASSIGNMENT_NOT_FOUND";
     public static final String HOST_CONTEXT_REQUIRED = "HOST_CONTEXT_REQUIRED";
     public static final String INVALID_SESSION_WINDOW = "INVALID_SESSION_WINDOW";
+    public static final String INVALID_TIMEZONE = "INVALID_TIMEZONE";
+    public static final String INVALID_PROCTOR_SCOPE = "INVALID_PROCTOR_SCOPE";
     public static final String NOT_ENTITLED = "NOT_ENTITLED";
     public static final String SESSION_NOT_STARTED = "SESSION_NOT_STARTED";
     public static final String SESSION_NOT_STARTED_FRIENDLY =

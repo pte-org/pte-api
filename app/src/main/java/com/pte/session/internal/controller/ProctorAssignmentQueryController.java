@@ -1,12 +1,15 @@
 package com.pte.session.internal.controller;
 
 import com.pte.session.SessionService;
-import com.pte.session.dto.response.ProctorMonitoringSessionView;
+import com.pte.session.dto.response.ProctorAssignedSessionsPageView;
+import com.pte.session.dto.response.ProctorWorkspaceOverviewView;
 import com.pte.session.internal.dto.response.AssignedProctorSessionResponse;
+import com.pte.session.internal.dto.response.ProctorAssignedSessionsPageResponse;
+import com.pte.session.internal.dto.response.ProctorWorkspaceOverviewResponse;
+import com.pte.session.internal.dto.response.ProctorWorkspaceSessionResponse;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
-import com.pte.shared.web.PagedResult;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,15 +32,48 @@ public class ProctorAssignmentQueryController {
         this.sessionService = sessionService;
     }
 
+    @GetMapping("/mine/overview")
+    public ApiResponse<ProctorWorkspaceOverviewResponse> getMyOverview(
+            @RequestParam(required = false) String timezone) {
+        CurrentUser caller = CurrentUserContext.required();
+        ProctorWorkspaceOverviewView view = sessionService
+                .getProctorWorkspaceOverview(caller.userId(), caller.tenantId(), timezone);
+
+        List<ProctorWorkspaceSessionResponse> priority = view.prioritySessions().stream()
+                .map(v -> new ProctorWorkspaceSessionResponse(
+                        v.assignmentPublicId(),
+                        v.examSessionPublicId(),
+                        v.name(),
+                        v.sessionCode(),
+                        v.status(),
+                        v.opensAt(),
+                        v.closesAt(),
+                        v.assignmentRole(),
+                        v.canMonitor(),
+                        v.monitoringBlockingReason()))
+                .toList();
+
+        return ApiResponse.success(new ProctorWorkspaceOverviewResponse(
+                view.asOf(),
+                view.timezone(),
+                view.dayStart(),
+                view.dayEnd(),
+                view.counts(),
+                priority));
+    }
+
     @GetMapping("/mine")
-    public ApiResponse<PagedResult<AssignedProctorSessionResponse>> listMyAssignedSessions(
+    public ApiResponse<ProctorAssignedSessionsPageResponse> listMyAssignedSessions(
+            @RequestParam(required = false, defaultValue = "ALL") String scope,
+            @RequestParam(required = false) String timezone,
+            @RequestParam(required = false) String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
         CurrentUser caller = CurrentUserContext.required();
-        PagedResult<ProctorMonitoringSessionView> pagedResult = sessionService
-                .getAssignedSessionsForProctor(caller.userId(), caller.tenantId(), page, size);
+        ProctorAssignedSessionsPageView pagedView = sessionService
+                .getAssignedSessionsForProctor(caller.userId(), caller.tenantId(), scope, timezone, sort, page, size);
 
-        List<AssignedProctorSessionResponse> mapped = pagedResult.data().stream()
+        List<AssignedProctorSessionResponse> mapped = pagedView.data().stream()
                 .map(v -> new AssignedProctorSessionResponse(
                         v.assignmentPublicId(),
                         v.examSessionPublicId(),
@@ -46,9 +82,17 @@ public class ProctorAssignmentQueryController {
                         v.status(),
                         v.opensAt(),
                         v.closesAt(),
-                        v.assignmentRole()))
+                        v.assignmentRole(),
+                        v.canMonitor(),
+                        v.monitoringBlockingReason()))
                 .toList();
 
-        return ApiResponse.success(new PagedResult<>(mapped, pagedResult.meta()));
+        return ApiResponse.success(new ProctorAssignedSessionsPageResponse(
+                mapped,
+                pagedView.meta(),
+                pagedView.asOf(),
+                pagedView.timezone(),
+                pagedView.dayStart(),
+                pagedView.dayEnd()));
     }
 }

@@ -7,7 +7,9 @@ import com.pte.session.dto.response.ClosingSoonSessionView;
 import com.pte.session.dto.response.SessionSummaryView;
 import com.pte.billing.SubscriptionRevocationImpactQuery.SubscriptionRevocationImpact;
 import com.pte.session.dto.response.MonitoringEnrollmentView;
+import com.pte.session.dto.response.ProctorAssignedSessionsPageView;
 import com.pte.session.dto.response.ProctorMonitoringSessionView;
+import com.pte.session.dto.response.ProctorWorkspaceOverviewView;
 import com.pte.session.internal.service.EntitlementService;
 import com.pte.session.internal.service.ProctorMonitoringQueryService;
 import com.pte.session.internal.service.SessionLifecycleService;
@@ -155,6 +157,18 @@ public class SessionService {
     public Optional<ProctorMonitoringSessionView> getMonitoringSession(
             UUID sessionPublicId, UUID proctorPublicId, UUID tenantId) {
         return proctorMonitoringQueryService.getMonitoringSession(sessionPublicId, proctorPublicId, tenantId);
+    }
+
+    /** Returns overview summary and priority sessions for proctor workspace. */
+    public ProctorWorkspaceOverviewView getProctorWorkspaceOverview(
+            UUID proctorPublicId, UUID tenantId, String timezone) {
+        return proctorMonitoringQueryService.getWorkspaceOverview(proctorPublicId, tenantId, timezone);
+    }
+
+    /** Returns paginated assigned sessions for the proctor within tenant with scope, timezone and sort. */
+    public ProctorAssignedSessionsPageView getAssignedSessionsForProctor(
+            UUID proctorPublicId, UUID tenantId, String scope, String timezone, String sort, int page, int size) {
+        return proctorMonitoringQueryService.getAssignedSessions(proctorPublicId, tenantId, scope, timezone, sort, page, size);
     }
 
     /** Returns paginated assigned sessions for the proctor within tenant. */

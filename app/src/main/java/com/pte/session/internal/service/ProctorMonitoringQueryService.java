@@ -2,13 +2,22 @@ package com.pte.session.internal.service;
 
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.ProctorAssignment;
+import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.response.MonitoringEnrollmentView;
+import com.pte.session.dto.response.ProctorAssignedSessionsPageView;
 import com.pte.session.dto.response.ProctorMonitoringSessionView;
+import com.pte.session.dto.response.ProctorWorkspaceOverviewView;
+import com.pte.session.dto.response.ProctorWorkspaceSessionView;
+import com.pte.session.internal.dto.response.ProctorOverviewCountsResponse;
+import com.pte.session.internal.exception.InvalidProctorScopeException;
+import com.pte.session.internal.exception.InvalidTimezoneException;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.session.internal.repository.ProctorAssignmentRepository;
+import com.pte.session.internal.repository.ProctorOverviewCountsProjection;
 import com.pte.shared.web.PageMeta;
 import com.pte.shared.web.PagedResult;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -16,8 +25,15 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.DateTimeException;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -32,14 +48,25 @@ public class ProctorMonitoringQueryService {
     private final ProctorAssignmentRepository proctorAssignmentRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final ExamSessionRepository examSessionRepository;
+    private final Clock clock;
 
     public ProctorMonitoringQueryService(
             ProctorAssignmentRepository proctorAssignmentRepository,
             EnrollmentRepository enrollmentRepository,
             ExamSessionRepository examSessionRepository) {
+        this(proctorAssignmentRepository, enrollmentRepository, examSessionRepository, Clock.systemUTC());
+    }
+
+    @Autowired
+    public ProctorMonitoringQueryService(
+            ProctorAssignmentRepository proctorAssignmentRepository,
+            EnrollmentRepository enrollmentRepository,
+            ExamSessionRepository examSessionRepository,
+            Clock clock) {
         this.proctorAssignmentRepository = proctorAssignmentRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.examSessionRepository = examSessionRepository;
+        this.clock = clock != null ? clock : Clock.systemUTC();
     }
 
     /**
@@ -143,6 +170,153 @@ public class ProctorMonitoringQueryService {
             return false;
         }
         return proctorAssignmentRepository.isProctorAssigned(sessionPublicId, proctorPublicId, tenantId);
+    }
+
+    @Transactional(readOnly = true)
+    public ProctorWorkspaceOverviewView getWorkspaceOverview(
+            UUID proctorPublicId, UUID tenantId, String timezoneStr) {
+        if (proctorPublicId == null || tenantId == null || timezoneStr == null || timezoneStr.isBlank()) {
+            throw new InvalidTimezoneException();
+        }
+        ZoneId zoneId;
+        try {
+            zoneId = ZoneId.of(timezoneStr.trim());
+        } catch (DateTimeException | IllegalArgumentException ex) {
+            throw new InvalidTimezoneException();
+        }
+
+        Instant asOf = clock.instant();
+        ZonedDateTime zdt = asOf.atZone(zoneId);
+        Instant dayStart = zdt.toLocalDate().atStartOfDay(zoneId).toInstant();
+        Instant dayEnd = zdt.toLocalDate().plusDays(1).atStartOfDay(zoneId).toInstant();
+
+        ProctorOverviewCountsProjection projection = proctorAssignmentRepository
+                .countWorkspaceOverview(proctorPublicId, tenantId, asOf, dayStart, dayEnd);
+        ProctorOverviewCountsResponse counts = new ProctorOverviewCountsResponse(
+                projection.getAccessible(), projection.getUpcoming(), projection.getToday());
+
+        List<ProctorAssignment> priorityAssignments = proctorAssignmentRepository
+                .findPrioritySessions(proctorPublicId, tenantId, asOf, PageRequest.of(0, 5));
+        List<ProctorWorkspaceSessionView> prioritySessions = priorityAssignments.stream()
+                .map(pa -> toWorkspaceSessionView(pa, asOf))
+                .toList();
+
+        return new ProctorWorkspaceOverviewView(
+                asOf, zoneId.getId(), dayStart, dayEnd, counts, prioritySessions);
+    }
+
+    @Transactional(readOnly = true)
+    public ProctorAssignedSessionsPageView getAssignedSessions(
+            UUID proctorPublicId, UUID tenantId, String scopeStr, String timezoneStr,
+            String sortStr, int requestedPage, int requestedSize) {
+        String scope = (scopeStr == null || scopeStr.isBlank()) ? "ALL" : scopeStr.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("ALL", "ACCESSIBLE", "UPCOMING", "TODAY").contains(scope)) {
+            throw new InvalidProctorScopeException();
+        }
+
+        ZoneId zoneId = null;
+        Instant dayStart = null;
+        Instant dayEnd = null;
+        if (timezoneStr != null && !timezoneStr.isBlank()) {
+            try {
+                zoneId = ZoneId.of(timezoneStr.trim());
+            } catch (DateTimeException | IllegalArgumentException ex) {
+                throw new InvalidTimezoneException();
+            }
+        } else if ("TODAY".equals(scope)) {
+            throw new InvalidTimezoneException();
+        }
+
+        Instant asOf = clock.instant();
+        if (zoneId != null) {
+            ZonedDateTime zdt = asOf.atZone(zoneId);
+            dayStart = zdt.toLocalDate().atStartOfDay(zoneId).toInstant();
+            dayEnd = zdt.toLocalDate().plusDays(1).atStartOfDay(zoneId).toInstant();
+        }
+
+        boolean usePrioritySort = "PRIORITY".equalsIgnoreCase(sortStr);
+        int page = Math.max(0, requestedPage);
+        int size = requestedSize <= 0 ? DEFAULT_SIZE : Math.min(MAX_SIZE, requestedSize);
+        Pageable pageable = PageRequest.of(page, size);
+
+        Page<ProctorAssignment> assignmentPage = proctorAssignmentRepository.findScopedAssignedSessions(
+                proctorPublicId, tenantId, scope, asOf,
+                dayStart != null ? dayStart : Instant.EPOCH,
+                dayEnd != null ? dayEnd : Instant.EPOCH,
+                usePrioritySort, pageable);
+
+        List<ProctorWorkspaceSessionView> items = assignmentPage.getContent().stream()
+                .map(pa -> toWorkspaceSessionView(pa, asOf))
+                .toList();
+
+        PageMeta meta = new PageMeta(
+                assignmentPage.getNumber(),
+                assignmentPage.getSize(),
+                assignmentPage.getTotalElements(),
+                assignmentPage.getTotalPages(),
+                assignmentPage.isFirst(),
+                assignmentPage.isLast(),
+                assignmentPage.hasNext(),
+                assignmentPage.hasPrevious());
+
+        return new ProctorAssignedSessionsPageView(
+                items, meta, asOf, zoneId != null ? zoneId.getId() : null, dayStart, dayEnd);
+    }
+
+    public static boolean canMonitor(ExamSession s, Instant asOf) {
+        if (s == null || s.isDeleted() || s.getStatus() != SessionStatus.OPEN) {
+            return false;
+        }
+        if (s.getOpensAt() == null || s.getClosesAt() == null) {
+            return false;
+        }
+        return !asOf.isBefore(s.getOpensAt()) && asOf.isBefore(s.getClosesAt());
+    }
+
+    public static String monitoringBlockingReason(ExamSession s, Instant asOf) {
+        if (canMonitor(s, asOf)) {
+            return null;
+        }
+        if (s == null) {
+            return "SESSION_NOT_FOUND";
+        }
+        if (s.getStatus() == SessionStatus.CANCELLED) {
+            return "SESSION_CANCELLED";
+        }
+        if (s.getStatus() == SessionStatus.CLOSED) {
+            return "SESSION_CLOSED";
+        }
+        if (s.getStatus() != SessionStatus.OPEN && s.getStatus() != SessionStatus.SCHEDULED) {
+            return "SESSION_NOT_OPEN";
+        }
+        if (s.getOpensAt() == null || s.getClosesAt() == null) {
+            return "WINDOW_NOT_CONFIGURED";
+        }
+        if (asOf.isBefore(s.getOpensAt())) {
+            return "WINDOW_NOT_OPENED";
+        }
+        if (!asOf.isBefore(s.getClosesAt())) {
+            return "WINDOW_CLOSED";
+        }
+        return "SESSION_NOT_OPEN";
+    }
+
+    private ProctorWorkspaceSessionView toWorkspaceSessionView(ProctorAssignment pa, Instant asOf) {
+        ExamSession s = pa.getSession();
+        String roleStr = pa.getRole() != null ? pa.getRole().name() : null;
+        boolean canMon = canMonitor(s, asOf);
+        String reason = monitoringBlockingReason(s, asOf);
+        return new ProctorWorkspaceSessionView(
+                pa.getPublicId(),
+                s.getPublicId(),
+                s.getName(),
+                s.getSessionCode(),
+                s.getStatus(),
+                s.getOpensAt(),
+                s.getClosesAt(),
+                roleStr,
+                canMon,
+                reason);
     }
 
     private ProctorMonitoringSessionView toSessionView(ProctorAssignment pa) {

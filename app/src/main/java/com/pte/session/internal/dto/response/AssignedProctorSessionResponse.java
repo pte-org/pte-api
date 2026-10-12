@@ -16,6 +16,20 @@ public record AssignedProctorSessionResponse(
         SessionStatus status,
         Instant opensAt,
         Instant closesAt,
-        String assignmentRole
+        String assignmentRole,
+        boolean canMonitor,
+        String monitoringBlockingReason
 ) {
+    public AssignedProctorSessionResponse(
+            UUID assignmentPublicId,
+            UUID examSessionPublicId,
+            String name,
+            String sessionCode,
+            SessionStatus status,
+            Instant opensAt,
+            Instant closesAt,
+            String assignmentRole) {
+        this(assignmentPublicId, examSessionPublicId, name, sessionCode, status, opensAt, closesAt,
+                assignmentRole, false, null);
+    }
 }
