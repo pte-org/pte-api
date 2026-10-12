@@ -63,4 +63,12 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
             @Param("sessionPublicId") UUID sessionPublicId,
             @Param("studentPublicId") UUID studentPublicId,
             @Param("tenantId") UUID tenantId);
+
+    @Query("SELECT e FROM Enrollment e "
+            + "WHERE e.session.publicId = :sessionPublicId AND e.studentPublicId = :studentPublicId "
+            + "AND e.tenantId = :tenantId AND e.deleted = false AND e.session.deleted = false")
+    Optional<Enrollment> findActiveEnrollment(
+            @Param("sessionPublicId") UUID sessionPublicId,
+            @Param("studentPublicId") UUID studentPublicId,
+            @Param("tenantId") UUID tenantId);
 }

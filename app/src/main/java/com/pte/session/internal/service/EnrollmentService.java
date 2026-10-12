@@ -167,7 +167,7 @@ public class EnrollmentService {
 
     @Transactional
     public void unenroll(UUID sessionPublicId, UUID enrollmentPublicId, CurrentUser caller) {
-        ExamSession session = sessionLifecycleService.findOwned(sessionPublicId, caller);
+        ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
         requireManualAudienceMutationAllowed(session);
         Enrollment enrollment = enrollmentRepository.findByPublicId(enrollmentPublicId)
                 .orElseThrow(EnrollmentNotFoundException::new);

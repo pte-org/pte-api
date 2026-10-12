@@ -42,14 +42,20 @@ public class SessionService {
     private final EntitlementService entitlementService;
     private final SessionLifecycleService sessionLifecycleService;
     private final ProctorMonitoringQueryService proctorMonitoringQueryService;
+    private final com.pte.session.internal.service.AttendanceQueryService attendanceQueryService;
+    private final com.pte.session.internal.service.AttendanceCommandService attendanceCommandService;
 
     public SessionService(
             EntitlementService entitlementService,
             SessionLifecycleService sessionLifecycleService,
-            ProctorMonitoringQueryService proctorMonitoringQueryService) {
+            ProctorMonitoringQueryService proctorMonitoringQueryService,
+            com.pte.session.internal.service.AttendanceQueryService attendanceQueryService,
+            com.pte.session.internal.service.AttendanceCommandService attendanceCommandService) {
         this.entitlementService = entitlementService;
         this.sessionLifecycleService = sessionLifecycleService;
         this.proctorMonitoringQueryService = proctorMonitoringQueryService;
+        this.attendanceQueryService = attendanceQueryService;
+        this.attendanceCommandService = attendanceCommandService;
     }
 
     /** Throws if the student isn't enrolled, or the session isn't OPEN or is outside its opensAt/closesAt window — never returns a false/empty result for "not entitled". */
@@ -196,5 +202,34 @@ public class SessionService {
     /** Checks whether a proctor is actively assigned to an exam session. */
     public boolean isProctorAssignedToSession(UUID sessionPublicId, UUID proctorPublicId, UUID tenantId) {
         return proctorMonitoringQueryService.isProctorAssigned(sessionPublicId, proctorPublicId, tenantId);
+    }
+
+    /** Returns paginated attendance roster joining active enrollments, attendance status and student search view. */
+    public com.pte.session.dto.response.AttendancePageView getAttendanceRoster(
+            UUID sessionPublicId, String status, String search, int page, int size,
+            com.pte.shared.security.CurrentUser caller, boolean isHost) {
+        return attendanceQueryService.getRosterPage(sessionPublicId, caller.tenantId(), status, search, page, size, caller, isHost);
+    }
+
+    /** Records or corrects attendance under session lock with idempotent request deduplication. */
+    public com.pte.session.dto.response.AttendanceCommandReceiptView recordAttendance(
+            UUID sessionPublicId, UUID studentPublicId,
+            com.pte.session.dto.request.RecordAttendanceRequest request,
+            com.pte.shared.security.CurrentUser caller, boolean isHost) {
+        return attendanceCommandService.recordAttendance(sessionPublicId, studentPublicId, request, caller, isHost);
+    }
+
+    /** Retrieves an exact attendance command receipt by requestPublicId for the caller. */
+    public com.pte.session.dto.response.AttendanceCommandReceiptView getAttendanceReceipt(
+            UUID sessionPublicId, UUID requestPublicId,
+            com.pte.shared.security.CurrentUser caller, boolean isHost) {
+        return attendanceCommandService.getReceipt(sessionPublicId, requestPublicId, caller, isHost);
+    }
+
+    /** Returns paginated immutable attendance transition history for a student on an exam session. */
+    public com.pte.session.dto.response.AttendanceHistoryView getAttendanceHistory(
+            UUID sessionPublicId, UUID studentPublicId, int page, int size,
+            com.pte.shared.security.CurrentUser caller, boolean isHost) {
+        return attendanceCommandService.getHistory(sessionPublicId, studentPublicId, page, size, caller, isHost);
     }
 }
