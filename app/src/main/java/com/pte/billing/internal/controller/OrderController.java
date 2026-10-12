@@ -42,10 +42,13 @@ public class OrderController {
 
     @GetMapping
     public ApiResponse<PagedResult<OrderResponse>> list(
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         CurrentUser caller = CurrentUserContext.required();
-        return ApiResponse.success(orderService.listOrders(caller.tenantId(), page, size));
+        return ApiResponse.success(search == null || search.isBlank()
+                ? orderService.listOrders(caller.tenantId(), page, size)
+                : orderService.listOrders(caller.tenantId(), search, page, size));
     }
 
     @GetMapping("/{publicId}")

@@ -23,13 +23,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Locale;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import jakarta.persistence.criteria.Predicate;
 
 /** Creates PayOS orders and exposes tenant or platform-scoped order projections. */
 @Service
@@ -94,16 +99,45 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public PagedResult<OrderResponse> listOrders(UUID tenantId, int requestedPage, int requestedSize) {
+        return listOrders(tenantId, null, requestedPage, requestedSize);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<OrderResponse> listOrders(UUID tenantId, String search, int requestedPage,
+            int requestedSize) {
         if (tenantId == null) {
             throw invalid(BillingConstants.ORDER_TENANT_REQUIRED);
         }
         int page = Math.max(0, requestedPage);
         int size = requestedSize <= 0 ? 20 : Math.min(requestedSize, 100);
-        Pageable pageable = PageRequest.of(page, size);
-        Page<Order> orders = orderRepository.findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(tenantId, pageable);
+        Page<Order> orders = search == null || search.trim().isBlank()
+                ? orderRepository.findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(tenantId,
+                        PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"))))
+                : orderRepository.findAll(orderSearch(tenantId, search),
+                        PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"))));
         return new PagedResult<>(orders.map(OrderResponse::from).getContent(),
                 new PageMeta(orders.getNumber(), orders.getSize(), orders.getTotalElements(), orders.getTotalPages(),
                         orders.isFirst(), orders.isLast(), orders.hasNext(), orders.hasPrevious()));
+    }
+
+    private Specification<Order> orderSearch(UUID tenantId, String search) {
+        String normalized = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
+        return (root, query, cb) -> {
+            List<Predicate> filters = new ArrayList<>();
+            filters.add(cb.equal(root.get("tenantId"), tenantId));
+            filters.add(cb.isFalse(root.get("deleted")));
+            if (normalized.isBlank()) {
+                return cb.and(filters.toArray(Predicate[]::new));
+            }
+            String pattern = "%" + normalized + "%";
+            List<Predicate> matches = new ArrayList<>();
+            matches.add(cb.like(cb.lower(cb.toString(root.get("orderCode"))), pattern));
+            matches.add(cb.like(cb.lower(root.get("status").as(String.class)), pattern));
+            matches.add(cb.like(cb.lower(cb.toString(root.get("publicId"))), pattern));
+            matches.add(cb.like(cb.lower(cb.toString(root.get("planId"))), pattern));
+            filters.add(cb.or(matches.toArray(Predicate[]::new)));
+            return cb.and(filters.toArray(Predicate[]::new));
+        };
     }
 
     @Transactional(readOnly = true)
