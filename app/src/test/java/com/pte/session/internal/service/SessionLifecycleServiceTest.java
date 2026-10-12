@@ -31,6 +31,15 @@ import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionExcept
 import com.pte.session.internal.mapper.SessionMapper;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
+import com.pte.session.internal.service.lifecycle.SessionAccess;
+import com.pte.session.internal.service.lifecycle.SessionCreationService;
+import com.pte.session.internal.service.lifecycle.SessionPolicyService;
+import com.pte.session.internal.service.lifecycle.SessionReadService;
+import com.pte.session.internal.service.lifecycle.SessionReminderService;
+import com.pte.session.internal.service.lifecycle.SessionRevocationService;
+import com.pte.session.internal.service.lifecycle.SessionStateService;
+import com.pte.session.internal.service.lifecycle.SessionSubscriptionRules;
+import com.pte.session.internal.service.lifecycle.SessionSubscriptionService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -93,8 +102,19 @@ class SessionLifecycleServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new SessionLifecycleService(sessionRepository, enrollmentRepository, assessmentService,
-                billingService, eventPublisher, sessionCodeGenerator);
+        SessionAccess access = new SessionAccess(sessionRepository);
+        SessionSubscriptionRules subscriptions = new SessionSubscriptionRules(sessionRepository, billingService);
+        service = new SessionLifecycleService(access,
+                new SessionCreationService(sessionRepository, assessmentService, sessionCodeGenerator,
+                        access, subscriptions),
+                new SessionSubscriptionService(sessionRepository, enrollmentRepository, billingService,
+                        access, subscriptions),
+                new SessionStateService(sessionRepository, access, subscriptions),
+                new SessionPolicyService(sessionRepository, access),
+                new SessionReadService(sessionRepository, access),
+                new SessionReminderService(sessionRepository),
+                new SessionRevocationService(sessionRepository, enrollmentRepository, eventPublisher),
+                new SessionOperationGuardService(sessionRepository));
         tenantId = UUID.randomUUID();
         subscriptionId = UUID.randomUUID();
         licenseKeyId = UUID.randomUUID();

@@ -17,6 +17,9 @@ import java.util.UUID;
 
 public interface ScoringAnswerRepository extends JpaRepository<ScoringAnswer, Long> {
 
+    org.springframework.data.domain.Slice<StaffAnswerRow>
+            findByTenantIdAndAttemptPublicIdInAndDeletedFalse(UUID tenantId, List<UUID> attemptIds, Pageable pageable);
+
     Optional<ScoringAnswer> findByAnswerPublicId(UUID answerPublicId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

@@ -72,19 +72,29 @@ class StudentRosterRepositoryTest {
         Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
         User first = student("first@example.test", tenant.getPublicId(), createdAt);
         User second = student("second@example.test", tenant.getPublicId(), createdAt);
+        first.setPhone("09120001");
+        second.setPhone("09120002");
         userRepository.saveAndFlush(first);
         userRepository.saveAndFlush(second);
 
         Page<StudentRosterRow> firstPage = rosterRepository.findPageForTenant(
-                tenant.getPublicId(), "", null, null, "ALL", "CREATED_AT", "ASC", PageRequest.of(0, 1));
+                tenant.getPublicId(), "", null, null, "ALL", "ALL", "CREATED_AT", "ASC", PageRequest.of(0, 1));
         Page<StudentRosterRow> secondPage = rosterRepository.findPageForTenant(
-                tenant.getPublicId(), "", null, null, "ALL", "CREATED_AT", "ASC", PageRequest.of(1, 1));
+                tenant.getPublicId(), "", null, null, "ALL", "ALL", "CREATED_AT", "ASC", PageRequest.of(1, 1));
 
         assertThat(firstPage.getTotalElements()).isEqualTo(2);
         assertThat(firstPage.getContent()).hasSize(1);
         assertThat(secondPage.getContent()).hasSize(1);
         assertThat(secondPage.getContent().get(0).getStudentPublicId())
                 .isNotEqualTo(firstPage.getContent().get(0).getStudentPublicId());
+
+        Page<StudentRosterRow> phoneSearch = rosterRepository.findPageForTenant(
+                tenant.getPublicId(), "09120001", null, null, "ALL", "ALL", "CREATED_AT", "ASC",
+                PageRequest.of(0, 10));
+
+        assertThat(phoneSearch.getContent()).singleElement()
+                .extracting(StudentRosterRow::getStudentPublicId)
+                .isEqualTo(first.getPublicId().toString());
     }
 
     private User student(String email, UUID tenantId, Instant createdAt) {
