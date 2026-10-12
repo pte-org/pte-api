@@ -33,4 +33,7 @@ public interface ExaminerAnswerScoreRepository extends JpaRepository<ExaminerAns
             UUID tenantId, UUID examinerPublicId, UUID requestPublicId);
 
     Optional<ExaminerAnswerScore> findByTenantIdAndRequestPublicId(UUID tenantId, UUID requestPublicId);
+
+    long countByTenantIdAndSessionPublicIdAndAttemptPublicIdAndExaminerPublicIdAndDeletedFalse(
+            UUID tenantId, UUID sessionPublicId, UUID attemptPublicId, UUID examinerPublicId);
 }

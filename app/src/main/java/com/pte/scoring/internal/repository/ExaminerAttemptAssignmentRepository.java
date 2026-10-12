@@ -18,6 +18,12 @@ public interface ExaminerAttemptAssignmentRepository extends JpaRepository<Exami
     boolean existsByTenantIdAndSessionPublicIdAndAttemptPublicIdAndExaminerPublicId(
             UUID tenantId, UUID sessionPublicId, UUID attemptPublicId, UUID examinerPublicId);
 
+    java.util.Optional<ExaminerAttemptAssignment> findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndExaminerPublicIdAndDeletedFalse(
+            UUID tenantId, UUID sessionPublicId, UUID attemptPublicId, UUID examinerPublicId);
+
+    java.util.Optional<ExaminerAttemptAssignment> findByTenantIdAndPublicIdAndDeletedFalse(
+            UUID tenantId, UUID publicId);
+
     List<ExaminerAttemptAssignment> findByTenantIdAndSessionPublicIdAndExaminerPublicId(
             UUID tenantId, UUID sessionPublicId, UUID examinerPublicId);
 

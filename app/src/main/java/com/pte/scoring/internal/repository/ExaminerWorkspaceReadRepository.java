@@ -38,7 +38,8 @@ public class ExaminerWorkspaceReadRepository {
                     assignment.eligible_answer_count,
                     COALESCE(sc.score_count, 0) AS submitted_answer_count,
                     CASE
-                        WHEN assignment.eligible_answer_count = 0 THEN 'COMPLETED'
+                        WHEN work.status IS NOT NULL THEN work.status
+                        WHEN assignment.eligible_answer_count = 0 THEN 'PENDING'
                         WHEN COALESCE(sc.score_count, 0) = 0 THEN 'PENDING'
                         WHEN COALESCE(sc.score_count, 0) < assignment.eligible_answer_count THEN 'IN_PROGRESS'
                         ELSE 'COMPLETED'
@@ -78,6 +79,9 @@ public class ExaminerWorkspaceReadRepository {
                 ) sc ON sc.tenant_id = assignment.tenant_id
                     AND sc.session_public_id = assignment.session_public_id
                     AND sc.attempt_public_id = assignment.attempt_public_id
+                LEFT JOIN examiner_grading_work work ON work.tenant_id = assignment.tenant_id
+                    AND work.assignment_public_id = assignment.public_id
+                    AND NOT work.deleted
                 LEFT JOIN scoring_session_states state ON state.tenant_id = assignment.tenant_id
                     AND state.session_public_id = assignment.session_public_id
                 LEFT JOIN session_grading_cohorts cohort ON cohort.tenant_id = assignment.tenant_id
@@ -89,7 +93,7 @@ public class ExaminerWorkspaceReadRepository {
                 WHERE assignment.tenant_id = :tenantId
                   AND assignment.examiner_public_id = :examinerPublicId
                   AND NOT assignment.deleted
-                  AND state.publication_public_id IS NULL
+                  AND (state.publication_public_id IS NULL OR work.status = 'COMPLETED' OR (work.status IS NULL AND COALESCE(sc.score_count, 0) >= assignment.eligible_answer_count AND assignment.eligible_answer_count > 0))
             )
             """;
 
@@ -155,17 +159,30 @@ public class ExaminerWorkspaceReadRepository {
                 .toList();
 
         return new ExaminerWorkspaceOverviewResponse(
-                asOf, "ASSIGNED_UNPUBLISHED", counts, progress, priorityItems);
+                asOf, "ASSIGNED_WITH_PUBLISHED_COMPLETED", counts, progress, priorityItems);
     }
 
     public Page<ExaminerQueueItemResponse> findQueue(
             UUID tenantId, UUID examinerPublicId, UUID sessionPublicId, String status, Pageable pageable) {
+        return findQueue(tenantId, examinerPublicId, sessionPublicId, status, null, null, pageable);
+    }
+
+    public Page<ExaminerQueueItemResponse> findQueue(
+            UUID tenantId, UUID examinerPublicId, UUID sessionPublicId, String status, String search, String sort, Pageable pageable) {
         StringBuilder whereClause = new StringBuilder(" WHERE 1=1");
         if (sessionPublicId != null) {
             whereClause.append(" AND session_public_id = :sessionPublicId");
         }
         if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
             whereClause.append(" AND status = :status");
+        }
+        if (search != null && !search.isBlank()) {
+            whereClause.append(" AND (CAST(attempt_public_id AS text) ILIKE :searchPattern OR CAST(session_public_id AS text) ILIKE :searchPattern)");
+        }
+
+        String orderClause = " ORDER BY assigned_at DESC, assignment_id DESC";
+        if ("ASSIGNED_ASC".equalsIgnoreCase(sort)) {
+            orderClause = " ORDER BY assigned_at ASC, assignment_id ASC";
         }
 
         String selectSql = CTE_SQL + """
@@ -180,8 +197,7 @@ public class ExaminerWorkspaceReadRepository {
                     blocking_reason,
                     has_outstanding_answers
                 FROM assignment_scores
-                """ + whereClause + """
-                ORDER BY assigned_at DESC, assignment_id DESC
+                """ + whereClause + orderClause + """
                 LIMIT :limit OFFSET :offset
                 """;
 
@@ -204,6 +220,11 @@ public class ExaminerWorkspaceReadRepository {
         if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
             selectQuery.setParameter("status", status.trim().toUpperCase(java.util.Locale.ROOT));
             countQuery.setParameter("status", status.trim().toUpperCase(java.util.Locale.ROOT));
+        }
+        if (search != null && !search.isBlank()) {
+            String pattern = "%" + search.trim() + "%";
+            selectQuery.setParameter("searchPattern", pattern);
+            countQuery.setParameter("searchPattern", pattern);
         }
 
         @SuppressWarnings("unchecked")

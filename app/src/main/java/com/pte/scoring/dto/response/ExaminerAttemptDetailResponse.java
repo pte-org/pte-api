@@ -16,7 +16,24 @@ public record ExaminerAttemptDetailResponse(
         String cohortStatus,
         String publicationState,
         boolean canFinalize,
-        String blockingReason) {
+        String blockingReason,
+        ExaminerWorkflowView workflow) {
+
+    public ExaminerAttemptDetailResponse(
+            UUID attemptPublicId,
+            UUID sessionPublicId,
+            Instant assignedAt,
+            int eligibleAnswerCount,
+            int submittedAnswerCount,
+            List<ExaminerAnswerDetailResponse> answers,
+            String cohortMode,
+            String cohortStatus,
+            String publicationState,
+            boolean canFinalize,
+            String blockingReason) {
+        this(attemptPublicId, sessionPublicId, assignedAt, eligibleAnswerCount, submittedAnswerCount, answers,
+                cohortMode, cohortStatus, publicationState, canFinalize, blockingReason, null);
+    }
 
     public ExaminerAttemptDetailResponse(
             UUID attemptPublicId,
@@ -26,6 +43,6 @@ public record ExaminerAttemptDetailResponse(
             int submittedAnswerCount,
             List<ExaminerAnswerDetailResponse> answers) {
         this(attemptPublicId, sessionPublicId, assignedAt, eligibleAnswerCount, submittedAnswerCount, answers,
-                null, null, "UNPUBLISHED", true, null);
+                null, null, "UNPUBLISHED", true, null, null);
     }
 }
