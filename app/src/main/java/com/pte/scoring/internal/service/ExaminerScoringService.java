@@ -19,6 +19,7 @@ import com.pte.scoring.dto.response.ExaminerPromptResponse;
 import com.pte.scoring.dto.response.ExaminerQueueResponse;
 import com.pte.scoring.dto.response.ExaminerResponseOptionResponse;
 import com.pte.scoring.dto.response.ExaminerScoreSubmissionResponse;
+import com.pte.scoring.dto.response.ExaminerWorkflowView;
 import com.pte.scoring.dto.response.ExaminerWorkspaceOverviewResponse;
 import com.pte.scoring.internal.constant.ExaminerScoringConstants;
 import com.pte.scoring.internal.dto.response.AnswerPayloadKind;
@@ -102,6 +103,7 @@ public class ExaminerScoringService {
     private final SessionService sessionService;
     private final ExaminerWorkspaceReadRepository readRepository;
     private final ExaminerWorkspaceQueryService examinerWorkspaceQueryService;
+    private final ExaminerWorkflowQueryService workflowQueryService;
     private final java.time.Clock clock;
 
     @Autowired
@@ -120,6 +122,7 @@ public class ExaminerScoringService {
             SessionService sessionService,
             ExaminerWorkspaceReadRepository readRepository,
             ExaminerWorkspaceQueryService examinerWorkspaceQueryService,
+            ExaminerWorkflowQueryService workflowQueryService,
             java.time.Clock clock) {
         this.workQueueRepository = workQueueRepository;
         this.assignmentRepository = assignmentRepository;
@@ -139,7 +142,31 @@ public class ExaminerScoringService {
         this.sessionService = sessionService;
         this.readRepository = readRepository;
         this.examinerWorkspaceQueryService = examinerWorkspaceQueryService;
+        this.workflowQueryService = workflowQueryService;
         this.clock = clock != null ? clock : java.time.Clock.systemUTC();
+    }
+
+    public ExaminerScoringService(ExaminerWorkQueueRepository workQueueRepository,
+            ExaminerAttemptAssignmentRepository assignmentRepository,
+            ScoringAnswerRepository scoringAnswerRepository,
+            ExaminerAnswerScoreRepository examinerAnswerScoreRepository,
+            ScoringSessionStateRepository sessionStateRepository,
+            ScoringEligibilityQueryService eligibilityQueryService,
+            AnswerPayloadDecoder answerPayloadDecoder, IdentityService identityService,
+            AttemptService attemptService, MediaService mediaService, EntityManager entityManager,
+            ApplicationEventPublisher eventPublisher,
+            ExaminerReviewVersionService examinerReviewVersionService,
+            GradingCohortRepository gradingCohortRepository,
+            GradingCohortMemberRepository gradingCohortMemberRepository,
+            SessionService sessionService,
+            ExaminerWorkspaceReadRepository readRepository,
+            ExaminerWorkspaceQueryService examinerWorkspaceQueryService,
+            java.time.Clock clock) {
+        this(workQueueRepository, assignmentRepository, scoringAnswerRepository, examinerAnswerScoreRepository,
+                sessionStateRepository, eligibilityQueryService, answerPayloadDecoder, identityService,
+                attemptService, mediaService, entityManager, eventPublisher, examinerReviewVersionService,
+                gradingCohortRepository, gradingCohortMemberRepository, sessionService, readRepository,
+                examinerWorkspaceQueryService, null, clock);
     }
 
     public ExaminerScoringService(ExaminerWorkQueueRepository workQueueRepository,
@@ -208,8 +235,8 @@ public class ExaminerScoringService {
     }
 
     @Transactional(readOnly = true)
-    public ExaminerQueueResponse listWork(String requestedStatus, UUID sessionPublicId, Integer requestedPage,
-            Integer requestedSize, CurrentUser caller) {
+    public ExaminerQueueResponse listWork(String requestedStatus, UUID sessionPublicId, String search, String sort,
+            Integer requestedPage, Integer requestedSize, CurrentUser caller) {
         CurrentUser examiner = requireActiveExaminer(caller);
         ExaminerQueueStatus status = parseStatus(requestedStatus);
         int page = requestedPage == null || requestedPage < 0 ? 0 : requestedPage;
@@ -218,7 +245,7 @@ public class ExaminerScoringService {
         Page<com.pte.scoring.dto.response.ExaminerQueueItemResponse> result;
         if (readRepository != null) {
             result = readRepository.findQueue(
-                    examiner.tenantId(), examiner.userId(), sessionPublicId, status.name(), PageRequest.of(page, size));
+                    examiner.tenantId(), examiner.userId(), sessionPublicId, status.name(), search, sort, PageRequest.of(page, size));
         } else {
             result = workQueueRepository.findQueue(
                     examiner.tenantId(), examiner.userId(), sessionPublicId, status.name(), PageRequest.of(page, size));
@@ -228,14 +255,28 @@ public class ExaminerScoringService {
     }
 
     @Transactional(readOnly = true)
+    public ExaminerQueueResponse listWork(String requestedStatus, UUID sessionPublicId, Integer requestedPage,
+            Integer requestedSize, CurrentUser caller) {
+        return listWork(requestedStatus, sessionPublicId, null, null, requestedPage, requestedSize, caller);
+    }
+
+    @Transactional(readOnly = true)
     public ExaminerAttemptDetailResponse getAttempt(UUID sessionPublicId, UUID attemptPublicId, CurrentUser caller) {
         CurrentUser examiner = requireActiveExaminer(caller);
-        if (isSessionPublished(examiner.tenantId(), sessionPublicId)) {
-            throw new ExaminerWorkNotFoundException();
-        }
         ExaminerAttemptAssignment assignment = workQueueRepository
                 .findOwnedAttempt(examiner.tenantId(), sessionPublicId, attemptPublicId, examiner.userId())
                 .orElseThrow(ExaminerWorkNotFoundException::new);
+
+        ExaminerWorkflowView workflow = workflowQueryService != null
+                ? workflowQueryService.buildWorkflowView(assignment, examiner.tenantId())
+                : null;
+
+        boolean isPublished = isSessionPublished(examiner.tenantId(), sessionPublicId);
+        if (isPublished) {
+            if (workflow == null || workflow.status() != com.pte.scoring.domain.enums.ExaminerWorkflowStatus.COMPLETED) {
+                throw new ExaminerWorkNotFoundException();
+            }
+        }
 
         List<ScoringAnswer> eligibleAnswers = scoringAnswerRepository
                 .findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(sessionPublicId, examiner.tenantId(),
@@ -258,16 +299,16 @@ public class ExaminerScoringService {
         ScoringSessionState sessionState = sessionStateRepository
                 .findByTenantIdAndSessionPublicId(examiner.tenantId(), sessionPublicId).orElse(null);
 
-        boolean isPublished = sessionState != null && sessionState.getPublicationPublicId() != null;
-        String publicationState = isPublished ? "PUBLISHED" : "UNPUBLISHED";
+        boolean sessionPublishedState = sessionState != null && sessionState.getPublicationPublicId() != null;
+        String publicationState = sessionPublishedState ? "PUBLISHED" : "UNPUBLISHED";
 
-        boolean attemptCanFinalize = !isPublished
+        boolean attemptCanFinalize = !sessionPublishedState
                 && cohort != null
                 && cohort.getMarkingMode() == GradingMarkingMode.MANUAL_EXAMINER
                 && (cohort.getStatus() == GradingCohortStatus.FROZEN || cohort.getStatus() == GradingCohortStatus.COMPLETED)
                 && (member != null && !member.isExcluded());
 
-        String attemptBlockingReason = isPublished ? "ALREADY_PUBLISHED"
+        String attemptBlockingReason = sessionPublishedState ? "ALREADY_PUBLISHED"
                 : cohort == null ? "WAITING_FOR_HOST_FREEZE"
                 : cohort.getMarkingMode() != GradingMarkingMode.MANUAL_EXAMINER ? "COHORT_NOT_MANUAL_EXAMINER"
                 : (cohort.getStatus() != GradingCohortStatus.FROZEN && cohort.getStatus() != GradingCohortStatus.COMPLETED) ? "WAITING_FOR_HOST_FREEZE"
@@ -320,7 +361,7 @@ public class ExaminerScoringService {
                 assignment.getEligibleAnswerCount(), submittedCount, details,
                 cohort != null ? cohort.getMarkingMode().name() : null,
                 cohort != null ? cohort.getStatus().name() : null,
-                publicationState, attemptCanFinalize, attemptBlockingReason);
+                publicationState, attemptCanFinalize, attemptBlockingReason, workflow);
     }
 
     @Transactional
