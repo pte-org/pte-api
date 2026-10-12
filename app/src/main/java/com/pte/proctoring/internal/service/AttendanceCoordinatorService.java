@@ -6,6 +6,7 @@ import com.pte.identity.IdentityService;
 import com.pte.identity.dto.response.StudentDisplayNameView;
 import com.pte.session.SessionService;
 import com.pte.session.dto.request.RecordAttendanceRequest;
+import com.pte.session.dto.request.RecordIdentityVerificationRequest;
 import com.pte.session.dto.response.AttendanceCommandReceiptView;
 import com.pte.session.dto.response.AttendanceHistoryItemView;
 import com.pte.session.dto.response.AttendanceHistoryView;
@@ -111,7 +112,9 @@ public class AttendanceCoordinatorService {
                     row.canEdit(),
                     row.blockingReason(),
                     activityStatus,
-                    activityAt
+                    activityAt,
+                    row.identityStatus(),
+                    row.identityNote()
             );
         }).toList();
 
@@ -202,5 +205,14 @@ public class AttendanceCoordinatorService {
                 historyView.meta(),
                 historyView.asOf()
         );
+    }
+
+    public AttendanceRowView recordIdentityVerification(
+            UUID sessionPublicId,
+            UUID studentPublicId,
+            RecordIdentityVerificationRequest request,
+            CurrentUser caller,
+            boolean isHost) {
+        return sessionService.recordIdentityVerification(sessionPublicId, studentPublicId, request, caller, isHost);
     }
 }

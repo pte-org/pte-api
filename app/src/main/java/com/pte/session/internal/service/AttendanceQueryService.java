@@ -128,6 +128,8 @@ public class AttendanceQueryService {
         String normalizedStatus = statusFilter != null ? statusFilter.trim().toUpperCase() : null;
         if ("PRESENT".equals(normalizedStatus)) {
             whereClause.append(" AND (sa.id IS NOT NULL AND sa.enrollment_public_id = e.public_id AND sa.status = 'PRESENT') ");
+        } else if ("LATE".equals(normalizedStatus)) {
+            whereClause.append(" AND (sa.id IS NOT NULL AND sa.enrollment_public_id = e.public_id AND sa.status = 'LATE') ");
         } else if ("ABSENT".equals(normalizedStatus)) {
             whereClause.append(" AND (sa.id IS NOT NULL AND sa.enrollment_public_id = e.public_id AND sa.status = 'ABSENT') ");
         } else if ("UNMARKED".equals(normalizedStatus)) {
@@ -171,7 +173,9 @@ public class AttendanceQueryService {
                 + "  sa.last_actor_public_id, "
                 + "  sa.last_actor_role, "
                 + "  sa.last_action_at, "
-                + "  sa.last_reason_or_note "
+                + "  sa.last_reason_or_note, "
+                + "  sa.identity_status AS sa_identity_status, "
+                + "  sa.identity_note AS sa_identity_note "
                 + "FROM enrollments e "
                 + "LEFT JOIN session_attendances sa ON sa.session_id = e.session_id AND sa.student_public_id = e.student_public_id AND sa.deleted = FALSE "
                 + "LEFT JOIN identity_staff_student_search_view u ON u.tenant_id = e.tenant_id AND u.student_public_id = e.student_public_id "
@@ -202,6 +206,10 @@ public class AttendanceQueryService {
             Timestamp actionTs = isCurrentGen ? rs.getTimestamp("last_action_at") : null;
             Instant lastActionAt = actionTs != null ? actionTs.toInstant() : null;
             String lastReasonOrNote = isCurrentGen ? rs.getString("last_reason_or_note") : null;
+            String identityStatus = isCurrentGen && rs.getString("sa_identity_status") != null
+                    ? rs.getString("sa_identity_status")
+                    : "UNVERIFIED";
+            String identityNote = isCurrentGen ? rs.getString("sa_identity_note") : null;
 
             return new AttendanceRowView(
                     studentId,
@@ -217,7 +225,9 @@ public class AttendanceQueryService {
                     finalCanEditSession,
                     finalSessionBlockingReason,
                     null,
-                    null
+                    null,
+                    identityStatus,
+                    identityNote
             );
         }, dataParams.toArray());
 

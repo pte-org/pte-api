@@ -62,4 +62,10 @@ public class SessionAttendance extends BaseEntity {
 
     @Column(name = "last_reason_or_note", length = 1000)
     private String lastReasonOrNote;
+
+    @Column(name = "identity_status", nullable = false, length = 32)
+    private String identityStatus = "UNVERIFIED";
+
+    @Column(name = "identity_note", length = 1000)
+    private String identityNote;
 }

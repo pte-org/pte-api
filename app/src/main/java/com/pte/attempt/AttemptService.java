@@ -222,4 +222,14 @@ public class AttemptService implements StartedAttemptLookup {
     public boolean attemptBelongsToSession(UUID attemptPublicId, UUID sessionPublicId, UUID tenantId) {
         return proctorCommandService.attemptBelongsToSession(attemptPublicId, sessionPublicId, tenantId);
     }
+
+    /** Checks whether an attempt belongs to the given exam session and tenant, optionally matching a specific student. */
+    public boolean attemptBelongsToSessionAndStudent(UUID attemptPublicId, UUID sessionPublicId, UUID studentPublicId, UUID tenantId) {
+        if (attemptPublicId == null || sessionPublicId == null || tenantId == null) {
+            return false;
+        }
+        return examAttemptRepository.findByPublicIdAndSessionPublicIdAndTenantId(attemptPublicId, sessionPublicId, tenantId)
+                .filter(a -> studentPublicId == null || studentPublicId.equals(a.getStudentPublicId()))
+                .isPresent();
+    }
 }

@@ -2,9 +2,11 @@ package com.pte.proctoring.internal.controller;
 
 import com.pte.proctoring.internal.service.AttendanceCoordinatorService;
 import com.pte.session.dto.request.RecordAttendanceRequest;
+import com.pte.session.dto.request.RecordIdentityVerificationRequest;
 import com.pte.session.dto.response.AttendanceCommandReceiptView;
 import com.pte.session.dto.response.AttendanceHistoryView;
 import com.pte.session.dto.response.AttendancePageView;
+import com.pte.session.dto.response.AttendanceRowView;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -71,5 +73,15 @@ public class ProctorAttendanceController {
         CurrentUser caller = CurrentUserContext.required();
         return ApiResponse.success(attendanceCoordinatorService.getHistory(
                 sessionPublicId, studentPublicId, page, size, caller, false));
+    }
+
+    @PatchMapping("/{sessionPublicId}/attendance/students/{studentPublicId}/identity")
+    public ApiResponse<AttendanceRowView> recordIdentityVerification(
+            @PathVariable UUID sessionPublicId,
+            @PathVariable UUID studentPublicId,
+            @Valid @RequestBody RecordIdentityVerificationRequest request) {
+        CurrentUser caller = CurrentUserContext.required();
+        return ApiResponse.success(attendanceCoordinatorService.recordIdentityVerification(
+                sessionPublicId, studentPublicId, request, caller, false));
     }
 }

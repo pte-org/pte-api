@@ -19,6 +19,8 @@ public record AttendanceRowView(
         boolean canEdit,
         String blockingReason,
         String latestAttemptActivityStatus,
-        Instant latestAttemptActivityAt
+        Instant latestAttemptActivityAt,
+        String identityStatus,
+        String identityNote
 ) {
 }

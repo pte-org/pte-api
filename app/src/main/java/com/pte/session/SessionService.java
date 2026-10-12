@@ -232,4 +232,12 @@ public class SessionService {
             com.pte.shared.security.CurrentUser caller, boolean isHost) {
         return attendanceCommandService.getHistory(sessionPublicId, studentPublicId, page, size, caller, isHost);
     }
+
+    /** Records or updates student identity verification. */
+    public com.pte.session.dto.response.AttendanceRowView recordIdentityVerification(
+            UUID sessionPublicId, UUID studentPublicId,
+            com.pte.session.dto.request.RecordIdentityVerificationRequest request,
+            com.pte.shared.security.CurrentUser caller, boolean isHost) {
+        return attendanceCommandService.recordIdentityVerification(sessionPublicId, studentPublicId, request, caller, isHost);
+    }
 }
