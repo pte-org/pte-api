@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,8 +23,19 @@ public interface ScoringAnswerRepository extends JpaRepository<ScoringAnswer, Lo
     @Query("SELECT s FROM ScoringAnswer s WHERE s.answerPublicId = :answerPublicId")
     Optional<ScoringAnswer> findByAnswerPublicIdForUpdate(@Param("answerPublicId") UUID answerPublicId);
 
-    List<ScoringAnswer> findBySessionPublicIdAndTenantIdAndStatus(UUID sessionPublicId, UUID tenantId,
-            ScoringAnswerStatus status);
+    /**
+     * What a host's scoring request works on: new answers, failed AI answers,
+     * and AI answers whose job was lost — dispatched before {@code staleBefore},
+     * or before dispatch times were recorded. A job still in flight is left
+     * alone; dispatching it again would pay the vendor twice.
+     */
+    @Query("SELECT s FROM ScoringAnswer s WHERE s.sessionPublicId = :sessionPublicId AND s.tenantId = :tenantId "
+            + "AND (s.status IN (com.pte.scoring.domain.enums.ScoringAnswerStatus.PENDING, "
+            + "com.pte.scoring.domain.enums.ScoringAnswerStatus.SCORING_FAILED) "
+            + "OR (s.status = com.pte.scoring.domain.enums.ScoringAnswerStatus.AI_SCORING "
+            + "AND (s.aiDispatchedAt IS NULL OR s.aiDispatchedAt < :staleBefore)))")
+    List<ScoringAnswer> findScoringWork(@Param("sessionPublicId") UUID sessionPublicId,
+            @Param("tenantId") UUID tenantId, @Param("staleBefore") Instant staleBefore);
 
     List<ScoringAnswer> findBySessionPublicIdAndTenantId(UUID sessionPublicId, UUID tenantId);
 
@@ -48,9 +60,17 @@ public interface ScoringAnswerRepository extends JpaRepository<ScoringAnswer, Lo
      */
     @Query("SELECT s FROM ScoringAnswer s WHERE s.tenantId = :tenantId "
             + "AND (:sessionPublicId IS NULL OR s.sessionPublicId = :sessionPublicId) "
+            + "AND (:attemptPublicId IS NULL OR s.attemptPublicId = :attemptPublicId) "
             + "AND (:status IS NULL OR s.status = :status) "
             + "ORDER BY s.createdAt DESC")
     Page<ScoringAnswer> findForReview(@Param("tenantId") UUID tenantId,
-            @Param("sessionPublicId") UUID sessionPublicId, @Param("status") ScoringAnswerStatus status,
-            Pageable pageable);
+            @Param("sessionPublicId") UUID sessionPublicId, @Param("attemptPublicId") UUID attemptPublicId,
+            @Param("status") ScoringAnswerStatus status, Pageable pageable);
+
+    /** Answer counts per attempt and status for one session — the host's per-attempt submissions list. */
+    @Query("SELECT new com.pte.scoring.internal.repository.AttemptStatusCount(s.attemptPublicId, s.status, COUNT(s)) "
+            + "FROM ScoringAnswer s WHERE s.tenantId = :tenantId AND s.sessionPublicId = :sessionPublicId "
+            + "GROUP BY s.attemptPublicId, s.status")
+    List<AttemptStatusCount> countByAttemptAndStatus(@Param("tenantId") UUID tenantId,
+            @Param("sessionPublicId") UUID sessionPublicId);
 }
