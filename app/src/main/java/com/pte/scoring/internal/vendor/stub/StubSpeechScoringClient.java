@@ -3,7 +3,7 @@ package com.pte.scoring.internal.vendor.stub;
 import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.SpeechScoringClient;
 import com.pte.scoring.domain.enums.AiProviderCategory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -20,8 +20,8 @@ import java.util.UUID;
  * on the interface.
  */
 @Component
-@ConditionalOnProperty(
-        name = "scoring.ai.provider", havingValue = "stub", matchIfMissing = true)
+// azure-gemini keeps the stub until its scorers replace it; STUB results are never publishable.
+@ConditionalOnExpression("'${scoring.ai.provider:stub}' == 'stub' or '${scoring.ai.provider:stub}' == 'azure-gemini'")
 public class StubSpeechScoringClient implements SpeechScoringClient {
 
     private static final int PLACEHOLDER_SCORE = 65;
