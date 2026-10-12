@@ -198,10 +198,11 @@ public class ExaminerWorkspaceReadRepository {
                     has_outstanding_answers
                 FROM assignment_scores
                 """ + whereClause + orderClause + """
+
                 LIMIT :limit OFFSET :offset
                 """;
 
-        String countSql = CTE_SQL + "SELECT COUNT(*) FROM assignment_scores" + whereClause;
+        String countSql = CTE_SQL + "\nSELECT COUNT(*) FROM assignment_scores" + whereClause + "\n";
 
         Query selectQuery = entityManager.createNativeQuery(selectSql)
                 .setParameter("tenantId", tenantId)

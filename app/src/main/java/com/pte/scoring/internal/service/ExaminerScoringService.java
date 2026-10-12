@@ -61,9 +61,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.Comparator;
@@ -395,6 +397,14 @@ public class ExaminerScoringService {
                 .stream()
                 .filter(a -> a.getAttemptPublicId().equals(answer.getAttemptPublicId()))
                 .findFirst().orElse(null);
+
+        if (assignment != null && workflowQueryService != null) {
+            ExaminerWorkflowView workflow = workflowQueryService.buildWorkflowView(assignment, examiner.tenantId());
+            if (workflow != null && "ATOMIC_DRAFT".equals(workflow.mode())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Single-item score submission is disabled for ATOMIC_DRAFT workflow. Use draft and atomic finalize.");
+            }
+        }
 
         GradingCohort cohort = gradingCohortRepository != null
                 ? gradingCohortRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(
