@@ -10,6 +10,11 @@ import java.util.UUID;
 
 public interface ExaminerAttemptAssignmentRepository extends JpaRepository<ExaminerAttemptAssignment, Long> {
 
+    org.springframework.data.domain.Slice<StaffAssignmentRow>
+            findByTenantIdAndExaminerPublicIdAndSessionPublicIdInAndDeletedFalse(
+                    UUID tenantId, UUID examinerPublicId, List<UUID> sessionPublicIds,
+                    org.springframework.data.domain.Pageable pageable);
+
     boolean existsByTenantIdAndSessionPublicIdAndAttemptPublicIdAndExaminerPublicId(
             UUID tenantId, UUID sessionPublicId, UUID attemptPublicId, UUID examinerPublicId);
 

@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
@@ -16,7 +17,29 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long> {
+public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long>,
+        JpaSpecificationExecutor<ExamAttempt> {
+
+    @Query("select a.publicId as attemptPublicId, a.sessionPublicId as sessionPublicId, "
+            + "p.publicId as pinnedPublicId, p.scoreTemplatePublicId as scoreTemplatePublicId, "
+            + "p.tenantId as pinnedTenantId, p.sourceSessionPublicId as pinnedSessionPublicId "
+            + "from ExamAttempt a left join a.pinnedSnapshot p on p.deleted = false "
+            + "where a.tenantId = :tenantId and a.publicId in :ids and a.deleted = false")
+    List<StaffContextRow> findStaffContexts(@Param("tenantId") UUID tenantId, @Param("ids") List<UUID> ids);
+
+    @Query("select a.publicId as attemptPublicId, coalesce(i.taskTypeKey, i.taskType) as taskType, "
+            + "count(i.id) as taskCount from ExamAttempt a join a.pinnedSnapshot p join p.items i "
+            + "where a.tenantId = :tenantId and a.publicId in :ids and a.deleted = false "
+            + "and p.deleted = false and i.deleted = false and p.tenantId = :tenantId "
+            + "and p.sourceSessionPublicId = a.sessionPublicId "
+            + "group by a.publicId, coalesce(i.taskTypeKey, i.taskType)")
+    List<StaffTaskCountRow> countStaffPinnedTasks(@Param("tenantId") UUID tenantId, @Param("ids") List<UUID> ids);
+
+    interface StaffContextRow {
+        UUID getAttemptPublicId(); UUID getSessionPublicId(); UUID getPinnedPublicId();
+        UUID getScoreTemplatePublicId(); UUID getPinnedTenantId(); UUID getPinnedSessionPublicId();
+    }
+    interface StaffTaskCountRow { UUID getAttemptPublicId(); String getTaskType(); long getTaskCount(); }
 
     Optional<ExamAttempt> findBySessionPublicIdAndStudentPublicId(UUID sessionPublicId, UUID studentPublicId);
 

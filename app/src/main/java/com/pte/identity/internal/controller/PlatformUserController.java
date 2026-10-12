@@ -42,9 +42,10 @@ public class PlatformUserController {
     public ApiResponse<PagedResult<UserResponse>> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String search,
             @RequestParam(required = false) String role,
             @RequestParam(required = false) String status) {
-        return ApiResponse.success(platformUserService.list(page, size, role, status, currentUser()));
+        return ApiResponse.success(platformUserService.list(page, size, search, role, status, currentUser()));
     }
 
     @GetMapping("/{publicId}")

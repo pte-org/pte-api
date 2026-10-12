@@ -13,7 +13,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> {
+public interface ExamSessionRepository extends JpaRepository<ExamSession, Long>,
+        org.springframework.data.jpa.repository.JpaSpecificationExecutor<ExamSession> {
 
     Optional<ExamSession> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 
@@ -37,6 +38,8 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long> 
 
     /** Newest first — the host exam list shows sessions in this order by default. */
     List<ExamSession> findByTenantIdOrderByCreatedAtDescIdDesc(UUID tenantId);
+
+    List<ExamSession> findByTenantIdAndPublicIdInAndDeletedFalse(UUID tenantId, List<UUID> publicIds);
 
     @Query("SELECT s FROM ExamSession s WHERE s.deleted = false "
             + "AND s.status = com.pte.session.domain.enums.SessionStatus.OPEN "

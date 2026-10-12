@@ -4,10 +4,12 @@ import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.domain.enums.FormMode;
 import com.pte.session.domain.enums.ReusePolicy;
 import com.pte.session.domain.enums.ExamMode;
+import com.pte.session.domain.converter.ExamModeCompatibilityConverter;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Convert;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -75,7 +77,7 @@ public class ExamSession extends BaseEntity {
     @Column(name = "form_mode", length = 32)
     private FormMode formMode = FormMode.SHARED_FORM;
 
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = ExamModeCompatibilityConverter.class)
     @Column(name = "exam_mode", length = 16)
     private ExamMode examMode = ExamMode.OFFICIAL_EXAM;
 
