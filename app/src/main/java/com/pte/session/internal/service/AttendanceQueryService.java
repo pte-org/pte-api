@@ -247,6 +247,7 @@ public class AttendanceQueryService {
                 + "  COUNT(e.id) AS total_enrollments, "
                 + "  COUNT(CASE WHEN sa.id IS NOT NULL AND sa.enrollment_public_id = e.public_id AND sa.status = 'PRESENT' THEN 1 END) AS present_count, "
                 + "  COUNT(CASE WHEN sa.id IS NOT NULL AND sa.enrollment_public_id = e.public_id AND sa.status = 'ABSENT' THEN 1 END) AS absent_count, "
+                + "  COUNT(CASE WHEN sa.id IS NOT NULL AND sa.enrollment_public_id = e.public_id AND sa.status = 'LATE' THEN 1 END) AS late_count, "
                 + "  COUNT(CASE WHEN sa.id IS NULL OR sa.enrollment_public_id != e.public_id OR sa.status = 'UNMARKED' THEN 1 END) AS unmarked_count "
                 + "FROM enrollments e "
                 + "LEFT JOIN session_attendances sa ON sa.session_id = e.session_id AND sa.student_public_id = e.student_public_id AND sa.deleted = FALSE "
@@ -258,10 +259,11 @@ public class AttendanceQueryService {
                         rs.getLong("total_enrollments"),
                         rs.getLong("unmarked_count"),
                         rs.getLong("present_count"),
-                        rs.getLong("absent_count")
+                        rs.getLong("absent_count"),
+                        rs.getLong("late_count")
                 );
             }
-            return new AttendanceSummaryView(0L, 0L, 0L, 0L);
+            return new AttendanceSummaryView(0L, 0L, 0L, 0L, 0L);
         }, sessionId, tenantId);
     }
 }
