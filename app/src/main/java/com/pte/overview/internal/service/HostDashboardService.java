@@ -48,13 +48,15 @@ public class HostDashboardService {
     private final SessionOverviewService sessions;
     private final AttemptOverviewService attemptOverview;
     private final TenancyService tenancy;
+    private final HostOperationsSections operations;
     private final DashboardSectionRunner runner;
     private final DashboardCache cache;
     private final Clock clock;
 
     public HostDashboardService(IdentityOverviewService identity, EnrollmentOverviewService enrollment,
             SessionOverviewService sessions, AttemptOverviewService attemptOverview, TenancyService tenancy,
-            DashboardSectionRunner runner, DashboardCache cache, Clock clock) {
+            HostOperationsSections operations, DashboardSectionRunner runner, DashboardCache cache, Clock clock) {
+        this.operations = operations;
         this.identity = identity;
         this.enrollment = enrollment;
         this.sessions = sessions;
@@ -76,7 +78,12 @@ public class HostDashboardService {
                 runner.run(OverviewConstants.SECTION_ACADEMICS, () -> academics(tenantId)),
                 runner.run(OverviewConstants.SECTION_STAFF, () -> staff(tenantId)),
                 runner.run(OverviewConstants.SECTION_EXAMS, () -> exams(tenantId, window)),
-                runner.run(OverviewConstants.SECTION_ATTEMPTS, () -> attempts(tenantId, window)));
+                runner.run(OverviewConstants.SECTION_ATTEMPTS, () -> attempts(tenantId, window)),
+                runner.run(OverviewConstants.SECTION_GRADING, () -> operations.grading(tenantId, window.days())),
+                runner.run(OverviewConstants.SECTION_SUBSCRIPTION, () -> operations.subscription(tenantId)),
+                runner.run(OverviewConstants.SECTION_BILLING, () -> operations.billing(tenantId)),
+                runner.run(OverviewConstants.SECTION_SUPPORT, () -> operations.support(tenantId)),
+                runner.run(OverviewConstants.SECTION_RECENT_ACTIVITY, () -> operations.recentActivity(tenantId)));
     }
 
     private Learners learners(UUID tenantId, DashboardWindow w) {
