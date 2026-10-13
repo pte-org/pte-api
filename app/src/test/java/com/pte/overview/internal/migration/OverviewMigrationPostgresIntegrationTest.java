@@ -26,6 +26,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -70,8 +71,20 @@ class OverviewMigrationPostgresIntegrationTest {
     private static final String V95_RESOURCE = "db/migration/V95__overview_host_commercial_ops_indexes.sql";
     private static final AtomicBoolean MIGRATED = new AtomicBoolean();
 
+    private static final String V96_RESOURCE = "db/migration/V96__overview_admin_dashboard_indexes.sql";
+
     private static final Set<String> V95_INDEXES = Set.of(
             "idx_attempt_reports_tenant_unpublished", "idx_audit_logs_tenant_created");
+
+    /** index -> {table, key columns} of the six platform-wide (no tenant prefix) Phase 3 indexes. */
+    private static final Map<String, String[]> V96_INDEX_SHAPES = Map.of(
+            "idx_attempts_started", new String[]{"exam_attempts", "(started_at)"},
+            "idx_attempts_submitted", new String[]{"exam_attempts", "(submitted_at)"},
+            "idx_subscriptions_status_expires", new String[]{"subscriptions", "(status, expires_at)"},
+            "idx_support_ticket_status_created", new String[]{"support_ticket", "(status, created_at)"},
+            "idx_tenant_applications_status_created", new String[]{"tenant_applications", "(status, created_at)"},
+            "idx_tenants_created", new String[]{"tenants", "(created_at)"});
+    private static final Set<String> V96_INDEXES = V96_INDEX_SHAPES.keySet();
 
     private static final Set<String> V94_INDEXES = Set.of(
             "idx_attempts_tenant_submitted", "idx_attempts_tenant_started", "idx_attempts_tenant_status",
@@ -130,7 +143,7 @@ class OverviewMigrationPostgresIntegrationTest {
     }
 
     @Test
-    void everyMigrationAppliedFromAnEmptySchemaThroughV95() {
+    void everyMigrationAppliedFromAnEmptySchemaThroughV96() {
         Integer failed = jdbc.queryForObject(
                 "select count(*) from " + SCHEMA + ".flyway_schema_history where success = false", Integer.class);
         Integer versionedApplied = jdbc.queryForObject(
@@ -141,10 +154,53 @@ class OverviewMigrationPostgresIntegrationTest {
                 String.class);
 
         assertThat(failed).isZero();
-        assertThat(versionedApplied).isGreaterThanOrEqualTo(95);
-        assertThat(versions).contains("94", "95");
+        assertThat(versionedApplied).isGreaterThanOrEqualTo(96);
+        assertThat(versions).contains("94", "95", "96");
         assertThat(versions.stream().mapToInt(v -> Integer.parseInt(v.split("\\.")[0])).max().orElse(0))
-                .isGreaterThanOrEqualTo(95);
+                .isGreaterThanOrEqualTo(96);
+    }
+
+    @Test
+    void v96CreatedTheSixPlatformWideIndexesAsPartialDefinitionsOnTheRightTables() {
+        Map<String, String> definitions = jdbc.queryForList(
+                        "select indexname, indexdef from pg_indexes where schemaname = ?", SCHEMA).stream()
+                .collect(Collectors.toMap(row -> (String) row.get("indexname"), row -> (String) row.get("indexdef")));
+
+        assertThat(V96_INDEXES).hasSize(6);
+        assertThat(definitions.keySet()).containsAll(V96_INDEXES);
+        V96_INDEX_SHAPES.forEach((index, shape) -> {
+            String definition = definitions.get(index);
+            assertThat(definition).as(index).contains(" ON " + SCHEMA + "." + shape[0] + " USING btree " + shape[1])
+                    .contains("WHERE (deleted = false)");
+            // platform-wide queries: no tenant prefix on any of the six
+            assertThat(definition).as(index).doesNotContain("tenant_id");
+        });
+    }
+
+    @Test
+    void v96IsIdempotentWhenReplayedAgainstTheMigratedSchema() throws Exception {
+        String script = new String(new ClassPathResource(V96_RESOURCE).getInputStream().readAllBytes(),
+                StandardCharsets.UTF_8);
+        String before = definitionsOf(V96_INDEXES);
+        try (Connection connection = DriverManager.getConnection(url());
+             Statement statement = connection.createStatement()) {
+            statement.execute("set search_path to " + SCHEMA);
+            statement.execute(script);
+            statement.execute(script);
+        }
+        Integer indexCount = jdbc.queryForObject("select count(*) from pg_indexes where schemaname = ? and indexname in ("
+                + V96_INDEXES.stream().map(name -> "'" + name + "'").collect(Collectors.joining(", ")) + ")",
+                Integer.class, SCHEMA);
+
+        assertThat(indexCount).isEqualTo(V96_INDEXES.size());
+        assertThat(definitionsOf(V96_INDEXES)).as("definitions unchanged by the replay").isEqualTo(before);
+    }
+
+    private String definitionsOf(Set<String> indexes) {
+        return jdbc.queryForList("select indexname || ' => ' || indexdef from pg_indexes where schemaname = ? "
+                        + "and indexname in (" + indexes.stream().map(name -> "'" + name + "'")
+                        .collect(Collectors.joining(", ")) + ") order by indexname", String.class, SCHEMA)
+                .stream().collect(Collectors.joining("\n"));
     }
 
     @Test
@@ -397,6 +453,300 @@ class OverviewMigrationPostgresIntegrationTest {
         assertThat(failures).isEmpty();
     }
 
+    // ---- EXPLAIN of the Phase 3 (platform-wide admin) queries ----
+
+    private static final int P3_TENANTS = 30;
+    private static final int P3_PER_TENANT = 2000;
+    private static final int P3_TENANT_ROWS = 4000;
+    private static final int P3_APPLICATIONS = 12000;
+    private static final int P3_LICENSES = 30000;
+
+    /** One platform-wide query: its SQL, the index that must be USABLE (forced plan) and whether the default planner must pick an index. */
+    private record PlatformQuery(String name, String sql, String usableIndex, boolean indexedByDefault) {
+    }
+
+    @Test
+    void phaseThreePlatformWideQueriesAndTheirPlans() throws Exception {
+        UUID[] tenants = new UUID[P3_TENANTS];
+        for (int i = 0; i < tenants.length; i++) {
+            tenants[i] = UUID.randomUUID();
+        }
+        seedPhaseThree(tenants);
+
+        String s = SCHEMA + ".";
+        String last30 = "now() - interval '30 days'";
+        List<PlatformQuery> queries = List.of(
+                new PlatformQuery("platform distinct active students (started_at, current 30d)",
+                        "select count(distinct a.student_public_id) from " + s + "exam_attempts a where a.deleted = false "
+                                + "and a.started_at >= " + last30 + " and a.started_at < now()",
+                        "idx_attempts_started", true),
+                new PlatformQuery("platform distinct active students (started_at, previous 30d)",
+                        "select count(distinct a.student_public_id) from " + s + "exam_attempts a where a.deleted = false "
+                                + "and a.started_at >= now() - interval '60 days' and a.started_at < " + last30,
+                        "idx_attempts_started", true),
+                new PlatformQuery("platform submitted in window",
+                        "select count(a.id) from " + s + "exam_attempts a where a.deleted = false and a.status = 'SUBMITTED' "
+                                + "and a.submitted_at >= " + last30 + " and a.submitted_at < now()",
+                        "idx_attempts_submitted", true),
+                // the REAL query since PERF-001: UserRepository.countByRoleGroupedByTenant uses count(u.id)
+                new PlatformQuery("students per tenant (users join user_roles, grouped by tenant, count(u.id) = production query)",
+                        "select u.tenant_id, count(u.id) from " + s + "users u join " + s + "user_roles r "
+                                + "on r.user_id = u.id where r.role = 'STUDENT' and u.deleted = false "
+                                + "and u.tenant_id is not null group by u.tenant_id",
+                        null, false),
+                // comparison only: the query before PERF-001 was resolved (count(distinct) forces a sort that spills to disk)
+                new PlatformQuery("students per tenant - count(distinct u.id) (PREVIOUS query, comparison only)",
+                        "select u.tenant_id, count(distinct u.id) from " + s + "users u join " + s + "user_roles r "
+                                + "on r.user_id = u.id where r.role = 'STUDENT' and u.deleted = false "
+                                + "and u.tenant_id is not null group by u.tenant_id",
+                        null, false),
+                new PlatformQuery("subscriptions usable now (count)",
+                        "select count(s.id) from " + s + "subscriptions s where s.deleted = false and s.status = 'ACTIVE' "
+                                + "and s.starts_at <= now() and s.expires_at > now()",
+                        "idx_subscriptions_status_expires", true),
+                new PlatformQuery("subscriptions usable and expiring within 30 days (count)",
+                        "select count(s.id) from " + s + "subscriptions s where s.deleted = false and s.status = 'ACTIVE' "
+                                + "and s.starts_at <= now() and s.expires_at > now() and s.expires_at <= now() + interval '30 days'",
+                        "idx_subscriptions_status_expires", true),
+                new PlatformQuery("subscriptions activated in window by source (created_at range)",
+                        "select s.activation_source, count(s.id) from " + s + "subscriptions s where s.deleted = false "
+                                + "and s.created_at >= " + last30 + " and s.created_at < now() group by s.activation_source",
+                        null, false),
+                new PlatformQuery("support tickets grouped by status (platform-wide)",
+                        "select t.status, count(t.id) from " + s + "support_ticket t where t.deleted = false group by t.status",
+                        "idx_support_ticket_status_created", false),
+                new PlatformQuery("support tickets opened in window (created_at range)",
+                        "select count(t.id) from " + s + "support_ticket t where t.deleted = false "
+                                + "and t.created_at >= " + last30 + " and t.created_at < now()",
+                        null, false),
+                new PlatformQuery("support oldest 5 OPEN tickets",
+                        "select t.* from " + s + "support_ticket t where t.deleted = false and t.status = 'OPEN' "
+                                + "order by t.created_at asc, t.id asc limit 5",
+                        "idx_support_ticket_status_created", true),
+                new PlatformQuery("applications pending (count)",
+                        "select count(a.id) from " + s + "tenant_applications a where a.deleted = false and a.status = 'PENDING'",
+                        "idx_tenant_applications_status_created|uq_application_code_active", true),
+                new PlatformQuery("applications oldest 5 pending",
+                        "select a.* from " + s + "tenant_applications a where a.deleted = false and a.status = 'PENDING' "
+                                + "order by a.created_at asc, a.id asc limit 5",
+                        "idx_tenant_applications_status_created", true),
+                new PlatformQuery("applications received in window (created_at range)",
+                        "select count(a.id) from " + s + "tenant_applications a where a.deleted = false "
+                                + "and a.created_at >= " + last30 + " and a.created_at < now()",
+                        null, false),
+                new PlatformQuery("tenants created in window (count)",
+                        "select count(t.id) from " + s + "tenants t where t.deleted = false and t.created_at >= " + last30
+                                + " and t.created_at < now()",
+                        "idx_tenants_created", true),
+                new PlatformQuery("tenants growth series (one month bucket)",
+                        "select count(t.id) from " + s + "tenants t where t.deleted = false "
+                                + "and t.created_at >= date_trunc('month', now() - interval '3 months') "
+                                + "and t.created_at < date_trunc('month', now() - interval '2 months')",
+                        "idx_tenants_created", true),
+                new PlatformQuery("recent tenants (newest 5)",
+                        "select t.* from " + s + "tenants t where t.deleted = false order by t.created_at desc, t.id desc limit 5",
+                        "idx_tenants_created", true),
+                new PlatformQuery("tenants grouped by status",
+                        "select t.status, count(t.id) from " + s + "tenants t where t.deleted = false group by t.status",
+                        null, false),
+                new PlatformQuery("license codes grouped by stored status",
+                        "select c.status, count(c.id) from " + s + "license_codes c where c.deleted = false group by c.status",
+                        null, false),
+                new PlatformQuery("license codes ISSUED past expiry (derived expired)",
+                        "select count(c.id) from " + s + "license_codes c where c.deleted = false and c.status = 'ISSUED' "
+                                + "and c.code_expires_at is not null and c.code_expires_at <= now()",
+                        "idx_license_codes_status_expiry", false),
+                new PlatformQuery("license codes ISSUED expiring within 7 days",
+                        "select count(c.id) from " + s + "license_codes c where c.deleted = false and c.status = 'ISSUED' "
+                                + "and c.code_expires_at > now() and c.code_expires_at <= now() + interval '7 days'",
+                        "idx_license_codes_status_expiry", false),
+                new PlatformQuery("license codes redeemed in window",
+                        "select count(c.id) from " + s + "license_codes c where c.deleted = false "
+                                + "and c.redeemed_at >= " + last30 + " and c.redeemed_at < now()",
+                        null, false),
+                new PlatformQuery("plans grouped by status and by type",
+                        "select p.status, p.type, count(p.id) from " + s + "plans p where p.deleted = false group by p.status, p.type",
+                        null, false));
+
+        StringBuilder report = new StringBuilder("EXPLAIN (ANALYZE) of Phase 3 platform-wide admin dashboard queries\n\nSeed (plus rows left by "
+                + "the other tests of this class in the same scratch schema):\n");
+        for (String table : List.of("exam_attempts", "users", "user_roles", "subscriptions", "support_ticket",
+                "tenant_applications", "tenants", "license_codes", "plans")) {
+            report.append("  ").append(table).append(": ")
+                    .append(jdbc.queryForObject("select count(*) from " + SCHEMA + "." + table, Long.class)).append(" rows\n");
+        }
+        report.append("  attempts started in the last 30 days: ").append(jdbc.queryForObject("select count(*) from " + SCHEMA
+                + ".exam_attempts where started_at >= now() - interval '30 days'", Long.class)).append('\n');
+        report.append("  distinct tenants with students: ").append(jdbc.queryForObject("select count(distinct tenant_id) from "
+                + SCHEMA + ".users", Long.class)).append('\n');
+        report.append("\nIndexes on the queried tables:\n");
+        jdbc.queryForList("select tablename, indexdef from pg_indexes where schemaname = ? and tablename in "
+                        + "('exam_attempts','users','user_roles','subscriptions','support_ticket','tenant_applications',"
+                        + "'tenants','license_codes','plans') order by tablename, indexname", SCHEMA)
+                .forEach(row -> report.append("  ").append(row.get("indexdef")).append('\n'));
+
+        List<String> failures = new ArrayList<>();
+        StringBuilder verdicts = new StringBuilder("\n=== VERDICTS ===\n");
+        for (PlatformQuery query : queries) {
+            String natural = explain(query.sql(), false);
+            String forced = explain(query.sql(), true);
+            report.append("\n--- ").append(query.name()).append(" [planner default]\n").append(natural)
+                    .append("\n--- ").append(query.name()).append(" [enable_seqscan=off]\n").append(forced).append('\n');
+            boolean naturalSeqScan = natural.contains("Seq Scan");
+            verdicts.append(query.name()).append(": default planner -> ").append(summarisePlan(natural))
+                    .append("; forced -> ").append(summarisePlan(forced)).append('\n');
+            // "a|b": either index satisfies the intent (e.g. the pre-existing partial unique index on PENDING rows)
+            if (query.usableIndex() != null && Arrays.stream(query.usableIndex().split("\\|")).noneMatch(forced::contains)) {
+                failures.add(query.name() + " cannot use " + query.usableIndex() + " even with sequential scans disabled");
+            }
+            if (query.indexedByDefault() && (!natural.contains("Index") || naturalSeqScan)) {
+                failures.add(query.name() + " does not use an index with the default planner settings");
+            }
+            if (query.usableIndex() == null && naturalSeqScan) {
+                verdicts.append("  note: default planner sequentially scans a table for this query (no covering index by design)\n");
+            }
+        }
+        report.append(verdicts);
+        Files.writeString(Path.of("target", "overview-explain-plans-phase3.txt"), report.toString(), StandardCharsets.UTF_8);
+        System.out.println(report);
+
+        assertThat(failures).isEmpty();
+    }
+
+    /**
+     * Plain-SQL seed of the platform-wide tables: 30 tenants interleaved in chunks, attempts/users/tickets/subscriptions
+     * with time columns growing in insertion order, a skewed status mix like production, then VACUUM ANALYZE.
+     * No entity or repository of another module is used.
+     */
+    private void seedPhaseThree(UUID[] tenants) {
+        int copies = P3_PER_TENANT;
+        long[] attempts = new long[tenants.length];
+        long[] users = new long[tenants.length];
+        long[] tickets = new long[tenants.length];
+        long[] subs = new long[tenants.length];
+        for (int i = 0; i < tenants.length; i++) {
+            String t = "'" + tenants[i] + "'::uuid";
+            attempts[i] = attemptTemplate(tenants[i]);
+            users[i] = userTemplate(tenants[i]);
+            tickets[i] = insertBaseRow("support_ticket", Map.of("tenant_id", t, "status", "'OPEN'", "category", "'BUG'"));
+            subs[i] = insertBaseRow("subscriptions", Map.of("tenant_id", t, "status", "'ACTIVE'",
+                    "activation_source", "'LICENSE_CODE'", "license_key", "substr(md5(random()::text), 1, 32)",
+                    "starts_at", "now()", "expires_at", "now() + interval '1 day'", "max_students_per_session", "30"));
+        }
+        long tenantTemplate = insertBaseRow("tenants", Map.of("code", "'p3tpl'", "name", "'p3tpl'",
+                "organization_type", "'SCHOOL'", "status", "'ACTIVE'", "package_name", "'starter'",
+                "student_limit", "100"));
+        long applicationTemplate = insertBaseRow("tenant_applications", Map.of("org_name", "'p3tpl'",
+                "org_type", "'SCHOOL'", "requested_code", "'p3tpl'", "contact_email", "'p3tpl@example.test'",
+                "status", "'PENDING'"));
+        long licenseTemplate = insertBaseRow("license_codes", Map.of("code", "'P3TPL'", "status", "'ISSUED'"));
+        for (int p = 0; p < 40; p++) {
+            Map<String, String> plan = new LinkedHashMap<>();
+            plan.put("name", "'p3 plan " + p + "'");
+            plan.put("status", "(array['ACTIVE','DRAFT','ARCHIVED'])[1 + " + (p % 3) + "]");
+            plan.put("currency", "'VND'");
+            plan.put("price", "100000");
+            if (p % 4 == 0) { // chk_plans_family_fields: capacity plans carry slots only
+                plan.put("type", "'STUDENT_CAPACITY'");
+                plan.put("extra_student_slots", "100");
+            } else {
+                plan.put("type", "'EXAM_PACKAGE'");
+                plan.put("duration_days", "365");
+                plan.put("max_students_per_session", "30");
+            }
+            insertBaseRow("plans", plan);
+        }
+
+        cloneInterleaved("exam_attempts", attempts, tenants, copies, tenant -> {
+            Map<String, String> o = new LinkedHashMap<>();
+            o.put("public_id", "gen_random_uuid()");
+            o.put("session_public_id", "gen_random_uuid()");
+            o.put("student_public_id", "md5((g % 400)::text || t.tenant_id::text)::uuid");
+            o.put("tenant_id", "'" + tenant + "'::uuid");
+            o.put("status", "case when g % 30 = 0 then 'IN_PROGRESS' else 'SUBMITTED' end");
+            o.put("started_at", "now() - (" + copies + " - g) * interval '5 hours'");
+            o.put("submitted_at", "case when g % 30 = 0 then null else now() - (" + copies
+                    + " - g) * interval '5 hours' + interval '40 minutes' end");
+            o.put("deleted", "(g % 97 = 0)");
+            return o;
+        });
+        cloneInterleaved("users", users, tenants, copies, tenant -> {
+            Map<String, String> o = new LinkedHashMap<>();
+            o.put("public_id", "gen_random_uuid()");
+            o.put("tenant_id", "'" + tenant + "'::uuid");
+            o.put("username", "'p3seed-' || g || '-' || t.tenant_id");
+            o.put("email", "'p3seed-' || g || '-' || t.tenant_id || '@example.test'");
+            o.put("created_at", "now() - (" + copies + " - g) * interval '5 hours'");
+            o.put("deleted", "(g % 33 = 0)");
+            return o;
+        });
+        jdbc.update("insert into " + SCHEMA + ".user_roles (user_id, role) select u.id, 'STUDENT' from " + SCHEMA
+                + ".users u where u.username like 'p3seed-%'");
+        jdbc.update("insert into " + SCHEMA + ".user_roles (user_id, role) select u.id, 'HOST_ADMIN' from " + SCHEMA
+                + ".users u where u.username like 'p3seed-%' and u.id % 50 = 0");
+        cloneInterleaved("support_ticket", tickets, tenants, copies / 2, tenant -> {
+            Map<String, String> o = new LinkedHashMap<>();
+            o.put("public_id", "gen_random_uuid()");
+            o.put("tenant_id", "'" + tenant + "'::uuid");
+            o.put("status", "case when g % 20 = 0 then 'OPEN' when g % 20 = 1 then 'IN_PROGRESS' "
+                    + "when g % 10 = 2 then 'RESOLVED' else 'CLOSED' end");
+            o.put("created_at", "now() - (" + (copies / 2) + " - g) * interval '10 hours'");
+            return o;
+        });
+        cloneInterleaved("subscriptions", subs, tenants, copies / 2, tenant -> {
+            Map<String, String> o = new LinkedHashMap<>();
+            o.put("public_id", "gen_random_uuid()");
+            o.put("license_key", "substr(md5('p3' || g::text || t.tenant_id::text), 1, 32)");
+            o.put("tenant_id", "'" + tenant + "'::uuid");
+            o.put("status", "case when g % 10 = 0 then 'ACTIVE' when g % 25 = 1 then 'CANCELLED' else 'EXPIRED' end");
+            o.put("activation_source", "case when g % 2 = 0 then 'PAYMENT' else 'LICENSE_CODE' end");
+            o.put("starts_at", "now() - interval '400 days'");
+            o.put("expires_at", "case when g % 10 = 0 then now() + ((g % 300) - 30) * interval '1 day' "
+                    + "else now() - interval '400 days' + g * interval '1 day' end");
+            o.put("created_at", "now() - (" + (copies / 2) + " - g) * interval '10 hours'");
+            return o;
+        });
+        cloneInterleaved("tenants", new long[]{tenantTemplate}, new UUID[]{UUID.randomUUID()}, P3_TENANT_ROWS, tenant -> {
+            Map<String, String> o = new LinkedHashMap<>();
+            o.put("public_id", "gen_random_uuid()");
+            o.put("code", "'p3-' || g");
+            o.put("name", "'p3 tenant ' || g");
+            o.put("status", "case when g % 15 = 0 then 'SUSPENDED' else 'ACTIVE' end");
+            o.put("organization_type", "(array['SCHOOL','CENTER','UNIVERSITY'])[1 + g % 3]");
+            o.put("created_at", "now() - (" + P3_TENANT_ROWS + " - g) * interval '5 hours'");
+            o.put("deleted", "(g % 50 = 0)");
+            return o;
+        });
+        cloneInterleaved("tenant_applications", new long[]{applicationTemplate}, new UUID[]{UUID.randomUUID()},
+                P3_APPLICATIONS, tenant -> {
+                    Map<String, String> o = new LinkedHashMap<>();
+                    o.put("public_id", "gen_random_uuid()");
+                    o.put("requested_code", "'rc-' || g");
+                    o.put("status", "case when g % 33 = 0 then 'PENDING' when g % 6 = 0 then 'REJECTED' else 'APPROVED' end");
+                    o.put("created_at", "now() - (" + P3_APPLICATIONS + " - g) * interval '1 hour'");
+                    return o;
+                });
+        cloneInterleaved("license_codes", new long[]{licenseTemplate}, new UUID[]{UUID.randomUUID()}, P3_LICENSES,
+                tenant -> {
+                    Map<String, String> o = new LinkedHashMap<>();
+                    o.put("public_id", "gen_random_uuid()");
+                    o.put("code", "'P3-' || g");
+                    o.put("plan_id", "gen_random_uuid()");
+                    o.put("status", "case when g % 10 < 6 then 'ISSUED' when g % 10 < 9 then 'REDEEMED' "
+                            + "when g % 20 = 9 then 'REVOKED' else 'EXPIRED' end");
+                    o.put("code_expires_at", "case when g % 3 = 0 then null when g % 3 = 1 "
+                            + "then now() + (g % 90) * interval '1 day' else now() - (g % 90) * interval '1 day' end");
+                    o.put("redeemed_at", "case when g % 10 between 6 and 8 then now() - (g % 400) * interval '1 day' end");
+                    o.put("redeemed_by_tenant_id", "case when g % 10 between 6 and 8 then gen_random_uuid() end");
+                    o.put("issued_at", "now() - interval '500 days' + g * interval '1 hour'");
+                    return o;
+                });
+        for (String table : List.of("exam_attempts", "users", "user_roles", "subscriptions", "support_ticket",
+                "tenant_applications", "tenants", "license_codes", "plans")) {
+            jdbc.execute("vacuum (analyze) " + SCHEMA + "." + table);
+        }
+    }
+
     private static String summarisePlan(String plan) {
         List<String> nodes = new ArrayList<>();
         for (String line : plan.split("\n")) {
@@ -515,7 +865,7 @@ class OverviewMigrationPostgresIntegrationTest {
             try (Statement statement = connection.createStatement()) {
                 statement.execute("set enable_seqscan = " + (forceIndexes ? "off" : "on"));
                 try (ResultSet rows = statement.executeQuery(
-                        "explain (analyze, timing off, summary off) " + sql)) {
+                        "explain (analyze, timing off, summary on) " + sql)) {
                     StringBuilder plan = new StringBuilder();
                     while (rows.next()) {
                         plan.append(rows.getString(1)).append('\n');
@@ -534,35 +884,53 @@ class OverviewMigrationPostgresIntegrationTest {
      * grow with insertion order (like real data); then VACUUM ANALYZE.
      */
     private void seed(UUID tenantA, UUID tenantB) {
-        UUID[] tenants = {tenantA, tenantB};
-        long[] attemptIds = {attemptTemplate(tenantA), attemptTemplate(tenantB)};
-        long[] userIds = {userTemplate(tenantA), userTemplate(tenantB)};
+        // Phase 3 realism fix: the seed used to hold only two tenants (tenant A = 50 percent of every table). Since V96 added
+        // the platform-wide time indexes, a 50 percent tenant filter makes the planner prefer those narrow time-only indexes
+        // over the tenant-leading ones, which is correct for that skew but not what production looks like. Twenty tenants
+        // interleaved (tenant A = 5 percent) keep the same row counts and restore a production-like tenant selectivity.
+        int tenantCount = 20;
+        UUID[] tenants = new UUID[tenantCount];
+        tenants[0] = tenantA;
+        tenants[1] = tenantB;
+        for (int i = 2; i < tenantCount; i++) {
+            tenants[i] = UUID.randomUUID();
+        }
+        long[] attemptIds = new long[tenantCount];
+        long[] userIds = new long[tenantCount];
+        for (int i = 0; i < tenantCount; i++) {
+            attemptIds[i] = attemptTemplate(tenants[i]);
+            userIds[i] = userTemplate(tenants[i]);
+        }
+        // sessions are untouched by V96 and keep the original two-tenant shape
+        UUID[] sessionTenants = {tenantA, tenantB};
         long[] sessionIds = {sessionTemplate(tenantA), sessionTemplate(tenantB)};
+        int attemptCopies = 2000; // x 20 tenants = 40000 rows, same totals as before
+        int sessionCopies = 60000;
 
-        cloneInterleaved("exam_attempts", attemptIds, tenants, 20000, tenant -> {
+        cloneInterleaved("exam_attempts", attemptIds, tenants, attemptCopies, tenant -> {
             Map<String, String> overrides = new LinkedHashMap<>();
             overrides.put("public_id", "gen_random_uuid()");
             overrides.put("session_public_id", "gen_random_uuid()");
             overrides.put("student_public_id", "md5((g % 500)::text)::uuid");
             overrides.put("tenant_id", "'" + tenant + "'::uuid");
             overrides.put("status", "case when g % 30 = 0 then 'IN_PROGRESS' else 'SUBMITTED' end");
-            overrides.put("started_at", "now() - (20000 - g) * interval '30 minutes' - interval '15 minutes'");
+            overrides.put("started_at", "now() - (" + attemptCopies + " - g) * interval '5 hours' - interval '15 minutes'");
             overrides.put("submitted_at",
-                    "case when g % 30 = 0 then null else now() - (20000 - g) * interval '30 minutes' end");
+                    "case when g % 30 = 0 then null else now() - (" + attemptCopies + " - g) * interval '5 hours' end");
             return overrides;
         });
-        cloneInterleaved("users", userIds, tenants, 20000, tenant -> {
+        cloneInterleaved("users", userIds, tenants, attemptCopies, tenant -> {
             Map<String, String> overrides = new LinkedHashMap<>();
             overrides.put("public_id", "gen_random_uuid()");
             overrides.put("tenant_id", "'" + tenant + "'::uuid");
             overrides.put("username", "'seed-' || g || '-' || t.tenant_id");
             overrides.put("email", "'seed-' || g || '-' || t.tenant_id || '@example.test'");
-            overrides.put("created_at", "now() - (20000 - g) * interval '30 minutes'");
+            overrides.put("created_at", "now() - (" + attemptCopies + " - g) * interval '5 hours'");
             return overrides;
         });
         jdbc.update("insert into " + SCHEMA + ".user_roles (user_id, role) select u.id, 'STUDENT' from " + SCHEMA
                 + ".users u where u.username like 'seed-%'");
-        cloneInterleaved("exam_sessions", sessionIds, tenants, 60000, tenant -> {
+        cloneInterleaved("exam_sessions", sessionIds, sessionTenants, sessionCopies, tenant -> {
             Map<String, String> overrides = new LinkedHashMap<>();
             overrides.put("public_id", "gen_random_uuid()");
             overrides.put("session_code", "substr(md5(g::text || t.tenant_id::text), 1, 20)");
@@ -570,7 +938,7 @@ class OverviewMigrationPostgresIntegrationTest {
             overrides.put("subscription_id", "gen_random_uuid()");
             overrides.put("tenant_id", "'" + tenant + "'::uuid");
             overrides.put("status", "(array['DRAFT','SCHEDULED','OPEN','CLOSED'])[1 + g % 4]");
-            overrides.put("created_at", "now() - (60000 - g) * interval '10 minutes'");
+            overrides.put("created_at", "now() - (" + sessionCopies + " - g) * interval '10 minutes'");
             return overrides;
         });
         for (String table : List.of("exam_attempts", "users", "user_roles", "exam_sessions")) {
