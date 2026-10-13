@@ -12,4 +12,7 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
     Optional<Organization> findByPublicId(UUID publicId);
 
     List<Organization> findByTenant_PublicIdOrderByCreatedAtAsc(UUID tenantPublicId);
+
+    /** Overview: non-deleted organizations (branches) of one tenant. */
+    long countByTenant_PublicIdAndDeletedFalse(UUID tenantPublicId);
 }

@@ -35,7 +35,7 @@ class ModuleStructureTest {
                 .containsExactlyInAnyOrder(
                         "identity", "tenancy", "enrollment", "itembank", "assessment", "session",
                         "attempt", "scoring", "proctoring", "reporting", "media", "notification",
-                        "scoretemplate", "billing", "support", "practice", "shared");
+                        "scoretemplate", "billing", "support", "practice", "examstaff", "overview", "shared");
     }
 
     /** Sinh sơ đồ PlantUML vào target/spring-modulith-docs — dùng cho báo cáo đồ án. */
