@@ -13,6 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
+import java.util.List;
+import java.util.UUID;
+
 /** In-transaction append and tenant-scoped read API for audit records. */
 @Service
 public class AuditLogService {
@@ -67,6 +70,18 @@ public class AuditLogService {
         return new PagedResult<>(logs.map(AuditLogService::toResponse).getContent(),
                 new PageMeta(logs.getNumber(), logs.getSize(), logs.getTotalElements(), logs.getTotalPages(),
                         logs.isFirst(), logs.isLast(), logs.hasNext(), logs.hasPrevious()));
+    }
+
+    /**
+     * Newest audit records of one tenant (no total count, no paging metadata) for
+     * compact feeds. {@code size} is clamped to {@code 1..MAX_SIZE}.
+     */
+    @Transactional(readOnly = true)
+    public List<AuditLogResponse> recent(UUID tenantId, int size) {
+        int bounded = Math.max(1, Math.min(size, MAX_SIZE));
+        return auditLogRepository
+                .findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(tenantId, PageRequest.of(DEFAULT_PAGE, bounded))
+                .stream().map(AuditLogService::toResponse).toList();
     }
 
     private static AuditLogResponse toResponse(AuditLog auditLog) {

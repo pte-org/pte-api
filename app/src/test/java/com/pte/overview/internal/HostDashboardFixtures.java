@@ -8,8 +8,16 @@ import com.pte.identity.IdentityOverviewService.StaffCounts;
 import com.pte.identity.IdentityOverviewService.StudentStatusCounts;
 import com.pte.overview.internal.cache.DashboardCache;
 import com.pte.overview.internal.service.DashboardSectionRunner;
+import com.pte.billing.BillingOverviewService;
+import com.pte.billing.CurrentSubscriptionView;
+import com.pte.shared.audit.dto.AuditLogResponse;
 import com.pte.overview.internal.service.HostDashboardService;
+import com.pte.overview.internal.service.HostOperationsSections;
+import com.pte.reporting.ReportingOverviewService;
+import com.pte.scoring.ScoringOverviewService;
 import com.pte.session.SessionOverviewService;
+import com.pte.shared.audit.AuditLogService;
+import com.pte.support.SupportOverviewService;
 import com.pte.session.UpcomingSessionView;
 import com.pte.tenancy.StudentQuota;
 import com.pte.tenancy.TenancyService;
@@ -87,9 +95,63 @@ public final class HostDashboardFixtures {
         return this;
     }
 
+    public final ScoringOverviewService scoring = mock(ScoringOverviewService.class);
+    public final ReportingOverviewService reporting = mock(ReportingOverviewService.class);
+    public final BillingOverviewService billing = mock(BillingOverviewService.class);
+    public final SupportOverviewService support = mock(SupportOverviewService.class);
+    public final AuditLogService audit = mock(AuditLogService.class);
+
+    public static final UUID SUBSCRIPTION_ID = UUID.fromString("55555555-5555-5555-5555-555555555555");
+    public static final UUID ACTOR_ID = UUID.fromString("66666666-6666-6666-6666-666666666666");
+    public static final UUID AUDIT_ID = UUID.fromString("77777777-7777-7777-7777-777777777777");
+    public static final Instant NEAREST_EXPIRY = NOW.plus(Duration.ofDays(12)).plusSeconds(3600);
+
+    /**
+     * Named fixture "tenant A": 5 pending / 2 AI / 1 failed answers, 3 closed sessions awaiting finalisation,
+     * 4 reports unpublished, one subscription expiring in 12 days, 2 pending orders, 3/2/1 tickets, 2 audit entries.
+     * Tenant B (see {@link #stubOperationsOfTenantB}) uses visibly different numbers and names.
+     */
+    public HostDashboardFixtures stubOperations(UUID tenant) {
+        when(scoring.backlog(tenant)).thenReturn(new ScoringOverviewService.ScoringBacklog(5, 2, 1, 3));
+        when(reporting.countAwaitingPublication(tenant)).thenReturn(4L);
+        CurrentSubscriptionView view = new CurrentSubscriptionView(SUBSCRIPTION_ID, "Tenant A Exam Pack",
+                "EXAM_PACKAGE", NOW.minus(Duration.ofDays(100)), NEAREST_EXPIRY, "ACTIVE");
+        when(billing.subscriptionSummary(tenant)).thenReturn(
+                new BillingOverviewService.SubscriptionSummary(List.of(view), NEAREST_EXPIRY, 12L, true));
+        when(billing.pendingOrderCount(tenant)).thenReturn(2L);
+        when(support.ticketCounts(tenant)).thenReturn(new SupportOverviewService.TicketCounts(3, 2, 1));
+        when(audit.recent(tenant, 8)).thenReturn(List.of(
+                new AuditLogResponse(AUDIT_ID, ACTOR_ID, "CLASS", "agg-1", "CLASS_CREATED", "SECRET summary text",
+                        NOW.minusSeconds(60)),
+                new AuditLogResponse(UUID.randomUUID(), ACTOR_ID, "PROGRAM", "agg-2", "PROGRAM_UPDATED",
+                        "another summary", NOW.minusSeconds(120))));
+        return this;
+    }
+
+    public HostDashboardFixtures stubOperationsOfTenantB(UUID tenant) {
+        when(scoring.backlog(tenant)).thenReturn(new ScoringOverviewService.ScoringBacklog(70707, 80808, 90909, 60606));
+        when(reporting.countAwaitingPublication(tenant)).thenReturn(50505L);
+        CurrentSubscriptionView view = new CurrentSubscriptionView(UUID.randomUUID(), "TENANT-B-SECRET-PLAN",
+                "EXAM_PACKAGE", NOW.minus(Duration.ofDays(10)), NOW.plus(Duration.ofDays(300)), "ACTIVE");
+        when(billing.subscriptionSummary(tenant)).thenReturn(new BillingOverviewService.SubscriptionSummary(
+                List.of(view), NOW.plus(Duration.ofDays(300)), 300L, false));
+        when(billing.pendingOrderCount(tenant)).thenReturn(40404L);
+        when(support.ticketCounts(tenant)).thenReturn(new SupportOverviewService.TicketCounts(30303, 20202, 10101));
+        when(audit.recent(tenant, 8)).thenReturn(List.of(new AuditLogResponse(UUID.randomUUID(), UUID.randomUUID(),
+                "TENANT-B-SECRET-TYPE", "x", "TENANT_B_ACTION", "x", NOW)));
+        return this;
+    }
+
+    /** Core fixtures plus every Phase 2 facade stubbed for {@code tenant} (all eleven sections can be OK). */
+    public HostDashboardFixtures stubFullPath(UUID tenant) {
+        return stubHappyPath(tenant).stubOperations(tenant);
+    }
+
     public HostDashboardService service(DashboardCache cache) {
+        HostOperationsSections operations = new HostOperationsSections(scoring, reporting, billing, support, audit,
+                cache);
         return new HostDashboardService(identity, enrollment, sessions, attempts, tenancy,
-                new DashboardSectionRunner(), cache, CLOCK);
+                operations, new DashboardSectionRunner(), cache, CLOCK);
     }
 
     /** A cache that always misses: the loader runs on every call. */
