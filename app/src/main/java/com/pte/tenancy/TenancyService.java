@@ -11,14 +11,21 @@ import com.pte.tenancy.internal.repository.OrganizationRepository;
 import com.pte.tenancy.internal.repository.TenantRepository;
 import com.pte.tenancy.internal.service.TenantLifecycleService;
 import com.pte.tenancy.internal.service.QuotaTransactionService;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -135,6 +142,68 @@ public class TenancyService {
     public long countOrganizations(UUID tenantPublicId) {
         requireTenantId(tenantPublicId);
         return organizationRepository.countByTenant_PublicIdAndDeletedFalse(tenantPublicId);
+    }
+
+    /** Platform dashboard read: tenants by status and organization type (counts only, deleted excluded). */
+    @Transactional(readOnly = true)
+    public PlatformTenantCounts platformTenantCounts() {
+        long active = 0L;
+        long suspended = 0L;
+        for (Object[] row : tenantRepository.countGroupedByStatus()) {
+            long count = ((Number) row[1]).longValue();
+            if (row[0] == TenantStatus.ACTIVE) {
+                active = count;
+            } else if (row[0] == TenantStatus.SUSPENDED) {
+                suspended = count;
+            }
+        }
+        Map<String, Long> byType = new TreeMap<>();
+        for (Object[] row : tenantRepository.countGroupedByOrganizationType()) {
+            byType.put((String) row[0], ((Number) row[1]).longValue());
+        }
+        return new PlatformTenantCounts(active, suspended, Collections.unmodifiableMap(byType));
+    }
+
+    /** Platform dashboard read: tenants created in {@code [from, to)}. */
+    @Transactional(readOnly = true)
+    public long countTenantsCreatedBetween(Instant from, Instant to) {
+        return tenantRepository.countCreatedBetween(from, to);
+    }
+
+    /**
+     * Tenants created per consecutive range: {@code boundaries} holds n+1 ascending instants and the
+     * result holds n counts, one per {@code [boundaries[i], boundaries[i+1])}.
+     */
+    @Transactional(readOnly = true)
+    public List<Long> countTenantsCreatedPerRange(List<Instant> boundaries) {
+        if (boundaries == null || boundaries.size() < 2) {
+            return List.of();
+        }
+        List<Long> counts = new ArrayList<>(boundaries.size() - 1);
+        for (int i = 0; i < boundaries.size() - 1; i++) {
+            counts.add(tenantRepository.countCreatedBetween(boundaries.get(i), boundaries.get(i + 1)));
+        }
+        return counts;
+    }
+
+    /** Platform dashboard read: the {@code limit} newest tenants, newest first. */
+    @Transactional(readOnly = true)
+    public List<RecentTenantView> recentTenants(int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
+        Sort newestFirst = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
+        return tenantRepository.findRecent(PageRequest.of(0, limit, newestFirst)).stream()
+                .map(tenant -> new RecentTenantView(tenant.getPublicId(), tenant.getCode(), tenant.getName(),
+                        tenant.getOrganizationType(), tenant.getStatus().name(), tenant.getStudentLimit(),
+                        tenant.getCreatedAt()))
+                .toList();
+    }
+
+    /** Platform dashboard read: every non-deleted tenant's seat limit in one query (joined with student counts by the caller). */
+    @Transactional(readOnly = true)
+    public List<TenantSeatLimit> seatLimits() {
+        return tenantRepository.findAllSeatLimits();
     }
 
     /** Returns the effective student limit configured for a tenant. */
