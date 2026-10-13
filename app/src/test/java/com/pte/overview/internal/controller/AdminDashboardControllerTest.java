@@ -54,8 +54,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AdminDashboardControllerTest {
 
     private static final String PATH = "/api/v1/dashboard/admin";
-    private static final List<String> PHASE_THREE_SECTIONS = List.of("tenants", "learners", "recentTenants",
-            "applications", "licenses", "subscriptions", "plans", "support");
+    /** The nine sections an academic caller must never read (everything except the question bank). */
+    private static final List<String> OPERATIONS_SECTIONS = List.of("tenants", "learners", "recentTenants",
+            "applications", "licenses", "subscriptions", "plans", "support", "revenue");
+    /** Phase 4: ten sections in all. */
+    private static final List<String> ALL_SECTIONS = List.of("tenants", "learners", "recentTenants",
+            "applications", "licenses", "subscriptions", "plans", "support", "revenue", "questionBank");
     private static final JsonMapper JSON = JsonMapper.builder().findAndAddModules().build();
 
     @Configuration
@@ -106,21 +110,28 @@ class AdminDashboardControllerTest {
     }
 
     private void assertNoFacadeWasTouched() {
-        verifyNoInteractions(fx.tenancy, fx.identity, fx.attempts, fx.billing, fx.support);
+        verifyNoInteractions(fx.tenancy, fx.tenancyOverview, fx.revenueFacade, fx.itembank, fx.identity, fx.attempts,
+                fx.billing, fx.support);
+    }
+
+    /** Everything except the item bank facade: the only one an academic caller's request may read. */
+    private void assertNoOperationsFacadeWasTouched() {
+        verifyNoInteractions(fx.tenancy, fx.tenancyOverview, fx.revenueFacade, fx.identity, fx.attempts, fx.billing,
+                fx.support);
     }
 
     // ---- 200: platform admin and manager ----
 
     @ParameterizedTest
     @ValueSource(strings = {"PLATFORM_ADMIN", "PLATFORM_MANAGER"})
-    void operationsRolesGetEveryPhaseThreeSectionOk(String role) throws Exception {
+    void operationsRolesGetEverySectionOk(String role) throws Exception {
         authenticate(null, role);
 
         var result = mvc.perform(get(PATH)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.meta.windowDays").value(30))
                 .andExpect(jsonPath("$.data.meta.zone").value("Asia/Ho_Chi_Minh"));
-        for (String section : PHASE_THREE_SECTIONS) {
+        for (String section : ALL_SECTIONS) {
             result.andExpect(jsonPath("$.data." + section + ".status").value("OK"));
             result.andExpect(jsonPath("$.data." + section + ".data").exists());
         }
@@ -168,7 +179,36 @@ class AdminDashboardControllerTest {
                 .andExpect(jsonPath("$.data.support.data.open").value(11))
                 .andExpect(jsonPath("$.data.support.data.inProgress").value(4))
                 .andExpect(jsonPath("$.data.support.data.oldestOpen.length()").value(2))
-                .andExpect(jsonPath("$.data.support.data.oldestOpen[0].category").value("BUG"));
+                .andExpect(jsonPath("$.data.support.data.oldestOpen[0].category").value("BUG"))
+                // Phase 4: revenue (per currency, exact amounts) and question bank
+                .andExpect(jsonPath("$.data.revenue.status").value("OK"))
+                .andExpect(jsonPath("$.data.revenue.data.source").value("ONLINE_ORDERS"))
+                .andExpect(jsonPath("$.data.revenue.data.paidOrders.current").value(5))
+                .andExpect(jsonPath("$.data.revenue.data.paidOrders.previous").value(3))
+                .andExpect(jsonPath("$.data.revenue.data.currencies.length()").value(3))
+                .andExpect(jsonPath("$.data.revenue.data.currencies[0].currency").value("EUR"))
+                .andExpect(jsonPath("$.data.revenue.data.currencies[1].currency").value("USD"))
+                .andExpect(jsonPath("$.data.revenue.data.currencies[2].currency").value("VND"))
+                .andExpect(jsonPath("$.data.revenue.data.currencies[2].current").value(1500000.5))
+                .andExpect(jsonPath("$.data.revenue.data.currencies[2].previous").value(1000000.0))
+                .andExpect(jsonPath("$.data.revenue.data.currencies[2].changePct").value(50.0))
+                .andExpect(jsonPath("$.data.revenue.data.currencies[2].paidOrders.current").value(3))
+                .andExpect(jsonPath("$.data.revenue.data.currencies[2].monthly.length()").value(12))
+                .andExpect(jsonPath("$.data.revenue.data.currencies[2].monthly[0].month").value("2025-11"))
+                .andExpect(jsonPath("$.data.revenue.data.currencies[2].monthly[11].month").value("2026-10"))
+                .andExpect(jsonPath("$.data.revenue.data.currencies[2].monthly[11].partial").value(true))
+                .andExpect(jsonPath("$.data.revenue.data.currencies[2].monthly[10].partial").value(false))
+                .andExpect(jsonPath("$.data.revenue.data.currencies[1].changePct").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.questionBank.status").value("OK"))
+                .andExpect(jsonPath("$.data.questionBank.data.total").value(120))
+                .andExpect(jsonPath("$.data.questionBank.data.byStatus.DRAFT").value(20))
+                .andExpect(jsonPath("$.data.questionBank.data.byStatus.APPROVED").value(80))
+                .andExpect(jsonPath("$.data.questionBank.data.bySection.READING").value(30))
+                .andExpect(jsonPath("$.data.questionBank.data.byPool.PRACTICE").value(20))
+                .andExpect(jsonPath("$.data.questionBank.data.approvedByPool.EXAM").value(70))
+                .andExpect(jsonPath("$.data.questionBank.data.createdInWindow.current").value(12))
+                .andExpect(jsonPath("$.data.questionBank.data.createdInWindow.previous").value(8))
+                .andExpect(jsonPath("$.data.questionBank.data.createdInWindow.changePct").value(50.0));
     }
 
     @ParameterizedTest
@@ -203,17 +243,34 @@ class AdminDashboardControllerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"ACADEMIC_STAFF", "ACADEMIC_MANAGER", "PLATFORM_AUTHOR"})
-    void academicRolesAndTheLegacyAuthorAliasGet200WithEverySectionForbiddenAndNullData(String role) throws Exception {
+    void academicRolesAndTheLegacyAuthorAliasGet200WithQuestionBankOkAndEveryOperationsSectionForbidden(String role)
+            throws Exception {
         authenticate(null, role);
 
+        // Phase 4 contract change: these callers used to get all 8 sections FORBIDDEN; the question bank is now OK.
         var result = mvc.perform(get(PATH)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.meta.windowDays").value(30));
-        for (String section : PHASE_THREE_SECTIONS) {
+        for (String section : OPERATIONS_SECTIONS) {
             result.andExpect(jsonPath("$.data." + section + ".status").value("FORBIDDEN"));
             result.andExpect(jsonPath("$.data." + section + ".data").value(org.hamcrest.Matchers.nullValue()));
         }
-        assertNoFacadeWasTouched();
+        result.andExpect(jsonPath("$.data.revenue.status").value("FORBIDDEN"));
+        result.andExpect(jsonPath("$.data.questionBank.status").value("OK"));
+        result.andExpect(jsonPath("$.data.questionBank.data.total").value(120));
+        result.andExpect(jsonPath("$.data.questionBank.data.approvedByPool.EXAM").value(70));
+        assertNoOperationsFacadeWasTouched();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ACADEMIC_STAFF", "ACADEMIC_MANAGER", "PLATFORM_AUTHOR"})
+    void anAcademicResponseBodyNeverContainsRevenueOrAnyOperationsData(String role) throws Exception {
+        authenticate(null, role);
+
+        String body = mvc.perform(get(PATH)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        assertThat(body).doesNotContain("ONLINE_ORDERS").doesNotContain("1500000").doesNotContain("VND")
+                .doesNotContain("Alpha School").doesNotContain("Pro Pack").doesNotContain("Org One");
     }
 
     @Test
@@ -222,16 +279,22 @@ class AdminDashboardControllerTest {
         MockMvc cached = buildMvc(redis.cache());
         authenticate(null, "PLATFORM_ADMIN");
         cached.perform(get(PATH).param("windowDays", "30")).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.tenants.data.total").value(20));
-        assertThat(redis.store).hasSize(8);
+                .andExpect(jsonPath("$.data.tenants.data.total").value(20))
+                .andExpect(jsonPath("$.data.revenue.data.currencies[0].currency").value("EUR"));
+        assertThat(redis.store).hasSize(10);
         SecurityContextHolder.clearContext();
         authenticate(null, "ACADEMIC_STAFF");
 
         String body = cached.perform(get(PATH).param("windowDays", "30")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.tenants.status").value("FORBIDDEN"))
+                .andExpect(jsonPath("$.data.revenue.status").value("FORBIDDEN"))
+                .andExpect(jsonPath("$.data.questionBank.status").value("OK"))
                 .andReturn().getResponse().getContentAsString();
 
-        assertThat(body).doesNotContain("Alpha School").doesNotContain("Pro Pack").doesNotContain("Org One");
+        assertThat(body).doesNotContain("Alpha School").doesNotContain("Pro Pack").doesNotContain("Org One")
+                .doesNotContain("ONLINE_ORDERS").doesNotContain("VND");
+        // the academic caller got an entry of its own (11 = 10 operations-bucket entries + 1 academic question bank)
+        assertThat(redis.store).hasSize(11);
     }
 
     // ---- 403 ----
@@ -340,6 +403,26 @@ class AdminDashboardControllerTest {
     }
 
     @Test
+    void aFailingRevenueOrQuestionBankSectionStill200sWithOnlyThatSectionInErrorAndNoRawMessage() throws Exception {
+        authenticate(null, "PLATFORM_ADMIN");
+        org.mockito.Mockito.when(fx.revenueFacade.paidRevenueBetween(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any())).thenThrow(new IllegalStateException("jdbc:postgresql://orders-host"));
+        org.mockito.Mockito.when(fx.itembank.counts()).thenThrow(new IllegalStateException("bank-host timeout"));
+
+        String body = mvc.perform(get(PATH))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.revenue.status").value("ERROR"))
+                .andExpect(jsonPath("$.data.revenue.data").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.questionBank.status").value("ERROR"))
+                .andExpect(jsonPath("$.data.questionBank.data").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.tenants.status").value("OK"))
+                .andExpect(jsonPath("$.data.subscriptions.status").value("OK"))
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(body).doesNotContain("orders-host").doesNotContain("bank-host").doesNotContain("jdbc");
+    }
+
+    @Test
     void redisBeingDownDoesNotFailTheRequest() throws Exception {
         FakeRedis redis = new FakeRedis();
         org.mockito.Mockito.doThrow(new org.springframework.data.redis.RedisConnectionFailureException("down"))
@@ -403,6 +486,59 @@ class AdminDashboardControllerTest {
             FORBIDDEN_KEY_FRAGMENTS.forEach(fragment -> assertThat(lower).as("response key '%s'", key)
                     .doesNotContain(fragment));
         }
+    }
+
+    /** Payment-provider, link and customer vocabulary that must never appear under the revenue section. */
+    private static final Set<String> REVENUE_FORBIDDEN_FRAGMENTS = Set.of("payment", "link", "url", "provider",
+            "checkout", "customer", "tenant", "buyer", "ordercode", "payos", "licensecode", "plan");
+
+    @Test
+    void theRevenueSectionCarriesOnlyAmountsCountsAndMonthsNeverPaymentLinkProviderCustomerOrTenantData()
+            throws Exception {
+        authenticate(null, "PLATFORM_ADMIN");
+        String body = mvc.perform(get(PATH).accept(MediaType.APPLICATION_JSON)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        List<String> keys = new ArrayList<>();
+        collectKeys(JSON.readTree(body).get("data").get("revenue"), "$", keys);
+
+        // exactly the documented vocabulary: nothing else may be added to the section without a test change
+        assertThat(new HashSet<>(keys)).containsExactlyInAnyOrder("status", "data", "source", "paidOrders", "current",
+                "previous", "changePct", "currencies", "currency", "monthly", "month", "amount", "partial");
+        for (String key : keys) {
+            String lower = key.toLowerCase(Locale.ROOT);
+            REVENUE_FORBIDDEN_FRAGMENTS.forEach(fragment -> assertThat(lower).as("revenue key '%s'", key)
+                    .doesNotContain(fragment));
+            FORBIDDEN_KEY_FRAGMENTS.forEach(fragment -> assertThat(lower).as("revenue key '%s'", key)
+                    .doesNotContain(fragment));
+        }
+    }
+
+    @Test
+    void theQuestionBankSectionCarriesOnlyCountsNeverQuestionTextAnswersOrAuthors() throws Exception {
+        authenticate(null, "ACADEMIC_MANAGER");
+        String body = mvc.perform(get(PATH).accept(MediaType.APPLICATION_JSON)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        List<String> keys = new ArrayList<>();
+        collectKeys(JSON.readTree(body).get("data").get("questionBank"), "$", keys);
+
+        assertThat(new HashSet<>(keys)).containsExactlyInAnyOrder("status", "data", "total", "byStatus", "DRAFT",
+                "PENDING_APPROVAL", "APPROVED", "ARCHIVED", "bySection", "LISTENING", "SPEAKING", "READING", "WRITING",
+                "byPool", "EXAM", "PRACTICE", "approvedByPool", "createdInWindow", "current", "previous", "changePct");
+    }
+
+    @Test
+    void theFacadeRowsOfRevenueAndQuestionBankOnlyHaveSafeFields() {
+        Set<String> revenue = new HashSet<>();
+        Arrays.stream(com.pte.billing.BillingRevenueOverviewService.CurrencyPaidTotal.class.getRecordComponents())
+                .forEach(c -> revenue.add(c.getName()));
+        Set<String> bank = new HashSet<>();
+        Arrays.stream(com.pte.itembank.ItembankOverviewService.QuestionBankCounts.class.getRecordComponents())
+                .forEach(c -> bank.add(c.getName()));
+
+        assertThat(revenue).containsExactlyInAnyOrder("currency", "amount", "paidOrders");
+        assertThat(bank).containsExactlyInAnyOrder("total", "byStatus", "bySection", "byPool", "approvedByPool");
     }
 
     @Test

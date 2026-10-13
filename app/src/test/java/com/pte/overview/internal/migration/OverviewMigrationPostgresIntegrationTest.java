@@ -41,7 +41,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Opt-in PostgreSQL proof for the overview migrations (V94, V95), enabled by passing
+ * Opt-in PostgreSQL proof for the overview migrations (V94, V95, V96, V97), enabled by passing
  * {@code -Dlifecycle.test.db.url=<jdbc url>}. The URL (including any credentials it
  * needs) comes only from that property; nothing about the host, port or account is
  * hard-coded. Everything runs in a brand-new, uniquely named schema that is dropped
@@ -143,7 +143,7 @@ class OverviewMigrationPostgresIntegrationTest {
     }
 
     @Test
-    void everyMigrationAppliedFromAnEmptySchemaThroughV96() {
+    void everyMigrationAppliedFromAnEmptySchemaThroughV97() {
         Integer failed = jdbc.queryForObject(
                 "select count(*) from " + SCHEMA + ".flyway_schema_history where success = false", Integer.class);
         Integer versionedApplied = jdbc.queryForObject(
@@ -154,10 +154,10 @@ class OverviewMigrationPostgresIntegrationTest {
                 String.class);
 
         assertThat(failed).isZero();
-        assertThat(versionedApplied).isGreaterThanOrEqualTo(96);
-        assertThat(versions).contains("94", "95", "96");
+        assertThat(versionedApplied).isGreaterThanOrEqualTo(97);
+        assertThat(versions).contains("94", "95", "96", "97");
         assertThat(versions.stream().mapToInt(v -> Integer.parseInt(v.split("\\.")[0])).max().orElse(0))
-                .isGreaterThanOrEqualTo(96);
+                .isGreaterThanOrEqualTo(97);
     }
 
     @Test
@@ -747,6 +747,271 @@ class OverviewMigrationPostgresIntegrationTest {
         }
     }
 
+    // ---- Phase 4: V97 (orders paid_at index), revenue and question bank queries ----
+
+    private static final String V97_RESOURCE = "db/migration/V97__overview_admin_revenue_index.sql";
+    private static final String V97_INDEX = "idx_orders_paid_at";
+    private static final int P4_ORDERS = 100_000;
+    private static final int P4_QUESTIONS = 40_000;
+
+    @Test
+    void v97CreatedThePartialPaidAtIndexOnPaidAndNotDeletedOrdersOnly() {
+        String definition = jdbc.queryForObject(
+                "select indexdef from pg_indexes where schemaname = ? and indexname = ?", String.class, SCHEMA, V97_INDEX);
+
+        assertThat(definition).contains(" ON " + SCHEMA + ".orders USING btree (paid_at)")
+                .contains("deleted = false").contains("'PAID'").doesNotContain("tenant_id");
+        // The pre-existing orders indexes lead with tenant or status and cannot serve a paid_at range on their own.
+        List<String> others = jdbc.queryForList("select indexdef from pg_indexes where schemaname = ? "
+                + "and tablename = 'orders' and indexname <> ?", String.class, SCHEMA, V97_INDEX);
+        assertThat(others).noneMatch(def -> def.contains("(paid_at"));
+    }
+
+    @Test
+    void v97IsIdempotentWhenReplayedAgainstTheMigratedSchema() throws Exception {
+        String before = definitionsOf(Set.of(V97_INDEX));
+
+        runMigrationScript(V97_RESOURCE);
+        runMigrationScript(V97_RESOURCE);
+
+        assertThat(jdbc.queryForObject("select count(*) from pg_indexes where schemaname = ? and indexname = ?",
+                Integer.class, SCHEMA, V97_INDEX)).isEqualTo(1);
+        assertThat(definitionsOf(Set.of(V97_INDEX))).as("definition unchanged by the replay").isEqualTo(before)
+                .isNotBlank();
+    }
+
+    private void runMigrationScript(String resource) throws Exception {
+        String script = new String(new ClassPathResource(resource).getInputStream().readAllBytes(),
+                StandardCharsets.UTF_8);
+        try (Connection connection = DriverManager.getConnection(url());
+             Statement statement = connection.createStatement()) {
+            statement.execute("set search_path to " + SCHEMA);
+            statement.execute(script);
+        }
+    }
+
+    /** PREPARE / EXECUTE on one connection: the first executions use custom plans, then (auto) possibly a generic one. */
+    private String explainPrepared(String body, String paramTypes, String args, boolean forceGeneric) {
+        return jdbc.execute((ConnectionCallback<String>) connection -> {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("set enable_seqscan = on");
+                statement.execute("set plan_cache_mode = " + (forceGeneric ? "force_generic_plan" : "auto"));
+                statement.execute("prepare p4q(" + paramTypes + ") as " + body);
+                try {
+                    for (int i = 0; i < 6; i++) { // more than the 5 custom plans PostgreSQL tries before comparing
+                        statement.execute("execute p4q(" + args + ")");
+                    }
+                    try (ResultSet rows = statement.executeQuery(
+                            "explain (analyze, timing off, summary on) execute p4q(" + args + ")")) {
+                        StringBuilder plan = new StringBuilder();
+                        while (rows.next()) {
+                            plan.append(rows.getString(1)).append('\n');
+                        }
+                        return plan.toString();
+                    }
+                } finally {
+                    statement.execute("deallocate p4q");
+                    statement.execute("set plan_cache_mode = auto");
+                }
+            }
+        });
+    }
+
+    /** Wall time of the whole revenue load of one cache miss (2 windows + 12 months) through bound parameters, in ms. */
+    private double revenueLoadMillis(List<java.sql.Timestamp> boundaries, int rounds) {
+        String sql = "select o.currency, sum(o.amount), count(o.id) from " + SCHEMA + ".orders o where o.deleted = false "
+                + "and o.status = ? and o.paid_at >= ? and o.paid_at < ? group by o.currency";
+        java.sql.Timestamp now = jdbc.queryForObject("select now()", java.sql.Timestamp.class);
+        java.sql.Timestamp d30 = jdbc.queryForObject("select now() - interval '30 days'", java.sql.Timestamp.class);
+        java.sql.Timestamp d60 = jdbc.queryForObject("select now() - interval '60 days'", java.sql.Timestamp.class);
+        for (int warm = 0; warm < 3; warm++) {
+            runRevenueLoad(sql, boundaries, now, d30, d60);
+        }
+        long start = System.nanoTime();
+        for (int round = 0; round < rounds; round++) {
+            runRevenueLoad(sql, boundaries, now, d30, d60);
+        }
+        return (System.nanoTime() - start) / 1_000_000.0 / rounds;
+    }
+
+    private void runRevenueLoad(String sql, List<java.sql.Timestamp> boundaries, java.sql.Timestamp now,
+            java.sql.Timestamp d30, java.sql.Timestamp d60) {
+        jdbc.queryForList(sql, "PAID", d30, now);
+        jdbc.queryForList(sql, "PAID", d60, d30);
+        for (int i = 0; i + 1 < boundaries.size(); i++) {
+            jdbc.queryForList(sql, "PAID", boundaries.get(i), boundaries.get(i + 1));
+        }
+    }
+
+    @Test
+    void phaseFourRevenueAndQuestionBankQueriesAndTheirPlans() throws Exception {
+        seedPhaseFour();
+        String s = SCHEMA + ".";
+
+        String revenueBody = "select o.currency, sum(o.amount), count(o.id) from " + s + "orders o where o.deleted = false "
+                + "and o.status = $1 and o.paid_at >= $2 and o.paid_at < $3 group by o.currency";
+        String revenueArgs = "'PAID', now() - interval '30 days', now()";
+        String previousArgs = "'PAID', now() - interval '60 days', now() - interval '30 days'";
+        String last30 = "now() - interval '30 days'";
+        String vnMonthStart = "(date_trunc('month', timezone('Asia/Ho_Chi_Minh', now()))";
+        record Q(String name, String sql, String mustUseIndexWhenForced) {
+        }
+        List<Q> queries = List.of(
+                new Q("revenue: current 30d window per currency (literal PAID)",
+                        "select o.currency, sum(o.amount), count(o.id) from " + s + "orders o where o.deleted = false "
+                                + "and o.status = 'PAID' and o.paid_at >= " + last30 + " and o.paid_at < now() group by o.currency",
+                        V97_INDEX),
+                new Q("revenue: previous 30d window per currency (literal PAID)",
+                        "select o.currency, sum(o.amount), count(o.id) from " + s + "orders o where o.deleted = false "
+                                + "and o.status = 'PAID' and o.paid_at >= now() - interval '60 days' and o.paid_at < " + last30
+                                + " group by o.currency",
+                        V97_INDEX),
+                new Q("revenue: monthly bucket - oldest of the 12 (Asia/Ho_Chi_Minh month)",
+                        "select o.currency, sum(o.amount), count(o.id) from " + s + "orders o where o.deleted = false "
+                                + "and o.status = 'PAID' and o.paid_at >= " + vnMonthStart + " - interval '11 months') at time zone 'Asia/Ho_Chi_Minh' "
+                                + "and o.paid_at < " + vnMonthStart + " - interval '10 months') at time zone 'Asia/Ho_Chi_Minh' group by o.currency",
+                        V97_INDEX),
+                new Q("revenue: monthly bucket - current partial month",
+                        "select o.currency, sum(o.amount), count(o.id) from " + s + "orders o where o.deleted = false "
+                                + "and o.status = 'PAID' and o.paid_at >= " + vnMonthStart + ") at time zone 'Asia/Ho_Chi_Minh' "
+                                + "and o.paid_at < " + vnMonthStart + " + interval '1 month') at time zone 'Asia/Ho_Chi_Minh' group by o.currency",
+                        V97_INDEX),
+                new Q("question bank: counts by status, section, pool (the new facade query)",
+                        "select q.status, q.task_type_section, q.pool, count(q.id) from " + s + "questions q "
+                                + "where q.deleted = false and q.visibility = 'SHARED' group by q.status, q.task_type_section, q.pool",
+                        null),
+                new Q("question bank: legacy stats by section",
+                        "select q.task_type_section, count(q.id) from " + s + "questions q "
+                                + "where q.deleted = false and q.visibility = 'SHARED' group by q.task_type_section",
+                        null),
+                new Q("question bank: legacy stats by status",
+                        "select q.status, count(q.id) from " + s + "questions q "
+                                + "where q.deleted = false and q.visibility = 'SHARED' group by q.status",
+                        null),
+                new Q("question bank: created in 30d window",
+                        "select count(q.id) from " + s + "questions q where q.deleted = false and q.visibility = 'SHARED' "
+                                + "and q.created_at >= " + last30 + " and q.created_at < now()",
+                        null));
+
+        StringBuilder report = new StringBuilder("EXPLAIN (ANALYZE) of Phase 4 queries: online revenue (orders) and question bank\n\n");
+        for (String table : List.of("orders", "questions")) {
+            report.append("  ").append(table).append(": ")
+                    .append(jdbc.queryForObject("select count(*) from " + s + table, Long.class)).append(" rows\n");
+        }
+        report.append("  PAID and not deleted orders: ").append(jdbc.queryForObject("select count(*) from " + s
+                + "orders where status = 'PAID' and deleted = false", Long.class)).append('\n');
+        report.append("  PAID orders paid in the last 30 days: ").append(jdbc.queryForObject("select count(*) from " + s
+                + "orders where status = 'PAID' and deleted = false and paid_at >= now() - interval '30 days'", Long.class)).append('\n');
+        report.append("  orders per currency: ").append(jdbc.queryForList("select currency || '=' || count(*) from " + s
+                + "orders group by currency order by currency", String.class)).append('\n');
+        report.append("\nIndexes on orders / questions:\n");
+        jdbc.queryForList("select indexdef from pg_indexes where schemaname = ? and tablename in ('orders','questions') "
+                + "order by tablename, indexname", String.class, SCHEMA).forEach(def -> report.append("  ").append(def).append('\n'));
+
+        List<String> failures = new ArrayList<>();
+        StringBuilder verdicts = new StringBuilder("\n=== VERDICTS (with V97 present) ===\n");
+        for (Q query : queries) {
+            String natural = explain(query.sql(), false);
+            String forced = explain(query.sql(), true);
+            report.append("\n--- ").append(query.name()).append(" [planner default]\n").append(natural)
+                    .append("\n--- ").append(query.name()).append(" [enable_seqscan=off]\n").append(forced).append('\n');
+            verdicts.append(query.name()).append(": default planner -> ").append(summarisePlan(natural))
+                    .append(" | forced -> ").append(summarisePlan(forced)).append('\n');
+            if (query.mustUseIndexWhenForced() != null && !forced.contains(query.mustUseIndexWhenForced())) {
+                failures.add(query.name() + " cannot use " + query.mustUseIndexWhenForced() + " even with seq scans disabled");
+            }
+        }
+
+        // What the production code actually sends: bound parameters (status is a parameter, not a literal).
+        // A partial index on status = 'PAID' can only be proven for a custom plan; check what happens after the
+        // plan cache has seen the statement more than 5 times (auto) and with a forced generic plan.
+        report.append("\n--- revenue current window, PREPARED with bound parameters (6 executions, then explain) [plan_cache_mode=auto]\n")
+                .append(explainPrepared(revenueBody, "varchar, timestamptz, timestamptz", revenueArgs, false));
+        report.append("\n--- revenue current window, PREPARED [plan_cache_mode=force_generic_plan] (worst case)\n")
+                .append(explainPrepared(revenueBody, "varchar, timestamptz, timestamptz", revenueArgs, true));
+        report.append("\n--- revenue previous window, PREPARED [plan_cache_mode=auto]\n")
+                .append(explainPrepared(revenueBody, "varchar, timestamptz, timestamptz", previousArgs, false));
+        String preparedAuto = explainPrepared(revenueBody, "varchar, timestamptz, timestamptz", revenueArgs, false);
+        String preparedGeneric = explainPrepared(revenueBody, "varchar, timestamptz, timestamptz", revenueArgs, true);
+        verdicts.append("revenue current window, prepared (auto, after 6 executions): ").append(summarisePlan(preparedAuto)).append('\n');
+        verdicts.append("revenue current window, prepared (force_generic_plan): ").append(summarisePlan(preparedGeneric)).append('\n');
+
+        // Cost of the whole 14-query revenue load of one cache miss, with and without V97.
+        List<java.sql.Timestamp> boundaries = jdbc.queryForList("select (date_trunc('month', timezone('Asia/Ho_Chi_Minh', now())) "
+                + "- k * interval '1 month') at time zone 'Asia/Ho_Chi_Minh' from generate_series(11, -1, -1) k",
+                java.sql.Timestamp.class);
+        assertThat(boundaries).hasSize(13);
+        double withIndex = revenueLoadMillis(boundaries, 20);
+        jdbc.execute("drop index " + s + V97_INDEX);
+        double withoutIndex;
+        String windowWithout;
+        String oneMonthWithout;
+        try {
+            withoutIndex = revenueLoadMillis(boundaries, 20);
+            windowWithout = explain(queries.get(0).sql(), false);
+            oneMonthWithout = explain(queries.get(3).sql(), false);
+        } finally {
+            runMigrationScript(V97_RESOURCE);
+            jdbc.execute("vacuum (analyze) " + s + "orders");
+        }
+        report.append("\n--- revenue current window WITHOUT idx_orders_paid_at [planner default]\n").append(windowWithout);
+        report.append("\n--- revenue current partial month WITHOUT idx_orders_paid_at [planner default]\n").append(oneMonthWithout);
+        verdicts.append(String.format(java.util.Locale.ROOT,
+                "revenue load of one cache miss (2 windows + 12 months = 14 grouped queries, bound parameters, %d orders): "
+                        + "%.1f ms WITH idx_orders_paid_at, %.1f ms WITHOUT%n", P4_ORDERS, withIndex, withoutIndex));
+        verdicts.append("without V97 the current window plan is: ").append(summarisePlan(windowWithout)).append('\n');
+        assertThat(jdbc.queryForObject("select count(*) from pg_indexes where schemaname = ? and indexname = ?",
+                Integer.class, SCHEMA, V97_INDEX)).as("V97 index restored for the other tests").isEqualTo(1);
+
+        report.append(verdicts);
+        Files.writeString(Path.of("target", "overview-explain-plans-phase4.txt"), report.toString(), StandardCharsets.UTF_8);
+        System.out.println(report);
+
+        assertThat(failures).isEmpty();
+    }
+
+    /** Plain-SQL seed: 100k orders over two years (several currencies, mixed statuses, 1 percent deleted) and 40k questions. */
+    private void seedPhaseFour() {
+        String paidAtOrCreatedAt = "now() - interval '730 days' + (g::float8 / " + P4_ORDERS + ") * interval '730 days'";
+        long orderTemplate = insertBaseRow("orders", Map.of("tenant_id", "gen_random_uuid()", "plan_id", "gen_random_uuid()",
+                "order_code", "7000000000000000", "amount", "100000", "currency", "'VND'", "status", "'PAID'",
+                "paid_at", "now()"));
+        cloneInterleaved("orders", new long[]{orderTemplate}, new UUID[]{UUID.randomUUID()}, P4_ORDERS, tenant -> {
+            Map<String, String> o = new LinkedHashMap<>();
+            o.put("public_id", "gen_random_uuid()");
+            o.put("order_code", "(7000000000000000 + g)");
+            o.put("tenant_id", "md5((g % 300)::text)::uuid");
+            o.put("plan_id", "gen_random_uuid()");
+            o.put("amount", "(10000 + (g % 1000) * 100)");
+            o.put("currency", "(array['VND','VND','VND','VND','USD','USD','EUR','JPY'])[1 + g % 8]");
+            o.put("status", "case when g % 100 < 70 then 'PAID' when g % 100 < 85 then 'CANCELLED' "
+                    + "when g % 100 < 95 then 'EXPIRED' else 'PENDING' end");
+            o.put("paid_at", "case when g % 100 < 70 then " + paidAtOrCreatedAt + " end");
+            o.put("created_at", paidAtOrCreatedAt + " - interval '20 minutes'");
+            o.put("deleted", "(g % 100 = 7)");
+            return o;
+        });
+        long questionTemplate = insertBaseRow("questions", Map.of("task_type_key", "'READ_ALOUD'",
+                "task_type_section", "'SPEAKING'", "visibility", "'SHARED'", "pool", "'EXAM'", "status", "'DRAFT'",
+                "title", "'tpl'", "revision_number", "1", "is_current", "true", "version", "0"));
+        cloneInterleaved("questions", new long[]{questionTemplate}, new UUID[]{UUID.randomUUID()}, P4_QUESTIONS, tenant -> {
+            Map<String, String> o = new LinkedHashMap<>();
+            o.put("public_id", "gen_random_uuid()");
+            o.put("revision_group_public_id", "gen_random_uuid()");
+            o.put("title", "'q ' || g");
+            o.put("task_type_section", "(array['LISTENING','SPEAKING','READING','WRITING'])[1 + g % 4]");
+            o.put("status", "(array['APPROVED','APPROVED','APPROVED','APPROVED','APPROVED','DRAFT','DRAFT',"
+                    + "'PENDING_APPROVAL','ARCHIVED','ARCHIVED'])[1 + g % 10]");
+            o.put("pool", "case when g % 5 = 0 then 'PRACTICE' else 'EXAM' end");
+            o.put("created_at", "now() - interval '730 days' + (g::float8 / " + P4_QUESTIONS + ") * interval '730 days'");
+            o.put("deleted", "(g % 50 = 0)");
+            return o;
+        });
+        for (String table : List.of("orders", "questions")) {
+            jdbc.execute("vacuum (analyze) " + SCHEMA + "." + table);
+        }
+    }
+
     private static String summarisePlan(String plan) {
         List<String> nodes = new ArrayList<>();
         for (String line : plan.split("\n")) {
@@ -755,7 +1020,7 @@ class OverviewMigrationPostgresIntegrationTest {
                 trimmed = trimmed.substring(2).trim();
             }
             if (trimmed.startsWith("Index") || trimmed.startsWith("Bitmap Index") || trimmed.startsWith("Seq Scan")
-                    || trimmed.startsWith("Bitmap Heap")) {
+                    || trimmed.startsWith("Parallel Seq Scan") || trimmed.startsWith("Bitmap Heap")) {
                 int paren = trimmed.indexOf(" (");
                 nodes.add(paren > 0 ? trimmed.substring(0, paren) : trimmed);
             }

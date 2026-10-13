@@ -60,10 +60,14 @@ import static org.mockito.Mockito.when;
  */
 class AdminDashboardServiceTest {
 
+    /** Phase 4 contract: operations callers see every one of the 10 sections (sorted keys joined with '+'). */
     private static final String ADMIN_BUCKET =
-            "applications+learners+licenses+plans+recentTenants+subscriptions+support+tenants";
+            "applications+learners+licenses+plans+questionBank+recentTenants+revenue+subscriptions+support+tenants";
+    /** Phase 4 contract change: academic callers used to land in the 'none' bucket, they now see only the question bank. */
+    private static final String ACADEMIC_BUCKET = "questionBank";
     private static final List<String> SECTION_KEYS = List.of("tenants", "learners", "recentTenants", "applications",
-            "licenses", "subscriptions", "plans", "support");
+            "licenses", "subscriptions", "plans", "support", "revenue", "questionBank");
+    private static final List<String> OPERATIONS_KEYS = SECTION_KEYS.subList(0, 9);
 
     private AdminDashboardFixtures fx;
 
@@ -74,7 +78,13 @@ class AdminDashboardServiceTest {
 
     private static List<DashboardSection<?>> sections(AdminDashboardResponse response) {
         return List.of(response.tenants(), response.learners(), response.recentTenants(), response.applications(),
-                response.licenses(), response.subscriptions(), response.plans(), response.support());
+                response.licenses(), response.subscriptions(), response.plans(), response.support(),
+                response.revenue(), response.questionBank());
+    }
+
+    /** The nine operations sections (everything except the question bank) of a response. */
+    private static List<DashboardSection<?>> operationsSections(AdminDashboardResponse response) {
+        return sections(response).subList(0, 9);
     }
 
     private static Map<String, DashboardSection<?>> byKey(AdminDashboardResponse response) {
@@ -87,21 +97,26 @@ class AdminDashboardServiceTest {
     }
 
     private void verifyNoFacadeTouched() {
-        verifyNoInteractions(fx.tenancy, fx.identity, fx.attempts, fx.billing, fx.support);
+        verifyNoInteractions(fx.tenancy, fx.tenancyOverview, fx.revenueFacade, fx.itembank, fx.identity, fx.attempts, fx.billing, fx.support);
+    }
+
+    /** Every facade except the item bank one (the only data an academic caller may read). */
+    private void verifyNoOperationsFacadeTouched() {
+        verifyNoInteractions(fx.tenancy, fx.tenancyOverview, fx.revenueFacade, fx.identity, fx.attempts, fx.billing, fx.support);
     }
 
     private void clearFacadeInvocations() {
-        clearInvocations(fx.tenancy, fx.identity, fx.attempts, fx.billing, fx.support);
+        clearInvocations(fx.tenancy, fx.tenancyOverview, fx.revenueFacade, fx.itembank, fx.identity, fx.attempts, fx.billing, fx.support);
     }
 
     // ---- happy path ----
 
     @Test
-    void platformAdminGetsEveryPhaseThreeSectionOkAndTheWindowEcho() {
+    void platformAdminGetsEverySectionOkAndTheWindowEcho() {
         AdminDashboardResponse response = fx.service(AdminDashboardFixtures.passThroughCache())
                 .build(platform("PLATFORM_ADMIN"), null);
 
-        assertThat(sections(response)).hasSize(8).allSatisfy(section -> {
+        assertThat(sections(response)).hasSize(10).allSatisfy(section -> {
             assertThat(section.status()).isEqualTo(SectionStatus.OK);
             assertThat(section.data()).isNotNull();
         });
@@ -113,11 +128,12 @@ class AdminDashboardServiceTest {
     }
 
     @Test
-    void platformManagerGetsEveryPhaseThreeSectionOkToo() {
+    void platformManagerGetsEverySectionOkToo() {
         AdminDashboardResponse response = fx.service(AdminDashboardFixtures.passThroughCache())
                 .build(platform("PLATFORM_MANAGER"), "30");
 
-        assertThat(sections(response)).allSatisfy(section -> assertThat(section.status()).isEqualTo(SectionStatus.OK));
+        assertThat(sections(response)).hasSize(10)
+                .allSatisfy(section -> assertThat(section.status()).isEqualTo(SectionStatus.OK));
     }
 
     @ParameterizedTest
@@ -128,11 +144,17 @@ class AdminDashboardServiceTest {
                 .build(platform("PLATFORM_ADMIN"), days);
 
         assertThat(response.meta().windowDays()).isEqualTo(window);
-        verify(fx.tenancy).countTenantsCreatedBetween(NOW.minus(Duration.ofDays(window)), NOW);
-        verify(fx.tenancy).countTenantsCreatedBetween(NOW.minus(Duration.ofDays(2L * window)),
+        verify(fx.tenancyOverview).countTenantsCreatedBetween(NOW.minus(Duration.ofDays(window)), NOW);
+        verify(fx.tenancyOverview).countTenantsCreatedBetween(NOW.minus(Duration.ofDays(2L * window)),
                 NOW.minus(Duration.ofDays(window)));
         verify(fx.attempts).countDistinctActiveStudentsPlatformWide(NOW.minus(Duration.ofDays(window)), NOW);
         verify(fx.support).countOpenedBetween(NOW.minus(Duration.ofDays(window)), NOW);
+        verify(fx.revenueFacade).paidRevenueBetween(NOW.minus(Duration.ofDays(window)), NOW);
+        verify(fx.revenueFacade).paidRevenueBetween(NOW.minus(Duration.ofDays(2L * window)),
+                NOW.minus(Duration.ofDays(window)));
+        verify(fx.itembank).countCreatedBetween(NOW.minus(Duration.ofDays(window)), NOW);
+        verify(fx.itembank).countCreatedBetween(NOW.minus(Duration.ofDays(2L * window)),
+                NOW.minus(Duration.ofDays(window)));
     }
 
     @Test
@@ -159,18 +181,21 @@ class AdminDashboardServiceTest {
     @ValueSource(strings = {"PLATFORM_ADMIN", "PLATFORM_MANAGER", "ACADEMIC_MANAGER", "ACADEMIC_STAFF",
             "PLATFORM_AUTHOR"})
     void everySectionStatusFollowsTheRealPolicyForEveryPlatformRole(String role) {
+        // Phase 4: revenue needs COMMERCIAL_READ; the question bank needs no operation, only a valid platform caller.
         Map<String, PlatformOperation> required = Map.of(
                 "tenants", PlatformOperation.TENANT_READ, "learners", PlatformOperation.TENANT_READ,
                 "recentTenants", PlatformOperation.TENANT_READ, "applications", PlatformOperation.APPLICATION_READ,
                 "licenses", PlatformOperation.LICENSE_MASKED_READ, "subscriptions", PlatformOperation.COMMERCIAL_READ,
-                "plans", PlatformOperation.PLAN_READ_ALL, "support", PlatformOperation.SUPPORT_READ);
+                "plans", PlatformOperation.PLAN_READ_ALL, "support", PlatformOperation.SUPPORT_READ,
+                "revenue", PlatformOperation.COMMERCIAL_READ);
         CurrentUser caller = platform(role);
         FakeRedis redis = new FakeRedis();
 
         AdminDashboardResponse response = fx.service(redis.cache()).build(caller, null);
 
         byKey(response).forEach((key, section) -> {
-            boolean allowed = PlatformOperationPolicy.can(caller, required.get(key));
+            boolean allowed = key.equals("questionBank") ? PlatformOperationPolicy.isPlatformCaller(caller)
+                    : PlatformOperationPolicy.can(caller, required.get(key));
             assertThat(section.status()).as("%s for %s", key, role)
                     .isEqualTo(allowed ? SectionStatus.OK : SectionStatus.FORBIDDEN);
             if (allowed) {
@@ -179,32 +204,55 @@ class AdminDashboardServiceTest {
                 assertThat(section.data()).as("%s data for %s", key, role).isNull();
             }
         });
-        long allowedCount = required.values().stream().filter(op -> PlatformOperationPolicy.can(caller, op)).count();
+        long allowedCount = byKey(response).values().stream().filter(s -> s.status() == SectionStatus.OK).count();
         assertThat(redis.store).hasSize((int) allowedCount);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"ACADEMIC_MANAGER", "ACADEMIC_STAFF", "PLATFORM_AUTHOR"})
-    void academicCallersGetEverySectionForbiddenWithNullDataAndNothingIsComputedOrCached(String role) {
+    void academicCallersGetEveryOperationsSectionForbiddenWithNullDataAndOnlyTheQuestionBankIsComputedAndCached(
+            String role) {
         FakeRedis redis = new FakeRedis();
 
         AdminDashboardResponse response = fx.service(redis.cache()).build(platform(role), null);
 
-        assertThat(sections(response)).hasSize(8).allSatisfy(section -> {
+        // Phase 4 contract change: 8 -> 10 sections and the question bank is now visible to academic callers.
+        assertThat(sections(response)).hasSize(10);
+        assertThat(operationsSections(response)).hasSize(9).allSatisfy(section -> {
             assertThat(section.status()).isEqualTo(SectionStatus.FORBIDDEN);
             assertThat(section.data()).isNull();
         });
-        verifyNoFacadeTouched();
-        assertThat(redis.store).isEmpty();
-        assertThat(redis.reads).isEmpty();
-        verifyNoInteractions(redis.ops);
+        assertThat(response.revenue().status()).isEqualTo(SectionStatus.FORBIDDEN);
+        assertThat(response.revenue().data()).isNull();
+        assertThat(response.questionBank().status()).isEqualTo(SectionStatus.OK);
+        assertThat(response.questionBank().data()).isNotNull();
+        // Forbidden sections never touch any operations facade: only the item bank facade was read.
+        verifyNoOperationsFacadeTouched();
+        verify(fx.itembank).counts();
+        // Only the question bank was looked up and cached, and under the academic bucket (never under 'none').
+        String key = "dash:admin:v1:" + ACADEMIC_BUCKET + ":30:questionBank";
+        assertThat(redis.reads).containsExactly(key);
+        assertThat(redis.store.keySet()).containsExactly(key);
     }
 
     @Test
-    void aForbiddenCallerNeverTouchesAMockedCacheEither() {
+    void aForbiddenSectionNeverTouchesAMockedCacheOnlyTheQuestionBankDoes() {
         DashboardCache cache = mock(DashboardCache.class);
 
         fx.service(cache).build(platform("ACADEMIC_STAFF"), "30");
+
+        verify(cache).getOrCompute(eq("dash:admin:v1:" + ACADEMIC_BUCKET + ":30:questionBank"), any(Duration.class),
+                any(), any());
+        org.mockito.Mockito.verifyNoMoreInteractions(cache);
+        verifyNoOperationsFacadeTouched();
+    }
+
+    @Test
+    void aCallerWithNoVisibleSectionAtAllNeverTouchesAMockedCacheOrAnyFacade() {
+        DashboardCache cache = mock(DashboardCache.class);
+
+        fx.service(cache).build(tenantBound("PLATFORM_ADMIN"), "30");
+        fx.service(cache).build(tenantBound("HOST_ADMIN"), "30");
 
         verifyNoInteractions(cache);
         verifyNoFacadeTouched();
@@ -248,7 +296,7 @@ class AdminDashboardServiceTest {
         Set<String> expected = SECTION_KEYS.stream().map(key -> "dash:admin:v1:" + ADMIN_BUCKET + ":30:" + key)
                 .collect(Collectors.toSet());
         assertThat(redis.store.keySet()).isEqualTo(expected);
-        assertThat(redis.ttls.values()).hasSize(8).allMatch(ttl -> ttl.equals(Duration.ofSeconds(60)));
+        assertThat(redis.ttls.values()).hasSize(10).allMatch(ttl -> ttl.equals(Duration.ofSeconds(60)));
     }
 
     @Test
@@ -269,6 +317,9 @@ class AdminDashboardServiceTest {
         assertThat(second.subscriptions()).isEqualTo(first.subscriptions());
         assertThat(second.plans()).isEqualTo(first.plans());
         assertThat(second.support()).isEqualTo(first.support());
+        assertThat(second.revenue()).isEqualTo(first.revenue());
+        assertThat(second.questionBank()).isEqualTo(first.questionBank());
+        assertThat(second.revenue().data().currencies()).isNotEmpty();
     }
 
     @Test
@@ -297,7 +348,7 @@ class AdminDashboardServiceTest {
 
         assertThat(sections(manager)).allSatisfy(section -> assertThat(section.status()).isEqualTo(SectionStatus.OK));
         verifyNoFacadeTouched();
-        assertThat(redis.store).hasSize(8);
+        assertThat(redis.store).hasSize(10);
     }
 
     @Test
@@ -309,9 +360,9 @@ class AdminDashboardServiceTest {
         service.build(platform("PLATFORM_ADMIN"), "30");
         service.build(platform("PLATFORM_ADMIN"), "90");
 
-        assertThat(redis.store).hasSize(24);
+        assertThat(redis.store).hasSize(30);
         for (String window : List.of("7", "30", "90")) {
-            assertThat(redis.store.keySet().stream().filter(key -> key.contains(":" + window + ":"))).hasSize(8);
+            assertThat(redis.store.keySet().stream().filter(key -> key.contains(":" + window + ":"))).hasSize(10);
         }
     }
 
@@ -321,41 +372,58 @@ class AdminDashboardServiceTest {
     void anAcademicCallerNeverReceivesAnOperationsPayloadEvenForTheSameWindowAfterAnAdminPopulatedTheCache() {
         FakeRedis redis = new FakeRedis();
         AdminDashboardService service = fx.service(redis.cache());
-        service.build(platform("PLATFORM_ADMIN"), "30");
-        assertThat(redis.store).hasSize(8);
+        AdminDashboardResponse admin = service.build(platform("PLATFORM_ADMIN"), "30");
+        assertThat(redis.store).hasSize(10);
         clearFacadeInvocations();
         redis.reads.clear();
 
         AdminDashboardResponse academic = service.build(platform("ACADEMIC_MANAGER"), "30");
 
-        assertThat(sections(academic)).allSatisfy(section -> {
+        assertThat(operationsSections(academic)).allSatisfy(section -> {
             assertThat(section.status()).isEqualTo(SectionStatus.FORBIDDEN);
             assertThat(section.data()).isNull();
         });
-        assertThat(redis.reads).as("a forbidden section does not even look into the cache").isEmpty();
-        verifyNoFacadeTouched();
-        assertThat(redis.store).hasSize(8);
+        assertThat(academic.revenue().status()).isEqualTo(SectionStatus.FORBIDDEN);
+        assertThat(academic.revenue().data()).isNull();
+        assertThat(academic.questionBank().status()).isEqualTo(SectionStatus.OK);
+        // The academic bucket is not the operations bucket: the admin's cached question bank is NOT reused (and
+        // no admin payload leaks), the academic caller gets its own entry computed once.
+        assertThat(redis.reads).as("a forbidden section does not even look into the cache")
+                .containsExactly("dash:admin:v1:" + ACADEMIC_BUCKET + ":30:questionBank");
+        verifyNoOperationsFacadeTouched();
+        verify(fx.itembank, times(1)).counts();
+        assertThat(redis.store).hasSize(11);
         assertThat(redis.store.keySet()).noneMatch(key -> key.contains(":none:"));
+        assertThat(redis.store.keySet().stream().filter(key -> key.startsWith("dash:admin:v1:" + ACADEMIC_BUCKET + ":")))
+                .containsExactly("dash:admin:v1:" + ACADEMIC_BUCKET + ":30:questionBank");
+        // The data both callers see for the question bank is identical (same computation, separate cache entries).
+        assertThat(academic.questionBank().data()).isEqualTo(admin.questionBank().data());
     }
 
     @Test
-    void evenAPayloadPlantedUnderTheNoneBucketKeyIsNeverServed() {
+    void evenAPayloadPlantedUnderTheAcademicOrNoneBucketKeyForAnOperationsSectionIsNeverServed() {
         FakeRedis redis = new FakeRedis();
         AdminDashboardService service = fx.service(redis.cache());
         service.build(platform("PLATFORM_ADMIN"), "30");
-        String operationsTenants = redis.store.get("dash:admin:v1:" + ADMIN_BUCKET + ":30:tenants");
-        redis.store.put("dash:admin:v1:none:30:tenants", operationsTenants);
+        for (String section : List.of("tenants", "revenue", "subscriptions")) {
+            String operationsPayload = redis.store.get("dash:admin:v1:" + ADMIN_BUCKET + ":30:" + section);
+            redis.store.put("dash:admin:v1:none:30:" + section, operationsPayload);
+            redis.store.put("dash:admin:v1:" + ACADEMIC_BUCKET + ":30:" + section, operationsPayload);
+        }
         redis.reads.clear();
 
         AdminDashboardResponse academic = service.build(platform("ACADEMIC_STAFF"), "30");
 
         assertThat(academic.tenants().status()).isEqualTo(SectionStatus.FORBIDDEN);
         assertThat(academic.tenants().data()).isNull();
-        assertThat(redis.reads).isEmpty();
+        assertThat(academic.revenue().status()).isEqualTo(SectionStatus.FORBIDDEN);
+        assertThat(academic.revenue().data()).isNull();
+        assertThat(academic.subscriptions().status()).isEqualTo(SectionStatus.FORBIDDEN);
+        assertThat(redis.reads).containsExactly("dash:admin:v1:" + ACADEMIC_BUCKET + ":30:questionBank");
     }
 
     @Test
-    void anAcademicCallerFirstThenAnAdminStillGetsFullDataAndTheCacheHoldsOnlyOperationsBuckets() {
+    void anAcademicCallerFirstThenAnAdminStillGetsFullDataAndTheCacheHoldsOnlyTheTwoExpectedBuckets() {
         FakeRedis redis = new FakeRedis();
         AdminDashboardService service = fx.service(redis.cache());
 
@@ -363,7 +431,14 @@ class AdminDashboardServiceTest {
         AdminDashboardResponse admin = service.build(platform("PLATFORM_ADMIN"), "30");
 
         assertThat(sections(admin)).allSatisfy(section -> assertThat(section.status()).isEqualTo(SectionStatus.OK));
-        assertThat(redis.store.keySet()).allMatch(key -> key.startsWith("dash:admin:v1:" + ADMIN_BUCKET + ":30:"));
+        assertThat(admin.revenue().data().currencies()).isNotEmpty();
+        String operationsPrefix = "dash:admin:v1:" + ADMIN_BUCKET + ":30:";
+        String academicPrefix = "dash:admin:v1:" + ACADEMIC_BUCKET + ":30:";
+        assertThat(redis.store.keySet()).allMatch(key -> key.startsWith(operationsPrefix) || key.startsWith(academicPrefix));
+        // 10 operations-bucket entries + the single academic question bank entry; no academic entry for any other section.
+        assertThat(redis.store.keySet().stream().filter(key -> key.startsWith(operationsPrefix))).hasSize(10);
+        assertThat(redis.store.keySet().stream().filter(key -> key.startsWith(academicPrefix)))
+                .containsExactly(academicPrefix + "questionBank");
     }
 
     // ---- cache failure and failed sections ----
@@ -377,7 +452,7 @@ class AdminDashboardServiceTest {
         AdminDashboardResponse response = fx.service(redis.cache()).build(platform("PLATFORM_ADMIN"), null);
 
         assertThat(sections(response)).allSatisfy(section -> assertThat(section.status()).isEqualTo(SectionStatus.OK));
-        verify(fx.tenancy).platformTenantCounts();
+        verify(fx.tenancyOverview).platformTenantCounts();
         verify(fx.billing).licenseCounts(NOW);
     }
 
@@ -430,7 +505,7 @@ class AdminDashboardServiceTest {
 
         assertThat(failed.licenses().status()).isEqualTo(SectionStatus.ERROR);
         assertThat(failed.licenses().data()).isNull();
-        assertThat(redis.store).hasSize(7);
+        assertThat(redis.store).hasSize(9);
         assertThat(redis.store.keySet()).noneMatch(key -> key.endsWith(":licenses"));
 
         doReturn(new LicenseCounts(1, 2, 3, 4, 5)).when(fx.billing).licenseCounts(NOW);
@@ -438,14 +513,41 @@ class AdminDashboardServiceTest {
 
         assertThat(recovered.licenses().status()).isEqualTo(SectionStatus.OK);
         assertThat(recovered.licenses().data().issuedValid()).isEqualTo(1);
+        assertThat(redis.store).hasSize(10);
+    }
+
+    @Test
+    void aFailedRevenueOrQuestionBankSectionIsNeverCachedAndRecoversOnTheNextRequest() {
+        FakeRedis redis = new FakeRedis();
+        AdminDashboardService service = fx.service(redis.cache());
+        when(fx.revenueFacade.paidRevenueBetween(any(), any())).thenThrow(new IllegalStateException("revenue db down"));
+        when(fx.itembank.counts()).thenThrow(new IllegalStateException("bank db down"));
+
+        AdminDashboardResponse failed = service.build(platform("PLATFORM_ADMIN"), "30");
+
+        assertThat(failed.revenue().status()).isEqualTo(SectionStatus.ERROR);
+        assertThat(failed.revenue().data()).isNull();
+        assertThat(failed.questionBank().status()).isEqualTo(SectionStatus.ERROR);
+        assertThat(failed.questionBank().data()).isNull();
+        assertThat(failed.tenants().status()).isEqualTo(SectionStatus.OK);
         assertThat(redis.store).hasSize(8);
+        assertThat(redis.store.keySet()).noneMatch(key -> key.endsWith(":revenue") || key.endsWith(":questionBank"));
+
+        org.mockito.Mockito.reset(fx.revenueFacade, fx.itembank);
+        fx.stubRevenueAndQuestionBank();
+        AdminDashboardResponse recovered = service.build(platform("PLATFORM_ADMIN"), "30");
+
+        assertThat(recovered.revenue().status()).isEqualTo(SectionStatus.OK);
+        assertThat(recovered.questionBank().status()).isEqualTo(SectionStatus.OK);
+        assertThat(redis.store).hasSize(10);
     }
 
     // ---- per-section failure isolation ----
 
     private enum Failing {
         TENANTS("tenants"), LEARNERS("learners"), RECENT_TENANTS("recentTenants"), APPLICATIONS("applications"),
-        LICENSES("licenses"), SUBSCRIPTIONS("subscriptions"), PLANS("plans"), SUPPORT("support");
+        LICENSES("licenses"), SUBSCRIPTIONS("subscriptions"), PLANS("plans"), SUPPORT("support"),
+        REVENUE("revenue"), QUESTION_BANK("questionBank");
 
         final String key;
 
@@ -457,14 +559,16 @@ class AdminDashboardServiceTest {
     private void breakFacadeOf(Failing failing) {
         RuntimeException boom = new IllegalStateException("boom jdbc:postgresql://secret-host");
         switch (failing) {
-            case TENANTS -> when(fx.tenancy.platformTenantCounts()).thenThrow(boom);
-            case LEARNERS -> when(fx.tenancy.seatLimits()).thenThrow(boom);
-            case RECENT_TENANTS -> when(fx.tenancy.recentTenants(5)).thenThrow(boom);
+            case TENANTS -> when(fx.tenancyOverview.platformTenantCounts()).thenThrow(boom);
+            case LEARNERS -> when(fx.tenancyOverview.seatLimits()).thenThrow(boom);
+            case RECENT_TENANTS -> when(fx.tenancyOverview.recentTenants(5)).thenThrow(boom);
             case APPLICATIONS -> when(fx.billing.pendingApplicationCount()).thenThrow(boom);
             case LICENSES -> when(fx.billing.licenseCounts(NOW)).thenThrow(boom);
             case SUBSCRIPTIONS -> when(fx.billing.subscriptionCounts(NOW)).thenThrow(boom);
             case PLANS -> when(fx.billing.planCounts()).thenThrow(boom);
             case SUPPORT -> when(fx.support.platformTicketCounts()).thenThrow(boom);
+            case REVENUE -> when(fx.revenueFacade.paidAmountsPerRange(any())).thenThrow(boom);
+            case QUESTION_BANK -> when(fx.itembank.counts()).thenThrow(boom);
             default -> throw new IllegalArgumentException();
         }
     }
@@ -512,6 +616,8 @@ class AdminDashboardServiceTest {
 
         assertThat(response.tenants().status()).isEqualTo(SectionStatus.ERROR);
         assertThat(response.tenants().data()).isNull();
+        assertThat(response.questionBank().status()).isEqualTo(SectionStatus.ERROR);
+        assertThat(response.questionBank().data()).isNull();
         assertThat(response.meta().windowDays()).isEqualTo(30);
     }
 
@@ -558,8 +664,8 @@ class AdminDashboardServiceTest {
         ArgumentCaptor<Collection<UUID>> tenantIds = ArgumentCaptor.forClass(Collection.class);
         verify(fx.tenancy, times(1)).findTenantSummaries(tenantIds.capture());
         assertThat(tenantIds.getValue()).containsExactly(T1);
-        verify(fx.tenancy, times(1)).recentTenants(5);
-        verify(fx.tenancy, times(1)).seatLimits();
+        verify(fx.tenancyOverview, times(1)).recentTenants(5);
+        verify(fx.tenancyOverview, times(1)).seatLimits();
         verify(fx.billing, times(1)).oldestPendingApplications(5);
         verify(fx.support, times(1)).oldestOpenTickets(5);
     }
@@ -571,7 +677,7 @@ class AdminDashboardServiceTest {
             many.add(new com.pte.tenancy.RecentTenantView(UUID.randomUUID(), "C" + i, "N" + i, "SCHOOL", "ACTIVE", 10,
                     NOW.minusSeconds(i)));
         }
-        when(fx.tenancy.recentTenants(5)).thenReturn(many);
+        when(fx.tenancyOverview.recentTenants(5)).thenReturn(many);
         AtomicInteger planLookups = new AtomicInteger();
         when(fx.billing.currentPlanByTenant(anyCollection(), eq(NOW))).thenAnswer(invocation -> {
             planLookups.incrementAndGet();

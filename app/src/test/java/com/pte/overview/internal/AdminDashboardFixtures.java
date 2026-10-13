@@ -7,10 +7,16 @@ import com.pte.billing.BillingOverviewService.PendingApplicationView;
 import com.pte.billing.BillingOverviewService.PlanCounts;
 import com.pte.billing.BillingOverviewService.SubscriptionCounts;
 import com.pte.billing.BillingOverviewService.TenantPlanBrief;
+import com.pte.billing.BillingRevenueOverviewService;
+import com.pte.billing.BillingRevenueOverviewService.CurrencyPaidTotal;
 import com.pte.identity.IdentityOverviewService;
+import com.pte.itembank.ItembankOverviewService;
+import com.pte.itembank.ItembankOverviewService.QuestionBankCounts;
 import com.pte.overview.internal.cache.DashboardCache;
 import com.pte.overview.internal.service.AdminCommercialSections;
 import com.pte.overview.internal.service.AdminDashboardService;
+import com.pte.overview.internal.service.AdminQuestionBankSections;
+import com.pte.overview.internal.service.AdminRevenueSections;
 import com.pte.overview.internal.service.AdminTenantSections;
 import com.pte.overview.internal.service.DashboardSectionRunner;
 import com.pte.shared.security.CurrentUser;
@@ -19,6 +25,7 @@ import com.pte.support.SupportOverviewService.OpenTicketBrief;
 import com.pte.support.SupportOverviewService.TicketCounts;
 import com.pte.tenancy.PlatformTenantCounts;
 import com.pte.tenancy.RecentTenantView;
+import com.pte.tenancy.TenancyOverviewService;
 import com.pte.tenancy.TenancyService;
 import com.pte.tenancy.TenantSeatLimit;
 import com.pte.tenancy.TenantSummary;
@@ -26,10 +33,12 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -71,6 +80,9 @@ public final class AdminDashboardFixtures {
     public static final UUID GHOST = UUID.fromString("ee000000-0000-0000-0000-00000000000e");
 
     public final TenancyService tenancy = mock(TenancyService.class);
+    public final TenancyOverviewService tenancyOverview = mock(TenancyOverviewService.class);
+    public final BillingRevenueOverviewService revenueFacade = mock(BillingRevenueOverviewService.class);
+    public final ItembankOverviewService itembank = mock(ItembankOverviewService.class);
     public final IdentityOverviewService identity = mock(IdentityOverviewService.class);
     public final AttemptOverviewService attempts = mock(AttemptOverviewService.class);
     public final BillingOverviewService billing = mock(BillingOverviewService.class);
@@ -115,12 +127,12 @@ public final class AdminDashboardFixtures {
         Map<String, Long> byType = new LinkedHashMap<>();
         byType.put("CENTER", 8L);
         byType.put("SCHOOL", 12L);
-        when(tenancy.platformTenantCounts()).thenReturn(new PlatformTenantCounts(18, 2, byType));
-        when(tenancy.countTenantsCreatedBetween(WINDOW_START, NOW)).thenReturn(6L);
-        when(tenancy.countTenantsCreatedBetween(PREVIOUS_START, WINDOW_START)).thenReturn(4L);
-        when(tenancy.countTenantsCreatedPerRange(anyList())).thenReturn(LongStream.rangeClosed(1, 12).boxed().toList());
-        when(tenancy.seatLimits()).thenReturn(SEAT_LIMITS);
-        when(tenancy.recentTenants(5)).thenReturn(List.of(
+        when(tenancyOverview.platformTenantCounts()).thenReturn(new PlatformTenantCounts(18, 2, byType));
+        when(tenancyOverview.countTenantsCreatedBetween(WINDOW_START, NOW)).thenReturn(6L);
+        when(tenancyOverview.countTenantsCreatedBetween(PREVIOUS_START, WINDOW_START)).thenReturn(4L);
+        when(tenancyOverview.countTenantsCreatedPerRange(anyList())).thenReturn(LongStream.rangeClosed(1, 12).boxed().toList());
+        when(tenancyOverview.seatLimits()).thenReturn(SEAT_LIMITS);
+        when(tenancyOverview.recentTenants(5)).thenReturn(List.of(
                 new RecentTenantView(T1, "T1", "Alpha School", "SCHOOL", "ACTIVE", 100, T1_CREATED),
                 new RecentTenantView(T2, "T2", "Beta Centre", "CENTER", "SUSPENDED", 50, T2_CREATED),
                 new RecentTenantView(T3, "T3", "Gamma College", "SCHOOL", "ACTIVE", 200, T3_CREATED)));
@@ -167,6 +179,49 @@ public final class AdminDashboardFixtures {
         when(support.oldestOpenTickets(5)).thenReturn(List.of(
                 new OpenTicketBrief(TICKET_1, T1, "BUG", Instant.parse("2026-09-10T00:00:00Z")),
                 new OpenTicketBrief(TICKET_2, T1, "CONTENT_COMPLAINT", Instant.parse("2026-09-11T00:00:00Z"))));
+        return stubRevenueAndQuestionBank();
+    }
+
+    /**
+     * Phase 4: deterministic revenue (VND and USD in the current window, VND and EUR in the previous one, so the
+     * currency set is the union) and question bank numbers. Callable on its own after a mock reset.
+     */
+    public AdminDashboardFixtures stubRevenueAndQuestionBank() {
+        when(revenueFacade.paidRevenueBetween(WINDOW_START, NOW)).thenReturn(List.of(
+                new CurrencyPaidTotal("USD", new BigDecimal("120.00"), 2),
+                new CurrencyPaidTotal("VND", new BigDecimal("1500000.50"), 3)));
+        when(revenueFacade.paidRevenueBetween(PREVIOUS_START, WINDOW_START)).thenReturn(List.of(
+                new CurrencyPaidTotal("EUR", new BigDecimal("50.00"), 1),
+                new CurrencyPaidTotal("VND", new BigDecimal("1000000.00"), 2)));
+        List<BigDecimal> vnd = new ArrayList<>(Collections.nCopies(12, BigDecimal.ZERO));
+        vnd.set(10, new BigDecimal("1000000.00"));
+        vnd.set(11, new BigDecimal("1500000.50"));
+        List<BigDecimal> usd = new ArrayList<>(Collections.nCopies(12, BigDecimal.ZERO));
+        usd.set(11, new BigDecimal("120.00"));
+        Map<String, List<BigDecimal>> series = new LinkedHashMap<>();
+        series.put("USD", List.copyOf(usd));
+        series.put("VND", List.copyOf(vnd));
+        when(revenueFacade.paidAmountsPerRange(anyList())).thenReturn(series);
+
+        Map<String, Long> byStatus = new LinkedHashMap<>();
+        byStatus.put("DRAFT", 20L);
+        byStatus.put("PENDING_APPROVAL", 10L);
+        byStatus.put("APPROVED", 80L);
+        byStatus.put("ARCHIVED", 10L);
+        Map<String, Long> bySection = new LinkedHashMap<>();
+        bySection.put("LISTENING", 30L);
+        bySection.put("SPEAKING", 30L);
+        bySection.put("READING", 30L);
+        bySection.put("WRITING", 30L);
+        Map<String, Long> byPool = new LinkedHashMap<>();
+        byPool.put("EXAM", 100L);
+        byPool.put("PRACTICE", 20L);
+        Map<String, Long> approvedByPool = new LinkedHashMap<>();
+        approvedByPool.put("EXAM", 70L);
+        approvedByPool.put("PRACTICE", 10L);
+        when(itembank.counts()).thenReturn(new QuestionBankCounts(120, byStatus, bySection, byPool, approvedByPool));
+        when(itembank.countCreatedBetween(WINDOW_START, NOW)).thenReturn(12L);
+        when(itembank.countCreatedBetween(PREVIOUS_START, WINDOW_START)).thenReturn(8L);
         return this;
     }
 
@@ -177,16 +232,24 @@ public final class AdminDashboardFixtures {
     }
 
     public AdminDashboardService service(DashboardCache cache, Clock clock) {
-        return new AdminDashboardService(identity, tenantSections(), commercialSections(),
-                new DashboardSectionRunner(), cache, clock);
+        return new AdminDashboardService(identity, tenantSections(), commercialSections(), revenueSections(),
+                questionBankSections(), new DashboardSectionRunner(), cache, clock);
     }
 
     public AdminTenantSections tenantSections() {
-        return new AdminTenantSections(tenancy, attempts, billing);
+        return new AdminTenantSections(tenancyOverview, attempts, billing);
     }
 
     public AdminCommercialSections commercialSections() {
         return new AdminCommercialSections(billing, support, tenancy);
+    }
+
+    public AdminRevenueSections revenueSections() {
+        return new AdminRevenueSections(revenueFacade);
+    }
+
+    public AdminQuestionBankSections questionBankSections() {
+        return new AdminQuestionBankSections(itembank);
     }
 
     /** A cache that always misses and never stores: the loader runs on every call (see {@link HostDashboardFixtures}). */

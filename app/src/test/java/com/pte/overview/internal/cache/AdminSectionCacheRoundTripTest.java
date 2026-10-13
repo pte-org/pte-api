@@ -7,13 +7,17 @@ import com.pte.overview.internal.dto.response.AdminSectionData.Learners;
 import com.pte.overview.internal.dto.response.AdminSectionData.Licenses;
 import com.pte.overview.internal.dto.response.AdminSectionData.OldestTicket;
 import com.pte.overview.internal.dto.response.AdminSectionData.PendingApplication;
+import com.pte.overview.internal.dto.response.AdminSectionData.CurrencyRevenue;
 import com.pte.overview.internal.dto.response.AdminSectionData.Plans;
+import com.pte.overview.internal.dto.response.AdminSectionData.QuestionBank;
 import com.pte.overview.internal.dto.response.AdminSectionData.RecentTenant;
 import com.pte.overview.internal.dto.response.AdminSectionData.RecentTenants;
+import com.pte.overview.internal.dto.response.AdminSectionData.Revenue;
 import com.pte.overview.internal.dto.response.AdminSectionData.SeatUtilisation;
 import com.pte.overview.internal.dto.response.AdminSectionData.Subscriptions;
 import com.pte.overview.internal.dto.response.AdminSectionData.Support;
 import com.pte.overview.internal.dto.response.AdminSectionData.Tenants;
+import com.pte.overview.internal.dto.response.MonthlyAmount;
 import com.pte.overview.internal.dto.response.MonthlyPoint;
 import com.pte.overview.internal.dto.response.TrendValue;
 import org.junit.jupiter.api.Test;
@@ -25,6 +29,7 @@ import org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -113,7 +118,48 @@ class AdminSectionCacheRoundTripTest {
                 new Sample("support (full)", Support.class, new Support(11, 4, new TrendValue(9, 3, 200.0),
                         List.of(new OldestTicket(A, B, "Alpha", "BUG", MICROS),
                                 new OldestTicket(B, A, null, "CONTENT_COMPLAINT", NANOS)))),
-                new Sample("support (empty)", Support.class, new Support(0, 0, new TrendValue(0, 0, null), List.of())));
+                new Sample("support (empty)", Support.class, new Support(0, 0, new TrendValue(0, 0, null), List.of())),
+                // Phase 4: revenue keeps exact BigDecimal amounts (scale included) and per-currency series
+                new Sample("revenue (two currencies, exact amounts, 12 monthly points)", Revenue.class,
+                        new Revenue("ONLINE_ORDERS", new TrendValue(5, 3, 66.7), List.of(
+                                new CurrencyRevenue("USD", new BigDecimal("120.00"), new BigDecimal("0.00"), null,
+                                        new TrendValue(2, 0, null), amountMonths("USD")),
+                                new CurrencyRevenue("VND", new BigDecimal("1500000.50"), new BigDecimal("1000000.00"),
+                                        50.0, new TrendValue(3, 2, 50.0), amountMonths("VND"))))),
+                new Sample("revenue (beyond double precision, scale 0 and 4, negative change)", Revenue.class,
+                        new Revenue("ONLINE_ORDERS", new TrendValue(1, 9, -88.9), List.of(
+                                new CurrencyRevenue("BTC", new BigDecimal("12345678901234567890.12"),
+                                        new BigDecimal("99999999999999999.99"), -99.9, new TrendValue(1, 9, -88.9),
+                                        amountMonths("BTC")),
+                                new CurrencyRevenue("JPY", new BigDecimal("7"), new BigDecimal("0.0001"), 699900.0,
+                                        new TrendValue(1, 1, 0.0), amountMonths("JPY"))))),
+                new Sample("revenue (empty, no currency)", Revenue.class,
+                        new Revenue("ONLINE_ORDERS", new TrendValue(0, 0, null), List.of())),
+                new Sample("questionBank (full)", QuestionBank.class, new QuestionBank(120,
+                        enumCounts("DRAFT", 20, "PENDING_APPROVAL", 10, "APPROVED", 80, "ARCHIVED", 10),
+                        enumCounts("LISTENING", 30, "SPEAKING", 30, "READING", 30, "WRITING", 30),
+                        enumCounts("EXAM", 100, "PRACTICE", 20), enumCounts("EXAM", 70, "PRACTICE", 10),
+                        new TrendValue(12, 8, 50.0))),
+                new Sample("questionBank (zero filled, null change)", QuestionBank.class, new QuestionBank(0,
+                        enumCounts("DRAFT", 0, "PENDING_APPROVAL", 0, "APPROVED", 0, "ARCHIVED", 0),
+                        enumCounts("LISTENING", 0, "SPEAKING", 0, "READING", 0, "WRITING", 0),
+                        enumCounts("EXAM", 0, "PRACTICE", 0), enumCounts("EXAM", 0, "PRACTICE", 0),
+                        new TrendValue(0, 0, null))));
+    }
+
+    private static List<MonthlyAmount> amountMonths(String currency) {
+        return java.util.stream.IntStream.range(0, 12)
+                .mapToObj(i -> new MonthlyAmount(String.format("2025-%02d", i + 1),
+                        i == 5 ? new BigDecimal("0.10") : new BigDecimal(i * 1000 + ".50"), i == 11))
+                .toList();
+    }
+
+    private static Map<String, Long> enumCounts(Object... keyAndCount) {
+        Map<String, Long> map = new LinkedHashMap<>();
+        for (int i = 0; i < keyAndCount.length; i += 2) {
+            map.put((String) keyAndCount[i], ((Number) keyAndCount[i + 1]).longValue());
+        }
+        return map;
     }
 
     private static final JsonMapper PRODUCTION = productionMapper();
@@ -129,7 +175,38 @@ class AdminSectionCacheRoundTripTest {
     void everyCachedAdminSectionTypeHasASample() {
         assertThat(samples().stream().map(Sample::type).distinct().toList()).containsExactlyInAnyOrder(Tenants.class,
                 Learners.class, RecentTenants.class, Applications.class, Licenses.class, Subscriptions.class,
-                Plans.class, Support.class);
+                Plans.class, Support.class, Revenue.class, QuestionBank.class);
+    }
+
+    @Test
+    void bigDecimalAmountsKeepTheirExactValueAndScaleThroughTheProductionMapper() {
+        JsonMapper mapper = productionMapper();
+        for (String amount : List.of("0", "0.00", "120.00", "1500000.50", "12345678901234567890.12", "0.0001",
+                "-35.5", "9999999999999999.99")) {
+            MonthlyAmount original = new MonthlyAmount("2026-10", new BigDecimal(amount), true);
+
+            MonthlyAmount restored = mapper.readValue(mapper.writeValueAsString(original), MonthlyAmount.class);
+
+            assertThat(restored.amount()).as(amount).isEqualTo(new BigDecimal(amount));
+            assertThat(restored.amount().scale()).as("scale of " + amount).isEqualTo(new BigDecimal(amount).scale());
+            assertThat(restored).isEqualTo(original);
+        }
+    }
+
+    @Test
+    void theCachedRevenueAndQuestionBankJsonCarryNoPaymentLinkProviderCustomerOrTenantKeys() {
+        JsonMapper mapper = productionMapper();
+        for (Sample sample : samples()) {
+            if (sample.type() != Revenue.class && sample.type() != QuestionBank.class) {
+                continue;
+            }
+            String json = mapper.writeValueAsString(sample.value()).toLowerCase();
+
+            assertThat(json).as(sample.name()).doesNotContain("payment").doesNotContain("link").doesNotContain("url")
+                    .doesNotContain("provider").doesNotContain("checkout").doesNotContain("customer")
+                    .doesNotContain("tenant").doesNotContain("ordercode").doesNotContain("title")
+                    .doesNotContain("prompt").doesNotContain("answer");
+        }
     }
 
     @Test
