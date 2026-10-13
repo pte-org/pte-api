@@ -94,8 +94,11 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long>,
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
     Optional<ExamAttempt> findWithPinnedByPublicId(UUID publicId);
 
+    /** Timeout hint (ms) for the heavy overview counts. */
+    String OVERVIEW_QUERY_TIMEOUT_MS = "2000";
+
     /** Overview: submitted attempts in {@code [from, to)}; heavy count, bounded by a 2s timeout hint. */
-    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "2000"))
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = OVERVIEW_QUERY_TIMEOUT_MS))
     @Query("SELECT COUNT(a) FROM ExamAttempt a WHERE a.tenantId = :tenantId AND a.deleted = false "
             + "AND a.status = com.pte.attempt.domain.enums.AttemptStatus.SUBMITTED "
             + "AND a.submittedAt >= :from AND a.submittedAt < :to")
@@ -108,7 +111,7 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long>,
     long countInProgress(@Param("tenantId") UUID tenantId);
 
     /** Overview: distinct students with an attempt started in {@code [from, to)}; heavy count with timeout hint. */
-    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "2000"))
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = OVERVIEW_QUERY_TIMEOUT_MS))
     @Query("SELECT COUNT(DISTINCT a.studentPublicId) FROM ExamAttempt a WHERE a.tenantId = :tenantId "
             + "AND a.deleted = false AND a.startedAt >= :from AND a.startedAt < :to")
     long countDistinctStudentsStartedBetween(@Param("tenantId") UUID tenantId, @Param("from") Instant from,

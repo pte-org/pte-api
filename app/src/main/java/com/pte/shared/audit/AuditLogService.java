@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /** In-transaction append and tenant-scoped read API for audit records. */
@@ -74,10 +75,13 @@ public class AuditLogService {
 
     /**
      * Newest audit records of one tenant (no total count, no paging metadata) for
-     * compact feeds. {@code size} is clamped to {@code 1..MAX_SIZE}.
+     * compact feeds. {@code size} is clamped to {@code 1..MAX_SIZE}. A null tenant
+     * is rejected: a derived query would otherwise match the platform-level rows
+     * whose {@code tenant_id} is NULL.
      */
     @Transactional(readOnly = true)
     public List<AuditLogResponse> recent(UUID tenantId, int size) {
+        Objects.requireNonNull(tenantId, "tenantId");
         int bounded = Math.max(1, Math.min(size, MAX_SIZE));
         return auditLogRepository
                 .findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(tenantId, PageRequest.of(DEFAULT_PAGE, bounded))

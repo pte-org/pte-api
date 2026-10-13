@@ -320,6 +320,34 @@ class HostDashboardServiceTest {
     }
 
     @Test
+    void enrollmentAcademicCountsIsReadExactlyOncePerBuildAndFeedsBothSections() {
+        HostDashboardResponse response = service.build(TENANT, null);
+
+        verify(fx.enrollment, times(1)).academicCounts(TENANT);
+        assertThat(response.learners().data().unassigned()).isEqualTo(30); // 100 students - 70 placed
+        assertThat(response.academics().data().programs()).isEqualTo(4);
+        assertThat(response.academics().data().activeClasses()).isEqualTo(7);
+
+        service.build(TENANT, null);
+        verify(fx.enrollment, times(2)).academicCounts(TENANT); // once per build, never cached across builds
+    }
+
+    @Test
+    void whenAcademicCountsFailsItIsStillQueriedOnceAndBothDependentSectionsAreErrorWhileOthersStayOk() {
+        when(fx.enrollment.academicCounts(TENANT)).thenThrow(new RuntimeException("enrollment down"));
+
+        HostDashboardResponse response = service.build(TENANT, null);
+
+        verify(fx.enrollment, times(1)).academicCounts(TENANT);
+        assertThat(response.learners().status()).isEqualTo(SectionStatus.ERROR);
+        assertThat(response.academics().status()).isEqualTo(SectionStatus.ERROR);
+        assertThat(response.quota().status()).isEqualTo(SectionStatus.OK);
+        assertThat(response.staff().status()).isEqualTo(SectionStatus.OK);
+        assertThat(response.exams().status()).isEqualTo(SectionStatus.OK);
+        assertThat(response.attempts().status()).isEqualTo(SectionStatus.OK);
+    }
+
+    @Test
     void monthlySeriesQueryFailureErrorsOnlyTheAttemptsSection() {
         when(fx.attempts.countSubmittedPerRange(eq(TENANT), any())).thenThrow(new RuntimeException("slow query timeout"));
 

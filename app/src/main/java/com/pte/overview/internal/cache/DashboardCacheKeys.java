@@ -20,7 +20,7 @@ public final class DashboardCacheKeys {
         if (tenantId == null) {
             throw new IllegalArgumentException("tenantId is required for a host cache key");
         }
-        return String.join(SEP, OverviewConstants.CACHE_KEY_PREFIX, "host",
+        return String.join(SEP, OverviewConstants.CACHE_KEY_PREFIX, OverviewConstants.CACHE_SCOPE_HOST,
                 OverviewConstants.CACHE_SCHEMA_VERSION, tenantId.toString(), String.valueOf(windowDays), series);
     }
 }

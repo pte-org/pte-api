@@ -23,6 +23,7 @@ public final class OverviewConstants {
     /** Bump when a cached payload shape changes so stale entries are never deserialised. */
     public static final String CACHE_SCHEMA_VERSION = "v1";
     public static final String CACHE_KEY_PREFIX = "dash";
+    public static final String CACHE_SCOPE_HOST = "host";
     public static final Duration HOST_SERIES_TTL = Duration.ofSeconds(30);
     public static final String SERIES_ATTEMPTS_MONTHLY = "attempts-monthly";
 

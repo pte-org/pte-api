@@ -10,7 +10,6 @@ import com.pte.overview.internal.cache.DashboardCache;
 import com.pte.overview.internal.cache.DashboardCacheKeys;
 import com.pte.overview.internal.constant.OverviewConstants;
 import com.pte.overview.internal.dto.response.DashboardMeta;
-import com.pte.overview.internal.dto.response.DashboardSection;
 import com.pte.overview.internal.dto.response.HostDashboardResponse;
 import com.pte.overview.internal.dto.response.HostSectionData.Academics;
 import com.pte.overview.internal.dto.response.HostSectionData.Attempts;
@@ -30,6 +29,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Composes the host dashboard from the other modules' public facades. Core counts
@@ -72,10 +72,11 @@ public class HostDashboardService {
         DashboardWindow window = DashboardWindow.parse(rawWindowDays, clock);
         DashboardMeta meta = new DashboardMeta(window.end(), window.days(), window.start(), window.end(),
                 OverviewConstants.BUCKET_ZONE);
+        Supplier<AcademicCounts> academicCounts = new Memo<>(() -> enrollment.academicCounts(tenantId));
         return new HostDashboardResponse(meta,
-                runner.run(OverviewConstants.SECTION_LEARNERS, () -> learners(tenantId, window)),
+                runner.run(OverviewConstants.SECTION_LEARNERS, () -> learners(tenantId, window, academicCounts)),
                 runner.run(OverviewConstants.SECTION_QUOTA, () -> quota(tenantId)),
-                runner.run(OverviewConstants.SECTION_ACADEMICS, () -> academics(tenantId)),
+                runner.run(OverviewConstants.SECTION_ACADEMICS, () -> academics(tenantId, academicCounts)),
                 runner.run(OverviewConstants.SECTION_STAFF, () -> staff(tenantId)),
                 runner.run(OverviewConstants.SECTION_EXAMS, () -> exams(tenantId, window)),
                 runner.run(OverviewConstants.SECTION_ATTEMPTS, () -> attempts(tenantId, window)),
@@ -86,9 +87,9 @@ public class HostDashboardService {
                 runner.run(OverviewConstants.SECTION_RECENT_ACTIVITY, () -> operations.recentActivity(tenantId)));
     }
 
-    private Learners learners(UUID tenantId, DashboardWindow w) {
+    private Learners learners(UUID tenantId, DashboardWindow w, Supplier<AcademicCounts> academicCounts) {
         StudentStatusCounts counts = identity.studentStatusCounts(tenantId);
-        AcademicCounts academic = enrollment.academicCounts(tenantId);
+        AcademicCounts academic = academicCounts.get();
         return new Learners(counts.total(), counts.active(), counts.suspended(),
                 TrendCalculator.of(identity.countStudentsCreatedBetween(tenantId, w.start(), w.end()),
                         identity.countStudentsCreatedBetween(tenantId, w.previousStart(), w.start())),
@@ -102,8 +103,8 @@ public class HostDashboardService {
         return new Quota(quota.current(), quota.limit(), quota.remaining());
     }
 
-    private Academics academics(UUID tenantId) {
-        AcademicCounts academic = enrollment.academicCounts(tenantId);
+    private Academics academics(UUID tenantId, Supplier<AcademicCounts> academicCounts) {
+        AcademicCounts academic = academicCounts.get();
         return new Academics(tenancy.countOrganizations(tenantId), academic.programs(), academic.activeClasses());
     }
 
