@@ -11,7 +11,6 @@ import com.pte.overview.internal.dto.response.MonthlyPoint;
 import com.pte.overview.internal.dto.response.MonthlySeries;
 import com.pte.overview.internal.dto.response.SectionStatus;
 import com.pte.overview.internal.exception.InvalidDashboardWindowException;
-import com.pte.tenancy.internal.exception.TenantNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -298,7 +297,7 @@ class HostDashboardServiceTest {
 
     @Test
     void aDomainExceptionInsideASectionIsAlsoIsolated() {
-        when(fx.tenancy.getStudentQuota(TENANT)).thenThrow(new TenantNotFoundException());
+        when(fx.tenancy.getStudentQuota(TENANT)).thenThrow(new InvalidDashboardWindowException());
 
         HostDashboardResponse response = service.build(TENANT, null);
 

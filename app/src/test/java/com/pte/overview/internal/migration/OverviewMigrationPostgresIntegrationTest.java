@@ -1,14 +1,5 @@
-﻿package com.pte.overview.internal.migration;
+package com.pte.overview.internal.migration;
 
-import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.enums.AttemptStatus;
-import com.pte.attempt.internal.repository.ExamAttemptRepository;
-import com.pte.identity.domain.Role;
-import com.pte.identity.domain.User;
-import com.pte.identity.internal.repository.UserRepository;
-import com.pte.session.domain.ExamSession;
-import com.pte.session.domain.enums.SessionStatus;
-import com.pte.session.internal.repository.ExamSessionRepository;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -34,7 +25,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -124,14 +114,7 @@ class OverviewMigrationPostgresIntegrationTest {
     @Autowired
     private Environment environment;
 
-    @Autowired
-    private ExamAttemptRepository attempts;
 
-    @Autowired
-    private UserRepository users;
-
-    @Autowired
-    private ExamSessionRepository sessions;
 
     // ---- migration ----
 
@@ -295,15 +278,15 @@ class OverviewMigrationPostgresIntegrationTest {
     }
 
     /**
-     * Seeds realistic volume by cloning one JPA-created template row per table with SQL. Rows of the two
+     * Seeds realistic volume by cloning one SQL-inserted template row per table. Rows of the two
      * tenants are interleaved in small chunks (so tenant_id alone does not cluster the heap) and time columns
      * grow with insertion order (like real data); then VACUUM ANALYZE.
      */
     private void seed(UUID tenantA, UUID tenantB) {
         UUID[] tenants = {tenantA, tenantB};
-        long[] attemptIds = {attempt(tenantA).getId(), attempt(tenantB).getId()};
-        long[] userIds = {user(tenantA).getId(), user(tenantB).getId()};
-        long[] sessionIds = {session(tenantA).getId(), session(tenantB).getId()};
+        long[] attemptIds = {attemptTemplate(tenantA), attemptTemplate(tenantB)};
+        long[] userIds = {userTemplate(tenantA), userTemplate(tenantB)};
+        long[] sessionIds = {sessionTemplate(tenantA), sessionTemplate(tenantB)};
 
         cloneInterleaved("exam_attempts", attemptIds, tenants, 20000, tenant -> {
             Map<String, String> overrides = new LinkedHashMap<>();
@@ -369,37 +352,70 @@ class OverviewMigrationPostgresIntegrationTest {
                 + " from " + SCHEMA + "." + table + " t cross join generate_series(" + fromCopy + ", " + toCopy
                 + ") g where t.id = ?", templateId);
     }
-    private ExamAttempt attempt(UUID tenant) {
-        ExamAttempt attempt = new ExamAttempt();
-        attempt.setTenantId(tenant);
-        attempt.setSessionPublicId(UUID.randomUUID());
-        attempt.setStudentPublicId(UUID.randomUUID());
-        attempt.setStatus(AttemptStatus.IN_PROGRESS);
-        attempt.setStartedAt(Instant.now());
-        return attempts.saveAndFlush(attempt);
+    /**
+     * Inserts one base row with plain SQL: every NOT NULL column without a default gets a type-based filler,
+     * then {@code given} (column -> SQL expression) wins. Returns the generated id. No entity or repository
+     * of another module is used.
+     */
+    private long insertBaseRow(String table, Map<String, String> given) {
+        List<Map<String, Object>> columns = jdbc.queryForList(
+                "select column_name, data_type, is_nullable, column_default, is_identity "
+                        + "from information_schema.columns where table_schema = ? and table_name = ? "
+                        + "order by ordinal_position", SCHEMA, table);
+        Map<String, String> values = new LinkedHashMap<>();
+        for (Map<String, Object> column : columns) {
+            String name = (String) column.get("column_name");
+            if (given.containsKey(name)) {
+                values.put(name, given.get(name));
+            } else if ("NO".equals(column.get("is_nullable")) && column.get("column_default") == null
+                    && "NO".equals(column.get("is_identity")) && !"id".equals(name)) {
+                values.put(name, filler((String) column.get("data_type")));
+            }
+        }
+        return jdbc.queryForObject("insert into " + SCHEMA + "." + table + " (" + String.join(", ", values.keySet())
+                + ") values (" + String.join(", ", values.values()) + ") returning id", Long.class);
     }
 
-    private User user(UUID tenant) {
-        User user = new User();
-        user.setUsername("template-" + UUID.randomUUID());
-        user.setEmail(user.getUsername() + "@example.test");
-        user.setTenantId(tenant);
-        user.setRoles(new HashSet<>(Set.of(Role.STUDENT)));
-        return users.saveAndFlush(user);
+    private static String filler(String dataType) {
+        return switch (dataType) {
+            case "uuid" -> "gen_random_uuid()";
+            case "boolean" -> "false";
+            case "integer", "bigint", "smallint", "numeric" -> "0";
+            case "timestamp with time zone", "timestamp without time zone" -> "now()";
+            case "date" -> "current_date";
+            case "json", "jsonb" -> "'{}'";
+            default -> "'tpl'";
+        };
     }
 
-    private ExamSession session(UUID tenant) {
-        ExamSession session = new ExamSession();
-        session.setName("template");
-        session.setSessionCode("TPL-" + UUID.randomUUID().toString().substring(0, 18));
-        session.setTenantId(tenant);
-        session.setSubscriptionId(UUID.randomUUID());
-        session.setLicenseKey("LIC");
-        session.setOpensAt(Instant.now().plusSeconds(3600));
-        session.setClosesAt(Instant.now().plusSeconds(7200));
-        session.setCapacity(10);
-        session.setStatus(SessionStatus.SCHEDULED);
-        return sessions.saveAndFlush(session);
+    private long attemptTemplate(UUID tenant) {
+        Map<String, String> given = new LinkedHashMap<>();
+        given.put("tenant_id", "'" + tenant + "'::uuid");
+        given.put("status", "'IN_PROGRESS'");
+        given.put("started_at", "now()");
+        return insertBaseRow("exam_attempts", given);
     }
-}
 
+    private long userTemplate(UUID tenant) {
+        String username = "'template-' || gen_random_uuid()::text";
+        Map<String, String> given = new LinkedHashMap<>();
+        given.put("tenant_id", "'" + tenant + "'::uuid");
+        given.put("username", username);
+        given.put("email", "'template-' || gen_random_uuid()::text || '@example.test'");
+        given.put("status", "'ACTIVE'");
+        return insertBaseRow("users", given);
+    }
+
+    private long sessionTemplate(UUID tenant) {
+        Map<String, String> given = new LinkedHashMap<>();
+        given.put("tenant_id", "'" + tenant + "'::uuid");
+        given.put("name", "'template'");
+        given.put("session_code", "'TPL-' || substr(md5(random()::text), 1, 18)");
+        given.put("subscription_id", "gen_random_uuid()");
+        given.put("license_key", "'LIC'");
+        given.put("opens_at", "now() + interval '1 hour'");
+        given.put("closes_at", "now() + interval '2 hours'");
+        given.put("capacity", "10");
+        given.put("status", "'SCHEDULED'");
+        return insertBaseRow("exam_sessions", given);
+    }}

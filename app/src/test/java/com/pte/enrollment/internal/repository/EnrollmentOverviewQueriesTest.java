@@ -9,14 +9,13 @@ import com.pte.enrollment.domain.enums.ClassStatus;
 import com.pte.enrollment.domain.enums.ProgramStatus;
 import com.pte.tenancy.domain.Organization;
 import com.pte.tenancy.domain.Tenant;
-import com.pte.tenancy.domain.enums.FacilityType;
-import com.pte.tenancy.internal.repository.OrganizationRepository;
-import com.pte.tenancy.internal.repository.TenantRepository;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 
+import java.lang.reflect.Field;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,10 +32,7 @@ class EnrollmentOverviewQueriesTest {
     private EnrollmentOverviewService service;
 
     @Autowired
-    private TenantRepository tenants;
-
-    @Autowired
-    private OrganizationRepository organizations;
+    private EntityManager em;
 
     @Autowired
     private ProgramRepository programs;
@@ -54,15 +50,27 @@ class EnrollmentOverviewQueriesTest {
         tenant.setOrganizationType("SCHOOL");
         tenant.setPackageName("starter");
         tenant.setStudentLimit(500);
-        return tenants.save(tenant);
+        em.persist(tenant);
+        em.flush();
+        return tenant;
     }
 
     private Organization organization(Tenant tenant) {
         Organization organization = new Organization();
         organization.setName("Branch " + UUID.randomUUID());
-        organization.setFacilityType(FacilityType.BRANCH);
         organization.setTenant(tenant);
-        return organizations.save(organization);
+        // facilityType is mandatory; its enum lives in a package tenancy does not expose to this module,
+        // so pick a constant reflectively instead of importing it.
+        try {
+            Field facilityType = Organization.class.getDeclaredField("facilityType");
+            facilityType.setAccessible(true);
+            facilityType.set(organization, facilityType.getType().getEnumConstants()[0]);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException(ex);
+        }
+        em.persist(organization);
+        em.flush();
+        return organization;
     }
 
     private Program program(Organization organization, ProgramStatus status, boolean deleted) {
