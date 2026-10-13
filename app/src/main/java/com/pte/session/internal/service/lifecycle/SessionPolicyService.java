@@ -16,6 +16,7 @@ import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Clock;
 import java.util.UUID;
 
 /** Edits policy only while the owned session remains scheduled. */
@@ -24,18 +25,21 @@ public class SessionPolicyService {
 
     private final ExamSessionRepository sessionRepository;
     private final SessionAccess access;
+    private final Clock clock;
 
     public SessionPolicyService(ExamSessionRepository sessionRepository,
-            SessionAccess access) {
+            SessionAccess access, Clock clock) {
         this.sessionRepository = sessionRepository;
         this.access = access;
+        this.clock = clock;
     }
 
     @Transactional
     public ExamPolicyResponse patchPolicy(UUID publicId, PatchExamPolicyRequest request, CurrentUser caller) {
         ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, access.requireTenant(caller))
                 .orElseThrow(SessionNotFoundException::new);
-        if (session.getStatus() != SessionStatus.SCHEDULED) {
+        if (session.getStatus() != SessionStatus.SCHEDULED
+                || !session.getOpensAt().isAfter(clock.instant())) {
             throw new PolicyLockedException();
         }
 
