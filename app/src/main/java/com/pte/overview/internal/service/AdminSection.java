@@ -20,7 +20,10 @@ public enum AdminSection {
     LICENSES(OverviewConstants.SECTION_LICENSES, requires(PlatformOperation.LICENSE_MASKED_READ)),
     SUBSCRIPTIONS(OverviewConstants.SECTION_SUBSCRIPTIONS, requires(PlatformOperation.COMMERCIAL_READ)),
     PLANS(OverviewConstants.SECTION_PLANS, requires(PlatformOperation.PLAN_READ_ALL)),
-    SUPPORT(OverviewConstants.SECTION_SUPPORT, requires(PlatformOperation.SUPPORT_READ));
+    SUPPORT(OverviewConstants.SECTION_SUPPORT, requires(PlatformOperation.SUPPORT_READ)),
+    REVENUE(OverviewConstants.SECTION_REVENUE, requires(PlatformOperation.COMMERCIAL_READ)),
+    /** Visible to any valid platform caller; the controller already limits who reaches the dashboard. */
+    QUESTION_BANK(OverviewConstants.SECTION_QUESTION_BANK, PlatformOperationPolicy::isPlatformCaller);
 
     private final String key;
     private final Predicate<CurrentUser> gate;

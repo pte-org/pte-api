@@ -9,7 +9,9 @@ import com.pte.overview.internal.dto.response.AdminSectionData.Applications;
 import com.pte.overview.internal.dto.response.AdminSectionData.Learners;
 import com.pte.overview.internal.dto.response.AdminSectionData.Licenses;
 import com.pte.overview.internal.dto.response.AdminSectionData.Plans;
+import com.pte.overview.internal.dto.response.AdminSectionData.QuestionBank;
 import com.pte.overview.internal.dto.response.AdminSectionData.RecentTenants;
+import com.pte.overview.internal.dto.response.AdminSectionData.Revenue;
 import com.pte.overview.internal.dto.response.AdminSectionData.Subscriptions;
 import com.pte.overview.internal.dto.response.AdminSectionData.Support;
 import com.pte.overview.internal.dto.response.AdminSectionData.Tenants;
@@ -38,16 +40,21 @@ public class AdminDashboardService {
     private final IdentityOverviewService identity;
     private final AdminTenantSections tenantSections;
     private final AdminCommercialSections commercialSections;
+    private final AdminRevenueSections revenueSections;
+    private final AdminQuestionBankSections questionBankSections;
     private final DashboardSectionRunner runner;
     private final DashboardCache cache;
     private final Clock clock;
 
     public AdminDashboardService(IdentityOverviewService identity, AdminTenantSections tenantSections,
-            AdminCommercialSections commercialSections, DashboardSectionRunner runner, DashboardCache cache,
+            AdminCommercialSections commercialSections, AdminRevenueSections revenueSections,
+            AdminQuestionBankSections questionBankSections, DashboardSectionRunner runner, DashboardCache cache,
             Clock clock) {
         this.identity = identity;
         this.tenantSections = tenantSections;
         this.commercialSections = commercialSections;
+        this.revenueSections = revenueSections;
+        this.questionBankSections = questionBankSections;
         this.runner = runner;
         this.cache = cache;
         this.clock = clock;
@@ -75,7 +82,11 @@ public class AdminDashboardService {
                         () -> commercialSections.subscriptions(window)),
                 section(AdminSection.PLANS, visibility, window, Plans.class, commercialSections::plans),
                 section(AdminSection.SUPPORT, visibility, window, Support.class,
-                        () -> commercialSections.support(window)));
+                        () -> commercialSections.support(window)),
+                section(AdminSection.REVENUE, visibility, window, Revenue.class,
+                        () -> revenueSections.revenue(window)),
+                section(AdminSection.QUESTION_BANK, visibility, window, QuestionBank.class,
+                        () -> questionBankSections.questionBank(window)));
     }
 
     private <T> DashboardSection<T> section(AdminSection section, AdminVisibility visibility, DashboardWindow window,

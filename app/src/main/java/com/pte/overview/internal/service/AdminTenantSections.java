@@ -11,7 +11,7 @@ import com.pte.overview.internal.dto.response.AdminSectionData.Tenants;
 import com.pte.overview.internal.dto.response.MonthlyPoint;
 import com.pte.tenancy.PlatformTenantCounts;
 import com.pte.tenancy.RecentTenantView;
-import com.pte.tenancy.TenancyService;
+import com.pte.tenancy.TenancyOverviewService;
 import com.pte.tenancy.TenantSeatLimit;
 import org.springframework.stereotype.Component;
 
@@ -31,11 +31,11 @@ import java.util.function.Supplier;
 @Component
 public class AdminTenantSections {
 
-    private final TenancyService tenancy;
+    private final TenancyOverviewService tenancy;
     private final AttemptOverviewService attempts;
     private final BillingOverviewService billing;
 
-    public AdminTenantSections(TenancyService tenancy, AttemptOverviewService attempts,
+    public AdminTenantSections(TenancyOverviewService tenancy, AttemptOverviewService attempts,
             BillingOverviewService billing) {
         this.tenancy = tenancy;
         this.attempts = attempts;
