@@ -15,10 +15,12 @@ import com.pte.scoring.domain.enums.ExaminerWorkflowStatus;
 import com.pte.scoring.domain.enums.GradingCohortStatus;
 import com.pte.scoring.domain.enums.GradingMarkingMode;
 import com.pte.scoring.dto.response.ExaminerDraftResponse;
+import com.pte.scoring.dto.response.ExaminerGradingAuditMetadata;
+import com.pte.scoring.dto.response.ExaminerGradingIssueResponse;
 import com.pte.scoring.dto.response.ExaminerGuidelinesResponse;
 import com.pte.scoring.dto.response.ExaminerHistoryItemResponse;
 import com.pte.scoring.dto.response.ExaminerHistoryResponse;
-import com.pte.scoring.dto.response.ExaminerGradingIssueResponse;
+import tools.jackson.databind.ObjectMapper;
 import com.pte.scoring.dto.response.ExaminerWorkflowView;
 import com.pte.scoring.internal.repository.ExaminerAnswerDraftRepository;
 import com.pte.scoring.internal.repository.ExaminerAnswerScoreRepository;
@@ -61,6 +63,7 @@ public class ExaminerWorkflowQueryService {
     private final GradingCohortMemberRepository memberRepository;
     private final ScoringAnswerRepository answerRepository;
     private final ScoreTemplateService scoreTemplateService;
+    private final ObjectMapper objectMapper;
 
     @Autowired
     public ExaminerWorkflowQueryService(
@@ -74,7 +77,8 @@ public class ExaminerWorkflowQueryService {
             GradingCohortRepository cohortRepository,
             GradingCohortMemberRepository memberRepository,
             ScoringAnswerRepository answerRepository,
-            ScoreTemplateService scoreTemplateService) {
+            ScoreTemplateService scoreTemplateService,
+            @Autowired(required = false) ObjectMapper objectMapper) {
         this.workRepository = workRepository;
         this.draftRepository = draftRepository;
         this.eventRepository = eventRepository;
@@ -86,6 +90,26 @@ public class ExaminerWorkflowQueryService {
         this.memberRepository = memberRepository;
         this.answerRepository = answerRepository;
         this.scoreTemplateService = scoreTemplateService;
+        this.objectMapper = objectMapper != null
+                ? objectMapper
+                : tools.jackson.databind.json.JsonMapper.builder().findAndAddModules().build();
+    }
+
+    public ExaminerWorkflowQueryService(
+            ExaminerGradingWorkRepository workRepository,
+            ExaminerAnswerDraftRepository draftRepository,
+            ExaminerGradingEventRepository eventRepository,
+            ExaminerGradingIssueRepository issueRepository,
+            ExaminerAttemptAssignmentRepository assignmentRepository,
+            ExaminerAnswerScoreRepository scoreRepository,
+            ScoringSessionStateRepository sessionStateRepository,
+            GradingCohortRepository cohortRepository,
+            GradingCohortMemberRepository memberRepository,
+            ScoringAnswerRepository answerRepository,
+            ScoreTemplateService scoreTemplateService) {
+        this(workRepository, draftRepository, eventRepository, issueRepository, assignmentRepository,
+                scoreRepository, sessionStateRepository, cohortRepository, memberRepository, answerRepository,
+                scoreTemplateService, null);
     }
 
     public ExaminerWorkflowView buildWorkflowView(ExaminerAttemptAssignment assignment, UUID tenantId) {
@@ -192,15 +216,25 @@ public class ExaminerWorkflowQueryService {
                 .findByTenantIdAndWorkId(user.tenantId(), workOpt.get().getId(), pageable);
 
         List<ExaminerHistoryItemResponse> items = eventPage.getContent().stream()
-                .map(e -> new ExaminerHistoryItemResponse(
-                        e.getPublicId(),
-                        assignment.getSessionPublicId(),
-                        assignment.getAttemptPublicId(),
-                        e.getAnswerPublicId(),
-                        e.getOperation(),
-                        e.getOccurredAt(),
-                        e.getWorkVersion(),
-                        e.getDraftVersion()))
+                .map(e -> {
+                    ExaminerGradingAuditMetadata meta = parseAuditMetadata(e.getMetadata());
+                    return new ExaminerHistoryItemResponse(
+                            e.getPublicId(),
+                            assignment.getSessionPublicId(),
+                            assignment.getAttemptPublicId(),
+                            e.getAnswerPublicId(),
+                            e.getOperation(),
+                            e.getOccurredAt(),
+                            e.getWorkVersion(),
+                            e.getDraftVersion(),
+                            meta != null ? meta.actorPublicId() : null,
+                            meta != null ? meta.actorRole() : null,
+                            meta != null ? meta.assignmentPublicId() : assignment.getPublicId(),
+                            meta != null ? meta.previousScore() : null,
+                            meta != null ? meta.newScore() : null,
+                            meta != null ? meta.rubricVersion() : null,
+                            meta != null ? meta.reason() : null);
+                })
                 .toList();
 
         return new ExaminerHistoryResponse(
@@ -274,5 +308,16 @@ public class ExaminerWorkflowQueryService {
         return assignmentRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndExaminerPublicIdAndDeletedFalse(
                 user.tenantId(), sessionPublicId, attemptPublicId, user.userId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found or unauthorized"));
+    }
+
+    private ExaminerGradingAuditMetadata parseAuditMetadata(String json) {
+        if (json == null || json.isBlank() || objectMapper == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, ExaminerGradingAuditMetadata.class);
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

@@ -36,7 +36,9 @@ import com.pte.scoring.internal.repository.GradingCohortMemberRepository;
 import com.pte.scoring.internal.repository.GradingCohortRepository;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
 import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.dto.response.ExaminerGradingAuditMetadata;
 import com.pte.session.SessionService;
+import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -80,6 +82,7 @@ public class ExaminerDraftCommandService {
     private final ExaminerWorkflowQueryService workflowQueryService;
     private final ExaminerReviewVersionService examinerReviewVersionService;
     private final ObjectMapper objectMapper;
+    private final AuditLogService auditLogService;
     private final Clock clock;
 
     @Autowired
@@ -100,6 +103,7 @@ public class ExaminerDraftCommandService {
             ExaminerWorkflowQueryService workflowQueryService,
             ExaminerReviewVersionService examinerReviewVersionService,
             ObjectMapper objectMapper,
+            @Autowired(required = false) AuditLogService auditLogService,
             Clock clock) {
         this.sessionService = sessionService;
         this.assignmentRepository = assignmentRepository;
@@ -117,7 +121,32 @@ public class ExaminerDraftCommandService {
         this.workflowQueryService = workflowQueryService;
         this.examinerReviewVersionService = examinerReviewVersionService;
         this.objectMapper = objectMapper;
+        this.auditLogService = auditLogService;
         this.clock = clock;
+    }
+
+    public ExaminerDraftCommandService(
+            SessionService sessionService,
+            ExaminerAttemptAssignmentRepository assignmentRepository,
+            ExaminerGradingWorkRepository workRepository,
+            ExaminerAnswerDraftRepository draftRepository,
+            ExaminerGradingEventRepository eventRepository,
+            ExaminerGradingCommandRepository commandRepository,
+            ExaminerGradingIssueRepository issueRepository,
+            ExaminerAnswerScoreRepository scoreRepository,
+            ScoringAnswerRepository answerRepository,
+            ScoringSessionStateRepository sessionStateRepository,
+            GradingCohortRepository cohortRepository,
+            GradingCohortMemberRepository memberRepository,
+            ScoringEligibilityQueryService eligibilityQueryService,
+            ExaminerWorkflowQueryService workflowQueryService,
+            ExaminerReviewVersionService examinerReviewVersionService,
+            ObjectMapper objectMapper,
+            Clock clock) {
+        this(sessionService, assignmentRepository, workRepository, draftRepository, eventRepository, commandRepository,
+                issueRepository, scoreRepository, answerRepository, sessionStateRepository, cohortRepository,
+                memberRepository, eligibilityQueryService, workflowQueryService, examinerReviewVersionService,
+                objectMapper, null, clock);
     }
 
     @Transactional
@@ -205,10 +234,31 @@ public class ExaminerDraftCommandService {
             draft = draftRepository.save(draft);
         }
 
+        Integer previousScore = draftOpt.map(ExaminerAnswerDraft::getScore).orElse(null);
+        boolean isScoreChange = previousScore != null && !Objects.equals(previousScore, request.score());
+        ExaminerGradingOperation op = isScoreChange ? ExaminerGradingOperation.SCORE_CHANGE : ExaminerGradingOperation.SAVE_DRAFT;
+
+        ExaminerGradingAuditMetadata auditMetadata = new ExaminerGradingAuditMetadata(
+                user.userId(),
+                "EXAMINER",
+                assignment.getPublicId(),
+                previousScore,
+                request.score(),
+                1L,
+                request.comment() != null ? request.comment().trim() : (isScoreChange ? "Score updated" : "Draft saved")
+        );
+        String metadataJson = serializeAuditMetadata(auditMetadata);
+
         ExaminerGradingEvent event = new ExaminerGradingEvent(
-                user.tenantId(), work.getId(), answerPublicId, ExaminerGradingOperation.SAVE_DRAFT,
-                work.getVersion(), draft.getVersion(), null, now);
+                user.tenantId(), work.getId(), answerPublicId, op,
+                work.getVersion(), draft.getVersion(), metadataJson, now);
         eventRepository.save(event);
+
+        if (auditLogService != null) {
+            String summary = String.format("Examiner %s %s for answer %s: score=%s (prev=%s)",
+                    user.userId(), op.name(), answerPublicId, request.score(), previousScore);
+            auditLogService.record(user, "EXAMINER_WORK", assignment.getPublicId().toString(), op.name(), summary);
+        }
 
         ExaminerCommandReceiptResponse receipt = new ExaminerCommandReceiptResponse(
                 request.requestPublicId(), ExaminerGradingOperation.SAVE_DRAFT, now,
@@ -381,10 +431,26 @@ public class ExaminerDraftCommandService {
         work.finalizeGrading(now);
         workRepository.save(work);
 
+        ExaminerGradingAuditMetadata auditMetadata = new ExaminerGradingAuditMetadata(
+                user.userId(),
+                "EXAMINER",
+                assignment.getPublicId(),
+                null,
+                null,
+                1L,
+                "Finalized grading with " + request.answers().size() + " answers"
+        );
+        String metadataJson = serializeAuditMetadata(auditMetadata);
+
         ExaminerGradingEvent event = new ExaminerGradingEvent(
                 user.tenantId(), work.getId(), null, ExaminerGradingOperation.FINALIZE,
-                work.getVersion(), null, null, now);
+                work.getVersion(), null, metadataJson, now);
         eventRepository.save(event);
+
+        if (auditLogService != null) {
+            auditLogService.record(user, "EXAMINER_WORK", assignment.getPublicId().toString(), "FINALIZE",
+                    "Finalized grading for attempt " + attemptPublicId + " (" + request.answers().size() + " answers)");
+        }
 
         ExaminerCommandReceiptResponse receipt = new ExaminerCommandReceiptResponse(
                 request.requestPublicId(), ExaminerGradingOperation.FINALIZE, now,
@@ -441,6 +507,14 @@ public class ExaminerDraftCommandService {
             return objectMapper.readValue(receiptJson, ExaminerCommandReceiptResponse.class);
         } catch (Exception e) {
             throw new RuntimeException("Failed to deserialize receipt JSON", e);
+        }
+    }
+
+    private String serializeAuditMetadata(ExaminerGradingAuditMetadata metadata) {
+        try {
+            return objectMapper.writeValueAsString(metadata);
+        } catch (Exception e) {
+            return null;
         }
     }
 }

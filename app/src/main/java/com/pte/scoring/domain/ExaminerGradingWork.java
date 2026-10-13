@@ -82,6 +82,11 @@ public class ExaminerGradingWork extends BaseEntity {
         this.version++;
     }
 
+    public void reopen(Instant reopenedAt) {
+        this.status = ExaminerWorkflowStatus.IN_PROGRESS;
+        this.version++;
+    }
+
     public void incrementVersion() {
         this.version++;
     }

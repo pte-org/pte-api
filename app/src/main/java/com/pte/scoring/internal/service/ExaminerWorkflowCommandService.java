@@ -21,7 +21,9 @@ import com.pte.scoring.internal.repository.ExaminerGradingEventRepository;
 import com.pte.scoring.internal.repository.ExaminerGradingIssueRepository;
 import com.pte.scoring.internal.repository.ExaminerGradingWorkRepository;
 import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.dto.response.ExaminerGradingAuditMetadata;
 import com.pte.session.SessionService;
+import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -51,6 +53,7 @@ public class ExaminerWorkflowCommandService {
     private final ScoringSessionStateRepository sessionStateRepository;
     private final ExaminerWorkflowQueryService workflowQueryService;
     private final ObjectMapper objectMapper;
+    private final AuditLogService auditLogService;
     private final Clock clock;
 
     @Autowired
@@ -64,6 +67,7 @@ public class ExaminerWorkflowCommandService {
             ScoringSessionStateRepository sessionStateRepository,
             ExaminerWorkflowQueryService workflowQueryService,
             ObjectMapper objectMapper,
+            @Autowired(required = false) AuditLogService auditLogService,
             Clock clock) {
         this.sessionService = sessionService;
         this.assignmentRepository = assignmentRepository;
@@ -74,7 +78,23 @@ public class ExaminerWorkflowCommandService {
         this.sessionStateRepository = sessionStateRepository;
         this.workflowQueryService = workflowQueryService;
         this.objectMapper = objectMapper;
+        this.auditLogService = auditLogService;
         this.clock = clock;
+    }
+
+    public ExaminerWorkflowCommandService(
+            SessionService sessionService,
+            ExaminerAttemptAssignmentRepository assignmentRepository,
+            ExaminerGradingWorkRepository workRepository,
+            ExaminerGradingEventRepository eventRepository,
+            ExaminerGradingCommandRepository commandRepository,
+            ExaminerGradingIssueRepository issueRepository,
+            ScoringSessionStateRepository sessionStateRepository,
+            ExaminerWorkflowQueryService workflowQueryService,
+            ObjectMapper objectMapper,
+            Clock clock) {
+        this(sessionService, assignmentRepository, workRepository, eventRepository, commandRepository,
+                issueRepository, sessionStateRepository, workflowQueryService, objectMapper, null, clock);
     }
 
     @Transactional
@@ -107,6 +127,7 @@ public class ExaminerWorkflowCommandService {
                 .findByAssignmentWithLock(user.tenantId(), assignment.getPublicId());
 
         ExaminerGradingWork work;
+        ExaminerGradingOperation op = ExaminerGradingOperation.START;
         if (workOpt.isEmpty()) {
             if (request.expectedWorkVersion() != 0) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Expected work version mismatch for unstarted work: expected " + request.expectedWorkVersion() + " but was 0");
@@ -120,17 +141,38 @@ public class ExaminerWorkflowCommandService {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Expected work version mismatch: expected "
                         + request.expectedWorkVersion() + " but was " + work.getVersion());
             }
-            work.start(now);
+            if (work.getStatus() == ExaminerWorkflowStatus.COMPLETED) {
+                work.reopen(now);
+                op = ExaminerGradingOperation.REGRADE;
+            } else {
+                work.start(now);
+            }
             work = workRepository.save(work);
         }
 
+        ExaminerGradingAuditMetadata auditMetadata = new ExaminerGradingAuditMetadata(
+                user.userId(),
+                "EXAMINER",
+                assignment.getPublicId(),
+                null,
+                null,
+                1L,
+                op == ExaminerGradingOperation.REGRADE ? "Grading reopened for regrade" : "Grading started"
+        );
+        String metadataJson = serializeAuditMetadata(auditMetadata);
+
         ExaminerGradingEvent event = new ExaminerGradingEvent(
-                user.tenantId(), work.getId(), null, ExaminerGradingOperation.START,
-                work.getVersion(), null, null, now);
+                user.tenantId(), work.getId(), null, op,
+                work.getVersion(), null, metadataJson, now);
         eventRepository.save(event);
 
+        if (auditLogService != null) {
+            auditLogService.record(user, "EXAMINER_WORK", assignment.getPublicId().toString(), op.name(),
+                    op == ExaminerGradingOperation.REGRADE ? "Grading reopened for regrade on attempt " + attemptPublicId : "Grading started on attempt " + attemptPublicId);
+        }
+
         ExaminerCommandReceiptResponse receipt = new ExaminerCommandReceiptResponse(
-                request.requestPublicId(), ExaminerGradingOperation.START, now,
+                request.requestPublicId(), op, now,
                 work.getVersion(), null, null, Collections.emptyList());
 
         String receiptJson = serializeReceipt(receipt);
@@ -200,10 +242,26 @@ public class ExaminerWorkflowCommandService {
                 request.description().trim(), user.userId(), now);
         issueRepository.save(issue);
 
+        ExaminerGradingAuditMetadata reportAuditMetadata = new ExaminerGradingAuditMetadata(
+                user.userId(),
+                "EXAMINER",
+                assignment.getPublicId(),
+                null,
+                null,
+                1L,
+                request.type() + ": " + request.description().trim()
+        );
+        String reportMetadataJson = serializeAuditMetadata(reportAuditMetadata);
+
         ExaminerGradingEvent event = new ExaminerGradingEvent(
                 user.tenantId(), work.getId(), request.answerPublicId(), ExaminerGradingOperation.REPORT_ISSUE,
-                work.getVersion(), null, null, now);
+                work.getVersion(), null, reportMetadataJson, now);
         eventRepository.save(event);
+
+        if (auditLogService != null) {
+            auditLogService.record(user, "EXAMINER_WORK", assignment.getPublicId().toString(), "REPORT_ISSUE",
+                    "Reported issue " + request.type() + " on attempt " + attemptPublicId);
+        }
 
         ExaminerCommandReceiptResponse receipt = new ExaminerCommandReceiptResponse(
                 request.requestPublicId(), ExaminerGradingOperation.REPORT_ISSUE, now,
@@ -235,10 +293,26 @@ public class ExaminerWorkflowCommandService {
         issue.resolve(user.userId(), request.resolution().trim(), now);
         issueRepository.save(issue);
 
+        ExaminerGradingAuditMetadata resolveAuditMetadata = new ExaminerGradingAuditMetadata(
+                user.userId(),
+                "EXAMINER",
+                work.getAssignmentPublicId(),
+                null,
+                null,
+                1L,
+                "Resolved issue: " + request.resolution().trim()
+        );
+        String resolveMetadataJson = serializeAuditMetadata(resolveAuditMetadata);
+
         ExaminerGradingEvent event = new ExaminerGradingEvent(
                 user.tenantId(), work.getId(), issue.getAnswerPublicId(), ExaminerGradingOperation.RESOLVE_ISSUE,
-                work.getVersion(), null, null, now);
+                work.getVersion(), null, resolveMetadataJson, now);
         eventRepository.save(event);
+
+        if (auditLogService != null) {
+            auditLogService.record(user, "EXAMINER_WORK", work.getAssignmentPublicId().toString(), "RESOLVE_ISSUE",
+                    "Resolved issue " + issuePublicId + " on attempt " + work.getAttemptPublicId());
+        }
 
         return new ExaminerGradingIssueResponse(
                 issue.getPublicId(),
@@ -295,6 +369,14 @@ public class ExaminerWorkflowCommandService {
             return objectMapper.readValue(receiptJson, ExaminerCommandReceiptResponse.class);
         } catch (Exception e) {
             throw new RuntimeException("Failed to deserialize receipt JSON", e);
+        }
+    }
+
+    private String serializeAuditMetadata(ExaminerGradingAuditMetadata metadata) {
+        try {
+            return objectMapper.writeValueAsString(metadata);
+        } catch (Exception e) {
+            return null;
         }
     }
 }
