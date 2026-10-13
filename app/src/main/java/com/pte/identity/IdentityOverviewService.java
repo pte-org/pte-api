@@ -7,7 +7,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -55,6 +58,19 @@ public class IdentityOverviewService {
     @Transactional(readOnly = true)
     public long countStudentsCreatedBetween(UUID tenantId, Instant from, Instant to) {
         return userRepository.countByTenantIdAndRoleCreatedBetween(tenantId, Role.STUDENT, from, to);
+    }
+
+    /**
+     * Platform dashboard read: non-deleted students per tenant public id, from one grouped query.
+     * Tenants without students are absent from the map; callers join it with seat limits in memory.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, Long> studentCountsByTenant() {
+        Map<UUID, Long> counts = new HashMap<>();
+        for (Object[] row : userRepository.countByRoleGroupedByTenant(Role.STUDENT)) {
+            counts.put((UUID) row[0], ((Number) row[1]).longValue());
+        }
+        return Collections.unmodifiableMap(counts);
     }
 
     @Transactional(readOnly = true)

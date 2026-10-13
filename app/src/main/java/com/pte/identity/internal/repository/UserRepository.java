@@ -4,11 +4,13 @@ import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
@@ -126,6 +128,22 @@ public interface UserRepository extends JpaRepository<User, Long> {
             + "group by r")
     List<Object[]> countActiveByTenantIdAndRoles(@Param("tenantId") UUID tenantId,
             @Param("roles") Set<Role> roles, @Param("status") UserStatus status);
+
+    /** Timeout hint (ms) for the platform-wide overview count. */
+    String OVERVIEW_QUERY_TIMEOUT_MS = "2000";
+
+    /**
+     * Overview: students per tenant across the whole platform in one grouped query (the heaviest
+     * admin count; bounded by a 2s timeout hint and cached by the caller). Tenant-less users are excluded.
+     * {@code roles} is a mapped set and the join is filtered to one role, so each user matches once and a
+     * plain {@code count} is exact as long as no duplicate (user_id, role) row exists; the schema does not
+     * enforce that uniqueness (the application only ever inserts set elements). {@code count(distinct)}
+     * would force a sort that spills to disk.
+     */
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = OVERVIEW_QUERY_TIMEOUT_MS))
+    @Query("select u.tenantId, count(u.id) from User u join u.roles r "
+            + "where r = :role and u.deleted = false and u.tenantId is not null group by u.tenantId")
+    List<Object[]> countByRoleGroupedByTenant(@Param("role") Role role);
 
     /** Host-admin fanout for notification (Phase 09) — every user in a tenant carrying the given role. */
     List<User> findByTenantIdAndRolesContaining(UUID tenantId, Role role);

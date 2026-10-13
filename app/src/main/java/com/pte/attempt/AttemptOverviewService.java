@@ -43,6 +43,15 @@ public class AttemptOverviewService {
     }
 
     /**
+     * Platform-wide: distinct students (across every tenant) who started at least one attempt in
+     * {@code [from, to)}. Not tenant-scoped, so only platform dashboards may call it.
+     */
+    @Transactional(readOnly = true)
+    public long countDistinctActiveStudentsPlatformWide(Instant from, Instant to) {
+        return attemptRepository.countDistinctStudentsStartedBetweenPlatformWide(from, to);
+    }
+
+    /**
      * Submitted attempts per consecutive range. {@code boundaries} holds n+1
      * ascending instants and the result holds n counts, one per
      * {@code [boundaries[i], boundaries[i+1])}. Each range is one indexed count.

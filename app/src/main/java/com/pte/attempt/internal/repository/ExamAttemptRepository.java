@@ -117,6 +117,15 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long>,
     long countDistinctStudentsStartedBetween(@Param("tenantId") UUID tenantId, @Param("from") Instant from,
             @Param("to") Instant to);
 
+    /**
+     * Overview (platform-wide): distinct students with an attempt started in {@code [from, to)} across all
+     * tenants; served by the time-leading {@code started_at} index, bounded by the timeout hint.
+     */
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = OVERVIEW_QUERY_TIMEOUT_MS))
+    @Query("SELECT COUNT(DISTINCT a.studentPublicId) FROM ExamAttempt a WHERE a.deleted = false "
+            + "AND a.startedAt >= :from AND a.startedAt < :to")
+    long countDistinctStudentsStartedBetweenPlatformWide(@Param("from") Instant from, @Param("to") Instant to);
+
     /** Batch context read for report publication; loads each pinned section set with a single query. */
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
     @Query("SELECT DISTINCT a FROM ExamAttempt a WHERE a.publicId IN :publicIds AND a.deleted = false")
