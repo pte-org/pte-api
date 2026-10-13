@@ -68,6 +68,11 @@ public final class OverviewConstants {
     public static final String SECTION_LICENSES = "licenses";
     public static final String SECTION_SUBSCRIPTIONS = "subscriptions";
     public static final String SECTION_PLANS = "plans";
+    public static final String SECTION_REVENUE = "revenue";
+    public static final String SECTION_QUESTION_BANK = "questionBank";
+
+    /** Revenue covers online (PayOS) paid orders only; license-code activations carry no payment. */
+    public static final String REVENUE_SOURCE_ONLINE_ORDERS = "ONLINE_ORDERS";
 
     private OverviewConstants() {
     }

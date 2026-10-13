@@ -12,6 +12,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -92,6 +93,20 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
             + "WHERE q.deleted = false AND q.visibility = :visibility GROUP BY q.status")
     List<Object[]> countByStatusAndVisibility(@Param("visibility") Visibility visibility);
 
+    /**
+     * Overview: one grouped read of the bank by status, skill section and pool (at most
+     * statuses x sections x pools rows); counts the same rows as the two stats queries above.
+     */
+    @Query("SELECT q.status, q.taskTypeSection, q.pool, COUNT(q) FROM Question q "
+            + "WHERE q.deleted = false AND q.visibility = :visibility "
+            + "GROUP BY q.status, q.taskTypeSection, q.pool")
+    List<Object[]> countByStatusSectionAndPool(@Param("visibility") Visibility visibility);
+
+    /** Overview: questions created in {@code [from, to)}, whatever their status is now. */
+    @Query("SELECT COUNT(q) FROM Question q WHERE q.deleted = false AND q.visibility = :visibility "
+            + "AND q.createdAt >= :from AND q.createdAt < :to")
+    long countCreatedBetween(@Param("visibility") Visibility visibility, @Param("from") Instant from,
+            @Param("to") Instant to);
     @Query("SELECT q.pteTaskType, COUNT(q) FROM Question q "
             + "WHERE q.deleted = false AND q.visibility = :visibility "
             + "AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED "

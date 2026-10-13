@@ -4,7 +4,9 @@ import com.pte.overview.internal.dto.response.AdminSectionData.Applications;
 import com.pte.overview.internal.dto.response.AdminSectionData.Learners;
 import com.pte.overview.internal.dto.response.AdminSectionData.Licenses;
 import com.pte.overview.internal.dto.response.AdminSectionData.Plans;
+import com.pte.overview.internal.dto.response.AdminSectionData.QuestionBank;
 import com.pte.overview.internal.dto.response.AdminSectionData.RecentTenants;
+import com.pte.overview.internal.dto.response.AdminSectionData.Revenue;
 import com.pte.overview.internal.dto.response.AdminSectionData.Subscriptions;
 import com.pte.overview.internal.dto.response.AdminSectionData.Support;
 import com.pte.overview.internal.dto.response.AdminSectionData.Tenants;
@@ -22,5 +24,7 @@ public record AdminDashboardResponse(
         DashboardSection<Licenses> licenses,
         DashboardSection<Subscriptions> subscriptions,
         DashboardSection<Plans> plans,
-        DashboardSection<Support> support) {
+        DashboardSection<Support> support,
+        DashboardSection<Revenue> revenue,
+        DashboardSection<QuestionBank> questionBank) {
 }

@@ -1,5 +1,6 @@
 package com.pte.overview.internal.dto.response;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -87,5 +88,33 @@ public final class AdminSectionData {
 
     /** {@code tenantName} is null when the tenant can no longer be resolved. */
     public record OldestTicket(UUID ticketId, UUID tenantId, String tenantName, String category, Instant openedAt) {
+    }
+
+    /**
+     * Online revenue only: PAID orders, never license-code activations (they carry no payment).
+     * {@code source} names that basis. Amounts are exact and always per currency, never summed
+     * across currencies; {@code paidOrders} counts paid orders of all currencies. Every currency
+     * with any paid order in the 12-month series or either window is listed, ordered by code.
+     */
+    public record Revenue(String source, TrendValue paidOrders, List<CurrencyRevenue> currencies) {
+    }
+
+    /**
+     * One currency: {@code current}/{@code previous} are the paid amounts of the current and previous
+     * window, {@code changePct} is null when {@code previous} is zero, {@code monthly} is the 12-month
+     * series (oldest first, ending with the current partial month in Asia/Ho_Chi_Minh).
+     */
+    public record CurrencyRevenue(String currency, BigDecimal current, BigDecimal previous, Double changePct,
+            TrendValue paidOrders, List<MonthlyAmount> monthly) {
+    }
+
+    /**
+     * Question bank health, platform-wide (shared questions, every revision). Every map holds all of its
+     * enum keys. {@code byPool} counts all questions (EXAM and PRACTICE); {@code approvedByPool} only
+     * APPROVED ones, so practice items are never mistaken for exam stock. {@code createdInWindow} is a
+     * created-at count: the bank stores no approval time, so there is no approval trend.
+     */
+    public record QuestionBank(long total, Map<String, Long> byStatus, Map<String, Long> bySection,
+            Map<String, Long> byPool, Map<String, Long> approvedByPool, TrendValue createdInWindow) {
     }
 }
