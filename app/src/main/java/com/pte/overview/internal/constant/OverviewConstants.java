@@ -26,12 +26,22 @@ public final class OverviewConstants {
     public static final Duration HOST_SERIES_TTL = Duration.ofSeconds(30);
     public static final String SERIES_ATTEMPTS_MONTHLY = "attempts-monthly";
 
+    /** The grading backlog is the only cached commercial/ops section. */
+    public static final String CACHE_SECTION_GRADING = "grading";
+    public static final Duration HOST_GRADING_TTL = Duration.ofSeconds(30);
+    public static final int RECENT_ACTIVITY_LIMIT = 8;
+
     public static final String SECTION_LEARNERS = "learners";
     public static final String SECTION_QUOTA = "quota";
     public static final String SECTION_ACADEMICS = "academics";
     public static final String SECTION_STAFF = "staff";
     public static final String SECTION_EXAMS = "exams";
     public static final String SECTION_ATTEMPTS = "attempts";
+    public static final String SECTION_GRADING = "grading";
+    public static final String SECTION_SUBSCRIPTION = "subscription";
+    public static final String SECTION_BILLING = "billing";
+    public static final String SECTION_SUPPORT = "support";
+    public static final String SECTION_RECENT_ACTIVITY = "recentActivity";
 
     private OverviewConstants() {
     }

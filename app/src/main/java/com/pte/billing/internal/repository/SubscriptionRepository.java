@@ -40,6 +40,13 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     List<Subscription> findByTenantIdAndStatusAndStartsAtLessThanEqualAndExpiresAtGreaterThanOrderByCreatedAtDesc(
             UUID tenantId, SubscriptionStatus status, Instant startsAt, Instant expiresAt);
 
+    /** Overview: the tenant's usable subscriptions at {@code now}, soonest expiry first (bounded by {@code pageable}). */
+    @Query("SELECT s FROM Subscription s WHERE s.tenantId = :tenantId AND s.deleted = false "
+            + "AND s.status = :status AND s.startsAt <= :now AND s.expiresAt > :now "
+            + "ORDER BY s.expiresAt ASC, s.id ASC")
+    List<Subscription> findUsableForOverview(@Param("tenantId") UUID tenantId,
+            @Param("status") SubscriptionStatus status, @Param("now") Instant now, Pageable pageable);
+
     List<Subscription> findByDeletedFalseAndStatusAndExpiresAtLessThanEqual(SubscriptionStatus status,
             Instant expiresAt);
 }

@@ -25,6 +25,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     Page<Order> findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(UUID tenantId, Pageable pageable);
 
+    /** Overview: orders of the tenant in {@code status}; a count only, no payment data is read. */
+    long countByTenantIdAndStatusAndDeletedFalse(UUID tenantId, OrderStatus status);
+
     Page<Order> findByDeletedFalseOrderByCreatedAtDesc(Pageable pageable);
 
     List<Order> findByStatusAndDeletedFalseAndCreatedAtLessThanEqual(OrderStatus status,

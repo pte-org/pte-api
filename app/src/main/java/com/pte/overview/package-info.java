@@ -5,5 +5,6 @@
  */
 @org.springframework.modulith.ApplicationModule(
         displayName = "Overview",
-        allowedDependencies = {"shared", "tenancy", "identity", "enrollment", "session", "attempt"})
+        allowedDependencies = {"shared", "tenancy", "identity", "enrollment", "session", "attempt",
+                "scoring", "reporting", "billing", "support"})
 package com.pte.overview;
