@@ -1,9 +1,11 @@
 package com.pte.overview.internal.service;
 
 import com.pte.overview.internal.constant.OverviewConstants;
+import com.pte.overview.internal.dto.response.MonthlyAmount;
 import com.pte.overview.internal.dto.response.MonthlyPoint;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -122,6 +124,60 @@ class MonthBucketsTest {
         int feb2027 = labels(MonthBuckets.toPoints(common, VN, counts(MONTHS))).indexOf("2027-02");
         assertThat(Duration.between(commonBoundaries.get(feb2027), commonBoundaries.get(feb2027 + 1)))
                 .isEqualTo(Duration.ofDays(28));
+    }
+
+    // ---- Phase 4: exact-amount points ----
+
+    private static List<BigDecimal> amounts(int n) {
+        return java.util.stream.IntStream.rangeClosed(1, n).mapToObj(i -> new BigDecimal(i * 100 + ".50")).toList();
+    }
+
+    @Test
+    void toAmountPointsLabelsTwelveMonthsOldestFirstWithOnlyTheCurrentMonthPartial() {
+        Instant now = Instant.parse("2026-10-13T03:00:00Z");
+
+        List<MonthlyAmount> points = MonthBuckets.toAmountPoints(now, VN, amounts(MONTHS));
+
+        assertThat(points).hasSize(12);
+        assertThat(points).extracting(MonthlyAmount::month).containsExactly("2025-11", "2025-12", "2026-01", "2026-02",
+                "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10");
+        assertThat(points).extracting(MonthlyAmount::amount).containsExactlyElementsOf(amounts(MONTHS));
+        assertThat(points).extracting(MonthlyAmount::partial)
+                .containsExactly(false, false, false, false, false, false, false, false, false, false, false, true);
+    }
+
+    @Test
+    void toAmountPointsKeepsTheExactScaleOfEveryAmount() {
+        Instant now = Instant.parse("2026-10-13T03:00:00Z");
+
+        List<MonthlyAmount> points = MonthBuckets.toAmountPoints(now, VN,
+                List.of(new BigDecimal("0"), new BigDecimal("0.00"), new BigDecimal("12345678901234567890.12")));
+
+        assertThat(points.get(0).amount().scale()).isZero();
+        assertThat(points.get(1).amount().scale()).isEqualTo(2);
+        assertThat(points.get(2).amount()).isEqualTo(new BigDecimal("12345678901234567890.12"));
+    }
+
+    @Test
+    void toAmountPointsUsesTheVietnamMonthEvenWhenUtcIsStillThePreviousMonthAndAgreesWithTheCountVariant() {
+        Instant now = Instant.parse("2026-10-31T17:30:00Z"); // 2026-11-01 00:30 in Ho Chi Minh
+
+        List<MonthlyAmount> points = MonthBuckets.toAmountPoints(now, VN, amounts(MONTHS));
+
+        assertThat(points.get(MONTHS - 1).month()).isEqualTo("2026-11");
+        assertThat(points.get(MONTHS - 1).partial()).isTrue();
+        assertThat(points).extracting(MonthlyAmount::month)
+                .isEqualTo(MonthBuckets.toPoints(now, VN, counts(MONTHS)).stream().map(MonthlyPoint::month).toList());
+    }
+
+    @Test
+    void toAmountPointsFollowsTheNumberOfAmountsAndHandlesEmptyInput() {
+        Instant now = Instant.parse("2026-10-13T03:00:00Z");
+
+        assertThat(MonthBuckets.toAmountPoints(now, VN, List.of(new BigDecimal("5.00"), BigDecimal.ZERO)))
+                .containsExactly(new MonthlyAmount("2026-09", new BigDecimal("5.00"), false),
+                        new MonthlyAmount("2026-10", BigDecimal.ZERO, true));
+        assertThat(MonthBuckets.toAmountPoints(now, VN, List.of())).isEmpty();
     }
 
     @Test

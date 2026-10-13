@@ -83,7 +83,7 @@ class AdminTenantSectionsTest {
 
     @Test
     void aZeroPreviousWindowGivesNoInventedPercentage() {
-        when(fx.tenancy.countTenantsCreatedBetween(window.previousStart(), window.start())).thenReturn(0L);
+        when(fx.tenancyOverview.countTenantsCreatedBetween(window.previousStart(), window.start())).thenReturn(0L);
 
         assertThat(sections.tenants(window).newInWindow()).isEqualTo(new TrendValue(6, 0, null));
     }
@@ -103,10 +103,10 @@ class AdminTenantSectionsTest {
     @SuppressWarnings("unchecked")
     private List<Instant> boundariesFor(Instant now) {
         DashboardWindow w = DashboardWindow.of(30, now);
-        when(fx.tenancy.countTenantsCreatedPerRange(anyList())).thenReturn(LongStream.range(0, 12).boxed().toList());
+        when(fx.tenancyOverview.countTenantsCreatedPerRange(anyList())).thenReturn(LongStream.range(0, 12).boxed().toList());
         sections.tenants(w);
         ArgumentCaptor<List<Instant>> captor = ArgumentCaptor.forClass(List.class);
-        verify(fx.tenancy, org.mockito.Mockito.atLeastOnce()).countTenantsCreatedPerRange(captor.capture());
+        verify(fx.tenancyOverview, org.mockito.Mockito.atLeastOnce()).countTenantsCreatedPerRange(captor.capture());
         return captor.getValue();
     }
 
@@ -218,7 +218,7 @@ class AdminTenantSectionsTest {
 
     @Test
     void anEmptyPlatformHasZeroTotalsAndNoUtilisationRows() {
-        when(fx.tenancy.seatLimits()).thenReturn(List.of());
+        when(fx.tenancyOverview.seatLimits()).thenReturn(List.of());
 
         Learners learners = sections.learners(window, counts(Map.of()));
 
@@ -276,12 +276,12 @@ class AdminTenantSectionsTest {
         ArgumentCaptor<java.util.Collection<UUID>> ids = ArgumentCaptor.forClass(java.util.Collection.class);
         verify(fx.billing, times(1)).currentPlanByTenant(ids.capture(), eq(window.end()));
         assertThat(ids.getValue()).containsExactly(T1, T2, T3);
-        verify(fx.tenancy).recentTenants(5);
+        verify(fx.tenancyOverview).recentTenants(5);
     }
 
     @Test
     void noRecentTenantsMeansAnEmptyListAndNoPerTenantWork() {
-        when(fx.tenancy.recentTenants(5)).thenReturn(List.of());
+        when(fx.tenancyOverview.recentTenants(5)).thenReturn(List.of());
         when(fx.billing.currentPlanByTenant(anyCollection(), eq(NOW))).thenReturn(Map.of());
 
         assertThat(sections.recentTenants(window, counts(STUDENTS)).items()).isEmpty();

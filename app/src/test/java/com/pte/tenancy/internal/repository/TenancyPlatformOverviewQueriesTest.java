@@ -2,13 +2,10 @@ package com.pte.tenancy.internal.repository;
 
 import com.pte.tenancy.PlatformTenantCounts;
 import com.pte.tenancy.RecentTenantView;
-import com.pte.tenancy.StudentCountProvider;
-import com.pte.tenancy.TenancyService;
+import com.pte.tenancy.TenancyOverviewService;
 import com.pte.tenancy.TenantSeatLimit;
 import com.pte.tenancy.domain.Tenant;
 import com.pte.tenancy.domain.enums.TenantStatus;
-import com.pte.tenancy.internal.service.QuotaTransactionService;
-import com.pte.tenancy.internal.service.TenantLifecycleService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
@@ -23,10 +20,9 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
 
 /**
- * Platform-wide tenant reads behind {@link TenancyService} on the embedded database: status and organization-type
+ * Platform-wide tenant reads behind {@link TenancyOverviewService} on the embedded database: status and organization-type
  * counts, half-open creation ranges (incl. Asia/Ho_Chi_Minh month boundaries that differ from UTC), the newest-first
  * list, the seat-limit projection and the statement counts (bounded, never one per tenant).
  */
@@ -50,12 +46,11 @@ class TenancyPlatformOverviewQueriesTest {
     @Autowired
     private EntityManagerFactory emf;
 
-    private TenancyService service;
+    private TenancyOverviewService service;
 
     @BeforeEach
     void setUp() {
-        service = new TenancyService(organizations, tenants, mock(TenantLifecycleService.class),
-                mock(QuotaTransactionService.class), mock(StudentCountProvider.class));
+        service = new TenancyOverviewService(tenants);
     }
 
     private Tenant tenant(String name, String type, TenantStatus status, boolean deleted, int seats, Instant createdAt) {
