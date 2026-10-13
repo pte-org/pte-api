@@ -17,6 +17,7 @@ import com.pte.scoring.dto.response.ExaminerAttemptDetailResponse;
 import com.pte.scoring.dto.response.ExaminerPromptOptionResponse;
 import com.pte.scoring.dto.response.ExaminerPromptResponse;
 import com.pte.scoring.dto.response.ExaminerQueueResponse;
+import com.pte.scoring.dto.response.ExaminerReportsResponse;
 import com.pte.scoring.dto.response.ExaminerResponseOptionResponse;
 import com.pte.scoring.dto.response.ExaminerScoreSubmissionResponse;
 import com.pte.scoring.dto.response.ExaminerWorkflowView;
@@ -234,6 +235,17 @@ public class ExaminerScoringService {
                     clock != null ? clock.instant() : Instant.now());
         }
         throw new UnsupportedOperationException("Workspace overview read repository not configured");
+    }
+
+    @Transactional(readOnly = true)
+    public ExaminerReportsResponse getReports(Instant fromDate, Instant toDate, String taskType,
+            String status, UUID sessionPublicId, CurrentUser caller) {
+        CurrentUser examiner = requireActiveExaminer(caller);
+        if (readRepository != null) {
+            return readRepository.getReports(examiner.tenantId(), examiner.userId(),
+                    fromDate, toDate, taskType, status, sessionPublicId);
+        }
+        throw new UnsupportedOperationException("Workspace read repository not configured");
     }
 
     @Transactional(readOnly = true)

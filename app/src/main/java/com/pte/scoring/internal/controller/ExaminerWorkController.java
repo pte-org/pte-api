@@ -11,6 +11,7 @@ import com.pte.scoring.dto.response.ExaminerGradingIssueResponse;
 import com.pte.scoring.dto.response.ExaminerGuidelinesResponse;
 import com.pte.scoring.dto.response.ExaminerHistoryResponse;
 import com.pte.scoring.dto.response.ExaminerQueueResponse;
+import com.pte.scoring.dto.response.ExaminerReportsResponse;
 import com.pte.scoring.dto.response.ExaminerScoreSubmissionResponse;
 import com.pte.scoring.dto.response.ExaminerWorkspaceOverviewResponse;
 import com.pte.scoring.internal.service.ExaminerDraftCommandService;
@@ -32,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -63,6 +65,31 @@ public class ExaminerWorkController {
     @GetMapping("/overview")
     public ApiResponse<ExaminerWorkspaceOverviewResponse> getOverview() {
         return ApiResponse.success(examinerScoringService.getWorkspaceOverview(currentUser()));
+    }
+
+    @GetMapping("/reports")
+    public ApiResponse<ExaminerReportsResponse> getReports(
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate,
+            @RequestParam(required = false) String taskType,
+            @RequestParam(required = false, defaultValue = "ALL") String status,
+            @RequestParam(required = false) UUID sessionPublicId) {
+        Instant fromInstant = parseInstant(fromDate);
+        Instant toInstant = parseInstant(toDate);
+        return ApiResponse.success(examinerScoringService.getReports(fromInstant, toInstant, taskType, status, sessionPublicId, currentUser()));
+    }
+
+    private static Instant parseInstant(String text) {
+        if (text == null || text.isBlank()) return null;
+        try {
+            return Instant.parse(text.trim());
+        } catch (Exception e) {
+            try {
+                return java.time.LocalDate.parse(text.trim()).atStartOfDay().toInstant(java.time.ZoneOffset.UTC);
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
     }
 
     @GetMapping

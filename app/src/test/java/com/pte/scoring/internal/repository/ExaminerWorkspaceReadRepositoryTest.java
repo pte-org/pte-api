@@ -56,4 +56,40 @@ class ExaminerWorkspaceReadRepositoryTest {
         assertThat(result.getTotalElements()).isZero();
         assertThat(result.getContent()).isEmpty();
     }
+
+    @Test
+    void testGetReportsWhenEmptyReturnsZeroSummaryAndEmptyLists() {
+        UUID tenantId = UUID.randomUUID();
+        UUID examinerId = UUID.randomUUID();
+
+        com.pte.scoring.dto.response.ExaminerReportsResponse reports = readRepository.getReports(
+                tenantId, examinerId, null, null, null, null, null);
+
+        assertThat(reports).isNotNull();
+        assertThat(reports.summary()).isNotNull();
+        assertThat(reports.summary().finalizedCount()).isZero();
+        assertThat(reports.summary().inProgressCount()).isZero();
+        assertThat(reports.summary().pendingCount()).isZero();
+        assertThat(reports.summary().totalAssignedCount()).isZero();
+        assertThat(reports.summary().avgGradingDurationMinutes()).isZero();
+        assertThat(reports.summary().regradeCount()).isZero();
+        assertThat(reports.taskTypeBreakdowns()).isEmpty();
+        assertThat(reports.recentFinalizedItems()).isEmpty();
+    }
+
+    @Test
+    void testGetReportsWithFilters() {
+        UUID tenantId = UUID.randomUUID();
+        UUID examinerId = UUID.randomUUID();
+        java.time.Instant from = java.time.Instant.now().minus(7, java.time.temporal.ChronoUnit.DAYS);
+        java.time.Instant to = java.time.Instant.now();
+
+        com.pte.scoring.dto.response.ExaminerReportsResponse reports = readRepository.getReports(
+                tenantId, examinerId, from, to, "READ_ALOUD", "COMPLETED", UUID.randomUUID());
+
+        assertThat(reports).isNotNull();
+        assertThat(reports.summary().totalAssignedCount()).isZero();
+        assertThat(reports.taskTypeBreakdowns()).isEmpty();
+        assertThat(reports.recentFinalizedItems()).isEmpty();
+    }
 }
