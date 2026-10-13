@@ -49,6 +49,12 @@ class BillingOverviewQueriesTest {
     private OrderRepository orders;
 
     @Autowired
+    private LicenseCodeRepository licenseCodes;
+
+    @Autowired
+    private TenantApplicationRepository applications;
+
+    @Autowired
     private EntityManager em;
 
     @Autowired
@@ -59,7 +65,7 @@ class BillingOverviewQueriesTest {
 
     @BeforeEach
     void setUp() {
-        service = new BillingOverviewService(subscriptions, plans, orders, CLOCK);
+        service = new BillingOverviewService(subscriptions, plans, orders, licenseCodes, applications, CLOCK);
     }
 
     private Plan plan(String name, PlanType type) {
