@@ -1,6 +1,7 @@
 package com.pte.overview.internal.constant;
 
 import java.time.Duration;
+import java.time.ZoneId;
 import java.util.Set;
 
 /** Error codes, limits and cache settings owned by the overview module. */
@@ -43,6 +44,30 @@ public final class OverviewConstants {
     public static final String SECTION_BILLING = "billing";
     public static final String SECTION_SUPPORT = "support";
     public static final String SECTION_RECENT_ACTIVITY = "recentActivity";
+
+    public static final String ADMIN_PATH = "/admin";
+    public static final ZoneId BUCKET_ZONE_ID = ZoneId.of(BUCKET_ZONE);
+
+    /**
+     * Admin sections are cached one by one for 60 seconds under a key that embeds the caller's
+     * computed visibility bucket (never the raw role), the window and the schema version.
+     */
+    public static final String CACHE_SCOPE_ADMIN = "admin";
+    public static final Duration ADMIN_SECTION_TTL = Duration.ofSeconds(60);
+    public static final String CACHE_BUCKET_NONE = "none";
+    public static final String CACHE_BUCKET_SEPARATOR = "+";
+
+    public static final int RECENT_TENANTS_LIMIT = 5;
+    public static final int TOP_UTILISATION_LIMIT = 5;
+    public static final int OLDEST_APPLICATIONS_LIMIT = 5;
+    public static final int OLDEST_TICKETS_LIMIT = 5;
+
+    public static final String SECTION_TENANTS = "tenants";
+    public static final String SECTION_RECENT_TENANTS = "recentTenants";
+    public static final String SECTION_APPLICATIONS = "applications";
+    public static final String SECTION_LICENSES = "licenses";
+    public static final String SECTION_SUBSCRIPTIONS = "subscriptions";
+    public static final String SECTION_PLANS = "plans";
 
     private OverviewConstants() {
     }

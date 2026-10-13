@@ -23,4 +23,17 @@ public final class DashboardCacheKeys {
         return String.join(SEP, OverviewConstants.CACHE_KEY_PREFIX, OverviewConstants.CACHE_SCOPE_HOST,
                 OverviewConstants.CACHE_SCHEMA_VERSION, tenantId.toString(), String.valueOf(windowDays), series);
     }
+
+    /**
+     * Admin key: the scope is the constant "admin", then schema version, visibility bucket (the
+     * computed set of sections the caller may see, never a raw role), window and section. Two
+     * callers with different visibility, windows or sections can never share an entry.
+     */
+    public static String admin(String visibilityBucket, int windowDays, String section) {
+        if (visibilityBucket == null || visibilityBucket.isBlank()) {
+            throw new IllegalArgumentException("visibilityBucket is required for an admin cache key");
+        }
+        return String.join(SEP, OverviewConstants.CACHE_KEY_PREFIX, OverviewConstants.CACHE_SCOPE_ADMIN,
+                OverviewConstants.CACHE_SCHEMA_VERSION, visibilityBucket, String.valueOf(windowDays), section);
+    }
 }
