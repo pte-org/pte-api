@@ -40,7 +40,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Opt-in PostgreSQL proof for the overview migration (V94), enabled by passing
+ * Opt-in PostgreSQL proof for the overview migrations (V94, V95), enabled by passing
  * {@code -Dlifecycle.test.db.url=<jdbc url>}. The URL (including any credentials it
  * needs) comes only from that property; nothing about the host, port or account is
  * hard-coded. Everything runs in a brand-new, uniquely named schema that is dropped
@@ -67,7 +67,11 @@ class OverviewMigrationPostgresIntegrationTest {
     private static final String URL_PROPERTY = "lifecycle.test.db.url";
     private static final String SCHEMA = "overview_mig_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
     private static final String V94_RESOURCE = "db/migration/V94__overview_host_dashboard_indexes.sql";
+    private static final String V95_RESOURCE = "db/migration/V95__overview_host_commercial_ops_indexes.sql";
     private static final AtomicBoolean MIGRATED = new AtomicBoolean();
+
+    private static final Set<String> V95_INDEXES = Set.of(
+            "idx_attempt_reports_tenant_unpublished", "idx_audit_logs_tenant_created");
 
     private static final Set<String> V94_INDEXES = Set.of(
             "idx_attempts_tenant_submitted", "idx_attempts_tenant_started", "idx_attempts_tenant_status",
@@ -126,7 +130,7 @@ class OverviewMigrationPostgresIntegrationTest {
     }
 
     @Test
-    void everyMigrationAppliedFromAnEmptySchemaThroughV94() {
+    void everyMigrationAppliedFromAnEmptySchemaThroughV95() {
         Integer failed = jdbc.queryForObject(
                 "select count(*) from " + SCHEMA + ".flyway_schema_history where success = false", Integer.class);
         Integer versionedApplied = jdbc.queryForObject(
@@ -137,10 +141,48 @@ class OverviewMigrationPostgresIntegrationTest {
                 String.class);
 
         assertThat(failed).isZero();
-        assertThat(versionedApplied).isGreaterThanOrEqualTo(94);
-        assertThat(versions).contains("94");
+        assertThat(versionedApplied).isGreaterThanOrEqualTo(95);
+        assertThat(versions).contains("94", "95");
         assertThat(versions.stream().mapToInt(v -> Integer.parseInt(v.split("\\.")[0])).max().orElse(0))
-                .isGreaterThanOrEqualTo(94);
+                .isGreaterThanOrEqualTo(95);
+    }
+
+    @Test
+    void v95CreatedTheReportsAndAuditIndexesAsPartialTenantLeadingIndexes() {
+        Map<String, String> definitions = jdbc.queryForList(
+                        "select indexname, indexdef from pg_indexes where schemaname = ?", SCHEMA).stream()
+                .collect(Collectors.toMap(row -> (String) row.get("indexname"), row -> (String) row.get("indexdef")));
+
+        assertThat(definitions.keySet()).containsAll(V95_INDEXES);
+        assertThat(definitions.get("idx_attempt_reports_tenant_unpublished")).contains("(tenant_id)")
+                .contains("published = false").contains("deleted = false");
+        assertThat(definitions.get("idx_audit_logs_tenant_created")).contains("(tenant_id, created_at DESC)")
+                .contains("WHERE (deleted = false)");
+    }
+
+    @Test
+    void v95IsIdempotentWhenReplayedAgainstTheMigratedSchema() throws Exception {
+        String script = new String(new ClassPathResource(V95_RESOURCE).getInputStream().readAllBytes(),
+                StandardCharsets.UTF_8);
+        try (Connection connection = DriverManager.getConnection(url());
+             Statement statement = connection.createStatement()) {
+            statement.execute("set search_path to " + SCHEMA);
+            statement.execute(script);
+            statement.execute(script);
+        }
+        String names = V95_INDEXES.stream().map(name -> "'" + name + "'").collect(Collectors.joining(", "));
+        Integer indexCount = jdbc.queryForObject(
+                "select count(*) from pg_indexes where schemaname = ? and indexname in (" + names + ")",
+                Integer.class, SCHEMA);
+        assertThat(indexCount).isEqualTo(V95_INDEXES.size());
+    }
+
+    @Test
+    void theScratchSchemaIsTheOnlyPlaceTheTestWrites() {
+        // The migrated schema is isolated: every table the run created lives in the scratch schema.
+        assertThat(jdbc.queryForObject("select count(*) from pg_tables where schemaname = ?", Integer.class, SCHEMA))
+                .isGreaterThan(50);
+        assertThat(SCHEMA).startsWith("overview_mig_").isNotEqualTo("public");
     }
 
     @Test
@@ -256,6 +298,215 @@ class OverviewMigrationPostgresIntegrationTest {
         System.out.println(report);
 
         assertThat(failures).isEmpty();
+    }
+
+    // ---- EXPLAIN of the Phase 2 (commercial / operations) host queries ----
+
+    private static final int PHASE2_TENANTS = 20;
+    private static final int PHASE2_COPIES_PER_TENANT = 1500;
+
+    @Test
+    void phaseTwoHostQueriesUseIndexes() throws Exception {
+        UUID[] tenants = new UUID[PHASE2_TENANTS];
+        for (int i = 0; i < tenants.length; i++) {
+            tenants[i] = UUID.randomUUID();
+        }
+        UUID tenantA = tenants[0];
+        seedPhaseTwo(tenants);
+
+        String a = "'" + tenantA + "'";
+        Map<String, String> queries = new LinkedHashMap<>();
+        // name -> index that MUST be used by the default planner (null: only recorded, usable-index checked when forced)
+        Map<String, String> mustUseNaturally = new LinkedHashMap<>();
+
+        queries.put("reports awaiting publication (count)", "select count(r.id) from " + SCHEMA
+                + ".attempt_reports r where r.tenant_id = " + a + " and r.published = false and r.deleted = false");
+        mustUseNaturally.put("reports awaiting publication (count)", "idx_attempt_reports_tenant_unpublished");
+
+        queries.put("recent activity (newest 8 audit rows)", "select * from " + SCHEMA + ".audit_logs a where a.tenant_id = "
+                + a + " and a.deleted = false order by a.created_at desc limit 8");
+        mustUseNaturally.put("recent activity (newest 8 audit rows)", "idx_audit_logs_tenant_created");
+
+        queries.put("grading: answers grouped by status", "select s.status, count(s.id) from " + SCHEMA
+                + ".scoring_answers s where s.tenant_id = " + a + " and s.deleted = false group by s.status");
+        mustUseNaturally.put("grading: answers grouped by status", null);
+
+        queries.put("grading: frozen cohorts (closed sessions awaiting finalisation)", "select count(c.id) from " + SCHEMA
+                + ".session_grading_cohorts c where c.tenant_id = " + a + " and c.status = 'FROZEN' and c.deleted = false");
+        mustUseNaturally.put("grading: frozen cohorts (closed sessions awaiting finalisation)", null);
+
+        queries.put("pending orders (count)", "select count(o.id) from " + SCHEMA + ".orders o where o.tenant_id = " + a
+                + " and o.status = 'PENDING' and o.deleted = false");
+        mustUseNaturally.put("pending orders (count)", null);
+
+        queries.put("support tickets grouped by status", "select t.status, count(t.id) from " + SCHEMA
+                + ".support_ticket t where t.tenant_id = " + a + " and t.deleted = false group by t.status");
+        mustUseNaturally.put("support tickets grouped by status", null);
+
+        queries.put("usable subscriptions (soonest expiry, limit 10)", "select * from " + SCHEMA + ".subscriptions s "
+                + "where s.tenant_id = " + a + " and s.deleted = false and s.status = 'ACTIVE' and s.starts_at <= now() "
+                + "and s.expires_at > now() order by s.expires_at asc, s.id asc limit 10");
+        mustUseNaturally.put("usable subscriptions (soonest expiry, limit 10)", null);
+
+        String planIds = jdbc.queryForList("select '''' || public_id::text || '''' from " + SCHEMA
+                + ".plans order by id limit 3", String.class).stream().collect(Collectors.joining(", "));
+        queries.put("plan names batch (findByPublicIdIn)", "select * from " + SCHEMA + ".plans p where p.public_id in ("
+                + planIds + ")");
+        mustUseNaturally.put("plan names batch (findByPublicIdIn)", null);
+
+        StringBuilder report = new StringBuilder("EXPLAIN (ANALYZE) of Phase 2 host dashboard queries\n\nSeed: ")
+                .append(PHASE2_TENANTS).append(" tenants x ").append(PHASE2_COPIES_PER_TENANT)
+                .append(" rows per table (tenant A is 1 of ").append(PHASE2_TENANTS).append(")\n");
+        for (String table : List.of("attempt_reports", "audit_logs", "scoring_answers", "session_grading_cohorts",
+                "orders", "support_ticket", "subscriptions", "plans")) {
+            report.append("  ").append(table).append(": ")
+                    .append(jdbc.queryForObject("select count(*) from " + SCHEMA + "." + table, Long.class)).append(" rows\n");
+        }
+        report.append("\nIndexes on the queried tables:\n");
+        jdbc.queryForList("select tablename, indexdef from pg_indexes where schemaname = ? and tablename in "
+                        + "('attempt_reports','audit_logs','scoring_answers','session_grading_cohorts','orders',"
+                        + "'support_ticket','subscriptions','plans') order by tablename, indexname", SCHEMA)
+                .forEach(row -> report.append("  ").append(row.get("indexdef")).append('\n'));
+
+        List<String> failures = new ArrayList<>();
+        StringBuilder verdicts = new StringBuilder("\n=== VERDICTS ===\n");
+        for (Map.Entry<String, String> query : queries.entrySet()) {
+            String natural = explain(query.getValue(), false);
+            String forced = explain(query.getValue(), true);
+            report.append("\n--- ").append(query.getKey()).append(" [planner default]\n").append(natural)
+                    .append("\n--- ").append(query.getKey()).append(" [enable_seqscan=off]\n").append(forced).append('\n');
+            String required = mustUseNaturally.get(query.getKey());
+            boolean naturalIndexed = natural.contains("Index") && !natural.contains("Seq Scan");
+            verdicts.append(query.getKey()).append(": default planner -> ")
+                    .append(summarisePlan(natural)).append("; forced -> ").append(summarisePlan(forced)).append('\n');
+            if (required != null && !natural.contains(required)) {
+                failures.add(query.getKey() + " does not use " + required + " by default");
+            }
+            if (!forced.contains("Index")) {
+                failures.add(query.getKey() + " has no usable index even with sequential scans disabled");
+            }
+            if (required == null && !naturalIndexed) {
+                verdicts.append("  note: default planner chose a sequential scan on the ").append(PHASE2_TENANTS)
+                        .append("-tenant seed\n");
+            }
+        }
+        report.append(verdicts);
+        Files.writeString(Path.of("target", "overview-explain-plans-phase2.txt"), report.toString(), StandardCharsets.UTF_8);
+        System.out.println(report);
+
+        assertThat(failures).isEmpty();
+    }
+
+    private static String summarisePlan(String plan) {
+        List<String> nodes = new ArrayList<>();
+        for (String line : plan.split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("->")) {
+                trimmed = trimmed.substring(2).trim();
+            }
+            if (trimmed.startsWith("Index") || trimmed.startsWith("Bitmap Index") || trimmed.startsWith("Seq Scan")
+                    || trimmed.startsWith("Bitmap Heap")) {
+                int paren = trimmed.indexOf(" (");
+                nodes.add(paren > 0 ? trimmed.substring(0, paren) : trimmed);
+            }
+        }
+        return nodes.isEmpty() ? "(no scan node)" : String.join(" | ", nodes);
+    }
+
+    /** Plain-SQL seed of the Phase 2 tables: realistic skew (few unpublished/pending/frozen rows), tenants interleaved. */
+    private void seedPhaseTwo(UUID[] tenants) {
+        int copies = PHASE2_COPIES_PER_TENANT;
+        long[] reports = new long[tenants.length];
+        long[] audits = new long[tenants.length];
+        long[] answers = new long[tenants.length];
+        long[] cohorts = new long[tenants.length];
+        long[] orderTemplates = new long[tenants.length];
+        long[] tickets = new long[tenants.length];
+        long[] subs = new long[tenants.length];
+        for (int i = 0; i < tenants.length; i++) {
+            String t = "'" + tenants[i] + "'::uuid";
+            reports[i] = insertBaseRow("attempt_reports", Map.of("tenant_id", t, "published", "false"));
+            audits[i] = insertBaseRow("audit_logs", Map.of("tenant_id", t));
+            answers[i] = insertBaseRow("scoring_answers", Map.of("tenant_id", t, "status", "'PENDING'"));
+            cohorts[i] = insertBaseRow("session_grading_cohorts", Map.of("tenant_id", t, "status", "'FROZEN'",
+                    "marking_mode", "'AI_ONLY'"));
+            orderTemplates[i] = insertBaseRow("orders", Map.of("tenant_id", t, "status", "'PENDING'",
+                    "order_code", String.valueOf(i + 1), "amount", "100000")); // unique code per template; clones override it
+            tickets[i] = insertBaseRow("support_ticket", Map.of("tenant_id", t, "status", "'OPEN'", "category", "'BUG'"));
+            subs[i] = insertBaseRow("subscriptions", Map.of("tenant_id", t, "status", "'ACTIVE'",
+                    "activation_source", "'LICENSE_CODE'", "license_key", "substr(md5(random()::text), 1, 32)",
+                    "starts_at", "now()", "expires_at", "now() + interval '1 day'", "max_students_per_session", "30"));
+        }
+        for (int p = 0; p < 40; p++) {
+            insertBaseRow("plans", Map.of("name", "'plan " + p + "'", "type", "'EXAM_PACKAGE'", "status", "'ACTIVE'",
+                    "currency", "'VND'", "price", "100000", "duration_days", "365", "max_students_per_session", "30"));
+        }
+        cloneInterleaved("attempt_reports", reports, tenants, copies, tenant -> {
+            Map<String, String> o = new LinkedHashMap<>();
+            o.put("public_id", "gen_random_uuid()");
+            o.put("attempt_public_id", "gen_random_uuid()");
+            o.put("tenant_id", "'" + tenant + "'::uuid");
+            o.put("published", "(g % 20 <> 0)"); // ~5% awaiting publication
+            return o;
+        });
+        cloneInterleaved("audit_logs", audits, tenants, copies, tenant -> {
+            Map<String, String> o = new LinkedHashMap<>();
+            o.put("public_id", "gen_random_uuid()");
+            o.put("tenant_id", "'" + tenant + "'::uuid");
+            o.put("created_at", "now() - (" + copies + " - g) * interval '5 minutes'");
+            return o;
+        });
+        cloneInterleaved("scoring_answers", answers, tenants, copies, tenant -> {
+            Map<String, String> o = new LinkedHashMap<>();
+            o.put("public_id", "gen_random_uuid()");
+            o.put("answer_public_id", "gen_random_uuid()");
+            o.put("attempt_public_id", "gen_random_uuid()");
+            o.put("session_public_id", "md5((g % 40)::text)::uuid");
+            o.put("tenant_id", "'" + tenant + "'::uuid");
+            o.put("status", "case when g % 20 = 0 then 'PENDING' when g % 50 = 0 then 'AI_SCORING' "
+                    + "when g % 100 = 0 then 'SCORING_FAILED' else 'SCORED' end");
+            return o;
+        });
+        cloneInterleaved("session_grading_cohorts", cohorts, tenants, copies, tenant -> {
+            Map<String, String> o = new LinkedHashMap<>();
+            o.put("public_id", "gen_random_uuid()");
+            o.put("session_public_id", "gen_random_uuid()");
+            o.put("tenant_id", "'" + tenant + "'::uuid");
+            o.put("status", "case when g % 10 = 0 then 'FROZEN' else 'COMPLETED' end");
+            o.put("completed_at", "case when g % 10 = 0 then null else now() end");
+            return o;
+        });
+        cloneInterleaved("orders", orderTemplates, tenants, copies, tenant -> {
+            Map<String, String> o = new LinkedHashMap<>();
+            o.put("public_id", "gen_random_uuid()");
+            o.put("order_code", "(abs(hashtext(t.tenant_id::text))::bigint * 100000 + g)");
+            o.put("tenant_id", "'" + tenant + "'::uuid");
+            o.put("plan_id", "gen_random_uuid()"); // one pending order per (tenant, plan) is unique
+            o.put("status", "case when g % 50 = 0 then 'PENDING' else 'PAID' end");
+            o.put("paid_at", "case when g % 50 = 0 then null else now() end");
+            return o;
+        });
+        cloneInterleaved("support_ticket", tickets, tenants, copies, tenant -> {
+            Map<String, String> o = new LinkedHashMap<>();
+            o.put("public_id", "gen_random_uuid()");
+            o.put("tenant_id", "'" + tenant + "'::uuid");
+            o.put("status", "(array['OPEN','IN_PROGRESS','RESOLVED','CLOSED','CLOSED','CLOSED'])[1 + g % 6]");
+            return o;
+        });
+        cloneInterleaved("subscriptions", subs, tenants, copies, tenant -> {
+            Map<String, String> o = new LinkedHashMap<>();
+            o.put("public_id", "gen_random_uuid()");
+            o.put("license_key", "substr(md5(g::text || t.tenant_id::text), 1, 32)");
+            o.put("tenant_id", "'" + tenant + "'::uuid");
+            o.put("status", "case when g % 10 = 0 then 'ACTIVE' else 'EXPIRED' end");
+            o.put("starts_at", "now() - interval '400 days'");
+            o.put("expires_at", "now() - interval '400 days' + g * interval '1 day'");
+            return o;
+        });
+        for (String table : List.of("attempt_reports", "audit_logs", "scoring_answers", "session_grading_cohorts",
+                "orders", "support_ticket", "subscriptions", "plans")) {
+            jdbc.execute("vacuum (analyze) " + SCHEMA + "." + table);
+        }
     }
 
     /** One connection for the planner setting and the EXPLAIN, so the setting cannot leak or be lost in the pool. */

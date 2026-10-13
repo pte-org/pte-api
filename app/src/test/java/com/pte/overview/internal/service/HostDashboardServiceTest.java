@@ -225,7 +225,7 @@ class HostDashboardServiceTest {
         cached.build(OTHER_TENANT, "30");
 
         ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
-        verify(cache, times(3)).getOrCompute(key.capture(), any(), any(), any());
+        verify(cache, times(3)).getOrCompute(key.capture(), any(), eq(MonthlySeries.class), any());
         assertThat(key.getAllValues()).doesNotHaveDuplicates();
     }
 

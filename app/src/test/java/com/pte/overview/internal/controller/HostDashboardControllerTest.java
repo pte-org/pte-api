@@ -136,6 +136,85 @@ class HostDashboardControllerTest {
                 .andExpect(jsonPath("$.data.attempts.data.monthlySubmitted[0].partial").value(false));
     }
 
+    @Test
+    void hostAdminGetsAllElevenSectionsOkFromTheNamedTenantAFixture() throws Exception {
+        fx.stubOperations(TENANT);
+        authenticate(TENANT, "HOST_ADMIN");
+
+        mvc.perform(get(PATH))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.learners.status").value("OK"))
+                .andExpect(jsonPath("$.data.quota.status").value("OK"))
+                .andExpect(jsonPath("$.data.academics.status").value("OK"))
+                .andExpect(jsonPath("$.data.staff.status").value("OK"))
+                .andExpect(jsonPath("$.data.exams.status").value("OK"))
+                .andExpect(jsonPath("$.data.attempts.status").value("OK"))
+                .andExpect(jsonPath("$.data.grading.status").value("OK"))
+                .andExpect(jsonPath("$.data.subscription.status").value("OK"))
+                .andExpect(jsonPath("$.data.billing.status").value("OK"))
+                .andExpect(jsonPath("$.data.support.status").value("OK"))
+                .andExpect(jsonPath("$.data.recentActivity.status").value("OK"))
+                .andExpect(jsonPath("$.data.grading.data.pendingAnswers").value(5))
+                .andExpect(jsonPath("$.data.grading.data.aiScoringAnswers").value(2))
+                .andExpect(jsonPath("$.data.grading.data.failedAnswers").value(1))
+                .andExpect(jsonPath("$.data.grading.data.closedSessionsAwaitingFinalisation").value(3))
+                .andExpect(jsonPath("$.data.grading.data.reportsAwaitingPublication").value(4))
+                .andExpect(jsonPath("$.data.subscription.data.current.length()").value(1))
+                .andExpect(jsonPath("$.data.subscription.data.current[0].planName").value("Tenant A Exam Pack"))
+                .andExpect(jsonPath("$.data.subscription.data.daysToExpiry").value(12))
+                .andExpect(jsonPath("$.data.subscription.data.expiringSoon").value(true))
+                .andExpect(jsonPath("$.data.billing.data.pendingOrders").value(2))
+                .andExpect(jsonPath("$.data.support.data.open").value(3))
+                .andExpect(jsonPath("$.data.support.data.inProgress").value(2))
+                .andExpect(jsonPath("$.data.support.data.resolvedAwaitingClose").value(1))
+                .andExpect(jsonPath("$.data.recentActivity.data.length()").value(2))
+                .andExpect(jsonPath("$.data.recentActivity.data[0].action").value("CLASS_CREATED"))
+                .andExpect(jsonPath("$.data.recentActivity.data[0].summary").doesNotExist())
+                .andExpect(jsonPath("$.data.billing.data.paymentLink").doesNotExist())
+                .andExpect(jsonPath("$.data.billing.data.paymentLinkUrl").doesNotExist());
+    }
+
+    @Test
+    void tenantBDataNeverAppearsInTenantAsResponseEvenWhenTenantBIsFullyStubbed() throws Exception {
+        fx.stubOperations(TENANT);
+        fx.stubFullPath(OTHER_TENANT).stubOperationsOfTenantB(OTHER_TENANT);
+        authenticate(TENANT, "HOST_ADMIN");
+
+        String body = mvc.perform(get(PATH).param("tenantId", OTHER_TENANT.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.grading.data.pendingAnswers").value(5))
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(body).doesNotContain("TENANT-B-SECRET").doesNotContain("70707").doesNotContain("80808").doesNotContain("90909").doesNotContain("60606").doesNotContain("50505").doesNotContain("40404").doesNotContain("30303").doesNotContain("20202").doesNotContain("10101").doesNotContain("TENANT_B_ACTION").doesNotContain("Tenant B");
+        verify(fx.scoring).backlog(TENANT);
+        verify(fx.scoring, never()).backlog(OTHER_TENANT);
+        verify(fx.reporting, never()).countAwaitingPublication(OTHER_TENANT);
+        verify(fx.billing, never()).subscriptionSummary(OTHER_TENANT);
+        verify(fx.billing, never()).pendingOrderCount(OTHER_TENANT);
+        verify(fx.support, never()).ticketCounts(OTHER_TENANT);
+        verify(fx.audit, never()).recent(org.mockito.ArgumentMatchers.eq(OTHER_TENANT),
+                org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    void aFailingScoringSectionStill200sWithGradingInErrorAndTheRestOk() throws Exception {
+        fx.stubOperations(TENANT);
+        when(fx.scoring.backlog(TENANT)).thenThrow(new IllegalStateException("jdbc:postgresql://secret-host"));
+        authenticate(TENANT, "HOST_ADMIN");
+
+        mvc.perform(get(PATH))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.grading.status").value("ERROR"))
+                .andExpect(jsonPath("$.data.grading.data").doesNotExist())
+                .andExpect(jsonPath("$.data.subscription.status").value("OK"))
+                .andExpect(jsonPath("$.data.billing.status").value("OK"))
+                .andExpect(jsonPath("$.data.support.status").value("OK"))
+                .andExpect(jsonPath("$.data.recentActivity.status").value("OK"))
+                .andExpect(jsonPath("$.data.attempts.status").value("OK"))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("secret-host"))));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"7", "30", "90"})
     void supportedWindowsAreAccepted(String days) throws Exception {
