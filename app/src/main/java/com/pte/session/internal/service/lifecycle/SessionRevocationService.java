@@ -5,7 +5,6 @@ import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.event.SessionCancelledEvent;
 import com.pte.session.internal.exception.SubscriptionRevocationScopeConflictException;
-import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -18,14 +17,11 @@ import java.util.UUID;
 public class SessionRevocationService {
 
     private final ExamSessionRepository sessionRepository;
-    private final EnrollmentRepository enrollmentRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     public SessionRevocationService(ExamSessionRepository sessionRepository,
-            EnrollmentRepository enrollmentRepository,
             ApplicationEventPublisher eventPublisher) {
         this.sessionRepository = sessionRepository;
-        this.enrollmentRepository = enrollmentRepository;
         this.eventPublisher = eventPublisher;
     }
 
@@ -53,10 +49,8 @@ public class SessionRevocationService {
         for (ExamSession session : sessionRepository.findBySubscriptionIdAndStatus(
                 subscriptionId, SessionStatus.SCHEDULED)) {
             session.cancel();
-            List<UUID> students = enrollmentRepository.findBySessionId(session.getId()).stream()
-                    .map(enrollment -> enrollment.getStudentPublicId()).toList();
             eventPublisher.publishEvent(new SessionCancelledEvent(
-                    session.getPublicId(), session.getTenantId(), students));
+                    session.getPublicId(), session.getTenantId(), session.getName(), java.time.Instant.now()));
         }
         sessionRepository.flush();
     }
@@ -76,10 +70,8 @@ public class SessionRevocationService {
                 continue;
             }
             session.cancel();
-            List<UUID> students = enrollmentRepository.findBySessionId(session.getId()).stream()
-                    .map(enrollment -> enrollment.getStudentPublicId()).toList();
             eventPublisher.publishEvent(new SessionCancelledEvent(
-                    session.getPublicId(), session.getTenantId(), students));
+                    session.getPublicId(), session.getTenantId(), session.getName(), java.time.Instant.now()));
         }
         sessionRepository.flush();
     }

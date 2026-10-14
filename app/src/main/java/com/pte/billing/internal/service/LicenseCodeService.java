@@ -159,6 +159,12 @@ public class LicenseCodeService {
     @Transactional(readOnly = true)
     public PagedResult<AdminLicenseCodeSummary> listForAdmin(Integer requestedPage, Integer requestedSize,
             String requestedStatus, UUID planId, UUID tenantId, CurrentUser caller) {
+        return listForAdmin(requestedPage, requestedSize, requestedStatus, planId, tenantId, null, caller);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<AdminLicenseCodeSummary> listForAdmin(Integer requestedPage, Integer requestedSize,
+            String requestedStatus, UUID planId, UUID tenantId, String requestedSearch, CurrentUser caller) {
         requirePlatformOperation(caller, PlatformOperation.LICENSE_MASKED_READ);
         int page = requestedPage == null ? 0 : requestedPage;
         int size = requestedSize == null ? DEFAULT_ADMIN_PAGE_SIZE : requestedSize;
@@ -170,11 +176,29 @@ public class LicenseCodeService {
         }
         LicenseCodeStatus status = parseAdminStatus(requestedStatus);
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        Page<LicenseCode> result = licenseCodeRepository.findAdminPage(status, planId, tenantId, now,
-                PageRequest.of(page, size));
+        String normalizedSearch = requestedSearch == null ? null : requestedSearch.trim();
+        UUID searchId = parseUuid(normalizedSearch);
+        if (normalizedSearch != null && !normalizedSearch.isBlank() && searchId == null) {
+            return new PagedResult<>(List.of(), new PageMeta(page, size, 0, 0, page == 0, true, false, page > 0));
+        }
+        Page<LicenseCode> result = searchId == null
+                ? licenseCodeRepository.findAdminPage(status, planId, tenantId, now, PageRequest.of(page, size))
+                : licenseCodeRepository.findAdminPageByIdentifier(status, planId, tenantId, now, searchId,
+                        PageRequest.of(page, size));
         return new PagedResult<>(adminSummaries(result.getContent(), now),
                 new PageMeta(result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages(),
                         result.isFirst(), result.isLast(), result.hasNext(), result.hasPrevious()));
+    }
+
+    private UUID parseUuid(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     @Transactional(readOnly = true)

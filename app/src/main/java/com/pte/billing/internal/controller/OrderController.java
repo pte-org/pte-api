@@ -1,5 +1,6 @@
 package com.pte.billing.internal.controller;
 
+import com.pte.billing.domain.enums.OrderStatus;
 import com.pte.billing.internal.dto.request.CreateOrderRequest;
 import com.pte.billing.internal.dto.response.OrderResponse;
 import com.pte.billing.internal.service.OrderService;
@@ -8,6 +9,7 @@ import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
 import com.pte.shared.web.PagedResult;
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 /** Tenant-owned PayOS order creation and history endpoints. */
@@ -42,10 +45,15 @@ public class OrderController {
 
     @GetMapping
     public ApiResponse<PagedResult<OrderResponse>> list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) OrderStatus status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate createdFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate createdTo,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         CurrentUser caller = CurrentUserContext.required();
-        return ApiResponse.success(orderService.listOrders(caller.tenantId(), page, size));
+        return ApiResponse.success(orderService.listOrders(caller.tenantId(), search, status,
+                createdFrom, createdTo, page, size));
     }
 
     @GetMapping("/{publicId}")

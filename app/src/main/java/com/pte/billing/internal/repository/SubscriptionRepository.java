@@ -40,6 +40,21 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     List<Subscription> findByTenantIdAndStatusAndStartsAtLessThanEqualAndExpiresAtGreaterThanOrderByCreatedAtDesc(
             UUID tenantId, SubscriptionStatus status, Instant startsAt, Instant expiresAt);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT s FROM Subscription s
+            WHERE s.tenantId = :tenantId
+              AND s.planId = :planId
+              AND s.deleted = false
+              AND s.status = :status
+              AND s.startsAt <= :now
+              AND s.expiresAt > :now
+            ORDER BY s.expiresAt DESC
+            """)
+    List<Subscription> findUsableForPlanRenewal(@Param("tenantId") UUID tenantId,
+            @Param("planId") UUID planId, @Param("status") SubscriptionStatus status,
+            @Param("now") Instant now);
+
     List<Subscription> findByDeletedFalseAndStatusAndExpiresAtLessThanEqual(SubscriptionStatus status,
             Instant expiresAt);
 }

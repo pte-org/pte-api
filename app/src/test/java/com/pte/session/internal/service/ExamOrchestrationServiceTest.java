@@ -14,6 +14,7 @@ import com.pte.session.domain.ExamPolicy;
 import com.pte.session.domain.ExamAudienceMember;
 import com.pte.session.domain.ExamAudienceSource;
 import com.pte.session.domain.ExamSession;
+import com.pte.session.domain.ExamGenerationJob;
 import com.pte.session.domain.enums.AudienceMemberStatus;
 import com.pte.session.domain.enums.AudienceSourceType;
 import com.pte.session.domain.enums.ExamMode;
@@ -24,6 +25,7 @@ import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.dto.request.CreateExamDraftRequest;
 import com.pte.session.internal.dto.request.PatchExamDraftRequest;
 import com.pte.session.internal.exception.ExamDraftConfigurationException;
+import com.pte.session.internal.exception.ExamDraftNotDeletableException;
 import com.pte.session.internal.exception.ExamDraftVersionConflictException;
 import com.pte.session.internal.repository.ExamAudienceMemberRepository;
 import com.pte.session.internal.repository.ExamAudienceSourceRepository;
@@ -36,6 +38,7 @@ import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.exception.DomainException;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -93,6 +96,8 @@ class ExamOrchestrationServiceTest {
     private AuditLogService auditLogService;
     @Mock
     private SessionCodeGenerator sessionCodeGenerator;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private ExamOrchestrationService service;
     private UUID tenantId;
@@ -108,7 +113,7 @@ class ExamOrchestrationServiceTest {
                 jobRepository, formRepository, formAssignmentRepository, enrollmentRepository,
                 sessionLifecycleService, enrollmentService, assessmentService, scoreTemplateService,
                 billingService, enrollmentModuleService, identityService, startedAttemptLookup, auditLogService,
-                sessionCodeGenerator);
+                sessionCodeGenerator, eventPublisher);
         tenantId = UUID.randomUUID();
         templateId = UUID.randomUUID();
         subscriptionId = UUID.randomUUID();
@@ -257,6 +262,79 @@ class ExamOrchestrationServiceTest {
                 .isInstanceOf(ExamDraftVersionConflictException.class);
 
         verify(sessionRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void deleteDraft_softDeletesDraftAndRecordsAuditEvent() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
+
+        service.deleteDraft(session.getPublicId(), hostAdmin);
+
+        assertThat(session.isDeleted()).isTrue();
+        verify(sessionRepository).save(session);
+        verify(auditLogService).record(hostAdmin, SessionConstants.AGGREGATE_EXAM_SESSION,
+                session.getPublicId().toString(), SessionConstants.EVENT_EXAM_DRAFT_DELETED, session.getName());
+    }
+
+    @Test
+    void deleteDraft_rejectsPublishedSession() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        session.setStatus(SessionStatus.SCHEDULED);
+        when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
+
+        assertThatThrownBy(() -> service.deleteDraft(session.getPublicId(), hostAdmin))
+                .isInstanceOf(ExamDraftNotDeletableException.class);
+
+        assertThat(session.isDeleted()).isFalse();
+        verify(sessionRepository, never()).save(any());
+    }
+
+    @Test
+    void cancelDraft_isRejectedBecauseDraftUsesDelete() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
+
+        assertThatThrownBy(() -> service.cancel(session.getPublicId(), hostAdmin))
+                .isInstanceOf(com.pte.session.internal.exception.SessionNotCancellableException.class);
+        verify(sessionRepository, never()).save(any());
+    }
+
+    @Test
+    void cancelPreparing_cancelsActiveGenerationAndReturnsToDraft() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        session.setStatus(SessionStatus.PREPARING);
+        ExamGenerationJob job = new ExamGenerationJob();
+        job.setSession(session);
+        job.setStatus(com.pte.session.domain.enums.GenerationJobStatus.RUNNING);
+        when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
+        when(jobRepository.findFirstBySessionIdOrderByCreatedAtDesc(session.getId())).thenReturn(Optional.of(job));
+
+        var response = service.cancel(session.getPublicId(), hostAdmin);
+
+        assertThat(response.status()).isEqualTo(SessionStatus.DRAFT.name());
+        assertThat(job.getStatus()).isEqualTo(com.pte.session.domain.enums.GenerationJobStatus.CANCELLED);
+        verify(eventPublisher, never()).publishEvent(any());
+        verify(auditLogService).record(hostAdmin, SessionConstants.AGGREGATE_EXAM_SESSION,
+                session.getPublicId().toString(), SessionConstants.EVENT_EXAM_GENERATION_CANCELLED,
+                "Draft (PREPARING -> DRAFT)");
+    }
+
+    @Test
+    void cancelScheduled_publishesNeutralCancellationEvent() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        session.setStatus(SessionStatus.SCHEDULED);
+        when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
+
+        var response = service.cancel(session.getPublicId(), hostAdmin);
+
+        assertThat(response.status()).isEqualTo(SessionStatus.CANCELLED.name());
+        verify(eventPublisher).publishEvent(any(com.pte.session.dto.event.SessionCancelledEvent.class));
     }
 
     @Test
