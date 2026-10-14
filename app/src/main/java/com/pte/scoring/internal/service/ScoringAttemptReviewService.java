@@ -60,6 +60,7 @@ public class ScoringAttemptReviewService {
         UUID studentPublicId = owner == null ? null : owner.studentPublicId();
         return new AttemptReviewItemResponse(attemptPublicId, studentPublicId, names.get(studentPublicId),
                 owner == null ? null : owner.attemptNumber(),
+                owner == null ? null : owner.submittedAt(),
                 counts.values().stream().mapToInt(Integer::intValue).sum(),
                 counts.getOrDefault(ScoringAnswerStatus.SCORED, 0),
                 counts.getOrDefault(ScoringAnswerStatus.PENDING, 0),

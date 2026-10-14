@@ -85,6 +85,11 @@ public class AttemptService implements StartedAttemptLookup {
         return submittedAnswerQueryService.findForSession(sessionPublicId, tenantId);
     }
 
+    /** Every answer of one attempt — scoring's ingestion right after the attempt is submitted. */
+    public List<SubmittedAnswerView> getSubmittedAnswersForAttempt(UUID attemptPublicId, UUID tenantId) {
+        return submittedAnswerQueryService.findForAttempt(attemptPublicId, tenantId);
+    }
+
     /** Throws if the attempt doesn't exist or hasn't reached SUBMITTED — reporting's report creation pull (Phase 10). */
     public AttemptSummaryView getSubmittedAttempt(UUID attemptPublicId) {
         return attemptSummaryQueryService.findSubmitted(attemptPublicId);
@@ -104,7 +109,8 @@ public class AttemptService implements StartedAttemptLookup {
         return examAttemptRepository.findBySessionPublicIdAndTenantIdAndPublicIdIn(sessionPublicId, tenantId,
                         List.copyOf(attemptPublicIds)).stream()
                 .collect(Collectors.toMap(ExamAttempt::getPublicId, attempt -> new AttemptOwnerView(
-                        attempt.getPublicId(), attempt.getStudentPublicId(), attempt.getAttemptNumber())));
+                        attempt.getPublicId(), attempt.getStudentPublicId(), attempt.getAttemptNumber(),
+                        attempt.getSubmittedAt())));
     }
 
     /** The pinned score template + tested sections for one attempt — reporting's weighted scoring (Phase 5). */

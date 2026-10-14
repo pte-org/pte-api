@@ -115,6 +115,27 @@ class ScoringIngestServiceTest {
     }
 
     @Test
+    void ingestSubmittedAttempt_pullsOnlyThatAttemptsAnswers() {
+        UUID attemptPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        UUID answerPublicId = UUID.randomUUID();
+        SubmittedAnswerView view = new SubmittedAnswerView(
+                answerPublicId, attemptPublicId, UUID.randomUUID(),
+                UUID.randomUUID(), tenantId, UUID.randomUUID(), "MC_READING_SINGLE", "1",
+                "[{\"text\":\"A\",\"correct\":true}]", "[{\"text\":\"A\",\"orderIndex\":0}]", false, null, null, null, null, null);
+        when(attemptService.getSubmittedAnswersForAttempt(attemptPublicId, tenantId)).thenReturn(List.of(view));
+        when(scoringAnswerRepository.findByAnswerPublicId(answerPublicId)).thenReturn(Optional.empty());
+        when(scoringAnswerRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.ingestSubmittedAttempt(attemptPublicId, tenantId);
+
+        ArgumentCaptor<ScoringAnswer> saved = ArgumentCaptor.forClass(ScoringAnswer.class);
+        verify(scoringAnswerRepository).save(saved.capture());
+        assertThat(saved.getValue().getAnswerPublicId()).isEqualTo(answerPublicId);
+        verify(attemptService, never()).getSubmittedAnswersForSession(any(), any());
+    }
+
+    @Test
     void ingestForSession_copiesAllFieldsCorrectly() {
         UUID sessionPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();

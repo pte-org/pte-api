@@ -6,8 +6,10 @@ import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -18,7 +20,8 @@ import java.util.UUID;
  * (dependency order: attempt ──> scoring, so scoring calls out to attempt,
  * never the reverse). Idempotent by the {@code answer_public_id} unique
  * constraint: an already-ingested answer (any status, including already
- * SCORED) is never re-inserted.
+ * SCORED) is never re-inserted. Ingesting only makes answers reviewable;
+ * scoring still starts only from the host's command.
  *
  * <p>Only the host's scoring request, which holds the session lock, also
  * refreshes the pinned question content of existing rows (status, payload
@@ -49,8 +52,21 @@ public class ScoringIngestService {
         ingest(sessionPublicId, tenantId, true);
     }
 
+    /**
+     * Ingests one submitted attempt right after it commits, so the host can review its answers before
+     * scoring. Always its own transaction: it runs after the submitting transaction has completed.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void ingestSubmittedAttempt(UUID attemptPublicId, UUID tenantId) {
+        ingest(attemptService.getSubmittedAnswersForAttempt(attemptPublicId, tenantId), false);
+    }
+
     private void ingest(UUID sessionPublicId, UUID tenantId, boolean refreshQuestionContent) {
-        for (SubmittedAnswerView view : attemptService.getSubmittedAnswersForSession(sessionPublicId, tenantId)) {
+        ingest(attemptService.getSubmittedAnswersForSession(sessionPublicId, tenantId), refreshQuestionContent);
+    }
+
+    private void ingest(List<SubmittedAnswerView> views, boolean refreshQuestionContent) {
+        for (SubmittedAnswerView view : views) {
             Optional<ScoringAnswer> existing = scoringAnswerRepository.findByAnswerPublicId(view.answerPublicId());
             if (existing.isPresent()) {
                 if (refreshQuestionContent && applyQuestionContent(existing.get(), view)) {

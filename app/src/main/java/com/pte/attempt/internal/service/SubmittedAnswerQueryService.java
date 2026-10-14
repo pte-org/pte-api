@@ -12,9 +12,9 @@ import java.util.UUID;
 
 /**
  * Backs scoring's pull-based ingestion (Phase 08): scoring calls this
- * in-process instead of attempt pushing an {@code AnswerSubmitted} event —
- * attempt has no outbound dependency on scoring (dependency order:
- * attempt ──> scoring, not the reverse).
+ * in-process instead of attempt pushing the answers to it — attempt has no
+ * outbound dependency on scoring. The only push is the payload-free
+ * {@code AttemptSubmittedEvent}, which tells scoring when to pull.
  */
 @Service
 public class SubmittedAnswerQueryService {
@@ -28,6 +28,14 @@ public class SubmittedAnswerQueryService {
     @Transactional(readOnly = true)
     public List<SubmittedAnswerView> findForSession(UUID sessionPublicId, UUID tenantId) {
         return attemptAnswerRepository.findByAttempt_SessionPublicIdAndAttempt_TenantId(sessionPublicId, tenantId)
+                .stream()
+                .map(SubmittedAnswerQueryService::toView)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<SubmittedAnswerView> findForAttempt(UUID attemptPublicId, UUID tenantId) {
+        return attemptAnswerRepository.findByAttempt_PublicIdAndAttempt_TenantId(attemptPublicId, tenantId)
                 .stream()
                 .map(SubmittedAnswerQueryService::toView)
                 .toList();

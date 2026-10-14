@@ -1,6 +1,7 @@
 package com.pte.attempt.domain;
 
 import com.pte.attempt.domain.enums.AttemptStatus;
+import com.pte.attempt.dto.event.AttemptSubmittedEvent;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -12,14 +13,19 @@ import jakarta.persistence.Index;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.domain.AfterDomainEventPublication;
+import org.springframework.data.domain.DomainEvents;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -133,6 +139,12 @@ public class ExamAttempt extends BaseEntity {
     @Version
     private Long version;
 
+    /** Events registered by state changes; the repository publishes them when this attempt is saved. */
+    @Transient
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    private final List<Object> domainEvents = new ArrayList<>();
+
     public void begin() {
         this.status = AttemptStatus.IN_PROGRESS;
         this.startedAt = Instant.now();
@@ -141,6 +153,17 @@ public class ExamAttempt extends BaseEntity {
     public void submit() {
         this.status = AttemptStatus.SUBMITTED;
         this.submittedAt = Instant.now();
+        domainEvents.add(new AttemptSubmittedEvent(getPublicId(), sessionPublicId, getTenantId()));
+    }
+
+    @DomainEvents
+    Collection<Object> domainEvents() {
+        return List.copyOf(domainEvents);
+    }
+
+    @AfterDomainEventPublication
+    void clearDomainEvents() {
+        domainEvents.clear();
     }
 
     public boolean isInProgress() {

@@ -12,11 +12,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Persists a student's answer. Does not itself trigger scoring: scoring
- * (Phase 08) only acts on the host's later scoring-request command, and will
- * receive this data through an application event/work handoff at that point
- * — not implemented yet since scoring doesn't exist in the monolith until
- * then (same deferral precedent as Phase 06's host-gated commands).
+ * Persists a student's answer. Does not itself trigger scoring: scoring only
+ * acts on the host's scoring-request command. The answers reach scoring once
+ * the attempt is submitted (see {@code AttemptSubmittedEvent}), not per answer,
+ * because a student may still change an answer until then.
  */
 @Service
 public class AnswerSubmitService {

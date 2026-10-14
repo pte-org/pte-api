@@ -46,14 +46,15 @@ class ScoringAttemptReviewServiceTest {
         UUID attemptB = UUID.randomUUID();
         UUID studentA = UUID.randomUUID();
         UUID studentB = UUID.randomUUID();
+        java.time.Instant submittedAt = java.time.Instant.parse("2026-10-14T09:30:00Z");
         when(scoringAnswerRepository.countByAttemptAndStatus(tenantId, sessionId)).thenReturn(List.of(
                 new AttemptStatusCount(attemptA, ScoringAnswerStatus.SCORED, 8),
                 new AttemptStatusCount(attemptA, ScoringAnswerStatus.SCORING_FAILED, 1),
                 new AttemptStatusCount(attemptA, ScoringAnswerStatus.AI_SCORING, 1),
                 new AttemptStatusCount(attemptB, ScoringAnswerStatus.PENDING, 3)));
         when(attemptService.getAttemptOwners(sessionId, tenantId, List.of(attemptA, attemptB))).thenReturn(Map.of(
-                attemptA, new AttemptOwnerView(attemptA, studentA, 1),
-                attemptB, new AttemptOwnerView(attemptB, studentB, 2)));
+                attemptA, new AttemptOwnerView(attemptA, studentA, 1, submittedAt),
+                attemptB, new AttemptOwnerView(attemptB, studentB, 2, null)));
         when(identityService.findFullNames(org.mockito.ArgumentMatchers.eq(tenantId), org.mockito.ArgumentMatchers.anyCollection()))
                 .thenReturn(Map.of(studentA, "Ann Nguyen", studentB, "Bao Tran"));
 
@@ -66,6 +67,7 @@ class ScoringAttemptReviewServiceTest {
         assertThat(first.studentPublicId()).isEqualTo(studentA);
         assertThat(first.studentName()).isEqualTo("Ann Nguyen");
         assertThat(first.attemptNumber()).isEqualTo(1);
+        assertThat(first.submittedAt()).isEqualTo(submittedAt);
         assertThat(first.answerCount()).isEqualTo(10);
         assertThat(first.scoredCount()).isEqualTo(8);
         assertThat(first.failedCount()).isEqualTo(1);
