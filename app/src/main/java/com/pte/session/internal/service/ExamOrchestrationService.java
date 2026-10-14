@@ -870,14 +870,12 @@ public class ExamOrchestrationService {
         return value == null || value.isBlank() ? null : value.trim().toUpperCase(java.util.Locale.ROOT);
     }
 
+    /** Every student sits an exam once, as in the real test; a retry count above 0 is refused. */
     private int resolveRetryCount(Integer retries) {
-        if (retries == null) {
-            return 0;
-        }
-        if (retries < 0 || retries > 9) {
+        if (retries != null && retries != 0) {
             throw new ExamDraftConfigurationException(SessionConstants.RETRY_COUNT_INVALID);
         }
-        return retries;
+        return 0;
     }
 
     private String normalizeSeriesKey(String value) {

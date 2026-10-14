@@ -142,7 +142,7 @@ public final class SessionConstants {
             "Mock and official exams must include every skill in the selected template.";
     public static final String TEMPLATE_SKILLS_UNAVAILABLE =
             "The selected exam template does not contain any supported skills.";
-    public static final String RETRY_COUNT_INVALID = "Set the retry count to a whole number from 0 to 9.";
+    public static final String RETRY_COUNT_INVALID = "Each student can take an exam only once, so the retry count must be 0.";
     public static final String SUBSCRIPTION_REFERENCE_REQUIRED = "Subscription reference is required";
     public static final String OPEN_TIME_REQUIRED = "Open time is required";
     public static final String OPEN_TIME_FUTURE = "Open time must be in the future";

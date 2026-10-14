@@ -179,6 +179,19 @@ class ExamOrchestrationServiceTest {
     }
 
     @Test
+    void createDraft_withRetries_isRejectedBecauseEveryStudentSitsOnce() {
+        stubTemplateAndSubscription();
+
+        assertThatThrownBy(() -> service.createDraft(new CreateExamDraftRequest(
+                "Retries", templateId, subscriptionId, opensAt, closesAt,
+                ExamMode.OFFICIAL_EXAM, null, null, "SERIES", 50, null, 2,
+                com.pte.session.domain.enums.LockdownMode.STRICT), hostAdmin))
+                .isInstanceOf(com.pte.session.internal.exception.ExamDraftConfigurationException.class);
+
+        verify(sessionRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void updateDraft_withoutLockdown_preservesStrictAfterRetryPatch() {
         ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
                 com.pte.session.domain.enums.LockdownMode.STRICT);
@@ -189,9 +202,9 @@ class ExamOrchestrationServiceTest {
 
         var response = service.updateDraft(session.getPublicId(), new PatchExamDraftRequest(
                 "Renamed", null, null, null, null, null, null, null, null, null,
-                0L, null, 2, null), hostAdmin);
+                0L, null, 0, null), hostAdmin);
 
-        assertThat(session.getMaxRetriesPerStudent()).isEqualTo(2);
+        assertThat(session.getMaxRetriesPerStudent()).isZero();
         assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
     }
 
