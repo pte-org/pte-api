@@ -126,6 +126,13 @@ media:
     authoring-folder: ${CLOUDINARY_AUTHORING_FOLDER:pte/authoring}
     submission-folder: ${CLOUDINARY_SUBMISSION_FOLDER:pte/submissions}
 
+locations:
+  vietnam:
+    base-url: ${VIETNAM_LOCATION_BASE_URL:https://provinces.open-api.vn/api/v2}
+    connect-timeout-ms: ${VIETNAM_LOCATION_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${VIETNAM_LOCATION_READ_TIMEOUT_MS:10000}
+    cache-ttl-ms: ${VIETNAM_LOCATION_CACHE_TTL_MS:86400000}
+
 attempt:
   capability:
     # Only snapshots without Phase 4 runtime provenance may use this legacy path.
