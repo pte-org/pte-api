@@ -39,6 +39,8 @@ public final class IdentityConstants {
     public static final String USER_AGGREGATE = "User";
     public static final String USER_PASSWORD_RESET = "UserPasswordReset";
     public static final String USER_PASSWORD_RESET_SUMMARY = "Authorized administrator reset the password.";
+    public static final String USER_PROFILE_UPDATED = "UserProfileUpdated";
+    public static final String USER_PROFILE_UPDATED_SUMMARY = "User updated their profile.";
     public static final String INVALID_EXAM_STAFF_QUERY = "INVALID_EXAM_STAFF_QUERY";
     public static final String DUPLICATE_EMAIL_IN_BATCH = "DUPLICATE_EMAIL_IN_BATCH";
     public static final String ROSTER_FILE_REQUIRED = "ROSTER_FILE_REQUIRED";
@@ -63,6 +65,9 @@ public final class IdentityConstants {
     public static final String EMAIL_REQUIRED = "Email is required";
     public static final String EMAIL_INVALID = "Email must be valid";
     public static final String FULL_NAME_REQUIRED = "Full name is required";
+    public static final String FULL_NAME_TOO_LONG = "Full name must be at most 255 characters";
+    public static final String PHONE_TOO_LONG = "Phone number must be at most 255 characters";
+    public static final String DATE_OF_BIRTH_NOT_IN_FUTURE = "Date of birth cannot be in the future";
     public static final String PASSWORD_REQUIRED = "Password is required";
     public static final String PASSWORD_MIN_LENGTH = "Password must be at least 8 characters";
     public static final String AT_LEAST_ONE_ROLE_REQUIRED = "At least one role is required";
