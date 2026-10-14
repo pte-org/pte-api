@@ -187,8 +187,7 @@ public class ExamOrchestrationService {
         session.setStatus(SessionStatus.DRAFT);
         session.setSessionCode(sessionCodeGenerator.generate(tenantId, request.opensAt()));
         ExamSession saved = sessionRepository.saveAndFlush(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, saved.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_DRAFT_CREATED, saved.getName());
+        recordExamAudit(caller, saved, SessionConstants.EVENT_EXAM_DRAFT_CREATED, saved.getName());
         return SessionMapper.toResponse(saved);
     }
 
@@ -292,8 +291,7 @@ public class ExamOrchestrationService {
         validateSubscriptionWindowAndCapacity(lockedSubscription, session.getOpensAt(),
                 session.getClosesAt(), session.getCapacity());
         ExamSession saved = sessionRepository.saveAndFlush(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, saved.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_DRAFT_UPDATED, saved.getName());
+        recordExamAudit(caller, saved, SessionConstants.EVENT_EXAM_DRAFT_UPDATED, saved.getName());
         return SessionMapper.toResponse(saved);
     }
 
@@ -317,8 +315,8 @@ public class ExamOrchestrationService {
         source.setSourcePublicId(request.sourcePublicId());
         source.setCreatedBy(caller.userId());
         ExamAudienceSource saved = sourceRepository.save(source);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_ADDED, request.sourceType().name());
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_ADDED,
+                request.sourceType().name());
         return toSourceResponse(saved);
     }
 
@@ -336,8 +334,8 @@ public class ExamOrchestrationService {
                 .orElseThrow(AudienceSourceNotFoundException::new);
         sourceRepository.delete(source);
         memberRepository.deleteBySessionId(session.getId());
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_REMOVED, source.getSourceType().name());
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_REMOVED,
+                source.getSourceType().name());
     }
 
     @Transactional
@@ -431,8 +429,7 @@ public class ExamOrchestrationService {
         jobRepository.save(job);
         session.setStatus(SessionStatus.READY);
         sessionRepository.save(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_GENERATED, job.getPublicId().toString());
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_GENERATED, session.getName());
         return toJobResponse(job);
     }
 
@@ -476,8 +473,7 @@ public class ExamOrchestrationService {
         } catch (DataIntegrityViolationException ex) {
             throw new SessionTimeConflictException();
         }
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_PUBLISHED, session.getName());
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_PUBLISHED, session.getName());
         return SessionMapper.toResponse(session);
     }
 
@@ -494,16 +490,14 @@ public class ExamOrchestrationService {
             cancelGenerationJob(session);
             session.setStatus(SessionStatus.DRAFT);
             sessionRepository.save(session);
-            auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION,
-                    session.getPublicId().toString(), SessionConstants.EVENT_EXAM_GENERATION_CANCELLED,
+            recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_GENERATION_CANCELLED,
                     transitionSummary(session.getName(), previousStatus, session.getStatus()));
             return SessionMapper.toResponse(session);
         }
 
         session.cancel();
         sessionRepository.save(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_CANCELLED,
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_CANCELLED,
                 transitionSummary(session.getName(), previousStatus, session.getStatus()));
         eventPublisher.publishEvent(new SessionCancelledEvent(session.getPublicId(), session.getTenantId(),
                 session.getName(), Instant.now()));
@@ -524,8 +518,7 @@ public class ExamOrchestrationService {
         }
         session.setDeleted(true);
         sessionRepository.save(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION,
-                session.getPublicId().toString(), SessionConstants.EVENT_EXAM_DRAFT_DELETED, session.getName());
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_DRAFT_DELETED, session.getName());
     }
 
     private void cancelGenerationJob(ExamSession session) {
@@ -885,5 +878,10 @@ public class ExamOrchestrationService {
     private UUID requireTenant(CurrentUser caller) {
         if (caller == null || caller.tenantId() == null) throw new HostContextRequiredException();
         return caller.tenantId();
+    }
+
+    private void recordExamAudit(CurrentUser caller, ExamSession session, String action, String summary) {
+        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION,
+                session.getPublicId().toString(), session.getName(), session.getSessionCode(), action, summary);
     }
 }

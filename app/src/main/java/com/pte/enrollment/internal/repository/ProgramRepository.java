@@ -1,6 +1,7 @@
 package com.pte.enrollment.internal.repository;
 
 import com.pte.enrollment.domain.Program;
+import com.pte.enrollment.domain.enums.ProgramStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -15,6 +16,9 @@ public interface ProgramRepository extends JpaRepository<Program, Long> {
 
     /** Single-join, tenant-wide â€” not called until Phase 13's dashboard, added now while touching this file. */
     List<Program> findByOrganization_Tenant_PublicIdAndDeletedFalse(UUID tenantPublicId);
+
+    /** Overview: count of non-deleted programs of one tenant in the given status. */
+    long countByOrganization_Tenant_PublicIdAndStatusAndDeletedFalse(UUID tenantPublicId, ProgramStatus status);
 
     boolean existsByOrganization_PublicIdAndNameIgnoreCaseAndDeletedFalse(UUID organizationPublicId, String name);
 }

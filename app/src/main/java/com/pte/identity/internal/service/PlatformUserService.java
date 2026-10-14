@@ -7,6 +7,7 @@ import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.identity.internal.domain.LoginHash;
 import com.pte.identity.internal.dto.request.PlatformUserCreateRequest;
 import com.pte.identity.internal.dto.request.PlatformUserRoleUpdateRequest;
+import com.pte.identity.internal.dto.response.UserDirectoryEntryResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.EmailAlreadyUsedException;
 import com.pte.identity.internal.exception.ForbiddenRoleAssignmentException;
@@ -16,11 +17,13 @@ import com.pte.identity.internal.mapper.UserMapper;
 import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.shared.audit.AuditLogService;
+import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.SecurityCapability;
 import com.pte.shared.security.SecurityPolicy;
 import com.pte.shared.web.PageMeta;
 import com.pte.shared.web.PagedResult;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -107,6 +110,17 @@ public class PlatformUserService {
                 new PageMeta(result.getNumber(), result.getSize(), result.getTotalElements(),
                         result.getTotalPages(), result.isFirst(), result.isLast(), result.hasNext(),
                         result.hasPrevious()));
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserDirectoryEntryResponse> listDirectory(CurrentUser caller) {
+        if (caller == null || !caller.isPlatformUser()
+                || (!caller.hasRole("PLATFORM_ADMIN") && !caller.hasRole("PLATFORM_MANAGER"))) {
+            throw new AccessDeniedException(SharedConstants.ACCESS_DENIED);
+        }
+        return userRepository.findPlatformDirectory(provisioningHelper.platformRoleValues()).stream()
+                .map(user -> new UserDirectoryEntryResponse(user.getPublicId(), user.getFullName()))
+                .toList();
     }
 
     private Role parseRoleFilter(String value) {

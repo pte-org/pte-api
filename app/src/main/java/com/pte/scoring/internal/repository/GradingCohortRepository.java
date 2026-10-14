@@ -22,4 +22,7 @@ public interface GradingCohortRepository extends JpaRepository<GradingCohort, Lo
             @Param("sessionPublicId") UUID sessionPublicId);
 
     List<GradingCohort> findByStatusAndDeletedFalse(GradingCohortStatus status);
+
+    /** Overview: cohorts of the tenant in {@code status}; a count only, no rows are loaded. */
+    long countByTenantIdAndStatusAndDeletedFalse(UUID tenantId, GradingCohortStatus status);
 }

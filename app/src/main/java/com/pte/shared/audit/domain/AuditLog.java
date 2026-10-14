@@ -34,6 +34,14 @@ public class AuditLog extends BaseEntity {
     @Column(nullable = false)
     private String aggregateId;
 
+    /** Human-readable resource identity captured when the audit event is written. */
+    @Column(name = "resource_name", length = 255)
+    private String resourceName;
+
+    /** Stable business reference shown to users instead of the internal aggregate UUID. */
+    @Column(name = "resource_code", length = 255)
+    private String resourceCode;
+
     @Column(nullable = false)
     private String action;
 

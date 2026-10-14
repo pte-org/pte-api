@@ -17,6 +17,11 @@ import java.util.UUID;
 
 public interface ScoringAnswerRepository extends JpaRepository<ScoringAnswer, Long> {
 
+    /** Overview: non-deleted answers of the tenant grouped by scoring status (counts only, never rows). */
+    @Query("SELECT s.status, COUNT(s) FROM ScoringAnswer s "
+            + "WHERE s.tenantId = :tenantId AND s.deleted = false GROUP BY s.status")
+    List<Object[]> countByTenantGroupedByStatus(@Param("tenantId") UUID tenantId);
+
     org.springframework.data.domain.Slice<StaffAnswerRow>
             findByTenantIdAndAttemptPublicIdInAndDeletedFalse(UUID tenantId, List<UUID> attemptIds, Pageable pageable);
 
