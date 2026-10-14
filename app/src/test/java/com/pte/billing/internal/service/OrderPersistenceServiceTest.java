@@ -1,8 +1,13 @@
 package com.pte.billing.internal.service;
 
+import com.pte.billing.domain.Plan;
+import com.pte.billing.CommercialOutcomeConfirmedEvent;
 import com.pte.billing.OrderExpiredEvent;
 import com.pte.billing.domain.Order;
 import com.pte.billing.domain.enums.OrderStatus;
+import com.pte.billing.domain.enums.PlanStatus;
+import com.pte.billing.domain.enums.PlanType;
+import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
 import com.pte.billing.internal.repository.OrderRepository;
 import com.pte.billing.internal.repository.PlanRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +40,8 @@ class OrderPersistenceServiceTest {
     private OrderPersistenceService service;
 
     @Mock private PlanRepository planRepository;
+
+    @Mock private SubscriptionActivationService subscriptionActivationService;
 
     @BeforeEach
     void setUp() {
@@ -75,5 +82,39 @@ class OrderPersistenceServiceTest {
 
         verify(orderRepository, never()).saveAndFlush(any(Order.class));
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void completeFreeOrderActivatesSubscriptionAndPublishesCommercialOutcome() {
+        UUID publicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        Order order = Order.pending(tenantId, planId, 1_000_000_008L,
+                BigDecimal.ZERO, "VND");
+        order.setPublicId(publicId);
+        Plan plan = new Plan();
+        plan.setPublicId(planId);
+        plan.setStatus(PlanStatus.ACTIVE);
+        plan.setType(PlanType.EXAM_PACKAGE);
+        plan.setDurationDays(30);
+        plan.setMaxStudentsPerSession(1);
+        UUID subscriptionId = UUID.randomUUID();
+        SubscriptionActivationResponse activation = SubscriptionActivationResponse.fromSubscription(
+                tenantId, planId, "PTE-TEST", java.time.Instant.now(),
+                java.time.Instant.now().plusSeconds(60), 1, "ACTIVE", "PAYMENT", subscriptionId);
+        service = new OrderPersistenceService(orderRepository, eventPublisher, planRepository,
+                subscriptionActivationService);
+        when(orderRepository.findByPublicIdForUpdateAndDeletedFalse(publicId)).thenReturn(Optional.of(order));
+        when(planRepository.findByPublicIdForUpdate(planId)).thenReturn(Optional.of(plan));
+        when(subscriptionActivationService.activate(tenantId, plan,
+                com.pte.billing.domain.enums.ActivationSource.PAYMENT)).thenReturn(activation);
+        when(orderRepository.saveAndFlush(order)).thenReturn(order);
+
+        Order result = service.completeFreeOrder(publicId);
+
+        assertThat(result.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(result.getPaidAt()).isNotNull();
+        verify(orderRepository).saveAndFlush(order);
+        verify(eventPublisher).publishEvent(any(CommercialOutcomeConfirmedEvent.class));
     }
 }

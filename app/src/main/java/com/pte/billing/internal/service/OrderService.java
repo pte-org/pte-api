@@ -30,6 +30,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
@@ -76,7 +79,7 @@ public class OrderService {
         if (plan.getStatus() != PlanStatus.ACTIVE) {
             throw new OrderException(HttpStatus.CONFLICT, BillingConstants.ORDER_PLAN_NOT_ACTIVE);
         }
-        validatePayOsAmount(plan.getPrice(), plan.getCurrency());
+        validateOrderAmount(plan.getPrice(), plan.getCurrency());
         if (orderRepository.existsByTenantIdAndPlanIdAndStatusAndDeletedFalse(
                 tenantId, planPublicId, OrderStatus.PENDING)) {
             throw new OrderException(HttpStatus.CONFLICT, BillingConstants.ORDER_PENDING_EXISTS);
@@ -92,6 +95,10 @@ public class OrderService {
             throw new OrderException(HttpStatus.CONFLICT, BillingConstants.ORDER_PENDING_EXISTS);
         }
 
+        if (plan.getPrice().signum() == 0) {
+            return OrderResponse.from(orderPersistenceService.completeFreeOrder(order.getPublicId()));
+        }
+
         String paymentLinkUrl = payOsClient.createPaymentLink(order);
         return OrderResponse.from(orderPersistenceService.attachPaymentLink(
                 order.getPublicId(), paymentLinkUrl));
@@ -99,42 +106,67 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public PagedResult<OrderResponse> listOrders(UUID tenantId, int requestedPage, int requestedSize) {
-        return listOrders(tenantId, null, requestedPage, requestedSize);
+        return listOrders(tenantId, null, null, null, null, requestedPage, requestedSize);
     }
 
     @Transactional(readOnly = true)
     public PagedResult<OrderResponse> listOrders(UUID tenantId, String search, int requestedPage,
             int requestedSize) {
+        return listOrders(tenantId, search, null, null, null, requestedPage, requestedSize);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<OrderResponse> listOrders(UUID tenantId, String search, OrderStatus status,
+            LocalDate createdFrom, LocalDate createdTo, int requestedPage, int requestedSize) {
         if (tenantId == null) {
             throw invalid(BillingConstants.ORDER_TENANT_REQUIRED);
         }
         int page = Math.max(0, requestedPage);
         int size = requestedSize <= 0 ? 20 : Math.min(requestedSize, 100);
-        Page<Order> orders = search == null || search.trim().isBlank()
+        boolean hasFilters = (search != null && !search.trim().isBlank()) || status != null
+                || createdFrom != null || createdTo != null;
+        Page<Order> orders = !hasFilters
                 ? orderRepository.findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(tenantId,
                         PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"))))
-                : orderRepository.findAll(orderSearch(tenantId, search),
+                : orderRepository.findAll(orderFilter(tenantId, search, status, createdFrom, createdTo),
                         PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"))));
         return new PagedResult<>(orders.map(OrderResponse::from).getContent(),
                 new PageMeta(orders.getNumber(), orders.getSize(), orders.getTotalElements(), orders.getTotalPages(),
                         orders.isFirst(), orders.isLast(), orders.hasNext(), orders.hasPrevious()));
     }
 
-    private Specification<Order> orderSearch(UUID tenantId, String search) {
+    private Specification<Order> orderFilter(UUID tenantId, String search, OrderStatus status,
+            LocalDate createdFrom, LocalDate createdTo) {
         String normalized = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
         return (root, query, cb) -> {
             List<Predicate> filters = new ArrayList<>();
             filters.add(cb.equal(root.get("tenantId"), tenantId));
             filters.add(cb.isFalse(root.get("deleted")));
+            if (status != null) {
+                filters.add(cb.equal(root.get("status"), status));
+            }
+            if (createdFrom != null) {
+                filters.add(cb.greaterThanOrEqualTo(root.<Instant>get("createdAt"),
+                        createdFrom.atStartOfDay(ZoneOffset.UTC).toInstant()));
+            }
+            if (createdTo != null) {
+                filters.add(cb.lessThan(root.<Instant>get("createdAt"),
+                        createdTo.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant()));
+            }
+            if (createdFrom != null && createdTo != null && createdFrom.isAfter(createdTo)) {
+                return cb.disjunction();
+            }
             if (normalized.isBlank()) {
                 return cb.and(filters.toArray(Predicate[]::new));
             }
+            var plan = query.from(Plan.class);
+            filters.add(cb.equal(plan.get("publicId"), root.get("planId")));
+            filters.add(cb.isFalse(plan.get("deleted")));
             String pattern = "%" + normalized + "%";
             List<Predicate> matches = new ArrayList<>();
             matches.add(cb.like(cb.lower(cb.toString(root.get("orderCode"))), pattern));
             matches.add(cb.like(cb.lower(root.get("status").as(String.class)), pattern));
-            matches.add(cb.like(cb.lower(cb.toString(root.get("publicId"))), pattern));
-            matches.add(cb.like(cb.lower(cb.toString(root.get("planId"))), pattern));
+            matches.add(cb.like(cb.lower(plan.get("name")), pattern));
             filters.add(cb.or(matches.toArray(Predicate[]::new)));
             return cb.and(filters.toArray(Predicate[]::new));
         };
@@ -170,8 +202,8 @@ public class OrderService {
                 .orElseThrow(() -> new OrderException(HttpStatus.NOT_FOUND, BillingConstants.ORDER_NOT_FOUND));
     }
 
-    private void validatePayOsAmount(BigDecimal amount, String currency) {
-        if (amount == null || amount.signum() <= 0) {
+    private void validateOrderAmount(BigDecimal amount, String currency) {
+        if (amount == null || amount.signum() < 0) {
             throw invalid(BillingConstants.ORDER_AMOUNT_INVALID);
         }
         try {
