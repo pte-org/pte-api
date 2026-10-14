@@ -7,6 +7,7 @@ import com.pte.session.internal.dto.request.CreateSessionRequest;
 import com.pte.session.internal.dto.request.CreateExamDraftRequest;
 import com.pte.session.internal.dto.request.PatchExamDraftRequest;
 import com.pte.session.internal.dto.request.PatchExamPolicyRequest;
+import com.pte.session.internal.dto.request.PatchExamScheduleRequest;
 import com.pte.session.internal.dto.response.AudiencePreviewResponse;
 import com.pte.session.internal.dto.response.AudienceSourceResponse;
 import com.pte.session.internal.dto.response.ExamPreflightResponse;
@@ -128,6 +129,12 @@ public class SessionController {
         return ApiResponse.success(examOrchestrationService.cancel(publicId, currentUser()));
     }
 
+    @DeleteMapping("/{publicId}")
+    public ApiResponse<Void> deleteDraft(@PathVariable UUID publicId) {
+        examOrchestrationService.deleteDraft(publicId, currentUser());
+        return ApiResponse.success(null);
+    }
+
     @GetMapping("/{publicId}")
     public ApiResponse<SessionResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(sessionLifecycleService.get(publicId, currentUser()));
@@ -148,6 +155,12 @@ public class SessionController {
     public ApiResponse<ExamPolicyResponse> patchPolicy(@PathVariable UUID publicId,
                                                         @Valid @RequestBody PatchExamPolicyRequest request) {
         return ApiResponse.success(sessionLifecycleService.patchPolicy(publicId, request, currentUser()));
+    }
+
+    @PatchMapping("/{publicId}/schedule")
+    public ApiResponse<SessionResponse> patchSchedule(@PathVariable UUID publicId,
+            @Valid @RequestBody PatchExamScheduleRequest request) {
+        return ApiResponse.success(sessionLifecycleService.patchSchedule(publicId, request, currentUser()));
     }
 
     @PostMapping("/{publicId}/open")

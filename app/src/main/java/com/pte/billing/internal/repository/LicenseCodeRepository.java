@@ -83,6 +83,33 @@ public interface LicenseCodeRepository extends JpaRepository<LicenseCode, Long> 
             + "and code.redeemedAt >= :from and code.redeemedAt < :to")
     long countRedeemedBetween(@Param("from") Instant from, @Param("to") Instant to);
 
+    @Query("""
+            select code
+              from LicenseCode code
+             where code.deleted = false
+               and (:status is null
+                    or (:status = com.pte.billing.domain.enums.LicenseCodeStatus.ISSUED
+                        and code.status = com.pte.billing.domain.enums.LicenseCodeStatus.ISSUED
+                        and (code.codeExpiresAt is null or code.codeExpiresAt > :now))
+                    or (:status = com.pte.billing.domain.enums.LicenseCodeStatus.EXPIRED
+                        and (code.status = com.pte.billing.domain.enums.LicenseCodeStatus.EXPIRED
+                             or (code.status = com.pte.billing.domain.enums.LicenseCodeStatus.ISSUED
+                                 and code.codeExpiresAt is not null and code.codeExpiresAt <= :now)))
+                    or (:status <> com.pte.billing.domain.enums.LicenseCodeStatus.ISSUED
+                        and :status <> com.pte.billing.domain.enums.LicenseCodeStatus.EXPIRED
+                        and code.status = :status))
+               and (:planId is null or code.planId = :planId)
+               and (:tenantId is null or code.redeemedByTenantId = :tenantId)
+               and (:searchId is not null and (code.publicId = :searchId
+                    or code.redeemedByTenantId = :searchId))
+             order by code.issuedAt desc, code.publicId desc
+            """)
+    Page<LicenseCode> findAdminPageByIdentifier(@Param("status") LicenseCodeStatus status,
+            @Param("planId") java.util.UUID planId,
+            @Param("tenantId") java.util.UUID tenantId,
+            @Param("now") Instant now, @Param("searchId") java.util.UUID searchId,
+            Pageable pageable);
+
     /**
      * The redeem claim is one database operation so concurrent requests cannot
      * both observe ISSUED and activate the same code.

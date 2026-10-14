@@ -6,6 +6,7 @@ import com.pte.session.dto.response.ExamPolicyResponse;
 import com.pte.session.internal.dto.request.ChangeSubscriptionRequest;
 import com.pte.session.internal.dto.request.CreateSessionRequest;
 import com.pte.session.internal.dto.request.PatchExamPolicyRequest;
+import com.pte.session.internal.dto.request.PatchExamScheduleRequest;
 import com.pte.session.internal.dto.response.SessionResponse;
 import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.session.dto.response.ClosingSoonSessionView;
@@ -23,6 +24,7 @@ import com.pte.session.internal.service.lifecycle.SessionCreationService;
 import com.pte.session.internal.service.lifecycle.SessionSubscriptionService;
 import com.pte.session.internal.service.lifecycle.SessionStateService;
 import com.pte.session.internal.service.lifecycle.SessionPolicyService;
+import com.pte.session.internal.service.lifecycle.SessionScheduleService;
 import com.pte.session.internal.service.lifecycle.SessionReadService;
 import com.pte.session.internal.service.lifecycle.SessionReminderService;
 import com.pte.session.internal.service.lifecycle.SessionRevocationService;
@@ -36,6 +38,7 @@ public class SessionLifecycleService {
     private final SessionSubscriptionService sessionSubscriptionService;
     private final SessionStateService sessionStateService;
     private final SessionPolicyService sessionPolicyService;
+    private final SessionScheduleService sessionScheduleService;
     private final SessionReadService sessionReadService;
     private final SessionReminderService sessionReminderService;
     private final SessionRevocationService sessionRevocationService;
@@ -46,6 +49,7 @@ public class SessionLifecycleService {
             SessionSubscriptionService sessionSubscriptionService,
             SessionStateService sessionStateService,
             SessionPolicyService sessionPolicyService,
+            SessionScheduleService sessionScheduleService,
             SessionReadService sessionReadService,
             SessionReminderService sessionReminderService,
             SessionRevocationService sessionRevocationService,
@@ -55,6 +59,7 @@ public class SessionLifecycleService {
         this.sessionSubscriptionService = sessionSubscriptionService;
         this.sessionStateService = sessionStateService;
         this.sessionPolicyService = sessionPolicyService;
+        this.sessionScheduleService = sessionScheduleService;
         this.sessionReadService = sessionReadService;
         this.sessionReminderService = sessionReminderService;
         this.sessionRevocationService = sessionRevocationService;
@@ -109,6 +114,13 @@ public class SessionLifecycleService {
     @Transactional
     public ExamPolicyResponse patchPolicy(UUID publicId, PatchExamPolicyRequest request, CurrentUser caller) {
         return sessionPolicyService.patchPolicy(publicId, request, caller);
+    }
+
+    @Transactional
+    public SessionResponse patchSchedule(UUID publicId,
+            PatchExamScheduleRequest request,
+            CurrentUser caller) {
+        return sessionScheduleService.patchSchedule(publicId, request, caller);
     }
 
     @Transactional

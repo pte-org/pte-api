@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -61,13 +62,31 @@ public class AuditLogService {
     @Transactional(readOnly = true)
     public PagedResult<AuditLogResponse> list(CurrentUser caller, String aggregateType, int requestedPage,
             int requestedSize) {
+        return list(caller, aggregateType, null, requestedPage, requestedSize);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<AuditLogResponse> list(CurrentUser caller, String aggregateType, String search,
+            int requestedPage, int requestedSize) {
         int page = Math.max(DEFAULT_PAGE, requestedPage);
         int size = requestedSize <= 0 ? DEFAULT_SIZE : Math.min(requestedSize, MAX_SIZE);
         Pageable pageable = PageRequest.of(page, size);
-        Page<AuditLog> logs = aggregateType != null && !aggregateType.isBlank()
-                ? auditLogRepository.findByTenantIdAndAggregateTypeOrderByCreatedAtDesc(
-                        caller.tenantId(), aggregateType, pageable)
-                : auditLogRepository.findByTenantIdOrderByCreatedAtDesc(caller.tenantId(), pageable);
+        String normalizedSearch = search == null ? null : search.trim().toLowerCase(Locale.ROOT);
+        if (normalizedSearch != null && normalizedSearch.isBlank()) {
+            normalizedSearch = null;
+        }
+        UUID actorId = parseUuid(normalizedSearch);
+        Page<AuditLog> logs;
+        if (normalizedSearch == null) {
+            logs = aggregateType != null && !aggregateType.isBlank()
+                    ? auditLogRepository.findByTenantIdAndAggregateTypeOrderByCreatedAtDesc(
+                            caller.tenantId(), aggregateType, pageable)
+                    : auditLogRepository.findByTenantIdOrderByCreatedAtDesc(caller.tenantId(), pageable);
+        } else {
+            logs = auditLogRepository.findForTenant(caller.tenantId(),
+                    aggregateType != null && !aggregateType.isBlank() ? aggregateType : null,
+                    normalizedSearch, actorId, pageable);
+        }
         return new PagedResult<>(logs.map(AuditLogService::toResponse).getContent(),
                 new PageMeta(logs.getNumber(), logs.getSize(), logs.getTotalElements(), logs.getTotalPages(),
                         logs.isFirst(), logs.isLast(), logs.hasNext(), logs.hasPrevious()));
@@ -86,6 +105,17 @@ public class AuditLogService {
         return auditLogRepository
                 .findByTenantIdAndDeletedFalseOrderByCreatedAtDesc(tenantId, PageRequest.of(DEFAULT_PAGE, bounded))
                 .stream().map(AuditLogService::toResponse).toList();
+    }
+
+    private static UUID parseUuid(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     private static AuditLogResponse toResponse(AuditLog auditLog) {

@@ -61,4 +61,20 @@ public interface ScoringAnswerRepository extends JpaRepository<ScoringAnswer, Lo
     Page<ScoringAnswer> findForReview(@Param("tenantId") UUID tenantId,
             @Param("sessionPublicId") UUID sessionPublicId, @Param("status") ScoringAnswerStatus status,
             Pageable pageable);
+
+    @Query("""
+            SELECT s FROM ScoringAnswer s WHERE s.tenantId = :tenantId
+              AND (:sessionPublicId IS NULL OR s.sessionPublicId = :sessionPublicId)
+              AND (:status IS NULL OR s.status = :status)
+              AND (:search IS NULL
+                   OR lower(s.taskType) like lower(concat('%', :search, '%'))
+                   OR (:searchStatus IS NOT NULL AND s.status = :searchStatus)
+                   OR (:searchUuid IS NOT NULL AND (s.answerPublicId = :searchUuid
+                       OR s.attemptPublicId = :searchUuid)))
+              ORDER BY s.createdAt DESC
+            """)
+    Page<ScoringAnswer> findForReviewWithSearch(@Param("tenantId") UUID tenantId,
+            @Param("sessionPublicId") UUID sessionPublicId, @Param("status") ScoringAnswerStatus status,
+            @Param("search") String search, @Param("searchStatus") ScoringAnswerStatus searchStatus,
+            @Param("searchUuid") UUID searchUuid, Pageable pageable);
 }

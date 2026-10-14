@@ -10,6 +10,7 @@ import com.pte.billing.internal.dto.response.LicenseRevokePreviewResponse;
 import com.pte.billing.internal.dto.response.LicenseRevokeResponse;
 import com.pte.billing.internal.service.LicenseCodeService;
 import com.pte.shared.web.PagedResult;
+import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
 import jakarta.validation.Valid;
@@ -43,10 +44,14 @@ public class AdminLicenseCodeController {
             @RequestParam(required = false) Integer size,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) UUID planId,
-            @RequestParam(required = false) UUID tenantId) {
+            @RequestParam(required = false) UUID tenantId,
+            @RequestParam(required = false) String search) {
+        CurrentUser caller = CurrentUserContext.required();
+        var result = search == null || search.isBlank()
+                ? service.listForAdmin(page, size, status, planId, tenantId, caller)
+                : service.listForAdmin(page, size, status, planId, tenantId, search, caller);
         return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore())
-                .body(ApiResponse.success(service.listForAdmin(page, size, status, planId, tenantId,
-                        CurrentUserContext.required())));
+                .body(ApiResponse.success(result));
     }
 
     @GetMapping("/{publicId}")

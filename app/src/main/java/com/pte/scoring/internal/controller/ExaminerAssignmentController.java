@@ -33,9 +33,13 @@ public class ExaminerAssignmentController {
 
     @GetMapping
     public ApiResponse<ExaminerAssignmentOverviewResponse> overview(@PathVariable UUID sessionPublicId,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(assignmentService.overview(sessionPublicId, currentUser(), page, size));
+        CurrentUser caller = currentUser();
+        return ApiResponse.success(search == null || search.isBlank()
+                ? assignmentService.overview(sessionPublicId, caller, page, size)
+                : assignmentService.overview(sessionPublicId, caller, search, page, size));
     }
 
     @PostMapping("/previews")
