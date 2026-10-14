@@ -146,7 +146,8 @@ class ExamOrchestrationServiceTest {
         assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
         assertThat(response.sessionCode()).isEqualTo("FPT-261010-K7QM");
         verify(auditLogService).record(hostAdmin, SessionConstants.AGGREGATE_EXAM_SESSION,
-                response.publicId().toString(), SessionConstants.EVENT_EXAM_DRAFT_CREATED, "HK1 mock");
+                response.publicId().toString(), "HK1 mock", "FPT-261010-K7QM",
+                SessionConstants.EVENT_EXAM_DRAFT_CREATED, "HK1 mock");
     }
 
     @Test
@@ -275,7 +276,8 @@ class ExamOrchestrationServiceTest {
         assertThat(session.isDeleted()).isTrue();
         verify(sessionRepository).save(session);
         verify(auditLogService).record(hostAdmin, SessionConstants.AGGREGATE_EXAM_SESSION,
-                session.getPublicId().toString(), SessionConstants.EVENT_EXAM_DRAFT_DELETED, session.getName());
+                session.getPublicId().toString(), session.getName(), session.getSessionCode(),
+                SessionConstants.EVENT_EXAM_DRAFT_DELETED, session.getName());
     }
 
     @Test
@@ -320,7 +322,8 @@ class ExamOrchestrationServiceTest {
         assertThat(job.getStatus()).isEqualTo(com.pte.session.domain.enums.GenerationJobStatus.CANCELLED);
         verify(eventPublisher, never()).publishEvent(any());
         verify(auditLogService).record(hostAdmin, SessionConstants.AGGREGATE_EXAM_SESSION,
-                session.getPublicId().toString(), SessionConstants.EVENT_EXAM_GENERATION_CANCELLED,
+                session.getPublicId().toString(), session.getName(), session.getSessionCode(),
+                SessionConstants.EVENT_EXAM_GENERATION_CANCELLED,
                 "Draft (PREPARING -> DRAFT)");
     }
 

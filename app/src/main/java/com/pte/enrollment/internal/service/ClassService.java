@@ -202,7 +202,7 @@ public class ClassService {
         }
         auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
                 EnrollmentConstants.EVENT_STUDENT_ASSIGNED_TO_CLASS,
-                "Assigned student " + saved.getStudentPublicId() + " to Class \"" + studentClass.getName() + "\"");
+                "Assigned student to Class \"" + studentClass.getName() + "\"");
         return ClassMembershipMapper.toResponse(saved);
     }
 
@@ -258,12 +258,12 @@ public class ClassService {
     @Transactional
     public void unassign(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
             UUID membershipPublicId, CurrentUser caller) {
-        findOwned(organizationPublicId, programPublicId, classPublicId, caller);
+        StudentClass studentClass = findOwned(organizationPublicId, programPublicId, classPublicId, caller);
         ClassMembership membership = loadMembershipOwned(classPublicId, membershipPublicId, caller.tenantId());
         classMembershipRepository.delete(membership);
         auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
                 EnrollmentConstants.EVENT_STUDENT_UNASSIGNED_FROM_CLASS,
-                "Unassigned student " + membership.getStudentPublicId() + " from Class");
+                "Unassigned student from Class \"" + studentClass.getName() + "\"");
     }
 
     /**
@@ -286,7 +286,7 @@ public class ClassService {
         ClassMembership saved = classMembershipRepository.save(membership);
         auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, targetClass.getPublicId().toString(),
                 EnrollmentConstants.EVENT_STUDENT_TRANSFERRED_CLASS,
-                "Transferred student " + saved.getStudentPublicId() + " to Class \"" + targetClass.getName() + "\"");
+                "Transferred student to Class \"" + targetClass.getName() + "\"");
         return ClassMembershipMapper.toResponse(saved);
     }
 

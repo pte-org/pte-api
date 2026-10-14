@@ -14,6 +14,9 @@ public interface AttemptReportRepository extends JpaRepository<AttemptReport, Lo
 
     Optional<AttemptReport> findByAttemptPublicId(UUID attemptPublicId);
 
+    /** Overview: reports of the tenant that exist but are not yet published (count only). */
+    long countByTenantIdAndPublishedFalseAndDeletedFalse(UUID tenantId);
+
     List<AttemptReport> findByStudentPublicIdAndTenantIdAndPublishedTrueAndDeletedFalseOrderByPublishedAtDesc(
             UUID studentPublicId, UUID tenantId);
 

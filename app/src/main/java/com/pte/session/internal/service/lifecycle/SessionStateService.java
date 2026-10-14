@@ -106,13 +106,11 @@ public class SessionStateService {
         subscriptions.validateSubscriptionWindowAndCapacity(subscription, session.getOpensAt(),
                 session.getClosesAt(), session.getCapacity(), false);
         session.open();
-        auditLogService.record(systemCaller, SessionConstants.AGGREGATE_EXAM_SESSION,
-                session.getPublicId().toString(), SessionConstants.EVENT_EXAM_AUTO_OPENED,
+        recordExamAudit(systemCaller, session, SessionConstants.EVENT_EXAM_AUTO_OPENED,
                 "%s (%s -> %s)".formatted(session.getName(), SessionStatus.SCHEDULED, SessionStatus.OPEN));
         if (!session.getClosesAt().isAfter(now)) {
             session.close();
-            auditLogService.record(systemCaller, SessionConstants.AGGREGATE_EXAM_SESSION,
-                    session.getPublicId().toString(), SessionConstants.EVENT_EXAM_AUTO_CLOSED,
+            recordExamAudit(systemCaller, session, SessionConstants.EVENT_EXAM_AUTO_CLOSED,
                     "%s (%s -> %s)".formatted(session.getName(), SessionStatus.OPEN, SessionStatus.CLOSED));
         }
         return Optional.of(SessionMapper.toResponse(session));
@@ -120,9 +118,13 @@ public class SessionStateService {
 
     private SessionResponse closeOpenSession(ExamSession session, CurrentUser caller, String auditEvent) {
         session.close();
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION,
-                session.getPublicId().toString(), auditEvent,
+        recordExamAudit(caller, session, auditEvent,
                 "%s (%s -> %s)".formatted(session.getName(), SessionStatus.OPEN, SessionStatus.CLOSED));
         return SessionMapper.toResponse(session);
+    }
+
+    private void recordExamAudit(CurrentUser caller, ExamSession session, String action, String summary) {
+        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION,
+                session.getPublicId().toString(), session.getName(), session.getSessionCode(), action, summary);
     }
 }

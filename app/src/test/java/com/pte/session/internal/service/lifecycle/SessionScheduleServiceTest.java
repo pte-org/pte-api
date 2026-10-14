@@ -79,7 +79,8 @@ class SessionScheduleServiceTest {
         assertThat(session.getOpensAt()).isEqualTo(newOpensAt);
         assertThat(session.getClosesAt()).isEqualTo(newClosesAt);
         verify(auditLogService).record(eq(caller), eq(SessionConstants.AGGREGATE_EXAM_SESSION),
-                eq(session.getPublicId().toString()), eq(SessionConstants.EVENT_EXAM_SCHEDULE_UPDATED),
+                eq(session.getPublicId().toString()), eq(session.getName()), eq(session.getSessionCode()),
+                eq(SessionConstants.EVENT_EXAM_SCHEDULE_UPDATED),
                 eq("Updated exam"));
     }
 
@@ -113,7 +114,8 @@ class SessionScheduleServiceTest {
         assertThat(response.status()).isEqualTo(SessionStatus.OPEN.name());
         assertThat(session.getClosesAt()).isEqualTo(extendedClose);
         verify(auditLogService).record(any(CurrentUser.class), eq(SessionConstants.AGGREGATE_EXAM_SESSION),
-                eq(session.getPublicId().toString()), eq(SessionConstants.EVENT_EXAM_AUTO_OPENED), any());
+                eq(session.getPublicId().toString()), eq(session.getName()), eq(session.getSessionCode()),
+                eq(SessionConstants.EVENT_EXAM_AUTO_OPENED), any());
     }
 
     @Test

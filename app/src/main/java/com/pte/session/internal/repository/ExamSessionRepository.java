@@ -3,12 +3,14 @@ package com.pte.session.internal.repository;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.enums.SessionStatus;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -54,7 +56,37 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long>,
             + "ORDER BY s.closesAt ASC, s.id ASC")
     List<ExamSession> findDueClosingSoon(@Param("now") Instant now, @Param("cutoff") Instant cutoff);
 
-    /** Global check (deleted rows included) — codes are unique across all tenants. */
+    /** Overview: non-deleted sessions of the tenant grouped by lifecycle status. */
+    @Query("SELECT s.status, COUNT(s) FROM ExamSession s "
+            + "WHERE s.tenantId = :tenantId AND s.deleted = false GROUP BY s.status")
+    List<Object[]> countByTenantGroupedByStatus(@Param("tenantId") UUID tenantId);
+
+    /** Overview: sessions created in {@code [from, to)}. */
+    @Query("SELECT COUNT(s) FROM ExamSession s WHERE s.tenantId = :tenantId AND s.deleted = false "
+            + "AND s.createdAt >= :from AND s.createdAt < :to")
+    long countCreatedBetween(@Param("tenantId") UUID tenantId, @Param("from") Instant from,
+            @Param("to") Instant to);
+
+    /** Overview: next sessions that are still joinable, earliest opening first. Callers pass a small page. */
+    @Query("SELECT s.id AS id, s.publicId AS publicId, s.name AS name, s.status AS status, "
+            + "s.opensAt AS opensAt, s.closesAt AS closesAt, s.capacity AS capacity "
+            + "FROM ExamSession s WHERE s.tenantId = :tenantId AND s.deleted = false "
+            + "AND s.status IN :statuses AND s.closesAt > :now ORDER BY s.opensAt ASC, s.id ASC")
+    List<UpcomingSessionRow> findUpcoming(@Param("tenantId") UUID tenantId,
+            @Param("statuses") Collection<SessionStatus> statuses, @Param("now") Instant now, Pageable pageable);
+
+    /** Projection for {@link #findUpcoming}; no entity is materialised. */
+    interface UpcomingSessionRow {
+        Long getId();
+        UUID getPublicId();
+        String getName();
+        SessionStatus getStatus();
+        Instant getOpensAt();
+        Instant getClosesAt();
+        Integer getCapacity();
+    }
+
+    /** Global check (deleted rows included)— codes are unique across all tenants. */
     boolean existsBySessionCode(String sessionCode);
 
     /**
