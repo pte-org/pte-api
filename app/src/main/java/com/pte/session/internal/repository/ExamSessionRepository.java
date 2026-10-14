@@ -16,7 +16,10 @@ import java.util.UUID;
 public interface ExamSessionRepository extends JpaRepository<ExamSession, Long>,
         org.springframework.data.jpa.repository.JpaSpecificationExecutor<ExamSession> {
 
-    Optional<ExamSession> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
+    @Query("SELECT s FROM ExamSession s WHERE s.publicId = :publicId "
+            + "AND s.tenantId = :tenantId AND s.deleted = false")
+    Optional<ExamSession> findByPublicIdAndTenantId(@Param("publicId") UUID publicId,
+                                                     @Param("tenantId") UUID tenantId);
 
     /**
      * Pessimistic write lock on the session row — required by {@code patchPolicy()}
@@ -25,7 +28,8 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long>,
      * interleaving. Callers must be inside an active {@code @Transactional} method.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT s FROM ExamSession s WHERE s.publicId = :publicId AND s.tenantId = :tenantId")
+    @Query("SELECT s FROM ExamSession s WHERE s.publicId = :publicId "
+            + "AND s.tenantId = :tenantId AND s.deleted = false")
     Optional<ExamSession> findWithLockByPublicIdAndTenantId(@Param("publicId") UUID publicId,
                                                              @Param("tenantId") UUID tenantId);
 
@@ -34,10 +38,13 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long>,
     Optional<ExamSession> findWithLockByPublicId(@Param("publicId") UUID publicId);
 
     /** No tenant filter: used by the trusted application-call surface, not a host-scoped caller. */
-    Optional<ExamSession> findByPublicId(UUID publicId);
+    @Query("SELECT s FROM ExamSession s WHERE s.publicId = :publicId AND s.deleted = false")
+    Optional<ExamSession> findByPublicId(@Param("publicId") UUID publicId);
 
-    /** Newest first — the host exam list shows sessions in this order by default. */
-    List<ExamSession> findByTenantIdOrderByCreatedAtDescIdDesc(UUID tenantId);
+    /** Newest first — the host exam list shows non-deleted sessions in this order by default. */
+    @Query("SELECT s FROM ExamSession s WHERE s.tenantId = :tenantId AND s.deleted = false "
+            + "ORDER BY s.createdAt DESC, s.id DESC")
+    List<ExamSession> findByTenantIdOrderByCreatedAtDescIdDesc(@Param("tenantId") UUID tenantId);
 
     List<ExamSession> findByTenantIdAndPublicIdInAndDeletedFalse(UUID tenantId, List<UUID> publicIds);
 
@@ -57,6 +64,7 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long>,
     Optional<ExamSession> findBySessionCodeAndTenantIdAndDeletedFalse(String sessionCode, UUID tenantId);
 
     @Query("SELECT s FROM ExamSession s WHERE s.subscriptionId = :subscriptionId "
+            + "AND s.deleted = false "
             + "AND s.status IN (com.pte.session.domain.enums.SessionStatus.SCHEDULED, "
             + "com.pte.session.domain.enums.SessionStatus.OPEN) "
             + "AND s.opensAt < :closesAt AND s.closesAt > :opensAt "
@@ -67,7 +75,21 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long>,
                                                 @Param("excludedPublicId") UUID excludedPublicId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    List<ExamSession> findBySubscriptionIdAndStatus(UUID subscriptionId, SessionStatus status);
+    @Query("SELECT s FROM ExamSession s WHERE s.subscriptionId = :subscriptionId "
+            + "AND s.status = :status AND s.deleted = false")
+    List<ExamSession> findBySubscriptionIdAndStatus(@Param("subscriptionId") UUID subscriptionId,
+                                                     @Param("status") SessionStatus status);
+
+    @Query("SELECT s.publicId FROM ExamSession s WHERE s.deleted = false "
+            + "AND s.status = com.pte.session.domain.enums.SessionStatus.OPEN "
+            + "AND s.closesAt <= :now ORDER BY s.closesAt ASC, s.id ASC")
+    List<UUID> findDueForAutoClose(@Param("now") Instant now);
+
+    @Query("SELECT s.publicId FROM ExamSession s WHERE s.deleted = false "
+            + "AND s.status = com.pte.session.domain.enums.SessionStatus.SCHEDULED "
+            + "AND s.opensAt <= :now "
+            + "ORDER BY s.opensAt ASC, s.id ASC")
+    List<UUID> findDueForAutoOpen(@Param("now") Instant now);
 
     /**
      * Locks every non-deleted session in public-id order. Billing holds the

@@ -101,9 +101,23 @@ public class ScoringReviewService {
     @Transactional(readOnly = true)
     public AnswerListResponse listAnswers(UUID sessionPublicId, UUID attemptPublicId, String statusFilter,
                                           Pageable pageable, CurrentUser caller) {
+        return listAnswers(sessionPublicId, attemptPublicId, statusFilter, null, pageable, caller);
+    }
+
+    @Transactional(readOnly = true)
+    public AnswerListResponse listAnswers(UUID sessionPublicId, UUID attemptPublicId, String statusFilter,
+            String search, Pageable pageable, CurrentUser caller) {
         ScoringAnswerStatus status = parseStatus(statusFilter);
-        Page<ScoringAnswer> page = scoringAnswerRepository.findForReview(caller.tenantId(), sessionPublicId,
-                attemptPublicId, status, pageable);
+        String normalizedSearch = search == null ? null : search.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalizedSearch != null && normalizedSearch.isBlank()) {
+            normalizedSearch = null;
+        }
+        Page<ScoringAnswer> page = normalizedSearch == null
+                ? scoringAnswerRepository.findForReview(caller.tenantId(), sessionPublicId, attemptPublicId, status,
+                        pageable)
+                : scoringAnswerRepository.findForReviewWithSearch(caller.tenantId(), sessionPublicId,
+                        attemptPublicId, status, normalizedSearch, parseSearchStatus(normalizedSearch),
+                        parseUuid(normalizedSearch), pageable);
         log.debug("Host {} listed answers (tenantId={}, sessionPublicId={}, status={}) -> {} results",
                 caller.userId(), caller.tenantId(), sessionPublicId, status, page.getNumberOfElements());
         Map<UUID, AttemptOwnerView> attemptOwners = attemptService == null ? Map.of()
@@ -202,6 +216,28 @@ public class ScoringReviewService {
             return ScoringAnswerStatus.valueOf(statusFilter.toUpperCase());
         } catch (IllegalArgumentException ex) {
             throw new InvalidAnswerStatusException();
+        }
+    }
+
+    private ScoringAnswerStatus parseSearchStatus(String search) {
+        if (search == null) {
+            return null;
+        }
+        try {
+            return ScoringAnswerStatus.valueOf(search.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
+    private UUID parseUuid(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException ex) {
+            return null;
         }
     }
 

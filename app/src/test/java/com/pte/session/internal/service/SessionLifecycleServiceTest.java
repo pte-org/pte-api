@@ -27,6 +27,7 @@ import com.pte.session.internal.exception.NotEntitledException;
 import com.pte.session.internal.exception.SessionClosedException;
 import com.pte.session.internal.exception.SessionNotStartedException;
 import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
+import com.pte.session.internal.exception.SessionNotOpenToCloseException;
 import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionException;
 import com.pte.session.internal.mapper.SessionMapper;
 import com.pte.session.internal.repository.EnrollmentRepository;
@@ -34,6 +35,7 @@ import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.session.internal.service.lifecycle.SessionAccess;
 import com.pte.session.internal.service.lifecycle.SessionCreationService;
 import com.pte.session.internal.service.lifecycle.SessionPolicyService;
+import com.pte.session.internal.service.lifecycle.SessionScheduleService;
 import com.pte.session.internal.service.lifecycle.SessionReadService;
 import com.pte.session.internal.service.lifecycle.SessionReminderService;
 import com.pte.session.internal.service.lifecycle.SessionRevocationService;
@@ -41,6 +43,7 @@ import com.pte.session.internal.service.lifecycle.SessionStateService;
 import com.pte.session.internal.service.lifecycle.SessionSubscriptionRules;
 import com.pte.session.internal.service.lifecycle.SessionSubscriptionService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.audit.AuditLogService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,6 +54,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Instant;
+import java.time.Clock;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -92,6 +96,9 @@ class SessionLifecycleServiceTest {
     private ApplicationEventPublisher eventPublisher;
 
     @Mock
+    private AuditLogService auditLogService;
+
+    @Mock
     private SessionCodeGenerator sessionCodeGenerator;
 
     private SessionLifecycleService service;
@@ -109,11 +116,13 @@ class SessionLifecycleServiceTest {
                         access, subscriptions),
                 new SessionSubscriptionService(sessionRepository, enrollmentRepository, billingService,
                         access, subscriptions),
-                new SessionStateService(sessionRepository, access, subscriptions),
-                new SessionPolicyService(sessionRepository, access),
+                new SessionStateService(sessionRepository, access, subscriptions, auditLogService),
+                new SessionPolicyService(sessionRepository, access, Clock.systemUTC()),
+                new SessionScheduleService(sessionRepository, access, subscriptions, auditLogService,
+                        Clock.systemUTC()),
                 new SessionReadService(sessionRepository, access),
                 new SessionReminderService(sessionRepository),
-                new SessionRevocationService(sessionRepository, enrollmentRepository, eventPublisher),
+                new SessionRevocationService(sessionRepository, eventPublisher),
                 new SessionOperationGuardService(sessionRepository));
         tenantId = UUID.randomUUID();
         subscriptionId = UUID.randomUUID();
@@ -435,13 +444,12 @@ class SessionLifecycleServiceTest {
     }
 
     @Test
-    void cancelScheduledSessionsBySubscription_cancelsOnlyScheduledAndPublishesStudents() {
+    void cancelScheduledSessionsBySubscription_cancelsOnlyScheduledAndPublishesNeutralEvent() {
         ExamSession scheduled = existingSession(SessionStatus.SCHEDULED, 100);
         ExamSession open = existingSession(SessionStatus.OPEN, 100);
         Enrollment enrollment = enrollment(scheduled, scheduled.getLicenseKey());
         when(sessionRepository.findBySubscriptionIdAndStatus(subscriptionId, SessionStatus.SCHEDULED))
                 .thenReturn(List.of(scheduled));
-        when(enrollmentRepository.findBySessionId(scheduled.getId())).thenReturn(List.of(enrollment));
 
         service.cancelScheduledSessionsBySubscription(subscriptionId);
 
@@ -449,7 +457,9 @@ class SessionLifecycleServiceTest {
         assertThat(open.getStatus()).isEqualTo(SessionStatus.OPEN);
         var captor = ArgumentCaptor.forClass(SessionCancelledEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());
-        assertThat(captor.getValue().studentPublicIds()).containsExactly(enrollment.getStudentPublicId());
+        assertThat(captor.getValue().sessionPublicId()).isEqualTo(scheduled.getPublicId());
+        assertThat(captor.getValue().tenantId()).isEqualTo(scheduled.getTenantId());
+        assertThat(captor.getValue().sessionName()).isEqualTo(scheduled.getName());
     }
 
     // ------------------------------------------------------------------
@@ -510,6 +520,18 @@ class SessionLifecycleServiceTest {
     }
 
     @Test
+    void patchPolicy_isRejected_whenScheduledWindowHasAlreadyStarted() {
+        ExamSession session = existingSession(SessionStatus.SCHEDULED, 100);
+        session.setOpensAt(Instant.now().minusSeconds(1));
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> service.patchPolicy(session.getPublicId(),
+                new PatchExamPolicyRequest(null, null, true, null, null, null), hostAdmin))
+                .isInstanceOf(PolicyLockedException.class);
+    }
+
+    @Test
     void toPolicy_emitsLockdownModeAsUppercaseString() {
         ExamPolicy policy = ExamPolicy.realExamDefault();
 
@@ -549,6 +571,20 @@ class SessionLifecycleServiceTest {
 
         assertThat(session.getStatus()).isEqualTo(SessionStatus.CLOSED);
         verify(sessionRepository).findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId);
+    }
+
+    @Test
+    void closeRejectsEveryNonOpenStatus() {
+        ExamSession session = existingSession(SessionStatus.DRAFT, 100);
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+
+        for (SessionStatus status : List.of(SessionStatus.DRAFT, SessionStatus.PREPARING, SessionStatus.READY,
+                SessionStatus.SCHEDULED, SessionStatus.CLOSED, SessionStatus.CANCELLED)) {
+            session.setStatus(status);
+            assertThatThrownBy(() -> service.close(session.getPublicId(), hostAdmin))
+                    .isInstanceOf(SessionNotOpenToCloseException.class);
+        }
     }
 
     @Test

@@ -125,21 +125,25 @@ public class ExamSession extends BaseEntity {
     private ExamPolicy policy = ExamPolicy.mockTestDefault();
 
     public void open() {
-        if (status != SessionStatus.CANCELLED) {
-            this.status = SessionStatus.OPEN;
-        }
+        requireStatus(SessionStatus.SCHEDULED);
+        this.status = SessionStatus.OPEN;
     }
 
     public void close() {
-        if (status != SessionStatus.CANCELLED) {
-            this.status = SessionStatus.CLOSED;
-        }
+        requireStatus(SessionStatus.OPEN);
+        this.status = SessionStatus.CLOSED;
     }
 
     public void cancel() {
-        if (status == SessionStatus.DRAFT || status == SessionStatus.PREPARING
-                || status == SessionStatus.READY || status == SessionStatus.SCHEDULED) {
-            this.status = SessionStatus.CANCELLED;
+        if (status != SessionStatus.READY && status != SessionStatus.SCHEDULED) {
+            throw new IllegalStateException("Only ready or scheduled sessions can be cancelled");
+        }
+        this.status = SessionStatus.CANCELLED;
+    }
+
+    private void requireStatus(SessionStatus expected) {
+        if (status != expected) {
+            throw new IllegalStateException("Session must be " + expected + " before this transition");
         }
     }
 }

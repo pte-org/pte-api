@@ -8,6 +8,7 @@ import com.pte.session.dto.response.SessionSummaryView;
 import com.pte.billing.SubscriptionRevocationImpactQuery.SubscriptionRevocationImpact;
 import com.pte.session.internal.service.EntitlementService;
 import com.pte.session.internal.service.SessionLifecycleService;
+import com.pte.session.internal.service.SessionStaffAssignmentQueryService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,10 +36,13 @@ public class SessionService {
 
     private final EntitlementService entitlementService;
     private final SessionLifecycleService sessionLifecycleService;
+    private final SessionStaffAssignmentQueryService staffAssignmentQueryService;
 
-    public SessionService(EntitlementService entitlementService, SessionLifecycleService sessionLifecycleService) {
+    public SessionService(EntitlementService entitlementService, SessionLifecycleService sessionLifecycleService,
+            SessionStaffAssignmentQueryService staffAssignmentQueryService) {
         this.entitlementService = entitlementService;
         this.sessionLifecycleService = sessionLifecycleService;
+        this.staffAssignmentQueryService = staffAssignmentQueryService;
     }
 
     /** Throws if the student isn't enrolled, or the session isn't OPEN or is outside its opensAt/closesAt window — never returns a false/empty result for "not entitled". */
@@ -134,5 +138,11 @@ public class SessionService {
     public SubscriptionRevocationImpact getSubscriptionRevocationImpact(
             UUID subscriptionId, UUID tenantId) {
         return sessionLifecycleService.getSubscriptionRevocationImpact(subscriptionId, tenantId);
+    }
+
+    /** Returns active assignment rows; identity validates the user's live staff role before dispatch. */
+    @Transactional(readOnly = true)
+    public List<UUID> findAssignedProctorPublicIds(UUID sessionPublicId, UUID tenantId) {
+        return staffAssignmentQueryService.findAssignedProctorPublicIds(sessionPublicId, tenantId);
     }
 }

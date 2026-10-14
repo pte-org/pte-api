@@ -35,6 +35,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -64,6 +65,11 @@ public class AnnouncementService {
     }
 
     public PagedResult<AnnouncementResponse> list(CurrentUser caller, int requestedPage, int requestedSize) {
+        return list(caller, null, requestedPage, requestedSize);
+    }
+
+    public PagedResult<AnnouncementResponse> list(CurrentUser caller, String search, int requestedPage,
+            int requestedSize) {
         requireOperation(caller, PlatformOperation.ANNOUNCEMENT_READ, "ANNOUNCEMENT_READ");
         int page = requestedPage < 0 ? invalidPage() : requestedPage;
         int size = requestedSize < 1 || requestedSize > InboxConstants.MAX_PAGE_SIZE ? invalidSize() : requestedSize;
@@ -71,7 +77,10 @@ public class AnnouncementService {
         if (offsetLong > Integer.MAX_VALUE) {
             throw invalid(InboxConstants.ANNOUNCEMENT_PAGE_INVALID, InboxConstants.ANNOUNCEMENT_PAGE_INVALID_MESSAGE);
         }
-        InboxAnnouncementStore.Page result = store.page((int) offsetLong, size);
+        String normalizedSearch = search == null ? null : search.trim().toLowerCase(Locale.ROOT);
+        InboxAnnouncementStore.Page result = normalizedSearch == null || normalizedSearch.isBlank()
+                ? store.page((int) offsetLong, size)
+                : store.page((int) offsetLong, size, normalizedSearch);
         List<AnnouncementResponse> rows = result.rows().stream().map(AnnouncementService::toResponse).toList();
         int totalPages = result.totalElements() == 0 ? 0 : (int) ((result.totalElements() + size - 1) / size);
         PageMeta meta = new PageMeta(page, size, result.totalElements(), totalPages, page == 0,

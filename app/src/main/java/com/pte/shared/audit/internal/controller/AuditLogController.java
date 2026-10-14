@@ -27,9 +27,13 @@ public class AuditLogController {
     @GetMapping
     public ApiResponse<PagedResult<AuditLogResponse>> list(
             @RequestParam(required = false) String aggregateType,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(auditLogService.list(currentUser(), aggregateType, page, size));
+        CurrentUser caller = currentUser();
+        return ApiResponse.success(search == null || search.isBlank()
+                ? auditLogService.list(caller, aggregateType, page, size)
+                : auditLogService.list(caller, aggregateType, search, page, size));
     }
 
     private CurrentUser currentUser() {

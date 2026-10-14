@@ -32,7 +32,10 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.criteria.Predicate;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -82,12 +85,19 @@ public class SupportTicketService {
     @Transactional(readOnly = true)
     public PagedResult<SupportTicketSummaryResponse> listForHost(TicketStatus status, TicketCategory category,
             int page, int size, CurrentUser caller) {
+        return listForHost(status, category, null, page, size, caller);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<SupportTicketSummaryResponse> listForHost(TicketStatus status, TicketCategory category,
+            String search, int page, int size, CurrentUser caller) {
         int cappedSize = Math.min(size <= 0 ? DEFAULT_PAGE_SIZE : size, MAX_PAGE_SIZE);
         PageRequest pageRequest = PageRequest.of(Math.max(0, page), cappedSize,
                 Sort.by(Sort.Order.desc("createdAt")));
         Specification<SupportTicket> spec = byTenant(caller.tenantId())
                 .and(byStatusOptional(status))
-                .and(byCategoryOptional(category));
+                .and(byCategoryOptional(category))
+                .and(bySearchOptional(search));
         Page<SupportTicket> result = ticketRepository.findAll(spec, pageRequest);
         List<SupportTicketSummaryResponse> data = result.getContent().stream()
                 .map(SupportTicketMapper::toSummaryResponse).toList();
@@ -161,19 +171,26 @@ public class SupportTicketService {
     @Transactional(readOnly = true)
     public PagedResult<SupportTicketSummaryResponse> listAllForAdmin(TicketStatus status, TicketCategory category,
             UUID tenantId, int page, int size) {
-        return listAllForAdmin(status, category, tenantId, page, size, null);
+        return listAllForAdmin(status, category, tenantId, null, page, size, null);
     }
 
     @Transactional(readOnly = true)
     public PagedResult<SupportTicketSummaryResponse> listAllForAdmin(TicketStatus status, TicketCategory category,
             UUID tenantId, int page, int size, CurrentUser caller) {
+        return listAllForAdmin(status, category, tenantId, null, page, size, caller);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<SupportTicketSummaryResponse> listAllForAdmin(TicketStatus status, TicketCategory category,
+            UUID tenantId, String search, int page, int size, CurrentUser caller) {
         requirePlatformOperation(caller, PlatformOperation.SUPPORT_READ, "SUPPORT_READ");
         int cappedSize = Math.min(size <= 0 ? DEFAULT_PAGE_SIZE : size, MAX_PAGE_SIZE);
         PageRequest pageRequest = PageRequest.of(Math.max(0, page), cappedSize,
                 Sort.by(Sort.Order.desc("createdAt")));
         Specification<SupportTicket> spec = byStatusOptional(status)
                 .and(byCategoryOptional(category))
-                .and(byTenantOptional(tenantId));
+                .and(byTenantOptional(tenantId))
+                .and(bySearchOptional(search));
         Page<SupportTicket> result = ticketRepository.findAll(spec, pageRequest);
         List<SupportTicketSummaryResponse> data = result.getContent().stream()
                 .map(SupportTicketMapper::toSummaryResponse).toList();
@@ -210,6 +227,37 @@ public class SupportTicketService {
 
     private static Specification<SupportTicket> byCategoryOptional(TicketCategory category) {
         return (root, query, cb) -> category == null ? cb.conjunction() : cb.equal(root.get("category"), category);
+    }
+
+    private static Specification<SupportTicket> bySearchOptional(String search) {
+        String normalized = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            return (root, query, cb) -> cb.conjunction();
+        }
+        String pattern = "%" + normalized + "%";
+        UUID searchId = parseUuid(normalized);
+        return (root, query, cb) -> {
+            List<Predicate> matches = new ArrayList<>();
+            matches.add(cb.like(cb.lower(root.get("description")), pattern));
+            matches.add(cb.like(cb.lower(root.get("category").as(String.class)), pattern));
+            matches.add(cb.like(cb.lower(root.get("status").as(String.class)), pattern));
+            matches.add(cb.like(cb.lower(root.get("entityType").as(String.class)), pattern));
+            matches.add(cb.like(cb.lower(root.get("entityId")), pattern));
+            if (searchId != null) {
+                matches.add(cb.equal(root.get("publicId"), searchId));
+                matches.add(cb.equal(root.get("tenantId"), searchId));
+                matches.add(cb.equal(root.get("submitterUserPublicId"), searchId));
+            }
+            return cb.or(matches.toArray(Predicate[]::new));
+        };
+    }
+
+    private static UUID parseUuid(String value) {
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     private void requirePlatformOperation(CurrentUser caller, PlatformOperation operation, String action) {

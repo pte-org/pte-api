@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /** The single write path that can create a Subscription. */
@@ -58,8 +59,7 @@ public class SubscriptionActivationService {
         }
 
         Instant startsAt = Instant.now();
-        Instant expiresAt = startsAt.plus(Duration.ofDays(plan.getDurationDays()));
-        Subscription subscription = saveWithUniqueLicenseKey(tenantId, plan, source, startsAt, expiresAt);
+        Subscription subscription = saveWithUniqueLicenseKey(tenantId, plan, source, startsAt);
         return SubscriptionActivationResponse.fromSubscription(
                 subscription.getTenantId(),
                 subscription.getPlanId(),
@@ -73,7 +73,8 @@ public class SubscriptionActivationService {
     }
 
     private Subscription saveWithUniqueLicenseKey(UUID tenantId, Plan plan, ActivationSource source,
-            Instant startsAt, Instant expiresAt) {
+            Instant startsAt) {
+        Instant expiresAt = calculateExpiryAfterRenewal(tenantId, plan, startsAt);
         // The pre-check can discard a generated key without touching the DB.
         // A uniqueness race during save aborts this whole transaction; retrying
         // only the repository call would leave the caller's transition rollback-only.
@@ -105,6 +106,16 @@ public class SubscriptionActivationService {
         }
         throw new SubscriptionActivationException(HttpStatus.INTERNAL_SERVER_ERROR,
                 BillingConstants.LICENSE_KEY_GENERATION_FAILED);
+    }
+
+    private Instant calculateExpiryAfterRenewal(UUID tenantId, Plan plan, Instant startsAt) {
+        List<Subscription> activeSubscriptions = subscriptionRepository.findUsableForPlanRenewal(
+                tenantId, plan.getPublicId(), SubscriptionStatus.ACTIVE, startsAt);
+        Instant latestExpiry = activeSubscriptions.stream()
+                .map(Subscription::getExpiresAt)
+                .max(Instant::compareTo)
+                .orElse(startsAt);
+        return latestExpiry.plus(Duration.ofDays(plan.getDurationDays()));
     }
 
     private void validateRequest(UUID tenantId, Plan plan, ActivationSource source) {
