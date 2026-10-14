@@ -144,7 +144,7 @@ done
 echo "== Creating exam Session (skills: READING, gated by the Subscription) as host =="
 OPENS_AT=$(date -u -d '+10 minutes' +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v+10M +"%Y-%m-%dT%H:%M:%SZ")
 CLOSES_AT=$(date -u -d '+2 hours' +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v+2H +"%Y-%m-%dT%H:%M:%SZ")
-SESSION_RESPONSE=$(api POST /api/v1/sessions "$HOST_TOKEN" "{\"name\":\"Reading Mock $RUN_ID\",\"subscriptionPublicId\":\"$SUBSCRIPTION_ID\",\"skills\":[\"READING\"],\"opensAt\":\"$OPENS_AT\",\"closesAt\":\"$CLOSES_AT\",\"examMode\":\"PRACTICE\",\"capacity\":30}")
+SESSION_RESPONSE=$(api POST /api/v1/sessions "$HOST_TOKEN" "{\"name\":\"Reading Mock $RUN_ID\",\"subscriptionPublicId\":\"$SUBSCRIPTION_ID\",\"skills\":[\"READING\"],\"opensAt\":\"$OPENS_AT\",\"closesAt\":\"$CLOSES_AT\",\"examMode\":\"OFFICIAL_EXAM\",\"capacity\":30}")
 SESSION_ID=$(echo "$SESSION_RESPONSE" | jq -r '.data.publicId')
 echo "  session: $SESSION_ID"
 echo "$SESSION_RESPONSE" | jq '.data'

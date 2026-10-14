@@ -9,8 +9,8 @@ import java.util.UUID;
  * {@code encryptionPublicKey} (Base64 X.509 SubjectPublicKeyInfo) is populated only on the
  * {@code startAttempt} response for a STRICT-pinned {@code answerIntegrityLevel}; null everywhere
  * else, including STANDARD-pinned attempts and every other response built off this same record.
- * {@code examMode} mirrors {@code PinnedExamSnapshot.examMode} — {@code "PRACTICE"} or
- * {@code "OFFICIAL_EXAM"}; null only for legacy attempts predating the field.
+ * {@code examMode} mirrors {@code PinnedExamSnapshot.examMode} — {@code "OFFICIAL_EXAM"};
+ * null only for legacy attempts predating the field.
  */
 public record AttemptTaskResponse(UUID attemptPublicId, String attemptStatus, boolean completed, TaskView task,
         String encryptionPublicKey, String lockdownMode, int attemptNumber, int remainingRetries,

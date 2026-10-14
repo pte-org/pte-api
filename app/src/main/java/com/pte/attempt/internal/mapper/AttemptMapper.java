@@ -8,6 +8,7 @@ import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.dto.response.BlankGroupView;
 import com.pte.attempt.internal.dto.response.OptionView;
 import com.pte.attempt.internal.dto.response.TaskView;
+import com.pte.attempt.internal.policy.ManualNavigationPolicy;
 import com.pte.attempt.internal.service.cache.PinnedItemView;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -58,14 +59,12 @@ public class AttemptMapper {
         List<FrozenOption> parsedOptions = parseFrozenOptions(item.optionsJson());
         requireHomogeneousBlankIndex(item.publicId(), parsedOptions);
         PinnedExamSnapshot pinned = attempt.getPinnedSnapshot();
-        boolean navigationAllowed = isManualNavigationAllowed(pinned, item.section());
-        boolean practiceMode = pinned != null && "PRACTICE".equals(pinned.getExamMode());
+        boolean navigationAllowed = pinned != null && ManualNavigationPolicy.allowsSection(item.section());
         boolean canNavigatePrevious = navigationAllowed && item.orderIndex() > 0
-                && (practiceMode || isManualNavigationAllowed(pinned, sectionAt(pinned, item.orderIndex() - 1)));
+                && ManualNavigationPolicy.allowsSection(sectionAt(pinned, item.orderIndex() - 1));
         boolean hasNextItem = item.orderIndex() + 1 < totalTasks;
         boolean canNavigateNext = navigationAllowed
-                && (!hasNextItem || practiceMode
-                        || isManualNavigationAllowed(pinned, sectionAt(pinned, item.orderIndex() + 1)));
+                && (!hasNextItem || ManualNavigationPolicy.allowsSection(sectionAt(pinned, item.orderIndex() + 1)));
         TaskView task = new TaskView(
                 item.publicId(), item.orderIndex(), totalTasks, item.section(), item.taskType(), item.title(),
                 item.promptText(), item.audioPromptRef(), item.imagePromptRef(), item.minWordCount(),
@@ -79,15 +78,6 @@ public class AttemptMapper {
                 pinned != null ? pinned.getLockdownMode() : null, attempt.getAttemptNumber(),
                 remainingRetries(attempt), remainingRetries(attempt) > 0,
                 pinned != null ? pinned.getExamMode() : null);
-    }
-
-    private boolean isManualNavigationAllowed(PinnedExamSnapshot pinned, String section) {
-        if (pinned == null || section == null) {
-            return false;
-        }
-        return "PRACTICE".equals(pinned.getExamMode())
-                || "READING".equals(section)
-                || "WRITING".equals(section);
     }
 
     private String sectionAt(PinnedExamSnapshot pinned, int orderIndex) {

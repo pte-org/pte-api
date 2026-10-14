@@ -27,6 +27,7 @@ import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.dto.response.AudioPlayResponse;
 import com.pte.attempt.internal.dto.response.AttemptPreflightResponse;
 import com.pte.attempt.internal.mapper.AttemptMapper;
+import com.pte.attempt.internal.policy.ManualNavigationPolicy;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import com.pte.attempt.internal.repository.PinnedItemRepository;
 import com.pte.attempt.internal.service.cache.PinnedItemView;
@@ -218,7 +219,7 @@ public class AttemptLifecycleService {
 
     /**
      * Moves the live task pointer by one item without submitting an answer.
-     * The pinned mode and both adjacent sections are checked server-side;
+     * Both adjacent sections are checked server-side;
      * the client-provided item id is only a stale-screen guard.
      */
     @Transactional
@@ -250,7 +251,7 @@ public class AttemptLifecycleService {
         }
 
         if (targetIndex >= totalTasks) {
-            if (!isManualNavigationAllowed(attempt.getPinnedSnapshot().getExamMode(), sourceItem.getSection())) {
+            if (!ManualNavigationPolicy.allowsSection(sourceItem.getSection())) {
                 throw new NotCurrentTaskException();
             }
             answerSubmitService.submitIfAbsent(attempt, sourceItem, null);
@@ -259,8 +260,8 @@ public class AttemptLifecycleService {
         }
 
         PinnedItem targetItem = itemAt(attempt, targetIndex);
-        if (!isManualNavigationAllowed(attempt.getPinnedSnapshot().getExamMode(), sourceItem.getSection())
-                || !isManualNavigationAllowed(attempt.getPinnedSnapshot().getExamMode(), targetItem.getSection())) {
+        if (!ManualNavigationPolicy.allowsSection(sourceItem.getSection())
+                || !ManualNavigationPolicy.allowsSection(targetItem.getSection())) {
             throw new NotCurrentTaskException();
         }
 
@@ -381,12 +382,6 @@ public class AttemptLifecycleService {
         } else {
             answerSubmitService.submit(attempt, item, payload, confidence);
         }
-    }
-
-    private boolean isManualNavigationAllowed(String examMode, String section) {
-        return "PRACTICE".equals(examMode)
-                || "READING".equals(section)
-                || "WRITING".equals(section);
     }
 
     @Transactional

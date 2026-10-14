@@ -4,10 +4,12 @@ import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.domain.enums.FormMode;
 import com.pte.session.domain.enums.ReusePolicy;
 import com.pte.session.domain.enums.ExamMode;
+import com.pte.session.domain.converter.ExamModeCompatibilityConverter;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Convert;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -75,7 +77,7 @@ public class ExamSession extends BaseEntity {
     @Column(name = "form_mode", length = 32)
     private FormMode formMode = FormMode.SHARED_FORM;
 
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = ExamModeCompatibilityConverter.class)
     @Column(name = "exam_mode", length = 16)
     private ExamMode examMode = ExamMode.OFFICIAL_EXAM;
 
@@ -123,21 +125,25 @@ public class ExamSession extends BaseEntity {
     private ExamPolicy policy = ExamPolicy.mockTestDefault();
 
     public void open() {
-        if (status != SessionStatus.CANCELLED) {
-            this.status = SessionStatus.OPEN;
-        }
+        requireStatus(SessionStatus.SCHEDULED);
+        this.status = SessionStatus.OPEN;
     }
 
     public void close() {
-        if (status != SessionStatus.CANCELLED) {
-            this.status = SessionStatus.CLOSED;
-        }
+        requireStatus(SessionStatus.OPEN);
+        this.status = SessionStatus.CLOSED;
     }
 
     public void cancel() {
-        if (status == SessionStatus.DRAFT || status == SessionStatus.PREPARING
-                || status == SessionStatus.READY || status == SessionStatus.SCHEDULED) {
-            this.status = SessionStatus.CANCELLED;
+        if (status != SessionStatus.READY && status != SessionStatus.SCHEDULED) {
+            throw new IllegalStateException("Only ready or scheduled sessions can be cancelled");
+        }
+        this.status = SessionStatus.CANCELLED;
+    }
+
+    private void requireStatus(SessionStatus expected) {
+        if (status != expected) {
+            throw new IllegalStateException("Session must be " + expected + " before this transition");
         }
     }
 }

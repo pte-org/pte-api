@@ -51,16 +51,31 @@ public class NotificationDispatchService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void dispatch(NotificationType type, User recipient, UUID tenantId, String subject, String body) {
+        dispatch(type, recipient, tenantId, subject, body, null);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void dispatch(NotificationType type, User recipient, UUID tenantId, String subject, String body,
+            String dedupeKey) {
         if (recipient == null) {
             log.warn("Skipping {} notification (tenantId={}): recipient not found in identity", type, tenantId);
             return;
         }
-        dispatchTo(type, recipient, tenantId, subject, body);
+        dispatchTo(type, recipient, tenantId, subject, body, dedupeKey);
     }
 
     /** Same as {@link #dispatch} but for a caller fanning out to N already-loaded recipients — avoids a redundant lookup per recipient. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void dispatchTo(NotificationType type, User recipient, UUID tenantId, String subject, String body) {
+        dispatchTo(type, recipient, tenantId, subject, body, null);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void dispatchTo(NotificationType type, User recipient, UUID tenantId, String subject, String body,
+            String dedupeKey) {
+        if (dedupeKey != null && notificationLogRepository.findByDedupeKey(dedupeKey).isPresent()) {
+            return;
+        }
         NotificationLog notificationLog = new NotificationLog();
         notificationLog.setRecipientUserPublicId(recipient.getPublicId());
         notificationLog.setRecipientEmail(recipient.getEmail());
@@ -68,6 +83,7 @@ public class NotificationDispatchService {
         notificationLog.setNotificationType(type);
         notificationLog.setSubject(subject);
         notificationLog.setBody(body);
+        notificationLog.setDedupeKey(dedupeKey);
         NotificationLog saved = notificationLogRepository.save(notificationLog);
 
         rabbitTemplate.convertAndSend(NotificationConstants.EMAIL_EXCHANGE, NotificationConstants.EMAIL_ROUTING_KEY,

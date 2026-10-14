@@ -50,6 +50,16 @@ public class IdentityService implements StudentCountProvider {
         return userRepository.findByPublicId(publicId);
     }
 
+    /** Tenant-scoped student read used by the tenant student workspace. */
+    public Optional<User> findStudentByTenant(UUID publicId, UUID tenantId) {
+        if (publicId == null || tenantId == null) {
+            return Optional.empty();
+        }
+        return userRepository.findByPublicIdAndTenantId(publicId, tenantId)
+                .filter(user -> !user.isDeleted())
+                .filter(user -> user.getRoles().contains(Role.STUDENT));
+    }
+
     public boolean existsById(UUID publicId) {
         return userRepository.findByPublicId(publicId).isPresent();
     }

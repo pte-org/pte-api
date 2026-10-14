@@ -114,9 +114,9 @@ class AttemptLifecycleServiceGetAllTasksTest {
     }
 
     @Test
-    @DisplayName("returns all items in order for a PRACTICE attempt")
-    void getAllTasks_practiceMode_returnsAllItemsInOrder() {
-        snapshot.setExamMode("PRACTICE");
+    @DisplayName("returns all items in order for an OFFICIAL_EXAM attempt")
+    void getAllTasks_officialExam_returnsAllItemsInOrder() {
+        snapshot.setExamMode("OFFICIAL_EXAM");
         PinnedItem item0 = item(0, "SPEAKING", "READ_ALOUD");
         PinnedItem item1 = item(1, "SPEAKING", "READ_ALOUD");
         PinnedItem item2 = item(2, "SPEAKING", "READ_ALOUD");
@@ -145,12 +145,12 @@ class AttemptLifecycleServiceGetAllTasksTest {
     }
 
     @Test
-    @DisplayName("PRACTICE mode: first item has canNavigatePrevious=false, others true")
-    void getAllTasks_practiceMode_navigationFlags() {
-        snapshot.setExamMode("PRACTICE");
+    @DisplayName("OFFICIAL_EXAM: navigation stays inside WRITING and never crosses back into SPEAKING")
+    void getAllTasks_officialExam_navigationStopsAtSectionBoundary() {
+        snapshot.setExamMode("OFFICIAL_EXAM");
         PinnedItem item0 = item(0, "SPEAKING", "READ_ALOUD");
-        PinnedItem item1 = item(1, "SPEAKING", "READ_ALOUD");
-        PinnedItem item2 = item(2, "SPEAKING", "READ_ALOUD");
+        PinnedItem item1 = item(1, "WRITING", "WRITE_ESSAY");
+        PinnedItem item2 = item(2, "WRITING", "WRITE_ESSAY");
         snapshot.addItem(item0);
         snapshot.addItem(item1);
         snapshot.addItem(item2);
@@ -169,11 +169,11 @@ class AttemptLifecycleServiceGetAllTasksTest {
 
         List<AttemptTaskResponse> result = service.getAllTasks(attemptPublicId, caller);
 
-        // first item: no prev, has next
+        // SPEAKING item: no manual navigation at all
         assertThat(result.get(0).task().canNavigatePrevious()).isFalse();
-        assertThat(result.get(0).task().canNavigateNext()).isTrue();
-        // middle item: both directions
-        assertThat(result.get(1).task().canNavigatePrevious()).isTrue();
+        assertThat(result.get(0).task().canNavigateNext()).isFalse();
+        // first WRITING item: previous would re-enter SPEAKING, next stays in WRITING
+        assertThat(result.get(1).task().canNavigatePrevious()).isFalse();
         assertThat(result.get(1).task().canNavigateNext()).isTrue();
         // last item: has prev, canNavigateNext=true (pressing Next completes the attempt)
         assertThat(result.get(2).task().canNavigatePrevious()).isTrue();
@@ -257,7 +257,7 @@ class AttemptLifecycleServiceGetAllTasksTest {
     @Test
     @DisplayName("encryptionPublicKey is populated for STRICT-pinned attempts")
     void getAllTasks_strictPinned_encryptionKeyPopulated() {
-        snapshot.setExamMode("PRACTICE");
+        snapshot.setExamMode("OFFICIAL_EXAM");
         snapshot.setAnswerIntegrityLevel("STRICT");
         PinnedItem item0 = item(0, "SPEAKING", "READ_ALOUD");
         snapshot.addItem(item0);
@@ -275,7 +275,7 @@ class AttemptLifecycleServiceGetAllTasksTest {
     @Test
     @DisplayName("totalTasks reflects the full list size, not just the current position")
     void getAllTasks_totalTasksIsFullListSize() {
-        snapshot.setExamMode("PRACTICE");
+        snapshot.setExamMode("OFFICIAL_EXAM");
         for (int i = 0; i < 5; i++) {
             snapshot.addItem(item(i, "SPEAKING", "READ_ALOUD"));
         }

@@ -86,6 +86,33 @@ class OrderServiceTest {
     }
 
     @Test
+    void createOrder_zeroPriceCompletesWithoutPayOsAndReturnsPaidOrder() {
+        UUID tenantId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        Plan plan = activePlan(planId);
+        plan.setPrice(BigDecimal.ZERO);
+        Order reserved = Order.pending(tenantId, planId, 1_000_000_001L,
+                BigDecimal.ZERO, plan.getCurrency());
+        reserved.setPublicId(UUID.randomUUID());
+        reserved.markPaid(java.time.Instant.now());
+
+        when(planRepository.findByPublicId(planId)).thenReturn(Optional.of(plan));
+        when(orderRepository.existsByTenantIdAndPlanIdAndStatusAndDeletedFalse(
+                tenantId, planId, OrderStatus.PENDING)).thenReturn(false);
+        when(orderRepository.nextOrderCode()).thenReturn(1_000_000_001L);
+        when(orderPersistenceService.reserve(any(Order.class))).thenReturn(reserved);
+        when(orderPersistenceService.completeFreeOrder(reserved.getPublicId())).thenReturn(reserved);
+
+        OrderResponse response = service.createOrder(tenantId, planId);
+
+        assertThat(response.amount()).isZero();
+        assertThat(response.status()).isEqualTo(OrderStatus.PAID.name());
+        assertThat(response.paymentLinkUrl()).isNull();
+        verify(orderPersistenceService).completeFreeOrder(reserved.getPublicId());
+        verify(payOsClient, never()).createPaymentLink(any());
+    }
+
+    @Test
     void createOrder_rejectsSecondPendingOrderForSameTenantAndPlan() {
         UUID tenantId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();

@@ -16,6 +16,10 @@ public final class NotificationConstants {
     public static final String EMAIL_SEND_FAILED = "Email send failed for %s";
     public static final String SENSITIVE_EMAIL_BODY_REDACTED =
             "Sensitive email content is not retained in notification history.";
+    public static final String SESSION_CANCELLED_SUBJECT = "Exam session cancelled";
+    public static final String SESSION_CANCELLED_BODY =
+            "The exam session \"%s\" was cancelled at %s. Please review the exam workspace.";
+    public static final String SESSION_CANCELLED_DEDUPE_KEY = "exam-session-cancelled:%s:%s";
 
     private NotificationConstants() {
     }

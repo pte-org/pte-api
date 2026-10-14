@@ -2,6 +2,7 @@ package com.pte.attempt.internal.mapper;
 
 import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.domain.PinnedExamSnapshot;
+import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.dto.response.BlankGroupView;
@@ -152,26 +153,34 @@ class AttemptMapperTest {
     }
 
     @Test
-    void practiceTask_allowsNavigationWithinAttemptBounds() {
+    void officialWritingTask_navigatesWithinSectionButNotBackIntoSpeaking() {
         PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
-        snapshot.setExamMode("PRACTICE");
+        snapshot.setExamMode("OFFICIAL_EXAM");
+        snapshot.addItem(pinnedItem(0, "SPEAKING"));
+        snapshot.addItem(pinnedItem(1, "WRITING"));
+        snapshot.addItem(pinnedItem(2, "WRITING"));
         ExamAttempt attempt = new ExamAttempt();
         attempt.setPublicId(UUID.randomUUID());
         attempt.setStatus(AttemptStatus.IN_PROGRESS);
         attempt.setPinnedSnapshot(snapshot);
 
-        PinnedItemView item = writingItem("WRITE_ESSAY", 200, 300, 0, 1200);
-        TaskView task = mapper.toTaskResponse(attempt, item, 0, 1200, 3).task();
+        TaskView speaking = mapper.toTaskResponse(attempt, new PinnedItemView(
+                UUID.randomUUID(), 0, "SPEAKING", "READ_ALOUD", "Speaking", "Prompt",
+                null, null, null, null, null, null, null, 30, 40, null, null, null), 30, 40, 3).task();
+        assertThat(speaking.canNavigatePrevious()).isFalse();
+        assertThat(speaking.canNavigateNext()).isFalse();
 
-        assertThat(task.canNavigatePrevious()).isFalse();
-        assertThat(task.canNavigateNext()).isTrue();
+        TaskView firstWriting = mapper.toTaskResponse(attempt, new PinnedItemView(
+                UUID.randomUUID(), 1, "WRITING", "WRITE_ESSAY", "Essay", "Prompt",
+                null, null, null, null, 200, 300, null, 0, 1200, null, null, null), 0, 1200, 3).task();
+        assertThat(firstWriting.canNavigatePrevious()).isFalse();
+        assertThat(firstWriting.canNavigateNext()).isTrue();
 
-        PinnedItemView finalItem = new PinnedItemView(
+        TaskView finalWriting = mapper.toTaskResponse(attempt, new PinnedItemView(
                 UUID.randomUUID(), 2, "WRITING", "WRITE_ESSAY", "Final task", "Prompt",
-                null, null, null, null, 200, 300, null, 0, 1200, null, null, null);
-        TaskView finalTask = mapper.toTaskResponse(attempt, finalItem, 0, 1200, 3).task();
-        assertThat(finalTask.canNavigatePrevious()).isTrue();
-        assertThat(finalTask.canNavigateNext()).isTrue();
+                null, null, null, null, 200, 300, null, 0, 1200, null, null, null), 0, 1200, 3).task();
+        assertThat(finalWriting.canNavigatePrevious()).isTrue();
+        assertThat(finalWriting.canNavigateNext()).isTrue();
     }
 
     @Test
@@ -254,6 +263,14 @@ class AttemptMapperTest {
                 UUID.randomUUID(), 0, "WRITING", taskType, "Writing title", "Writing prompt",
                 null, null, null, null, minWords, maxWords, null, prep, response,
                 null, null, null);
+    }
+
+    private PinnedItem pinnedItem(int orderIndex, String section) {
+        PinnedItem item = new PinnedItem();
+        item.setPublicId(UUID.randomUUID());
+        item.setOrderIndex(orderIndex);
+        item.setSection(section);
+        return item;
     }
 
     private TaskView toTaskFromItem(PinnedItemView item) {

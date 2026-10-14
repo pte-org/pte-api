@@ -42,6 +42,12 @@ public class ExaminerWorkQueryService {
     }
 
     @Transactional(readOnly = true)
+    public List<UUID> findAssignedExaminerPublicIds(UUID tenantId, UUID sessionPublicId) {
+        return assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId)
+                .stream().map(ExaminerAttemptAssignment::getExaminerPublicId).distinct().sorted().toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<ExaminerScoringWorkItemView> findWorkItems(UUID tenantId, UUID sessionPublicId,
             UUID examinerPublicId) {
         List<ExaminerAttemptAssignment> assignments = assignmentRepository

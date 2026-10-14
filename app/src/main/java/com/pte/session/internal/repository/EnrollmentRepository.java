@@ -18,6 +18,11 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
     boolean existsBySessionIdAndStudentPublicId(Long sessionId, UUID studentPublicId);
 
+    /** Overview: enrolled learners per session for a small id set, grouped so no row per student is read. */
+    @Query("select e.session.id, count(e) from Enrollment e "
+            + "where e.session.id in :sessionIds and e.deleted = false group by e.session.id")
+    List<Object[]> countGroupedBySessionIds(@Param("sessionIds") List<Long> sessionIds);
+
     Optional<Enrollment> findByPublicId(UUID publicId);
 
     List<Enrollment> findBySessionIdAndStudentPublicIdIn(Long sessionId, List<UUID> studentPublicIds);

@@ -36,9 +36,13 @@ public class AnnouncementController {
 
     @GetMapping
     public ApiResponse<PagedResult<AnnouncementResponse>> list(
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(service.list(currentUser(), page, size));
+        CurrentUser caller = currentUser();
+        return ApiResponse.success(search == null || search.isBlank()
+                ? service.list(caller, page, size)
+                : service.list(caller, search, page, size));
     }
 
     @PostMapping

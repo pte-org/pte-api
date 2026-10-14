@@ -25,6 +25,7 @@ import com.pte.session.domain.enums.LockdownMode;
 import com.pte.session.domain.enums.GenerationJobStatus;
 import com.pte.session.domain.enums.ReusePolicy;
 import com.pte.session.domain.enums.SessionStatus;
+import com.pte.session.dto.event.SessionCancelledEvent;
 import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.dto.request.AudienceSourceRequest;
 import com.pte.session.internal.dto.request.CreateExamDraftRequest;
@@ -38,6 +39,7 @@ import com.pte.session.internal.dto.response.GenerationJobResponse;
 import com.pte.session.internal.dto.response.SessionResponse;
 import com.pte.session.internal.exception.AudienceSourceNotFoundException;
 import com.pte.session.internal.exception.ExamDraftConfigurationException;
+import com.pte.session.internal.exception.ExamDraftNotDeletableException;
 import com.pte.session.internal.exception.ExamDraftNotEditableException;
 import com.pte.session.internal.exception.ExamDraftVersionConflictException;
 import com.pte.session.internal.exception.ExamPublishBlockedException;
@@ -66,6 +68,7 @@ import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.audit.AuditLogService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -106,6 +109,7 @@ public class ExamOrchestrationService {
     private final StartedAttemptLookup startedAttemptLookup;
     private final AuditLogService auditLogService;
     private final SessionCodeGenerator sessionCodeGenerator;
+    private final ApplicationEventPublisher eventPublisher;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public ExamOrchestrationService(ExamSessionRepository sessionRepository,
@@ -124,7 +128,8 @@ public class ExamOrchestrationService {
             IdentityService identityService,
             StartedAttemptLookup startedAttemptLookup,
             AuditLogService auditLogService,
-            SessionCodeGenerator sessionCodeGenerator) {
+            SessionCodeGenerator sessionCodeGenerator,
+            ApplicationEventPublisher eventPublisher) {
         this.sessionRepository = sessionRepository;
         this.sourceRepository = sourceRepository;
         this.memberRepository = memberRepository;
@@ -142,6 +147,7 @@ public class ExamOrchestrationService {
         this.startedAttemptLookup = startedAttemptLookup;
         this.auditLogService = auditLogService;
         this.sessionCodeGenerator = sessionCodeGenerator;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -154,9 +160,10 @@ public class ExamOrchestrationService {
                 .orElseThrow(() -> new ExamDraftConfigurationException(SessionConstants.EXAM_TEMPLATE_ACTIVE_REQUIRED));
 
         ExamMode mode = request.examMode() == null ? ExamMode.OFFICIAL_EXAM : request.examMode();
-        FormMode formMode = request.formMode() == null ? defaultFormMode(mode) : request.formMode();
-        ReusePolicy reusePolicy = request.reusePolicy() == null ? defaultReusePolicy(mode) : request.reusePolicy();
-        validateConfiguration(mode, formMode, reusePolicy, request.seriesKey());
+        FormMode formMode = request.formMode() == null ? FormMode.UNIQUE_FORM_PER_STUDENT : request.formMode();
+        ReusePolicy reusePolicy = request.reusePolicy() == null
+                ? ReusePolicy.EXCLUDE_STARTED_IN_SERIES : request.reusePolicy();
+        validateConfiguration(reusePolicy, request.seriesKey());
 
         ExamSession session = new ExamSession();
         session.setName(request.name().trim());
@@ -170,18 +177,17 @@ public class ExamOrchestrationService {
         session.setReusePolicy(reusePolicy);
         session.setSeriesKey(normalizeSeriesKey(request.seriesKey()));
         Set<String> templateSkills = resolveTemplateSkills(template);
-        session.setSelectedSkills(resolveSelectedSkills(request.selectedSkills(), templateSkills, mode));
+        session.setSelectedSkills(resolveSelectedSkills(request.selectedSkills(), templateSkills));
         session.setMaxRetriesPerStudent(resolveRetryCount(request.maxRetriesPerStudent()));
         session.setOpensAt(request.opensAt());
         session.setClosesAt(request.closesAt());
         session.setCapacity(request.capacity());
-        session.setPolicy(ExamPolicy.forMode(mode));
-        session.getPolicy().setLockdownMode(SessionPolicyResolver.resolveForCreate(mode, request.lockdownMode()));
+        session.setPolicy(ExamPolicy.realExamDefault());
+        session.getPolicy().setLockdownMode(SessionPolicyResolver.resolveForCreate(request.lockdownMode()));
         session.setStatus(SessionStatus.DRAFT);
         session.setSessionCode(sessionCodeGenerator.generate(tenantId, request.opensAt()));
         ExamSession saved = sessionRepository.saveAndFlush(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, saved.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_DRAFT_CREATED, saved.getName());
+        recordExamAudit(caller, saved, SessionConstants.EVENT_EXAM_DRAFT_CREATED, saved.getName());
         return SessionMapper.toResponse(saved);
     }
 
@@ -221,7 +227,7 @@ public class ExamOrchestrationService {
         if (request.expectedVersion() != null && !request.expectedVersion().equals(session.getDraftVersion())) {
             throw new ExamDraftVersionConflictException();
         }
-        ExamMode previousMode = session.getExamMode();
+        boolean legacyPolicyState = session.getExamMode() == null;
         LockdownMode previousLockdownMode = session.getPolicy() == null ? null : session.getPolicy().getLockdownMode();
         UUID previousTemplatePublicId = session.getTemplatePublicId();
         Integer previousTemplateVersion = session.getTemplateVersion();
@@ -248,18 +254,12 @@ public class ExamOrchestrationService {
             if (request.capacity() <= 0) throw new SessionCapacityInvalidException();
             session.setCapacity(request.capacity());
         }
-        ExamMode requestedMode = request.examMode();
-        ExamMode nextMode = requestedMode == null ? previousMode : requestedMode;
-        boolean modeChanged = SessionPolicyResolver.effectiveExamMode(previousMode)
-                != SessionPolicyResolver.effectiveExamMode(nextMode);
         LockdownMode resolvedLockdownMode = SessionPolicyResolver.resolveForDraftPatch(
-                previousMode, previousLockdownMode, requestedMode, request.lockdownMode());
-        if (requestedMode != null) {
-            session.setExamMode(requestedMode);
+                legacyPolicyState, previousLockdownMode, request.lockdownMode());
+        if (request.examMode() != null) {
+            session.setExamMode(request.examMode());
         }
-        if (modeChanged) {
-            session.setPolicy(ExamPolicy.forMode(nextMode));
-        } else if (session.getPolicy() == null) {
+        if (session.getPolicy() == null) {
             throw new ExamDraftConfigurationException(SessionConstants.EXAM_POLICY_INCOMPLETE);
         }
         session.getPolicy().setLockdownMode(resolvedLockdownMode);
@@ -277,24 +277,21 @@ public class ExamOrchestrationService {
                 || !java.util.Objects.equals(previousTemplateVersion, session.getTemplateVersion());
         Set<String> currentSkills = session.getSelectedSkills() == null
                 ? Set.of() : new LinkedHashSet<>(session.getSelectedSkills());
-        boolean resetSkillsToFull = templateChanged || currentSkills.isEmpty()
-                || (modeChanged && session.getExamMode() != ExamMode.PRACTICE
-                        && !currentSkills.equals(templateSkills));
+        boolean resetSkillsToFull = templateChanged || currentSkills.isEmpty();
         List<String> requestedSkills = request.selectedSkills();
         if (requestedSkills == null && !resetSkillsToFull) {
             requestedSkills = new ArrayList<>(currentSkills);
         }
-        session.setSelectedSkills(resolveSelectedSkills(requestedSkills, templateSkills, session.getExamMode()));
+        session.setSelectedSkills(resolveSelectedSkills(requestedSkills, templateSkills));
         if (request.maxRetriesPerStudent() != null) {
             session.setMaxRetriesPerStudent(resolveRetryCount(request.maxRetriesPerStudent()));
         }
         validateWindow(session.getOpensAt(), session.getClosesAt());
-        validateConfiguration(session.getExamMode(), session.getFormMode(), session.getReusePolicy(), session.getSeriesKey());
+        validateConfiguration(session.getReusePolicy(), session.getSeriesKey());
         validateSubscriptionWindowAndCapacity(lockedSubscription, session.getOpensAt(),
                 session.getClosesAt(), session.getCapacity());
         ExamSession saved = sessionRepository.saveAndFlush(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, saved.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_DRAFT_UPDATED, saved.getName());
+        recordExamAudit(caller, saved, SessionConstants.EVENT_EXAM_DRAFT_UPDATED, saved.getName());
         return SessionMapper.toResponse(saved);
     }
 
@@ -318,8 +315,8 @@ public class ExamOrchestrationService {
         source.setSourcePublicId(request.sourcePublicId());
         source.setCreatedBy(caller.userId());
         ExamAudienceSource saved = sourceRepository.save(source);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_ADDED, request.sourceType().name());
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_ADDED,
+                request.sourceType().name());
         return toSourceResponse(saved);
     }
 
@@ -337,8 +334,8 @@ public class ExamOrchestrationService {
                 .orElseThrow(AudienceSourceNotFoundException::new);
         sourceRepository.delete(source);
         memberRepository.deleteBySessionId(session.getId());
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_REMOVED, source.getSourceType().name());
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_REMOVED,
+                source.getSourceType().name());
     }
 
     @Transactional
@@ -432,8 +429,7 @@ public class ExamOrchestrationService {
         jobRepository.save(job);
         session.setStatus(SessionStatus.READY);
         sessionRepository.save(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_GENERATED, job.getPublicId().toString());
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_GENERATED, session.getName());
         return toJobResponse(job);
     }
 
@@ -477,29 +473,65 @@ public class ExamOrchestrationService {
         } catch (DataIntegrityViolationException ex) {
             throw new SessionTimeConflictException();
         }
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_PUBLISHED, session.getName());
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_PUBLISHED, session.getName());
         return SessionMapper.toResponse(session);
     }
 
     @Transactional
     public SessionResponse cancel(UUID sessionPublicId, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
-        if (session.getStatus() != SessionStatus.DRAFT && session.getStatus() != SessionStatus.PREPARING
-                && session.getStatus() != SessionStatus.READY && session.getStatus() != SessionStatus.SCHEDULED) {
+        SessionStatus previousStatus = session.getStatus();
+        if (previousStatus != SessionStatus.PREPARING && previousStatus != SessionStatus.READY
+                && previousStatus != SessionStatus.SCHEDULED) {
             throw new SessionNotCancellableException();
         }
+
+        if (previousStatus == SessionStatus.PREPARING) {
+            cancelGenerationJob(session);
+            session.setStatus(SessionStatus.DRAFT);
+            sessionRepository.save(session);
+            recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_GENERATION_CANCELLED,
+                    transitionSummary(session.getName(), previousStatus, session.getStatus()));
+            return SessionMapper.toResponse(session);
+        }
+
         session.cancel();
+        sessionRepository.save(session);
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_CANCELLED,
+                transitionSummary(session.getName(), previousStatus, session.getStatus()));
+        eventPublisher.publishEvent(new SessionCancelledEvent(session.getPublicId(), session.getTenantId(),
+                session.getName(), Instant.now()));
+        return SessionMapper.toResponse(session);
+    }
+
+    @Transactional
+    public void deleteDraft(UUID sessionPublicId, CurrentUser caller) {
+        ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
+        if (session.getStatus() != SessionStatus.DRAFT) {
+            throw new ExamDraftNotDeletableException();
+        }
+        if (jobRepository.findFirstBySessionIdOrderByCreatedAtDesc(session.getId())
+                .map(job -> job.getStatus() == GenerationJobStatus.QUEUED
+                        || job.getStatus() == GenerationJobStatus.RUNNING)
+                .orElse(false)) {
+            throw new ExamDraftNotDeletableException();
+        }
+        session.setDeleted(true);
+        sessionRepository.save(session);
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_DRAFT_DELETED, session.getName());
+    }
+
+    private void cancelGenerationJob(ExamSession session) {
         jobRepository.findFirstBySessionIdOrderByCreatedAtDesc(session.getId()).ifPresent(job -> {
             if (job.getStatus() == GenerationJobStatus.QUEUED || job.getStatus() == GenerationJobStatus.RUNNING) {
                 job.setStatus(GenerationJobStatus.CANCELLED);
                 jobRepository.save(job);
             }
         });
-        sessionRepository.save(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_CANCELLED, session.getName());
-        return SessionMapper.toResponse(session);
+    }
+
+    private String transitionSummary(String name, SessionStatus from, SessionStatus to) {
+        return "%s (%s -> %s)".formatted(name, from, to);
     }
 
     private ExamPreflightResponse preflightInternal(ExamSession session, boolean persistAudience) {
@@ -777,7 +809,7 @@ public class ExamOrchestrationService {
             throw new InvalidSessionWindowException();
     }
 
-    private void validateConfiguration(ExamMode mode, FormMode formMode, ReusePolicy reusePolicy, String seriesKey) {
+    private void validateConfiguration(ReusePolicy reusePolicy, String seriesKey) {
         if (reusePolicy != ReusePolicy.ALLOW && (seriesKey == null || seriesKey.isBlank())) {
             throw new ExamDraftConfigurationException(SessionConstants.EXAM_SERIES_REQUIRED);
         }
@@ -804,7 +836,7 @@ public class ExamOrchestrationService {
         return skills;
     }
 
-    private Set<String> resolveSelectedSkills(List<String> requestedSkills, Set<String> templateSkills, ExamMode mode) {
+    private Set<String> resolveSelectedSkills(List<String> requestedSkills, Set<String> templateSkills) {
         if (requestedSkills == null) {
             return new LinkedHashSet<>(templateSkills);
         }
@@ -821,7 +853,7 @@ public class ExamOrchestrationService {
                 throw new ExamDraftConfigurationException(SessionConstants.SKILLS_DUPLICATE);
             }
         }
-        if (mode != ExamMode.PRACTICE && !selectedSkills.equals(templateSkills)) {
+        if (!selectedSkills.equals(templateSkills)) {
             throw new ExamDraftConfigurationException(SessionConstants.SKILLS_FULL_TEMPLATE_REQUIRED);
         }
         return selectedSkills;
@@ -841,14 +873,6 @@ public class ExamOrchestrationService {
         return retries;
     }
 
-    private FormMode defaultFormMode(ExamMode mode) {
-        return mode == ExamMode.PRACTICE ? FormMode.SHARED_FORM : FormMode.UNIQUE_FORM_PER_STUDENT;
-    }
-
-    private ReusePolicy defaultReusePolicy(ExamMode mode) {
-        return mode == ExamMode.PRACTICE ? ReusePolicy.ALLOW : ReusePolicy.EXCLUDE_STARTED_IN_SERIES;
-    }
-
     private String normalizeSeriesKey(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
@@ -856,5 +880,10 @@ public class ExamOrchestrationService {
     private UUID requireTenant(CurrentUser caller) {
         if (caller == null || caller.tenantId() == null) throw new HostContextRequiredException();
         return caller.tenantId();
+    }
+
+    private void recordExamAudit(CurrentUser caller, ExamSession session, String action, String summary) {
+        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION,
+                session.getPublicId().toString(), session.getName(), session.getSessionCode(), action, summary);
     }
 }

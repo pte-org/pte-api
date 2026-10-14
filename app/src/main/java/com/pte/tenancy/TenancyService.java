@@ -130,6 +130,13 @@ public class TenancyService {
         return new StudentQuota(studentCountProvider.countStudents(tenantPublicId), tenant.getStudentLimit());
     }
 
+    /** Dashboard read: number of non-deleted organizations (branches) a tenant owns. */
+    @Transactional(readOnly = true)
+    public long countOrganizations(UUID tenantPublicId) {
+        requireTenantId(tenantPublicId);
+        return organizationRepository.countByTenant_PublicIdAndDeletedFalse(tenantPublicId);
+    }
+
     /** Returns the effective student limit configured for a tenant. */
     @Transactional(readOnly = true)
     public int getStudentLimit(UUID tenantPublicId) {

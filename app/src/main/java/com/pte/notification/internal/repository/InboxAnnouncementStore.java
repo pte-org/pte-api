@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -59,14 +60,31 @@ public class InboxAnnouncementStore {
     }
 
     public Page page(int offset, int limit) {
+        return page(offset, limit, null);
+    }
+
+    public Page page(int offset, int limit, String search) {
+        String normalized = search == null ? null : search.trim().toLowerCase(Locale.ROOT);
+        String filter = normalized == null || normalized.isBlank()
+                ? ""
+                : " AND (lower(title) LIKE :search OR lower(body) LIKE :search)";
+        String rowFilter = normalized == null || normalized.isBlank()
+                ? ""
+                : " AND (lower(a.title) LIKE :search OR lower(a.body) LIKE :search)";
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        if (!filter.isBlank()) {
+            params.addValue("search", "%" + normalized + "%");
+        }
         long total = jdbc.queryForObject("""
                 SELECT count(*) FROM notification_inbox_announcements
                 WHERE deleted=FALSE
-                """, new MapSqlParameterSource(), Long.class);
+                """ + filter, params, Long.class);
+        params.addValue("limit", limit).addValue("offset", offset);
         List<AnnouncementRow> rows = jdbc.query(select() + """
                 WHERE a.deleted=FALSE
+                """ + rowFilter + """
                 ORDER BY a.created_at DESC,a.id DESC LIMIT :limit OFFSET :offset
-                """, new MapSqlParameterSource().addValue("limit", limit).addValue("offset", offset),
+                """, params,
                 (rs, row) -> map(rs, deliverySummary(rs)));
         return new Page(rows, total);
     }

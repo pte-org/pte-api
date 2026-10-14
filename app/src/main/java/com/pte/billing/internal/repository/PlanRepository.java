@@ -38,6 +38,14 @@ public interface PlanRepository extends JpaRepository<Plan, Long> {
             """, nativeQuery = true)
     Set<UUID> findOutstandingCodePlanIds(@Param("ids") Collection<UUID> ids, @Param("now") Instant now);
 
+    /** Overview: non-deleted plans grouped by lifecycle status. */
+    @Query("select p.status, count(p) from Plan p where p.deleted = false group by p.status")
+    List<Object[]> countGroupedByStatus();
+
+    /** Overview: non-deleted plans grouped by plan type. */
+    @Query("select p.type, count(p) from Plan p where p.deleted = false group by p.type")
+    List<Object[]> countGroupedByType();
+
     List<Plan> findAllByOrderByCreatedAtDesc();
 
     List<Plan> findByStatusOrderByCreatedAtDesc(PlanStatus status);

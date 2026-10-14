@@ -241,7 +241,7 @@ class ReportServiceTest {
         legacyReport.setTenantId(tenantId);
         legacyReport.setPublished(true);
         CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
-        when(attemptReportRepository.findByStudentPublicIdAndTenantIdAndPublishedTrueOrderByPublishedAtDesc(
+        when(attemptReportRepository.findByStudentPublicIdAndTenantIdAndPublishedTrueAndDeletedFalseOrderByPublishedAtDesc(
                 studentPublicId, tenantId)).thenReturn(List.of(report, legacyReport));
         when(scoreAggregationService.aggregateLegacyPublished(legacyAttemptPublicId, tenantId))
                 .thenReturn(new AttemptScoreSummary(SkillScore.of(64), Map.of()));

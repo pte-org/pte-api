@@ -22,10 +22,9 @@ public record CreateSessionRequest(
         @Size(min = 1, max = 4, message = SessionConstants.SKILLS_SIZE_INVALID) Set<String> skills,
         @NotNull(message = SessionConstants.OPEN_TIME_REQUIRED) @Future(message = SessionConstants.OPEN_TIME_FUTURE) Instant opensAt,
         @NotNull(message = SessionConstants.CLOSE_TIME_REQUIRED) Instant closesAt,
-        /** Null defaults to {@link ExamMode#MOCK_TEST} — the safe middle ground, not the permissive PRACTICE default. */
+        /** Null defaults to {@link ExamMode#OFFICIAL_EXAM}. */
         ExamMode examMode,
-        /** Optional teacher override — null means use ExamMode default.
-         *  Validation: STRICT is not allowed when examMode is PRACTICE. */
+        /** Optional teacher override — null means STRICT, the only value OFFICIAL_EXAM accepts. */
         LockdownMode lockdownMode,
         @NotNull(message = SessionConstants.CAPACITY_REQUIRED)
         @Positive(message = SessionConstants.CAPACITY_POSITIVE) Integer capacity) {

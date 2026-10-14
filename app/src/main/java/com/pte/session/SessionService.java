@@ -4,15 +4,18 @@ import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
 import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.session.dto.response.ClosingSoonSessionView;
+import com.pte.session.dto.response.SessionSummaryView;
 import com.pte.billing.SubscriptionRevocationImpactQuery.SubscriptionRevocationImpact;
 import com.pte.session.internal.service.EntitlementService;
 import com.pte.session.internal.service.SessionLifecycleService;
+import com.pte.session.internal.service.SessionStaffAssignmentQueryService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 import java.time.Instant;
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 
 /**
@@ -33,13 +36,16 @@ public class SessionService {
 
     private final EntitlementService entitlementService;
     private final SessionLifecycleService sessionLifecycleService;
+    private final SessionStaffAssignmentQueryService staffAssignmentQueryService;
 
-    public SessionService(EntitlementService entitlementService, SessionLifecycleService sessionLifecycleService) {
+    public SessionService(EntitlementService entitlementService, SessionLifecycleService sessionLifecycleService,
+            SessionStaffAssignmentQueryService staffAssignmentQueryService) {
         this.entitlementService = entitlementService;
         this.sessionLifecycleService = sessionLifecycleService;
+        this.staffAssignmentQueryService = staffAssignmentQueryService;
     }
 
-    /** Throws if the session isn't OPEN or the student isn't enrolled — never returns a false/empty result for "not entitled". */
+    /** Throws if the student isn't enrolled, or the session isn't OPEN or is outside its opensAt/closesAt window — never returns a false/empty result for "not entitled". */
     public EntitlementResponse checkEntitlement(UUID sessionPublicId, UUID studentPublicId) {
         return entitlementService.checkEntitlement(sessionPublicId, studentPublicId);
     }
@@ -98,6 +104,12 @@ public class SessionService {
         return sessionLifecycleService.findDueClosingSoonSessions(now, cutoff);
     }
 
+    /** Reads tenant-owned session labels in one batch for activity projections. */
+    @Transactional(readOnly = true)
+    public List<SessionSummaryView> findSummaries(Collection<UUID> publicIds, UUID tenantId) {
+        return sessionLifecycleService.findSummaries(publicIds, tenantId);
+    }
+
     /** Locks and revalidates one candidate inside the caller's transaction. */
     @Transactional
     public Optional<ClosingSoonSessionView> lockDueClosingSoonSession(UUID sessionPublicId, Instant now,
@@ -126,5 +138,11 @@ public class SessionService {
     public SubscriptionRevocationImpact getSubscriptionRevocationImpact(
             UUID subscriptionId, UUID tenantId) {
         return sessionLifecycleService.getSubscriptionRevocationImpact(subscriptionId, tenantId);
+    }
+
+    /** Returns active assignment rows; identity validates the user's live staff role before dispatch. */
+    @Transactional(readOnly = true)
+    public List<UUID> findAssignedProctorPublicIds(UUID sessionPublicId, UUID tenantId) {
+        return staffAssignmentQueryService.findAssignedProctorPublicIds(sessionPublicId, tenantId);
     }
 }
