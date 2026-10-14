@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -20,19 +21,45 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
     Page<AuditLog> findByTenantIdAndAggregateTypeOrderByCreatedAtDesc(UUID tenantId, String aggregateType,
             Pageable pageable);
 
+    Page<AuditLog> findByTenantIdIsNullOrderByCreatedAtDesc(Pageable pageable);
+
+    Page<AuditLog> findByTenantIdIsNullAndAggregateTypeOrderByCreatedAtDesc(String aggregateType,
+            Pageable pageable);
+
     @Query("""
             select a from AuditLog a
              where a.tenantId = :tenantId
                and (:aggregateType is null or a.aggregateType = :aggregateType)
                and (:search is null
                     or lower(a.aggregateType) like lower(concat('%', :search, '%'))
-                    or lower(a.aggregateId) like lower(concat('%', :search, '%'))
+                    or lower(a.resourceName) like lower(concat('%', :search, '%'))
+                    or lower(a.resourceCode) like lower(concat('%', :search, '%'))
                     or lower(a.action) like lower(concat('%', :search, '%'))
-                    or lower(a.summary) like lower(concat('%', :search, '%'))
-                    or (:actorId is not null and a.actorUserId = :actorId))
+                    or lower(a.summary) like lower(concat('%', :search, '%')))
+               and (:createdFrom is null or a.createdAt >= :createdFrom)
+               and (:createdTo is null or a.createdAt < :createdTo)
              order by a.createdAt desc
             """)
     Page<AuditLog> findForTenant(@Param("tenantId") UUID tenantId,
             @Param("aggregateType") String aggregateType, @Param("search") String search,
-            @Param("actorId") UUID actorId, Pageable pageable);
+            @Param("createdFrom") Instant createdFrom, @Param("createdTo") Instant createdTo,
+            Pageable pageable);
+
+    @Query("""
+            select a from AuditLog a
+             where a.tenantId is null
+               and (:aggregateType is null or a.aggregateType = :aggregateType)
+               and (:search is null
+                    or lower(a.aggregateType) like lower(concat('%', :search, '%'))
+                    or lower(a.resourceName) like lower(concat('%', :search, '%'))
+                    or lower(a.resourceCode) like lower(concat('%', :search, '%'))
+                    or lower(a.action) like lower(concat('%', :search, '%'))
+                    or lower(a.summary) like lower(concat('%', :search, '%')))
+               and (:createdFrom is null or a.createdAt >= :createdFrom)
+               and (:createdTo is null or a.createdAt < :createdTo)
+             order by a.createdAt desc
+            """)
+    Page<AuditLog> findForPlatform(@Param("aggregateType") String aggregateType,
+            @Param("search") String search, @Param("createdFrom") Instant createdFrom,
+            @Param("createdTo") Instant createdTo, Pageable pageable);
 }

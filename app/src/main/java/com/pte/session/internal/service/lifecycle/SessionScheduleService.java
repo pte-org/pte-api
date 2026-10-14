@@ -93,9 +93,7 @@ public class SessionScheduleService {
         session.setOpensAt(opensAt);
         session.setClosesAt(closesAt);
         ExamSession saved = sessionRepository.saveAndFlush(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION,
-                saved.getPublicId().toString(), SessionConstants.EVENT_EXAM_SCHEDULE_UPDATED,
-                saved.getName());
+        recordExamAudit(caller, saved, SessionConstants.EVENT_EXAM_SCHEDULE_UPDATED, saved.getName());
         return SessionMapper.toResponse(saved);
     }
 
@@ -122,8 +120,7 @@ public class SessionScheduleService {
         }
 
         session.open();
-        auditLogService.record(systemCaller(session), SessionConstants.AGGREGATE_EXAM_SESSION,
-                session.getPublicId().toString(), SessionConstants.EVENT_EXAM_AUTO_OPENED,
+        recordExamAudit(systemCaller(session), session, SessionConstants.EVENT_EXAM_AUTO_OPENED,
                 "%s (%s -> %s)".formatted(session.getName(), SessionStatus.SCHEDULED, SessionStatus.OPEN));
         boolean extended = closesAt.isAfter(session.getClosesAt());
         if (extended) {
@@ -131,9 +128,7 @@ public class SessionScheduleService {
         }
         ExamSession saved = sessionRepository.saveAndFlush(session);
         if (extended) {
-            auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION,
-                    saved.getPublicId().toString(), SessionConstants.EVENT_EXAM_SCHEDULE_UPDATED,
-                    saved.getName());
+            recordExamAudit(caller, saved, SessionConstants.EVENT_EXAM_SCHEDULE_UPDATED, saved.getName());
         }
         return SessionMapper.toResponse(saved);
     }
@@ -158,13 +153,16 @@ public class SessionScheduleService {
                 session.getPublicId());
         session.setClosesAt(request.closesAt());
         ExamSession saved = sessionRepository.saveAndFlush(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION,
-                saved.getPublicId().toString(), SessionConstants.EVENT_EXAM_SCHEDULE_UPDATED,
-                saved.getName());
+        recordExamAudit(caller, saved, SessionConstants.EVENT_EXAM_SCHEDULE_UPDATED, saved.getName());
         return SessionMapper.toResponse(saved);
     }
 
     private CurrentUser systemCaller(ExamSession session) {
         return new CurrentUser(SessionConstants.SYSTEM_ACTOR_USER_ID, session.getTenantId(), List.of("SYSTEM"));
+    }
+
+    private void recordExamAudit(CurrentUser caller, ExamSession session, String action, String summary) {
+        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION,
+                session.getPublicId().toString(), session.getName(), session.getSessionCode(), action, summary);
     }
 }

@@ -3,6 +3,7 @@ package com.pte.shared.audit;
 import com.pte.shared.audit.domain.AuditLog;
 import com.pte.shared.audit.dto.AuditLogResponse;
 import com.pte.shared.audit.internal.repository.AuditLogRepository;
+import com.pte.shared.security.CurrentUser;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -144,5 +145,23 @@ class AuditLogServiceRecentTest {
         assertThat(response.action()).isEqualTo("ACTION_3");
         assertThat(response.summary()).isEqualTo("summary 3");
         assertThat(response.createdAt()).isEqualTo(BASE.plusSeconds(180));
+    }
+
+    @Test
+    void searchUsesResourceIdentityAndDoesNotMatchInternalAggregateId() {
+        UUID tenant = UUID.randomUUID();
+        UUID aggregateId = UUID.randomUUID();
+        AuditLog saved = log(tenant, 3, false);
+        saved.setAggregateId(aggregateId.toString());
+        saved.setResourceName("Mock exam");
+        saved.setResourceCode("HCM-261014-AB12");
+        repository.saveAndFlush(saved);
+
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenant, List.of("HOST_ADMIN"));
+
+        assertThat(service.list(caller, "CLASS", aggregateId.toString(), 0, 20).data()).isEmpty();
+        assertThat(service.list(caller, "CLASS", "HCM-261014-AB12", 0, 20).data())
+                .extracting(AuditLogResponse::resourceName)
+                .containsExactly("Mock exam");
     }
 }

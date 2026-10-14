@@ -12,6 +12,8 @@ import com.pte.itembank.internal.controller.QuestionController;
 import com.pte.notification.internal.controller.AnnouncementController;
 import com.pte.scoretemplate.internal.controller.ScoreTemplateController;
 import com.pte.support.internal.controller.AdminSupportTicketController;
+import com.pte.shared.audit.internal.controller.PlatformAuditLogController;
+import com.pte.identity.internal.controller.PlatformUserDirectoryController;
 import com.pte.tenancy.internal.controller.TenantController;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -38,6 +40,8 @@ class PlatformManagerControllerSecurityTest {
         assertMethod(PlatformCommercialController.class, null, MANAGER);
         assertMethod(AnnouncementController.class, null, MANAGER);
         assertMethod(AdminSupportTicketController.class, null, MANAGER);
+        assertMethod(PlatformAuditLogController.class, null, MANAGER);
+        assertMethod(PlatformUserDirectoryController.class, null, MANAGER);
     }
 
     @Test
