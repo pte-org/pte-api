@@ -62,8 +62,9 @@ public class ReportService {
         if (caller.hasRole(ROLE_STUDENT)) {
             throw new ReportNotFoundException();
         }
-        AttemptScoreSummary liveSummary = scoreAggregationService.aggregate(attemptPublicId, report.getTenantId());
-        return ReportMapper.toResponse(report, liveSummary);
+        ProvisionalScoreSummary live = scoreAggregationService.aggregateProvisional(attemptPublicId,
+                report.getTenantId());
+        return ReportMapper.toResponse(report, live.summary(), live.includesUnselectedAiScores());
     }
 
     @Transactional(readOnly = true)

@@ -109,8 +109,8 @@ class ReportServiceTest {
                     report.setId(1L);
                     return report;
                 });
-        when(scoreAggregationService.aggregate(attemptPublicId, tenantId))
-                .thenReturn(scoreSummary);
+        when(scoreAggregationService.aggregateProvisional(attemptPublicId, tenantId))
+                .thenReturn(new ProvisionalScoreSummary(scoreSummary, false));
 
         ReportResponse response = service.getReport(attemptPublicId, caller);
 
@@ -144,8 +144,8 @@ class ReportServiceTest {
                     report.setId(1L);
                     return report;
                 });
-        when(scoreAggregationService.aggregate(attemptPublicId, tenantId))
-                .thenReturn(scoreSummary);
+        when(scoreAggregationService.aggregateProvisional(attemptPublicId, tenantId))
+                .thenReturn(new ProvisionalScoreSummary(scoreSummary, false));
 
         service.getReport(attemptPublicId, caller);
 
@@ -178,7 +178,7 @@ class ReportServiceTest {
 
         assertThat(response.published()).isTrue();
         assertThat(response.overall().score()).isEqualTo(50);
-        verify(scoreAggregationService, never()).aggregate(attemptPublicId, tenantId);
+        verify(scoreAggregationService, never()).aggregateProvisional(attemptPublicId, tenantId);
     }
 
     @Test
@@ -298,8 +298,8 @@ class ReportServiceTest {
 
         when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.of(report));
-        when(scoreAggregationService.aggregate(attemptPublicId, tenantId))
-                .thenReturn(summary);
+        when(scoreAggregationService.aggregateProvisional(attemptPublicId, tenantId))
+                .thenReturn(new ProvisionalScoreSummary(summary, false));
 
         ReportResponse response = service.getReport(attemptPublicId, caller);
 
@@ -351,8 +351,8 @@ class ReportServiceTest {
 
         when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.of(report));
-        when(scoreAggregationService.aggregate(attemptPublicId, otherTenantId))
-                .thenReturn(summary);
+        when(scoreAggregationService.aggregateProvisional(attemptPublicId, otherTenantId))
+                .thenReturn(new ProvisionalScoreSummary(summary, false));
 
         ReportResponse response = service.getReport(attemptPublicId, caller);
 
@@ -373,7 +373,7 @@ class ReportServiceTest {
         assertThatThrownBy(() -> service.getReport(attemptPublicId,
                 new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"))))
                 .isInstanceOf(ReportNotFoundException.class);
-        verify(scoreAggregationService, never()).aggregate(any(), any());
+        verify(scoreAggregationService, never()).aggregateProvisional(any(), any());
     }
 
     @Test
@@ -415,8 +415,8 @@ class ReportServiceTest {
                 .thenReturn(Optional.of(savedReport));
         when(attemptService.getSubmittedAttempt(attemptPublicId))
                 .thenReturn(attemptSummary);
-        when(scoreAggregationService.aggregate(attemptPublicId, tenantId))
-                .thenReturn(scoreSummary);
+        when(scoreAggregationService.aggregateProvisional(attemptPublicId, tenantId))
+                .thenReturn(new ProvisionalScoreSummary(scoreSummary, false));
 
         ReportResponse response = service.getReport(attemptPublicId, caller);
 

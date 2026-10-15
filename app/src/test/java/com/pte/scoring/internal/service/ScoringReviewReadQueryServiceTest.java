@@ -106,6 +106,47 @@ class ScoringReviewReadQueryServiceTest {
     }
 
     @Test
+    void reportInputs_provisionalScoreFallsBackToTheAiScoreUntilASourceIsChosen() {
+        ScoringAnswer answer = answer("READ_ALOUD");
+        answer.markAiScored(88, AiProviderCategory.REAL, "provider", "model", "v1");
+        stubAiAnswer(answer);
+
+        var input = service.findReportInputsForAttempt(tenantId, attemptId).getFirst();
+
+        assertThat(input.provisionalScore()).isEqualTo(88);
+        assertThat(input.selectedScore()).isNull();
+        assertThat(input.publishable()).isFalse();
+    }
+
+    @Test
+    void reportInputs_provisionalScoreIsEmptyWhenTheAnswerHasNoAiScore() {
+        stubAiAnswer(answer("READ_ALOUD"));
+
+        var input = service.findReportInputsForAttempt(tenantId, attemptId).getFirst();
+
+        assertThat(input.provisionalScore()).isNull();
+    }
+
+    @Test
+    void reportInputs_provisionalScoreEqualsTheSelectedScoreOnceChosen() {
+        ScoringAnswer answer = answer("READ_ALOUD");
+        answer.markAiScored(88, AiProviderCategory.REAL, "provider", "model", "v1");
+        answer.selectScoreSource(ScoreSource.AI, UUID.randomUUID(), Instant.now(), null);
+        stubAiAnswer(answer);
+
+        var input = service.findReportInputsForAttempt(tenantId, attemptId).getFirst();
+
+        assertThat(input.provisionalScore()).isEqualTo(input.selectedScore()).isEqualTo(88);
+    }
+
+    private void stubAiAnswer(ScoringAnswer answer) {
+        when(answerRepository.findByAttemptPublicIdAndTenantId(attemptId, tenantId)).thenReturn(List.of(answer));
+        when(examinerScoreRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(List.of());
+        when(methodResolver.resolve(templateId, "READ_ALOUD")).thenReturn(Optional.of(ScoringMethod.AI_SPEECH));
+        when(methodResolver.resolveSection(templateId, "READ_ALOUD")).thenReturn(Optional.of("SPEAKING"));
+    }
+
+    @Test
     void reportInputs_useOnlyTheSelectedRealAiScore() {
         ScoringAnswer answer = answer("READ_ALOUD");
         answer.markAiScored(88, AiProviderCategory.REAL, "provider", "model", "v1");

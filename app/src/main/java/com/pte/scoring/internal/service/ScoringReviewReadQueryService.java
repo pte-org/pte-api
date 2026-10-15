@@ -154,7 +154,17 @@ public class ScoringReviewReadQueryService {
                 method == null ? null : method.name(), answer.getRawScore(), name(answer.getAiProviderCategory()),
                 answer.getAiProvider(), answer.getAiModel(), answer.getAiProviderVersion(),
                 examinerScore == null ? null : examinerScore.getScore(), name(answer.getSelectedScoreSource()),
-                selectedScore, block == null, block, answer.getLockVersion());
+                selectedScore, block == null, block, answer.getLockVersion(),
+                provisionalScore(answer, method, selectedScore));
+    }
+
+    /** Until a source is chosen, an AI-scored answer's own AI score stands in; a chosen source always wins. */
+    private Integer provisionalScore(ScoringAnswer answer, ScoringMethod method, Integer selectedScore) {
+        if (selectedScore == null && isAiScored(method) && answer.getSelectedScoreSource() == null
+                && answer.hasPublishableAiScore()) {
+            return answer.getRawScore();
+        }
+        return selectedScore;
     }
 
     private Integer selectedScore(ScoringAnswer answer, ExaminerAnswerScore examinerScore) {
