@@ -22,6 +22,11 @@ public interface ClassMembershipRepository extends JpaRepository<ClassMembership
     @EntityGraph(attributePaths = {"studentClass", "studentClass.program"})
     Optional<ClassMembership> findByTenantIdAndStudentPublicId(UUID tenantId, UUID studentPublicId);
 
+    /** Overview: learners currently placed in a (non-deleted) class of the tenant. */
+    @Query("SELECT COUNT(m) FROM ClassMembership m JOIN m.studentClass c "
+            + "WHERE m.tenantId = :tenantId AND m.deleted = false AND c.deleted = false")
+    long countAssignedForTenant(@Param("tenantId") UUID tenantId);
+
     /** Used by {@code StudentClass} archive/deactivate's active-members guard. */
     boolean existsByTenantIdAndStudentClass_PublicId(UUID tenantId, UUID classPublicId);
 

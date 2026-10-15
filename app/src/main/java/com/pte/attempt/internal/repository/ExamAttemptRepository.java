@@ -3,15 +3,18 @@ package com.pte.attempt.internal.repository;
 import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -93,6 +96,38 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long>,
     /** Mirrors {@link #findWithPinnedByPublicIdAndStudentPublicId} but no student filter — trusted internal caller (reporting's per-attempt scoring, Phase 5), not a student-facing read. */
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
     Optional<ExamAttempt> findWithPinnedByPublicId(UUID publicId);
+
+    /** Timeout hint (ms) for the heavy overview counts. */
+    String OVERVIEW_QUERY_TIMEOUT_MS = "2000";
+
+    /** Overview: submitted attempts in {@code [from, to)}; heavy count, bounded by a 2s timeout hint. */
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = OVERVIEW_QUERY_TIMEOUT_MS))
+    @Query("SELECT COUNT(a) FROM ExamAttempt a WHERE a.tenantId = :tenantId AND a.deleted = false "
+            + "AND a.status = com.pte.attempt.domain.enums.AttemptStatus.SUBMITTED "
+            + "AND a.submittedAt >= :from AND a.submittedAt < :to")
+    long countSubmittedBetween(@Param("tenantId") UUID tenantId, @Param("from") Instant from,
+            @Param("to") Instant to);
+
+    /** Overview: attempts currently in progress for the tenant. */
+    @Query("SELECT COUNT(a) FROM ExamAttempt a WHERE a.tenantId = :tenantId AND a.deleted = false "
+            + "AND a.status = com.pte.attempt.domain.enums.AttemptStatus.IN_PROGRESS")
+    long countInProgress(@Param("tenantId") UUID tenantId);
+
+    /** Overview: distinct students with an attempt started in {@code [from, to)}; heavy count with timeout hint. */
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = OVERVIEW_QUERY_TIMEOUT_MS))
+    @Query("SELECT COUNT(DISTINCT a.studentPublicId) FROM ExamAttempt a WHERE a.tenantId = :tenantId "
+            + "AND a.deleted = false AND a.startedAt >= :from AND a.startedAt < :to")
+    long countDistinctStudentsStartedBetween(@Param("tenantId") UUID tenantId, @Param("from") Instant from,
+            @Param("to") Instant to);
+
+    /**
+     * Overview (platform-wide): distinct students with an attempt started in {@code [from, to)} across all
+     * tenants; served by the time-leading {@code started_at} index, bounded by the timeout hint.
+     */
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = OVERVIEW_QUERY_TIMEOUT_MS))
+    @Query("SELECT COUNT(DISTINCT a.studentPublicId) FROM ExamAttempt a WHERE a.deleted = false "
+            + "AND a.startedAt >= :from AND a.startedAt < :to")
+    long countDistinctStudentsStartedBetweenPlatformWide(@Param("from") Instant from, @Param("to") Instant to);
 
     /** Batch context read for report publication; loads each pinned section set with a single query. */
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})

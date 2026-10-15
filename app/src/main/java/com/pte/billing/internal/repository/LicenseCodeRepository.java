@@ -12,6 +12,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 public interface LicenseCodeRepository extends JpaRepository<LicenseCode, Long> {
@@ -53,6 +54,60 @@ public interface LicenseCodeRepository extends JpaRepository<LicenseCode, Long> 
             @Param("planId") java.util.UUID planId,
             @Param("tenantId") java.util.UUID tenantId,
             @Param("now") Instant now,
+            Pageable pageable);
+
+    /** Overview: non-deleted codes grouped by their stored status (ISSUED rows past expiry are split out separately). */
+    @Query("select code.status, count(code) from LicenseCode code where code.deleted = false group by code.status")
+    List<Object[]> countGroupedByStatus();
+
+    /** Overview: ISSUED codes whose expiry has passed, i.e. effectively EXPIRED (same rule as {@link #findAdminPage}). */
+    @Query("""
+            select count(code) from LicenseCode code
+             where code.deleted = false
+               and code.status = com.pte.billing.domain.enums.LicenseCodeStatus.ISSUED
+               and code.codeExpiresAt is not null and code.codeExpiresAt <= :now
+            """)
+    long countIssuedPastExpiry(@Param("now") Instant now);
+
+    /** Overview: ISSUED codes still valid at {@code now} that expire at or before {@code until}. */
+    @Query("""
+            select count(code) from LicenseCode code
+             where code.deleted = false
+               and code.status = com.pte.billing.domain.enums.LicenseCodeStatus.ISSUED
+               and code.codeExpiresAt > :now and code.codeExpiresAt <= :until
+            """)
+    long countIssuedExpiringBetween(@Param("now") Instant now, @Param("until") Instant until);
+
+    /** Overview: codes redeemed in {@code [from, to)} (whatever their status is now). */
+    @Query("select count(code) from LicenseCode code where code.deleted = false "
+            + "and code.redeemedAt >= :from and code.redeemedAt < :to")
+    long countRedeemedBetween(@Param("from") Instant from, @Param("to") Instant to);
+
+    @Query("""
+            select code
+              from LicenseCode code
+             where code.deleted = false
+               and (:status is null
+                    or (:status = com.pte.billing.domain.enums.LicenseCodeStatus.ISSUED
+                        and code.status = com.pte.billing.domain.enums.LicenseCodeStatus.ISSUED
+                        and (code.codeExpiresAt is null or code.codeExpiresAt > :now))
+                    or (:status = com.pte.billing.domain.enums.LicenseCodeStatus.EXPIRED
+                        and (code.status = com.pte.billing.domain.enums.LicenseCodeStatus.EXPIRED
+                             or (code.status = com.pte.billing.domain.enums.LicenseCodeStatus.ISSUED
+                                 and code.codeExpiresAt is not null and code.codeExpiresAt <= :now)))
+                    or (:status <> com.pte.billing.domain.enums.LicenseCodeStatus.ISSUED
+                        and :status <> com.pte.billing.domain.enums.LicenseCodeStatus.EXPIRED
+                        and code.status = :status))
+               and (:planId is null or code.planId = :planId)
+               and (:tenantId is null or code.redeemedByTenantId = :tenantId)
+               and (:searchId is not null and (code.publicId = :searchId
+                    or code.redeemedByTenantId = :searchId))
+             order by code.issuedAt desc, code.publicId desc
+            """)
+    Page<LicenseCode> findAdminPageByIdentifier(@Param("status") LicenseCodeStatus status,
+            @Param("planId") java.util.UUID planId,
+            @Param("tenantId") java.util.UUID tenantId,
+            @Param("now") Instant now, @Param("searchId") java.util.UUID searchId,
             Pageable pageable);
 
     /**

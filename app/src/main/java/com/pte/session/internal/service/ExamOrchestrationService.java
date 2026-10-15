@@ -25,6 +25,7 @@ import com.pte.session.domain.enums.LockdownMode;
 import com.pte.session.domain.enums.GenerationJobStatus;
 import com.pte.session.domain.enums.ReusePolicy;
 import com.pte.session.domain.enums.SessionStatus;
+import com.pte.session.dto.event.SessionCancelledEvent;
 import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.dto.request.AudienceSourceRequest;
 import com.pte.session.internal.dto.request.CreateExamDraftRequest;
@@ -38,6 +39,7 @@ import com.pte.session.internal.dto.response.GenerationJobResponse;
 import com.pte.session.internal.dto.response.SessionResponse;
 import com.pte.session.internal.exception.AudienceSourceNotFoundException;
 import com.pte.session.internal.exception.ExamDraftConfigurationException;
+import com.pte.session.internal.exception.ExamDraftNotDeletableException;
 import com.pte.session.internal.exception.ExamDraftNotEditableException;
 import com.pte.session.internal.exception.ExamDraftVersionConflictException;
 import com.pte.session.internal.exception.ExamPublishBlockedException;
@@ -66,6 +68,7 @@ import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.audit.AuditLogService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -106,6 +109,7 @@ public class ExamOrchestrationService {
     private final StartedAttemptLookup startedAttemptLookup;
     private final AuditLogService auditLogService;
     private final SessionCodeGenerator sessionCodeGenerator;
+    private final ApplicationEventPublisher eventPublisher;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public ExamOrchestrationService(ExamSessionRepository sessionRepository,
@@ -124,7 +128,8 @@ public class ExamOrchestrationService {
             IdentityService identityService,
             StartedAttemptLookup startedAttemptLookup,
             AuditLogService auditLogService,
-            SessionCodeGenerator sessionCodeGenerator) {
+            SessionCodeGenerator sessionCodeGenerator,
+            ApplicationEventPublisher eventPublisher) {
         this.sessionRepository = sessionRepository;
         this.sourceRepository = sourceRepository;
         this.memberRepository = memberRepository;
@@ -142,6 +147,7 @@ public class ExamOrchestrationService {
         this.startedAttemptLookup = startedAttemptLookup;
         this.auditLogService = auditLogService;
         this.sessionCodeGenerator = sessionCodeGenerator;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -181,8 +187,7 @@ public class ExamOrchestrationService {
         session.setStatus(SessionStatus.DRAFT);
         session.setSessionCode(sessionCodeGenerator.generate(tenantId, request.opensAt()));
         ExamSession saved = sessionRepository.saveAndFlush(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, saved.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_DRAFT_CREATED, saved.getName());
+        recordExamAudit(caller, saved, SessionConstants.EVENT_EXAM_DRAFT_CREATED, saved.getName());
         return SessionMapper.toResponse(saved);
     }
 
@@ -286,8 +291,7 @@ public class ExamOrchestrationService {
         validateSubscriptionWindowAndCapacity(lockedSubscription, session.getOpensAt(),
                 session.getClosesAt(), session.getCapacity());
         ExamSession saved = sessionRepository.saveAndFlush(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, saved.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_DRAFT_UPDATED, saved.getName());
+        recordExamAudit(caller, saved, SessionConstants.EVENT_EXAM_DRAFT_UPDATED, saved.getName());
         return SessionMapper.toResponse(saved);
     }
 
@@ -311,8 +315,8 @@ public class ExamOrchestrationService {
         source.setSourcePublicId(request.sourcePublicId());
         source.setCreatedBy(caller.userId());
         ExamAudienceSource saved = sourceRepository.save(source);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_ADDED, request.sourceType().name());
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_ADDED,
+                request.sourceType().name());
         return toSourceResponse(saved);
     }
 
@@ -330,8 +334,8 @@ public class ExamOrchestrationService {
                 .orElseThrow(AudienceSourceNotFoundException::new);
         sourceRepository.delete(source);
         memberRepository.deleteBySessionId(session.getId());
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_REMOVED, source.getSourceType().name());
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_REMOVED,
+                source.getSourceType().name());
     }
 
     @Transactional
@@ -425,8 +429,7 @@ public class ExamOrchestrationService {
         jobRepository.save(job);
         session.setStatus(SessionStatus.READY);
         sessionRepository.save(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_GENERATED, job.getPublicId().toString());
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_GENERATED, session.getName());
         return toJobResponse(job);
     }
 
@@ -470,29 +473,65 @@ public class ExamOrchestrationService {
         } catch (DataIntegrityViolationException ex) {
             throw new SessionTimeConflictException();
         }
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_PUBLISHED, session.getName());
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_PUBLISHED, session.getName());
         return SessionMapper.toResponse(session);
     }
 
     @Transactional
     public SessionResponse cancel(UUID sessionPublicId, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
-        if (session.getStatus() != SessionStatus.DRAFT && session.getStatus() != SessionStatus.PREPARING
-                && session.getStatus() != SessionStatus.READY && session.getStatus() != SessionStatus.SCHEDULED) {
+        SessionStatus previousStatus = session.getStatus();
+        if (previousStatus != SessionStatus.PREPARING && previousStatus != SessionStatus.READY
+                && previousStatus != SessionStatus.SCHEDULED) {
             throw new SessionNotCancellableException();
         }
+
+        if (previousStatus == SessionStatus.PREPARING) {
+            cancelGenerationJob(session);
+            session.setStatus(SessionStatus.DRAFT);
+            sessionRepository.save(session);
+            recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_GENERATION_CANCELLED,
+                    transitionSummary(session.getName(), previousStatus, session.getStatus()));
+            return SessionMapper.toResponse(session);
+        }
+
         session.cancel();
+        sessionRepository.save(session);
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_CANCELLED,
+                transitionSummary(session.getName(), previousStatus, session.getStatus()));
+        eventPublisher.publishEvent(new SessionCancelledEvent(session.getPublicId(), session.getTenantId(),
+                session.getName(), Instant.now()));
+        return SessionMapper.toResponse(session);
+    }
+
+    @Transactional
+    public void deleteDraft(UUID sessionPublicId, CurrentUser caller) {
+        ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
+        if (session.getStatus() != SessionStatus.DRAFT) {
+            throw new ExamDraftNotDeletableException();
+        }
+        if (jobRepository.findFirstBySessionIdOrderByCreatedAtDesc(session.getId())
+                .map(job -> job.getStatus() == GenerationJobStatus.QUEUED
+                        || job.getStatus() == GenerationJobStatus.RUNNING)
+                .orElse(false)) {
+            throw new ExamDraftNotDeletableException();
+        }
+        session.setDeleted(true);
+        sessionRepository.save(session);
+        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_DRAFT_DELETED, session.getName());
+    }
+
+    private void cancelGenerationJob(ExamSession session) {
         jobRepository.findFirstBySessionIdOrderByCreatedAtDesc(session.getId()).ifPresent(job -> {
             if (job.getStatus() == GenerationJobStatus.QUEUED || job.getStatus() == GenerationJobStatus.RUNNING) {
                 job.setStatus(GenerationJobStatus.CANCELLED);
                 jobRepository.save(job);
             }
         });
-        sessionRepository.save(session);
-        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION, session.getPublicId().toString(),
-                SessionConstants.EVENT_EXAM_CANCELLED, session.getName());
-        return SessionMapper.toResponse(session);
+    }
+
+    private String transitionSummary(String name, SessionStatus from, SessionStatus to) {
+        return "%s (%s -> %s)".formatted(name, from, to);
     }
 
     private ExamPreflightResponse preflightInternal(ExamSession session, boolean persistAudience) {
@@ -841,5 +880,10 @@ public class ExamOrchestrationService {
     private UUID requireTenant(CurrentUser caller) {
         if (caller == null || caller.tenantId() == null) throw new HostContextRequiredException();
         return caller.tenantId();
+    }
+
+    private void recordExamAudit(CurrentUser caller, ExamSession session, String action, String summary) {
+        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION,
+                session.getPublicId().toString(), session.getName(), session.getSessionCode(), action, summary);
     }
 }

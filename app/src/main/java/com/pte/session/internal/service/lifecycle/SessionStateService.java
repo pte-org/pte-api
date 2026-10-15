@@ -5,13 +5,19 @@ import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.internal.dto.response.SessionResponse;
 import com.pte.session.internal.exception.SessionNotFoundException;
+import com.pte.session.internal.exception.SessionNotOpenToCloseException;
 import com.pte.session.internal.exception.SessionNotReadyToOpenException;
 import com.pte.session.internal.exception.SessionSubscriptionConflictException;
 import com.pte.session.internal.mapper.SessionMapper;
 import com.pte.session.internal.repository.ExamSessionRepository;
+import com.pte.session.internal.constant.SessionConstants;
+import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Session state transitions; domain entities retain state-machine validation. */
@@ -21,13 +27,16 @@ public class SessionStateService {
     private final ExamSessionRepository sessionRepository;
     private final SessionAccess access;
     private final SessionSubscriptionRules subscriptions;
+    private final AuditLogService auditLogService;
 
     public SessionStateService(ExamSessionRepository sessionRepository,
             SessionAccess access,
-            SessionSubscriptionRules subscriptions) {
+            SessionSubscriptionRules subscriptions,
+            AuditLogService auditLogService) {
         this.sessionRepository = sessionRepository;
         this.access = access;
         this.subscriptions = subscriptions;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -56,7 +65,66 @@ public class SessionStateService {
     @Transactional
     public SessionResponse close(UUID publicId, CurrentUser caller) {
         ExamSession session = access.findOwnedWithLock(publicId, caller);
+        if (session.getStatus() != SessionStatus.OPEN) {
+            throw new SessionNotOpenToCloseException();
+        }
+        return closeOpenSession(session, caller, SessionConstants.EVENT_EXAM_CLOSED);
+    }
+
+    /**
+     * Revalidates a candidate under a row lock so a scheduled auto-close cannot
+     * race with a manual close or a cancellation.
+     */
+    @Transactional
+    public Optional<SessionResponse> closeIfDue(UUID publicId, Instant now) {
+        ExamSession session = sessionRepository.findWithLockByPublicId(publicId).orElse(null);
+        if (session == null || session.getStatus() != SessionStatus.OPEN
+                || session.getClosesAt() == null || session.getClosesAt().isAfter(now)) {
+            return Optional.empty();
+        }
+        CurrentUser systemCaller = new CurrentUser(SessionConstants.SYSTEM_ACTOR_USER_ID,
+                session.getTenantId(), List.of("SYSTEM"));
+        return Optional.of(closeOpenSession(session, systemCaller, SessionConstants.EVENT_EXAM_AUTO_CLOSED));
+    }
+
+    /**
+     * Revalidates a scheduled candidate under a row lock so the persisted
+     * schedule, subscription entitlement, and manual open command cannot race.
+     */
+    @Transactional
+    public Optional<SessionResponse> openIfDue(UUID publicId, Instant now) {
+        ExamSession session = sessionRepository.findWithLockByPublicId(publicId).orElse(null);
+        if (session == null || session.getStatus() != SessionStatus.SCHEDULED
+                || session.getOpensAt() == null || session.getOpensAt().isAfter(now)
+                || session.getClosesAt() == null) {
+            return Optional.empty();
+        }
+        CurrentUser systemCaller = new CurrentUser(SessionConstants.SYSTEM_ACTOR_USER_ID,
+                session.getTenantId(), List.of("SYSTEM"));
+        SubscriptionView subscription = subscriptions.lockedActiveSubscription(
+                session.getSubscriptionId(), session.getTenantId());
+        subscriptions.validateSubscriptionWindowAndCapacity(subscription, session.getOpensAt(),
+                session.getClosesAt(), session.getCapacity(), false);
+        session.open();
+        recordExamAudit(systemCaller, session, SessionConstants.EVENT_EXAM_AUTO_OPENED,
+                "%s (%s -> %s)".formatted(session.getName(), SessionStatus.SCHEDULED, SessionStatus.OPEN));
+        if (!session.getClosesAt().isAfter(now)) {
+            session.close();
+            recordExamAudit(systemCaller, session, SessionConstants.EVENT_EXAM_AUTO_CLOSED,
+                    "%s (%s -> %s)".formatted(session.getName(), SessionStatus.OPEN, SessionStatus.CLOSED));
+        }
+        return Optional.of(SessionMapper.toResponse(session));
+    }
+
+    private SessionResponse closeOpenSession(ExamSession session, CurrentUser caller, String auditEvent) {
         session.close();
+        recordExamAudit(caller, session, auditEvent,
+                "%s (%s -> %s)".formatted(session.getName(), SessionStatus.OPEN, SessionStatus.CLOSED));
         return SessionMapper.toResponse(session);
+    }
+
+    private void recordExamAudit(CurrentUser caller, ExamSession session, String action, String summary) {
+        auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION,
+                session.getPublicId().toString(), session.getName(), session.getSessionCode(), action, summary);
     }
 }

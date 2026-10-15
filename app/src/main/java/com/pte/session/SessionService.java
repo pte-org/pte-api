@@ -12,7 +12,7 @@ import com.pte.session.dto.response.ProctorMonitoringSessionView;
 import com.pte.session.dto.response.ProctorWorkspaceOverviewView;
 import com.pte.session.internal.service.EntitlementService;
 import com.pte.session.internal.service.ProctorMonitoringQueryService;
-import com.pte.session.internal.service.SessionLifecycleService;
+import com.pte.session.internal.service.SessionStaffAssignmentQueryService;
 import com.pte.shared.web.PagedResult;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +41,7 @@ public class SessionService {
 
     private final EntitlementService entitlementService;
     private final SessionLifecycleService sessionLifecycleService;
+    private final SessionStaffAssignmentQueryService staffAssignmentQueryService;
     private final ProctorMonitoringQueryService proctorMonitoringQueryService;
     private final com.pte.session.internal.service.AttendanceQueryService attendanceQueryService;
     private final com.pte.session.internal.service.AttendanceCommandService attendanceCommandService;
@@ -48,11 +49,13 @@ public class SessionService {
     public SessionService(
             EntitlementService entitlementService,
             SessionLifecycleService sessionLifecycleService,
+            SessionStaffAssignmentQueryService staffAssignmentQueryService,
             ProctorMonitoringQueryService proctorMonitoringQueryService,
             com.pte.session.internal.service.AttendanceQueryService attendanceQueryService,
             com.pte.session.internal.service.AttendanceCommandService attendanceCommandService) {
         this.entitlementService = entitlementService;
         this.sessionLifecycleService = sessionLifecycleService;
+        this.staffAssignmentQueryService = staffAssignmentQueryService;
         this.proctorMonitoringQueryService = proctorMonitoringQueryService;
         this.attendanceQueryService = attendanceQueryService;
         this.attendanceCommandService = attendanceCommandService;
@@ -239,5 +242,11 @@ public class SessionService {
             com.pte.session.dto.request.RecordIdentityVerificationRequest request,
             com.pte.shared.security.CurrentUser caller, boolean isHost) {
         return attendanceCommandService.recordIdentityVerification(sessionPublicId, studentPublicId, request, caller, isHost);
+    }
+
+    /** Returns active assignment rows; identity validates the user's live staff role before dispatch. */
+    @Transactional(readOnly = true)
+    public List<UUID> findAssignedProctorPublicIds(UUID sessionPublicId, UUID tenantId) {
+        return staffAssignmentQueryService.findAssignedProctorPublicIds(sessionPublicId, tenantId);
     }
 }

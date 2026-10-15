@@ -18,5 +18,6 @@ public interface ExamGenerationJobRepository extends JpaRepository<ExamGeneratio
 
     Optional<ExamGenerationJob> findBySessionIdAndIdempotencyKey(Long sessionId, String idempotencyKey);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<ExamGenerationJob> findFirstBySessionIdOrderByCreatedAtDesc(Long sessionId);
 }

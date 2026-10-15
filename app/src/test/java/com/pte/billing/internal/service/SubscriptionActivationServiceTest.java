@@ -5,6 +5,7 @@ import com.pte.billing.domain.Subscription;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
+import com.pte.billing.domain.enums.SubscriptionStatus;
 import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
 import com.pte.billing.internal.repository.SubscriptionRepository;
 import com.pte.tenancy.TenancyService;
@@ -15,11 +16,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -53,6 +57,8 @@ class SubscriptionActivationServiceTest {
         Plan plan = examPlan(planId);
         when(keyGenerator.generate(any(Plan.class), any(Instant.class))).thenReturn("PTE-EXAM-2026-ABC123");
         when(subscriptionRepository.existsByLicenseKey("PTE-EXAM-2026-ABC123")).thenReturn(false);
+        when(subscriptionRepository.findUsableForPlanRenewal(any(UUID.class), any(UUID.class), any(),
+                any(Instant.class))).thenReturn(List.of());
         when(persistence.save(any(Subscription.class))).thenAnswer(invocation -> {
             Subscription subscription = invocation.getArgument(0);
             subscription.setPublicId(subscriptionId);
@@ -65,6 +71,26 @@ class SubscriptionActivationServiceTest {
         assertThat(result.targetPublicId()).isEqualTo(subscriptionId);
         assertThat(result.tenantId()).isEqualTo(tenantId);
         assertThat(result.activationSource()).isEqualTo(ActivationSource.PAYMENT.name());
+    }
+
+    @Test
+    void activateExamPackageExtendsLatestSamePlanExpiryWithoutChangingSessionCap() {
+        UUID tenantId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        Plan plan = examPlan(planId);
+        Instant existingExpiry = Instant.now().plus(Duration.ofDays(12));
+        Subscription existing = new Subscription();
+        existing.setExpiresAt(existingExpiry);
+        when(subscriptionRepository.findUsableForPlanRenewal(eq(tenantId), eq(planId),
+                eq(SubscriptionStatus.ACTIVE), any(Instant.class))).thenReturn(List.of(existing));
+        when(keyGenerator.generate(any(Plan.class), any(Instant.class))).thenReturn("PTE-EXAM-2026-RENEW");
+        when(subscriptionRepository.existsByLicenseKey("PTE-EXAM-2026-RENEW")).thenReturn(false);
+        when(persistence.save(any(Subscription.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        SubscriptionActivationResponse result = service.activate(tenantId, plan, ActivationSource.PAYMENT);
+
+        assertThat(result.expiresAt()).isAfter(existingExpiry.plus(Duration.ofDays(29)));
+        assertThat(result.maxStudentsPerSession()).isEqualTo(plan.getMaxStudentsPerSession());
     }
 
     @Test

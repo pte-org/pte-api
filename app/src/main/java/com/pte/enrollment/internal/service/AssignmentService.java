@@ -60,8 +60,9 @@ public class AssignmentService {
             saved = lecturerAssignmentRepository.save(assignment);
         } catch (DataIntegrityViolationException ex) {
             throw new LecturerAlreadyAssignedException();
-        }        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
-                EnrollmentConstants.EVENT_LECTURER_ASSIGNED, "Assigned Lecturer " + saved.getAssigneePublicId() + " to Class");
+        }
+        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
+                EnrollmentConstants.EVENT_LECTURER_ASSIGNED, "Assigned lecturer to Class");
         return toLecturerResponse(saved, classPublicId);
     }
 
@@ -85,9 +86,10 @@ public class AssignmentService {
         if (!assignment.getStudentClass().getPublicId().equals(classPublicId)) {
             throw new LecturerAssignmentNotFoundException();
         }
-        lecturerAssignmentRepository.delete(assignment);        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
+        lecturerAssignmentRepository.delete(assignment);
+        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_CLASS, classPublicId.toString(),
                 EnrollmentConstants.EVENT_LECTURER_UNASSIGNED,
-                "Unassigned Lecturer " + assignment.getAssigneePublicId() + " from Class");
+                "Unassigned lecturer from Class");
     }
 
     private LecturerAssignmentResponse toLecturerResponse(LecturerAssignment assignment, UUID classPublicId) {

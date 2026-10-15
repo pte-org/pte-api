@@ -171,4 +171,11 @@ public interface ProctorAssignmentRepository extends JpaRepository<ProctorAssign
             @Param("sessionPublicId") UUID sessionPublicId,
             @Param("proctorPublicId") UUID proctorPublicId,
             @Param("tenantId") UUID tenantId);
+
+    @Query("select p.proctorPublicId from ProctorAssignment p "
+            + "where p.session.publicId = :sessionPublicId and p.tenantId = :tenantId "
+            + "and p.deleted = false and p.session.deleted = false "
+            + "order by p.proctorPublicId")
+    List<UUID> findAssignedProctorPublicIds(@Param("sessionPublicId") UUID sessionPublicId,
+            @Param("tenantId") UUID tenantId);
 }

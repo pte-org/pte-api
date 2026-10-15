@@ -240,6 +240,12 @@ public class ExaminerAssignmentService {
 
     @Transactional
     public ExaminerAssignmentOverviewResponse overview(UUID sessionPublicId, CurrentUser caller, int page, int size) {
+        return overview(sessionPublicId, caller, null, page, size);
+    }
+
+    @Transactional
+    public ExaminerAssignmentOverviewResponse overview(UUID sessionPublicId, CurrentUser caller, String search,
+            int page, int size) {
         UUID tenantId = requireHost(caller);
         if (page < 0 || size < 1 || size > MAX_BATCH_PAGE_SIZE) {
             throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.INVALID_BATCH_PAGE);
@@ -247,9 +253,18 @@ public class ExaminerAssignmentService {
         sessionService.verifyHostAccess(sessionPublicId, tenantId);
         batchRepository.expireOverduePreviews(tenantId, sessionPublicId,
                 AssignmentBatchStatus.PREVIEWED, AssignmentBatchStatus.EXPIRED, Instant.now());
-        Page<ExaminerAssignmentBatch> batchPage = batchRepository
-                .findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId,
-                        PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))));
+        String normalizedSearch = search == null ? null : search.trim();
+        if (normalizedSearch != null && normalizedSearch.isBlank()) {
+            normalizedSearch = null;
+        }
+        PageRequest batchPageRequest = PageRequest.of(page, size,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+        Page<ExaminerAssignmentBatch> batchPage = normalizedSearch == null
+                ? batchRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId,
+                        batchPageRequest)
+                : batchRepository.findForOverview(tenantId, sessionPublicId, normalizedSearch,
+                        parseUuid(normalizedSearch), parseBatchStatus(normalizedSearch),
+                        parseBatchMode(normalizedSearch), batchPageRequest);
         List<ExaminerAssignmentBatch> batches = batchPage.getContent();
         Map<UUID, MutableLoad> loads = new LinkedHashMap<>();
         assignmentRepository.summarizeLoads(tenantId, sessionPublicId).forEach(load ->
@@ -266,6 +281,39 @@ public class ExaminerAssignmentService {
                 .countByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId);
         return new ExaminerAssignmentOverviewResponse(summaries, loadResponses(loads), assignedAttemptCount,
                 batchPage.getNumber(), batchPage.getSize(), batchPage.getTotalElements(), batchPage.getTotalPages());
+    }
+
+    private UUID parseUuid(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
+    private AssignmentBatchStatus parseBatchStatus(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return AssignmentBatchStatus.valueOf(value.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
+    private AssignmentBatchMode parseBatchMode(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return AssignmentBatchMode.valueOf(value.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     private ResolvedPool resolvePool(UUID sessionPublicId, UUID tenantId, List<AssignmentScopeRequest> scopes,

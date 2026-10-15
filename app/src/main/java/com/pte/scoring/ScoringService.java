@@ -93,6 +93,11 @@ public class ScoringService {
                 examinerPublicId);
     }
 
+    /** Returns examiner assignment recipients for a cancellation notification. */
+    public List<UUID> findAssignedExaminerPublicIds(UUID tenantId, UUID sessionPublicId) {
+        return examinerWorkQueryService.findAssignedExaminerPublicIds(tenantId, sessionPublicId);
+    }
+
     /** Blind queue projection. The response contains no AI score, Host score, source decision, or provider metadata. */
     public List<ExaminerScoringWorkItemView> getExaminerWorkItems(UUID tenantId, UUID sessionPublicId,
             UUID examinerPublicId) {

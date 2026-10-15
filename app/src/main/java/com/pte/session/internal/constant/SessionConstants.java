@@ -1,6 +1,7 @@
 package com.pte.session.internal.constant;
 
 import java.util.Set;
+import java.util.UUID;
 
 /** Centralized codes/labels for session. */
 public final class SessionConstants {
@@ -57,7 +58,12 @@ public final class SessionConstants {
     public static final String SESSION_TIME_CONFLICT_FRIENDLY =
             "Some students already have another exam during this time window.";
     public static final String SESSION_NOT_READY_TO_OPEN = "SESSION_NOT_READY_TO_OPEN";
+    public static final String SESSION_NOT_OPEN_TO_CLOSE = "SESSION_NOT_OPEN_TO_CLOSE";
+    public static final String EXAM_SCHEDULE_NOT_EDITABLE = "EXAM_SCHEDULE_NOT_EDITABLE";
+    public static final String EXAM_SCHEDULE_VERSION_CONFLICT = "EXAM_SCHEDULE_VERSION_CONFLICT";
+    public static final String EXAM_CLOSE_TIME_NOT_EXTENDED = "EXAM_CLOSE_TIME_NOT_EXTENDED";
     public static final String SESSION_NOT_CANCELLABLE = "SESSION_NOT_CANCELLABLE";
+    public static final String EXAM_DRAFT_NOT_DELETABLE = "EXAM_DRAFT_NOT_DELETABLE";
     public static final String EXAM_DRAFT_NOT_EDITABLE = "EXAM_DRAFT_NOT_EDITABLE";
     public static final String EXAM_PREFLIGHT_FAILED = "EXAM_PREFLIGHT_FAILED";
     public static final String EXAM_GENERATION_NOT_READY = "EXAM_GENERATION_NOT_READY";
@@ -71,8 +77,18 @@ public final class SessionConstants {
             "This exam can no longer be edited because preparation or publishing has started.";
     public static final String SESSION_NOT_READY_TO_OPEN_FRIENDLY =
             "Publish the exam before opening it for students.";
+    public static final String SESSION_NOT_OPEN_TO_CLOSE_FRIENDLY =
+            "Only an open exam session can be closed.";
+    public static final String EXAM_SCHEDULE_NOT_EDITABLE_FRIENDLY =
+            "Only a scheduled or open exam can update its schedule. Refresh the exam and try again.";
+    public static final String EXAM_SCHEDULE_VERSION_CONFLICT_FRIENDLY =
+            "This exam was changed elsewhere. Refresh it before saving the schedule.";
+    public static final String EXAM_CLOSE_TIME_NOT_EXTENDED_FRIENDLY =
+            "While an exam is open, only a later close time can be saved.";
     public static final String SESSION_NOT_CANCELLABLE_FRIENDLY =
             "This exam can no longer be cancelled in its current state.";
+    public static final String EXAM_DRAFT_NOT_DELETABLE_FRIENDLY =
+            "Only an unpublished exam draft can be deleted.";
     public static final String SESSION_WINDOW_OUTSIDE_SUBSCRIPTION_FRIENDLY =
             "The exam window must fit within the selected subscription period.";
     public static final String SESSION_CAPACITY_EXCEEDS_SUBSCRIPTION_FRIENDLY =
@@ -98,11 +114,19 @@ public final class SessionConstants {
     public static final String AGGREGATE_EXAM_SESSION = "ExamSession";
     public static final String EVENT_EXAM_DRAFT_CREATED = "ExamDraftCreated";
     public static final String EVENT_EXAM_DRAFT_UPDATED = "ExamDraftUpdated";
+    public static final String EVENT_EXAM_DRAFT_DELETED = "ExamDraftDeleted";
     public static final String EVENT_EXAM_AUDIENCE_SOURCE_ADDED = "ExamAudienceSourceAdded";
     public static final String EVENT_EXAM_AUDIENCE_SOURCE_REMOVED = "ExamAudienceSourceRemoved";
     public static final String EVENT_EXAM_GENERATED = "ExamGenerated";
+    public static final String EVENT_EXAM_GENERATION_CANCELLED = "ExamGenerationCancelled";
     public static final String EVENT_EXAM_PUBLISHED = "ExamPublished";
     public static final String EVENT_EXAM_CANCELLED = "ExamCancelled";
+    public static final String EVENT_EXAM_CLOSED = "ExamClosed";
+    public static final String EVENT_EXAM_AUTO_CLOSED = "ExamAutoClosed";
+    public static final String EVENT_EXAM_AUTO_OPENED = "ExamAutoOpened";
+    public static final String EVENT_EXAM_SCHEDULE_UPDATED = "ExamScheduleUpdated";
+    public static final UUID SYSTEM_ACTOR_USER_ID =
+            UUID.fromString("00000000-0000-0000-0000-000000000000");
     public static final String TEMPLATE_REFERENCE_REQUIRED = "Template reference is required";
     public static final String AUDIENCE_SOURCE_TYPE_REQUIRED = "Audience source type is required";
     public static final String AUDIENCE_SOURCE_REFERENCE_REQUIRED = "Audience source reference is required";
