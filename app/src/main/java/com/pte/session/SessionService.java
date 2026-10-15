@@ -12,6 +12,7 @@ import com.pte.session.dto.response.ProctorMonitoringSessionView;
 import com.pte.session.dto.response.ProctorWorkspaceOverviewView;
 import com.pte.session.internal.service.EntitlementService;
 import com.pte.session.internal.service.ProctorMonitoringQueryService;
+import com.pte.session.internal.service.SessionLifecycleService;
 import com.pte.session.internal.service.SessionStaffAssignmentQueryService;
 import com.pte.shared.web.PagedResult;
 import org.springframework.stereotype.Service;
