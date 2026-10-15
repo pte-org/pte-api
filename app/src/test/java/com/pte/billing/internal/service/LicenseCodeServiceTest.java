@@ -292,7 +292,7 @@ class LicenseCodeServiceTest {
     @Test
     void redeem_marksCodeAtomicallyAndActivatesOnce() {
         UUID tenantId = UUID.randomUUID();
-        LicenseCode code = issuedCode("ABCD-EFGH-JKLM-NPQR-STUV");
+        LicenseCode code = issuedCode("7K4M-2Q9X");
         Subscription subscription = new Subscription();
         subscription.setPublicId(UUID.randomUUID());
         SubscriptionActivationResponse activation = SubscriptionActivationResponse.fromSubscription(
@@ -312,7 +312,7 @@ class LicenseCodeServiceTest {
         when(subscriptionRepository.findByLicenseKey(activation.licenseKey())).thenReturn(Optional.of(subscription));
         when(licenseCodeRepository.saveAndFlush(code)).thenReturn(code);
 
-        SubscriptionActivationResponse result = service.redeem("  " + code.getCode().toLowerCase() + "  ",
+        SubscriptionActivationResponse result = service.redeem("  " + code.getCode().replace("-", "").toLowerCase() + "  ",
                 hostAdmin(tenantId));
 
         assertThat(result).isSameAs(activation);

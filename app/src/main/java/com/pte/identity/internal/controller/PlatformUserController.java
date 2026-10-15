@@ -2,7 +2,9 @@ package com.pte.identity.internal.controller;
 
 import com.pte.identity.internal.dto.request.PlatformUserCreateRequest;
 import com.pte.identity.internal.dto.request.PlatformUserRoleUpdateRequest;
+import com.pte.identity.internal.dto.request.UpdatePlatformUserProfileRequest;
 import com.pte.identity.internal.dto.response.UserResponse;
+import com.pte.identity.internal.service.PlatformUserLifecycleService;
 import com.pte.identity.internal.service.PlatformUserService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
@@ -10,6 +12,7 @@ import com.pte.shared.web.ApiResponse;
 import com.pte.shared.web.PagedResult;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,9 +31,12 @@ import java.util.UUID;
 public class PlatformUserController {
 
     private final PlatformUserService platformUserService;
+    private final PlatformUserLifecycleService platformUserLifecycleService;
 
-    public PlatformUserController(PlatformUserService platformUserService) {
+    public PlatformUserController(PlatformUserService platformUserService,
+            PlatformUserLifecycleService platformUserLifecycleService) {
         this.platformUserService = platformUserService;
+        this.platformUserLifecycleService = platformUserLifecycleService;
     }
 
     @PostMapping
@@ -44,8 +50,10 @@ public class PlatformUserController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String role,
-            @RequestParam(required = false) String status) {
-        return ApiResponse.success(platformUserService.list(page, size, search, role, status, currentUser()));
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "false") boolean includeArchived) {
+        return ApiResponse.success(
+                platformUserService.list(page, size, search, role, status, includeArchived, currentUser()));
     }
 
     @GetMapping("/{publicId}")
@@ -59,6 +67,17 @@ public class PlatformUserController {
         return ApiResponse.success(platformUserService.updateRoles(publicId, request, currentUser()));
     }
 
+    @PatchMapping("/{publicId}")
+    public ApiResponse<UserResponse> updateProfile(@PathVariable UUID publicId,
+            @Valid @RequestBody UpdatePlatformUserProfileRequest request) {
+        return ApiResponse.success(platformUserLifecycleService.updateProfile(publicId, request, currentUser()));
+    }
+
+    @PostMapping("/{publicId}/reset-password")
+    public ApiResponse<UserResponse> resetPassword(@PathVariable UUID publicId) {
+        return ApiResponse.success(platformUserLifecycleService.resetPassword(publicId, currentUser()));
+    }
+
     @PostMapping("/{publicId}/suspend")
     public ApiResponse<UserResponse> suspend(@PathVariable UUID publicId) {
         return ApiResponse.success(platformUserService.suspend(publicId, currentUser()));
@@ -67,6 +86,16 @@ public class PlatformUserController {
     @PostMapping("/{publicId}/reactivate")
     public ApiResponse<UserResponse> reactivate(@PathVariable UUID publicId) {
         return ApiResponse.success(platformUserService.reactivate(publicId, currentUser()));
+    }
+
+    @DeleteMapping("/{publicId}")
+    public ApiResponse<UserResponse> archive(@PathVariable UUID publicId) {
+        return ApiResponse.success(platformUserLifecycleService.archive(publicId, currentUser()));
+    }
+
+    @PostMapping("/{publicId}/restore")
+    public ApiResponse<UserResponse> restore(@PathVariable UUID publicId) {
+        return ApiResponse.success(platformUserLifecycleService.restore(publicId, currentUser()));
     }
 
     private CurrentUser currentUser() {

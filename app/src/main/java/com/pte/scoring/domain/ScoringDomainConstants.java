@@ -61,6 +61,18 @@ public final class ScoringDomainConstants {
     public static final String EXAMINER_SCORE_TENANT_REQUIRED = "tenantId is required";
     public static final String EXAMINER_SCORE_EXAMINER_REQUIRED = "examinerPublicId is required";
     public static final String EXAMINER_SCORE_SUBMISSION_TIME_REQUIRED = "submittedAt is required";
+    public static final String EXAMINER_RECEIPT_CONFLICT =
+            "Request key has already been used with different parameters";
+    public static final String EXAMINER_CONFIRM_AI_MISMATCH =
+            "CONFIRM_AI score must match reviewed AI score and version";
+    public static final String EXAMINER_DECISION_KIND_REQUIRED =
+            "decisionKind is required for modern score submission";
+    public static final String EXAMINER_EXPECTED_REVIEW_VERSION_REQUIRED =
+            "expectedReviewVersion is required for modern score submission";
+    public static final String EXAMINER_REQUEST_PUBLIC_ID_REQUIRED =
+            "requestPublicId is required for modern score submission";
+    public static final String EXAMINER_REVIEWED_AI_REQUIRED_FOR_CONFIRM =
+            "reviewedAiScore and reviewedAiVersion are required when confirming AI score";
 
     private ScoringDomainConstants() {
     }

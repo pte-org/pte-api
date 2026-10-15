@@ -1,20 +1,27 @@
 package com.pte.proctoring.internal.service;
 
+import com.pte.attempt.AttemptService;
 import com.pte.proctoring.domain.ProctorSession;
 import com.pte.proctoring.domain.ViolationEvent;
 import com.pte.proctoring.dto.event.ViolationDetectedEvent;
 import com.pte.proctoring.internal.constant.ProctorConstants;
 import com.pte.proctoring.internal.exception.ProctorSessionNotActiveException;
+import com.pte.proctoring.internal.exception.TargetAttemptInvalidException;
 import com.pte.proctoring.internal.dto.request.FlagViolationRequest;
 import com.pte.proctoring.internal.dto.response.ViolationEventResponse;
 import com.pte.proctoring.internal.mapper.ProctorMapper;
+import com.pte.proctoring.internal.policy.ProctorAccessPolicy;
 import com.pte.proctoring.internal.repository.ProctorSessionRepository;
 import com.pte.proctoring.internal.repository.ViolationEventRepository;
+import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.List;
@@ -36,11 +43,16 @@ public class ViolationService {
     private final ApplicationEventPublisher eventPublisher;
     private final ProctorMapper mapper;
     private final SimpMessagingTemplate messagingTemplate;
+    private final SessionService sessionService;
+    private final AttemptService attemptService;
+    private final ProctorAccessPolicy proctorAccessPolicy;
 
+    @Autowired
     public ViolationService(ProctorSessionService proctorSessionService, ProctorSessionRepository proctorSessionRepository,
                             ViolationEventRepository violationEventRepository, HashChainService hashChainService,
                             ApplicationEventPublisher eventPublisher, ProctorMapper mapper,
-                            SimpMessagingTemplate messagingTemplate) {
+                            SimpMessagingTemplate messagingTemplate, SessionService sessionService,
+                            AttemptService attemptService, ProctorAccessPolicy proctorAccessPolicy) {
         this.proctorSessionService = proctorSessionService;
         this.proctorSessionRepository = proctorSessionRepository;
         this.violationEventRepository = violationEventRepository;
@@ -48,13 +60,37 @@ public class ViolationService {
         this.eventPublisher = eventPublisher;
         this.mapper = mapper;
         this.messagingTemplate = messagingTemplate;
+        this.sessionService = sessionService;
+        this.attemptService = attemptService;
+        this.proctorAccessPolicy = proctorAccessPolicy;
+    }
+
+    public ViolationService(ProctorSessionService proctorSessionService, ProctorSessionRepository proctorSessionRepository,
+                            ViolationEventRepository violationEventRepository, HashChainService hashChainService,
+                            ApplicationEventPublisher eventPublisher, ProctorMapper mapper,
+                            SimpMessagingTemplate messagingTemplate) {
+        this(proctorSessionService, proctorSessionRepository, violationEventRepository, hashChainService,
+                eventPublisher, mapper, messagingTemplate, null, null, null);
     }
 
     @Transactional
     public ViolationEventResponse flag(UUID proctorSessionPublicId, FlagViolationRequest request, CurrentUser caller) {
-        ProctorSession session = proctorSessionService.findOwned(proctorSessionPublicId, caller.userId(), caller.tenantId());
+        ProctorSession session = proctorSessionRepository
+                .findWithLockByPublicIdAndProctorPublicIdAndTenantId(proctorSessionPublicId, caller.userId(), caller.tenantId())
+                .orElseGet(() -> proctorSessionService.findOwned(proctorSessionPublicId, caller.userId(), caller.tenantId()));
         if (!session.isActive()) {
             throw new ProctorSessionNotActiveException();
+        }
+
+        if (sessionService != null) {
+            sessionService.lockOpenWithinWindowForProctorOperation(session.getSessionPublicId(), session.getTenantId());
+            sessionService.checkProctorAssignment(session.getSessionPublicId(), caller.userId());
+        }
+
+        if (attemptService != null) {
+            if (!attemptService.attemptBelongsToSession(request.attemptPublicId(), session.getSessionPublicId(), session.getTenantId())) {
+                throw new TargetAttemptInvalidException();
+            }
         }
 
         int nextSequenceNo = session.getLastSequenceNo() + 1;
@@ -84,13 +120,25 @@ public class ViolationService {
                 request.violationType(), request.detail(), detectedAt, session.getTenantId()));
 
         ViolationEventResponse response = mapper.toResponse(saved);
-        messagingTemplate.convertAndSend(ProctorConstants.TOPIC_PREFIX + session.getSessionPublicId(), response);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    messagingTemplate.convertAndSend(ProctorConstants.TOPIC_PREFIX + session.getSessionPublicId(), response);
+                }
+            });
+        } else {
+            messagingTemplate.convertAndSend(ProctorConstants.TOPIC_PREFIX + session.getSessionPublicId(), response);
+        }
         return response;
     }
 
     @Transactional(readOnly = true)
     public List<ViolationEventResponse> listForSession(UUID sessionPublicId, CurrentUser caller) {
-        return violationEventRepository.findBySessionPublicIdAndTenantIdOrderByDetectedAtAsc(sessionPublicId, caller.tenantId())
+        UUID tenantId = proctorAccessPolicy != null
+                ? proctorAccessPolicy.authorizeReadAssigned(sessionPublicId, caller)
+                : caller.tenantId();
+        return violationEventRepository.findBySessionPublicIdAndTenantIdOrderByDetectedAtAsc(sessionPublicId, tenantId)
                 .stream().map(mapper::toResponse).toList();
     }
 }

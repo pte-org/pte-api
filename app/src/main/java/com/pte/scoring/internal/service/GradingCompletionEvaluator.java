@@ -102,7 +102,14 @@ public class GradingCompletionEvaluator {
                     ExaminerAttemptAssignment assignment = assignmentByAttempt.get(member.getAttemptPublicId());
                     if (assignment == null || assignment.getEligibleAnswerCount() < subjectiveItems) {
                         reasons.add(GradingConstants.EXAMINER_ASSIGNMENT_REQUIRED);
-                    } else if (score == null || !score.isPublishable()) {
+                    } else if (score == null || !score.isPublishable()
+                            || !java.util.Objects.equals(score.getExaminerPublicId(), assignment.getExaminerPublicId())) {
+                        reasons.add(GradingConstants.EXAMINER_SCORE_REQUIRED);
+                    } else if (answer.getSelectedScoreSource() != null
+                            && answer.getSelectedScoreSource() != com.pte.scoring.domain.enums.ScoreSource.EXAMINER) {
+                        reasons.add(GradingConstants.EXAMINER_SCORE_REQUIRED);
+                    } else if (answer.getSelectedExaminerScorePublicId() != null && score.getPublicId() != null
+                            && !java.util.Objects.equals(answer.getSelectedExaminerScorePublicId(), score.getPublicId())) {
                         reasons.add(GradingConstants.EXAMINER_SCORE_REQUIRED);
                     } else {
                         satisfiedItems++;

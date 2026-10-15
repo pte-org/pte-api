@@ -7,6 +7,10 @@ public record OrganizationResponse(
         UUID tenantPublicId,
         String name,
         String address,
+        String provinceCode,
+        String provinceName,
+        String wardCode,
+        String wardName,
         String facilityType,
         String status) {
 }

@@ -60,12 +60,40 @@ public class ExaminerAnswerScore extends BaseEntity {
     @Column(nullable = false, updatable = false)
     private Instant submittedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "decision_kind", length = 32)
+    private com.pte.scoring.domain.enums.ExaminerDecisionKind decisionKind;
+
+    @Column(name = "reviewed_ai_score")
+    private Integer reviewedAiScore;
+
+    @Column(name = "reviewed_ai_version", length = 64)
+    private String reviewedAiVersion;
+
+    @Column(name = "expected_review_version", length = 64)
+    private String expectedReviewVersion;
+
+    @Column(name = "request_public_id")
+    private UUID requestPublicId;
+
+    @Column(name = "request_fingerprint", length = 128)
+    private String requestFingerprint;
+
     @Version
     @Column(name = "lock_version", nullable = false)
     private long lockVersion;
 
     public ExaminerAnswerScore(UUID answerPublicId, UUID attemptPublicId, UUID sessionPublicId,
             UUID tenantId, UUID examinerPublicId, int score, Instant submittedAt) {
+        this(answerPublicId, attemptPublicId, sessionPublicId, tenantId, examinerPublicId, score,
+                submittedAt, null, null, null, null, null, null);
+    }
+
+    public ExaminerAnswerScore(UUID answerPublicId, UUID attemptPublicId, UUID sessionPublicId,
+            UUID tenantId, UUID examinerPublicId, int score, Instant submittedAt,
+            com.pte.scoring.domain.enums.ExaminerDecisionKind decisionKind,
+            Integer reviewedAiScore, String reviewedAiVersion,
+            String expectedReviewVersion, UUID requestPublicId, String requestFingerprint) {
         this.answerPublicId = Objects.requireNonNull(answerPublicId,
                 ScoringDomainConstants.EXAMINER_SCORE_ANSWER_REQUIRED);
         this.attemptPublicId = Objects.requireNonNull(attemptPublicId,
@@ -82,11 +110,46 @@ public class ExaminerAnswerScore extends BaseEntity {
         this.status = ExaminerAnswerScoreStatus.SUBMITTED;
         this.submittedAt = Objects.requireNonNull(submittedAt,
                 ScoringDomainConstants.EXAMINER_SCORE_SUBMISSION_TIME_REQUIRED);
+        this.decisionKind = decisionKind;
+        this.reviewedAiScore = reviewedAiScore;
+        this.reviewedAiVersion = reviewedAiVersion;
+        this.expectedReviewVersion = expectedReviewVersion;
+        this.requestPublicId = requestPublicId;
+        this.requestFingerprint = requestFingerprint;
+
+        if (decisionKind == com.pte.scoring.domain.enums.ExaminerDecisionKind.CONFIRM_AI) {
+            if (reviewedAiScore == null || reviewedAiVersion == null || reviewedAiScore != score) {
+                throw new IllegalArgumentException(ScoringDomainConstants.EXAMINER_CONFIRM_AI_MISMATCH);
+            }
+        }
+        if (decisionKind != null && decisionKind != com.pte.scoring.domain.enums.ExaminerDecisionKind.LEGACY_IMPORTED) {
+            Objects.requireNonNull(requestPublicId, ScoringDomainConstants.EXAMINER_REQUEST_PUBLIC_ID_REQUIRED);
+            Objects.requireNonNull(requestFingerprint, "requestFingerprint is required");
+            Objects.requireNonNull(expectedReviewVersion, ScoringDomainConstants.EXAMINER_EXPECTED_REVIEW_VERSION_REQUIRED);
+        }
     }
 
     /** Identical retries are safe; a different score or examiner is a conflict, not an update. */
     public void requireIdenticalRetry(UUID retryingExaminerPublicId, int retryingScore) {
-        if (!examinerPublicId.equals(retryingExaminerPublicId) || score != retryingScore) {
+        requireIdenticalRetry(retryingExaminerPublicId, retryingScore, null, null);
+    }
+
+    public void requireIdenticalRetry(UUID retryingExaminerPublicId, int retryingScore,
+            UUID retryingRequestPublicId, String retryingFingerprint) {
+        if (!examinerPublicId.equals(retryingExaminerPublicId)) {
+            throw new IllegalStateException(ScoringDomainConstants.EXAMINER_SCORE_IMMUTABLE);
+        }
+        if (requestPublicId != null || (decisionKind != null && decisionKind != com.pte.scoring.domain.enums.ExaminerDecisionKind.LEGACY_IMPORTED)) {
+            if (requestPublicId == null || retryingRequestPublicId == null
+                    || !requestPublicId.equals(retryingRequestPublicId)) {
+                throw new IllegalStateException(ScoringDomainConstants.EXAMINER_SCORE_IMMUTABLE);
+            }
+            if (!Objects.equals(requestFingerprint, retryingFingerprint)) {
+                throw new IllegalStateException(ScoringDomainConstants.EXAMINER_RECEIPT_CONFLICT);
+            }
+            return;
+        }
+        if (score != retryingScore) {
             throw new IllegalStateException(ScoringDomainConstants.EXAMINER_SCORE_IMMUTABLE);
         }
     }

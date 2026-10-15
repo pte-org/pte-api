@@ -8,8 +8,10 @@ import com.pte.session.internal.exception.NotEntitledException;
 import com.pte.session.internal.exception.SessionNotClosedForGradingCohortException;
 import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
 import com.pte.session.internal.repository.ExamSessionRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Clock;
 import java.util.UUID;
 
 /** Transactional session guards used by attempt, scoring, and reporting commands. */
@@ -17,9 +19,16 @@ import java.util.UUID;
 public class SessionOperationGuardService {
 
     private final ExamSessionRepository sessionRepository;
+    private final Clock clock;
 
     public SessionOperationGuardService(ExamSessionRepository sessionRepository) {
+        this(sessionRepository, Clock.systemUTC());
+    }
+
+    @Autowired
+    public SessionOperationGuardService(ExamSessionRepository sessionRepository, Clock clock) {
         this.sessionRepository = sessionRepository;
+        this.clock = clock != null ? clock : Clock.systemUTC();
     }
 
     @Transactional
@@ -54,6 +63,14 @@ public class SessionOperationGuardService {
         ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
                 .orElseThrow(NotEntitledException::new);
         SessionEntryGate.requireOpen(session);
+    }
+
+    @Transactional
+    public void lockOpenWithinWindowForProctorOperation(UUID publicId, UUID tenantId) {
+        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(NotEntitledException::new);
+        SessionEntryGate.requireOpen(session);
+        SessionEntryGate.requireWithinWindow(session, clock.instant());
     }
 
     @Transactional

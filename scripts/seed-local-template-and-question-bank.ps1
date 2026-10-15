@@ -3,7 +3,8 @@ param(
     [string]$BaseUrl = $(if ([string]::IsNullOrWhiteSpace($env:PTE_BASE_URL)) { "http://localhost:8080" } else { $env:PTE_BASE_URL }),
     [string]$AdminUsername = $(if ([string]::IsNullOrWhiteSpace($env:PTE_ADMIN_USERNAME)) { "admin@test.local" } else { $env:PTE_ADMIN_USERNAME }),
     [string]$AdminPassword = $env:PTE_ADMIN_PASSWORD,
-    [string]$SeedKey = "PTE_LOCAL"
+    [string]$SeedKey = "PTE_LOCAL",
+    [ValidateSet("EXAM", "PRACTICE")][string]$QuestionPool = "EXAM"
 )
 
 # Prerequisites:
@@ -174,7 +175,8 @@ function Ensure-PublishedQuestion {
         [Parameter(Mandatory = $true)][int]$Index
     )
 
-    $title = "$SeedKey - $($Definition.Key) - $Index"
+    $titlePrefix = if ($QuestionPool -eq "PRACTICE") { "$SeedKey - PRACTICE" } else { $SeedKey }
+    $title = "$titlePrefix - $($Definition.Key) - $Index"
     $question = Get-QuestionByTitle -Title $title -TaskTypeKey $Definition.Key
 
     if ($null -eq $question) {
@@ -183,6 +185,7 @@ function Ensure-PublishedQuestion {
             taskTypeKey  = $Definition.Key
             title        = $title
             promptText   = $Definition.Prompt
+            pool         = $QuestionPool
         }
         if ($Definition.Key -eq "READ_ALOUD") {
             $body["referenceAnswerText"] = $Definition.ReferenceAnswer
@@ -197,6 +200,10 @@ function Ensure-PublishedQuestion {
         }
         $question = Invoke-SeedApi -Method POST -Path "/api/v1/questions" -Token $script:AdminToken -Body $body
         Write-Host "  created question $title ($($question.publicId))"
+    }
+
+    if ("$($question.pool)".ToUpperInvariant() -ne $QuestionPool) {
+        throw "Seed question '$title' belongs to pool '$($question.pool)', expected '$QuestionPool'. Question pools are immutable."
     }
 
     $status = "$($question.status)".ToUpperInvariant()
@@ -335,28 +342,34 @@ foreach ($definition in $definitions) {
     Write-Host "  $($definition.Key): screen=$($row.screenKey), contract=$($row.contractVersion)"
 }
 
-Write-Host "== Creating or reusing two published questions per task type =="
+Write-Host "== Creating or reusing two published $QuestionPool questions per task type =="
 foreach ($definition in $definitions) {
     1..2 | ForEach-Object { $null = Ensure-PublishedQuestion -Definition $definition -Index $_ }
 }
 
-Write-Host "== Creating or reusing the custom template draft =="
-$template = Get-OrCreateDraftTemplate -Code $templateCode
-if ("$($template.status)".ToUpperInvariant() -ne "ACTIVE") {
-    $template = Invoke-SeedApi -Method PUT -Path "/api/v1/score-templates/$($template.publicId)/items" -Token $script:AdminToken -Body @{
-        name           = "PTE local practice template"
-        templatePolicy = "CUSTOM"
-        items          = New-DesiredTemplateItems
+if ($QuestionPool -eq "EXAM") {
+    Write-Host "== Creating or reusing the custom template draft =="
+    $template = Get-OrCreateDraftTemplate -Code $templateCode
+    if ("$($template.status)".ToUpperInvariant() -ne "ACTIVE") {
+        $template = Invoke-SeedApi -Method PUT -Path "/api/v1/score-templates/$($template.publicId)/items" -Token $script:AdminToken -Body @{
+            name           = "PTE local practice template"
+            templatePolicy = "CUSTOM"
+            items          = New-DesiredTemplateItems
+        }
+        $template = Invoke-SeedApi -Method POST -Path "/api/v1/score-templates/$($template.publicId)/activate" -Token $script:AdminToken
     }
-    $template = Invoke-SeedApi -Method POST -Path "/api/v1/score-templates/$($template.publicId)/activate" -Token $script:AdminToken
+} else {
+    Write-Host "== Skipping exam score-template seed for PRACTICE pool =="
 }
 
 Write-Host ""
 Write-Host "== Template/question-bank seed complete =="
-Write-Host "Template code: $($template.code)"
-Write-Host "Template id:   $($template.publicId)"
-Write-Host "Template v:    $($template.version) ($($template.status))"
+if ($QuestionPool -eq "EXAM") {
+    Write-Host "Template code: $($template.code)"
+    Write-Host "Template id:   $($template.publicId)"
+    Write-Host "Template v:    $($template.version) ($($template.status))"
+}
 Write-Host "Task types:    READ_ALOUD, MC_READING_SINGLE"
-Write-Host "Questions:     2 per task type, published and shared"
+Write-Host "Questions:     2 per task type, published and shared in pool $QuestionPool"
 Write-Host ""
 Write-Host "Next: run scripts/seed-local-exam-ready.ps1 with the same -SeedKey."

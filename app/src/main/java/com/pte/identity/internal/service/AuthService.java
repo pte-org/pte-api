@@ -69,7 +69,7 @@ public class AuthService {
         Set<UUID> seenTenantIds = new HashSet<>();
         boolean credentialMatched = false;
 
-        for (User user : userRepository.findByUsername(request.username())) {
+        for (User user : userRepository.findByUsernameAndDeletedFalse(request.username())) {
             if (user.isSuspended()) {
                 continue;
             }
@@ -95,10 +95,10 @@ public class AuthService {
 
     private User resolveUser(LoginRequest request) {
         if (request.tenantId() != null) {
-            return userRepository.findByUsernameAndTenantId(request.username(), request.tenantId())
+            return userRepository.findByUsernameAndTenantIdAndDeletedFalse(request.username(), request.tenantId())
                     .orElseThrow(InvalidLoginException::new);
         }
-        List<User> matches = userRepository.findByUsername(request.username());
+        List<User> matches = userRepository.findByUsernameAndDeletedFalse(request.username());
         if (matches.size() != 1) {
             throw new InvalidLoginException();
         }
@@ -124,7 +124,7 @@ public class AuthService {
     @Transactional
     public TokenResponse refresh(RefreshRequest request) {
         Long userId = refreshTokenService.consume(request.refreshToken());
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByIdAndDeletedFalse(userId)
                 .orElseThrow(InvalidRefreshTokenException::new);
         if (user.isSuspended()) {
             throw new InvalidRefreshTokenException();

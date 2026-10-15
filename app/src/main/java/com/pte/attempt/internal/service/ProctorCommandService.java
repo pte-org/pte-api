@@ -42,11 +42,33 @@ public class ProctorCommandService {
     public void forceSubmit(UUID attemptPublicId, UUID tenantId) {
         inProgressAttempt(attemptPublicId, tenantId).ifPresent(attempt -> {
             if (sessionService != null) {
-                sessionService.lockOpenForAttemptOperation(attempt.getSessionPublicId(), tenantId);
+                sessionService.lockOpenWithinWindowForProctorOperation(attempt.getSessionPublicId(), tenantId);
             }
             attempt.submit();
             attemptRepository.save(attempt);
         });
+    }
+
+    @Transactional
+    public boolean forceSubmitScoped(UUID attemptPublicId, UUID sessionPublicId, UUID tenantId) {
+        if (sessionService != null) {
+            sessionService.lockOpenWithinWindowForProctorOperation(sessionPublicId, tenantId);
+        }
+        return attemptRepository.findWithLockByPublicIdAndSessionPublicIdAndTenantId(attemptPublicId, sessionPublicId, tenantId)
+                .filter(attempt -> attempt.getStatus() == AttemptStatus.IN_PROGRESS)
+                .map(attempt -> {
+                    attempt.submit();
+                    attemptRepository.save(attempt);
+                    return true;
+                })
+                .orElse(false);
+    }
+
+    public boolean attemptBelongsToSession(UUID attemptPublicId, UUID sessionPublicId, UUID tenantId) {
+        if (attemptPublicId == null || sessionPublicId == null || tenantId == null) {
+            return false;
+        }
+        return attemptRepository.existsByPublicIdAndSessionPublicIdAndTenantId(attemptPublicId, sessionPublicId, tenantId);
     }
 
     private Optional<ExamAttempt> inProgressAttempt(UUID attemptPublicId, UUID tenantId) {

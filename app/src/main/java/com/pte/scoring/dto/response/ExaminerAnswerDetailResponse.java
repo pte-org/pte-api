@@ -10,5 +10,22 @@ public record ExaminerAnswerDetailResponse(
         ExaminerAnswerPayloadResponse response,
         String status,
         Integer myScore,
-        Instant submittedAt) {
+        Instant submittedAt,
+        ExaminerAiReferenceResponse aiReference,
+        ExaminerDecisionResponse decision,
+        String reviewVersion,
+        boolean canFinalize,
+        String blockingReason) {
+
+    public ExaminerAnswerDetailResponse(
+            UUID answerPublicId,
+            String taskType,
+            ExaminerPromptResponse prompt,
+            ExaminerAnswerPayloadResponse response,
+            String status,
+            Integer myScore,
+            Instant submittedAt) {
+        this(answerPublicId, taskType, prompt, response, status, myScore, submittedAt,
+                null, null, null, true, null);
+    }
 }

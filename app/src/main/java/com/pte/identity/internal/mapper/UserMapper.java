@@ -31,6 +31,7 @@ public final class UserMapper {
                 user.getPhone(),
                 user.getDateOfBirth(),
                 organizationType,
-                user.isMustChangePassword());
+                user.isMustChangePassword(),
+                user.isDeleted());
     }
 }

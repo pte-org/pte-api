@@ -22,6 +22,10 @@ public final class OrganizationMapper {
                 tenantPublicId,
                 organization.getName(),
                 organization.getAddress(),
+                organization.getProvinceCode(),
+                organization.getProvinceName(),
+                organization.getWardCode(),
+                organization.getWardName(),
                 organization.getFacilityType().name(),
                 organization.getStatus().name());
     }

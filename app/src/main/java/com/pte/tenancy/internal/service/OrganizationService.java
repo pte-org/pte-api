@@ -1,14 +1,20 @@
 package com.pte.tenancy.internal.service;
 
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.audit.AuditLogService;
 import com.pte.tenancy.domain.Organization;
+import com.pte.tenancy.domain.Tenant;
 import com.pte.tenancy.domain.enums.OrganizationStatus;
+import com.pte.tenancy.internal.constant.TenancyConstants;
+import com.pte.tenancy.internal.dto.request.UpdateOrganizationProfileRequest;
 import com.pte.tenancy.internal.dto.response.OrganizationResponse;
 import com.pte.tenancy.internal.exception.OrganizationNotFoundException;
+import com.pte.tenancy.internal.exception.TenantNameAlreadyUsedException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
 import com.pte.tenancy.internal.mapper.OrganizationMapper;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
 import com.pte.tenancy.internal.repository.TenantRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,7 +22,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Read and lifecycle operations for the single Organization owned by a Tenant.
+ * Read, lifecycle and host self-service profile operations for the single Organization owned by a Tenant.
  * Organizations are provisioned automatically when a Tenant is created.
  */
 @Service
@@ -24,10 +30,25 @@ public class OrganizationService {
 
     private final OrganizationRepository organizationRepository;
     private final TenantRepository tenantRepository;
+    private final AuditLogService auditLogService;
+    private final VietnamLocationService vietnamLocationService;
 
     public OrganizationService(OrganizationRepository organizationRepository, TenantRepository tenantRepository) {
+        this(organizationRepository, tenantRepository, null, null);
+    }
+
+    public OrganizationService(OrganizationRepository organizationRepository, TenantRepository tenantRepository,
+            AuditLogService auditLogService) {
+        this(organizationRepository, tenantRepository, auditLogService, null);
+    }
+
+    @Autowired
+    public OrganizationService(OrganizationRepository organizationRepository, TenantRepository tenantRepository,
+            AuditLogService auditLogService, VietnamLocationService vietnamLocationService) {
         this.organizationRepository = organizationRepository;
         this.tenantRepository = tenantRepository;
+        this.auditLogService = auditLogService;
+        this.vietnamLocationService = vietnamLocationService;
     }
 
     @Transactional(readOnly = true)
@@ -59,6 +80,38 @@ public class OrganizationService {
     }
 
     @Transactional
+    public OrganizationResponse updateForCaller(UUID organizationPublicId,
+            UpdateOrganizationProfileRequest request, CurrentUser caller) {
+        UUID tenantPublicId = caller.tenantId();
+        Tenant tenant = tenantRepository.findWithLockByPublicId(tenantPublicId)
+                .orElseThrow(TenantNotFoundException::new);
+        Organization organization = organizationRepository.findWithLockByPublicId(organizationPublicId)
+                .orElseThrow(OrganizationNotFoundException::new);
+        if (organization.getTenant() == null
+                || !organization.getTenant().getPublicId().equals(tenantPublicId)) {
+            throw new OrganizationNotFoundException();
+        }
+
+        String name = request.name().trim();
+        if (!name.equals(tenant.getName()) && tenantRepository.existsByName(name)) {
+            throw new TenantNameAlreadyUsedException();
+        }
+        tenant.setName(name);
+        organization.setName(name);
+        organization.setAddress(normalizeOptional(request.address()));
+        VietnamLocationService.ResolvedLocation location = resolveLocation(request);
+        organization.setProvinceCode(location.provinceCode());
+        organization.setProvinceName(location.provinceName());
+        organization.setWardCode(location.wardCode());
+        organization.setWardName(location.wardName());
+        organization.setFacilityType(request.facilityType());
+        auditLogService.record(caller, TenancyConstants.AGGREGATE_ORGANIZATION,
+                organizationPublicId.toString(), TenancyConstants.EVENT_ORGANIZATION_UPDATED,
+                TenancyConstants.AUDIT_ORGANIZATION_UPDATED_SUMMARY);
+        return OrganizationMapper.toResponse(organization, tenantPublicId);
+    }
+
+    @Transactional
     public OrganizationResponse suspend(UUID tenantPublicId, UUID organizationPublicId, CurrentUser caller) {
         Organization organization = loadUnderTenant(tenantPublicId, organizationPublicId);
         if (organization.getStatus() != OrganizationStatus.SUSPENDED) {
@@ -87,5 +140,25 @@ public class OrganizationService {
             throw new OrganizationNotFoundException();
         }
         return organization;
+    }
+
+    private static String normalizeOptional(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private VietnamLocationService.ResolvedLocation resolveLocation(UpdateOrganizationProfileRequest request) {
+        String provinceCode = normalizeOptional(request.provinceCode());
+        String wardCode = normalizeOptional(request.wardCode());
+        if (vietnamLocationService == null) {
+            if (provinceCode != null || wardCode != null) {
+                throw new IllegalStateException("Vietnam location service is not configured");
+            }
+            return VietnamLocationService.ResolvedLocation.empty();
+        }
+        return vietnamLocationService.resolve(provinceCode, wardCode);
     }
 }

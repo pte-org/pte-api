@@ -8,10 +8,15 @@ import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.response.PracticeCatalogResponse;
 import com.pte.practice.internal.dto.response.PracticeCatalogSectionResponse;
 import com.pte.practice.internal.dto.response.PracticeSessionResponse;
+import com.pte.practice.internal.dto.response.PracticeTaskContentResponse;
 import com.pte.practice.internal.dto.response.PracticeTaskResponse;
 import com.pte.practice.internal.service.PracticeCatalogService;
 import com.pte.practice.internal.service.PracticeSessionItemService;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -24,11 +29,19 @@ public class PracticeSessionResponseMapper {
 
     private final PracticeCatalogService catalogService;
     private final PracticeSessionItemService itemService;
+    private final JsonMapper jsonMapper;
 
     public PracticeSessionResponseMapper(PracticeCatalogService catalogService,
             PracticeSessionItemService itemService) {
+        this(catalogService, itemService, JsonMapper.builder().build());
+    }
+
+    @Autowired
+    public PracticeSessionResponseMapper(PracticeCatalogService catalogService,
+            PracticeSessionItemService itemService, JsonMapper jsonMapper) {
         this.catalogService = catalogService;
         this.itemService = itemService;
+        this.jsonMapper = jsonMapper;
     }
 
     public PracticeSessionResponse toResponse(PracticeSession session) {
@@ -90,7 +103,26 @@ public class PracticeSessionResponseMapper {
                 item.getAnswerSchemaVersion(),
                 item.getStatus(),
                 item.getSavedPayload(),
-                item.getConfidence());
+                item.getConfidence(),
+                toContent(item));
+    }
+
+    private PracticeTaskContentResponse toContent(PracticeSessionItem item) {
+        if ((item.getPromptText() == null || item.getPromptText().isBlank())
+                && (item.getOptionsJson() == null || item.getOptionsJson().isBlank())) {
+            return null;
+        }
+        List<PracticeTaskContentResponse.Option> options = List.of();
+        if (item.getOptionsJson() != null && !item.getOptionsJson().isBlank()) {
+            try {
+                options = jsonMapper.readValue(item.getOptionsJson(),
+                        new TypeReference<List<PracticeTaskContentResponse.Option>>() { });
+            } catch (JacksonException ex) {
+                throw new IllegalStateException("PRACTICE_CONTENT_SNAPSHOT_INVALID", ex);
+            }
+        }
+        return new PracticeTaskContentResponse(item.getPromptText(), item.getMinWordCount(),
+                item.getMaxWordCount(), options);
     }
 
     private long versionOf(PracticeSession session) {

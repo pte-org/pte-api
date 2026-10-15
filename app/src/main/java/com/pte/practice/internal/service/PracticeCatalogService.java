@@ -1,9 +1,7 @@
 package com.pte.practice.internal.service;
 
-import com.pte.itembank.TaskRuntimeProfileDescriptor;
-import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.QuestionTypeService;
-import com.pte.itembank.TaskTypeCodeCompatibility;
+import com.pte.itembank.PracticeQuestionService;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.dto.response.QuestionTypeResponse;
@@ -17,10 +15,10 @@ import com.pte.practice.internal.dto.response.PracticeCatalogTaskResponse;
 import com.pte.practice.internal.dto.response.PracticePreflightResponse;
 import com.pte.practice.internal.exception.PracticeCatalogException;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -40,16 +38,24 @@ import java.util.stream.Collectors;
 public class PracticeCatalogService {
 
     private final QuestionTypeService questionTypeService;
+    private final PracticeCatalogTaskMapper taskMapper;
 
     public PracticeCatalogService(QuestionTypeService questionTypeService) {
+        this(questionTypeService, null);
+    }
+
+    @Autowired
+    public PracticeCatalogService(QuestionTypeService questionTypeService,
+            PracticeQuestionService practiceQuestionService) {
         this.questionTypeService = questionTypeService;
+        this.taskMapper = new PracticeCatalogTaskMapper(practiceQuestionService);
     }
 
     @Transactional(readOnly = true)
     public PracticeCatalogResponse getCatalog() {
         Map<String, PracticeCatalogTaskResponse> tasks = new LinkedHashMap<>();
         for (QuestionTypeResponse definition : questionTypeService.list(true)) {
-            PracticeCatalogTaskResponse task = mapDefinition(definition);
+            PracticeCatalogTaskResponse task = taskMapper.mapDefinition(definition);
             tasks.putIfAbsent(task.code(), task);
         }
 
@@ -57,7 +63,7 @@ public class PracticeCatalogService {
         // Such entries are explicitly visible-only and cannot be selected for
         // execution until canonical content is published.
         for (PteTaskType taskType : PteTaskType.values()) {
-            tasks.putIfAbsent(taskType.name(), fallbackTask(taskType));
+            tasks.putIfAbsent(taskType.name(), taskMapper.fallbackTask(taskType));
         }
         tasks.putIfAbsent(PracticeConstants.PRACTICE_WRITE_EMAIL_TASK_CODE, new PracticeCatalogTaskResponse(
                 PracticeConstants.PRACTICE_WRITE_EMAIL_TASK_CODE,
@@ -145,69 +151,14 @@ public class PracticeCatalogService {
                 .toList() : requested.stream().map(byCode::get).toList());
     }
 
-    private PracticeCatalogTaskResponse mapDefinition(QuestionTypeResponse definition) {
-        String code = normalizeCode(definition.taskTypeCode() == null ? definition.code() : definition.taskTypeCode());
-        String section = safeSection(definition.section(), code);
-        TaskRuntimeProfileDescriptor profile = definition.runtime();
-        if (profile == null) {
-            profile = resolveProfile(code);
-        }
-        boolean allowlisted = profile != null && TaskRuntimeProfileRegistry.isAllowlistedContract(profile);
-        boolean serverReady = definition.readiness() == null || definition.readiness().serverReady();
-        boolean phase05RuntimeSupported = isPhase05RuntimeSupported(profile);
-        boolean runtimeActive = profile != null && profile.active();
-        boolean runnable = allowlisted && runtimeActive && serverReady && phase05RuntimeSupported;
-        PracticeCatalogAvailability availability = runnable
-                ? PracticeCatalogAvailability.RUNNABLE
-                : allowlisted ? PracticeCatalogAvailability.VISIBLE : PracticeCatalogAvailability.UNAVAILABLE;
-        String reason = availability == PracticeCatalogAvailability.RUNNABLE ? null
-                : !phase05RuntimeSupported || !allowlisted
-                        ? PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME
-                        : PracticeConstants.PRACTICE_CONTENT_NOT_READY;
-        return toTask(code, definition.displayName(), section, definition.scored(), profile,
-                availability, reason,
-                definition.readiness() == null ? PracticeConstants.PRACTICE_RUNTIME_CONTRACT_READY_STATUS :
-                        (serverReady ? PracticeConstants.PRACTICE_SERVER_READY_STATUS
-                                : PracticeConstants.PRACTICE_SERVER_NOT_READY_STATUS),
-                PracticeConstants.PRACTICE_PERSISTED_CATALOG_PROVENANCE);
-    }
-
-    private PracticeCatalogTaskResponse fallbackTask(PteTaskType taskType) {
-        TaskRuntimeProfileDescriptor profile = TaskRuntimeProfileRegistry.descriptorFor(taskType.name());
-        return toTask(taskType.name(), humanize(taskType.name()), taskType.getSection().name(), taskType.isScored(),
-                profile, PracticeCatalogAvailability.VISIBLE, PracticeConstants.PRACTICE_CONTENT_NOT_READY,
-                PracticeConstants.PRACTICE_RUNTIME_ONLY_STATUS,
-                PracticeConstants.PRACTICE_RUNTIME_REGISTRY_PROVENANCE);
-    }
-
-    private PracticeCatalogTaskResponse toTask(String code, String displayName, String section, boolean scored,
-            TaskRuntimeProfileDescriptor profile, PracticeCatalogAvailability availability, String reason,
-            String contentStatus, String provenance) {
-        return new PracticeCatalogTaskResponse(
-                code,
-                displayName == null || displayName.isBlank() ? humanize(code) : displayName,
-                section,
-                scored,
-                availability,
-                reason,
-                profile == null ? null : profile.profileKey(),
-                profile == null ? null : profile.profileVersion(),
-                profile == null ? null : profile.rendererKey(),
-                profile == null ? null : profile.contractVersion(),
-                profile == null ? null : profile.answerSchemaVersion(),
-                profile == null ? List.of() : profile.requiredClientCapabilities(),
-                contentStatus,
-                provenance);
-    }
-
     private List<PracticeCatalogSectionResponse> groupBySection(Collection<PracticeCatalogTaskResponse> tasks) {
         Map<String, List<PracticeCatalogTaskResponse>> grouped = tasks.stream()
                 .sorted(Comparator.comparingInt(this::sectionOrder).thenComparing(PracticeCatalogTaskResponse::code))
                 .collect(Collectors.groupingBy(PracticeCatalogTaskResponse::section, LinkedHashMap::new,
                         Collectors.toList()));
         return grouped.entrySet().stream()
-                .map(entry -> new PracticeCatalogSectionResponse(
-                        entry.getKey(), humanize(entry.getKey()), entry.getValue()))
+                        .map(entry -> new PracticeCatalogSectionResponse(
+                                entry.getKey(), humanize(entry.getKey()), entry.getValue()))
                 .toList();
     }
 
@@ -238,41 +189,6 @@ public class PracticeCatalogService {
                 .toList();
     }
 
-    private String normalizeCode(String code) {
-        if (code == null || code.isBlank()) {
-            return PracticeConstants.PRACTICE_UNKNOWN_TASK_CODE;
-        }
-        try {
-            return TaskTypeCodeCompatibility.normalizeTaskTypeKey(code);
-        } catch (RuntimeException ex) {
-            return code.trim().toUpperCase(Locale.ROOT);
-        }
-    }
-
-    private String safeSection(String rawSection, String taskCode) {
-        if (rawSection != null && !rawSection.isBlank()) {
-            return rawSection.trim().toUpperCase(Locale.ROOT);
-        }
-        try {
-            return PteTaskType.valueOf(taskCode).getSection().name();
-        } catch (RuntimeException ex) {
-            return PracticeConstants.PRACTICE_UNKNOWN_TASK_CODE;
-        }
-    }
-
-    private TaskRuntimeProfileDescriptor resolveProfile(String code) {
-        try {
-            return TaskRuntimeProfileRegistry.descriptorFor(code);
-        } catch (RuntimeException ex) {
-            return null;
-        }
-    }
-
-    private boolean isPhase05RuntimeSupported(TaskRuntimeProfileDescriptor profile) {
-        return profile != null
-                && PracticeConstants.PRACTICE_CLIENT_SUPPORTED_RENDERER_KEYS.contains(profile.rendererKey());
-    }
-
     private void requireProduct(String productCode) {
         if (!PracticeConstants.PRACTICE_PRODUCT_CODE.equals(productCode)) {
             throw new PracticeCatalogException(HttpStatus.NOT_FOUND,
@@ -285,14 +201,10 @@ public class PracticeCatalogService {
         if (value == null || value.isBlank()) {
             return PracticeConstants.PRACTICE_DEFAULT_DISPLAY_NAME;
         }
-        String[] words = value.toLowerCase(Locale.ROOT).split("_");
-        List<String> result = new ArrayList<>();
-        for (String word : words) {
-            if (word.isBlank()) {
-                continue;
-            }
-            result.add(Character.toUpperCase(word.charAt(0)) + word.substring(1));
-        }
-        return String.join(" ", result);
+        String[] words = value.toLowerCase(java.util.Locale.ROOT).split("_");
+        return java.util.Arrays.stream(words)
+                .filter(word -> !word.isBlank())
+                .map(word -> Character.toUpperCase(word.charAt(0)) + word.substring(1))
+                .collect(Collectors.joining(" "));
     }
 }

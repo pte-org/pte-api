@@ -59,18 +59,31 @@ public class ScoringReviewService {
     private final ScoringSessionStateRepository sessionStateRepository;
     private final EntityManager entityManager;
     private final AttemptService attemptService;
+    private final com.pte.session.SessionService sessionService;
+    private final com.pte.scoring.internal.repository.GradingCohortRepository cohortRepository;
 
     @Autowired
     public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
             AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService,
             ScoringSessionStateRepository sessionStateRepository, EntityManager entityManager,
-            AttemptService attemptService) {
+            AttemptService attemptService, com.pte.session.SessionService sessionService,
+            com.pte.scoring.internal.repository.GradingCohortRepository cohortRepository) {
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.answerPayloadDecoder = answerPayloadDecoder;
         this.mediaService = mediaService;
         this.sessionStateRepository = sessionStateRepository;
         this.entityManager = entityManager;
         this.attemptService = attemptService;
+        this.sessionService = sessionService;
+        this.cohortRepository = cohortRepository;
+    }
+
+    public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
+            AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService,
+            ScoringSessionStateRepository sessionStateRepository, EntityManager entityManager,
+            AttemptService attemptService) {
+        this(scoringAnswerRepository, answerPayloadDecoder, mediaService, sessionStateRepository, entityManager,
+                attemptService, null, null);
     }
 
     public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
@@ -149,6 +162,19 @@ public class ScoringReviewService {
     @Transactional
     public ScoringAnswerResponse submitTeacherScore(UUID answerPublicId, int score, CurrentUser caller) {
         ScoringAnswer answer = findOwned(answerPublicId, caller);
+        if (sessionService != null) {
+            sessionService.lockForScoreReviewMutation(answer.getSessionPublicId(), caller.tenantId());
+        }
+        if (cohortRepository != null) {
+            cohortRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(caller.tenantId(), answer.getSessionPublicId())
+                    .ifPresent(cohort -> {
+                        if (cohort.getMarkingMode() == com.pte.scoring.domain.enums.GradingMarkingMode.MANUAL_EXAMINER) {
+                            throw new ScoreSourceSelectionException(HttpStatus.CONFLICT,
+                                    ScoreReviewConstants.MANUAL_EXAMINER_SELECTION_PROHIBITED, null,
+                                    ScoreReviewConstants.MANUAL_EXAMINER_SELECTION_PROHIBITED_MESSAGE);
+                        }
+                    });
+        }
         if (entityManager != null) {
             entityManager.lock(answer, LockModeType.PESSIMISTIC_WRITE);
             entityManager.refresh(answer, LockModeType.PESSIMISTIC_WRITE);

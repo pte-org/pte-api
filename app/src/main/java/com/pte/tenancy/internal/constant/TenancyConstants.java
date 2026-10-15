@@ -23,6 +23,12 @@ public final class TenancyConstants {
     public static final String TENANT_CODE_INVALID =
             "Tenant code must be 3-32 lowercase letters, digits, or hyphens";
     public static final String ORGANIZATION_NAME_REQUIRED = "Organization name is required";
+    public static final String ORGANIZATION_NAME_TOO_LONG = "Organization name must be at most 255 characters";
+    public static final String ORGANIZATION_ADDRESS_TOO_LONG = "Organization address must be at most 255 characters";
+    public static final String ORGANIZATION_LOCATION_CODE_TOO_LONG =
+            "Organization location code must be at most 16 characters";
+    public static final String LOCATION_SELECTION_INVALID = "LOCATION_SELECTION_INVALID";
+    public static final String LOCATION_CATALOG_UNAVAILABLE = "LOCATION_CATALOG_UNAVAILABLE";
     public static final String ORGANIZATION_TYPE_REQUIRED = "Organization type is required";
     public static final String PACKAGE_NAME_REQUIRED = "Package name is required";
     public static final String STUDENT_LIMIT_REQUIRED = "Student limit is required";
@@ -50,8 +56,10 @@ public final class TenancyConstants {
 
     public static final String AGGREGATE_ORGANIZATION = "Organization";
     public static final String EVENT_ORGANIZATION_CREATED = "OrganizationCreated";
+    public static final String EVENT_ORGANIZATION_UPDATED = "OrganizationUpdated";
     public static final String EVENT_ORGANIZATION_SUSPENDED = "OrganizationSuspended";
     public static final String EVENT_ORGANIZATION_REACTIVATED = "OrganizationReactivated";
+    public static final String AUDIT_ORGANIZATION_UPDATED_SUMMARY = "Updated organization profile";
 
     public static final String AGGREGATE_QUOTA_TRANSACTION = "QuotaTransaction";
     public static final String EVENT_QUOTA_GRANTED = "QuotaGranted";

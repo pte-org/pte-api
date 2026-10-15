@@ -58,9 +58,10 @@ public class ReportPublishService {
     public ReportPublicationReadinessResponse preflight(UUID sessionPublicId, UUID tenantId) {
         sessionService.verifyHostAccess(sessionPublicId, tenantId);
         boolean closed = sessionService.isSessionClosed(sessionPublicId, tenantId);
-        List<AttemptSummaryView> attempts = submittedAttempts(sessionPublicId, tenantId);
+        List<ReportPublicationBlockerResponse> blockers = new ArrayList<>();
+        List<AttemptSummaryView> attempts = resolveCohortAttempts(sessionPublicId, tenantId, blockers);
         List<ReportScoringAnswerView> inputs = scoringService.getReportScoringInputs(tenantId, sessionPublicId);
-        return readiness(sessionPublicId, closed, attempts, inputs);
+        return readiness(sessionPublicId, closed, attempts, inputs, blockers);
     }
 
     @Transactional(readOnly = true)
@@ -80,14 +81,21 @@ public class ReportPublishService {
     @Transactional
     public int publishSession(UUID sessionPublicId, UUID tenantId, UUID actorPublicId) {
         sessionService.lockClosedForReportPublication(sessionPublicId, tenantId);
-        List<AttemptSummaryView> attempts = submittedAttempts(sessionPublicId, tenantId);
+        List<ReportPublicationBlockerResponse> blockers = new ArrayList<>();
+        List<AttemptSummaryView> attempts = resolveCohortAttempts(sessionPublicId, tenantId, blockers);
+
         if (attempts.isEmpty()) {
-            return 0;
+            if (blockers.isEmpty()) {
+                return 0;
+            }
+            ReportPublicationReadinessResponse readiness =
+                    readiness(sessionPublicId, true, attempts, List.of(), blockers);
+            throw new ReportPublicationNotReadyException(readiness.blockers());
         }
 
         ReportPublicationScoringView locked = scoringService.lockForReportPublication(tenantId, sessionPublicId,
                 UUID.randomUUID());
-        ReportPublicationReadinessResponse readiness = readiness(sessionPublicId, true, attempts, locked.answers());
+        ReportPublicationReadinessResponse readiness = readiness(sessionPublicId, true, attempts, locked.answers(), blockers);
         if (!readiness.canPublish()) {
             throw new ReportPublicationNotReadyException(readiness.blockers());
         }
@@ -112,8 +120,8 @@ public class ReportPublishService {
                 throw new IllegalStateException(ReportingConstants.SCORE_AGGREGATION_MISSING);
             }
             String snapshotJson = snapshotCodec.encode(locked.publicationPublicId(), actorPublicId, publishedAt,
-                    cohortSize, summary.snapshotPublicId(), scoreAggregation.context().scoreTemplatePublicId(),
-                    scoreAggregation.context().scoreTemplateVersion(), scoreAggregation.summary(), attemptInputs);
+                cohortSize, summary.snapshotPublicId(), scoreAggregation.context().scoreTemplatePublicId(),
+                scoreAggregation.context().scoreTemplateVersion(), scoreAggregation.summary(), attemptInputs);
             report.publishSnapshot(snapshotJson, locked.publicationPublicId(), actorPublicId, cohortSize, publishedAt);
             attemptReportRepository.save(report);
             if (newlyPublished) {
@@ -126,13 +134,22 @@ public class ReportPublishService {
 
     private ReportPublicationReadinessResponse readiness(UUID sessionPublicId, boolean closed,
             List<AttemptSummaryView> attempts, List<ReportScoringAnswerView> inputs) {
+        return readiness(sessionPublicId, closed, attempts, inputs, List.of());
+    }
+
+    private ReportPublicationReadinessResponse readiness(UUID sessionPublicId, boolean closed,
+            List<AttemptSummaryView> attempts, List<ReportScoringAnswerView> inputs,
+            List<ReportPublicationBlockerResponse> initialBlockers) {
         Set<UUID> attemptIds = attempts.stream().map(AttemptSummaryView::attemptPublicId).collect(Collectors.toSet());
         List<ReportScoringAnswerView> cohortInputs = inputs.stream()
                 .filter(input -> attemptIds.contains(input.attemptPublicId())).toList();
         Map<UUID, List<ReportScoringAnswerView>> inputsByAttempt = cohortInputs.stream()
                 .collect(Collectors.groupingBy(ReportScoringAnswerView::attemptPublicId));
-        List<ReportPublicationBlockerResponse> blockers = new ArrayList<>();
+        List<ReportPublicationBlockerResponse> blockers = new ArrayList<>(initialBlockers);
         Set<UUID> blockedAttemptIds = new HashSet<>();
+        for (ReportPublicationBlockerResponse initialBlocker : initialBlockers) {
+            blockedAttemptIds.add(initialBlocker.attemptPublicId());
+        }
         for (UUID attemptId : attemptIds) {
             List<ReportScoringAnswerView> attemptInputs = inputsByAttempt.getOrDefault(attemptId, List.of());
             if (attemptInputs.isEmpty()) {
@@ -154,6 +171,40 @@ public class ReportPublishService {
         boolean canPublish = closed && !attemptIds.isEmpty() && blockers.isEmpty();
         return new ReportPublicationReadinessResponse(sessionPublicId, closed, attempts.size(), readyAttempts,
                 blockers.size(), canPublish, blockers);
+    }
+
+    private List<AttemptSummaryView> resolveCohortAttempts(UUID sessionPublicId, UUID tenantId,
+            List<ReportPublicationBlockerResponse> blockers) {
+        List<AttemptSummaryView> allSubmitted = attemptService.getSubmittedAttemptsForSession(sessionPublicId, tenantId);
+        var cohortOpt = scoringService.getCohortPublicationView(sessionPublicId, tenantId);
+        if (cohortOpt.isEmpty()) {
+            return allSubmitted;
+        }
+        var cohort = cohortOpt.get();
+        Set<UUID> requiredIds = new HashSet<>(cohort.requiredAttemptPublicIds());
+        Set<UUID> excludedIds = new HashSet<>(cohort.excludedAttemptPublicIds());
+        Map<UUID, AttemptSummaryView> submittedById = allSubmitted.stream()
+                .collect(Collectors.toMap(AttemptSummaryView::attemptPublicId, java.util.function.Function.identity(), (a, b) -> a));
+
+        for (UUID requiredId : requiredIds) {
+            if (!submittedById.containsKey(requiredId)) {
+                blockers.add(new ReportPublicationBlockerResponse(requiredId, null, null, null,
+                        ReportingConstants.REASON_SCORING_INPUTS_MISSING));
+            }
+        }
+
+        if ("MANUAL_EXAMINER".equals(cohort.markingMode())) {
+            scoringService.evaluateManualPublicationBlockers(sessionPublicId, tenantId).ifPresent(reasons -> {
+                for (String reason : reasons) {
+                    blockers.add(new ReportPublicationBlockerResponse(sessionPublicId, null, null, null, reason));
+                }
+            });
+        }
+
+        return allSubmitted.stream()
+                .filter(attempt -> requiredIds.contains(attempt.attemptPublicId()))
+                .filter(attempt -> !excludedIds.contains(attempt.attemptPublicId()))
+                .toList();
     }
 
     private List<AttemptSummaryView> submittedAttempts(UUID sessionPublicId, UUID tenantId) {
