@@ -45,4 +45,35 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
             + "where e.tenantId = :tenantId and e.studentPublicId in :studentPublicIds")
     List<Enrollment> findByTenantIdAndStudentPublicIdIn(@Param("tenantId") UUID tenantId,
             @Param("studentPublicIds") List<UUID> studentPublicIds);
+
+    @Query("SELECT e FROM Enrollment e "
+            + "WHERE e.session.publicId = :sessionPublicId AND e.tenantId = :tenantId "
+            + "AND e.deleted = false AND e.session.deleted = false")
+    org.springframework.data.domain.Page<Enrollment> findBySessionPublicIdAndTenantIdAndDeletedFalse(
+            @Param("sessionPublicId") UUID sessionPublicId,
+            @Param("tenantId") UUID tenantId,
+            org.springframework.data.domain.Pageable pageable);
+
+    @Query("SELECT COUNT(e) FROM Enrollment e "
+            + "WHERE e.session.publicId = :sessionPublicId AND e.tenantId = :tenantId "
+            + "AND e.deleted = false AND e.session.deleted = false")
+    long countBySessionPublicIdAndTenantIdAndDeletedFalse(
+            @Param("sessionPublicId") UUID sessionPublicId,
+            @Param("tenantId") UUID tenantId);
+
+    @Query("SELECT CASE WHEN COUNT(e) > 0 THEN true ELSE false END FROM Enrollment e "
+            + "WHERE e.session.publicId = :sessionPublicId AND e.studentPublicId = :studentPublicId "
+            + "AND e.tenantId = :tenantId AND e.deleted = false AND e.session.deleted = false")
+    boolean isStudentEnrolled(
+            @Param("sessionPublicId") UUID sessionPublicId,
+            @Param("studentPublicId") UUID studentPublicId,
+            @Param("tenantId") UUID tenantId);
+
+    @Query("SELECT e FROM Enrollment e "
+            + "WHERE e.session.publicId = :sessionPublicId AND e.studentPublicId = :studentPublicId "
+            + "AND e.tenantId = :tenantId AND e.deleted = false AND e.session.deleted = false")
+    Optional<Enrollment> findActiveEnrollment(
+            @Param("sessionPublicId") UUID sessionPublicId,
+            @Param("studentPublicId") UUID studentPublicId,
+            @Param("tenantId") UUID tenantId);
 }

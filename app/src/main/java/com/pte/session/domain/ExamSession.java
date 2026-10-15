@@ -45,8 +45,11 @@ import java.util.UUID;
 })
 @Getter
 @Setter
-@NoArgsConstructor
 public class ExamSession extends BaseEntity {
+
+    public ExamSession() {
+        super();
+    }
 
     @Column(nullable = false)
     private String name;

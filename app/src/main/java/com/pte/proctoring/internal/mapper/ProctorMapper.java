@@ -6,6 +6,8 @@ import com.pte.proctoring.internal.dto.response.ProctorSessionResponse;
 import com.pte.proctoring.internal.dto.response.ViolationEventResponse;
 import org.springframework.stereotype.Component;
 
+import java.util.UUID;
+
 @Component
 public class ProctorMapper {
 
@@ -15,7 +17,8 @@ public class ProctorMapper {
     }
 
     public ViolationEventResponse toResponse(ViolationEvent event) {
+        UUID proctorPublicId = event.getProctorSession() != null ? event.getProctorSession().getProctorPublicId() : null;
         return new ViolationEventResponse(event.getPublicId(), event.getAttemptPublicId(), event.getViolationType(),
-                event.getDetail(), event.getSequenceNo(), event.getHash(), event.getDetectedAt());
+                event.getDetail(), event.getSequenceNo(), event.getHash(), event.getDetectedAt(), proctorPublicId);
     }
 }

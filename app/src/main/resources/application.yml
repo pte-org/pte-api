@@ -87,7 +87,6 @@ spring:
 
 notification:
   mail-from: ${MAIL_FROM:no-reply@pteprep.local}
-  application-response-sla-hours: ${TENANT_APPLICATION_RESPONSE_SLA_HOURS:72}
   inbox:
     # Enable after additive migration and the notification rollout checks; email delivery is independent.
     enabled: ${NOTIFICATION_INBOX_ENABLED:false}
@@ -125,6 +124,13 @@ media:
     api-secret: ${CLOUDINARY_API_SECRET:}
     authoring-folder: ${CLOUDINARY_AUTHORING_FOLDER:pte/authoring}
     submission-folder: ${CLOUDINARY_SUBMISSION_FOLDER:pte/submissions}
+
+locations:
+  vietnam:
+    base-url: ${VIETNAM_LOCATION_BASE_URL:https://provinces.open-api.vn/api/v2}
+    connect-timeout-ms: ${VIETNAM_LOCATION_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${VIETNAM_LOCATION_READ_TIMEOUT_MS:10000}
+    cache-ttl-ms: ${VIETNAM_LOCATION_CACHE_TTL_MS:86400000}
 
 attempt:
   capability:

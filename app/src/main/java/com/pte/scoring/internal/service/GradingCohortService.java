@@ -40,10 +40,14 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Freezes a CLOSED session's grading cohort and reconciles its scoring barrier. */
 @Service
 public class GradingCohortService {
+
+    private static final Logger log = LoggerFactory.getLogger(GradingCohortService.class);
 
     private final SessionService sessionService;
     private final AttemptService attemptService;
@@ -56,6 +60,9 @@ public class GradingCohortService {
     private final GradingCompletionEvaluator evaluator;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    private GradingReconciliationWorker reconciliationWorker;
 
     public GradingCohortService(SessionService sessionService, AttemptService attemptService,
             ScoringIngestService ingestService, ScoringAnswerRepository answerRepository,
@@ -153,6 +160,7 @@ public class GradingCohortService {
 
     @Transactional
     public GradingCohortResponse reconcile(UUID sessionPublicId, UUID tenantId) {
+        sessionService.lockForScoreReviewMutation(sessionPublicId, tenantId);
         return cohortRepository.findForUpdate(tenantId, sessionPublicId)
                 .map(cohort -> reconcileLocked(cohort, tenantId, sessionPublicId))
                 .orElseThrow(() -> error(HttpStatus.NOT_FOUND, GradingConstants.COHORT_ALREADY_FINALIZED,
@@ -166,11 +174,19 @@ public class GradingCohortService {
     }
 
     @Scheduled(fixedDelayString = "${scoring.grading-reconciliation.poll-delay-ms:60000}")
-    @Transactional
     public void reconcileScheduled() {
         for (GradingCohort cohort : cohortRepository.findByStatusAndDeletedFalse(GradingCohortStatus.FROZEN)) {
-            cohortRepository.findForUpdate(cohort.getTenantId(), cohort.getSessionPublicId())
-                    .ifPresent(locked -> reconcileLocked(locked, locked.getTenantId(), locked.getSessionPublicId()));
+            if (reconciliationWorker != null) {
+                try {
+                    reconciliationWorker.reconcileSession(cohort.getSessionPublicId(), cohort.getTenantId());
+                } catch (Exception ex) {
+                    log.warn("Scheduled grading reconciliation failed for session {} (tenantId={}): {}",
+                            cohort.getSessionPublicId(), cohort.getTenantId(), ex.getMessage());
+                }
+            } else {
+                cohortRepository.findForUpdate(cohort.getTenantId(), cohort.getSessionPublicId())
+                        .ifPresent(locked -> reconcileLocked(locked, locked.getTenantId(), locked.getSessionPublicId()));
+            }
         }
     }
 
@@ -270,5 +286,53 @@ public class GradingCohortService {
 
     private GradingCohortException error(HttpStatus status, String code, String message) {
         return new GradingCohortException(status, code, null, message);
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.Optional<com.pte.scoring.dto.response.SessionCohortPublicationView> getCohortPublicationView(
+            UUID sessionPublicId, UUID tenantId) {
+        return cohortRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId)
+                .map(cohort -> {
+                    List<GradingCohortMember> members = memberRepository
+                            .findByCohortPublicIdAndDeletedFalse(cohort.getPublicId());
+                    List<UUID> required = members.stream().filter(m -> !m.isExcluded())
+                            .map(GradingCohortMember::getAttemptPublicId).toList();
+                    List<UUID> excluded = members.stream().filter(GradingCohortMember::isExcluded)
+                            .map(GradingCohortMember::getAttemptPublicId).toList();
+                    return new com.pte.scoring.dto.response.SessionCohortPublicationView(
+                            cohort.getPublicId(), cohort.getMarkingMode().name(), cohort.getStatus().name(),
+                            required, excluded);
+                });
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.Optional<List<String>> evaluateManualPublicationBlockers(
+            UUID sessionPublicId, UUID tenantId) {
+        var existing = cohortRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId);
+        if (existing.isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        GradingCohort cohort = existing.get();
+        if (cohort.getMarkingMode() != GradingMarkingMode.MANUAL_EXAMINER) {
+            return java.util.Optional.empty();
+        }
+        List<GradingCohortMember> members = memberRepository
+                .findByCohortPublicIdAndDeletedFalse(cohort.getPublicId());
+        List<UUID> requiredAttemptIds = members.stream().filter(m -> !m.isExcluded())
+                .map(GradingCohortMember::getAttemptPublicId).toList();
+        Map<UUID, AttemptGradingCoverageView> coverage = attemptService.getGradingCoverage(requiredAttemptIds,
+                sessionPublicId, tenantId);
+        List<com.pte.scoring.domain.ScoringAnswer> answers = answerRepository
+                .findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(sessionPublicId, tenantId, requiredAttemptIds).stream()
+                .filter(answer -> !answer.isDeleted()).toList();
+        List<com.pte.scoring.domain.ExaminerAttemptAssignment> assignments = assignmentRepository
+                .findByTenantIdAndSessionPublicIdAndAttemptPublicIdIn(tenantId, sessionPublicId, requiredAttemptIds).stream()
+                .filter(assignment -> !assignment.isDeleted()).toList();
+        List<com.pte.scoring.domain.ExaminerAnswerScore> scores = examinerScoreRepository
+                .findByTenantIdAndSessionPublicId(tenantId, sessionPublicId).stream()
+                .filter(score -> !score.isDeleted() && requiredAttemptIds.contains(score.getAttemptPublicId())).toList();
+        GradingEvaluation evaluation = evaluator.evaluate(cohort.getMarkingMode(), members, coverage, answers,
+                assignments, scores);
+        return java.util.Optional.of(evaluation.complete() ? List.of() : evaluation.blockingReasons());
     }
 }

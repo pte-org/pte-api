@@ -2,8 +2,11 @@ package com.pte.billing.internal.service;
 
 import com.pte.billing.domain.PlatformSetting;
 import com.pte.billing.internal.dto.request.PlatformSettingRequest;
+import com.pte.billing.internal.dto.request.PlatformSettingBatchRequest;
+import com.pte.billing.internal.dto.request.PlatformSettingChangeRequest;
 import com.pte.billing.internal.exception.PlatformSettingInvalidException;
 import com.pte.billing.internal.exception.PlatformSettingNotFoundException;
+import com.pte.billing.internal.exception.PlatformSettingValidationException;
 import com.pte.billing.internal.repository.PlatformSettingRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,6 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -55,6 +59,7 @@ class PlatformSettingServiceTest {
         service.update("free_student_limit", new PlatformSettingRequest("75", "Updated"));
 
         assertThat(service.getInteger("free_student_limit")).isEqualTo(75);
+        assertThat(setting.getDescription()).isEqualTo("Updated");
         verify(platformSettingRepository, times(3)).findByKey("free_student_limit");
     }
 
@@ -75,6 +80,66 @@ class PlatformSettingServiceTest {
 
         assertThatThrownBy(() -> service.getInteger("free_student_limit"))
                 .isInstanceOf(PlatformSettingInvalidException.class);
+    }
+
+    @Test
+    void updateRejectsValuesOutsideTheCatalogContract() {
+        PlatformSetting setting = setting("free_student_limit", "50");
+        when(platformSettingRepository.findByKey("free_student_limit")).thenReturn(Optional.of(setting));
+
+        assertThatThrownBy(() -> service.update("free_student_limit", new PlatformSettingRequest("-1", null)))
+                .isInstanceOf(PlatformSettingValidationException.class);
+
+        verify(platformSettingRepository, org.mockito.Mockito.never()).saveAndFlush(any(PlatformSetting.class));
+    }
+
+    @Test
+    void batchUpdateValidatesAndReturnsTypedSettings() {
+        PlatformSetting freeStudents = setting("free_student_limit", "50");
+        PlatformSetting responseSla = setting("tenant_application_response_sla_hours", "72");
+        when(platformSettingRepository.findByKey("free_student_limit")).thenReturn(Optional.of(freeStudents));
+        when(platformSettingRepository.findByKey("tenant_application_response_sla_hours"))
+                .thenReturn(Optional.of(responseSla));
+        when(platformSettingRepository.saveAllAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.updateBatch(new PlatformSettingBatchRequest(List.of(
+                new PlatformSettingChangeRequest("free_student_limit", "75"),
+                new PlatformSettingChangeRequest("tenant_application_response_sla_hours", "48"))), null);
+
+        assertThat(response).hasSize(2);
+        assertThat(response.get(0).value()).isEqualTo("75");
+        assertThat(response.get(0).unit()).isEqualTo("students");
+        assertThat(response.get(1).value()).isEqualTo("48");
+        assertThat(response.get(1).unit()).isEqualTo("hours");
+        verify(platformSettingRepository).saveAllAndFlush(any());
+    }
+
+    @Test
+    void batchUpdateDoesNotMutateOrPersistWhenAnyValueIsInvalid() {
+        PlatformSetting freeStudents = setting("free_student_limit", "50");
+        PlatformSetting responseSla = setting("tenant_application_response_sla_hours", "72");
+        when(platformSettingRepository.findByKey("free_student_limit")).thenReturn(Optional.of(freeStudents));
+        when(platformSettingRepository.findByKey("tenant_application_response_sla_hours"))
+                .thenReturn(Optional.of(responseSla));
+
+        assertThatThrownBy(() -> service.updateBatch(new PlatformSettingBatchRequest(List.of(
+                new PlatformSettingChangeRequest("free_student_limit", "75"),
+                new PlatformSettingChangeRequest("tenant_application_response_sla_hours", "not-hours"))), null))
+                .isInstanceOf(PlatformSettingValidationException.class);
+
+        assertThat(freeStudents.getValue()).isEqualTo("50");
+        assertThat(responseSla.getValue()).isEqualTo("72");
+        verify(platformSettingRepository, org.mockito.Mockito.never()).saveAllAndFlush(any());
+    }
+
+    @Test
+    void listHidesDeprecatedRowsFromTheAdminCatalog() {
+        when(platformSettingRepository.findAllByOrderByKeyAsc()).thenReturn(List.of(
+                setting("free_student_limit", "50"),
+                setting("suspension_default_days", "0")));
+
+        assertThat(service.list()).extracting(response -> response.key())
+                .containsExactly("free_student_limit");
     }
 
     private PlatformSetting setting(String key, String value) {

@@ -593,7 +593,11 @@ public class LicenseCodeService {
         if (rawCode == null || rawCode.isBlank()) {
             throw invalid(BillingConstants.LICENSE_CODE_REQUIRED);
         }
-        return rawCode.trim().toUpperCase(Locale.ROOT);
+        String normalized = rawCode.trim().toUpperCase(Locale.ROOT).replaceAll("\\s+", "");
+        if (normalized.indexOf('-') < 0 && normalized.length() == 8) {
+            return normalized.substring(0, 4) + "-" + normalized.substring(4);
+        }
+        return normalized;
     }
 
     private LicenseCodeException invalid(String code) {

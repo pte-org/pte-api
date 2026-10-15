@@ -72,7 +72,7 @@ class SecurityAuditQueryServiceTest {
     @Test
     void assignedProctorUsesAuthoritativeTenant_andReturnsCursorWhenMoreRowsExist() {
         UUID proctorId = UUID.randomUUID();
-        CurrentUser proctor = new CurrentUser(proctorId, UUID.randomUUID(), List.of("PROCTOR"));
+        CurrentUser proctor = new CurrentUser(proctorId, tenantId, List.of("PROCTOR"));
         when(sessionService.checkProctorAssignment(sessionId, proctorId))
                 .thenReturn(new ProctorAssignmentCheckResponse(sessionId, tenantId));
         when(violationEventRepository.findForSecurityAudit(eq(sessionId), eq(tenantId), any(), any(), any(Pageable.class)))

@@ -1,6 +1,8 @@
 package com.pte.practice.internal.service;
 
 import com.pte.attempt.ResponseConfidence;
+import com.pte.itembank.PracticeQuestionService;
+import com.pte.itembank.dto.response.PracticeQuestionContent;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeSessionItem;
@@ -17,6 +19,7 @@ import com.pte.shared.practice.PracticeResponseMediaValidator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -38,20 +41,32 @@ public class PracticeSessionItemService {
     private final PracticeCatalogService catalogService;
     private final PracticeAnswerValidationService answerValidationService;
     private final PracticeResponseMediaValidator mediaValidator;
+    private final PracticeQuestionService practiceQuestionService;
+    private final JsonMapper jsonMapper;
 
     public PracticeSessionItemService(PracticeSessionItemRepository itemRepository,
             PracticeCatalogService catalogService, PracticeAnswerValidationService answerValidationService) {
-        this(itemRepository, catalogService, answerValidationService, null);
+        this(itemRepository, catalogService, answerValidationService, null, null, null);
+    }
+
+    /** Compatibility constructor for tests that exercise recording validation without media wiring. */
+    public PracticeSessionItemService(PracticeSessionItemRepository itemRepository,
+            PracticeCatalogService catalogService, PracticeAnswerValidationService answerValidationService,
+            PracticeResponseMediaValidator mediaValidator) {
+        this(itemRepository, catalogService, answerValidationService, mediaValidator, null, null);
     }
 
     @Autowired
     public PracticeSessionItemService(PracticeSessionItemRepository itemRepository,
             PracticeCatalogService catalogService, PracticeAnswerValidationService answerValidationService,
-            PracticeResponseMediaValidator mediaValidator) {
+            PracticeResponseMediaValidator mediaValidator, PracticeQuestionService practiceQuestionService,
+            JsonMapper jsonMapper) {
         this.itemRepository = itemRepository;
         this.catalogService = catalogService;
         this.answerValidationService = answerValidationService;
         this.mediaValidator = mediaValidator;
+        this.practiceQuestionService = practiceQuestionService;
+        this.jsonMapper = jsonMapper;
     }
 
     public void createItemsIfNeeded(PracticeSession session) {
@@ -74,6 +89,7 @@ public class PracticeSessionItemService {
             item.setRendererKey(task.rendererKey());
             item.setContractVersion(task.contractVersion());
             item.setAnswerSchemaVersion(task.answerSchemaVersion());
+            pinQuestionContent(item, task.code());
             item.setStatus(PracticeSessionItemStatus.PENDING);
             items.add(item);
         }
@@ -172,5 +188,26 @@ public class PracticeSessionItemService {
         return Arrays.stream(csv.split(","))
                 .filter(value -> !value.isBlank())
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private void pinQuestionContent(PracticeSessionItem item, String taskCode) {
+        if (practiceQuestionService == null) {
+            return;
+        }
+        PracticeQuestionContent content = practiceQuestionService.findPublishedQuestion(taskCode)
+                .orElseThrow(() -> new PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        PracticeConstants.PRACTICE_CONTENT_NOT_READY,
+                        PracticeConstants.PRACTICE_CONTENT_NOT_READY_MESSAGE));
+        item.setSourceQuestionPublicId(content.publicId());
+        item.setPromptText(content.promptText());
+        item.setMinWordCount(content.minWordCount());
+        item.setMaxWordCount(content.maxWordCount());
+        try {
+            item.setOptionsJson(jsonMapper.writeValueAsString(content.options()));
+        } catch (RuntimeException ex) {
+            throw new PracticeSessionException(HttpStatus.SERVICE_UNAVAILABLE,
+                    PracticeConstants.PRACTICE_CONTENT_NOT_READY,
+                    PracticeConstants.PRACTICE_CONTENT_NOT_READY_MESSAGE);
+        }
     }
 }

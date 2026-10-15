@@ -1,10 +1,10 @@
 package com.pte.notification.internal.listener;
 
+import com.pte.billing.BillingSettingsService;
 import com.pte.billing.TenantApplicationApprovedEvent;
 import com.pte.billing.TenantApplicationRejectedEvent;
 import com.pte.billing.TenantApplicationSubmittedEvent;
 import com.pte.notification.domain.enums.NotificationType;
-import com.pte.notification.internal.config.NotificationProperties;
 import com.pte.notification.internal.service.NotificationDispatchService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,17 +24,19 @@ class TenantApplicationNotificationListenerTest {
     @Mock
     private NotificationDispatchService dispatchService;
 
+    @Mock
+    private BillingSettingsService billingSettingsService;
+
     private TenantApplicationNotificationListener listener;
 
     @BeforeEach
     void setUp() {
-        NotificationProperties properties = new NotificationProperties();
-        properties.setApplicationResponseSlaHours(48);
-        listener = new TenantApplicationNotificationListener(dispatchService, properties);
+        listener = new TenantApplicationNotificationListener(dispatchService, billingSettingsService);
     }
 
     @Test
     void submitted_sendsOneProfessionalConfirmationWithConfiguredSla() {
+        org.mockito.Mockito.when(billingSettingsService.getTenantApplicationResponseSlaHours()).thenReturn(48);
         UUID applicationId = UUID.randomUUID();
 
         listener.onApplicationSubmitted(new TenantApplicationSubmittedEvent(

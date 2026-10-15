@@ -17,5 +17,14 @@ public record PracticeTaskResponse(
         Integer answerSchemaVersion,
         PracticeSessionItemStatus status,
         String savedPayload,
-        ResponseConfidence confidence) {
+        ResponseConfidence confidence,
+        PracticeTaskContentResponse content) {
+
+    /** Compatibility constructor for callers that only need task metadata. */
+    public PracticeTaskResponse(UUID publicId, int orderIndex, String taskCode, String displayName,
+            String section, String rendererKey, Integer contractVersion, Integer answerSchemaVersion,
+            PracticeSessionItemStatus status, String savedPayload, ResponseConfidence confidence) {
+        this(publicId, orderIndex, taskCode, displayName, section, rendererKey, contractVersion,
+                answerSchemaVersion, status, savedPayload, confidence, null);
+    }
 }

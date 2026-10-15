@@ -16,11 +16,12 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * Student-owned task boundary for a practice session. It stores only the
- * renderer contract and the student's draft/answer; correct-answer data is
- * deliberately excluded from this aggregate.
+ * renderer contract, a safe question snapshot and the student's draft/answer;
+ * correct-answer data is deliberately excluded from this aggregate.
  */
 @Entity
 @Table(name = "practice_session_items", uniqueConstraints = {
@@ -59,6 +60,23 @@ public class PracticeSessionItem extends BaseEntity {
 
     @Column(name = "answer_schema_version")
     private Integer answerSchemaVersion;
+
+    /** Source identity is retained for traceability, never returned to the student. */
+    @Column(name = "source_question_public_id")
+    private UUID sourceQuestionPublicId;
+
+    /** Safe question content pinned when the session begins. */
+    @Column(name = "prompt_text", columnDefinition = "text")
+    private String promptText;
+
+    @Column(name = "options_json", columnDefinition = "text")
+    private String optionsJson;
+
+    @Column(name = "min_word_count")
+    private Integer minWordCount;
+
+    @Column(name = "max_word_count")
+    private Integer maxWordCount;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)

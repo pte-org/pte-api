@@ -2,6 +2,7 @@ package com.pte.proctoring.internal.repository;
 
 import com.pte.proctoring.domain.ViolationEvent;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,6 +13,7 @@ import java.util.UUID;
 
 public interface ViolationEventRepository extends JpaRepository<ViolationEvent, Long> {
 
+    @EntityGraph(attributePaths = {"proctorSession"})
     List<ViolationEvent> findBySessionPublicIdAndTenantIdOrderByDetectedAtAsc(UUID sessionPublicId, UUID tenantId);
 
     @Query("""
@@ -29,4 +31,17 @@ public interface ViolationEventRepository extends JpaRepository<ViolationEvent, 
                                                @Param("cursorAt") Instant cursorAt,
                                                @Param("cursorId") UUID cursorId,
                                                Pageable pageable);
+
+    @Query("""
+            SELECT event.attemptPublicId, COUNT(event) FROM ViolationEvent event
+            WHERE event.sessionPublicId = :sessionPublicId
+              AND event.tenantId = :tenantId
+              AND event.attemptPublicId IN :attemptPublicIds
+              AND event.deleted = false
+            GROUP BY event.attemptPublicId
+            """)
+    List<Object[]> countViolationsByAttemptPublicIdIn(
+            @Param("sessionPublicId") UUID sessionPublicId,
+            @Param("tenantId") UUID tenantId,
+            @Param("attemptPublicIds") java.util.Collection<UUID> attemptPublicIds);
 }

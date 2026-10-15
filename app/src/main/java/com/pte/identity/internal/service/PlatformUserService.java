@@ -1,5 +1,6 @@
 package com.pte.identity.internal.service;
 
+import com.pte.identity.UserCredentialsEmailRequestedEvent;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
@@ -16,6 +17,7 @@ import com.pte.identity.internal.exception.UserNotFoundException;
 import com.pte.identity.internal.mapper.UserMapper;
 import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
+import com.pte.identity.internal.util.PasswordGenerator;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.security.CurrentUser;
@@ -23,6 +25,7 @@ import com.pte.shared.security.SecurityCapability;
 import com.pte.shared.security.SecurityPolicy;
 import com.pte.shared.web.PageMeta;
 import com.pte.shared.web.PagedResult;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -46,15 +49,20 @@ public class PlatformUserService {
     private final PasswordEncoder passwordEncoder;
     private final UserProvisioningHelper provisioningHelper;
     private final AuditLogService auditLogService;
+    private final RefreshTokenService refreshTokenService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public PlatformUserService(UserRepository userRepository, LoginHashRepository loginHashRepository,
             PasswordEncoder passwordEncoder, UserProvisioningHelper provisioningHelper,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService, RefreshTokenService refreshTokenService,
+            ApplicationEventPublisher eventPublisher) {
         this.userRepository = userRepository;
         this.loginHashRepository = loginHashRepository;
         this.passwordEncoder = passwordEncoder;
         this.provisioningHelper = provisioningHelper;
         this.auditLogService = auditLogService;
+        this.refreshTokenService = refreshTokenService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -71,15 +79,29 @@ public class PlatformUserService {
         user.setFullName(request.fullName());
         user.setTenantId(null);
         user.setRoles(roles);
+        String password = request.password();
+        boolean generatedPassword = password == null || password.isBlank();
+        if (generatedPassword) {
+            password = PasswordGenerator.generateReadable();
+            user.setMustChangePassword(true);
+        }
         User saved = userRepository.saveAndFlush(user);
+        if (generatedPassword) {
+            saved.setMustChangePassword(true);
+        }
 
         LoginHash loginHash = new LoginHash();
         loginHash.setUserId(saved.getId());
-        loginHash.setHash(passwordEncoder.encode(request.password()));
+        loginHash.setHash(passwordEncoder.encode(password));
         loginHashRepository.save(loginHash);
         auditLogService.record(caller, IdentityConstants.PLATFORM_USER_AGGREGATE,
                 saved.getPublicId().toString(), IdentityConstants.PLATFORM_USER_CREATED,
                 IdentityConstants.PLATFORM_USER_CREATED_SUMMARY);
+        if (generatedPassword) {
+            eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(
+                    UUID.randomUUID(), saved.getPublicId(), saved.getTenantId(), saved.getUsername(),
+                    saved.getEmail(), saved.getFullName(), password));
+        }
         return UserMapper.toResponse(saved);
     }
 
@@ -97,15 +119,24 @@ public class PlatformUserService {
     @Transactional(readOnly = true)
     public PagedResult<UserResponse> list(int requestedPage, int requestedSize, String search,
             String role, String status, CurrentUser caller) {
+        return list(requestedPage, requestedSize, search, role, status, false, caller);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<UserResponse> list(int requestedPage, int requestedSize, String search,
+            String role, String status, boolean includeArchived, CurrentUser caller) {
         requirePlatformUserManagement(caller);
         int page = Math.max(DEFAULT_PAGE, requestedPage);
         int size = requestedSize <= 0 ? DEFAULT_SIZE : Math.min(requestedSize, MAX_SIZE);
         Role roleFilter = parseRoleFilter(role);
         UserStatus statusFilter = parseStatusFilter(status);
         String normalizedSearch = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
-        var result = userRepository.findPageForPlatformUsers(provisioningHelper.platformRoleValues(),
-                roleFilter, statusFilter, normalizedSearch,
-                org.springframework.data.domain.PageRequest.of(page, size));
+        var pageable = org.springframework.data.domain.PageRequest.of(page, size);
+        var result = includeArchived
+                ? userRepository.findPageForPlatformUsersIncludingArchived(provisioningHelper.platformRoleValues(),
+                        roleFilter, statusFilter, normalizedSearch, true, pageable)
+                : userRepository.findPageForPlatformUsers(provisioningHelper.platformRoleValues(),
+                        roleFilter, statusFilter, normalizedSearch, pageable);
         return new PagedResult<>(result.map(UserMapper::toResponse).getContent(),
                 new PageMeta(result.getNumber(), result.getSize(), result.getTotalElements(),
                         result.getTotalPages(), result.isFirst(), result.isLast(), result.hasNext(),
@@ -173,6 +204,7 @@ public class PlatformUserService {
         rejectSelfOrAdminTarget(target, caller);
         authorizePlatformTarget(caller, publicId, target.getRoles());
         target.suspend();
+        refreshTokenService.revokeAllForUser(target.getId());
         auditLogService.record(caller, IdentityConstants.PLATFORM_USER_AGGREGATE,
                 publicId.toString(), IdentityConstants.PLATFORM_USER_SUSPENDED,
                 IdentityConstants.PLATFORM_USER_SUSPENDED_SUMMARY);
@@ -194,7 +226,7 @@ public class PlatformUserService {
         return UserMapper.toResponse(target);
     }
 
-    private void requirePlatformUserManagement(CurrentUser caller) {
+    void requirePlatformUserManagement(CurrentUser caller) {
         if (!SecurityPolicy.hasCapability(caller, SecurityCapability.PLATFORM_USER_MANAGE)) {
             if (caller != null && caller.userId() != null) {
                 recordAuthorizationDenied(caller, IdentityConstants.PLATFORM_AUTHORIZATION_AGGREGATE_ID);
@@ -212,7 +244,7 @@ public class PlatformUserService {
         }
     }
 
-    private void authorizePlatformTarget(CurrentUser caller, UUID publicId, Set<Role> targetRoles) {
+    void authorizePlatformTarget(CurrentUser caller, UUID publicId, Set<Role> targetRoles) {
         try {
             provisioningHelper.authorizePlatformTarget(caller, targetRoles);
         } catch (ForbiddenUserManagementException ex) {
@@ -230,7 +262,7 @@ public class PlatformUserService {
         return target;
     }
 
-    private User findPlatformTargetWithLock(UUID publicId) {
+    User findPlatformTargetWithLock(UUID publicId) {
         User target = userRepository.findWithLockByPublicId(publicId).orElseThrow(UserNotFoundException::new);
         if (target.getTenantId() != null || !provisioningHelper.isPlatformTarget(target.getRoles())) {
             throw new UserNotFoundException();
@@ -238,14 +270,23 @@ public class PlatformUserService {
         return target;
     }
 
-    private void rejectSelfOrAdminTarget(User target, CurrentUser caller) {
+    User findPlatformTargetWithLockIncludingDeleted(UUID publicId) {
+        User target = userRepository.findWithLockByPublicIdIncludingDeleted(publicId)
+                .orElseThrow(UserNotFoundException::new);
+        if (target.getTenantId() != null || !provisioningHelper.isPlatformTarget(target.getRoles())) {
+            throw new UserNotFoundException();
+        }
+        return target;
+    }
+
+    void rejectSelfOrAdminTarget(User target, CurrentUser caller) {
         if (target.getPublicId().equals(caller.userId()) || target.getRoles().contains(Role.PLATFORM_ADMIN)) {
             recordAuthorizationDenied(caller, target.getPublicId().toString());
             throw new ForbiddenUserManagementException();
         }
     }
 
-    private void recordAuthorizationDenied(CurrentUser caller, String aggregateId) {
+    void recordAuthorizationDenied(CurrentUser caller, String aggregateId) {
         if (caller != null && caller.userId() != null) {
             auditLogService.recordFailure(caller, IdentityConstants.PLATFORM_USER_AGGREGATE, aggregateId,
                     IdentityConstants.PLATFORM_AUTHORIZATION_DENIED,

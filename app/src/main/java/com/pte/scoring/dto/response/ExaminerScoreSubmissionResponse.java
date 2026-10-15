@@ -8,5 +8,12 @@ public record ExaminerScoreSubmissionResponse(
         UUID answerPublicId,
         int myScore,
         String status,
-        Instant submittedAt) {
+        Instant submittedAt,
+        ExaminerDecisionResponse decision,
+        String selectedScoreSource,
+        String reviewVersion) {
+
+    public ExaminerScoreSubmissionResponse(UUID answerPublicId, int myScore, String status, Instant submittedAt) {
+        this(answerPublicId, myScore, status, submittedAt, null, "EXAMINER", null);
+    }
 }
