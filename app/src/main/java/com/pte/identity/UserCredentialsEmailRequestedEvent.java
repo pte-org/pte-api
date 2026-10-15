@@ -3,9 +3,10 @@ package com.pte.identity;
 import java.util.UUID;
 
 /**
- * Published after an operator rotates a user's password and requests a
- * credential email. The temporary password exists only in this in-memory event
- * and the outbound email job; notification history stores a redacted body.
+ * Published after a user's temporary password is generated or rotated and a
+ * credential email is requested. The temporary password exists only in this
+ * in-memory event and the outbound email job; notification history stores a
+ * redacted body.
  */
 public record UserCredentialsEmailRequestedEvent(
         UUID requestId,

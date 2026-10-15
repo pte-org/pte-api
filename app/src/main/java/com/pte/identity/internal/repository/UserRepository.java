@@ -28,22 +28,32 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     List<User> findByUsername(String username);
 
+    List<User> findByUsernameAndDeletedFalse(String username);
+
     Optional<User> findByUsernameAndTenantId(String username, UUID tenantId);
+
+    Optional<User> findByUsernameAndTenantIdAndDeletedFalse(String username, UUID tenantId);
 
     boolean existsByUsernameAndTenantId(String username, UUID tenantId);
 
-    /** Kept for the password-recovery flow only — login itself uses {@link #findByUsername}. */
+    /** Kept for the password-recovery flow only; login excludes archived users. */
     Optional<User> findByEmail(String email);
 
     Optional<User> findByPublicId(UUID publicId);
 
     Optional<User> findByPublicIdAndDeletedFalse(UUID publicId);
 
+    Optional<User> findByIdAndDeletedFalse(Long id);
+
     Optional<User> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.publicId = :publicId and u.deleted = false")
     Optional<User> findWithLockByPublicId(@Param("publicId") UUID publicId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.publicId = :publicId")
+    Optional<User> findWithLockByPublicIdIncludingDeleted(@Param("publicId") UUID publicId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.publicId = :publicId and u.tenantId = :tenantId "
@@ -74,6 +84,19 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Page<User> findPageForPlatformUsers(@Param("platformRoles") Set<Role> platformRoles,
             @Param("role") Role role, @Param("status") UserStatus status, @Param("search") String search,
             Pageable pageable);
+
+    @Query("select distinct u from User u join u.roles userRole "
+            + "where u.tenantId is null and userRole in :platformRoles "
+            + "and (:includeArchived = true or u.deleted = false) "
+            + "and (:role is null or userRole = :role) "
+            + "and (:status is null or u.status = :status) "
+            + "and (:search = '' "
+            + "or lower(coalesce(u.fullName, '')) like concat('%', :search, '%') "
+            + "or lower(coalesce(u.email, '')) like concat('%', :search, '%') "
+            + "or lower(coalesce(u.username, '')) like concat('%', :search, '%'))")
+    Page<User> findPageForPlatformUsersIncludingArchived(@Param("platformRoles") Set<Role> platformRoles,
+            @Param("role") Role role, @Param("status") UserStatus status, @Param("search") String search,
+            @Param("includeArchived") boolean includeArchived, Pageable pageable);
 
     @Query("select distinct u from User u join u.roles userRole "
             + "where u.tenantId is null and u.deleted = false and userRole in :platformRoles")

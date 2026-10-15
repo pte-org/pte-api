@@ -25,15 +25,23 @@ public final class IdentityConstants {
     public static final String PLATFORM_USER_AGGREGATE = "PlatformUser";
     public static final String PLATFORM_USER_CREATED = "PlatformUserCreated";
     public static final String PLATFORM_USER_ROLES_UPDATED = "PlatformUserRolesUpdated";
+    public static final String PLATFORM_USER_PROFILE_UPDATED = "PlatformUserProfileUpdated";
+    public static final String PLATFORM_USER_PASSWORD_RESET = "PlatformUserPasswordReset";
     public static final String PLATFORM_USER_SUSPENDED = "PlatformUserSuspended";
     public static final String PLATFORM_USER_REACTIVATED = "PlatformUserReactivated";
+    public static final String PLATFORM_USER_ARCHIVED = "PlatformUserArchived";
+    public static final String PLATFORM_USER_RESTORED = "PlatformUserRestored";
     public static final String PLATFORM_AUTHORIZATION_DENIED = "PlatformAuthorizationDenied";
     public static final String PLATFORM_AUTHORIZATION_AGGREGATE_ID = "authorization";
     public static final String PLATFORM_ROLE_ASSIGNMENT_AGGREGATE_ID = "role-assignment";
     public static final String PLATFORM_USER_CREATED_SUMMARY = "Platform user created.";
     public static final String PLATFORM_USER_ROLES_UPDATED_SUMMARY = "Platform user roles updated.";
+    public static final String PLATFORM_USER_PROFILE_UPDATED_SUMMARY = "Platform user profile updated.";
+    public static final String PLATFORM_USER_PASSWORD_RESET_SUMMARY = "Platform user password reset.";
     public static final String PLATFORM_USER_SUSPENDED_SUMMARY = "Platform user suspended.";
     public static final String PLATFORM_USER_REACTIVATED_SUMMARY = "Platform user reactivated.";
+    public static final String PLATFORM_USER_ARCHIVED_SUMMARY = "Platform user archived.";
+    public static final String PLATFORM_USER_RESTORED_SUMMARY = "Platform user restored.";
     public static final String PLATFORM_AUTHORIZATION_DENIED_SUMMARY =
             "Platform-user management authorization denied.";
     public static final String USER_AGGREGATE = "User";
