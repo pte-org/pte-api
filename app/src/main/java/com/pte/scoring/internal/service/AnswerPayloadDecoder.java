@@ -61,6 +61,8 @@ public class AnswerPayloadDecoder {
     private static final Set<String> HIGHLIGHT_INCORRECT_WORDS_TASK_TYPES = Set.of(
             ScoringConstants.TASK_TYPE_HIGHLIGHT_INCORRECT_WORDS);
 
+    private static final String EMPTY_OPTIONS = "[]";
+
     private final JsonMapper jsonMapper;
     private final ScoringMethodResolver scoringMethodResolver;
 
@@ -85,19 +87,28 @@ public class AnswerPayloadDecoder {
         if (route != null
                 && (FILL_IN_THE_BLANKS_TYPE_IN_TASK_TYPES.contains(route)
                         || "FILL_IN_THE_BLANKS_TYPE_IN_V1".equals(route))
-                && answer.getOptionsJson() == null) {
+                && !hasOptions(answer)) {
             return decodePositionalSelection(answer);
         }
-        if (answer.getOptionsJson() != null && !answer.getOptionsJson().isBlank()) {
+        if (hasOptions(answer)) {
             return decodeSelection(answer);
         }
         if (route != null
                 && (HIGHLIGHT_INCORRECT_WORDS_TASK_TYPES.contains(route)
                         || "HIGHLIGHT_INCORRECT_WORDS_V1".equals(route))
-                && answer.getOptionsJson() == null) {
+                && !hasOptions(answer)) {
             return decodeWordIndices(answer);
         }
         return new DecodedAnswerPayload(AnswerPayloadKind.TEXT, answer.getPayload(), null, null, null, null, null);
+    }
+
+    /**
+     * Snapshots store {@code "[]"} for questions without options (essay,
+     * speaking, ...), so an empty array means "no options", not "unparsable".
+     */
+    private boolean hasOptions(ScoringAnswer answer) {
+        String optionsJson = answer.getOptionsJson();
+        return optionsJson != null && !optionsJson.isBlank() && !EMPTY_OPTIONS.equals(optionsJson.replaceAll("\\s", ""));
     }
 
     private String runtimeRoute(ScoringAnswer answer) {
