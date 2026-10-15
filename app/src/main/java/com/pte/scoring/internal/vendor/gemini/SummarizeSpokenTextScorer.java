@@ -35,6 +35,12 @@ public class SummarizeSpokenTextScorer extends GeminiWritingScorer {
         return Set.of(ScoringConstants.TASK_TYPE_SUMMARIZE_SPOKEN_TEXT);
     }
 
+    /** The lecture's transcript is authored as the item's reference answer; the item has no prompt text. */
+    @Override
+    String sourceText(AiScoringRequest request) {
+        return request.referenceAnswerText();
+    }
+
     @Override
     FormCheck formCheck(String answer, AiScoringRequest request) {
         return FormCheck.summarizeSpokenText(answer, request.minWordCount(), request.maxWordCount());

@@ -258,7 +258,7 @@ class GeminiWritingScorersTest {
         geminiSays("{\"content\": 80, \"grammar\": 70, \"vocabulary\": 60, \"spelling\": 90, \"feedback\": \"Good.\", "
                 + "\"covered_points\": [\"main idea\"], \"missed_points\": [\"example\"], " + ERRORS + "}");
 
-        AiScoreResult result = sst.score(request("SUMMARIZE_SPOKEN_TEXT", "A lecture about bees.", words(60), null, null));
+        AiScoreResult result = sst.score(sstRequest("A lecture about bees.", words(60)));
 
         assertThat(result.subScores()).containsOnlyKeys("CONTENT", "FORM", "GRAMMAR", "VOCABULARY", "SPELLING")
                 .containsEntry("FORM", 100);
@@ -276,20 +276,20 @@ class GeminiWritingScorersTest {
         geminiSays("{\"content\": 80, \"grammar\": 70, \"vocabulary\": 60, \"spelling\": 90, \"feedback\": \"\", "
                 + "\"covered_points\": [], \"missed_points\": [], " + ERRORS + "}");
 
-        AiScoreResult nearMiss = sst.score(request("SUMMARIZE_SPOKEN_TEXT", "A lecture about bees.", words(45), null, null));
+        AiScoreResult nearMiss = sst.score(sstRequest("A lecture about bees.", words(45)));
         assertThat(nearMiss.subScores()).containsEntry("FORM", 0);
         assertThat(detail(nearMiss).path("formCheck").path("status").asText()).isEqualTo("outside_full_range");
 
         geminiSays("{\"content\": 80, \"grammar\": 70, \"vocabulary\": 60, \"spelling\": 90, \"feedback\": \"\", "
                 + "\"covered_points\": [], \"missed_points\": [], " + ERRORS + "}");
-        AiScoreResult invalid = sst.score(request("SUMMARIZE_SPOKEN_TEXT", "A lecture about bees.", words(30), null, null));
+        AiScoreResult invalid = sst.score(sstRequest("A lecture about bees.", words(30)));
         assertThat(invalid.subScores()).containsEntry("FORM", 0);
         assertThat(detail(invalid).path("formCheck").path("status").asText()).isEqualTo("invalid_boundary");
     }
 
     @Test
     void sstWithNoTranscriptOfTheListeningFails() {
-        assertThatThrownBy(() -> sst.score(request("SUMMARIZE_SPOKEN_TEXT", " ", words(60), null, null)))
+        assertThatThrownBy(() -> sst.score(sstRequest(" ", words(60))))
                 .isInstanceOfSatisfying(AiProviderException.class,
                         ex -> assertThat(ex.getMessage()).isEqualTo(ScoringConstants.AI_SOURCE_TEXT_EMPTY));
         verify(gemini, never()).generate(any());
@@ -314,6 +314,12 @@ class GeminiWritingScorersTest {
     private static AiScoringRequest request(String taskType, String promptText, String answer, Integer minWords,
                                             Integer maxWords) {
         return new AiScoringRequest(taskType, answer, promptText, null, null, null, minWords, maxWords,
+                UUID.randomUUID());
+    }
+
+    /** An SST item keeps the lecture transcript as its reference answer and has no prompt text. */
+    private static AiScoringRequest sstRequest(String transcript, String answer) {
+        return new AiScoringRequest("SUMMARIZE_SPOKEN_TEXT", answer, null, transcript, null, null, 50, 70,
                 UUID.randomUUID());
     }
 

@@ -62,9 +62,14 @@ abstract class GeminiWritingScorer implements AiAnswerScorer {
 
     abstract FormCheck formCheck(String answer, AiScoringRequest request);
 
+    /** The text the answer is judged against; the item's prompt unless a task keeps it elsewhere. */
+    String sourceText(AiScoringRequest request) {
+        return request.promptText();
+    }
+
     @Override
     public AiScoreResult score(AiScoringRequest request) {
-        String source = GeminiScorers.requireText(request.promptText(), ScoringConstants.AI_SOURCE_TEXT_EMPTY);
+        String source = GeminiScorers.requireText(sourceText(request), ScoringConstants.AI_SOURCE_TEXT_EMPTY);
         String answer = request.payload() == null ? "" : request.payload();
         FormCheck form = formCheck(answer, request);
         Map<String, Object> detail = AzureScorers.newDetail();
