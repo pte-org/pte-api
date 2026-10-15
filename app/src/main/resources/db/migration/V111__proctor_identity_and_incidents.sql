@@ -1,4 +1,4 @@
--- V99: Proctor identity verification and exam session incidents
+-- Proctor identity verification and exam session incidents
 
 ALTER TABLE session_attendances
     ADD COLUMN IF NOT EXISTS identity_status VARCHAR(32) NOT NULL DEFAULT 'UNVERIFIED',
