@@ -84,15 +84,20 @@ public class ReportPublishService {
         List<ReportPublicationBlockerResponse> blockers = new ArrayList<>();
         List<AttemptSummaryView> attempts = resolveCohortAttempts(sessionPublicId, tenantId, blockers);
 
+        if (attempts.isEmpty()) {
+            if (blockers.isEmpty()) {
+                return 0;
+            }
+            ReportPublicationReadinessResponse readiness =
+                    readiness(sessionPublicId, true, attempts, List.of(), blockers);
+            throw new ReportPublicationNotReadyException(readiness.blockers());
+        }
+
         ReportPublicationScoringView locked = scoringService.lockForReportPublication(tenantId, sessionPublicId,
                 UUID.randomUUID());
         ReportPublicationReadinessResponse readiness = readiness(sessionPublicId, true, attempts, locked.answers(), blockers);
         if (!readiness.canPublish()) {
             throw new ReportPublicationNotReadyException(readiness.blockers());
-        }
-
-        if (attempts.isEmpty()) {
-            return 0;
         }
 
         Set<UUID> attemptIds = attempts.stream().map(AttemptSummaryView::attemptPublicId).collect(Collectors.toSet());
