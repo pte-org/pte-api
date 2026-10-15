@@ -75,6 +75,22 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("SELECT DISTINCT q FROM Question q WHERE q.deleted = false AND q.publicId IN :publicIds")
     List<Question> findWithOptionsByPublicIdIn(@Param("publicIds") Collection<UUID> publicIds);
 
+    @Query("""
+            SELECT q.publicId FROM Question q
+            WHERE q.deleted = false
+              AND q.visibility = com.pte.itembank.domain.enums.Visibility.SHARED
+              AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED
+              AND q.current = true
+              AND q.pool = com.pte.itembank.domain.enums.QuestionPool.PRACTICE
+              AND q.taskTypeKey = :taskTypeKey
+            ORDER BY q.publicId
+            """)
+    List<UUID> findPublishedPracticeQuestionIdsByTaskTypeKey(@Param("taskTypeKey") String taskTypeKey,
+            Pageable pageable);
+
+    boolean existsByDeletedFalseAndVisibilityAndStatusAndCurrentTrueAndPoolAndTaskTypeKey(
+            Visibility visibility, QuestionStatus status, QuestionPool pool, String taskTypeKey);
+
     long countByDeletedFalseAndVisibility(Visibility visibility);
 
     /** True when some other revision in the group already holds the group's one "current" slot. */

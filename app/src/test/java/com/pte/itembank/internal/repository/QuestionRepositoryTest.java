@@ -1,6 +1,7 @@
 package com.pte.itembank.internal.repository;
 
 import com.pte.itembank.domain.Question;
+import com.pte.itembank.domain.QuestionOption;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
@@ -86,6 +87,32 @@ class QuestionRepositoryTest {
         assertThat(questionRepository.countPublishedSharedGroupedByTaskType(Set.of(key)))
                 .singleElement()
                 .satisfies(row -> assertThat(row.getCount()).isEqualTo(1L));
+    }
+
+    @Test
+    void practiceQueryReturnsOnlyPublishedCurrentPracticeContentWithOptions() {
+        Question practice = persist("Practice item", "Read this passage", "READING",
+                QuestionStatus.APPROVED, QuestionPool.PRACTICE);
+        QuestionOption option = new QuestionOption();
+        option.setText("The supported statement");
+        option.setCorrect(true);
+        option.setOrderIndex(0);
+        practice.addOption(option);
+        questionRepository.saveAndFlush(practice);
+        persist("Exam item", "Do not return this", "READING", QuestionStatus.APPROVED);
+
+        List<UUID> ids = questionRepository.findPublishedPracticeQuestionIdsByTaskTypeKey(
+                "MC_READING_SINGLE", PageRequest.of(0, 1));
+        List<Question> result = questionRepository.findWithOptionsByPublicId(ids.get(0)).stream().toList();
+
+        assertThat(result).singleElement().satisfies(question -> {
+            assertThat(question.getPublicId()).isEqualTo(practice.getPublicId());
+            assertThat(question.getOptions()).singleElement().extracting(QuestionOption::getText)
+                    .isEqualTo("The supported statement");
+        });
+        assertThat(questionRepository.existsByDeletedFalseAndVisibilityAndStatusAndCurrentTrueAndPoolAndTaskTypeKey(
+                Visibility.SHARED, QuestionStatus.APPROVED, QuestionPool.PRACTICE, "MC_READING_SINGLE"))
+                .isTrue();
     }
 
     private Question persist(String title, String prompt, String section, QuestionStatus status) {
