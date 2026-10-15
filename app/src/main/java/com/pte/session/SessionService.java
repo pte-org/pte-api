@@ -72,6 +72,11 @@ public class SessionService {
         return entitlementService.checkProctorAssignment(sessionPublicId, proctorPublicId);
     }
 
+    /** Resolves the tenant owning a session for trusted platform-level operations. */
+    public UUID resolveTenantId(UUID sessionPublicId) {
+        return entitlementService.resolveTenantId(sessionPublicId);
+    }
+
     /** Throws if the session doesn't exist in the caller's tenant. */
     public void verifyHostAccess(UUID sessionPublicId, UUID tenantId) {
         entitlementService.verifyHostAccess(sessionPublicId, tenantId);

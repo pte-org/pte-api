@@ -93,6 +93,14 @@ public class EntitlementService {
         return new ProctorAssignmentCheckResponse(session.getPublicId(), session.getTenantId());
     }
 
+    /** Resolves the owning tenant for trusted platform-level operations. */
+    @Transactional(readOnly = true)
+    public UUID resolveTenantId(UUID sessionPublicId) {
+        return sessionRepository.findByPublicId(sessionPublicId)
+                .map(ExamSession::getTenantId)
+                .orElseThrow(SessionNotFoundException::new);
+    }
+
     /**
      * Tenant-ownership gate for scoring's host-triggered "score this session"
      * command (Phase 08) — same 404-not-403 shape as every other tenant check
