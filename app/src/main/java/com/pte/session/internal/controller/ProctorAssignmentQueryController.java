@@ -26,6 +26,9 @@ import java.util.List;
 @PreAuthorize("hasRole('PROCTOR')")
 public class ProctorAssignmentQueryController {
 
+    private static final int DEFAULT_PAGE_SIZE = 25;
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final SessionService sessionService;
 
     public ProctorAssignmentQueryController(SessionService sessionService) {
@@ -70,8 +73,10 @@ public class ProctorAssignmentQueryController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
         CurrentUser caller = CurrentUserContext.required();
+        int safePage = Math.max(0, page);
+        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
         ProctorAssignedSessionsPageView pagedView = sessionService
-                .getAssignedSessionsForProctor(caller.userId(), caller.tenantId(), scope, timezone, sort, page, size);
+                .getAssignedSessionsForProctor(caller.userId(), caller.tenantId(), scope, timezone, sort, safePage, safeSize);
 
         List<AssignedProctorSessionResponse> mapped = pagedView.data().stream()
                 .map(v -> new AssignedProctorSessionResponse(

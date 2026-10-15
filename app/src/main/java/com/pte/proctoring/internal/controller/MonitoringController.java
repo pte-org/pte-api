@@ -24,6 +24,9 @@ import java.util.UUID;
 @PreAuthorize("hasRole('PROCTOR')")
 public class MonitoringController {
 
+    private static final int DEFAULT_PAGE_SIZE = 25;
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final MonitoringQueryService monitoringQueryService;
 
     public MonitoringController(MonitoringQueryService monitoringQueryService) {
@@ -36,7 +39,9 @@ public class MonitoringController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
         CurrentUser caller = CurrentUserContext.required();
-        return ApiResponse.success(monitoringQueryService.getSnapshot(sessionPublicId, page, size, caller));
+        int safePage = Math.max(0, page);
+        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+        return ApiResponse.success(monitoringQueryService.getSnapshot(sessionPublicId, safePage, safeSize, caller));
     }
 
     @GetMapping("/{sessionPublicId}/monitoring/students/{studentPublicId}/attempts")
@@ -46,7 +51,9 @@ public class MonitoringController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
         CurrentUser caller = CurrentUserContext.required();
+        int safePage = Math.max(0, page);
+        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
         return ApiResponse.success(monitoringQueryService.getStudentAttemptHistory(
-                sessionPublicId, studentPublicId, page, size, caller));
+                sessionPublicId, studentPublicId, safePage, safeSize, caller));
     }
 }

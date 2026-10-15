@@ -27,6 +27,9 @@ import java.util.UUID;
 @PreAuthorize("hasRole('PROCTOR')")
 public class ProctorAttendanceController {
 
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final AttendanceCoordinatorService attendanceCoordinatorService;
 
     public ProctorAttendanceController(AttendanceCoordinatorService attendanceCoordinatorService) {
@@ -41,8 +44,10 @@ public class ProctorAttendanceController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         CurrentUser caller = CurrentUserContext.required();
+        int safePage = Math.max(0, page);
+        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
         return ApiResponse.success(attendanceCoordinatorService.getAttendanceRoster(
-                sessionPublicId, status, search, page, size, caller, false));
+                sessionPublicId, status, search, safePage, safeSize, caller, false));
     }
 
     @PatchMapping("/{sessionPublicId}/attendance/students/{studentPublicId}")
@@ -71,8 +76,10 @@ public class ProctorAttendanceController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         CurrentUser caller = CurrentUserContext.required();
+        int safePage = Math.max(0, page);
+        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
         return ApiResponse.success(attendanceCoordinatorService.getHistory(
-                sessionPublicId, studentPublicId, page, size, caller, false));
+                sessionPublicId, studentPublicId, safePage, safeSize, caller, false));
     }
 
     @PatchMapping("/{sessionPublicId}/attendance/students/{studentPublicId}/identity")

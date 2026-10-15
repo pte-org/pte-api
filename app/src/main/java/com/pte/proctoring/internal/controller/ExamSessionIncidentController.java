@@ -28,6 +28,9 @@ import java.util.UUID;
 @PreAuthorize("hasAnyRole('PROCTOR', 'HOST_ADMIN', 'PLATFORM_ADMIN', 'PLATFORM_MANAGER')")
 public class ExamSessionIncidentController {
 
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final ExamSessionIncidentService incidentService;
 
     public ExamSessionIncidentController(ExamSessionIncidentService incidentService) {
@@ -41,7 +44,9 @@ public class ExamSessionIncidentController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         CurrentUser caller = CurrentUserContext.required();
-        return ApiResponse.success(incidentService.listIncidents(sessionPublicId, status, page, size, caller));
+        int safePage = Math.max(0, page);
+        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+        return ApiResponse.success(incidentService.listIncidents(sessionPublicId, status, safePage, safeSize, caller));
     }
 
     @PostMapping("/{sessionPublicId}/incidents")

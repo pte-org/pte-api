@@ -15,6 +15,7 @@ import com.pte.proctoring.internal.service.ProctorSessionService;
 import com.pte.proctoring.internal.service.ViolationService;
 import com.pte.shared.exception.DomainException;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.SecurityRoles;
 import jakarta.validation.Valid;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -44,8 +45,6 @@ import java.util.UUID;
  */
 @Controller
 public class ProctorStompController {
-
-    private static final String ROLE_PROCTOR = "PROCTOR";
 
     private final ProctorSessionService proctorSessionService;
     private final ProctorCommandDispatchService proctorCommandService;
@@ -236,7 +235,7 @@ public class ProctorStompController {
             throw new IllegalStateException(SharedConstants.NO_AUTHENTICATED_STOMP_PRINCIPAL);
         }
         CurrentUser currentUser = stompPrincipal.currentUser();
-        if (!currentUser.hasRole(ROLE_PROCTOR)) {
+        if (!currentUser.hasRole(SecurityRoles.PROCTOR)) {
             throw new ProctorRoleRequiredException();
         }
         return currentUser;
