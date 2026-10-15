@@ -214,7 +214,10 @@ public class ExamGenerationService {
                         PteTaskType.PERSONAL_INTRODUCTION, section, 1, 1));
             }
             itemsBySection.getOrDefault(section, List.of()).stream()
-                    .sorted(Comparator.comparingInt(ScoreTemplateItemResponse::sequence))
+                    .sorted(Comparator.comparingInt(i -> TemplateTaskOrder.sequenceInSection(section,
+                            TaskTypeCodeCompatibility.normalizeTaskTypeKey(
+                                    i.taskTypeKey() == null ? i.taskType() : i.taskTypeKey()),
+                            i.sequence())))
                     .forEach(i -> {
                         String taskTypeKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
                                 i.taskTypeKey() == null ? i.taskType() : i.taskTypeKey());
