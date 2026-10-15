@@ -166,6 +166,11 @@ public class SessionLifecycleService {
         sessionOperationGuardService.lockOpenForAttemptOperation(publicId, tenantId);
     }
 
+    @Transactional
+    public void lockOpenWithinWindowForProctorOperation(UUID publicId, UUID tenantId) {
+        sessionOperationGuardService.lockOpenWithinWindowForProctorOperation(publicId, tenantId);
+    }
+
     @Transactional(readOnly = true)
     public AttemptRetryPolicyResponse getAttemptRetryPolicy(UUID publicId, UUID tenantId) {
         return sessionReadService.getAttemptRetryPolicy(publicId, tenantId);

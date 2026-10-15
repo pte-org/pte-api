@@ -23,6 +23,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -47,11 +48,15 @@ class ProctorSessionServiceTest {
     }
 
     @Test
-    void open_activeSessionExists_returnsExistingSessionWithoutCheckingAssignment() {
+    void open_activeSessionExists_returnsExistingSessionAfterCheckingAssignment() {
         UUID sessionPublicId = UUID.randomUUID();
         UUID proctorPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(proctorPublicId, tenantId, List.of("PROCTOR"));
+
+        ProctorAssignmentCheckResponse checkResponse = new ProctorAssignmentCheckResponse(sessionPublicId, tenantId);
+        when(sessionService.checkProctorAssignment(sessionPublicId, proctorPublicId))
+                .thenReturn(checkResponse);
 
         ProctorSession existingSession = new ProctorSession();
         existingSession.setPublicId(UUID.randomUUID());
@@ -72,7 +77,8 @@ class ProctorSessionServiceTest {
         ProctorSessionResponse result = service.open(sessionPublicId, caller);
 
         assertThat(result).isEqualTo(expectedResponse);
-        verify(sessionService, never()).checkProctorAssignment(any(), any());
+        verify(sessionService).lockOpenWithinWindowForProctorOperation(sessionPublicId, tenantId);
+        verify(sessionService).checkProctorAssignment(sessionPublicId, proctorPublicId);
         verify(proctorSessionRepository, never()).save(any());
     }
 
@@ -107,6 +113,7 @@ class ProctorSessionServiceTest {
         ProctorSessionResponse result = service.open(sessionPublicId, caller);
 
         assertThat(result).isEqualTo(expectedResponse);
+        verify(sessionService).lockOpenWithinWindowForProctorOperation(sessionPublicId, tenantId);
         verify(sessionService).checkProctorAssignment(sessionPublicId, proctorPublicId);
 
         ArgumentCaptor<ProctorSession> captor = ArgumentCaptor.forClass(ProctorSession.class);
@@ -124,9 +131,6 @@ class ProctorSessionServiceTest {
         UUID tenantId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(proctorPublicId, tenantId, List.of("PROCTOR"));
 
-        when(proctorSessionRepository.findBySessionPublicIdAndProctorPublicIdAndTenantIdAndStatus(
-                sessionPublicId, proctorPublicId, tenantId, ProctorSessionStatus.ACTIVE))
-                .thenReturn(Optional.empty());
         when(sessionService.checkProctorAssignment(sessionPublicId, proctorPublicId))
                 .thenThrow(new RuntimeException("Proctor not assigned"));
 
@@ -134,6 +138,25 @@ class ProctorSessionServiceTest {
                 .isInstanceOf(RuntimeException.class)
                 .hasMessage("Proctor not assigned");
 
+        verify(sessionService).lockOpenWithinWindowForProctorOperation(sessionPublicId, tenantId);
+        verify(proctorSessionRepository, never()).save(any());
+    }
+
+    @Test
+    void open_sessionOutsideWindowOrClosed_throwsException() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID proctorPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = new CurrentUser(proctorPublicId, tenantId, List.of("PROCTOR"));
+
+        doThrow(new RuntimeException("Session closed"))
+                .when(sessionService).lockOpenWithinWindowForProctorOperation(sessionPublicId, tenantId);
+
+        assertThatThrownBy(() -> service.open(sessionPublicId, caller))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("Session closed");
+
+        verify(sessionService, never()).checkProctorAssignment(any(), any());
         verify(proctorSessionRepository, never()).save(any());
     }
 
@@ -150,7 +173,7 @@ class ProctorSessionServiceTest {
         session.setTenantId(tenantId);
         session.setStatus(ProctorSessionStatus.ACTIVE);
 
-        when(proctorSessionRepository.findByPublicIdAndProctorPublicIdAndTenantId(sessionPublicId, proctorPublicId, tenantId))
+        when(proctorSessionRepository.findWithLockByPublicIdAndProctorPublicIdAndTenantId(sessionPublicId, proctorPublicId, tenantId))
                 .thenReturn(Optional.of(session));
 
         service.close(sessionPublicId, new CurrentUser(proctorPublicId, tenantId, List.of("PROCTOR")));
@@ -173,7 +196,7 @@ class ProctorSessionServiceTest {
         session.setTenantId(tenantId);
         session.setStatus(ProctorSessionStatus.ENDED);
 
-        when(proctorSessionRepository.findByPublicIdAndProctorPublicIdAndTenantId(sessionPublicId, proctorPublicId, tenantId))
+        when(proctorSessionRepository.findWithLockByPublicIdAndProctorPublicIdAndTenantId(sessionPublicId, proctorPublicId, tenantId))
                 .thenReturn(Optional.of(session));
 
         service.close(sessionPublicId, new CurrentUser(proctorPublicId, tenantId, List.of("PROCTOR")));
@@ -191,6 +214,19 @@ class ProctorSessionServiceTest {
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.findOwned(publicId, proctorPublicId, tenantId))
+                .isInstanceOf(ProctorSessionNotFoundException.class);
+    }
+
+    @Test
+    void findOwnedWithLock_sessionNotFound_throwsException() {
+        UUID publicId = UUID.randomUUID();
+        UUID proctorPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+
+        when(proctorSessionRepository.findWithLockByPublicIdAndProctorPublicIdAndTenantId(publicId, proctorPublicId, tenantId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.findOwnedWithLock(publicId, proctorPublicId, tenantId))
                 .isInstanceOf(ProctorSessionNotFoundException.class);
     }
 }

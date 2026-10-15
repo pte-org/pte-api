@@ -20,6 +20,7 @@ import com.pte.scoring.internal.repository.ScoringAnswerRepository;
 import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
 import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,14 +43,17 @@ public class ScoreSourceSelectionService {
     private final ScoreSourceAuditRepository auditRepository;
     private final ScoringMethodResolver methodResolver;
     private final ScoringReviewReadQueryService readQueryService;
+    private final com.pte.scoring.internal.repository.GradingCohortRepository cohortRepository;
 
+    @Autowired
     public ScoreSourceSelectionService(SessionService sessionService,
             ScoringAnswerRepository answerRepository,
             ExaminerAnswerScoreRepository examinerScoreRepository,
             ScoringSessionStateRepository sessionStateRepository,
             ScoreSourceAuditRepository auditRepository,
             ScoringMethodResolver methodResolver,
-            ScoringReviewReadQueryService readQueryService) {
+            ScoringReviewReadQueryService readQueryService,
+            com.pte.scoring.internal.repository.GradingCohortRepository cohortRepository) {
         this.sessionService = sessionService;
         this.answerRepository = answerRepository;
         this.examinerScoreRepository = examinerScoreRepository;
@@ -57,6 +61,19 @@ public class ScoreSourceSelectionService {
         this.auditRepository = auditRepository;
         this.methodResolver = methodResolver;
         this.readQueryService = readQueryService;
+        this.cohortRepository = cohortRepository;
+    }
+
+    /** Compatibility constructor for tests. */
+    public ScoreSourceSelectionService(SessionService sessionService,
+            ScoringAnswerRepository answerRepository,
+            ExaminerAnswerScoreRepository examinerScoreRepository,
+            ScoringSessionStateRepository sessionStateRepository,
+            ScoreSourceAuditRepository auditRepository,
+            ScoringMethodResolver methodResolver,
+            ScoringReviewReadQueryService readQueryService) {
+        this(sessionService, answerRepository, examinerScoreRepository, sessionStateRepository,
+                auditRepository, methodResolver, readQueryService, null);
     }
 
     @Transactional(readOnly = true)
@@ -65,6 +82,7 @@ public class ScoreSourceSelectionService {
         UUID tenantId = requireHost(caller);
         validateRequest(request, false);
         sessionService.verifyHostAccess(sessionPublicId, tenantId);
+        assertNotManualExaminer(tenantId, sessionPublicId);
         return previewFor(tenantId, sessionPublicId, request,
                 answerRepository.findBySessionPublicIdAndTenantId(sessionPublicId, tenantId));
     }
@@ -88,6 +106,7 @@ public class ScoreSourceSelectionService {
         UUID tenantId = requireHost(caller);
         validateRequest(request, true);
         sessionService.lockForScoreReviewMutation(sessionPublicId, tenantId);
+        assertNotManualExaminer(tenantId, sessionPublicId);
 
         var prior = auditRepository.findByTenantIdAndSessionPublicIdAndRequestPublicId(
                 tenantId, sessionPublicId, request.requestPublicId());
@@ -231,5 +250,18 @@ public class ScoreSourceSelectionService {
 
     private ScoreSourceSelectionException error(HttpStatus status, String code, String message, Object data) {
         return new ScoreSourceSelectionException(status, code, data, message);
+    }
+
+    private void assertNotManualExaminer(UUID tenantId, UUID sessionPublicId) {
+        if (cohortRepository == null) {
+            return;
+        }
+        cohortRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId)
+                .ifPresent(cohort -> {
+                    if (cohort.getMarkingMode() == com.pte.scoring.domain.enums.GradingMarkingMode.MANUAL_EXAMINER) {
+                        throw error(HttpStatus.CONFLICT, ScoreReviewConstants.MANUAL_EXAMINER_SELECTION_PROHIBITED,
+                                ScoreReviewConstants.MANUAL_EXAMINER_SELECTION_PROHIBITED_MESSAGE, null);
+                    }
+                });
     }
 }

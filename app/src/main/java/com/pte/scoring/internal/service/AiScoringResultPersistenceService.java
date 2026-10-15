@@ -6,6 +6,7 @@ import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
 import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
 import com.pte.scoring.internal.vendor.AiScoreResult;
+import com.pte.session.SessionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -20,19 +21,27 @@ public class AiScoringResultPersistenceService {
     private final ScoringAnswerRepository answerRepository;
     private final ScoringSessionStateRepository sessionStateRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final SessionService sessionService;
 
     @Autowired
     public AiScoringResultPersistenceService(ScoringAnswerRepository answerRepository,
-            ScoringSessionStateRepository sessionStateRepository, ApplicationEventPublisher eventPublisher) {
+            ScoringSessionStateRepository sessionStateRepository, ApplicationEventPublisher eventPublisher,
+            SessionService sessionService) {
         this.answerRepository = answerRepository;
         this.sessionStateRepository = sessionStateRepository;
         this.eventPublisher = eventPublisher;
+        this.sessionService = sessionService;
+    }
+
+    public AiScoringResultPersistenceService(ScoringAnswerRepository answerRepository,
+            ScoringSessionStateRepository sessionStateRepository, ApplicationEventPublisher eventPublisher) {
+        this(answerRepository, sessionStateRepository, eventPublisher, null);
     }
 
     /** Compatibility constructor for focused persistence tests. */
     public AiScoringResultPersistenceService(ScoringAnswerRepository answerRepository,
             ScoringSessionStateRepository sessionStateRepository) {
-        this(answerRepository, sessionStateRepository, null);
+        this(answerRepository, sessionStateRepository, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -44,6 +53,9 @@ public class AiScoringResultPersistenceService {
     @Transactional
     public boolean persistAiScore(UUID answerPublicId, UUID attemptPublicId, UUID tenantId, UUID sessionPublicId,
             AiScoreResult result) {
+        if (sessionService != null) {
+            sessionService.lockForScoreReviewMutation(sessionPublicId, tenantId);
+        }
         ScoringAnswer answer = lockAnswer(answerPublicId, attemptPublicId, tenantId, sessionPublicId);
         if (answer == null || isTerminal(answer) || publicationLocked(tenantId, sessionPublicId)) {
             return false;
@@ -57,6 +69,9 @@ public class AiScoringResultPersistenceService {
 
     @Transactional
     public boolean markScoringFailed(UUID answerPublicId, UUID attemptPublicId, UUID tenantId, UUID sessionPublicId) {
+        if (sessionService != null) {
+            sessionService.lockForScoreReviewMutation(sessionPublicId, tenantId);
+        }
         ScoringAnswer answer = lockAnswer(answerPublicId, attemptPublicId, tenantId, sessionPublicId);
         if (answer == null || isTerminal(answer) || publicationLocked(tenantId, sessionPublicId)) {
             return false;

@@ -90,7 +90,7 @@ class ProctorCommandServiceTest {
         attempt.setSessionPublicId(sessionId);
         attempt.begin();
         when(attemptRepository.findByPublicIdAndTenantId(attemptPublicId, tenantId)).thenReturn(Optional.of(attempt));
-        doThrow(new NotEntitledException()).when(sessionService).lockOpenForAttemptOperation(sessionId, tenantId);
+        doThrow(new NotEntitledException()).when(sessionService).lockOpenWithinWindowForProctorOperation(sessionId, tenantId);
 
         assertThatThrownBy(() -> service.forceSubmit(attemptPublicId, tenantId))
                 .isInstanceOf(NotEntitledException.class);

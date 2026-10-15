@@ -4,6 +4,8 @@ import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -13,6 +15,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -130,4 +133,26 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long>,
     @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
     @Query("SELECT DISTINCT a FROM ExamAttempt a WHERE a.publicId IN :publicIds AND a.deleted = false")
     List<ExamAttempt> findAllWithPinnedByPublicIds(@Param("publicIds") List<UUID> publicIds);
+
+    /** Batch read of attempts for the given students on an exam session; ordered by attempt number desc. */
+    List<ExamAttempt> findBySessionPublicIdAndTenantIdAndStudentPublicIdInAndDeletedFalseOrderByAttemptNumberDesc(
+            UUID sessionPublicId, UUID tenantId, Collection<UUID> studentPublicIds);
+
+    /** Paged attempt history for a specific enrolled student on an exam session. */
+    Page<ExamAttempt> findBySessionPublicIdAndStudentPublicIdAndTenantIdAndDeletedFalse(
+            UUID sessionPublicId, UUID studentPublicId, UUID tenantId, Pageable pageable);
+
+    /** Tenant- and session-scoped single attempt lookup. */
+    Optional<ExamAttempt> findByPublicIdAndSessionPublicIdAndTenantId(
+            UUID publicId, UUID sessionPublicId, UUID tenantId);
+
+    /** Tenant- and session-scoped single attempt lookup under pessimistic write lock. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM ExamAttempt a WHERE a.publicId = :publicId AND a.sessionPublicId = :sessionPublicId AND a.tenantId = :tenantId")
+    Optional<ExamAttempt> findWithLockByPublicIdAndSessionPublicIdAndTenantId(
+            @Param("publicId") UUID publicId, @Param("sessionPublicId") UUID sessionPublicId, @Param("tenantId") UUID tenantId);
+
+    /** Checks whether the target attempt exists and belongs to the given exam session and tenant. */
+    boolean existsByPublicIdAndSessionPublicIdAndTenantId(
+            UUID publicId, UUID sessionPublicId, UUID tenantId);
 }
