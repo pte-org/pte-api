@@ -1,10 +1,10 @@
 package com.pte.notification.internal.listener;
 
+import com.pte.billing.BillingSettingsService;
 import com.pte.billing.TenantApplicationApprovedEvent;
 import com.pte.billing.TenantApplicationRejectedEvent;
 import com.pte.billing.TenantApplicationSubmittedEvent;
 import com.pte.notification.domain.enums.NotificationType;
-import com.pte.notification.internal.config.NotificationProperties;
 import com.pte.notification.internal.service.NotificationDispatchService;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -16,12 +16,12 @@ import java.util.UUID;
 public class TenantApplicationNotificationListener {
 
     private final NotificationDispatchService dispatchService;
-    private final NotificationProperties notificationProperties;
+    private final BillingSettingsService billingSettingsService;
 
     public TenantApplicationNotificationListener(NotificationDispatchService dispatchService,
-            NotificationProperties notificationProperties) {
+            BillingSettingsService billingSettingsService) {
         this.dispatchService = dispatchService;
-        this.notificationProperties = notificationProperties;
+        this.billingSettingsService = billingSettingsService;
     }
 
     @TransactionalEventListener
@@ -36,7 +36,7 @@ public class TenantApplicationNotificationListener {
 
                 Regards,
                 PTE Prep Platform Team
-                """.formatted(notificationProperties.getApplicationResponseSlaHours());
+                """.formatted(billingSettingsService.getTenantApplicationResponseSlaHours());
 
         dispatchService.dispatchExternal(NotificationType.TENANT_APPLICATION_SUBMITTED, event.contactEmail(), null,
                 dedupeKey(event.applicationPublicId(), "submitted"), subject, body);

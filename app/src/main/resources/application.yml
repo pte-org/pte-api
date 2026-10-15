@@ -87,7 +87,6 @@ spring:
 
 notification:
   mail-from: ${MAIL_FROM:no-reply@pteprep.local}
-  application-response-sla-hours: ${TENANT_APPLICATION_RESPONSE_SLA_HOURS:72}
   inbox:
     # Enable after additive migration and the notification rollout checks; email delivery is independent.
     enabled: ${NOTIFICATION_INBOX_ENABLED:false}
