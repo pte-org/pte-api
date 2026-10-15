@@ -23,6 +23,7 @@ public record AdminLicenseCodeSummary(
         String planType,
         Instant issuedAt,
         Instant codeExpiresAt,
+        Instant redeemedAt,
         UUID recipientPublicId,
         String recipientName,
         UUID subscriptionPublicId) {
@@ -41,6 +42,7 @@ public record AdminLicenseCodeSummary(
                 planAvailable && plan.getType() != null ? plan.getType().name() : null,
                 licenseCode.getIssuedAt(),
                 licenseCode.getCodeExpiresAt(),
+                licenseCode.getRedeemedAt(),
                 licenseCode.getRedeemedByTenantId(),
                 licenseCode.getRedeemedByTenantId() == null
                         ? null
