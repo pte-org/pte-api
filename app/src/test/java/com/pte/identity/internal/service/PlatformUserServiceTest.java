@@ -1,5 +1,6 @@
 package com.pte.identity.internal.service;
 
+import com.pte.identity.UserCredentialsEmailRequestedEvent;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.constant.IdentityConstants;
@@ -16,10 +17,12 @@ import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
@@ -33,6 +36,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -54,12 +58,18 @@ class PlatformUserServiceTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private RefreshTokenService refreshTokenService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private PlatformUserService service;
 
     @BeforeEach
     void setUp() {
         service = new PlatformUserService(userRepository, loginHashRepository, passwordEncoder,
-                provisioningHelper, auditLogService);
+                provisioningHelper, auditLogService, refreshTokenService, eventPublisher);
     }
 
     private CurrentUser admin() {
@@ -96,6 +106,35 @@ class PlatformUserServiceTest {
         verify(loginHashRepository).save(any(LoginHash.class));
         verify(auditLogService).record(eq(caller), eq("PlatformUser"),
                 eq(saved.getPublicId().toString()), eq("PlatformUserCreated"), any(String.class));
+        verify(eventPublisher, never()).publishEvent(any(UserCredentialsEmailRequestedEvent.class));
+    }
+
+    @Test
+    void create_withoutPassword_generatesReadableTemporaryPasswordAndQueuesEmail() {
+        CurrentUser caller = admin();
+        PlatformUserCreateRequest request = new PlatformUserCreateRequest(
+                "academic@example.com", "Academic User", null, List.of("ACADEMIC_STAFF"));
+        User saved = platformUser(UUID.randomUUID(), Role.ACADEMIC_STAFF);
+        when(provisioningHelper.resolvePlatformRoles(caller, request.roles()))
+                .thenReturn(Set.of(Role.ACADEMIC_STAFF));
+        when(userRepository.existsByUsernameAndTenantId(request.email(), null)).thenReturn(false);
+        when(passwordEncoder.encode(any(String.class))).thenReturn("generated-hash");
+        when(userRepository.saveAndFlush(any(User.class))).thenReturn(saved);
+
+        service.create(request, caller);
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(userCaptor.capture());
+        assertThat(userCaptor.getValue().isMustChangePassword()).isTrue();
+
+        ArgumentCaptor<UserCredentialsEmailRequestedEvent> eventCaptor =
+                ArgumentCaptor.forClass(UserCredentialsEmailRequestedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        ArgumentCaptor<String> passwordCaptor = ArgumentCaptor.forClass(String.class);
+        verify(passwordEncoder).encode(passwordCaptor.capture());
+        assertThat(eventCaptor.getValue().temporaryPassword())
+                .matches("^[2-9A-HJ-NP-Za-hj-np-z]{4}-[2-9A-HJ-NP-Za-hj-np-z]{4}$");
+        assertThat(passwordCaptor.getValue()).isEqualTo(eventCaptor.getValue().temporaryPassword());
     }
 
     @Test
@@ -168,6 +207,7 @@ class PlatformUserServiceTest {
         UserResponse response = service.suspend(targetId, caller);
 
         assertThat(response.status()).isEqualTo("SUSPENDED");
+        verify(refreshTokenService).revokeAllForUser(target.getId());
         verify(auditLogService).record(eq(caller), eq("PlatformUser"), eq(targetId.toString()),
                 eq("PlatformUserSuspended"), any(String.class));
     }

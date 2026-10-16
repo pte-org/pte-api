@@ -17,7 +17,6 @@ public record PlatformUserCreateRequest(
         @NotBlank(message = IdentityConstants.FULL_NAME_REQUIRED)
         String fullName,
 
-        @NotBlank(message = IdentityConstants.PASSWORD_REQUIRED)
         @Size(min = 8, message = IdentityConstants.PASSWORD_MIN_LENGTH)
         String password,
 

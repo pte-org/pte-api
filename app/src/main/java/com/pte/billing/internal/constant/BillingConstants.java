@@ -144,7 +144,19 @@ public final class BillingConstants {
     public static final int MAX_STUDENT_COUNT = 2_000;
 
     public static final String FREE_STUDENT_LIMIT_SETTING_KEY = "free_student_limit";
+    public static final int DEFAULT_TENANT_APPLICATION_RESPONSE_SLA_HOURS = 72;
+    public static final String TENANT_APPLICATION_RESPONSE_SLA_HOURS_SETTING_KEY =
+            "tenant_application_response_sla_hours";
     public static final String SUSPENSION_DEFAULT_DAYS_SETTING_KEY = "suspension_default_days";
+    public static final String PLATFORM_SETTING_AGGREGATE = "PlatformSetting";
+    public static final String PLATFORM_SETTING_UPDATED = "PLATFORM_SETTING_UPDATED";
+    public static final String PLATFORM_SETTING_KEY_UNSUPPORTED = "PLATFORM_SETTING_KEY_UNSUPPORTED";
+    public static final String PLATFORM_SETTING_VALUE_INVALID = "PLATFORM_SETTING_VALUE_INVALID";
+    public static final String PLATFORM_SETTING_BATCH_REQUIRED = "At least one platform setting is required";
+    public static final String PLATFORM_SETTING_BATCH_MAX =
+            "A platform setting batch must contain at most 20 values";
+    public static final String PLATFORM_SETTING_BATCH_DUPLICATE = "PLATFORM_SETTING_BATCH_DUPLICATE";
+    public static final int MAX_PLATFORM_SETTING_BATCH_SIZE = 20;
 
     public static final String ORG_NAME_REQUIRED = "Organization name is required";
     public static final String ORG_TYPE_REQUIRED = "Organization type is required";
@@ -191,6 +203,7 @@ public final class BillingConstants {
     public static final String CAPACITY_MAX_STUDENTS_FORBIDDEN =
             "STUDENT_CAPACITY must not set maxStudentsPerSession";
     public static final String SETTING_KEY_REQUIRED = "Setting key is required";
+    public static final String SETTING_KEY_MAX = "Setting key must be at most 100 characters";
     public static final String SETTING_VALUE_REQUIRED = "Setting value is required";
     public static final String SETTING_VALUE_MAX = "Setting value must be at most 255 characters";
     public static final String SETTING_DESCRIPTION_MAX = "Setting description must be at most 255 characters";

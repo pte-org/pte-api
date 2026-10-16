@@ -9,6 +9,7 @@ import com.pte.identity.internal.dto.request.LoginOrganizationOptionsRequest;
 import com.pte.identity.internal.dto.response.LoginOrganizationOptionResponse;
 import com.pte.identity.internal.dto.response.TokenResponse;
 import com.pte.identity.internal.exception.InvalidLoginException;
+import com.pte.identity.internal.exception.InvalidRefreshTokenException;
 import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.security.AccessTokenIssuer;
@@ -92,7 +93,7 @@ class AuthServiceTest {
         User user = activeUser(userId, tenantId, role, username);
         LoginHash loginHash = hashFor(userId, PASSWORD);
 
-        when(userRepository.findByUsername(username)).thenReturn(List.of(user));
+        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(List.of(user));
         when(loginHashRepository.findByUserId(userId)).thenReturn(Optional.of(loginHash));
         when(accessTokenIssuer.issue(user)).thenReturn("access-token");
         when(refreshTokenService.issue(user)).thenReturn("refresh-token");
@@ -142,7 +143,7 @@ class AuthServiceTest {
         User user = activeUser(1L, tenantId, Role.STUDENT, username);
         user.setMustChangePassword(true);
         LoginHash loginHash = hashFor(1L, PASSWORD);
-        when(userRepository.findByUsername(username)).thenReturn(List.of(user));
+        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(List.of(user));
         when(loginHashRepository.findByUserId(1L)).thenReturn(Optional.of(loginHash));
         when(accessTokenIssuer.issue(user)).thenReturn("access-token");
         when(refreshTokenService.issue(user)).thenReturn("refresh-token");
@@ -154,7 +155,7 @@ class AuthServiceTest {
 
     @Test
     void login_unknownUsername_throwsInvalidLogin() {
-        when(userRepository.findByUsername("ghost")).thenReturn(List.of());
+        when(userRepository.findByUsernameAndDeletedFalse("ghost")).thenReturn(List.of());
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("ghost", PASSWORD)))
                 .isInstanceOf(InvalidLoginException.class);
@@ -164,7 +165,7 @@ class AuthServiceTest {
     void login_wrongPassword_throwsInvalidLogin() {
         User user = activeUser(1L, null, Role.PLATFORM_ADMIN, "admin@test.local");
         LoginHash loginHash = hashFor(1L, PASSWORD);
-        when(userRepository.findByUsername("admin@test.local")).thenReturn(List.of(user));
+        when(userRepository.findByUsernameAndDeletedFalse("admin@test.local")).thenReturn(List.of(user));
         when(loginHashRepository.findByUserId(1L)).thenReturn(Optional.of(loginHash));
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("admin@test.local", "WrongPassword1")))
@@ -175,10 +176,28 @@ class AuthServiceTest {
     void login_suspendedUser_throwsInvalidLoginWithoutCheckingPassword() {
         User user = activeUser(1L, UUID.randomUUID(), Role.HOST_ADMIN, "host@tenant.example");
         user.setStatus(UserStatus.SUSPENDED);
-        when(userRepository.findByUsername("host@tenant.example")).thenReturn(List.of(user));
+        when(userRepository.findByUsernameAndDeletedFalse("host@tenant.example")).thenReturn(List.of(user));
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("host@tenant.example", PASSWORD)))
                 .isInstanceOf(InvalidLoginException.class);
+    }
+
+    @Test
+    void login_archivedUser_throwsInvalidLogin() {
+        when(userRepository.findByUsernameAndDeletedFalse("archived@example.test")).thenReturn(List.of());
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("archived@example.test", PASSWORD)))
+                .isInstanceOf(InvalidLoginException.class);
+    }
+
+    @Test
+    void refresh_archivedUser_throwsInvalidRefreshToken() {
+        when(refreshTokenService.consume("refresh-token")).thenReturn(9L);
+        when(userRepository.findByIdAndDeletedFalse(9L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.refresh(new com.pte.identity.internal.dto.request.RefreshRequest(
+                "refresh-token")))
+                .isInstanceOf(InvalidRefreshTokenException.class);
     }
 
     @Test
@@ -189,11 +208,12 @@ class AuthServiceTest {
         User first = activeUser(1L, firstTenantId, Role.HOST_ADMIN, username);
         User second = activeUser(2L, secondTenantId, Role.HOST_ADMIN, username);
 
-        when(userRepository.findByUsername(username)).thenReturn(List.of(first, second));
+        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(List.of(first, second));
         assertThatThrownBy(() -> authService.login(new LoginRequest(username, PASSWORD)))
                 .isInstanceOf(InvalidLoginException.class);
 
-        when(userRepository.findByUsernameAndTenantId(username, secondTenantId)).thenReturn(Optional.of(second));
+        when(userRepository.findByUsernameAndTenantIdAndDeletedFalse(username, secondTenantId))
+                .thenReturn(Optional.of(second));
         when(loginHashRepository.findByUserId(2L)).thenReturn(Optional.of(hashFor(2L, PASSWORD)));
         when(accessTokenIssuer.issue(second)).thenReturn("access-token");
         when(refreshTokenService.issue(second)).thenReturn("refresh-token");
@@ -212,7 +232,7 @@ class AuthServiceTest {
         User second = activeUser(2L, secondTenantId, Role.HOST_ADMIN, username);
         second.setStatus(UserStatus.SUSPENDED);
 
-        when(userRepository.findByUsername(username)).thenReturn(List.of(first, second));
+        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(List.of(first, second));
         when(loginHashRepository.findByUserId(1L)).thenReturn(Optional.of(hashFor(1L, PASSWORD)));
         when(tenancyService.findLoginOrganization(firstTenantId)).thenReturn(Optional.of(
                 new LoginOrganizationOption(firstTenantId, "alpha", "Alpha Center", "language-center")));

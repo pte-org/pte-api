@@ -67,4 +67,18 @@ class PracticeMigrationVersionTest {
                 .doesNotContain("DROP TABLE")
                 .doesNotContain("DELETE FROM");
     }
+
+    @Test
+    void practiceQuestionSnapshotMigrationStoresOnlyStudentSafeContent() throws IOException {
+        String sql = new ClassPathResource("db/migration/V102__practice_question_content.sql")
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(sql).contains("source_question_public_id UUID")
+                .contains("prompt_text TEXT")
+                .contains("options_json TEXT")
+                .contains("min_word_count INTEGER")
+                .contains("max_word_count INTEGER")
+                .doesNotContain("correct_answer")
+                .doesNotContain("DROP TABLE");
+    }
 }

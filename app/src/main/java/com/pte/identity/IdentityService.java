@@ -5,6 +5,7 @@ import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
 import com.pte.identity.dto.response.ExaminerIdentityView;
+import com.pte.identity.dto.response.StudentDisplayNameView;
 import com.pte.identity.internal.domain.LoginHash;
 import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -189,5 +191,39 @@ public class IdentityService implements StudentCountProvider {
         loginHashRepository.save(loginHash);
 
         return new HostAdminCreated(saved, password);
+    }
+
+    /** Returns minimal display names and email addresses for enrolled students within the tenant. */
+    @Transactional(readOnly = true)
+    public Map<UUID, StudentDisplayNameView> getStudentDisplayNames(UUID tenantId, Collection<UUID> studentPublicIds) {
+        if (tenantId == null || studentPublicIds == null || studentPublicIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<UUID> targetIds = studentPublicIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (targetIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return userRepository.findByPublicIdInAndTenantIdAndDeletedFalse(targetIds, tenantId).stream()
+                .collect(Collectors.toMap(
+                        User::getPublicId,
+                        user -> {
+                            String name = (user.getFullName() != null && !user.getFullName().isBlank())
+                                    ? user.getFullName()
+                                    : user.getUsername();
+                            return new StudentDisplayNameView(user.getPublicId(), name, user.getEmail());
+                        },
+                        (existing, replacement) -> existing));
+    }
+
+    /** Fresh active PROCTOR check for current tenant; ensures non-deleted and ACTIVE status. */
+    @Transactional(readOnly = true)
+    public boolean isActiveProctor(UUID userPublicId, UUID tenantId) {
+        if (userPublicId == null || tenantId == null) {
+            return false;
+        }
+        return userRepository.findByPublicIdAndTenantId(userPublicId, tenantId)
+                .filter(user -> !user.isDeleted() && user.getStatus() == UserStatus.ACTIVE)
+                .filter(user -> user.getRoles().contains(Role.PROCTOR))
+                .isPresent();
     }
 }

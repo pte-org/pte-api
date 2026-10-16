@@ -10,5 +10,19 @@ public record ExaminerQueueItemResponse(
         Instant assignedAt,
         int eligibleAnswerCount,
         long submittedAnswerCount,
-        String status) {
+        String status,
+        boolean canFinalize,
+        String blockingReason,
+        boolean hasOutstandingAnswers) {
+
+    public ExaminerQueueItemResponse(
+            UUID attemptPublicId,
+            UUID sessionPublicId,
+            Instant assignedAt,
+            int eligibleAnswerCount,
+            long submittedAnswerCount,
+            String status) {
+        this(attemptPublicId, sessionPublicId, assignedAt, eligibleAnswerCount, submittedAnswerCount, status,
+                false, null, false);
+    }
 }

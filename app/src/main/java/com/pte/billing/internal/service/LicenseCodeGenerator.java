@@ -4,12 +4,12 @@ import org.springframework.stereotype.Component;
 
 import java.security.SecureRandom;
 
-/** Generates readable, high-entropy bearer codes without ambiguous characters. */
+/** Generates short, readable bearer codes without ambiguous characters. */
 @Component
 public class LicenseCodeGenerator {
 
-    private static final String ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    private static final int RAW_LENGTH = 20;
+    private static final String ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+    private static final int RAW_LENGTH = 8;
     private static final int GROUP_LENGTH = 4;
 
     private final SecureRandom secureRandom;

@@ -56,4 +56,10 @@ public class RefreshTokenService {
         refreshTokenRepository.findByTokenHash(tokenHasher.hash(rawToken))
                 .ifPresent(token -> token.setRevoked(true));
     }
+
+    /** Revokes every active refresh token when a user loses account access. */
+    @Transactional
+    public void revokeAllForUser(Long userId) {
+        refreshTokenRepository.revokeAllActiveByUserId(userId);
+    }
 }

@@ -17,6 +17,9 @@ public final class ScoreReviewConstants {
     public static final String REASON_AI_SCORE_NOT_PUBLISHABLE = "AI_SCORE_NOT_PUBLISHABLE";
     public static final String REASON_EXAMINER_SCORE_NOT_SUBMITTED = "EXAMINER_SCORE_NOT_SUBMITTED";
     public static final String REASON_SELECTED_SCORE_UNAVAILABLE = "SELECTED_SCORE_UNAVAILABLE";
+    public static final String MANUAL_EXAMINER_SELECTION_PROHIBITED = "MANUAL_EXAMINER_SELECTION_PROHIBITED";
+    public static final String MANUAL_EXAMINER_SELECTION_PROHIBITED_MESSAGE =
+            "Host score source selection and teacher scores are prohibited in MANUAL_EXAMINER sessions.";
 
     private ScoreReviewConstants() {
     }

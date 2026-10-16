@@ -101,7 +101,7 @@ class LicenseIssueHttpContractTest {
     @Test void adminReadsUseMaskedPageAndLegacyRawListIsRetired() throws Exception {
         UUID publicId = UUID.randomUUID();
         AdminLicenseCodeSummary row = new AdminLicenseCodeSummary(publicId, "•••• STUV", "ISSUED", "ISSUED",
-                plan, "Exam", "EXAM_PACKAGE", Instant.EPOCH, null, null, null, null);
+                plan, "Exam", "EXAM_PACKAGE", Instant.EPOCH, null, null, null, null, null);
         when(service.listForAdmin(null, null, null, null, null, actor))
                 .thenReturn(new PagedResult<>(List.of(row), new PageMeta(0, 25, 1, 1, true, true, false, false)));
 
@@ -122,7 +122,7 @@ class LicenseIssueHttpContractTest {
     @Test void lookupBindsBearerInPostBodyAndRevealIsNoStore() throws Exception {
         UUID publicId = UUID.randomUUID();
         AdminLicenseCodeSummary row = new AdminLicenseCodeSummary(publicId, "•••• STUV", "ISSUED", "ISSUED",
-                plan, "Exam", "EXAM_PACKAGE", Instant.EPOCH, null, null, null, null);
+                plan, "Exam", "EXAM_PACKAGE", Instant.EPOCH, null, null, null, null, null);
         when(service.lookupForAdmin("abcd-efgh-jklm-npqr-stuv", actor)).thenReturn(row);
         when(service.revealForAdmin(publicId, actor)).thenReturn(new LicenseCodeRevealResponse("ABCD-EFGH-JKLM-NPQR-STUV"));
 

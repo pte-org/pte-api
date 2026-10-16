@@ -112,16 +112,20 @@ class ExaminerScoringServiceTest {
     void publishedSessionDoesNotExposeExaminerAttemptOrMedia() {
         CurrentUser examiner = examiner();
         UUID sessionPublicId = UUID.randomUUID();
+        UUID attemptPublicId = UUID.randomUUID();
         ScoringSessionState publicationLock = new ScoringSessionState(examiner.tenantId(), sessionPublicId);
         publicationLock.lockForPublication(UUID.randomUUID(), Instant.parse("2026-01-03T00:00:00Z"));
         givenActiveExaminer(examiner);
+        ExaminerAttemptAssignment assignment = new ExaminerAttemptAssignment(
+                UUID.randomUUID(), examiner.tenantId(), sessionPublicId, attemptPublicId, examiner.userId(), 5, UUID.randomUUID(), Instant.now());
+        when(workQueueRepository.findOwnedAttempt(examiner.tenantId(), sessionPublicId, attemptPublicId, examiner.userId()))
+                .thenReturn(Optional.of(assignment));
         when(sessionStateRepository.findByTenantIdAndSessionPublicId(examiner.tenantId(), sessionPublicId))
                 .thenReturn(Optional.of(publicationLock));
 
-        assertThatThrownBy(() -> service.getAttempt(sessionPublicId, UUID.randomUUID(), examiner))
+        assertThatThrownBy(() -> service.getAttempt(sessionPublicId, attemptPublicId, examiner))
                 .isInstanceOf(ExaminerWorkNotFoundException.class);
 
-        verify(workQueueRepository, never()).findOwnedAttempt(any(), any(), any(), any());
         verifyNoInteractions(attemptService, mediaService, answerPayloadDecoder);
     }
 

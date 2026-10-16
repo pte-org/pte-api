@@ -9,10 +9,11 @@ import com.pte.proctoring.internal.dto.response.SecurityAuditPageResponse;
 import com.pte.proctoring.internal.dto.response.SecurityAuditSource;
 import com.pte.proctoring.internal.exception.InvalidSecurityAuditCursorException;
 import com.pte.proctoring.internal.exception.InvalidSecurityAuditLimitException;
+import com.pte.proctoring.internal.policy.ProctorAccessPolicy;
 import com.pte.proctoring.internal.repository.ViolationEventRepository;
 import com.pte.session.SessionService;
-import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -38,15 +39,21 @@ public class SecurityAuditQueryService {
             .comparing(SecurityAuditEntryResponse::detectedAt)
             .thenComparing(SecurityAuditEntryResponse::publicId);
 
-    private final SessionService sessionService;
+    private final ProctorAccessPolicy proctorAccessPolicy;
     private final AttemptService attemptService;
     private final ViolationEventRepository violationEventRepository;
 
-    public SecurityAuditQueryService(SessionService sessionService, AttemptService attemptService,
+    @Autowired
+    public SecurityAuditQueryService(ProctorAccessPolicy proctorAccessPolicy, AttemptService attemptService,
                                      ViolationEventRepository violationEventRepository) {
-        this.sessionService = sessionService;
+        this.proctorAccessPolicy = proctorAccessPolicy;
         this.attemptService = attemptService;
         this.violationEventRepository = violationEventRepository;
+    }
+
+    public SecurityAuditQueryService(SessionService sessionService, AttemptService attemptService,
+                                     ViolationEventRepository violationEventRepository) {
+        this(new ProctorAccessPolicy(sessionService, null), attemptService, violationEventRepository);
     }
 
     @Transactional(readOnly = true)
@@ -54,7 +61,7 @@ public class SecurityAuditQueryService {
                                                     CurrentUser caller) {
         int limit = normalizeLimit(requestedLimit);
         SecurityAuditCursor cursor = decodeCursor(rawCursor);
-        UUID tenantId = authorize(sessionPublicId, caller);
+        UUID tenantId = proctorAccessPolicy.authorizeReadAssigned(sessionPublicId, caller);
         int fetchSize = limit + 1;
 
         List<SecurityAuditEntryResponse> entries = new ArrayList<>();
@@ -76,25 +83,6 @@ public class SecurityAuditQueryService {
                 : entries;
         String nextCursor = hasNext && !page.isEmpty() ? encodeCursor(page.get(page.size() - 1)) : null;
         return new SecurityAuditPageResponse(page, nextCursor);
-    }
-
-    private UUID authorize(UUID sessionPublicId, CurrentUser caller) {
-        if (caller == null) {
-            throw new AccessDeniedException("Authenticated user is required");
-        }
-        if (caller.hasRole("HOST_ADMIN")) {
-            if (caller.tenantId() == null) {
-                throw new AccessDeniedException("Tenant context is required");
-            }
-            sessionService.verifyHostAccess(sessionPublicId, caller.tenantId());
-            return caller.tenantId();
-        }
-        if (caller.hasRole("PROCTOR")) {
-            ProctorAssignmentCheckResponse assignment = sessionService.checkProctorAssignment(
-                    sessionPublicId, caller.userId());
-            return assignment.tenantId();
-        }
-        throw new AccessDeniedException("Host or proctor role is required");
     }
 
     private int normalizeLimit(int requestedLimit) {

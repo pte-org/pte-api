@@ -252,7 +252,7 @@ class EnrollmentServiceTest {
         enrollment.setSession(session);
         enrollment.setStudentPublicId(UUID.randomUUID());
 
-        when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
         when(enrollmentRepository.findByPublicId(enrollmentPublicId)).thenReturn(Optional.of(enrollment));
 
         enrollmentService.unenroll(sessionPublicId, enrollmentPublicId, caller);
@@ -274,7 +274,7 @@ class EnrollmentServiceTest {
         enrollment.setSession(otherSession);
         enrollment.setStudentPublicId(UUID.randomUUID());
 
-        when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
         when(enrollmentRepository.findByPublicId(enrollmentPublicId)).thenReturn(Optional.of(enrollment));
 
         assertThatThrownBy(() -> enrollmentService.unenroll(sessionPublicId, enrollmentPublicId, caller))

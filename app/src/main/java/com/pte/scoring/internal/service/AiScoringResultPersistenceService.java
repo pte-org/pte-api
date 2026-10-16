@@ -10,6 +10,8 @@ import com.pte.scoring.internal.repository.ScoringAnswerAiDetailRepository;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
 import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
 import com.pte.scoring.internal.vendor.AiScoreResult;
+import com.pte.session.SessionService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,15 +35,25 @@ public class AiScoringResultPersistenceService {
     private final ScoringAnswerAiDetailRepository detailRepository;
     private final JsonMapper jsonMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final SessionService sessionService;
 
+    @Autowired
     public AiScoringResultPersistenceService(ScoringAnswerRepository answerRepository,
             ScoringSessionStateRepository sessionStateRepository, ScoringAnswerAiDetailRepository detailRepository,
-            JsonMapper jsonMapper, ApplicationEventPublisher eventPublisher) {
+            JsonMapper jsonMapper, ApplicationEventPublisher eventPublisher, SessionService sessionService) {
         this.answerRepository = answerRepository;
         this.sessionStateRepository = sessionStateRepository;
         this.detailRepository = detailRepository;
         this.jsonMapper = jsonMapper;
         this.eventPublisher = eventPublisher;
+        this.sessionService = sessionService;
+    }
+
+    /** Compatibility constructor for focused persistence tests that do not need the session lock. */
+    public AiScoringResultPersistenceService(ScoringAnswerRepository answerRepository,
+            ScoringSessionStateRepository sessionStateRepository, ScoringAnswerAiDetailRepository detailRepository,
+            JsonMapper jsonMapper, ApplicationEventPublisher eventPublisher) {
+        this(answerRepository, sessionStateRepository, detailRepository, jsonMapper, eventPublisher, null);
     }
 
     @Transactional(readOnly = true)
@@ -73,6 +85,9 @@ public class AiScoringResultPersistenceService {
 
     private boolean applyIfAwaiting(UUID answerPublicId, UUID attemptPublicId, UUID tenantId, UUID sessionPublicId,
             long dispatchToken, Consumer<ScoringAnswer> onAnswer, Consumer<ScoringAnswerAiDetail> onDetail) {
+        if (sessionService != null) {
+            sessionService.lockForScoreReviewMutation(sessionPublicId, tenantId);
+        }
         ScoringAnswer answer = answerRepository.findByAnswerPublicIdForUpdate(answerPublicId)
                 .filter(row -> row.isAwaitingAiResult(tenantId, sessionPublicId, attemptPublicId, dispatchToken))
                 .orElse(null);

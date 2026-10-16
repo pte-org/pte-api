@@ -15,8 +15,12 @@ import com.pte.scoring.dto.response.ReportScoringAnswerView;
 import com.pte.scoring.internal.repository.AiDetailFlags;
 import com.pte.scoring.internal.repository.ExaminerAnswerScoreRepository;
 import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
+import com.pte.scoring.domain.GradingCohort;
+import com.pte.scoring.domain.enums.GradingMarkingMode;
+import com.pte.scoring.internal.repository.GradingCohortRepository;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
 import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +32,7 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -42,8 +47,27 @@ public class ScoringReviewReadQueryService {
     private final ExaminerAttemptAssignmentRepository assignmentRepository;
     private final ScoringSessionStateRepository sessionStateRepository;
     private final ScoringMethodResolver scoringMethodResolver;
+    private final GradingCohortRepository cohortRepository;
     private final AiScoreDetailQueryService aiDetails;
     private final AiScoringDispatcher aiScoringDispatcher;
+
+    @Autowired
+    public ScoringReviewReadQueryService(ScoringAnswerRepository scoringAnswerRepository,
+            ExaminerAnswerScoreRepository examinerAnswerScoreRepository,
+            ExaminerAttemptAssignmentRepository assignmentRepository,
+            ScoringSessionStateRepository sessionStateRepository,
+            ScoringMethodResolver scoringMethodResolver,
+            GradingCohortRepository cohortRepository, AiScoreDetailQueryService aiDetails,
+            AiScoringDispatcher aiScoringDispatcher) {
+        this.scoringAnswerRepository = scoringAnswerRepository;
+        this.examinerAnswerScoreRepository = examinerAnswerScoreRepository;
+        this.assignmentRepository = assignmentRepository;
+        this.sessionStateRepository = sessionStateRepository;
+        this.scoringMethodResolver = scoringMethodResolver;
+        this.cohortRepository = cohortRepository;
+        this.aiDetails = aiDetails;
+        this.aiScoringDispatcher = aiScoringDispatcher;
+    }
 
     public ScoringReviewReadQueryService(ScoringAnswerRepository scoringAnswerRepository,
             ExaminerAnswerScoreRepository examinerAnswerScoreRepository,
@@ -51,13 +75,8 @@ public class ScoringReviewReadQueryService {
             ScoringSessionStateRepository sessionStateRepository,
             ScoringMethodResolver scoringMethodResolver, AiScoreDetailQueryService aiDetails,
             AiScoringDispatcher aiScoringDispatcher) {
-        this.scoringAnswerRepository = scoringAnswerRepository;
-        this.examinerAnswerScoreRepository = examinerAnswerScoreRepository;
-        this.assignmentRepository = assignmentRepository;
-        this.sessionStateRepository = sessionStateRepository;
-        this.scoringMethodResolver = scoringMethodResolver;
-        this.aiDetails = aiDetails;
-        this.aiScoringDispatcher = aiScoringDispatcher;
+        this(scoringAnswerRepository, examinerAnswerScoreRepository, assignmentRepository,
+                sessionStateRepository, scoringMethodResolver, null, aiDetails, aiScoringDispatcher);
     }
 
     @Transactional(readOnly = true)
@@ -91,11 +110,17 @@ public class ScoringReviewReadQueryService {
                 .filter(answer -> selectedScore(answer, examinerScores.get(answer.getAnswerPublicId())) == null).count();
         boolean locked = sessionStateRepository.findByTenantIdAndSessionPublicId(tenantId, sessionPublicId)
                 .map(ScoringSessionState::getPublicationPublicId).orElse(null) != null;
+        GradingCohort cohort = cohortRepository != null
+                ? cohortRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId).orElse(null)
+                : null;
+        String markingMode = cohort != null ? cohort.getMarkingMode().name() : null;
+        String cohortStatus = cohort != null ? cohort.getStatus().name() : null;
+        boolean canSelectScoreSource = !locked && (cohort == null || cohort.getMarkingMode() != GradingMarkingMode.MANUAL_EXAMINER);
 
         return new HostScoreReviewResponse(reviewVersion(answers, examinerScores), locked,
                 aiEligibleAttempts.size(), assignedAttemptCount,
                 Math.max(0, aiEligibleAttempts.size() - assignedAttemptCount), pendingExaminerCount,
-                unavailableSelectedCount, rescorableCount, items);
+                unavailableSelectedCount, rescorableCount, items, markingMode, cohortStatus, canSelectScoreSource);
     }
 
     @Transactional(readOnly = true)
@@ -115,11 +140,15 @@ public class ScoringReviewReadQueryService {
 
     private List<ReportScoringAnswerView> toReportInputs(UUID tenantId, UUID sessionPublicId,
             List<ScoringAnswer> answers) {
+        GradingCohort cohort = cohortRepository != null
+                ? cohortRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId).orElse(null)
+                : null;
+        GradingMarkingMode markingMode = cohort != null ? cohort.getMarkingMode() : null;
         Map<UUID, ExaminerAnswerScore> examinerScores = examinerAnswerScoreRepository
                 .findByTenantIdAndSessionPublicId(tenantId, sessionPublicId).stream()
                 .collect(Collectors.toMap(ExaminerAnswerScore::getAnswerPublicId, Function.identity()));
         return answers.stream().map(answer -> toReportInput(answer,
-                examinerScores.get(answer.getAnswerPublicId()))).toList();
+                examinerScores.get(answer.getAnswerPublicId()), markingMode)).toList();
     }
 
     private HostScoreReviewView toHostReview(ScoringAnswer answer, ExaminerAnswerScore examinerScore,
@@ -143,12 +172,13 @@ public class ScoringReviewReadQueryService {
                         ? name(aiFlags.failureReason()) : null);
     }
 
-    private ReportScoringAnswerView toReportInput(ScoringAnswer answer, ExaminerAnswerScore examinerScore) {
+    private ReportScoringAnswerView toReportInput(ScoringAnswer answer, ExaminerAnswerScore examinerScore,
+            GradingMarkingMode markingMode) {
         ScoringMethod method = methodFor(answer);
         String section = scoringMethodResolver.resolveSection(answer.getScoreTemplatePublicId(), answer.getTaskType())
                 .orElse(null);
-        Integer selectedScore = selectedScore(answer, examinerScore);
-        String block = blockingReason(answer, examinerScore, method, selectedScore);
+        Integer selectedScore = selectedScore(answer, examinerScore, markingMode);
+        String block = blockingReason(answer, examinerScore, method, selectedScore, markingMode);
         return new ReportScoringAnswerView(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
                 answer.getScoreTemplatePublicId(), answer.getTaskType(), section,
                 method == null ? null : method.name(), answer.getRawScore(), name(answer.getAiProviderCategory()),
@@ -168,9 +198,20 @@ public class ScoringReviewReadQueryService {
     }
 
     private Integer selectedScore(ScoringAnswer answer, ExaminerAnswerScore examinerScore) {
+        return selectedScore(answer, examinerScore, null);
+    }
+
+    private Integer selectedScore(ScoringAnswer answer, ExaminerAnswerScore examinerScore,
+            GradingMarkingMode markingMode) {
         ScoringMethod method = methodFor(answer);
         ScoreSource source = answer.getSelectedScoreSource();
         if (isAiScored(method)) {
+            if (markingMode == GradingMarkingMode.MANUAL_EXAMINER) {
+                if (source == ScoreSource.EXAMINER && isSubmitted(examinerScore)) {
+                    return examinerScore.getScore();
+                }
+                return null;
+            }
             if (source == ScoreSource.AI && answer.hasPublishableAiScore()) {
                 return answer.getRawScore();
             }
@@ -186,7 +227,7 @@ public class ScoringReviewReadQueryService {
     }
 
     private String blockingReason(ScoringAnswer answer, ExaminerAnswerScore examinerScore, ScoringMethod method,
-            Integer score) {
+            Integer score, GradingMarkingMode markingMode) {
         if (method == null || method == ScoringMethod.UNSCORED) {
             return null;
         }
@@ -197,6 +238,19 @@ public class ScoringReviewReadQueryService {
         }
         if (!isAiScored(method)) {
             return ScoreReviewConstants.REASON_SCORING_METHOD_UNAVAILABLE;
+        }
+        if (markingMode == GradingMarkingMode.MANUAL_EXAMINER) {
+            if (answer.getSelectedScoreSource() != ScoreSource.EXAMINER) {
+                return ScoreReviewConstants.REASON_NO_SELECTED_SOURCE;
+            }
+            if (!isSubmitted(examinerScore)) {
+                return ScoreReviewConstants.REASON_EXAMINER_SCORE_NOT_SUBMITTED;
+            }
+            if (examinerScore.getPublicId() != null && answer.getSelectedExaminerScorePublicId() != null
+                    && !Objects.equals(examinerScore.getPublicId(), answer.getSelectedExaminerScorePublicId())) {
+                return ScoreReviewConstants.REASON_SELECTED_SCORE_UNAVAILABLE;
+            }
+            return score == null ? ScoreReviewConstants.REASON_SELECTED_SCORE_UNAVAILABLE : null;
         }
         if (answer.getSelectedScoreSource() == null) {
             return ScoreReviewConstants.REASON_NO_SELECTED_SOURCE;

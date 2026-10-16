@@ -58,6 +58,12 @@ public interface ScoringAnswerRepository extends JpaRepository<ScoringAnswer, Lo
     List<ScoringAnswer> findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(
             UUID sessionPublicId, UUID tenantId, List<UUID> attemptPublicIds);
 
+    boolean existsByTenantIdAndSessionPublicIdAndAttemptPublicIdAndAnswerPublicIdAndDeletedFalse(
+            UUID tenantId, UUID sessionPublicId, UUID attemptPublicId, UUID answerPublicId);
+
+    List<ScoringAnswer> findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndDeletedFalse(
+            UUID tenantId, UUID sessionPublicId, UUID attemptPublicId);
+
     /** Reporting's skill-aggregation pull (Phase 10) — every scored answer for one attempt. */
     List<ScoringAnswer> findByAttemptPublicIdAndTenantIdAndStatus(UUID attemptPublicId, UUID tenantId,
             ScoringAnswerStatus status);

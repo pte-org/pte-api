@@ -7,10 +7,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LicenseCodeGeneratorTest {
 
     @Test
-    void generate_returnsFiveReadableGroupsAndExcludesAmbiguousCharacters() {
+    void generate_returnsTwoReadableGroupsAndExcludesAmbiguousCharacters() {
         String code = new LicenseCodeGenerator().generate();
 
-        assertThat(code).matches("[A-HJ-NP-Z2-9]{4}(-[A-HJ-NP-Z2-9]{4}){4}");
-        assertThat(code).doesNotContain("0", "1", "I", "O");
+        assertThat(code).matches("[A-HJKMNP-Z2-9]{4}(-[A-HJKMNP-Z2-9]{4})");
+        assertThat(code).doesNotContain("0", "1", "I", "L", "O");
     }
 }

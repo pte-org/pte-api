@@ -3,19 +3,23 @@ package com.pte.tenancy.internal.controller;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
+import com.pte.tenancy.internal.dto.request.UpdateOrganizationProfileRequest;
 import com.pte.tenancy.internal.dto.response.OrganizationResponse;
 import com.pte.tenancy.internal.service.OrganizationService;
+import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Host self-service read-only view of its single Organization. The Organization
+ * Host self-service profile access for its single Organization. The Organization
  * is provisioned automatically with the Host and is not created from this UI.
  */
 @RestController
@@ -37,6 +41,12 @@ public class HostOrganizationController {
     @GetMapping("/{publicId}")
     public ApiResponse<OrganizationResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(organizationService.getForCaller(publicId, currentUser()));
+    }
+
+    @PatchMapping("/{publicId}")
+    public ApiResponse<OrganizationResponse> update(@PathVariable UUID publicId,
+            @Valid @RequestBody UpdateOrganizationProfileRequest request) {
+        return ApiResponse.success(organizationService.updateForCaller(publicId, request, currentUser()));
     }
 
     private CurrentUser currentUser() {

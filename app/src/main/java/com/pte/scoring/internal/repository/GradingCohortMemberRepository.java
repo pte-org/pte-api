@@ -13,6 +13,9 @@ import java.util.UUID;
 public interface GradingCohortMemberRepository extends JpaRepository<GradingCohortMember, Long> {
     List<GradingCohortMember> findByCohortPublicIdAndDeletedFalse(UUID cohortPublicId);
 
+    java.util.Optional<GradingCohortMember> findByCohortPublicIdAndAttemptPublicIdAndDeletedFalse(
+            UUID cohortPublicId, UUID attemptPublicId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select m from GradingCohortMember m where m.cohortPublicId = :cohortPublicId and m.deleted = false "
             + "order by m.id")

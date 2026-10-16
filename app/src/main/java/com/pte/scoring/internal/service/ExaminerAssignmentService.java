@@ -25,6 +25,7 @@ import com.pte.scoring.internal.repository.ExaminerAssignmentBatchRepository;
 import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
 import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -65,12 +66,17 @@ public class ExaminerAssignmentService {
     private final ExaminerAttemptAssignmentRepository assignmentRepository;
     private final ScorePublicationLockService publicationLockService;
     private final ObjectMapper objectMapper;
+    private final com.pte.scoring.internal.repository.GradingCohortRepository cohortRepository;
+    private final com.pte.scoring.internal.repository.GradingCohortMemberRepository cohortMemberRepository;
 
+    @Autowired
     public ExaminerAssignmentService(SessionService sessionService, EnrollmentModuleService enrollmentService,
             AttemptService attemptService, ScoringEligibilityQueryService eligibilityQueryService,
             IdentityService identityService, ExaminerAssignmentBatchRepository batchRepository,
             ExaminerAttemptAssignmentRepository assignmentRepository, ScorePublicationLockService publicationLockService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            com.pte.scoring.internal.repository.GradingCohortRepository cohortRepository,
+            com.pte.scoring.internal.repository.GradingCohortMemberRepository cohortMemberRepository) {
         this.sessionService = sessionService;
         this.enrollmentService = enrollmentService;
         this.attemptService = attemptService;
@@ -80,6 +86,17 @@ public class ExaminerAssignmentService {
         this.assignmentRepository = assignmentRepository;
         this.publicationLockService = publicationLockService;
         this.objectMapper = objectMapper;
+        this.cohortRepository = cohortRepository;
+        this.cohortMemberRepository = cohortMemberRepository;
+    }
+
+    public ExaminerAssignmentService(SessionService sessionService, EnrollmentModuleService enrollmentService,
+            AttemptService attemptService, ScoringEligibilityQueryService eligibilityQueryService,
+            IdentityService identityService, ExaminerAssignmentBatchRepository batchRepository,
+            ExaminerAttemptAssignmentRepository assignmentRepository, ScorePublicationLockService publicationLockService,
+            ObjectMapper objectMapper) {
+        this(sessionService, enrollmentService, attemptService, eligibilityQueryService, identityService,
+                batchRepository, assignmentRepository, publicationLockService, objectMapper, null, null);
     }
 
     @Transactional
@@ -148,6 +165,26 @@ public class ExaminerAssignmentService {
                     expectedScopes.examinerPublicIds(), entries, List.of(), batch.getPreviewExpiresAt(), null);
         }
         publicationLockService.assertNotPublished(tenantId, sessionPublicId);
+        if (cohortRepository != null) {
+            cohortRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId)
+                    .ifPresent(cohort -> {
+                        if (cohort.getMarkingMode() == com.pte.scoring.domain.enums.GradingMarkingMode.AI_ONLY) {
+                            throw new InvalidExaminerAssignmentException(
+                                    "Examiner assignments cannot be confirmed for AI_ONLY grading cohorts.");
+                        }
+                        if (cohortMemberRepository != null) {
+                            var members = cohortMemberRepository.findByCohortPublicIdAndDeletedFalse(cohort.getPublicId());
+                            Set<UUID> excludedAttempts = members.stream()
+                                    .filter(com.pte.scoring.domain.GradingCohortMember::isExcluded)
+                                    .map(com.pte.scoring.domain.GradingCohortMember::getAttemptPublicId)
+                                    .collect(Collectors.toSet());
+                            if (entries.stream().anyMatch(e -> excludedAttempts.contains(e.attemptPublicId()))) {
+                                throw new InvalidExaminerAssignmentException(
+                                        "Cannot assign excluded attempts in the grading cohort.");
+                            }
+                        }
+                    });
+        }
         if (!Instant.now().isBefore(batch.getPreviewExpiresAt())) {
             batch.expire();
             batchRepository.save(batch);
