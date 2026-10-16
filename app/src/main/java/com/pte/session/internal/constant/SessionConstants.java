@@ -71,6 +71,7 @@ public final class SessionConstants {
     public static final String EXAM_DRAFT_CONFIGURATION_INVALID = "EXAM_DRAFT_CONFIGURATION_INVALID";
     public static final String AUDIENCE_SOURCE_NOT_FOUND = "AUDIENCE_SOURCE_NOT_FOUND";
     public static final String EXAM_AUDIENCE_LOCKED = "EXAM_AUDIENCE_LOCKED";
+    public static final String ENROLLED_STUDENT_ALREADY_STARTED = "ENROLLED_STUDENT_ALREADY_STARTED";
     public static final String AUDIENCE_SOURCE_ALREADY_COVERED = "AUDIENCE_SOURCE_ALREADY_COVERED";
     public static final String LEGACY_SESSION_CREATE_REQUIRES_NEW_WORKFLOW =
             "LEGACY_SESSION_CREATE_REQUIRES_NEW_WORKFLOW";
@@ -164,7 +165,9 @@ public final class SessionConstants {
     public static final String EXAM_GENERATION_FRIENDLY =
             "The exam is still being prepared. Please wait until generation finishes before publishing it.";
     public static final String EXAM_AUDIENCE_LOCKED_FRIENDLY =
-            "This exam audience is already locked for generation or publishing and can no longer be changed here.";
+            "Students can't be added or removed while the exam is being prepared or running. Try again before it starts or after it ends.";
+    public static final String ENROLLED_STUDENT_ALREADY_STARTED_FRIENDLY =
+            "This student already started the exam, so they can't be removed from it.";
     public static final String AUDIENCE_SOURCE_ALREADY_COVERED_FRIENDLY =
             "This student or class is already included through a class or program added to this exam.";
     public static final String LEGACY_SESSION_CREATE_FRIENDLY =
