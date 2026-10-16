@@ -38,6 +38,7 @@ import com.pte.session.internal.dto.response.ExamPreflightResponse;
 import com.pte.session.internal.dto.response.GenerationJobResponse;
 import com.pte.session.internal.dto.response.SessionResponse;
 import com.pte.session.internal.exception.AudienceSourceNotFoundException;
+import com.pte.session.internal.exception.AudienceSourceAlreadyCoveredException;
 import com.pte.session.internal.exception.ExamDraftConfigurationException;
 import com.pte.session.internal.exception.ExamDraftNotDeletableException;
 import com.pte.session.internal.exception.ExamDraftNotEditableException;
@@ -82,6 +83,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -298,15 +300,53 @@ public class ExamOrchestrationService {
     @Transactional
     public AudienceSourceResponse addSource(UUID sessionPublicId, AudienceSourceRequest request, CurrentUser caller) {
         ExamSession session = ownedForEdit(sessionPublicId, caller);
+        List<ExamAudienceSource> existing = new ArrayList<>(
+                sourceRepository.findBySessionIdOrderByCreatedAtAsc(session.getId()));
+        int sizeBefore = existing.size();
+        ExamAudienceSource source = addToSession(session, existing, request, caller);
+        if (existing.size() > sizeBefore) {
+            recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_ADDED,
+                    request.sourceType().name());
+        }
+        return toSourceResponse(source);
+    }
+
+    /**
+     * Adds many sources in one transaction: either every new source is saved or none is. Duplicates (within the
+     * request or already on the session) are idempotent; a source covered by a wider one fails the whole batch.
+     */
+    @Transactional
+    public List<AudienceSourceResponse> addSources(UUID sessionPublicId, List<AudienceSourceRequest> requests,
+            CurrentUser caller) {
+        ExamSession session = ownedForEdit(sessionPublicId, caller);
+        List<ExamAudienceSource> existing = new ArrayList<>(
+                sourceRepository.findBySessionIdOrderByCreatedAtAsc(session.getId()));
+        int sizeBefore = existing.size();
+        List<AudienceSourceResponse> responses = new ArrayList<>();
+        for (AudienceSourceRequest request : new LinkedHashSet<>(requests)) {
+            responses.add(toSourceResponse(addToSession(session, existing, request, caller)));
+        }
+        int added = existing.size() - sizeBefore;
+        if (added > 0) {
+            recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_ADDED,
+                    added + " sources");
+        }
+        return responses;
+    }
+
+    /** Returns the matching existing source, or validates and saves a new one (appending it to {@code existing}). */
+    private ExamAudienceSource addToSession(ExamSession session, List<ExamAudienceSource> existing,
+            AudienceSourceRequest request, CurrentUser caller) {
         validateSourceOwnership(request, caller.tenantId());
-        if (sourceRepository.existsBySessionIdAndSourceTypeAndSourcePublicId(
-                session.getId(), request.sourceType(), request.sourcePublicId())) {
-            return sourceRepository.findBySessionIdOrderByCreatedAtAsc(session.getId()).stream()
-                    .filter(source -> source.getSourceType() == request.sourceType()
-                            && source.getSourcePublicId().equals(request.sourcePublicId()))
-                    .findFirst()
-                    .map(this::toSourceResponse)
-                    .orElseThrow(AudienceSourceNotFoundException::new);
+        Optional<ExamAudienceSource> duplicate = existing.stream()
+                .filter(source -> source.getSourceType() == request.sourceType()
+                        && source.getSourcePublicId().equals(request.sourcePublicId()))
+                .findFirst();
+        if (duplicate.isPresent()) {
+            return duplicate.get();
+        }
+        if (isCoveredByExistingSource(existing, request, caller.tenantId())) {
+            throw new AudienceSourceAlreadyCoveredException();
         }
         ExamAudienceSource source = new ExamAudienceSource();
         source.setSession(session);
@@ -315,9 +355,8 @@ public class ExamOrchestrationService {
         source.setSourcePublicId(request.sourcePublicId());
         source.setCreatedBy(caller.userId());
         ExamAudienceSource saved = sourceRepository.save(source);
-        recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_ADDED,
-                request.sourceType().name());
-        return toSourceResponse(saved);
+        existing.add(saved);
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -695,6 +734,27 @@ public class ExamOrchestrationService {
             case STUDENT -> identityService.findById(source.getSourcePublicId())
                     .filter(user -> tenantId.equals(user.getTenantId()) && user.getRoles().contains(Role.STUDENT))
                     .map(User::getPublicId).stream().toList();
+        };
+    }
+
+    /**
+     * A new source may not sit inside the scope of one already added (program > class > student).
+     * The reverse is allowed: a wider source added later simply overlaps the narrower one, and
+     * the audience is de-duplicated by student when it is resolved.
+     */
+    private boolean isCoveredByExistingSource(List<ExamAudienceSource> existing, AudienceSourceRequest request,
+            UUID tenantId) {
+        return switch (request.sourceType()) {
+            case STUDENT -> existing.stream()
+                    .filter(source -> source.getSourceType() != AudienceSourceType.STUDENT)
+                    .anyMatch(source -> resolveSource(source, tenantId).contains(request.sourcePublicId()));
+            case CLASS -> {
+                UUID programPublicId = enrollmentModuleService
+                        .findProgramPublicIdOfClass(tenantId, request.sourcePublicId());
+                yield existing.stream().anyMatch(source -> source.getSourceType() == AudienceSourceType.PROGRAM
+                        && source.getSourcePublicId().equals(programPublicId));
+            }
+            case PROGRAM -> false;
         };
     }
 

@@ -71,6 +71,7 @@ public final class SessionConstants {
     public static final String EXAM_DRAFT_CONFIGURATION_INVALID = "EXAM_DRAFT_CONFIGURATION_INVALID";
     public static final String AUDIENCE_SOURCE_NOT_FOUND = "AUDIENCE_SOURCE_NOT_FOUND";
     public static final String EXAM_AUDIENCE_LOCKED = "EXAM_AUDIENCE_LOCKED";
+    public static final String AUDIENCE_SOURCE_ALREADY_COVERED = "AUDIENCE_SOURCE_ALREADY_COVERED";
     public static final String LEGACY_SESSION_CREATE_REQUIRES_NEW_WORKFLOW =
             "LEGACY_SESSION_CREATE_REQUIRES_NEW_WORKFLOW";
     public static final String EXAM_DRAFT_NOT_EDITABLE_FRIENDLY =
@@ -130,6 +131,9 @@ public final class SessionConstants {
     public static final String TEMPLATE_REFERENCE_REQUIRED = "Template reference is required";
     public static final String AUDIENCE_SOURCE_TYPE_REQUIRED = "Audience source type is required";
     public static final String AUDIENCE_SOURCE_REFERENCE_REQUIRED = "Audience source reference is required";
+    public static final String AUDIENCE_SOURCES_REQUIRED = "At least one audience source is required";
+    public static final String AUDIENCE_SOURCES_TOO_MANY = "Too many audience sources in one request";
+    public static final int MAX_AUDIENCE_SOURCES_PER_REQUEST = 2000;
 
     public static final String PROCTOR_REFERENCE_REQUIRED = "Proctor reference is required";
     public static final String AT_LEAST_ONE_STUDENT_REQUIRED = "At least one student is required";
@@ -161,6 +165,8 @@ public final class SessionConstants {
             "The exam is still being prepared. Please wait until generation finishes before publishing it.";
     public static final String EXAM_AUDIENCE_LOCKED_FRIENDLY =
             "This exam audience is already locked for generation or publishing and can no longer be changed here.";
+    public static final String AUDIENCE_SOURCE_ALREADY_COVERED_FRIENDLY =
+            "This student or class is already included through a class or program added to this exam.";
     public static final String LEGACY_SESSION_CREATE_FRIENDLY =
             "This exam creation form is outdated. Start the exam from the new workflow so the template, audience, and student rules can be checked before publishing.";
     public static final String PREFLIGHT_AUDIENCE_CHANGED = "AUDIENCE_CHANGED_REQUIRES_REGENERATION";
