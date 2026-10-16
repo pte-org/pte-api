@@ -9,10 +9,13 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.UUID;
 
-/** Manual entries carry one Examiner per scope; random mode supplies the Examiner pool separately. */
+/**
+ * Manual entries carry one Examiner per scope; random mode supplies the Examiner pool separately.
+ * Student scopes are one per student, so the cap is sized for a whole class.
+ */
 public record CreateExaminerAssignmentPreviewRequest(
         @NotNull AssignmentBatchMode mode,
-        @NotEmpty @Size(max = 100) List<@Valid AssignmentScopeRequest> scopes,
+        @NotEmpty @Size(max = 1000) List<@Valid AssignmentScopeRequest> scopes,
         @Size(max = 50) List<@NotNull UUID> examinerPublicIds) {
 
     public record AssignmentScopeRequest(
