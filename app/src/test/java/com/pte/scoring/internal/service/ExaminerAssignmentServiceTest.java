@@ -157,6 +157,59 @@ class ExaminerAssignmentServiceTest {
     }
 
     @Test
+    void manualStudentScopesAssignOnlyThePickedStudentsToTheirExaminer() {
+        UUID picked = UUID.randomUUID();
+        UUID other = UUID.randomUUID();
+        UUID pickedAttempt = UUID.randomUUID();
+        UUID otherAttempt = UUID.randomUUID();
+        when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(List.of(
+                new AttemptSummaryView(pickedAttempt, sessionId, picked, tenantId),
+                new AttemptSummaryView(otherAttempt, sessionId, other, tenantId)));
+        when(eligibilityService.findEligibleAttempts(sessionId, tenantId, List.of(pickedAttempt)))
+                .thenReturn(List.of(new AiEligibleAttemptView(pickedAttempt, 2)));
+        when(identityService.findActiveExaminers(tenantId, List.of(examiner1)))
+                .thenReturn(List.of(examiner(examiner1)));
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(List.of());
+        stubBatchSave();
+        var request = new CreateExaminerAssignmentPreviewRequest(AssignmentBatchMode.MANUAL,
+                List.of(new AssignmentScopeRequest(AssignmentScopeType.STUDENT, picked, examiner1)), List.of());
+
+        var result = service.preview(sessionId, request, host);
+
+        assertThat(result.valid()).isTrue();
+        assertThat(result.attemptCount()).isEqualTo(1);
+        assertThat(result.examinerLoads()).singleElement().satisfies(load ->
+                assertThat(load.examinerPublicId()).isEqualTo(examiner1));
+        verifyNoInteractions(enrollmentService);
+    }
+
+    @Test
+    void manualStudentScopeOverlappingClassScopeForAnotherExaminerReturnsConflict() {
+        UUID student = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        when(enrollmentService.findActiveStudentPublicIds(tenantId, classId)).thenReturn(List.of(student));
+        when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(
+                List.of(new AttemptSummaryView(attemptId, sessionId, student, tenantId)));
+        when(eligibilityService.findEligibleAttempts(sessionId, tenantId, List.of(attemptId)))
+                .thenReturn(List.of(new AiEligibleAttemptView(attemptId, 2)));
+        when(identityService.findActiveExaminers(tenantId, List.of(examiner1, examiner2)))
+                .thenReturn(List.of(examiner(examiner1), examiner(examiner2)));
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(List.of());
+        var request = new CreateExaminerAssignmentPreviewRequest(AssignmentBatchMode.MANUAL, List.of(
+                new AssignmentScopeRequest(AssignmentScopeType.CLASS, classId, examiner1),
+                new AssignmentScopeRequest(AssignmentScopeType.STUDENT, student, examiner2)), List.of());
+
+        var result = service.preview(sessionId, request, host);
+
+        assertThat(result.valid()).isFalse();
+        assertThat(result.conflicts()).singleElement().satisfies(conflict ->
+                assertThat(conflict.attemptPublicId()).isEqualTo(attemptId));
+        verify(batchRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void confirmMarksPreviewStaleWhenMembershipChangesAfterPreview() {
         UUID student = UUID.randomUUID();
         UUID attemptId = UUID.randomUUID();
