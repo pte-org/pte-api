@@ -439,7 +439,7 @@ public class ExamOrchestrationService {
         formAssignmentRepository.deleteBySessionId(session.getId());
         List<ExamForm> forms = new ArrayList<>();
         for (int index = 0; index < formsTotal; index++) {
-            long formSeed = baseSeed ^ (0x9E3779B97F4A7C15L * (index + 1L));
+            long formSeed = ExamFormProvisioningService.formSeed(baseSeed, index);
             SnapshotResponse snapshot = assessmentService.generateDeterministic(
                     session.getName(), session.getTemplatePublicId(), formSeed, caller, session.getSelectedSkills());
             ExamForm form = new ExamForm();
