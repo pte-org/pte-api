@@ -328,6 +328,7 @@ public class ExaminerAssignmentService {
             List<UUID> studentIds = switch (scope.type()) {
                 case CLASS -> enrollmentService.findActiveStudentPublicIds(tenantId, scope.scopePublicId());
                 case PROGRAM -> enrollmentService.findActiveStudentPublicIdsByProgram(tenantId, scope.scopePublicId());
+                case STUDENT -> List.of(scope.scopePublicId());
             };
             Set<UUID> students = new HashSet<>(studentIds);
             Set<UUID> matchingAttemptIds = submitted.stream()
