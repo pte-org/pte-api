@@ -145,6 +145,36 @@ class IdentityServiceTest {
     }
 
     @Test
+    void lockActiveStudentsInTenant_sortsIdsAndLocksOnlyEligibleStudents() {
+        UUID tenantId = UUID.randomUUID();
+        UUID firstStudentId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID secondStudentId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        User firstStudent = activeStudent(firstStudentId, tenantId);
+        User secondStudent = activeStudent(secondStudentId, tenantId);
+        when(userRepository.findWithLockByPublicIdsAndTenantId(
+                List.of(firstStudentId, secondStudentId), tenantId))
+                .thenReturn(List.of(secondStudent, firstStudent));
+
+        service.lockActiveStudentsInTenant(List.of(secondStudentId, firstStudentId, firstStudentId), tenantId);
+
+        verify(userRepository).findWithLockByPublicIdsAndTenantId(
+                List.of(firstStudentId, secondStudentId), tenantId);
+    }
+
+    @Test
+    void lockActiveStudentsInTenant_failsClosedWhenLockedRowsAreNotEligible() {
+        UUID tenantId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        User suspendedStudent = activeStudent(studentId, tenantId);
+        suspendedStudent.setStatus(UserStatus.SUSPENDED);
+        when(userRepository.findWithLockByPublicIdsAndTenantId(List.of(studentId), tenantId))
+                .thenReturn(List.of(suspendedStudent));
+
+        assertThatThrownBy(() -> service.lockActiveStudentsInTenant(List.of(studentId), tenantId))
+                .isInstanceOf(IdentityService.IdentityNotEligibleException.class);
+    }
+
+    @Test
     void countStudents_delegatesToRoleAwareRepositoryQuery() {
         UUID tenantId = UUID.randomUUID();
         when(userRepository.countByTenantIdAndRole(tenantId, Role.STUDENT)).thenReturn(487L);
@@ -152,5 +182,14 @@ class IdentityServiceTest {
         assertThat(service.countStudents(tenantId)).isEqualTo(487L);
 
         verify(userRepository).countByTenantIdAndRole(tenantId, Role.STUDENT);
+    }
+
+    private User activeStudent(UUID publicId, UUID tenantId) {
+        User student = new User();
+        student.setPublicId(publicId);
+        student.setTenantId(tenantId);
+        student.setStatus(UserStatus.ACTIVE);
+        student.setRoles(java.util.Set.of(Role.STUDENT));
+        return student;
     }
 }

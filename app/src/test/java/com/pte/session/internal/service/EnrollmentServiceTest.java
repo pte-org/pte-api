@@ -111,6 +111,7 @@ class EnrollmentServiceTest {
                 new EnrollStudentRequest(studentPublicId), caller);
 
         assertThat(response.studentPublicId()).isEqualTo(studentPublicId);
+        verify(identityService).lockActiveStudentsInTenant(List.of(studentPublicId), tenantId);
     }
 
     @Test
@@ -201,6 +202,8 @@ class EnrollmentServiceTest {
 
         assertThat(response.enrolled()).containsExactlyInAnyOrder(newId1, newId2);
         assertThat(response.alreadyEnrolled()).containsExactly(alreadyEnrolledId);
+        verify(identityService).lockActiveStudentsInTenant(
+                List.of(alreadyEnrolledId, newId1, newId2), tenantId);
         // Regression: capacity == null (unset here) must skip the capacity
         // check entirely, not just "pass" with a 0/default count.
         verify(enrollmentRepository, never()).countBySessionId(anyLong());
