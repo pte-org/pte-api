@@ -194,6 +194,30 @@ public class IdentityService implements StudentCountProvider {
                 .isPresent();
     }
 
+    /**
+     * Locks every requested active student identity in deterministic order for the duration of
+     * the caller transaction. Enrollment uses this as the serialization boundary before reading
+     * slot conflicts, checking capacity, and inserting rows.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockActiveStudentsInTenant(Collection<UUID> publicIds, UUID tenantId) {
+        if (tenantId == null || publicIds == null || publicIds.isEmpty()
+                || publicIds.stream().anyMatch(Objects::isNull)) {
+            throw new IdentityNotEligibleException();
+        }
+        List<UUID> orderedIds = publicIds.stream().distinct().sorted().toList();
+        List<User> lockedUsers = userRepository.findWithLockByPublicIdsAndTenantId(orderedIds, tenantId);
+        Set<UUID> lockedIds = lockedUsers.stream().map(User::getPublicId).collect(Collectors.toSet());
+        if (lockedUsers.size() != orderedIds.size()
+                || !lockedIds.equals(Set.copyOf(orderedIds))
+                || lockedUsers.stream().anyMatch(user -> user.isDeleted()
+                        || user.getStatus() != UserStatus.ACTIVE
+                        || !Objects.equals(user.getTenantId(), tenantId)
+                        || !user.getRoles().contains(Role.STUDENT))) {
+            throw new IdentityNotEligibleException();
+        }
+    }
+
     /** Returns only active EXAMINER identities in the supplied tenant; invalid IDs are omitted. */
     public List<ExaminerIdentityView> findActiveExaminers(UUID tenantId, List<UUID> examinerPublicIds) {
         if (tenantId == null || examinerPublicIds == null || examinerPublicIds.isEmpty()) {

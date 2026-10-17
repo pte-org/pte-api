@@ -88,6 +88,7 @@ public class EnrollmentService {
         assertTenantActive(session);
         requireManualAudienceMutationAllowed(session);
         requireActiveStudent(request.studentPublicId(), session.getTenantId());
+        lockActiveStudents(List.of(request.studentPublicId()), session.getTenantId());
         if (enrollmentRepository.existsBySessionIdAndStudentPublicId(session.getId(), request.studentPublicId())) {
             throw new AlreadyEnrolledException();
         }
@@ -147,6 +148,7 @@ public class EnrollmentService {
     }
 
     private BulkEnrollResponse bulkEnrollLocked(ExamSession session, BulkEnrollRequest request, CurrentUser caller) {
+        lockActiveStudents(request.studentPublicIds(), session.getTenantId());
 
         List<UUID> existing = enrollmentRepository
                 .findBySessionIdAndStudentPublicIdIn(session.getId(), request.studentPublicIds())
@@ -346,6 +348,12 @@ public class EnrollmentService {
     private void requireActiveStudents(List<UUID> studentPublicIds, UUID tenantId) {
         if (identityService != null) {
             identityService.requireActiveStudentsInTenant(studentPublicIds, tenantId);
+        }
+    }
+
+    private void lockActiveStudents(List<UUID> studentPublicIds, UUID tenantId) {
+        if (identityService != null) {
+            identityService.lockActiveStudentsInTenant(studentPublicIds, tenantId);
         }
     }
 }

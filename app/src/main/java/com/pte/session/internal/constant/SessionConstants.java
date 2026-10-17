@@ -57,6 +57,13 @@ public final class SessionConstants {
     public static final String SESSION_TIME_CONFLICT = "SESSION_TIME_CONFLICT";
     public static final String SESSION_TIME_CONFLICT_FRIENDLY =
             "Some students already have another exam during this time window.";
+    public static final String EXAM_AUDIENCE_CONFLICT = "EXAM_AUDIENCE_CONFLICT";
+    public static final String EXAM_AUDIENCE_CONFLICT_FRIENDLY =
+            "Every eligible student conflicts with another exam. Resolve the conflicts and try publishing again.";
+    public static final String EXAM_AUDIENCE_RECONCILIATION_FAILED =
+            "EXAM_AUDIENCE_RECONCILIATION_FAILED";
+    public static final String EXAM_AUDIENCE_RECONCILIATION_FAILED_FRIENDLY =
+            "The exam audience could not be reconciled with enrollment. Refresh and try again.";
     public static final String SESSION_NOT_READY_TO_OPEN = "SESSION_NOT_READY_TO_OPEN";
     public static final String SESSION_NOT_OPEN_TO_CLOSE = "SESSION_NOT_OPEN_TO_CLOSE";
     public static final String EXAM_SCHEDULE_NOT_EDITABLE = "EXAM_SCHEDULE_NOT_EDITABLE";

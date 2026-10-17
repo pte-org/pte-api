@@ -23,6 +23,7 @@ import com.pte.session.domain.enums.LockdownMode;
 import com.pte.session.domain.enums.GenerationJobStatus;
 import com.pte.session.domain.enums.ReusePolicy;
 import com.pte.session.domain.enums.SessionStatus;
+import com.pte.session.dto.response.SlotConflict;
 import com.pte.session.dto.event.SessionCancelledEvent;
 import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.dto.request.AudienceSourceRequest;
@@ -32,6 +33,7 @@ import com.pte.session.internal.dto.request.BulkEnrollRequest;
 import com.pte.session.internal.dto.response.AudienceMemberResponse;
 import com.pte.session.internal.dto.response.AudiencePreviewResponse;
 import com.pte.session.internal.dto.response.AudienceSourceResponse;
+import com.pte.session.internal.dto.response.BulkEnrollResponse;
 import com.pte.session.internal.dto.response.ExamPreflightResponse;
 import com.pte.session.internal.dto.response.GenerationJobResponse;
 import com.pte.session.internal.dto.response.SessionResponse;
@@ -40,6 +42,8 @@ import com.pte.session.internal.exception.ExamDraftConfigurationException;
 import com.pte.session.internal.exception.ExamDraftNotDeletableException;
 import com.pte.session.internal.exception.ExamDraftNotEditableException;
 import com.pte.session.internal.exception.ExamDraftVersionConflictException;
+import com.pte.session.internal.exception.ExamAudienceConflictException;
+import com.pte.session.internal.exception.ExamAudienceReconciliationException;
 import com.pte.session.internal.exception.ExamPublishBlockedException;
 import com.pte.session.internal.exception.GenerationNotReadyException;
 import com.pte.session.internal.exception.HostContextRequiredException;
@@ -475,7 +479,7 @@ public class ExamOrchestrationService {
         return latestJob(session);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = ExamAudienceConflictException.class)
     public SessionResponse publish(UUID sessionPublicId, CurrentUser caller) {
         UUID tenantId = requireTenant(caller);
         assertTenantActive(tenantId);
@@ -497,13 +501,10 @@ public class ExamOrchestrationService {
                 .stream()
                 .filter(member -> member.getStatus() != AudienceMemberStatus.EXCLUDED)
                 .toList();
-        enrollmentService.bulkEnrollPublishedExam(session,
+        BulkEnrollResponse enrollmentResponse = enrollmentService.bulkEnrollPublishedExam(session,
                 new BulkEnrollRequest(audienceMembers.stream().map(ExamAudienceMember::getStudentPublicId).toList()), caller);
         Instant publishedAt = Instant.now();
-        audienceMembers.forEach(member -> {
-            member.setStatus(AudienceMemberStatus.ENROLLED);
-            member.setPublishedAt(publishedAt);
-        });
+        reconcilePublishedAudience(audienceMembers, enrollmentResponse, publishedAt);
         session.setStatus(SessionStatus.SCHEDULED);
         try {
             sessionRepository.flush();
@@ -512,6 +513,60 @@ public class ExamOrchestrationService {
         }
         recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_PUBLISHED, session.getName());
         return SessionMapper.toResponse(session);
+    }
+
+    private void reconcilePublishedAudience(List<ExamAudienceMember> audienceMembers,
+            BulkEnrollResponse enrollmentResponse, Instant publishedAt) {
+        Set<UUID> successfulStudentIds = new LinkedHashSet<>();
+        successfulStudentIds.addAll(enrollmentResponse.enrolled());
+        successfulStudentIds.addAll(enrollmentResponse.alreadyEnrolled());
+        Map<UUID, SlotConflict> conflictsByStudent = enrollmentResponse.skippedByConflict().stream()
+                .collect(Collectors.toMap(SlotConflict::studentPublicId, conflict -> conflict,
+                        (first, ignored) -> first, LinkedHashMap::new));
+
+        Set<UUID> audienceStudentIds = audienceMembers.stream()
+                .map(ExamAudienceMember::getStudentPublicId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<UUID> unresolvedStudentIds = new ArrayList<>();
+        for (UUID studentPublicId : audienceStudentIds) {
+            if (successfulStudentIds.contains(studentPublicId) == conflictsByStudent.containsKey(studentPublicId)) {
+                unresolvedStudentIds.add(studentPublicId);
+            }
+        }
+        successfulStudentIds.stream()
+                .filter(studentPublicId -> !audienceStudentIds.contains(studentPublicId))
+                .forEach(unresolvedStudentIds::add);
+        conflictsByStudent.keySet().stream()
+                .filter(studentPublicId -> !audienceStudentIds.contains(studentPublicId))
+                .forEach(unresolvedStudentIds::add);
+        if (!unresolvedStudentIds.isEmpty()) {
+            throw new ExamAudienceReconciliationException(unresolvedStudentIds.stream().distinct().toList());
+        }
+
+        audienceMembers.forEach(member -> {
+            UUID studentPublicId = member.getStudentPublicId();
+            SlotConflict conflict = conflictsByStudent.get(studentPublicId);
+            if (successfulStudentIds.contains(studentPublicId)) {
+                member.setStatus(AudienceMemberStatus.ENROLLED);
+                member.setReason(null);
+                member.setPriorSessionPublicId(null);
+                member.setPriorSessionName(null);
+                member.setPriorStatus(null);
+                member.setPublishedAt(publishedAt);
+            } else {
+                member.setStatus(AudienceMemberStatus.EXCLUDED);
+                member.setReason(com.pte.session.domain.enums.AudienceDecisionReason.SCHEDULE_OVERLAP);
+                member.setPriorSessionPublicId(conflict.conflictingSessionPublicId());
+                member.setPriorSessionName(conflict.conflictingSessionName());
+                member.setPriorStatus(null);
+                member.setPublishedAt(null);
+            }
+        });
+        memberRepository.saveAll(audienceMembers);
+        if (successfulStudentIds.isEmpty() && !enrollmentResponse.skippedByConflict().isEmpty()) {
+            memberRepository.flush();
+            throw new ExamAudienceConflictException(enrollmentResponse.skippedByConflict());
+        }
     }
 
     @Transactional
