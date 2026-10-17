@@ -14,6 +14,8 @@ import com.pte.session.internal.mapper.SessionMapper;
 import com.pte.session.internal.policy.SessionPolicyResolver;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.shared.security.CurrentUser;
+import com.pte.tenancy.TenancyService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,22 +31,35 @@ public class SessionCreationService {
     private final SessionCodeGenerator sessionCodeGenerator;
     private final SessionAccess access;
     private final SessionSubscriptionRules subscriptions;
+    private final TenancyService tenancyService;
 
     public SessionCreationService(ExamSessionRepository sessionRepository,
             AssessmentService assessmentService,
             SessionCodeGenerator sessionCodeGenerator,
             SessionAccess access,
             SessionSubscriptionRules subscriptions) {
+        this(sessionRepository, assessmentService, sessionCodeGenerator, access, subscriptions, null);
+    }
+
+    @Autowired
+    public SessionCreationService(ExamSessionRepository sessionRepository,
+            AssessmentService assessmentService,
+            SessionCodeGenerator sessionCodeGenerator,
+            SessionAccess access,
+            SessionSubscriptionRules subscriptions,
+            TenancyService tenancyService) {
         this.sessionRepository = sessionRepository;
         this.assessmentService = assessmentService;
         this.sessionCodeGenerator = sessionCodeGenerator;
         this.access = access;
         this.subscriptions = subscriptions;
+        this.tenancyService = tenancyService;
     }
 
     @Transactional
     public SessionResponse create(CreateSessionRequest request, CurrentUser caller) {
         UUID tenantId = access.requireTenant(caller);
+        assertTenantActive(tenantId);
         subscriptions.validateWindow(request.opensAt(), request.closesAt());
 
         SubscriptionView subscription = subscriptions.lockedActiveSubscription(request.subscriptionPublicId(), tenantId);
@@ -89,6 +104,12 @@ public class SessionCreationService {
             return SessionMapper.toResponse(saved);
         } catch (DataIntegrityViolationException ex) {
             throw subscriptions.translateOverlap(ex);
+        }
+    }
+
+    private void assertTenantActive(UUID tenantId) {
+        if (tenancyService != null) {
+            tenancyService.assertTenantActive(tenantId);
         }
     }
 }

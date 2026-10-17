@@ -18,6 +18,7 @@ import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.PlatformOperation;
 import com.pte.shared.security.PlatformOperationPolicy;
 import com.pte.shared.constant.SharedConstants;
+import com.pte.tenancy.TenancyService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -48,16 +49,25 @@ public class OrderService {
     private final OrderPersistenceService orderPersistenceService;
     private final PayOsClient payOsClient;
     private final AuditLogService auditLogService;
+    private final TenancyService tenancyService;
 
     @Autowired
     public OrderService(OrderRepository orderRepository, PlanRepository planRepository,
             OrderPersistenceService orderPersistenceService, PayOsClient payOsClient,
             AuditLogService auditLogService) {
+        this(orderRepository, planRepository, orderPersistenceService, payOsClient, auditLogService, null);
+    }
+
+    @Autowired
+    public OrderService(OrderRepository orderRepository, PlanRepository planRepository,
+            OrderPersistenceService orderPersistenceService, PayOsClient payOsClient,
+            AuditLogService auditLogService, TenancyService tenancyService) {
         this.orderRepository = orderRepository;
         this.planRepository = planRepository;
         this.orderPersistenceService = orderPersistenceService;
         this.payOsClient = payOsClient;
         this.auditLogService = auditLogService;
+        this.tenancyService = tenancyService;
     }
 
     /** Compatibility constructor for focused billing tests. */
@@ -72,6 +82,9 @@ public class OrderService {
         }
         if (planPublicId == null) {
             throw invalid(BillingConstants.ORDER_PLAN_REQUIRED);
+        }
+        if (tenancyService != null) {
+            tenancyService.assertTenantActive(tenantId);
         }
 
         Plan plan = planRepository.findByPublicId(planPublicId)

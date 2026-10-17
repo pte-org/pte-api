@@ -8,6 +8,7 @@ import com.pte.tenancy.internal.dto.response.StudentQuotaResponse;
 import com.pte.tenancy.internal.exception.InvalidStudentCountException;
 import com.pte.tenancy.internal.exception.StudentLimitExceededException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
+import com.pte.tenancy.internal.exception.TenantSuspendedException;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
 import com.pte.tenancy.internal.repository.TenantRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -125,6 +126,26 @@ class TenancyServiceTest {
                 .isInstanceOf(TenantNotFoundException.class);
 
         verify(studentCountProvider, never()).countStudents(any());
+    }
+
+    @Test
+    void assertTenantActive_rejectsSuspendedTenant() {
+        UUID tenantId = UUID.randomUUID();
+        Tenant tenant = tenant(tenantId, 100);
+        tenant.setStatus(com.pte.tenancy.domain.enums.TenantStatus.SUSPENDED);
+        when(tenantRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant));
+
+        assertThatThrownBy(() -> tenancyService.assertTenantActive(tenantId))
+                .isInstanceOfSatisfying(TenantSuspendedException.class,
+                        exception -> assertThat(exception.getStatus().value()).isEqualTo(403));
+    }
+
+    @Test
+    void assertTenantActive_allowsActiveTenant() {
+        UUID tenantId = UUID.randomUUID();
+        when(tenantRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant(tenantId, 100)));
+
+        tenancyService.assertTenantActive(tenantId);
     }
 
     private Tenant tenant(UUID publicId, int studentLimit) {

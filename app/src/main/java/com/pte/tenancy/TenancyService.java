@@ -7,6 +7,7 @@ import com.pte.tenancy.internal.exception.OrganizationNotFoundException;
 import com.pte.tenancy.internal.exception.InvalidStudentCountException;
 import com.pte.tenancy.internal.exception.StudentLimitExceededException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
+import com.pte.tenancy.internal.exception.TenantSuspendedException;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
 import com.pte.tenancy.internal.repository.TenantRepository;
 import com.pte.tenancy.internal.service.TenantLifecycleService;
@@ -121,6 +122,20 @@ public class TenancyService {
                 .isPresent();
     }
 
+    /** Guards the start of tenant-owned writes; running attempts use no such guard. */
+    @Transactional(readOnly = true)
+    public void assertTenantActive(UUID tenantPublicId) {
+        requireTenantId(tenantPublicId);
+        Tenant tenant = tenantRepository.findByPublicId(tenantPublicId)
+                .orElseThrow(TenantNotFoundException::new);
+        if (tenant.isDeleted()) {
+            throw new TenantNotFoundException();
+        }
+        if (tenant.getStatus() == TenantStatus.SUSPENDED) {
+            throw new TenantSuspendedException();
+        }
+    }
+
     /** Returns the current student count and the tenant's effective limit. */
     @Transactional(readOnly = true)
     public StudentQuota getStudentQuota(UUID tenantPublicId) {
@@ -169,6 +184,12 @@ public class TenancyService {
         requireTenantId(tenantPublicId);
         Tenant tenant = tenantRepository.findWithLockByPublicId(tenantPublicId)
                 .orElseThrow(TenantNotFoundException::new);
+        if (tenant.isDeleted()) {
+            throw new TenantNotFoundException();
+        }
+        if (tenant.getStatus() == TenantStatus.SUSPENDED) {
+            throw new TenantSuspendedException();
+        }
         long current = studentCountProvider.countStudents(tenantPublicId);
         StudentQuota quota = new StudentQuota(current, tenant.getStudentLimit());
         if (!quota.canAdd(adding)) {

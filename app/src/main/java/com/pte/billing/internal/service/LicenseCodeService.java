@@ -567,6 +567,7 @@ public class LicenseCodeService {
         if (caller.tenantId() == null) {
             throw invalid(BillingConstants.LICENSE_CODE_TENANT_REQUIRED);
         }
+        tenancyService.assertTenantActive(caller.tenantId());
         return caller.tenantId();
     }
 

@@ -6,6 +6,8 @@ import java.util.UUID;
 public final class TenancyConstants {
 
     public static final String TENANT_NOT_FOUND = "TENANT_NOT_FOUND";
+    public static final String TENANT_SUSPENDED = "TENANT_SUSPENDED";
+    public static final String TENANT_SUSPENSION_DAYS_INVALID = "TENANT_SUSPENSION_DAYS_INVALID";
     public static final String TENANT_NAME_ALREADY_USED = "TENANT_NAME_ALREADY_USED";
     public static final String TENANT_CODE_ALREADY_USED = "TENANT_CODE_ALREADY_USED";
     public static final String TENANT_TAX_CODE_ALREADY_USED = "TENANT_TAX_CODE_ALREADY_USED";
@@ -48,6 +50,7 @@ public final class TenancyConstants {
     public static final String OPERATION_TENANT_ONBOARD = "TENANT_ONBOARD";
     public static final String OPERATION_TENANT_SUSPEND = "TENANT_SUSPEND";
     public static final String OPERATION_TENANT_REACTIVATE = "TENANT_REACTIVATE";
+    public static final String OPERATION_TENANT_SUSPENSION_IMPACT = "TENANT_SUSPENSION_IMPACT";
     public static final String OPERATION_TENANT_BRANDING = "TENANT_BRANDING";
     public static final String AUDIT_TENANT_ONBOARDED_SUMMARY = "Onboarded tenant";
     public static final String AUDIT_TENANT_SUSPENDED_SUMMARY = "Suspended tenant";
