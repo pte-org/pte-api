@@ -35,6 +35,6 @@ public final class ReportMapper {
     }
 
     private static SkillScoreResponse toResponse(String name, SkillScore score) {
-        return new SkillScoreResponse(name, score.score(), score.sufficientData());
+        return new SkillScoreResponse(name, score.score(), score.sufficientData(), score.appliedWeight());
     }
 }

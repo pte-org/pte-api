@@ -63,6 +63,6 @@ public class ReportingService {
     }
 
     private static ReportSkillScoreView toSkill(String name, SkillScore score) {
-        return new ReportSkillScoreView(name, score.score(), score.sufficientData());
+        return new ReportSkillScoreView(name, score.score(), score.sufficientData(), score.appliedWeight());
     }
 }
