@@ -24,6 +24,7 @@ import com.pte.session.internal.exception.SessionCapacityExceededException;
 import com.pte.session.internal.exception.SessionTimeConflictException;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ProctorAssignmentRepository;
+import com.pte.identity.IdentityService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
 import org.springframework.context.ApplicationEventPublisher;
@@ -52,22 +53,33 @@ public class EnrollmentService {
     private final ProctorAssignmentRepository proctorAssignmentRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final TenancyService tenancyService;
+    private final IdentityService identityService;
 
     public EnrollmentService(SessionLifecycleService sessionLifecycleService, EnrollmentRepository enrollmentRepository,
                              ProctorAssignmentRepository proctorAssignmentRepository,
                              ApplicationEventPublisher eventPublisher) {
-        this(sessionLifecycleService, enrollmentRepository, proctorAssignmentRepository, eventPublisher, null);
+        this(sessionLifecycleService, enrollmentRepository, proctorAssignmentRepository, eventPublisher, null, null);
     }
 
-    @Autowired
     public EnrollmentService(SessionLifecycleService sessionLifecycleService, EnrollmentRepository enrollmentRepository,
                              ProctorAssignmentRepository proctorAssignmentRepository,
                              ApplicationEventPublisher eventPublisher, TenancyService tenancyService) {
+        this(sessionLifecycleService, enrollmentRepository, proctorAssignmentRepository, eventPublisher,
+                tenancyService, null);
+    }
+
+    @Autowired
+    public EnrollmentService(SessionLifecycleService sessionLifecycleService,
+                             EnrollmentRepository enrollmentRepository,
+                             ProctorAssignmentRepository proctorAssignmentRepository,
+                             ApplicationEventPublisher eventPublisher, TenancyService tenancyService,
+                             IdentityService identityService) {
         this.sessionLifecycleService = sessionLifecycleService;
         this.enrollmentRepository = enrollmentRepository;
         this.proctorAssignmentRepository = proctorAssignmentRepository;
         this.eventPublisher = eventPublisher;
         this.tenancyService = tenancyService;
+        this.identityService = identityService;
     }
 
     @Transactional
@@ -75,6 +87,7 @@ public class EnrollmentService {
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
         assertTenantActive(session);
         requireManualAudienceMutationAllowed(session);
+        requireActiveStudent(request.studentPublicId(), session.getTenantId());
         if (enrollmentRepository.existsBySessionIdAndStudentPublicId(session.getId(), request.studentPublicId())) {
             throw new AlreadyEnrolledException();
         }
@@ -117,6 +130,7 @@ public class EnrollmentService {
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
         assertTenantActive(session);
         requireManualAudienceMutationAllowed(session);
+        requireActiveStudents(request.studentPublicIds(), session.getTenantId());
         return bulkEnrollLocked(session, request, caller);
     }
 
@@ -124,6 +138,7 @@ public class EnrollmentService {
     @Transactional
     BulkEnrollResponse bulkEnrollPublishedExam(ExamSession session, BulkEnrollRequest request, CurrentUser caller) {
         assertTenantActive(session);
+        requireActiveStudents(request.studentPublicIds(), session.getTenantId());
         if (session.getStatus() != com.pte.session.domain.enums.SessionStatus.READY
                 || session.getGenerationJobPublicId() == null) {
             throw new ExamAudienceLockedException();
@@ -232,6 +247,10 @@ public class EnrollmentService {
     @Transactional
     public ProctorAssignmentResponse assignProctor(UUID sessionPublicId, AssignProctorRequest request, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwned(sessionPublicId, caller);
+        assertTenantActive(session);
+        if (identityService != null) {
+            identityService.requireActiveProctorInTenant(request.proctorPublicId(), session.getTenantId());
+        }
         ProctorAssignment assignment = new ProctorAssignment();
         assignment.setSession(session);
         assignment.setProctorPublicId(request.proctorPublicId());
@@ -315,6 +334,18 @@ public class EnrollmentService {
     private void assertTenantActive(ExamSession session) {
         if (tenancyService != null) {
             tenancyService.assertTenantActive(session.getTenantId());
+        }
+    }
+
+    private void requireActiveStudent(UUID studentPublicId, UUID tenantId) {
+        if (identityService != null) {
+            identityService.requireActiveStudentInTenant(studentPublicId, tenantId);
+        }
+    }
+
+    private void requireActiveStudents(List<UUID> studentPublicIds, UUID tenantId) {
+        if (identityService != null) {
+            identityService.requireActiveStudentsInTenant(studentPublicIds, tenantId);
         }
     }
 }

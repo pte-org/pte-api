@@ -166,6 +166,11 @@ public class SessionLifecycleService {
         sessionOperationGuardService.lockOpenForAttemptOperation(publicId, tenantId);
     }
 
+    @Transactional(readOnly = true)
+    public void assertTenantActiveForNewAttempt(UUID tenantId) {
+        sessionOperationGuardService.assertTenantActiveForNewAttempt(tenantId);
+    }
+
     @Transactional
     public void lockOpenWithinWindowForProctorOperation(UUID publicId, UUID tenantId) {
         sessionOperationGuardService.lockOpenWithinWindowForProctorOperation(publicId, tenantId);

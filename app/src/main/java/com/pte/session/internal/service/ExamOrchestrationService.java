@@ -6,8 +6,6 @@ import com.pte.billing.BillingService;
 import com.pte.billing.SubscriptionView;
 import com.pte.enrollment.EnrollmentModuleService;
 import com.pte.identity.IdentityService;
-import com.pte.identity.domain.Role;
-import com.pte.identity.domain.User;
 import com.pte.session.domain.ExamAudienceMember;
 import com.pte.session.domain.ExamAudienceSource;
 import com.pte.session.domain.ExamForm;
@@ -68,6 +66,7 @@ import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
 import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.audit.AuditLogService;
+import com.pte.tenancy.TenancyService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -106,6 +105,7 @@ public class ExamOrchestrationService {
     private final BillingService billingService;
     private final EnrollmentModuleService enrollmentModuleService;
     private final IdentityService identityService;
+    private final TenancyService tenancyService;
     private final StartedAttemptLookup startedAttemptLookup;
     private final AuditLogService auditLogService;
     private final SessionCodeGenerator sessionCodeGenerator;
@@ -130,6 +130,32 @@ public class ExamOrchestrationService {
             AuditLogService auditLogService,
             SessionCodeGenerator sessionCodeGenerator,
             ApplicationEventPublisher eventPublisher) {
+        this(sessionRepository, sourceRepository, memberRepository, jobRepository, formRepository,
+                formAssignmentRepository, enrollmentRepository, sessionLifecycleService, enrollmentService,
+                assessmentService, scoreTemplateService, billingService, enrollmentModuleService, identityService,
+                startedAttemptLookup, auditLogService, sessionCodeGenerator, eventPublisher, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ExamOrchestrationService(ExamSessionRepository sessionRepository,
+            ExamAudienceSourceRepository sourceRepository,
+            ExamAudienceMemberRepository memberRepository,
+            ExamGenerationJobRepository jobRepository,
+            ExamFormRepository formRepository,
+            FormAssignmentRepository formAssignmentRepository,
+            EnrollmentRepository enrollmentRepository,
+            SessionLifecycleService sessionLifecycleService,
+            EnrollmentService enrollmentService,
+            AssessmentService assessmentService,
+            ScoreTemplateService scoreTemplateService,
+            BillingService billingService,
+            EnrollmentModuleService enrollmentModuleService,
+            IdentityService identityService,
+            StartedAttemptLookup startedAttemptLookup,
+            AuditLogService auditLogService,
+            SessionCodeGenerator sessionCodeGenerator,
+            ApplicationEventPublisher eventPublisher,
+            TenancyService tenancyService) {
         this.sessionRepository = sessionRepository;
         this.sourceRepository = sourceRepository;
         this.memberRepository = memberRepository;
@@ -144,6 +170,7 @@ public class ExamOrchestrationService {
         this.billingService = billingService;
         this.enrollmentModuleService = enrollmentModuleService;
         this.identityService = identityService;
+        this.tenancyService = tenancyService;
         this.startedAttemptLookup = startedAttemptLookup;
         this.auditLogService = auditLogService;
         this.sessionCodeGenerator = sessionCodeGenerator;
@@ -153,6 +180,7 @@ public class ExamOrchestrationService {
     @Transactional
     public SessionResponse createDraft(CreateExamDraftRequest request, CurrentUser caller) {
         UUID tenantId = requireTenant(caller);
+        assertTenantActive(tenantId);
         validateWindow(request.opensAt(), request.closesAt());
         SubscriptionView subscription = lockedActiveSubscription(request.subscriptionPublicId(), tenantId);
         validateSubscriptionWindowAndCapacity(subscription, request.opensAt(), request.closesAt(), request.capacity());
@@ -194,6 +222,7 @@ public class ExamOrchestrationService {
     @Transactional
     public SessionResponse updateDraft(UUID publicId, PatchExamDraftRequest request, CurrentUser caller) {
         UUID tenantId = requireTenant(caller);
+        assertTenantActive(tenantId);
         ExamSession observed = observedSession(publicId, caller);
         if (request.expectedVersion() != null
                 && !request.expectedVersion().equals(observed.getDraftVersion())) {
@@ -298,6 +327,7 @@ public class ExamOrchestrationService {
     @Transactional
     public AudienceSourceResponse addSource(UUID sessionPublicId, AudienceSourceRequest request, CurrentUser caller) {
         ExamSession session = ownedForEdit(sessionPublicId, caller);
+        assertTenantActive(session.getTenantId());
         validateSourceOwnership(request, caller.tenantId());
         if (sourceRepository.existsBySessionIdAndSourceTypeAndSourcePublicId(
                 session.getId(), request.sourceType(), request.sourcePublicId())) {
@@ -330,6 +360,7 @@ public class ExamOrchestrationService {
     @Transactional
     public void removeSource(UUID sessionPublicId, UUID sourcePublicId, CurrentUser caller) {
         ExamSession session = ownedForEdit(sessionPublicId, caller);
+        assertTenantActive(session.getTenantId());
         ExamAudienceSource source = sourceRepository.findByPublicIdAndSessionId(sourcePublicId, session.getId())
                 .orElseThrow(AudienceSourceNotFoundException::new);
         sourceRepository.delete(source);
@@ -344,7 +375,7 @@ public class ExamOrchestrationService {
         if (session.getStatus() != SessionStatus.DRAFT) {
             throw new ExamDraftNotEditableException();
         }
-        return resolveAudience(session, true);
+        return resolveAudience(session, false);
     }
 
     @Transactional
@@ -353,7 +384,11 @@ public class ExamOrchestrationService {
         if (session.getStatus() != SessionStatus.DRAFT && session.getStatus() != SessionStatus.READY) {
             throw new ExamDraftNotEditableException();
         }
-        return preflightInternal(session, session.getStatus() == SessionStatus.DRAFT);
+        boolean persistAudience = session.getStatus() == SessionStatus.DRAFT;
+        if (persistAudience) {
+            assertTenantActive(session.getTenantId());
+        }
+        return preflightInternal(session, persistAudience);
     }
 
     @Transactional
@@ -363,6 +398,7 @@ public class ExamOrchestrationService {
             throw new ExamDraftConfigurationException(SessionConstants.EXAM_GENERATION_KEY_REQUIRED);
         }
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
+        assertTenantActive(session.getTenantId());
         if (session.getStatus() == SessionStatus.READY) {
             return latestJob(session);
         }
@@ -442,6 +478,7 @@ public class ExamOrchestrationService {
     @Transactional
     public SessionResponse publish(UUID sessionPublicId, CurrentUser caller) {
         UUID tenantId = requireTenant(caller);
+        assertTenantActive(tenantId);
         ExamSession observed = observedSession(sessionPublicId, caller);
         SubscriptionView lockedSubscription = lockedActiveSubscription(
                 observed.getSubscriptionId(), tenantId);
@@ -692,9 +729,7 @@ public class ExamOrchestrationService {
         return switch (source.getSourceType()) {
             case CLASS -> enrollmentModuleService.findActiveStudentPublicIds(tenantId, source.getSourcePublicId());
             case PROGRAM -> enrollmentModuleService.findActiveStudentPublicIdsByProgram(tenantId, source.getSourcePublicId());
-            case STUDENT -> identityService.findById(source.getSourcePublicId())
-                    .filter(user -> tenantId.equals(user.getTenantId()) && user.getRoles().contains(Role.STUDENT))
-                    .map(User::getPublicId).stream().toList();
+            case STUDENT -> activeStudentSource(source.getSourcePublicId(), tenantId);
         };
     }
 
@@ -702,9 +737,7 @@ public class ExamOrchestrationService {
         List<UUID> resolved = switch (request.sourceType()) {
             case CLASS -> enrollmentModuleService.findActiveStudentPublicIds(tenantId, request.sourcePublicId());
             case PROGRAM -> enrollmentModuleService.findActiveStudentPublicIdsByProgram(tenantId, request.sourcePublicId());
-            case STUDENT -> identityService.findById(request.sourcePublicId())
-                    .filter(user -> tenantId.equals(user.getTenantId()) && user.getRoles().contains(Role.STUDENT))
-                    .map(User::getPublicId).stream().toList();
+            case STUDENT -> activeStudentSource(request.sourcePublicId(), tenantId);
         };
         if (request.sourceType() == AudienceSourceType.STUDENT && resolved.isEmpty()) {
             throw new AudienceSourceNotFoundException();
@@ -880,6 +913,17 @@ public class ExamOrchestrationService {
     private UUID requireTenant(CurrentUser caller) {
         if (caller == null || caller.tenantId() == null) throw new HostContextRequiredException();
         return caller.tenantId();
+    }
+
+    private List<UUID> activeStudentSource(UUID studentPublicId, UUID tenantId) {
+        identityService.requireActiveStudentInTenant(studentPublicId, tenantId);
+        return List.of(studentPublicId);
+    }
+
+    private void assertTenantActive(UUID tenantId) {
+        if (tenancyService != null) {
+            tenancyService.assertTenantActive(tenantId);
+        }
     }
 
     private void recordExamAudit(CurrentUser caller, ExamSession session, String action, String summary) {

@@ -37,7 +37,7 @@ public class StudentEnrollmentConflictNotificationListener {
                 .reduce((left, right) -> left + "\n" + right)
                 .orElse("");
         String body = NotificationConstants.STUDENT_ENROLLMENT_CONFLICT_BODY.formatted(sessionLabel, details);
-        for (var hostAdmin : identityService.findByTenantIdAndRole(event.tenantId(), Role.HOST_ADMIN)) {
+        for (var hostAdmin : identityService.findActiveByTenantIdAndRole(event.tenantId(), Role.HOST_ADMIN)) {
             String dedupeKey = NotificationConstants.STUDENT_ENROLLMENT_CONFLICT_DEDUPE_KEY.formatted(
                     event.sessionPublicId(), hostAdmin.getPublicId(), details.hashCode());
             dispatchService.dispatchTo(NotificationType.STUDENT_ENROLLMENT_CONFLICT, hostAdmin, event.tenantId(),
