@@ -22,6 +22,7 @@ import com.pte.session.internal.exception.SessionCapacityExceededException;
 import com.pte.session.internal.exception.SessionTimeConflictException;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ProctorAssignmentRepository;
+import com.pte.identity.IdentityService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -67,12 +69,15 @@ class EnrollmentServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private IdentityService identityService;
+
     private EnrollmentService enrollmentService;
 
     @BeforeEach
     void setUp() {
         enrollmentService = new EnrollmentService(sessionLifecycleService, enrollmentRepository,
-                proctorAssignmentRepository, eventPublisher);
+                proctorAssignmentRepository, eventPublisher, null, identityService);
     }
 
     private ExamSession session(Long id, UUID publicId, UUID tenantId) {
@@ -106,6 +111,25 @@ class EnrollmentServiceTest {
                 new EnrollStudentRequest(studentPublicId), caller);
 
         assertThat(response.studentPublicId()).isEqualTo(studentPublicId);
+    }
+
+    @Test
+    void enrollStudent_rejectsIneligibleIdentityBeforeCheckingEnrollment() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        CurrentUser caller = hostAdmin(tenantId);
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+        doThrow(new IdentityService.IdentityNotEligibleException()).when(identityService)
+                .requireActiveStudentInTenant(studentPublicId, tenantId);
+
+        assertThatThrownBy(() -> enrollmentService.enrollStudent(sessionPublicId,
+                new EnrollStudentRequest(studentPublicId), caller))
+                .isInstanceOf(IdentityService.IdentityNotEligibleException.class);
+
+        verify(enrollmentRepository, never()).existsBySessionIdAndStudentPublicId(anyLong(), eq(studentPublicId));
+        verify(enrollmentRepository, never()).save(any());
     }
 
     @Test
@@ -374,6 +398,24 @@ class EnrollmentServiceTest {
 
         assertThat(response.proctorPublicId()).isEqualTo(proctorPublicId);
         assertThat(response.role()).isEqualTo(ProctorRole.ASSISTANT_PROCTOR);
+    }
+
+    @Test
+    void assignProctor_rejectsIneligibleIdentityBeforeSaving() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID proctorPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        CurrentUser caller = hostAdmin(tenantId);
+        when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
+        doThrow(new IdentityService.IdentityNotEligibleException()).when(identityService)
+                .requireActiveProctorInTenant(proctorPublicId, tenantId);
+
+        assertThatThrownBy(() -> enrollmentService.assignProctor(sessionPublicId,
+                new AssignProctorRequest(proctorPublicId, null), caller))
+                .isInstanceOf(IdentityService.IdentityNotEligibleException.class);
+
+        verify(proctorAssignmentRepository, never()).save(any());
     }
 
     @Test

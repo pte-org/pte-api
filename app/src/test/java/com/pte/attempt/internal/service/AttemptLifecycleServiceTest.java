@@ -13,7 +13,9 @@ import com.pte.attempt.internal.repository.PinnedItemRepository;
 import com.pte.attempt.internal.service.cache.PinnedSnapshotCacheService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.session.SessionService;
+import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.session.internal.exception.NotEntitledException;
+import com.pte.tenancy.internal.exception.TenantSuspendedException;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,12 +26,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -71,6 +75,9 @@ class AttemptLifecycleServiceTest {
     @Mock
     private HeartbeatService heartbeatService;
 
+    @Mock
+    private SessionService sessionService;
+
     private AttemptLifecycleService attemptLifecycleService;
 
     private static final String TEST_PUBLIC_KEY_BASE64 =
@@ -84,6 +91,8 @@ class AttemptLifecycleServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(sessionService.getAttemptRetryPolicy(any(), any()))
+                .thenReturn(new AttemptRetryPolicyResponse(0));
         AttemptMapper attemptMapper = new AttemptMapper(JsonMapper.builder().build());
         attemptLifecycleService = new AttemptLifecycleService(
             attemptRepository,
@@ -95,7 +104,9 @@ class AttemptLifecycleServiceTest {
             attemptMapper,
             encryptionKeyProvider,
             submissionDecryptionService,
-            heartbeatService
+            heartbeatService,
+            null,
+            sessionService
         );
 
     }
@@ -186,6 +197,55 @@ class AttemptLifecycleServiceTest {
                 new StartAttemptRequest(sessionPublicId, true), new CurrentUser(studentPublicId, tenantId, List.of("STUDENT")))))
                 .isInstanceOf(NotEntitledException.class);
 
+        verify(snapshotPinService, never()).pin(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("new attempt is blocked for a suspended tenant before pinning")
+    void startAttempt_newAttemptIsBlockedWhenTenantIsSuspended() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        doThrow(new TenantSuspendedException()).when(sessionService)
+                .assertTenantActiveForNewAttempt(tenantId);
+
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> attemptLifecycleService.startAttempt(
+                new StartAttemptRequest(sessionPublicId, true),
+                new CurrentUser(studentPublicId, tenantId, List.of("STUDENT")))))
+                .isInstanceOf(TenantSuspendedException.class);
+
+        verify(snapshotPinService, never()).pin(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("resume of an in-progress attempt remains allowed for a suspended tenant")
+    void startAttempt_resumeExistingAttemptDoesNotCheckTenantActivity() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
+        PinnedExamSnapshot snapshot = createPinnedSnapshot(tenantId, "STANDARD");
+        ExamAttempt existing = new ExamAttempt();
+        existing.setPublicId(UUID.randomUUID());
+        existing.setSessionPublicId(sessionPublicId);
+        existing.setStudentPublicId(studentPublicId);
+        existing.setTenantId(tenantId);
+        existing.setStatus(AttemptStatus.IN_PROGRESS);
+        existing.setPinnedSnapshot(snapshot);
+        snapshot.setAttempt(existing);
+        PinnedItem currentItem = snapshot.getItems().get(0);
+
+        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+                sessionPublicId, studentPublicId)).thenReturn(Optional.of(existing));
+        when(pinnedItemRepository.countByPinnedSnapshotId(snapshot.getId())).thenReturn(1L);
+        when(pinnedItemRepository.findByPinnedSnapshotIdAndOrderIndex(snapshot.getId(), 0))
+                .thenReturn(Optional.of(currentItem));
+
+        AttemptTaskResponse response = attemptLifecycleService.startAttempt(
+                new StartAttemptRequest(sessionPublicId, true), caller);
+
+        assertThat(response.attemptPublicId()).isEqualTo(existing.getPublicId());
+        verify(sessionService, never()).assertTenantActiveForNewAttempt(tenantId);
         verify(snapshotPinService, never()).pin(any(), any(), any());
     }
 

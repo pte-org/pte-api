@@ -2,6 +2,7 @@ package com.pte.identity;
 
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
+import com.pte.identity.domain.UserStatus;
 import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
 
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -92,6 +94,54 @@ class IdentityServiceTest {
 
         assertThat(result).hasSize(2);
         assertThat(result).containsExactly(student1, student2);
+    }
+
+    @Test
+    void findActiveStudentInTenant_requiresTenantRoleActiveStatusAndNotDeleted() {
+        UUID tenantId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        User student = new User();
+        student.setPublicId(studentId);
+        student.setTenantId(tenantId);
+        student.setRoles(java.util.Set.of(Role.STUDENT));
+
+        when(userRepository.findByPublicIdAndTenantId(studentId, tenantId)).thenReturn(java.util.Optional.of(student));
+
+        assertThat(service.findActiveStudentInTenant(studentId, tenantId)).contains(student);
+
+        student.setStatus(UserStatus.SUSPENDED);
+        assertThat(service.findActiveStudentInTenant(studentId, tenantId)).isEmpty();
+
+        student.setStatus(UserStatus.ACTIVE);
+        student.setDeleted(true);
+        assertThat(service.findActiveStudentInTenant(studentId, tenantId)).isEmpty();
+
+        student.setDeleted(false);
+        student.setRoles(java.util.Set.of(Role.PROCTOR));
+        assertThat(service.findActiveStudentInTenant(studentId, tenantId)).isEmpty();
+    }
+
+    @Test
+    void requireActiveStudentsInTenant_failsClosedForMixedEligibility() {
+        UUID tenantId = UUID.randomUUID();
+        UUID activeStudentId = UUID.randomUUID();
+        UUID suspendedStudentId = UUID.randomUUID();
+        User activeStudent = new User();
+        activeStudent.setPublicId(activeStudentId);
+        activeStudent.setTenantId(tenantId);
+        activeStudent.setRoles(java.util.Set.of(Role.STUDENT));
+        User suspendedStudent = new User();
+        suspendedStudent.setPublicId(suspendedStudentId);
+        suspendedStudent.setTenantId(tenantId);
+        suspendedStudent.setStatus(UserStatus.SUSPENDED);
+        suspendedStudent.setRoles(java.util.Set.of(Role.STUDENT));
+        when(userRepository.findByPublicIdInAndTenantIdAndDeletedFalse(
+                java.util.List.of(activeStudentId, suspendedStudentId), tenantId))
+                .thenReturn(java.util.List.of(activeStudent, suspendedStudent));
+
+        assertThatThrownBy(() -> service.requireActiveStudentsInTenant(
+                java.util.List.of(activeStudentId, suspendedStudentId), tenantId))
+                .isInstanceOf(IdentityService.IdentityNotEligibleException.class);
     }
 
     @Test

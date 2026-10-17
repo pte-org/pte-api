@@ -24,6 +24,7 @@ import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.dto.request.CreateExamDraftRequest;
 import com.pte.session.internal.dto.request.PatchExamDraftRequest;
+import com.pte.session.internal.dto.response.AudienceMemberResponse;
 import com.pte.session.internal.exception.ExamDraftConfigurationException;
 import com.pte.session.internal.exception.ExamDraftNotDeletableException;
 import com.pte.session.internal.exception.ExamDraftVersionConflictException;
@@ -38,6 +39,8 @@ import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.exception.DomainException;
 import com.pte.shared.security.CurrentUser;
+import com.pte.tenancy.TenancyService;
+import com.pte.tenancy.internal.exception.TenantSuspendedException;
 import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,8 +58,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -98,6 +103,8 @@ class ExamOrchestrationServiceTest {
     private SessionCodeGenerator sessionCodeGenerator;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private TenancyService tenancyService;
 
     private ExamOrchestrationService service;
     private UUID tenantId;
@@ -113,13 +120,25 @@ class ExamOrchestrationServiceTest {
                 jobRepository, formRepository, formAssignmentRepository, enrollmentRepository,
                 sessionLifecycleService, enrollmentService, assessmentService, scoreTemplateService,
                 billingService, enrollmentModuleService, identityService, startedAttemptLookup, auditLogService,
-                sessionCodeGenerator, eventPublisher);
+                sessionCodeGenerator, eventPublisher, tenancyService);
         tenantId = UUID.randomUUID();
         templateId = UUID.randomUUID();
         subscriptionId = UUID.randomUUID();
         hostAdmin = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
         opensAt = Instant.now().plusSeconds(3600);
         closesAt = opensAt.plusSeconds(3600);
+    }
+
+    @Test
+    void createDraft_suspendedTenantIsBlockedBeforeCommercialSideEffects() {
+        doThrow(new TenantSuspendedException()).when(tenancyService).assertTenantActive(tenantId);
+
+        assertThatThrownBy(() -> service.createDraft(new CreateExamDraftRequest(
+                "HK1 mock", templateId, subscriptionId, opensAt, closesAt,
+                ExamMode.OFFICIAL_EXAM, null, null, null, 50), hostAdmin))
+                .isInstanceOf(TenantSuspendedException.class);
+
+        verifyNoInteractions(scoreTemplateService, billingService, sessionRepository);
     }
 
     @Test
@@ -341,7 +360,7 @@ class ExamOrchestrationServiceTest {
     }
 
     @Test
-    void previewAudience_reusesPersistedMembersWhenPreflightRunsRepeatedly() {
+    void previewAudience_isReadOnlyAndDoesNotPersistComputedMembers() {
         UUID sessionPublicId = UUID.randomUUID();
         UUID classPublicId = UUID.randomUUID();
         UUID studentPublicId = UUID.randomUUID();
@@ -371,14 +390,15 @@ class ExamOrchestrationServiceTest {
                 .thenReturn(List.of(studentPublicId));
         when(enrollmentRepository.findByTenantIdAndStudentPublicIdIn(tenantId, List.of(studentPublicId)))
                 .thenReturn(List.of());
-        when(memberRepository.findBySessionIdOrderByStudentPublicIdAsc(20L)).thenReturn(List.of(existing));
+        var firstPreview = service.previewAudience(sessionPublicId, hostAdmin);
+        var secondPreview = service.previewAudience(sessionPublicId, hostAdmin);
 
-        service.previewAudience(sessionPublicId, hostAdmin);
-        service.previewAudience(sessionPublicId, hostAdmin);
-
-        assertThat(existing.getStatus()).isEqualTo(AudienceMemberStatus.ELIGIBLE);
-        assertThat(existing.getSourceSummary()).isEqualTo("CLASS:" + classPublicId);
-        verify(memberRepository, times(2)).saveAll(any());
+        assertThat(firstPreview.members()).extracting(AudienceMemberResponse::status)
+                .containsExactly(AudienceMemberStatus.ELIGIBLE);
+        assertThat(secondPreview.members()).extracting(AudienceMemberResponse::status)
+                .containsExactly(AudienceMemberStatus.ELIGIBLE);
+        assertThat(existing.getStatus()).isEqualTo(AudienceMemberStatus.EXCLUDED);
+        verify(memberRepository, never()).saveAll(any());
         verify(memberRepository, never()).deleteBySessionId(20L);
     }
 
