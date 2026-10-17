@@ -20,6 +20,11 @@ public final class NotificationConstants {
     public static final String SESSION_CANCELLED_BODY =
             "The exam session \"%s\" was cancelled at %s. Please review the exam workspace.";
     public static final String SESSION_CANCELLED_DEDUPE_KEY = "exam-session-cancelled:%s:%s";
+    public static final String STUDENT_ENROLLMENT_CONFLICT_SUBJECT = "Students skipped because of exam time conflicts";
+    public static final String STUDENT_ENROLLMENT_CONFLICT_BODY =
+            "The exam session \"%s\" skipped these students because they are enrolled in another overlapping exam:\n%s";
+    public static final String STUDENT_ENROLLMENT_CONFLICT_DEDUPE_KEY =
+            "student-enrollment-conflict:%s:%s:%s";
 
     private NotificationConstants() {
     }
