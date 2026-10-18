@@ -5,6 +5,7 @@ import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.internal.exception.HostContextRequiredException;
 import com.pte.session.internal.exception.SessionNotFoundException;
 import com.pte.session.internal.exception.NotEntitledException;
+import com.pte.session.internal.exception.SessionNotClosedForExaminerAssignmentException;
 import com.pte.session.internal.exception.SessionNotClosedForGradingCohortException;
 import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
 import com.pte.session.internal.repository.ExamSessionRepository;
@@ -45,8 +46,11 @@ public class SessionOperationGuardService {
         if (tenantId == null) {
             throw new HostContextRequiredException();
         }
-        sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
                 .orElseThrow(SessionNotFoundException::new);
+        if (session.getStatus() != SessionStatus.CLOSED) {
+            throw new SessionNotClosedForExaminerAssignmentException();
+        }
     }
 
     @Transactional
