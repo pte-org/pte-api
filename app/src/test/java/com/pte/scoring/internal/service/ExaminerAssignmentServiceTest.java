@@ -185,6 +185,58 @@ class ExaminerAssignmentServiceTest {
     }
 
     @Test
+    void randomSessionScopeBalancesEverySubmittedAttemptWithoutPickingStudents() {
+        List<UUID> students = ids(7);
+        List<AttemptSummaryView> attempts = new ArrayList<>();
+        for (UUID student : students) {
+            attempts.add(new AttemptSummaryView(UUID.randomUUID(), sessionId, student, tenantId));
+        }
+        when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(attempts);
+        when(eligibilityService.findEligibleAttempts(sessionId, tenantId,
+                attempts.stream().map(AttemptSummaryView::attemptPublicId).toList()))
+                .thenReturn(attempts.stream().map(a -> new AiEligibleAttemptView(a.attemptPublicId(), 1)).toList());
+        when(identityService.findActiveExaminers(tenantId, List.of(examiner1, examiner2)))
+                .thenReturn(List.of(examiner(examiner1), examiner(examiner2)));
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(List.of());
+        stubBatchSave();
+        var request = new CreateExaminerAssignmentPreviewRequest(AssignmentBatchMode.RANDOM,
+                List.of(new AssignmentScopeRequest(AssignmentScopeType.SESSION, sessionId, null)),
+                List.of(examiner1, examiner2));
+
+        var result = service.preview(sessionId, request, host);
+
+        assertThat(result.valid()).isTrue();
+        assertThat(result.attemptCount()).isEqualTo(7);
+        assertThat(result.examinerLoads()).extracting(load -> load.attemptCount()).containsExactlyInAnyOrder(4L, 3L);
+        verifyNoInteractions(enrollmentService);
+    }
+
+    @Test
+    void sessionScopeMustReferenceTheSessionBeingAssigned() {
+        when(identityService.findActiveExaminers(tenantId, List.of(examiner1)))
+                .thenReturn(List.of(examiner(examiner1)));
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(List.of());
+        when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(List.of());
+        var request = new CreateExaminerAssignmentPreviewRequest(AssignmentBatchMode.RANDOM,
+                List.of(new AssignmentScopeRequest(AssignmentScopeType.SESSION, UUID.randomUUID(), null)),
+                List.of(examiner1));
+
+        assertThatThrownBy(() -> service.preview(sessionId, request, host))
+                .hasMessage("The whole-session scope must reference the exam session being assigned.");
+    }
+
+    @Test
+    void sessionScopeIsRejectedInManualMode() {
+        var request = new CreateExaminerAssignmentPreviewRequest(AssignmentBatchMode.MANUAL,
+                List.of(new AssignmentScopeRequest(AssignmentScopeType.SESSION, sessionId, examiner1)), List.of());
+
+        assertThatThrownBy(() -> service.preview(sessionId, request, host))
+                .hasMessage("The whole-session scope can only be used in random mode.");
+    }
+
+    @Test
     void manualStudentScopeOverlappingClassScopeForAnotherExaminerReturnsConflict() {
         UUID student = UUID.randomUUID();
         UUID attemptId = UUID.randomUUID();
