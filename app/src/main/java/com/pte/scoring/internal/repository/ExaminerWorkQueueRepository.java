@@ -23,6 +23,17 @@ public interface ExaminerWorkQueueRepository extends Repository<ExaminerAttemptA
             @Param("attemptPublicId") UUID attemptPublicId,
             @Param("examinerPublicId") UUID examinerPublicId);
 
+    /** 1-based position of {@code assignment} among this Examiner's assignments in the same session (assigned order). */
+    @Query("select count(other.id) from ExaminerAttemptAssignment other "
+            + "where other.tenantId = :tenantId and other.examinerPublicId = :examinerPublicId "
+            + "and other.sessionPublicId = :sessionPublicId and other.deleted = false "
+            + "and (other.assignedAt < :assignedAt or (other.assignedAt = :assignedAt and other.id <= :assignmentId))")
+    long countOrdinal(@Param("tenantId") UUID tenantId,
+            @Param("examinerPublicId") UUID examinerPublicId,
+            @Param("sessionPublicId") UUID sessionPublicId,
+            @Param("assignedAt") java.time.Instant assignedAt,
+            @Param("assignmentId") Long assignmentId);
+
     @Query(value = """
             select new com.pte.scoring.dto.response.ExaminerQueueItemResponse(
                 assignment.attemptPublicId,

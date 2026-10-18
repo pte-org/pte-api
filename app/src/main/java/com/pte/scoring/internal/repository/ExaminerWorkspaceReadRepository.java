@@ -70,7 +70,15 @@ public class ExaminerWorkspaceReadRepository {
                         WHEN assignment.eligible_answer_count > 0
                              AND COALESCE(sc.score_count, 0) < assignment.eligible_answer_count THEN true
                         ELSE false
-                    END AS has_outstanding_answers
+                    END AS has_outstanding_answers,
+                    (SELECT COUNT(*) FROM examiner_attempt_assignments a2
+                        WHERE a2.tenant_id = assignment.tenant_id
+                          AND a2.examiner_public_id = assignment.examiner_public_id
+                          AND a2.session_public_id = assignment.session_public_id
+                          AND NOT a2.deleted
+                          AND (a2.assigned_at < assignment.assigned_at
+                               OR (a2.assigned_at = assignment.assigned_at AND a2.id <= assignment.id))
+                    ) AS attempt_ordinal
                 FROM examiner_attempt_assignments assignment
                 LEFT JOIN (
                     SELECT
@@ -140,7 +148,8 @@ public class ExaminerWorkspaceReadRepository {
                     status,
                     can_finalize,
                     blocking_reason,
-                    has_outstanding_answers
+                    has_outstanding_answers,
+                    attempt_ordinal
                 FROM assignment_scores
                 WHERE can_finalize = true
                   AND has_outstanding_answers = true
@@ -200,7 +209,8 @@ public class ExaminerWorkspaceReadRepository {
                     status,
                     can_finalize,
                     blocking_reason,
-                    has_outstanding_answers
+                    has_outstanding_answers,
+                    attempt_ordinal
                 FROM assignment_scores
                 """ + whereClause + orderClause + """
 
@@ -251,6 +261,7 @@ public class ExaminerWorkspaceReadRepository {
         boolean canFinalize = toBoolean(row[6]);
         String blockingReason = row[7] != null ? row[7].toString() : null;
         boolean hasOutstandingAnswers = toBoolean(row[8]);
+        int attemptOrdinal = toInt(row[9]);
 
         return new ExaminerQueueItemResponse(
                 attemptPublicId,
@@ -261,7 +272,9 @@ public class ExaminerWorkspaceReadRepository {
                 status,
                 canFinalize,
                 blockingReason,
-                hasOutstandingAnswers
+                hasOutstandingAnswers,
+                null,
+                attemptOrdinal
         );
     }
 
@@ -276,6 +289,10 @@ public class ExaminerWorkspaceReadRepository {
     private static UUID toUUID(Object obj) {
         if (obj == null) return null;
         if (obj instanceof UUID u) return u;
+        if (obj instanceof byte[] bytes && bytes.length == 16) {
+            java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(bytes);
+            return new UUID(buffer.getLong(), buffer.getLong());
+        }
         return UUID.fromString(obj.toString());
     }
 
@@ -396,7 +413,8 @@ public class ExaminerWorkspaceReadRepository {
                     a.finalized_at,
                     COALESCE(COUNT(sc.id), 0) AS score_count,
                     AVG(sc.score) AS average_score,
-                    a.work_version
+                    a.work_version,
+                    a.attempt_ordinal
                 FROM filtered_assignments a
                 LEFT JOIN examiner_answer_scores sc ON sc.tenant_id = a.tenant_id
                     AND sc.session_public_id = a.session_public_id
@@ -404,7 +422,7 @@ public class ExaminerWorkspaceReadRepository {
                     AND sc.examiner_public_id = a.examiner_public_id
                     AND NOT sc.deleted
                 WHERE a.status = 'COMPLETED'
-                GROUP BY a.attempt_public_id, a.session_public_id, a.finalized_at, a.work_version
+                GROUP BY a.attempt_public_id, a.session_public_id, a.finalized_at, a.work_version, a.attempt_ordinal
                 ORDER BY a.finalized_at DESC NULLS LAST, a.attempt_public_id ASC
                 LIMIT 10
                 """;
@@ -421,7 +439,9 @@ public class ExaminerWorkspaceReadRepository {
                         toInstant(row[2]),
                         toLong(row[3]),
                         toDouble(row[4]),
-                        toLong(row[5])
+                        toLong(row[5]),
+                        null,
+                        toInt(row[6])
                 ))
                 .toList();
 
