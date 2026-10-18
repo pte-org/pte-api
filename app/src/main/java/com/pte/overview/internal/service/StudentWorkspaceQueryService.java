@@ -1,26 +1,26 @@
-package com.pte.enrollment.internal.service;
+package com.pte.overview.internal.service;
 
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.dto.response.StudentAttemptHistoryView;
 import com.pte.enrollment.EnrollmentModuleService;
-import com.pte.enrollment.dto.response.StudentAssignmentView;
-import com.pte.enrollment.internal.dto.response.StudentAttemptHistoryResponse;
-import com.pte.enrollment.internal.dto.response.StudentDetailResponse;
-import com.pte.enrollment.internal.dto.response.StudentPerformanceResponse;
-import com.pte.enrollment.internal.dto.response.StudentSkillPerformanceResponse;
-import com.pte.enrollment.internal.exception.InvalidStudentRosterQueryException;
-import com.pte.enrollment.internal.exception.StudentNotFoundException;
+import com.pte.enrollment.StudentAssignmentView;
+import com.pte.overview.internal.dto.response.StudentAttemptHistoryResponse;
+import com.pte.overview.internal.dto.response.StudentDetailResponse;
+import com.pte.overview.internal.dto.response.StudentPerformanceResponse;
+import com.pte.overview.internal.dto.response.StudentSkillPerformanceResponse;
 import com.pte.identity.IdentityService;
-import com.pte.identity.domain.Role;
-import com.pte.identity.domain.User;
+import com.pte.identity.StudentIdentityView;
 import com.pte.reporting.ReportingService;
-import com.pte.reporting.dto.response.ReportSkillScoreView;
-import com.pte.reporting.dto.response.StudentReportSummaryView;
+import com.pte.reporting.ReportSkillScoreView;
+import com.pte.reporting.StudentReportSummaryView;
 import com.pte.session.SessionService;
 import com.pte.session.dto.response.SessionSummaryView;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.SecurityRoles;
 import com.pte.shared.web.PagedResult;
+import com.pte.overview.internal.exception.InvalidStudentWorkspaceQueryException;
+import com.pte.overview.internal.exception.StudentWorkspaceNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,13 +62,12 @@ public class StudentWorkspaceQueryService {
 
     @Transactional(readOnly = true)
     public StudentDetailResponse getDetail(UUID studentPublicId, CurrentUser caller) {
-        User student = requireStudent(studentPublicId, caller);
+        StudentIdentityView student = requireStudent(studentPublicId, caller);
         StudentAssignmentView assignment = enrollmentModuleService.findCurrentStudentAssignment(
                 caller.tenantId(), studentPublicId);
-        return new StudentDetailResponse(student.getPublicId(), student.getUsername(), student.getEmail(),
-                student.getFullName(), student.getTenantId(), student.getStatus().name(),
-                student.getRoles().stream().map(Role::name).sorted().toList(), student.getStudentCode(),
-                student.getPhone(), student.getDateOfBirth(), student.isMustChangePassword(), assignment);
+        return new StudentDetailResponse(student.publicId(), student.username(), student.email(),
+                student.fullName(), student.tenantId(), student.status(), student.roles(), student.studentCode(),
+                student.phone(), student.dateOfBirth(), student.mustChangePassword(), assignment);
     }
 
     @Transactional(readOnly = true)
@@ -127,12 +126,12 @@ public class StudentWorkspaceQueryService {
                 averageOverall != null, skills, "PUBLISHED_IMMUTABLE_REPORTS");
     }
 
-    private User requireStudent(UUID studentPublicId, CurrentUser caller) {
-        if (caller == null || caller.tenantId() == null || !caller.hasRole(Role.HOST_ADMIN.name())) {
-            throw new StudentNotFoundException();
+    private StudentIdentityView requireStudent(UUID studentPublicId, CurrentUser caller) {
+        if (caller == null || caller.tenantId() == null || !caller.hasRole(SecurityRoles.HOST_ADMIN)) {
+            throw new StudentWorkspaceNotFoundException();
         }
         return identityService.findStudentByTenant(studentPublicId, caller.tenantId())
-                .orElseThrow(StudentNotFoundException::new);
+                .orElseThrow(StudentWorkspaceNotFoundException::new);
     }
 
     private StudentAttemptHistoryResponse toHistoryResponse(StudentAttemptHistoryView attempt,
@@ -171,13 +170,13 @@ public class StudentWorkspaceQueryService {
         try {
             return AttemptStatus.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException ex) {
-            throw new InvalidStudentRosterQueryException();
+            throw new InvalidStudentWorkspaceQueryException();
         }
     }
 
     private DateRange dateRange(LocalDate fromDate, LocalDate toDate) {
         if (fromDate != null && toDate != null && fromDate.isAfter(toDate)) {
-            throw new InvalidStudentRosterQueryException();
+            throw new InvalidStudentWorkspaceQueryException();
         }
         Instant from = fromDate == null ? null : fromDate.atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant to = toDate == null ? null : toDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();

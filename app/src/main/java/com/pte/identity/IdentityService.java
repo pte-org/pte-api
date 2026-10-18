@@ -60,13 +60,14 @@ public class IdentityService implements StudentCountProvider {
     }
 
     /** Tenant-scoped student read used by the tenant student workspace. */
-    public Optional<User> findStudentByTenant(UUID publicId, UUID tenantId) {
+    public Optional<StudentIdentityView> findStudentByTenant(UUID publicId, UUID tenantId) {
         if (publicId == null || tenantId == null) {
             return Optional.empty();
         }
         return userRepository.findByPublicIdAndTenantId(publicId, tenantId)
                 .filter(user -> !user.isDeleted())
-                .filter(user -> user.getRoles().contains(Role.STUDENT));
+                .filter(user -> user.getRoles().contains(Role.STUDENT))
+                .map(StudentIdentityView::from);
     }
 
     public boolean existsById(UUID publicId) {

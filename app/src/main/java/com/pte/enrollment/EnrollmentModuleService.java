@@ -4,7 +4,6 @@ import com.pte.enrollment.domain.ClassMembership;
 import com.pte.enrollment.domain.enums.ClassStatus;
 import com.pte.enrollment.domain.enums.ProgramStatus;
 import com.pte.enrollment.domain.StudentClass;
-import com.pte.enrollment.dto.response.StudentAssignmentView;
 import com.pte.enrollment.internal.exception.ProgramNotFoundException;
 import com.pte.enrollment.internal.exception.StudentClassNotFoundException;
 import com.pte.enrollment.internal.repository.ClassMembershipRepository;

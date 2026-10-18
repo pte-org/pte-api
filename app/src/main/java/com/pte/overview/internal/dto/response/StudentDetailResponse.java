@@ -1,6 +1,6 @@
-package com.pte.enrollment.internal.dto.response;
+package com.pte.overview.internal.dto.response;
 
-import com.pte.enrollment.dto.response.StudentAssignmentView;
+import com.pte.enrollment.StudentAssignmentView;
 
 import java.time.LocalDate;
 import java.util.List;

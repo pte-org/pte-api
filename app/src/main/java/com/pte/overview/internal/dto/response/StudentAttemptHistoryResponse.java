@@ -1,4 +1,4 @@
-package com.pte.enrollment.internal.dto.response;
+package com.pte.overview.internal.dto.response;
 
 import java.time.Instant;
 import java.util.UUID;

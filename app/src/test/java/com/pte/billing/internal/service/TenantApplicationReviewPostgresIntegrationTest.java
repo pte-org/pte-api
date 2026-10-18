@@ -9,6 +9,7 @@ import com.pte.identity.domain.HostAdminCreated;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.audit.AuditLogService;
 import com.pte.tenancy.TenancyService;
 import com.pte.tenancy.domain.Tenant;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -40,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -98,6 +101,9 @@ class TenantApplicationReviewPostgresIntegrationTest {
     @MockitoBean
     private ApplicationEventPublisher eventPublisher;
 
+    @MockitoBean
+    private AuditLogService auditLogService;
+
     @Test
     void tenApproveRejectRacesCommitExactlyOneTerminalDecision() throws Exception {
         when(platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY)).thenReturn(75);
@@ -150,17 +156,42 @@ class TenantApplicationReviewPostgresIntegrationTest {
                 .isEqualTo(TenantApplicationStatus.PENDING);
     }
 
-    private TenantApplication pending(String suffix) {
-        return tx(() -> {
-            String unique = suffix + "-" + UUID.randomUUID().toString().substring(0, 8);
-            TenantApplication application = new TenantApplication();
-            application.setOrgName("Review fixture " + unique);
-            application.setOrgType("SCHOOL");
-            application.setRequestedCode("review-" + unique);
-            application.setContactEmail("review-" + unique + "@example.test");
-            application.setTaxCode("TAX-" + unique);
-            return applications.saveAndFlush(application);
+    @Test
+    void pendingRequestedCodeIsUniqueUntilTheApplicationReachesATerminalState() {
+        String code = "partial-" + UUID.randomUUID().toString().substring(0, 8);
+        TenantApplication first = pendingWithCode(code);
+
+        assertThatThrownBy(() -> tx(() -> applications.saveAndFlush(application(code))))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        tx(() -> {
+            TenantApplication persisted = applications.findByPublicId(first.getPublicId()).orElseThrow();
+            persisted.setStatus(TenantApplicationStatus.REJECTED);
+            applications.saveAndFlush(persisted);
+            return null;
         });
+
+        assertThatCode(() -> tx(() -> applications.saveAndFlush(application(code))))
+                .doesNotThrowAnyException();
+    }
+
+    private TenantApplication pending(String suffix) {
+        String unique = suffix + "-" + UUID.randomUUID().toString().substring(0, 8);
+        return pendingWithCode("review-" + unique);
+    }
+
+    private TenantApplication pendingWithCode(String code) {
+        return tx(() -> applications.saveAndFlush(application(code)));
+    }
+
+    private TenantApplication application(String code) {
+        TenantApplication application = new TenantApplication();
+        application.setOrgName("Review fixture " + code);
+        application.setOrgType("SCHOOL");
+        application.setRequestedCode(code);
+        application.setContactEmail("review-" + code + "@example.test");
+        application.setTaxCode("TAX-" + code);
+        return application;
     }
 
     private Tenant tenant(String name, String code) {
