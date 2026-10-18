@@ -11,7 +11,9 @@ import com.pte.tenancy.internal.exception.TenantCodeAlreadyUsedException;
 import com.pte.tenancy.internal.exception.TenantNameAlreadyUsedException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
 import com.pte.tenancy.internal.exception.TenantTaxCodeAlreadyUsedException;
+import com.pte.tenancy.internal.exception.TenantSuspensionImpactStaleException;
 import com.pte.tenancy.internal.dto.request.OnboardTenantRequest;
+import com.pte.tenancy.internal.dto.request.SuspendTenantRequest;
 import com.pte.tenancy.internal.dto.request.UpdateBrandingRequest;
 import com.pte.tenancy.internal.dto.response.TenantResponse;
 import com.pte.tenancy.internal.constant.TenancyConstants;
@@ -29,6 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.List;
 import java.util.UUID;
 
@@ -160,6 +164,38 @@ public class TenantLifecycleService {
         }
         Instant now = clock.instant();
         tenant.suspendUntil(days == 0 ? null : now.plus(Duration.ofDays(days)));
+        audit(caller, TenancyConstants.EVENT_TENANT_SUSPENDED, publicId,
+                TenancyConstants.AUDIT_TENANT_SUSPENDED_SUMMARY);
+        return TenantMapper.toResponse(tenant);
+    }
+
+    /**
+     * Confirms a live suspension preview before mutating tenant state. The row
+     * lock keeps re-suspension idempotent and makes the final status transition
+     * atomic with the digest check.
+     */
+    @Transactional
+    public TenantResponse suspendWithConfirmation(UUID publicId, SuspendTenantRequest request,
+            CurrentUser caller) {
+        require(caller, PlatformOperation.TENANT_LIFECYCLE, TenancyConstants.OPERATION_TENANT_SUSPEND);
+        Tenant tenant = tenantRepository.findWithLockByPublicId(publicId)
+                .orElseThrow(TenantNotFoundException::new);
+        if (tenant.getStatus() == TenantStatus.SUSPENDED) {
+            return TenantMapper.toResponse(tenant);
+        }
+        int days = resolveSuspensionDays(request.days());
+        Instant now = clock.instant();
+        Instant suspendedUntil = days == 0 ? null : now.plus(Duration.ofDays(days));
+        if (suspensionImpactProvider == null) {
+            throw new TenantSuspensionImpactStaleException();
+        }
+        TenantSuspensionImpact liveImpact = suspensionImpactProvider.preview(publicId, now, suspendedUntil);
+        if (liveImpact.impactDigest() == null || request.impactDigest() == null
+                || !MessageDigest.isEqual(request.impactDigest().getBytes(StandardCharsets.UTF_8),
+                        liveImpact.impactDigest().getBytes(StandardCharsets.UTF_8))) {
+            throw new TenantSuspensionImpactStaleException();
+        }
+        tenant.suspendUntil(suspendedUntil);
         audit(caller, TenancyConstants.EVENT_TENANT_SUSPENDED, publicId,
                 TenancyConstants.AUDIT_TENANT_SUSPENDED_SUMMARY);
         return TenantMapper.toResponse(tenant);

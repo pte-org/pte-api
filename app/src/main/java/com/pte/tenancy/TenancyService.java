@@ -208,11 +208,15 @@ public class TenancyService {
         return tenantRepository.findOrganizationTypeByPublicId(tenantId);
     }
 
-    /** Returns safe tenant metadata for credential-matched login disambiguation. */
+    /**
+     * Returns safe tenant metadata for credential-matched login disambiguation.
+     * Suspended tenants remain selectable because suspension blocks new tenant
+     * activity, not authentication or access to in-flight/report data.
+     */
     @Transactional(readOnly = true)
     public Optional<LoginOrganizationOption> findLoginOrganization(UUID tenantId) {
         return tenantRepository.findByPublicId(tenantId)
-                .filter(tenant -> tenant.getStatus() == TenantStatus.ACTIVE)
+                .filter(tenant -> !tenant.isDeleted())
                 .map(tenant -> new LoginOrganizationOption(
                         tenant.getPublicId(), tenant.getCode(), tenant.getName(), tenant.getOrganizationType()));
     }

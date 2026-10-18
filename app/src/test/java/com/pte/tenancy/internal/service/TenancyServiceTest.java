@@ -4,6 +4,7 @@ import com.pte.tenancy.StudentCountProvider;
 import com.pte.tenancy.StudentQuota;
 import com.pte.tenancy.TenancyService;
 import com.pte.tenancy.domain.Tenant;
+import com.pte.tenancy.domain.enums.TenantStatus;
 import com.pte.tenancy.internal.dto.response.StudentQuotaResponse;
 import com.pte.tenancy.internal.exception.InvalidStudentCountException;
 import com.pte.tenancy.internal.exception.StudentLimitExceededException;
@@ -146,6 +147,20 @@ class TenancyServiceTest {
         when(tenantRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant(tenantId, 100)));
 
         tenancyService.assertTenantActive(tenantId);
+    }
+
+    @Test
+    void findLoginOrganization_allowsSuspendedTenantForAuthentication() {
+        UUID tenantId = UUID.randomUUID();
+        Tenant tenant = tenant(tenantId, 100);
+        tenant.setCode("suspended-school");
+        tenant.setName("Suspended School");
+        tenant.setOrganizationType("SCHOOL");
+        tenant.setStatus(TenantStatus.SUSPENDED);
+        when(tenantRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant));
+
+        assertThat(tenancyService.findLoginOrganization(tenantId)).isPresent()
+                .get().extracting("tenantId").isEqualTo(tenantId);
     }
 
     private Tenant tenant(UUID publicId, int studentLimit) {

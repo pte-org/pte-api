@@ -3,6 +3,7 @@ package com.pte.tenancy.internal.service;
 import com.pte.tenancy.domain.Tenant;
 import com.pte.tenancy.domain.enums.TenantStatus;
 import com.pte.tenancy.internal.repository.TenantRepository;
+import com.pte.shared.audit.AuditLogService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -24,6 +25,9 @@ class TenantSuspensionExpirationServiceTest {
     @Mock
     private TenantRepository tenantRepository;
 
+    @Mock
+    private AuditLogService auditLogService;
+
     @Test
     void reactivateDueTenants_reactivatesExpiredBoundedSuspensionsOnly() {
         Instant now = Instant.parse("2026-10-17T00:00:00Z");
@@ -44,6 +48,27 @@ class TenantSuspensionExpirationServiceTest {
         verify(tenantRepository)
                 .findByStatusAndSuspendedUntilIsNotNullAndSuspendedUntilLessThanEqualAndDeletedFalse(
                         TenantStatus.SUSPENDED, now);
+    }
+
+    @Test
+    void reactivateDueTenants_recordsSystemAuditAndIsIdempotentOnNextRun() {
+        Instant now = Instant.parse("2026-10-17T00:00:00Z");
+        Tenant due = suspendedTenant(now.minusSeconds(1), TenantStatus.SUSPENDED);
+        when(tenantRepository
+                .findByStatusAndSuspendedUntilIsNotNullAndSuspendedUntilLessThanEqualAndDeletedFalse(
+                        TenantStatus.SUSPENDED, now))
+                .thenReturn(List.of(due), List.of());
+
+        TenantSuspensionExpirationService service = new TenantSuspensionExpirationService(
+                tenantRepository, Clock.fixed(now, ZoneOffset.UTC), auditLogService);
+
+        assertThat(service.reactivateDueTenants()).isEqualTo(1);
+        assertThat(service.reactivateDueTenants()).isZero();
+        verify(auditLogService).record(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq("Tenant"),
+                org.mockito.ArgumentMatchers.eq(due.getPublicId().toString()),
+                org.mockito.ArgumentMatchers.eq("TenantReactivated"),
+                org.mockito.ArgumentMatchers.eq("Reactivated tenant"));
     }
 
     private Tenant suspendedTenant(Instant suspendedUntil, TenantStatus status) {

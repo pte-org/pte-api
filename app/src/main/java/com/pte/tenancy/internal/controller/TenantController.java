@@ -2,6 +2,7 @@ package com.pte.tenancy.internal.controller;
 
 import com.pte.tenancy.internal.dto.request.GrantQuotaRequest;
 import com.pte.tenancy.internal.dto.request.OnboardTenantRequest;
+import com.pte.tenancy.internal.dto.request.SuspendTenantRequest;
 import com.pte.tenancy.internal.dto.request.UpdateBrandingRequest;
 import com.pte.tenancy.internal.dto.response.QuotaTransactionResponse;
 import com.pte.tenancy.internal.dto.response.TenantResponse;
@@ -49,8 +50,8 @@ public class TenantController {
 
     @PostMapping("/{publicId}/suspend")
     public ApiResponse<TenantResponse> suspend(@PathVariable UUID publicId,
-            @RequestParam(required = false) Integer days) {
-        return ApiResponse.success(tenantLifecycleService.suspend(publicId, days, currentUser()));
+            @Valid @RequestBody SuspendTenantRequest request) {
+        return ApiResponse.success(tenantLifecycleService.suspendWithConfirmation(publicId, request, currentUser()));
     }
 
     @GetMapping("/{publicId}/suspension-impact")

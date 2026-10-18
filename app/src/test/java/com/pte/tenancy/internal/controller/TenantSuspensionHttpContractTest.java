@@ -4,6 +4,7 @@ import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.exception.GlobalExceptionHandler;
 import com.pte.tenancy.TenantSuspensionImpact;
+import com.pte.tenancy.internal.dto.request.SuspendTenantRequest;
 import com.pte.tenancy.internal.dto.response.TenantResponse;
 import com.pte.tenancy.internal.service.QuotaTransactionService;
 import com.pte.tenancy.internal.service.TenantLifecycleService;
@@ -23,6 +24,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -53,16 +55,19 @@ class TenantSuspensionHttpContractTest {
     void suspendBindsOptionalDaysAndReturnsSuspendedUntil() throws Exception {
         UUID tenantId = UUID.randomUUID();
         Instant suspendedUntil = Instant.parse("2026-10-24T00:00:00Z");
-        when(lifecycleService.suspend(tenantId, 7, actor)).thenReturn(new TenantResponse(
+        SuspendTenantRequest request = new SuspendTenantRequest(7, "impact-digest");
+        when(lifecycleService.suspendWithConfirmation(tenantId, request, actor)).thenReturn(new TenantResponse(
                 tenantId, "TENANT", "Tenant", "SCHOOL", "TAX", "SUSPENDED", suspendedUntil,
                 "starter", 100, null, null));
 
-        mvc.perform(post("/api/v1/tenants/{publicId}/suspend", tenantId).param("days", "7"))
+        mvc.perform(post("/api/v1/tenants/{publicId}/suspend", tenantId)
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"days\":7,\"impactDigest\":\"impact-digest\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("SUSPENDED"))
                 .andExpect(jsonPath("$.data.suspendedUntil").value("2026-10-24T00:00:00Z"));
 
-        verify(lifecycleService).suspend(tenantId, 7, actor);
+        verify(lifecycleService).suspendWithConfirmation(tenantId, request, actor);
     }
 
     @Test

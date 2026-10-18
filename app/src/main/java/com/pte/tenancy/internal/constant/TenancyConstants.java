@@ -8,6 +8,9 @@ public final class TenancyConstants {
     public static final String TENANT_NOT_FOUND = "TENANT_NOT_FOUND";
     public static final String TENANT_SUSPENDED = "TENANT_SUSPENDED";
     public static final String TENANT_SUSPENSION_DAYS_INVALID = "TENANT_SUSPENSION_DAYS_INVALID";
+    public static final String TENANT_SUSPENSION_IMPACT_DIGEST_REQUIRED =
+            "TENANT_SUSPENSION_IMPACT_DIGEST_REQUIRED";
+    public static final String TENANT_SUSPENSION_IMPACT_STALE = "TENANT_SUSPENSION_IMPACT_STALE";
     public static final String TENANT_NAME_ALREADY_USED = "TENANT_NAME_ALREADY_USED";
     public static final String TENANT_CODE_ALREADY_USED = "TENANT_CODE_ALREADY_USED";
     public static final String TENANT_TAX_CODE_ALREADY_USED = "TENANT_TAX_CODE_ALREADY_USED";

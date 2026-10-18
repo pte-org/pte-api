@@ -9,7 +9,9 @@ import com.pte.tenancy.internal.exception.TenantNotFoundException;
 import com.pte.tenancy.internal.exception.TenantSuspensionDaysInvalidException;
 import com.pte.tenancy.internal.exception.TenantTaxCodeAlreadyUsedException;
 import com.pte.tenancy.internal.dto.request.OnboardTenantRequest;
+import com.pte.tenancy.internal.dto.request.SuspendTenantRequest;
 import com.pte.tenancy.internal.dto.request.UpdateBrandingRequest;
+import com.pte.tenancy.internal.exception.TenantSuspensionImpactStaleException;
 import com.pte.tenancy.internal.dto.response.TenantResponse;
 import com.pte.tenancy.internal.repository.TenantRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -207,6 +209,44 @@ class TenantLifecycleServiceTest {
         TenantResponse response = service.suspend(publicId);
 
         assertThat(response.status()).isEqualTo("SUSPENDED");
+    }
+
+    @Test
+    void suspendWithConfirmation_rejectsStaleImpactBeforeStateChange() {
+        UUID publicId = UUID.randomUUID();
+        Tenant tenant = activeTenant(publicId);
+        Instant now = Instant.parse("2026-10-17T00:00:00Z");
+        TenantSuspensionImpact impact = new TenantSuspensionImpact(publicId, 7,
+                now.plusSeconds(7 * 86_400L), 1, 7, List.of(), 7 * 86_400L, 0, "live-digest");
+        service = new TenantLifecycleService(tenantRepository, null, () -> 30,
+                suspensionImpactProvider, Clock.fixed(now, ZoneOffset.UTC));
+        when(tenantRepository.findWithLockByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        when(suspensionImpactProvider.preview(publicId, now, impact.suspendedUntil())).thenReturn(impact);
+
+        assertThatThrownBy(() -> service.suspendWithConfirmation(publicId,
+                new SuspendTenantRequest(7, "stale-digest"), null))
+                .isInstanceOf(TenantSuspensionImpactStaleException.class);
+        assertThat(tenant.getStatus()).isEqualTo(TenantStatus.ACTIVE);
+    }
+
+    @Test
+    void suspendWithConfirmation_appliesMatchingImpactAndUsesTenantLock() {
+        UUID publicId = UUID.randomUUID();
+        Tenant tenant = activeTenant(publicId);
+        Instant now = Instant.parse("2026-10-17T00:00:00Z");
+        TenantSuspensionImpact impact = new TenantSuspensionImpact(publicId, 7,
+                now.plusSeconds(7 * 86_400L), 1, 7, List.of(), 7 * 86_400L, 0, "live-digest");
+        service = new TenantLifecycleService(tenantRepository, null, () -> 30,
+                suspensionImpactProvider, Clock.fixed(now, ZoneOffset.UTC));
+        when(tenantRepository.findWithLockByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        when(suspensionImpactProvider.preview(publicId, now, impact.suspendedUntil())).thenReturn(impact);
+
+        TenantResponse response = service.suspendWithConfirmation(publicId,
+                new SuspendTenantRequest(7, "live-digest"), null);
+
+        assertThat(response.status()).isEqualTo("SUSPENDED");
+        assertThat(response.suspendedUntil()).isEqualTo(impact.suspendedUntil());
+        verify(tenantRepository).findWithLockByPublicId(publicId);
     }
 
     @Test

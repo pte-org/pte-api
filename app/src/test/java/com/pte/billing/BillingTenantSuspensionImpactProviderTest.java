@@ -40,9 +40,13 @@ class BillingTenantSuspensionImpactProviderTest {
         assertThat(impact.activeSubscriptionCount()).isEqualTo(2);
         assertThat(impact.suspensionDays()).isEqualTo(10);
         assertThat(impact.totalDaysLost()).isEqualTo(15);
+        assertThat(impact.totalLossSeconds()).isEqualTo(15 * 86_400L);
+        assertThat(impact.remainingSubscriptionCount()).isEqualTo(1);
+        assertThat(impact.impactDigest()).isNotBlank();
         assertThat(impact.expiringSubscriptions()).extracting(TenantSuspensionImpact.SubscriptionImpact::subscriptionPublicId)
                 .containsExactly(expiresSoon.getPublicId());
         assertThat(impact.expiringSubscriptions().get(0).daysLost()).isEqualTo(5);
+        assertThat(impact.expiringSubscriptions().get(0).lossSeconds()).isEqualTo(5 * 86_400L);
     }
 
     @Test
@@ -60,6 +64,8 @@ class BillingTenantSuspensionImpactProviderTest {
         assertThat(impact.suspensionDays()).isZero();
         assertThat(impact.suspendedUntil()).isNull();
         assertThat(impact.totalDaysLost()).isEqualTo(4);
+        assertThat(impact.totalLossSeconds()).isEqualTo(4 * 86_400L);
+        assertThat(impact.remainingSubscriptionCount()).isZero();
         assertThat(impact.expiringSubscriptions()).hasSize(1);
     }
 
