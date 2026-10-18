@@ -325,16 +325,29 @@ public class ExaminerAssignmentService {
         Set<UUID> allRawAttemptIds = new LinkedHashSet<>();
 
         for (AssignmentScopeRequest scope : scopes) {
-            List<UUID> studentIds = switch (scope.type()) {
-                case CLASS -> enrollmentService.findActiveStudentPublicIds(tenantId, scope.scopePublicId());
-                case PROGRAM -> enrollmentService.findActiveStudentPublicIdsByProgram(tenantId, scope.scopePublicId());
-                case STUDENT -> List.of(scope.scopePublicId());
-            };
-            Set<UUID> students = new HashSet<>(studentIds);
-            Set<UUID> matchingAttemptIds = submitted.stream()
-                    .filter(attempt -> students.contains(attempt.studentPublicId()))
-                    .map(AttemptSummaryView::attemptPublicId)
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            Set<UUID> matchingAttemptIds;
+            if (scope.type() == AssignmentScopeType.SESSION) {
+                if (!sessionPublicId.equals(scope.scopePublicId())) {
+                    throw new InvalidExaminerAssignmentException(
+                            ExaminerAssignmentConstants.SESSION_SCOPE_MUST_MATCH_SESSION);
+                }
+                matchingAttemptIds = submitted.stream()
+                        .map(AttemptSummaryView::attemptPublicId)
+                        .collect(Collectors.toCollection(LinkedHashSet::new));
+            } else {
+                List<UUID> studentIds = switch (scope.type()) {
+                    case CLASS -> enrollmentService.findActiveStudentPublicIds(tenantId, scope.scopePublicId());
+                    case PROGRAM ->
+                            enrollmentService.findActiveStudentPublicIdsByProgram(tenantId, scope.scopePublicId());
+                    case STUDENT -> List.of(scope.scopePublicId());
+                    case SESSION -> List.of();
+                };
+                Set<UUID> students = new HashSet<>(studentIds);
+                matchingAttemptIds = submitted.stream()
+                        .filter(attempt -> students.contains(attempt.studentPublicId()))
+                        .map(AttemptSummaryView::attemptPublicId)
+                        .collect(Collectors.toCollection(LinkedHashSet::new));
+            }
             AssignmentScopeKey key = new AssignmentScopeKey(scope.type(), scope.scopePublicId());
             rawAttemptsByScope.put(key, matchingAttemptIds);
             allRawAttemptIds.addAll(matchingAttemptIds);
@@ -374,6 +387,9 @@ public class ExaminerAssignmentService {
             }
             if (request.mode() == AssignmentBatchMode.MANUAL && scope.examinerPublicId() == null) {
                 throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.MANUAL_EXAMINER_REQUIRED);
+            }
+            if (request.mode() == AssignmentBatchMode.MANUAL && scope.type() == AssignmentScopeType.SESSION) {
+                throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.SESSION_SCOPE_RANDOM_ONLY);
             }
             if (request.mode() == AssignmentBatchMode.RANDOM && scope.examinerPublicId() != null) {
                 throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.RANDOM_SCOPE_EXAMINER_FORBIDDEN);

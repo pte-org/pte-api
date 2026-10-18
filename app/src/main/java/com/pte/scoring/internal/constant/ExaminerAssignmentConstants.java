@@ -12,6 +12,10 @@ public final class ExaminerAssignmentConstants {
     public static final String MANUAL_EXAMINER_REQUIRED = "Manual mode requires an Examiner for every scope.";
     public static final String RANDOM_SCOPE_EXAMINER_FORBIDDEN =
             "Random mode uses one pooled Examiner list, not per-scope mappings.";
+    public static final String SESSION_SCOPE_RANDOM_ONLY =
+            "The whole-session scope can only be used in random mode.";
+    public static final String SESSION_SCOPE_MUST_MATCH_SESSION =
+            "The whole-session scope must reference the exam session being assigned.";
     public static final String DUPLICATE_SCOPE = "Duplicate scope in assignment request.";
     public static final String RANDOM_EXAMINERS_REQUIRED = "Random mode requires unique active Examiner IDs.";
     public static final String MANUAL_EXAMINER_LIST_FORBIDDEN =
