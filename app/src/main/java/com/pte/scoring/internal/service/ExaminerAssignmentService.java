@@ -5,11 +5,13 @@ import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.enrollment.EnrollmentModuleService;
 import com.pte.identity.IdentityService;
 import com.pte.identity.dto.response.ExaminerIdentityView;
+import com.pte.identity.dto.response.StudentDisplayNameView;
 import com.pte.scoring.domain.ExaminerAssignmentBatch;
 import com.pte.scoring.domain.ExaminerAttemptAssignment;
 import com.pte.scoring.domain.enums.AssignmentBatchMode;
 import com.pte.scoring.domain.enums.AssignmentBatchStatus;
 import com.pte.scoring.domain.enums.AssignmentScopeType;
+import com.pte.scoring.dto.request.CommitExaminerAssignmentRequest;
 import com.pte.scoring.dto.request.CreateExaminerAssignmentPreviewRequest;
 import com.pte.scoring.dto.request.CreateExaminerAssignmentPreviewRequest.AssignmentScopeRequest;
 import com.pte.scoring.dto.response.ExaminerAssignmentBatchSummaryResponse;
@@ -17,6 +19,7 @@ import com.pte.scoring.dto.response.ExaminerAssignmentConflictResponse;
 import com.pte.scoring.dto.response.ExaminerAssignmentLoadResponse;
 import com.pte.scoring.dto.response.ExaminerAssignmentOverviewResponse;
 import com.pte.scoring.dto.response.ExaminerAssignmentPreviewResponse;
+import com.pte.scoring.dto.response.ExaminerAssignmentRosterResponse;
 import com.pte.scoring.dto.response.ExaminerAssignmentScopeReferenceResponse;
 import com.pte.scoring.internal.exception.InvalidExaminerAssignmentException;
 import com.pte.scoring.internal.exception.StaleExaminerAssignmentPreviewException;
@@ -165,25 +168,10 @@ public class ExaminerAssignmentService {
                     expectedScopes.examinerPublicIds(), entries, List.of(), batch.getPreviewExpiresAt(), null);
         }
         publicationLockService.assertNotPublished(tenantId, sessionPublicId);
-        if (cohortRepository != null) {
-            cohortRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId)
-                    .ifPresent(cohort -> {
-                        if (cohort.getMarkingMode() == com.pte.scoring.domain.enums.GradingMarkingMode.AI_ONLY) {
-                            throw new InvalidExaminerAssignmentException(
-                                    "Examiner assignments cannot be confirmed for AI_ONLY grading cohorts.");
-                        }
-                        if (cohortMemberRepository != null) {
-                            var members = cohortMemberRepository.findByCohortPublicIdAndDeletedFalse(cohort.getPublicId());
-                            Set<UUID> excludedAttempts = members.stream()
-                                    .filter(com.pte.scoring.domain.GradingCohortMember::isExcluded)
-                                    .map(com.pte.scoring.domain.GradingCohortMember::getAttemptPublicId)
-                                    .collect(Collectors.toSet());
-                            if (entries.stream().anyMatch(e -> excludedAttempts.contains(e.attemptPublicId()))) {
-                                throw new InvalidExaminerAssignmentException(
-                                        "Cannot assign excluded attempts in the grading cohort.");
-                            }
-                        }
-                    });
+        assertCohortAllowsExaminers(tenantId, sessionPublicId);
+        Set<UUID> excludedAttempts = excludedAttemptIds(tenantId, sessionPublicId);
+        if (entries.stream().anyMatch(e -> excludedAttempts.contains(e.attemptPublicId()))) {
+            throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.EXCLUDED_ATTEMPT_REJECTED);
         }
         if (!Instant.now().isBefore(batch.getPreviewExpiresAt())) {
             batch.expire();
@@ -236,6 +224,136 @@ public class ExaminerAssignmentService {
         return response(batch.getPublicId(), batch.getMode(), batch.getStatus().name(), true,
                 expectedScopes.supplemental(), entries.size(), expectedScopes.eligibleAnswerCount(),
                 expectedScopes.examinerPublicIds(), entries, List.of(), batch.getPreviewExpiresAt(), committedAt);
+    }
+
+    /** The editable table: every eligible submitted attempt, or the committed mapping once the Host has locked it. */
+    @Transactional(readOnly = true)
+    public ExaminerAssignmentRosterResponse roster(UUID sessionPublicId, CurrentUser caller) {
+        UUID tenantId = requireHost(caller);
+        sessionService.verifyHostAccess(sessionPublicId, tenantId);
+        List<ExaminerAttemptAssignment> committed =
+                assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId);
+        Map<UUID, AttemptSummaryView> submitted = submittedAttempts(sessionPublicId, tenantId);
+        Map<UUID, UUID> examinerByAttempt = new LinkedHashMap<>();
+        if (committed.isEmpty()) {
+            eligibleAttemptCounts(sessionPublicId, tenantId, submitted)
+                    .keySet().forEach(attemptId -> examinerByAttempt.put(attemptId, null));
+        } else {
+            committed.forEach(row -> examinerByAttempt.put(row.getAttemptPublicId(), row.getExaminerPublicId()));
+        }
+        Map<UUID, StudentDisplayNameView> students = identityService.getStudentDisplayNames(tenantId,
+                submitted.values().stream().map(AttemptSummaryView::studentPublicId).collect(Collectors.toSet()));
+        List<ExaminerAssignmentRosterResponse.Row> rows = examinerByAttempt.entrySet().stream()
+                .filter(entry -> submitted.containsKey(entry.getKey()))
+                .map(entry -> {
+                    UUID studentId = submitted.get(entry.getKey()).studentPublicId();
+                    StudentDisplayNameView student = students.get(studentId);
+                    return new ExaminerAssignmentRosterResponse.Row(entry.getKey(), studentId,
+                            student == null ? null : student.displayName(),
+                            student == null ? null : student.email(), entry.getValue());
+                })
+                .sorted(Comparator
+                        .comparing((ExaminerAssignmentRosterResponse.Row row) -> row.studentName() == null
+                                ? "" : row.studentName().toLowerCase(java.util.Locale.ROOT))
+                        .thenComparing(row -> row.attemptPublicId().toString()))
+                .toList();
+        return new ExaminerAssignmentRosterResponse(!committed.isEmpty(), rows);
+    }
+
+    /** Persists the Host's final table in one shot; there is no later edit, so the whole roster must be covered. */
+    @Transactional
+    public ExaminerAssignmentRosterResponse commit(UUID sessionPublicId, CommitExaminerAssignmentRequest request,
+            CurrentUser caller) {
+        UUID tenantId = requireHost(caller);
+        sessionService.lockForExaminerAssignment(sessionPublicId, tenantId);
+        publicationLockService.assertNotPublished(tenantId, sessionPublicId);
+        if (request == null || request.entries() == null || request.entries().isEmpty()) {
+            throw new InvalidExaminerAssignmentException(
+                    ExaminerAssignmentConstants.ASSIGNMENT_MUST_COVER_EVERY_ATTEMPT);
+        }
+        if (!assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId)
+                .isEmpty()) {
+            throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.ALREADY_ASSIGNED);
+        }
+        assertCohortAllowsExaminers(tenantId, sessionPublicId);
+
+        Map<UUID, UUID> examinerByAttempt = new LinkedHashMap<>();
+        for (CommitExaminerAssignmentRequest.Entry entry : request.entries()) {
+            if (entry == null || entry.attemptPublicId() == null || entry.examinerPublicId() == null
+                    || examinerByAttempt.put(entry.attemptPublicId(), entry.examinerPublicId()) != null) {
+                throw new InvalidExaminerAssignmentException(
+                        ExaminerAssignmentConstants.ASSIGNMENT_MUST_COVER_EVERY_ATTEMPT);
+            }
+        }
+        Map<UUID, Integer> eligible = eligibleAttemptCounts(sessionPublicId, tenantId,
+                submittedAttempts(sessionPublicId, tenantId));
+        if (!eligible.keySet().equals(examinerByAttempt.keySet())) {
+            throw new InvalidExaminerAssignmentException(
+                    ExaminerAssignmentConstants.ASSIGNMENT_MUST_COVER_EVERY_ATTEMPT);
+        }
+        List<UUID> examinerIds = examinerByAttempt.values().stream().distinct().toList();
+        if (!validateExaminerLocks(tenantId, examinerIds)) {
+            throw new InvalidExaminerAssignmentException(
+                    ExaminerAssignmentConstants.EXAMINERS_MUST_BE_ACTIVE_AND_TENANT_SCOPED);
+        }
+
+        Instant now = Instant.now();
+        List<AssignmentEntry> entries = allocationEntries(examinerByAttempt, eligible);
+        ScopeSnapshotEnvelope scopeSnapshot = new ScopeSnapshotEnvelope(
+                List.of(new ScopeSnapshot(AssignmentScopeType.SESSION, sessionPublicId, null,
+                        entries.stream().map(AssignmentEntry::attemptPublicId).sorted().toList())),
+                examinerIds, false, eligible.values().stream().mapToInt(Integer::intValue).sum());
+        ExaminerAssignmentBatch batch = new ExaminerAssignmentBatch(tenantId, sessionPublicId, caller.userId(),
+                AssignmentBatchMode.MANUAL, writeJson(scopeSnapshot), writeJson(entries), null,
+                now.plus(PREVIEW_TTL));
+        batch.commit(now);
+        batch = batchRepository.saveAndFlush(batch);
+        UUID batchPublicId = batch.getPublicId();
+        assignmentRepository.saveAll(entries.stream().map(entry -> new ExaminerAttemptAssignment(
+                batchPublicId, tenantId, sessionPublicId, entry.attemptPublicId(), entry.examinerPublicId(),
+                entry.eligibleAnswerCount(), caller.userId(), now)).toList());
+        assignmentRepository.flush();
+        return roster(sessionPublicId, caller);
+    }
+
+    private Map<UUID, AttemptSummaryView> submittedAttempts(UUID sessionPublicId, UUID tenantId) {
+        return attemptService.getSubmittedAttemptsForSession(sessionPublicId, tenantId).stream()
+                .collect(Collectors.toMap(AttemptSummaryView::attemptPublicId, attempt -> attempt,
+                        (left, right) -> left, LinkedHashMap::new));
+    }
+
+    /** Submitted attempts that carry at least one AI-eligible answer and are not excluded from the cohort. */
+    private Map<UUID, Integer> eligibleAttemptCounts(UUID sessionPublicId, UUID tenantId,
+            Map<UUID, AttemptSummaryView> submitted) {
+        Set<UUID> excluded = excludedAttemptIds(tenantId, sessionPublicId);
+        List<UUID> candidates = submitted.keySet().stream().filter(id -> !excluded.contains(id)).toList();
+        return eligibilityQueryService.findEligibleAttempts(sessionPublicId, tenantId, candidates).stream()
+                .collect(Collectors.toMap(view -> view.attemptPublicId(), view -> view.eligibleAnswerCount(),
+                        (left, right) -> left, LinkedHashMap::new));
+    }
+
+    private void assertCohortAllowsExaminers(UUID tenantId, UUID sessionPublicId) {
+        if (cohortRepository == null) {
+            return;
+        }
+        cohortRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId)
+                .filter(cohort -> cohort.getMarkingMode() == com.pte.scoring.domain.enums.GradingMarkingMode.AI_ONLY)
+                .ifPresent(cohort -> {
+                    throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.AI_ONLY_COHORT_REJECTED);
+                });
+    }
+
+    private Set<UUID> excludedAttemptIds(UUID tenantId, UUID sessionPublicId) {
+        if (cohortRepository == null || cohortMemberRepository == null) {
+            return Set.of();
+        }
+        return cohortRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId)
+                .map(cohort -> cohortMemberRepository.findByCohortPublicIdAndDeletedFalse(cohort.getPublicId())
+                        .stream()
+                        .filter(com.pte.scoring.domain.GradingCohortMember::isExcluded)
+                        .map(com.pte.scoring.domain.GradingCohortMember::getAttemptPublicId)
+                        .collect(Collectors.toSet()))
+                .orElseGet(Set::of);
     }
 
     @Transactional

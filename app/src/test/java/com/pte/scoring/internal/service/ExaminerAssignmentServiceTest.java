@@ -5,10 +5,12 @@ import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.enrollment.EnrollmentModuleService;
 import com.pte.identity.IdentityService;
 import com.pte.identity.dto.response.ExaminerIdentityView;
+import com.pte.identity.dto.response.StudentDisplayNameView;
 import com.pte.scoring.domain.ExaminerAssignmentBatch;
 import com.pte.scoring.domain.ExaminerAttemptAssignment;
 import com.pte.scoring.domain.enums.AssignmentBatchMode;
 import com.pte.scoring.domain.enums.AssignmentScopeType;
+import com.pte.scoring.dto.request.CommitExaminerAssignmentRequest;
 import com.pte.scoring.dto.request.CreateExaminerAssignmentPreviewRequest;
 import com.pte.scoring.dto.request.CreateExaminerAssignmentPreviewRequest.AssignmentScopeRequest;
 import com.pte.scoring.dto.response.AiEligibleAttemptView;
@@ -28,8 +30,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -444,6 +448,133 @@ class ExaminerAssignmentServiceTest {
         assertThatThrownBy(() -> service.preview(sessionId, request, student))
                 .hasMessage("A tenant HOST_ADMIN is required.");
         verify(sessionService, never()).lockForExaminerAssignment(any(), any());
+    }
+
+    @Test
+    void rosterListsEveryEligibleAttemptUnassignedAndUnlockedBeforeCommit() {
+        UUID studentA = UUID.randomUUID();
+        UUID studentB = UUID.randomUUID();
+        var attemptA = new AttemptSummaryView(UUID.randomUUID(), sessionId, studentA, tenantId);
+        var attemptB = new AttemptSummaryView(UUID.randomUUID(), sessionId, studentB, tenantId);
+        stubRosterPool(List.of(attemptA, attemptB));
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(List.of());
+        when(identityService.getStudentDisplayNames(any(), any())).thenReturn(Map.of(
+                studentA, new StudentDisplayNameView(studentA, "Zed", "zed@example.test"),
+                studentB, new StudentDisplayNameView(studentB, "Amy", "amy@example.test")));
+
+        var roster = service.roster(sessionId, host);
+
+        assertThat(roster.locked()).isFalse();
+        assertThat(roster.rows()).extracting(row -> row.studentName()).containsExactly("Amy", "Zed");
+        assertThat(roster.rows()).extracting(row -> row.examinerPublicId()).containsOnlyNulls();
+        verify(sessionService).verifyHostAccess(sessionId, tenantId);
+    }
+
+    @Test
+    void rosterIsLockedAndShowsCommittedExaminersOnceAssigned() {
+        var attempt = new AttemptSummaryView(UUID.randomUUID(), sessionId, UUID.randomUUID(), tenantId);
+        when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(List.of(attempt));
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(List.of(assignment(attempt.attemptPublicId(), examiner1)));
+        when(identityService.getStudentDisplayNames(any(), any())).thenReturn(Map.of());
+
+        var roster = service.roster(sessionId, host);
+
+        assertThat(roster.locked()).isTrue();
+        assertThat(roster.rows()).singleElement()
+                .satisfies(row -> assertThat(row.examinerPublicId()).isEqualTo(examiner1));
+    }
+
+    @Test
+    void commitPersistsTheEditedTableAsOneCommittedBatch() {
+        var attemptA = new AttemptSummaryView(UUID.randomUUID(), sessionId, UUID.randomUUID(), tenantId);
+        var attemptB = new AttemptSummaryView(UUID.randomUUID(), sessionId, UUID.randomUUID(), tenantId);
+        stubRosterPool(List.of(attemptA, attemptB));
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(List.of());
+        when(identityService.lockActiveExaminers(eq(tenantId), any()))
+                .thenReturn(List.of(examiner(examiner1), examiner(examiner2)));
+        when(identityService.getStudentDisplayNames(any(), any())).thenReturn(Map.of());
+        stubBatchSave();
+
+        service.commit(sessionId, new CommitExaminerAssignmentRequest(List.of(
+                new CommitExaminerAssignmentRequest.Entry(attemptA.attemptPublicId(), examiner1),
+                new CommitExaminerAssignmentRequest.Entry(attemptB.attemptPublicId(), examiner2))), host);
+
+        ArgumentCaptor<ExaminerAssignmentBatch> batchCaptor = ArgumentCaptor.forClass(ExaminerAssignmentBatch.class);
+        verify(batchRepository).saveAndFlush(batchCaptor.capture());
+        assertThat(batchCaptor.getValue().getStatus()).isEqualTo(AssignmentBatchStatus.COMMITTED);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Iterable<ExaminerAttemptAssignment>> rows = ArgumentCaptor.forClass(Iterable.class);
+        verify(assignmentRepository).saveAll(rows.capture());
+        assertThat(rows.getValue()).extracting(ExaminerAttemptAssignment::getExaminerPublicId)
+                .containsExactlyInAnyOrder(examiner1, examiner2);
+        verify(publicationLockService).assertNotPublished(tenantId, sessionId);
+    }
+
+    @Test
+    void commitRejectsATableThatLeavesAnEligibleAttemptUnassigned() {
+        var attemptA = new AttemptSummaryView(UUID.randomUUID(), sessionId, UUID.randomUUID(), tenantId);
+        var attemptB = new AttemptSummaryView(UUID.randomUUID(), sessionId, UUID.randomUUID(), tenantId);
+        stubRosterPool(List.of(attemptA, attemptB));
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.commit(sessionId, new CommitExaminerAssignmentRequest(List.of(
+                new CommitExaminerAssignmentRequest.Entry(attemptA.attemptPublicId(), examiner1))), host))
+                .hasMessage("Assign every eligible attempt to exactly one Examiner.");
+        verify(assignmentRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void commitRejectsAnAttemptListedTwice() {
+        UUID attemptId = UUID.randomUUID();
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.commit(sessionId, new CommitExaminerAssignmentRequest(List.of(
+                new CommitExaminerAssignmentRequest.Entry(attemptId, examiner1),
+                new CommitExaminerAssignmentRequest.Entry(attemptId, examiner2))), host))
+                .hasMessage("Assign every eligible attempt to exactly one Examiner.");
+    }
+
+    @Test
+    void commitRejectsOnceAssignmentIsAlreadyLocked() {
+        UUID attemptId = UUID.randomUUID();
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(List.of(assignment(attemptId, examiner1)));
+
+        assertThatThrownBy(() -> service.commit(sessionId, new CommitExaminerAssignmentRequest(List.of(
+                new CommitExaminerAssignmentRequest.Entry(attemptId, examiner2))), host))
+                .hasMessage("Examiners are already assigned for this exam.");
+        verify(assignmentRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void commitRejectsAnInactiveExaminer() {
+        var attempt = new AttemptSummaryView(UUID.randomUUID(), sessionId, UUID.randomUUID(), tenantId);
+        stubRosterPool(List.of(attempt));
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(List.of());
+        when(identityService.lockActiveExaminers(eq(tenantId), any())).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.commit(sessionId, new CommitExaminerAssignmentRequest(List.of(
+                new CommitExaminerAssignmentRequest.Entry(attempt.attemptPublicId(), examiner1))), host))
+                .hasMessage("Every selected Examiner must be active and belong to this tenant.");
+        verify(batchRepository, never()).saveAndFlush(any());
+    }
+
+    private void stubRosterPool(List<AttemptSummaryView> attempts) {
+        when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(attempts);
+        when(eligibilityService.findEligibleAttempts(sessionId, tenantId,
+                attempts.stream().map(AttemptSummaryView::attemptPublicId).toList()))
+                .thenReturn(attempts.stream().map(a -> new AiEligibleAttemptView(a.attemptPublicId(), 1)).toList());
+    }
+
+    private ExaminerAttemptAssignment assignment(UUID attemptId, UUID examinerId) {
+        return new ExaminerAttemptAssignment(batchId, tenantId, sessionId, attemptId, examinerId, 1,
+                host.userId(), Instant.now());
     }
 
     private void setCandidatePool(List<UUID> students, List<AttemptSummaryView> attempts) {
