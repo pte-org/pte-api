@@ -155,6 +155,51 @@ class GradingCohortServiceTest {
                 .hasMessageContaining("closed");
     }
 
+    @Test
+    void ensuringAManualCohortFreezesItWithAnAutomaticReasonForUnsubmittedAttempts() {
+        stubCandidates();
+        when(cohortRepository.findForUpdate(tenantId, sessionId)).thenReturn(Optional.empty());
+        var cohortId = UUID.randomUUID();
+        when(cohortRepository.saveAndFlush(any())).thenAnswer(invocation -> {
+            var cohort = invocation.getArgument(0, com.pte.scoring.domain.GradingCohort.class);
+            cohort.setPublicId(cohortId);
+            return cohort;
+        });
+        when(memberRepository.findForUpdate(cohortId)).thenReturn(List.of());
+        when(attemptService.getGradingCoverage(any(), any(), any())).thenReturn(Map.of());
+        when(evaluator.evaluate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new GradingEvaluation(false, 1, 1, 1, 0, List.of()));
+
+        service.ensureManualCohort(sessionId, tenantId, actorId);
+
+        var cohort = org.mockito.ArgumentCaptor.forClass(com.pte.scoring.domain.GradingCohort.class);
+        verify(cohortRepository).saveAndFlush(cohort.capture());
+        assertThat(cohort.getValue().getMarkingMode()).isEqualTo(GradingMarkingMode.MANUAL_EXAMINER);
+        @SuppressWarnings("unchecked")
+        var members = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(memberRepository).saveAll(members.capture());
+        var saved = (List<com.pte.scoring.domain.GradingCohortMember>) members.getValue();
+        assertThat(saved).extracting(com.pte.scoring.domain.GradingCohortMember::getAttemptPublicId,
+                com.pte.scoring.domain.GradingCohortMember::isExcluded,
+                com.pte.scoring.domain.GradingCohortMember::getDispositionReason)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple(submittedAttemptId, false, null),
+                        org.assertj.core.groups.Tuple.tuple(outstandingAttemptId, true,
+                                com.pte.scoring.internal.constant.GradingConstants.AUTO_DISPOSITION_NOT_SUBMITTED));
+    }
+
+    @Test
+    void ensuringAManualCohortLeavesAnExistingCohortUntouched() {
+        var existing = new com.pte.scoring.domain.GradingCohort(tenantId, sessionId, actorId, "preview-v1",
+                GradingMarkingMode.MANUAL_EXAMINER, Instant.parse("2026-10-03T08:00:00Z"));
+        when(cohortRepository.findForUpdate(tenantId, sessionId)).thenReturn(Optional.of(existing));
+
+        service.ensureManualCohort(sessionId, tenantId, actorId);
+
+        verify(cohortRepository, never()).saveAndFlush(any());
+        verify(memberRepository, never()).saveAll(any());
+    }
+
     private void stubCandidates() {
         when(attemptService.getGradingCandidatesForSession(sessionId, tenantId)).thenReturn(List.of(
                 new AttemptGradingCandidateView(submittedAttemptId, submittedStudentId, "SUBMITTED", "submitted-v1"),
