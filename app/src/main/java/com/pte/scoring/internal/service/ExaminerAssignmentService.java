@@ -71,6 +71,7 @@ public class ExaminerAssignmentService {
     private final ObjectMapper objectMapper;
     private final com.pte.scoring.internal.repository.GradingCohortRepository cohortRepository;
     private final com.pte.scoring.internal.repository.GradingCohortMemberRepository cohortMemberRepository;
+    private final GradingCohortService cohortService;
 
     @Autowired
     public ExaminerAssignmentService(SessionService sessionService, EnrollmentModuleService enrollmentService,
@@ -79,7 +80,8 @@ public class ExaminerAssignmentService {
             ExaminerAttemptAssignmentRepository assignmentRepository, ScorePublicationLockService publicationLockService,
             ObjectMapper objectMapper,
             com.pte.scoring.internal.repository.GradingCohortRepository cohortRepository,
-            com.pte.scoring.internal.repository.GradingCohortMemberRepository cohortMemberRepository) {
+            com.pte.scoring.internal.repository.GradingCohortMemberRepository cohortMemberRepository,
+            GradingCohortService cohortService) {
         this.sessionService = sessionService;
         this.enrollmentService = enrollmentService;
         this.attemptService = attemptService;
@@ -91,6 +93,7 @@ public class ExaminerAssignmentService {
         this.objectMapper = objectMapper;
         this.cohortRepository = cohortRepository;
         this.cohortMemberRepository = cohortMemberRepository;
+        this.cohortService = cohortService;
     }
 
     public ExaminerAssignmentService(SessionService sessionService, EnrollmentModuleService enrollmentService,
@@ -99,7 +102,7 @@ public class ExaminerAssignmentService {
             ExaminerAttemptAssignmentRepository assignmentRepository, ScorePublicationLockService publicationLockService,
             ObjectMapper objectMapper) {
         this(sessionService, enrollmentService, attemptService, eligibilityQueryService, identityService,
-                batchRepository, assignmentRepository, publicationLockService, objectMapper, null, null);
+                batchRepository, assignmentRepository, publicationLockService, objectMapper, null, null, null);
     }
 
     @Transactional
@@ -313,6 +316,9 @@ public class ExaminerAssignmentService {
                 batchPublicId, tenantId, sessionPublicId, entry.attemptPublicId(), entry.examinerPublicId(),
                 entry.eligibleAnswerCount(), caller.userId(), now)).toList());
         assignmentRepository.flush();
+        if (cohortService != null) {
+            cohortService.ensureManualCohort(sessionPublicId, tenantId, caller.userId());
+        }
         return roster(sessionPublicId, caller);
     }
 

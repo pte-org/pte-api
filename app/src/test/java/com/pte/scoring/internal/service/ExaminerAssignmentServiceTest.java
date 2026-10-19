@@ -67,6 +67,7 @@ class ExaminerAssignmentServiceTest {
     @Mock private ExaminerAssignmentBatchRepository batchRepository;
     @Mock private ExaminerAttemptAssignmentRepository assignmentRepository;
     @Mock private ScorePublicationLockService publicationLockService;
+    @Mock private GradingCohortService cohortService;
 
     private ExaminerAssignmentService service;
 
@@ -74,7 +75,7 @@ class ExaminerAssignmentServiceTest {
     void setUp() {
         service = new ExaminerAssignmentService(sessionService, enrollmentService, attemptService, eligibilityService,
                 identityService, batchRepository, assignmentRepository, publicationLockService,
-                JsonMapper.builder().build());
+                JsonMapper.builder().build(), null, null, cohortService);
     }
 
     @Test
@@ -511,6 +512,7 @@ class ExaminerAssignmentServiceTest {
         assertThat(rows.getValue()).extracting(ExaminerAttemptAssignment::getExaminerPublicId)
                 .containsExactlyInAnyOrder(examiner1, examiner2);
         verify(publicationLockService).assertNotPublished(tenantId, sessionId);
+        verify(cohortService).ensureManualCohort(sessionId, tenantId, host.userId());
     }
 
     @Test
