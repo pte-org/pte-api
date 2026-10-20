@@ -3,7 +3,9 @@ package com.pte.scoring.internal.service;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptOwnerView;
 import com.pte.identity.IdentityService;
+import com.pte.scoring.domain.enums.ExaminerWorkflowStatus;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
+import com.pte.scoring.internal.dto.response.AttemptExaminerProgress;
 import com.pte.scoring.internal.dto.response.AttemptReviewItemResponse;
 import com.pte.scoring.internal.repository.AttemptStatusCount;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
@@ -37,6 +39,8 @@ class ScoringAttemptReviewServiceTest {
     private AttemptService attemptService;
     @Mock
     private IdentityService identityService;
+    @Mock
+    private AttemptExaminerProgressReader examinerProgressReader;
     @InjectMocks
     private ScoringAttemptReviewService service;
 
@@ -78,6 +82,40 @@ class ScoringAttemptReviewServiceTest {
         assertThat(second.pendingCount()).isEqualTo(3);
         assertThat(second.answerCount()).isEqualTo(3);
         assertThat(second.scoredCount()).isZero();
+    }
+
+    @Test
+    void listAttempts_assignedAttempt_carriesExaminerNameAndProgress() {
+        UUID assigned = UUID.randomUUID();
+        UUID unassigned = UUID.randomUUID();
+        UUID student = UUID.randomUUID();
+        UUID examiner = UUID.randomUUID();
+        when(scoringAnswerRepository.countByAttemptAndStatus(tenantId, sessionId)).thenReturn(List.of(
+                new AttemptStatusCount(assigned, ScoringAnswerStatus.SCORED, 5),
+                new AttemptStatusCount(unassigned, ScoringAnswerStatus.SCORED, 5)));
+        when(attemptService.getAttemptOwners(sessionId, tenantId, List.of(assigned, unassigned))).thenReturn(Map.of(
+                assigned, new AttemptOwnerView(assigned, student, 1, null),
+                unassigned, new AttemptOwnerView(unassigned, student, 2, null)));
+        when(examinerProgressReader.read(tenantId, sessionId)).thenReturn(Map.of(assigned,
+                new AttemptExaminerProgress(examiner, ExaminerWorkflowStatus.IN_PROGRESS, 5, 2)));
+        when(identityService.findFullNames(org.mockito.ArgumentMatchers.eq(tenantId), org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(Map.of(student, "Ann Nguyen", examiner, "Lan Pham"));
+
+        Map<UUID, AttemptReviewItemResponse> byAttempt = service.listAttempts(sessionId, host).stream()
+                .collect(Collectors.toMap(AttemptReviewItemResponse::attemptPublicId, Function.identity()));
+
+        AttemptReviewItemResponse withExaminer = byAttempt.get(assigned);
+        assertThat(withExaminer.examinerPublicId()).isEqualTo(examiner);
+        assertThat(withExaminer.examinerName()).isEqualTo("Lan Pham");
+        assertThat(withExaminer.examinerStatus()).isEqualTo(ExaminerWorkflowStatus.IN_PROGRESS);
+        assertThat(withExaminer.examinerEligibleCount()).isEqualTo(5);
+        assertThat(withExaminer.examinerSavedCount()).isEqualTo(2);
+        AttemptReviewItemResponse withoutExaminer = byAttempt.get(unassigned);
+        assertThat(withoutExaminer.examinerPublicId()).isNull();
+        assertThat(withoutExaminer.examinerName()).isNull();
+        assertThat(withoutExaminer.examinerStatus()).isNull();
+        assertThat(withoutExaminer.examinerEligibleCount()).isZero();
+        assertThat(withoutExaminer.examinerSavedCount()).isZero();
     }
 
     @Test

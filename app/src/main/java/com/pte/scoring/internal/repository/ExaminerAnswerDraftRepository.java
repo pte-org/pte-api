@@ -15,6 +15,12 @@ public interface ExaminerAnswerDraftRepository extends JpaRepository<ExaminerAns
 
     List<ExaminerAnswerDraft> findByTenantIdAndWorkIdAndDeletedFalse(UUID tenantId, Long workId);
 
+    /** Saved drafts per grading work, for the host's per-attempt examiner progress. */
+    @Query("SELECT new com.pte.scoring.internal.repository.WorkDraftCount(d.workId, COUNT(d)) "
+            + "FROM ExaminerAnswerDraft d WHERE d.tenantId = :tenantId AND d.workId IN :workIds "
+            + "AND d.deleted = false GROUP BY d.workId")
+    List<WorkDraftCount> countByWork(@Param("tenantId") UUID tenantId, @Param("workIds") List<Long> workIds);
+
     Optional<ExaminerAnswerDraft> findByTenantIdAndWorkIdAndAnswerPublicIdAndDeletedFalse(
             UUID tenantId, Long workId, UUID answerPublicId);
 

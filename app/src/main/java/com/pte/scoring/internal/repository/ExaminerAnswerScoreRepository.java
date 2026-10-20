@@ -22,6 +22,15 @@ public interface ExaminerAnswerScoreRepository extends JpaRepository<ExaminerAns
 
     interface StaffScoreCount { UUID getAttemptPublicId(); long getScoreCount(); }
 
+    /** Submitted scores per attempt for one session, for the host's per-attempt examiner progress. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT new com.pte.scoring.internal.repository.AttemptScoreCount(s.attemptPublicId, COUNT(s)) "
+            + "FROM ExaminerAnswerScore s WHERE s.tenantId = :tenantId AND s.sessionPublicId = :sessionPublicId "
+            + "AND s.deleted = false GROUP BY s.attemptPublicId")
+    List<AttemptScoreCount> countBySessionAndAttempt(
+            @org.springframework.data.repository.query.Param("tenantId") UUID tenantId,
+            @org.springframework.data.repository.query.Param("sessionPublicId") UUID sessionPublicId);
+
     Optional<ExaminerAnswerScore> findByAnswerPublicIdAndTenantId(UUID answerPublicId, UUID tenantId);
 
     List<ExaminerAnswerScore> findByTenantIdAndSessionPublicId(UUID tenantId, UUID sessionPublicId);
