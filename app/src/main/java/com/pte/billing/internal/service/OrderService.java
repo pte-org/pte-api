@@ -51,7 +51,6 @@ public class OrderService {
     private final AuditLogService auditLogService;
     private final TenancyService tenancyService;
 
-    @Autowired
     public OrderService(OrderRepository orderRepository, PlanRepository planRepository,
             OrderPersistenceService orderPersistenceService, PayOsClient payOsClient,
             AuditLogService auditLogService) {
