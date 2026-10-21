@@ -3,11 +3,15 @@ package com.pte.tenancy.internal.service;
 import com.pte.tenancy.domain.Tenant;
 import com.pte.tenancy.domain.enums.FacilityType;
 import com.pte.tenancy.domain.enums.TenantStatus;
+import com.pte.tenancy.TenantSuspensionImpact;
 import com.pte.tenancy.internal.exception.TenantNameAlreadyUsedException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
+import com.pte.tenancy.internal.exception.TenantSuspensionDaysInvalidException;
 import com.pte.tenancy.internal.exception.TenantTaxCodeAlreadyUsedException;
 import com.pte.tenancy.internal.dto.request.OnboardTenantRequest;
+import com.pte.tenancy.internal.dto.request.SuspendTenantRequest;
 import com.pte.tenancy.internal.dto.request.UpdateBrandingRequest;
+import com.pte.tenancy.internal.exception.TenantSuspensionImpactStaleException;
 import com.pte.tenancy.internal.dto.response.TenantResponse;
 import com.pte.tenancy.internal.repository.TenantRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +24,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -35,6 +42,8 @@ class TenantLifecycleServiceTest {
     @Mock
     private TenantRepository tenantRepository;
 
+    @org.mockito.Mock
+    private com.pte.tenancy.TenantSuspensionImpactProvider suspensionImpactProvider;
 
     private TenantLifecycleService service;
 
@@ -112,6 +121,73 @@ class TenantLifecycleServiceTest {
     }
 
     @Test
+    void suspend_withRequestedDays_setsBoundedEnd() {
+        UUID publicId = UUID.randomUUID();
+        Tenant tenant = activeTenant(publicId);
+        Instant now = Instant.parse("2026-10-17T00:00:00Z");
+        service = new TenantLifecycleService(tenantRepository, null, () -> 30, null,
+                Clock.fixed(now, ZoneOffset.UTC));
+        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+
+        TenantResponse response = service.suspend(publicId, 7);
+
+        assertThat(response.status()).isEqualTo("SUSPENDED");
+        assertThat(response.suspendedUntil()).isEqualTo(now.plusSeconds(7 * 86_400L));
+    }
+
+    @Test
+    void suspend_withoutRequestedDays_usesPlatformDefault() {
+        UUID publicId = UUID.randomUUID();
+        Tenant tenant = activeTenant(publicId);
+        Instant now = Instant.parse("2026-10-17T00:00:00Z");
+        service = new TenantLifecycleService(tenantRepository, null, () -> 3, null,
+                Clock.fixed(now, ZoneOffset.UTC));
+        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+
+        TenantResponse response = service.suspend(publicId);
+
+        assertThat(response.suspendedUntil()).isEqualTo(now.plusSeconds(3 * 86_400L));
+    }
+
+    @Test
+    void suspend_withZeroDays_isIndefinite() {
+        UUID publicId = UUID.randomUUID();
+        Tenant tenant = activeTenant(publicId);
+        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+
+        TenantResponse response = service.suspend(publicId, 0);
+
+        assertThat(response.suspendedUntil()).isNull();
+    }
+
+    @Test
+    void suspend_withNegativeDays_isRejectedBeforeStateChange() {
+        UUID publicId = UUID.randomUUID();
+        Tenant tenant = activeTenant(publicId);
+        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+
+        assertThatThrownBy(() -> service.suspend(publicId, -1))
+                .isInstanceOf(TenantSuspensionDaysInvalidException.class);
+        assertThat(tenant.getStatus()).isEqualTo(TenantStatus.ACTIVE);
+    }
+
+    @Test
+    void suspensionImpact_delegatesWithResolvedWindow() {
+        UUID publicId = UUID.randomUUID();
+        Tenant tenant = activeTenant(publicId);
+        Instant now = Instant.parse("2026-10-17T00:00:00Z");
+        TenantSuspensionImpact expected = new TenantSuspensionImpact(publicId, 5,
+                now.plusSeconds(5 * 86_400L), 2, 7, List.of());
+        service = new TenantLifecycleService(tenantRepository, null, () -> 30,
+                suspensionImpactProvider, Clock.fixed(now, ZoneOffset.UTC));
+        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        when(suspensionImpactProvider.preview(publicId, now, expected.suspendedUntil())).thenReturn(expected);
+
+        assertThat(service.suspensionImpact(publicId, 5)).isEqualTo(expected);
+        verify(suspensionImpactProvider).preview(publicId, now, expected.suspendedUntil());
+    }
+
+    @Test
     void platformManagerCanSuspendTenant() {
         UUID publicId = UUID.randomUUID();
         Tenant tenant = activeTenant(publicId);
@@ -133,6 +209,44 @@ class TenantLifecycleServiceTest {
         TenantResponse response = service.suspend(publicId);
 
         assertThat(response.status()).isEqualTo("SUSPENDED");
+    }
+
+    @Test
+    void suspendWithConfirmation_rejectsStaleImpactBeforeStateChange() {
+        UUID publicId = UUID.randomUUID();
+        Tenant tenant = activeTenant(publicId);
+        Instant now = Instant.parse("2026-10-17T00:00:00Z");
+        TenantSuspensionImpact impact = new TenantSuspensionImpact(publicId, 7,
+                now.plusSeconds(7 * 86_400L), 1, 7, List.of(), 7 * 86_400L, 0, "live-digest");
+        service = new TenantLifecycleService(tenantRepository, null, () -> 30,
+                suspensionImpactProvider, Clock.fixed(now, ZoneOffset.UTC));
+        when(tenantRepository.findWithLockByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        when(suspensionImpactProvider.preview(publicId, now, impact.suspendedUntil())).thenReturn(impact);
+
+        assertThatThrownBy(() -> service.suspendWithConfirmation(publicId,
+                new SuspendTenantRequest(7, "stale-digest"), null))
+                .isInstanceOf(TenantSuspensionImpactStaleException.class);
+        assertThat(tenant.getStatus()).isEqualTo(TenantStatus.ACTIVE);
+    }
+
+    @Test
+    void suspendWithConfirmation_appliesMatchingImpactAndUsesTenantLock() {
+        UUID publicId = UUID.randomUUID();
+        Tenant tenant = activeTenant(publicId);
+        Instant now = Instant.parse("2026-10-17T00:00:00Z");
+        TenantSuspensionImpact impact = new TenantSuspensionImpact(publicId, 7,
+                now.plusSeconds(7 * 86_400L), 1, 7, List.of(), 7 * 86_400L, 0, "live-digest");
+        service = new TenantLifecycleService(tenantRepository, null, () -> 30,
+                suspensionImpactProvider, Clock.fixed(now, ZoneOffset.UTC));
+        when(tenantRepository.findWithLockByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        when(suspensionImpactProvider.preview(publicId, now, impact.suspendedUntil())).thenReturn(impact);
+
+        TenantResponse response = service.suspendWithConfirmation(publicId,
+                new SuspendTenantRequest(7, "live-digest"), null);
+
+        assertThat(response.status()).isEqualTo("SUSPENDED");
+        assertThat(response.suspendedUntil()).isEqualTo(impact.suspendedUntil());
+        verify(tenantRepository).findWithLockByPublicId(publicId);
     }
 
     @Test

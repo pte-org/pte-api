@@ -48,7 +48,7 @@ class ViolationNotificationListenerTest {
                                 attemptPublicId, sessionPublicId, ViolationType.TAB_SWITCH, "detail", Instant.now(),
                                 tenantId);
 
-                when(identityService.findByTenantIdAndRole(tenantId,
+                when(identityService.findActiveByTenantIdAndRole(tenantId,
                                 Role.valueOf(NotificationConstants.ROLE_HOST_ADMIN)))
                                 .thenReturn(List.of());
 
@@ -73,7 +73,7 @@ class ViolationNotificationListenerTest {
                                 attemptPublicId, sessionPublicId, ViolationType.TAB_SWITCH, violationDetail,
                                 Instant.now(), tenantId);
 
-                when(identityService.findByTenantIdAndRole(tenantId,
+                when(identityService.findActiveByTenantIdAndRole(tenantId,
                                 Role.valueOf(NotificationConstants.ROLE_HOST_ADMIN)))
                                 .thenReturn(List.of(hostAdmin));
 
@@ -110,7 +110,7 @@ class ViolationNotificationListenerTest {
                                 attemptPublicId, sessionPublicId, ViolationType.SUSPICIOUS_AUDIO, violationDetail,
                                 Instant.now(), tenantId);
 
-                when(identityService.findByTenantIdAndRole(tenantId,
+                when(identityService.findActiveByTenantIdAndRole(tenantId,
                                 Role.valueOf(NotificationConstants.ROLE_HOST_ADMIN)))
                                 .thenReturn(List.of(hostAdmin1, hostAdmin2, hostAdmin3));
 
@@ -142,7 +142,7 @@ class ViolationNotificationListenerTest {
                                 attemptPublicId, sessionPublicId, ViolationType.TECHNICAL_ISSUE, null, Instant.now(),
                                 tenantId);
 
-                when(identityService.findByTenantIdAndRole(tenantId,
+                when(identityService.findActiveByTenantIdAndRole(tenantId,
                                 Role.valueOf(NotificationConstants.ROLE_HOST_ADMIN)))
                                 .thenReturn(List.of(hostAdmin));
 

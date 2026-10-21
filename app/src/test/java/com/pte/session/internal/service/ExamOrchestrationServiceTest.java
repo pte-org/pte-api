@@ -7,8 +7,6 @@ import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.SubscriptionStatus;
 import com.pte.enrollment.EnrollmentModuleService;
 import com.pte.identity.IdentityService;
-import com.pte.identity.domain.Role;
-import com.pte.identity.domain.User;
 import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
@@ -17,6 +15,7 @@ import com.pte.session.domain.ExamAudienceMember;
 import com.pte.session.domain.ExamAudienceSource;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.ExamGenerationJob;
+import com.pte.session.domain.enums.AudienceDecisionReason;
 import com.pte.session.domain.enums.AudienceMemberStatus;
 import com.pte.session.domain.enums.AudienceSourceType;
 import com.pte.session.domain.enums.ExamMode;
@@ -28,6 +27,10 @@ import com.pte.session.internal.dto.request.AudienceSourceRequest;
 import com.pte.session.internal.dto.response.AudienceSourceResponse;
 import com.pte.session.internal.dto.request.CreateExamDraftRequest;
 import com.pte.session.internal.dto.request.PatchExamDraftRequest;
+import com.pte.session.internal.dto.response.AudienceMemberResponse;
+import com.pte.session.internal.dto.response.BulkEnrollResponse;
+import com.pte.session.dto.response.SlotConflict;
+import com.pte.session.internal.exception.ExamAudienceConflictException;
 import com.pte.session.internal.exception.AudienceSourceAlreadyCoveredException;
 import com.pte.session.internal.exception.ExamDraftConfigurationException;
 import com.pte.session.internal.exception.ExamDraftNotDeletableException;
@@ -43,6 +46,8 @@ import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.exception.DomainException;
 import com.pte.shared.security.CurrentUser;
+import com.pte.tenancy.TenancyService;
+import com.pte.tenancy.internal.exception.TenantSuspendedException;
 import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,9 +64,12 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -103,6 +111,8 @@ class ExamOrchestrationServiceTest {
     private SessionCodeGenerator sessionCodeGenerator;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private TenancyService tenancyService;
 
     private ExamOrchestrationService service;
     private UUID tenantId;
@@ -118,13 +128,25 @@ class ExamOrchestrationServiceTest {
                 jobRepository, formRepository, formAssignmentRepository, enrollmentRepository,
                 sessionLifecycleService, enrollmentService, assessmentService, scoreTemplateService,
                 billingService, enrollmentModuleService, identityService, startedAttemptLookup, auditLogService,
-                sessionCodeGenerator, eventPublisher);
+                sessionCodeGenerator, eventPublisher, tenancyService);
         tenantId = UUID.randomUUID();
         templateId = UUID.randomUUID();
         subscriptionId = UUID.randomUUID();
         hostAdmin = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
         opensAt = Instant.now().plusSeconds(3600);
         closesAt = opensAt.plusSeconds(3600);
+    }
+
+    @Test
+    void createDraft_suspendedTenantIsBlockedBeforeCommercialSideEffects() {
+        doThrow(new TenantSuspendedException()).when(tenancyService).assertTenantActive(tenantId);
+
+        assertThatThrownBy(() -> service.createDraft(new CreateExamDraftRequest(
+                "HK1 mock", templateId, subscriptionId, opensAt, closesAt,
+                ExamMode.OFFICIAL_EXAM, null, null, null, 50), hostAdmin))
+                .isInstanceOf(TenantSuspendedException.class);
+
+        verifyNoInteractions(scoreTemplateService, billingService, sessionRepository);
     }
 
     @Test
@@ -359,7 +381,7 @@ class ExamOrchestrationServiceTest {
     }
 
     @Test
-    void previewAudience_reusesPersistedMembersWhenPreflightRunsRepeatedly() {
+    void previewAudience_isReadOnlyAndDoesNotPersistComputedMembers() {
         UUID sessionPublicId = UUID.randomUUID();
         UUID classPublicId = UUID.randomUUID();
         UUID studentPublicId = UUID.randomUUID();
@@ -389,15 +411,69 @@ class ExamOrchestrationServiceTest {
                 .thenReturn(List.of(studentPublicId));
         when(enrollmentRepository.findByTenantIdAndStudentPublicIdIn(tenantId, List.of(studentPublicId)))
                 .thenReturn(List.of());
-        when(memberRepository.findBySessionIdOrderByStudentPublicIdAsc(20L)).thenReturn(List.of(existing));
+        var firstPreview = service.previewAudience(sessionPublicId, hostAdmin);
+        var secondPreview = service.previewAudience(sessionPublicId, hostAdmin);
 
-        service.previewAudience(sessionPublicId, hostAdmin);
-        service.previewAudience(sessionPublicId, hostAdmin);
-
-        assertThat(existing.getStatus()).isEqualTo(AudienceMemberStatus.ELIGIBLE);
-        assertThat(existing.getSourceSummary()).isEqualTo("CLASS:" + classPublicId);
-        verify(memberRepository, times(2)).saveAll(any());
+        assertThat(firstPreview.members()).extracting(AudienceMemberResponse::status)
+                .containsExactly(AudienceMemberStatus.ELIGIBLE);
+        assertThat(secondPreview.members()).extracting(AudienceMemberResponse::status)
+                .containsExactly(AudienceMemberStatus.ELIGIBLE);
+        assertThat(existing.getStatus()).isEqualTo(AudienceMemberStatus.EXCLUDED);
+        verify(memberRepository, never()).saveAll(any());
         verify(memberRepository, never()).deleteBySessionId(20L);
+    }
+
+    @Test
+    void publish_reconcilesEnrollmentResponseBeforeScheduling() {
+        ExamSession session = readyPublishSession();
+        UUID enrolledStudentId = UUID.randomUUID();
+        UUID conflictingStudentId = UUID.randomUUID();
+        ExamAudienceMember enrolledMember = audienceMember(session, enrolledStudentId);
+        ExamAudienceMember conflictingMember = audienceMember(session, conflictingStudentId);
+        List<ExamAudienceMember> audience = List.of(enrolledMember, conflictingMember);
+        stubPublishDependencies(session, audience);
+        SlotConflict conflict = new SlotConflict(conflictingStudentId, UUID.randomUUID(), "Morning exam");
+        when(enrollmentService.bulkEnrollPublishedExam(any(), any(), any())).thenReturn(
+                new BulkEnrollResponse(List.of(enrolledStudentId), List.of(), List.of(conflict)));
+
+        var response = service.publish(session.getPublicId(), hostAdmin);
+
+        assertThat(response.status()).isEqualTo(SessionStatus.SCHEDULED.name());
+        assertThat(enrolledMember.getStatus()).isEqualTo(AudienceMemberStatus.ENROLLED);
+        assertThat(enrolledMember.getPublishedAt()).isNotNull();
+        assertThat(conflictingMember.getStatus()).isEqualTo(AudienceMemberStatus.EXCLUDED);
+        assertThat(conflictingMember.getReason()).isEqualTo(AudienceDecisionReason.SCHEDULE_OVERLAP);
+        assertThat(conflictingMember.getPriorSessionPublicId()).isEqualTo(conflict.conflictingSessionPublicId());
+        assertThat(conflictingMember.getPriorSessionName()).isEqualTo(conflict.conflictingSessionName());
+        verify(memberRepository).saveAll(audience);
+        verify(sessionRepository).flush();
+        verify(auditLogService).record(hostAdmin, SessionConstants.AGGREGATE_EXAM_SESSION,
+                session.getPublicId().toString(), session.getName(), session.getSessionCode(),
+                SessionConstants.EVENT_EXAM_PUBLISHED, session.getName());
+    }
+
+    @Test
+    void publish_allConflictsKeepsSessionReadyAndReturnsConflict() {
+        ExamSession session = readyPublishSession();
+        UUID studentId = UUID.randomUUID();
+        ExamAudienceMember member = audienceMember(session, studentId);
+        List<ExamAudienceMember> audience = List.of(member);
+        stubPublishDependencies(session, audience);
+        SlotConflict conflict = new SlotConflict(studentId, UUID.randomUUID(), "Existing exam");
+        when(enrollmentService.bulkEnrollPublishedExam(any(), any(), any())).thenReturn(
+                new BulkEnrollResponse(List.of(), List.of(), List.of(conflict)));
+
+        assertThatThrownBy(() -> service.publish(session.getPublicId(), hostAdmin))
+                .isInstanceOf(ExamAudienceConflictException.class)
+                .satisfies(error -> assertThat(((DomainException) error).getData())
+                        .isEqualTo(List.of(conflict)));
+
+        assertThat(session.getStatus()).isEqualTo(SessionStatus.READY);
+        assertThat(member.getStatus()).isEqualTo(AudienceMemberStatus.EXCLUDED);
+        assertThat(member.getReason()).isEqualTo(AudienceDecisionReason.SCHEDULE_OVERLAP);
+        verify(memberRepository).flush();
+        verify(sessionRepository, never()).flush();
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -412,7 +488,7 @@ class ExamOrchestrationServiceTest {
         classSource.setTenantId(tenantId);
         classSource.setSourceType(AudienceSourceType.CLASS);
         classSource.setSourcePublicId(classPublicId);
-        stubStudentSource(session, studentPublicId);
+        stubOwnedSession(session);
         when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(21L)).thenReturn(List.of(classSource));
         when(enrollmentModuleService.findActiveStudentPublicIds(tenantId, classPublicId))
                 .thenReturn(List.of(studentPublicId));
@@ -436,7 +512,7 @@ class ExamOrchestrationServiceTest {
         classSource.setTenantId(tenantId);
         classSource.setSourceType(AudienceSourceType.CLASS);
         classSource.setSourcePublicId(classPublicId);
-        stubStudentSource(session, studentPublicId);
+        stubOwnedSession(session);
         when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(22L)).thenReturn(List.of(classSource));
         when(enrollmentModuleService.findActiveStudentPublicIds(tenantId, classPublicId))
                 .thenReturn(List.of(UUID.randomUUID()));
@@ -502,8 +578,7 @@ class ExamOrchestrationServiceTest {
         session.setId(25L);
         UUID first = UUID.randomUUID();
         UUID second = UUID.randomUUID();
-        stubStudentSource(session, first);
-        stubStudent(second);
+        stubOwnedSession(session);
         when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(25L)).thenReturn(List.of());
         when(sourceRepository.save(any(ExamAudienceSource.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -530,7 +605,7 @@ class ExamOrchestrationServiceTest {
         existing.setTenantId(tenantId);
         existing.setSourceType(AudienceSourceType.STUDENT);
         existing.setSourcePublicId(studentPublicId);
-        stubStudentSource(session, studentPublicId);
+        stubOwnedSession(session);
         when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(26L)).thenReturn(List.of(existing));
 
         List<AudienceSourceResponse> responses = service.addSources(session.getPublicId(),
@@ -539,6 +614,72 @@ class ExamOrchestrationServiceTest {
         assertThat(responses).hasSize(1);
         verify(sourceRepository, never()).save(any());
         verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void publish_alreadyEnrolledCountsAsSuccessfulReconciliation() {
+        ExamSession session = readyPublishSession();
+        UUID studentId = UUID.randomUUID();
+        ExamAudienceMember member = audienceMember(session, studentId);
+        List<ExamAudienceMember> audience = List.of(member);
+        stubPublishDependencies(session, audience);
+        when(enrollmentService.bulkEnrollPublishedExam(any(), any(), any())).thenReturn(
+                new BulkEnrollResponse(List.of(), List.of(studentId), List.of()));
+
+        service.publish(session.getPublicId(), hostAdmin);
+
+        assertThat(session.getStatus()).isEqualTo(SessionStatus.SCHEDULED);
+        assertThat(member.getStatus()).isEqualTo(AudienceMemberStatus.ENROLLED);
+    }
+
+    private ExamSession readyPublishSession() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        session.setStatus(SessionStatus.READY);
+        session.setSnapshotPublicId(UUID.randomUUID());
+        session.setGenerationJobPublicId(UUID.randomUUID());
+        return session;
+    }
+
+    private ExamAudienceMember audienceMember(ExamSession session, UUID studentPublicId) {
+        ExamAudienceMember member = new ExamAudienceMember();
+        member.setSession(session);
+        member.setTenantId(tenantId);
+        member.setStudentPublicId(studentPublicId);
+        member.setStatus(AudienceMemberStatus.ELIGIBLE);
+        return member;
+    }
+
+    private void stubPublishDependencies(ExamSession session, List<ExamAudienceMember> audience) {
+        List<UUID> studentIds = audience.stream().map(ExamAudienceMember::getStudentPublicId).toList();
+        List<ExamAudienceSource> sources = studentIds.stream()
+                .map(studentId -> {
+                    ExamAudienceSource source = new ExamAudienceSource();
+                    source.setSession(session);
+                    source.setTenantId(tenantId);
+                    source.setSourceType(AudienceSourceType.STUDENT);
+                    source.setSourcePublicId(studentId);
+                    return source;
+                }).toList();
+        SubscriptionView subscription = new SubscriptionView(subscriptionId, tenantId, UUID.randomUUID(),
+                "LIC-TEST", opensAt.minusSeconds(60), closesAt.plusSeconds(3600), 100,
+                SubscriptionStatus.ACTIVE, ActivationSource.LICENSE_CODE);
+        when(sessionRepository.findByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+        when(billingService.lockSubscriptions(List.of(subscriptionId), tenantId))
+                .thenReturn(List.of(subscription));
+        when(billingService.getActiveSubscription(subscriptionId, tenantId))
+                .thenReturn(Optional.of(subscription));
+        when(assessmentService.getTemplateFeasibility(session.getTemplatePublicId(), session.getSelectedSkills()))
+                .thenReturn(new com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse(
+                        templateId, 3, true, List.of()));
+        when(sessionRepository.findFirstOverlapping(any(), any(), any(), any())).thenReturn(Optional.empty());
+        when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(session.getId())).thenReturn(sources);
+        when(enrollmentRepository.findByTenantIdAndStudentPublicIdIn(tenantId, studentIds))
+                .thenReturn(List.of());
+        when(memberRepository.findBySessionIdOrderByStudentPublicIdAsc(session.getId())).thenReturn(audience);
     }
 
     @Test
@@ -554,8 +695,7 @@ class ExamOrchestrationServiceTest {
         classSource.setTenantId(tenantId);
         classSource.setSourceType(AudienceSourceType.CLASS);
         classSource.setSourcePublicId(classPublicId);
-        stubStudentSource(session, outside);
-        stubStudent(covered);
+        stubOwnedSession(session);
         when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(27L)).thenReturn(List.of(classSource));
         when(enrollmentModuleService.findActiveStudentPublicIds(tenantId, classPublicId))
                 .thenReturn(List.of(covered));
@@ -569,21 +709,8 @@ class ExamOrchestrationServiceTest {
         verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any());
     }
 
-    private void stubStudent(UUID studentPublicId) {
-        User student = new User();
-        student.setPublicId(studentPublicId);
-        student.setTenantId(tenantId);
-        student.setRoles(java.util.Set.of(Role.STUDENT));
-        when(identityService.findById(studentPublicId)).thenReturn(Optional.of(student));
-    }
-
-    private void stubStudentSource(ExamSession session, UUID studentPublicId) {
+    private void stubOwnedSession(ExamSession session) {
         when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
-        User student = new User();
-        student.setPublicId(studentPublicId);
-        student.setTenantId(tenantId);
-        student.setRoles(java.util.Set.of(Role.STUDENT));
-        when(identityService.findById(studentPublicId)).thenReturn(Optional.of(student));
     }
 
     private void stubTemplateAndSubscription() {

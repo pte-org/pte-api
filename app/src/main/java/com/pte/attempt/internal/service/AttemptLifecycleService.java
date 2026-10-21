@@ -154,6 +154,9 @@ public class AttemptLifecycleService {
             return resumeOrReject(latest.get(), caller);
         }
 
+        if (sessionService != null) {
+            sessionService.assertTenantActiveForNewAttempt(caller.tenantId());
+        }
         int maxRetries = configuredRetries(request.sessionPublicId(), caller.tenantId());
         long submittedAttempts = attemptRepository.countBySessionPublicIdAndStudentPublicIdAndStatus(
                 request.sessionPublicId(), studentPublicId, AttemptStatus.SUBMITTED);

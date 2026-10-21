@@ -13,6 +13,8 @@ import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.session.internal.constant.SessionConstants;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.tenancy.TenancyService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
@@ -28,20 +30,32 @@ public class SessionStateService {
     private final SessionAccess access;
     private final SessionSubscriptionRules subscriptions;
     private final AuditLogService auditLogService;
+    private final TenancyService tenancyService;
 
     public SessionStateService(ExamSessionRepository sessionRepository,
             SessionAccess access,
             SessionSubscriptionRules subscriptions,
             AuditLogService auditLogService) {
+        this(sessionRepository, access, subscriptions, auditLogService, null);
+    }
+
+    @Autowired
+    public SessionStateService(ExamSessionRepository sessionRepository,
+            SessionAccess access,
+            SessionSubscriptionRules subscriptions,
+            AuditLogService auditLogService,
+            TenancyService tenancyService) {
         this.sessionRepository = sessionRepository;
         this.access = access;
         this.subscriptions = subscriptions;
         this.auditLogService = auditLogService;
+        this.tenancyService = tenancyService;
     }
 
     @Transactional
     public SessionResponse open(UUID publicId, CurrentUser caller) {
         UUID tenantId = access.requireTenant(caller);
+        assertTenantActive(tenantId);
         ExamSession observed = access.observedSession(publicId, tenantId);
         if (observed.getStatus() != SessionStatus.SCHEDULED) {
             throw new SessionNotReadyToOpenException();
@@ -99,6 +113,7 @@ public class SessionStateService {
                 || session.getClosesAt() == null) {
             return Optional.empty();
         }
+        assertTenantActive(session.getTenantId());
         CurrentUser systemCaller = new CurrentUser(SessionConstants.SYSTEM_ACTOR_USER_ID,
                 session.getTenantId(), List.of("SYSTEM"));
         SubscriptionView subscription = subscriptions.lockedActiveSubscription(
@@ -126,5 +141,11 @@ public class SessionStateService {
     private void recordExamAudit(CurrentUser caller, ExamSession session, String action, String summary) {
         auditLogService.record(caller, SessionConstants.AGGREGATE_EXAM_SESSION,
                 session.getPublicId().toString(), session.getName(), session.getSessionCode(), action, summary);
+    }
+
+    private void assertTenantActive(UUID tenantId) {
+        if (tenancyService != null) {
+            tenancyService.assertTenantActive(tenantId);
+        }
     }
 }

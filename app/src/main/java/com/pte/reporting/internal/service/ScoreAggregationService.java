@@ -207,10 +207,10 @@ public class ScoreAggregationService {
             totalWeight = totalWeight.add(weight);
         }
         if (totalWeight.signum() <= 0) {
-            return SkillScore.insufficientData();
+            return SkillScore.insufficientData(totalWeight);
         }
         BigDecimal ratio = weightedSum.divide(totalWeight, MATH_CONTEXT);
         BigDecimal scaled = BigDecimal.valueOf(SCALE_FLOOR).add(BigDecimal.valueOf(SCALE_SPAN).multiply(ratio, MATH_CONTEXT));
-        return SkillScore.of(scaled.setScale(0, RoundingMode.HALF_UP).intValue());
+        return SkillScore.of(scaled.setScale(0, RoundingMode.HALF_UP).intValue(), totalWeight);
     }
 }

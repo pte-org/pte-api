@@ -108,6 +108,7 @@ class ScoreAggregationServiceTest {
         SkillScore reading = summary.skillScores().get(Skill.READING);
         assertThat(reading.sufficientData()).isTrue();
         assertThat(reading.score()).isEqualTo(50);
+        assertThat(reading.appliedWeight()).isEqualByComparingTo(bd(10));
     }
 
     @Test
@@ -154,6 +155,7 @@ class ScoreAggregationServiceTest {
         SkillScore speaking = summary.skillScores().get(Skill.SPEAKING);
         assertThat(speaking.sufficientData()).isFalse();
         assertThat(speaking.score()).isNull();
+        assertThat(speaking.appliedWeight()).isZero();
     }
 
     @Test
@@ -212,6 +214,7 @@ class ScoreAggregationServiceTest {
         assertThat(summary.overall()).isNotNull();
         assertThat(summary.overall().sufficientData()).isTrue();
         assertThat(summary.overall().score()).isEqualTo(90);
+        assertThat(summary.overall().appliedWeight()).isEqualByComparingTo(bd(4));
     }
 
     @Test

@@ -1,4 +1,4 @@
-package com.pte.enrollment.internal.dto.response;
+package com.pte.overview.internal.dto.response;
 
 public record StudentSkillPerformanceResponse(
         String skill,

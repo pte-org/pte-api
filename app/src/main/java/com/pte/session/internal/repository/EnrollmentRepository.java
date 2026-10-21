@@ -27,6 +27,27 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
     List<Enrollment> findBySessionIdAndStudentPublicIdIn(Long sessionId, List<UUID> studentPublicIds);
 
+    /** Finds tenant-wide slot conflicts in one query; cancelled sessions are not blockers. */
+    @Query("select e.studentPublicId as studentPublicId, s.publicId as conflictingSessionPublicId, "
+            + "s.name as conflictingSessionName from Enrollment e join e.session s "
+            + "where e.tenantId = :tenantId and s.tenantId = :tenantId "
+            + "and e.studentPublicId in :studentPublicIds and e.deleted = false and s.deleted = false "
+            + "and s.status <> com.pte.session.domain.enums.SessionStatus.CANCELLED "
+            + "and s.opensAt < :closesAt and s.closesAt > :opensAt "
+            + "order by e.studentPublicId, s.opensAt, s.id")
+    List<SlotConflictProjection> findConflictingEnrollments(@Param("tenantId") UUID tenantId,
+            @Param("studentPublicIds") List<UUID> studentPublicIds,
+            @Param("opensAt") java.time.Instant opensAt,
+            @Param("closesAt") java.time.Instant closesAt);
+
+    interface SlotConflictProjection {
+        UUID getStudentPublicId();
+
+        UUID getConflictingSessionPublicId();
+
+        String getConflictingSessionName();
+    }
+
     /** Backs Class-unassign (Plan B, Phase 4) — removes only the current members of the unassigned Class. */
     long deleteBySessionIdAndStudentPublicIdIn(Long sessionId, List<UUID> studentPublicIds);
 

@@ -18,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 /** The single write path that can create a Subscription. */
@@ -74,7 +73,7 @@ public class SubscriptionActivationService {
 
     private Subscription saveWithUniqueLicenseKey(UUID tenantId, Plan plan, ActivationSource source,
             Instant startsAt) {
-        Instant expiresAt = calculateExpiryAfterRenewal(tenantId, plan, startsAt);
+        Instant expiresAt = calculateExpiryAfterRenewal(plan, startsAt);
         // The pre-check can discard a generated key without touching the DB.
         // A uniqueness race during save aborts this whole transaction; retrying
         // only the repository call would leave the caller's transition rollback-only.
@@ -108,14 +107,11 @@ public class SubscriptionActivationService {
                 BillingConstants.LICENSE_KEY_GENERATION_FAILED);
     }
 
-    private Instant calculateExpiryAfterRenewal(UUID tenantId, Plan plan, Instant startsAt) {
-        List<Subscription> activeSubscriptions = subscriptionRepository.findUsableForPlanRenewal(
-                tenantId, plan.getPublicId(), SubscriptionStatus.ACTIVE, startsAt);
-        Instant latestExpiry = activeSubscriptions.stream()
-                .map(Subscription::getExpiresAt)
-                .max(Instant::compareTo)
-                .orElse(startsAt);
-        return latestExpiry.plus(Duration.ofDays(plan.getDurationDays()));
+    private Instant calculateExpiryAfterRenewal(Plan plan, Instant startsAt) {
+        // Each activation is an independent commercial lane. A still-active
+        // subscription must not extend a new purchase's expiry beyond its own
+        // start time; overlap is visible, not silently compounded.
+        return startsAt.plus(Duration.ofDays(plan.getDurationDays()));
     }
 
     private void validateRequest(UUID tenantId, Plan plan, ActivationSource source) {

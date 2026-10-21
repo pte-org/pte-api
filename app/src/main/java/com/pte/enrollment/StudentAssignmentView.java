@@ -1,4 +1,4 @@
-package com.pte.enrollment.dto.response;
+package com.pte.enrollment;
 
 import java.util.UUID;
 

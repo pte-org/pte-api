@@ -7,6 +7,7 @@ import com.pte.enrollment.internal.exception.StudentClassNotFoundException;
 import com.pte.enrollment.internal.repository.ClassMembershipRepository;
 import com.pte.enrollment.internal.repository.ProgramRepository;
 import com.pte.enrollment.internal.repository.StudentClassRepository;
+import com.pte.identity.IdentityService;
 import com.pte.tenancy.domain.Organization;
 import com.pte.tenancy.domain.Tenant;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +39,8 @@ class EnrollmentModuleServiceTest {
     private ClassMembershipRepository classMembershipRepository;
     @Mock
     private ProgramRepository programRepository;
+    @Mock
+    private IdentityService identityService;
 
     private EnrollmentModuleService service;
 
@@ -86,6 +89,30 @@ class EnrollmentModuleServiceTest {
 
         assertThatThrownBy(() -> service.findActiveStudentPublicIds(tenantId, classPublicId))
                 .isInstanceOf(StudentClassNotFoundException.class);
+    }
+
+    @Test
+    void findActiveStudentPublicIds_excludesIdentityRecordsThatAreNoLongerEligible() {
+        UUID tenantId = UUID.randomUUID();
+        UUID classPublicId = UUID.randomUUID();
+        StudentClass studentClass = classForTenant(tenantId);
+        UUID activeStudentId = UUID.randomUUID();
+        UUID suspendedStudentId = UUID.randomUUID();
+        ClassMembership activeMembership = new ClassMembership();
+        activeMembership.setStudentPublicId(activeStudentId);
+        ClassMembership suspendedMembership = new ClassMembership();
+        suspendedMembership.setStudentPublicId(suspendedStudentId);
+        when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
+        when(classMembershipRepository.findByTenantIdAndStudentClass_PublicId(tenantId, classPublicId))
+                .thenReturn(List.of(activeMembership, suspendedMembership));
+        when(identityService.findActiveStudentPublicIds(tenantId, List.of(activeStudentId, suspendedStudentId)))
+                .thenReturn(java.util.Set.of(activeStudentId));
+
+        EnrollmentModuleService filteredService = new EnrollmentModuleService(
+                studentClassRepository, classMembershipRepository, programRepository, identityService);
+
+        assertThat(filteredService.findActiveStudentPublicIds(tenantId, classPublicId))
+                .containsExactly(activeStudentId);
     }
 
     @Test

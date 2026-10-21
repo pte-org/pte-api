@@ -33,7 +33,7 @@ public class ViolationNotificationListener {
         String body = "A proctor flagged attempt " + event.attemptPublicId() + " in session " + event.sessionPublicId()
                 + " for " + event.violationType() + (event.detail() == null ? "" : (" — " + event.detail())) + ".";
 
-        for (User hostAdmin : identityService.findByTenantIdAndRole(event.tenantId(),
+        for (User hostAdmin : identityService.findActiveByTenantIdAndRole(event.tenantId(),
                 Role.valueOf(NotificationConstants.ROLE_HOST_ADMIN))) {
             dispatchService.dispatchTo(NotificationType.VIOLATION_DETECTED, hostAdmin, event.tenantId(), subject, body);
         }

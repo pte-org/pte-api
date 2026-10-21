@@ -1,8 +1,6 @@
 package com.pte.reporting;
 
 import com.pte.reporting.domain.AttemptReport;
-import com.pte.reporting.dto.response.ReportSkillScoreView;
-import com.pte.reporting.dto.response.StudentReportSummaryView;
 import com.pte.reporting.internal.repository.AttemptReportRepository;
 import com.pte.reporting.internal.service.AttemptScoreSummary;
 import com.pte.reporting.internal.service.ReportSnapshotCodec;
@@ -63,6 +61,6 @@ public class ReportingService {
     }
 
     private static ReportSkillScoreView toSkill(String name, SkillScore score) {
-        return new ReportSkillScoreView(name, score.score(), score.sufficientData());
+        return new ReportSkillScoreView(name, score.score(), score.sufficientData(), score.appliedWeight());
     }
 }

@@ -1,10 +1,10 @@
-package com.pte.reporting.dto.response;
+package com.pte.reporting;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-/** Read-only report visibility and immutable score snapshot for a student workspace. */
+/** Public immutable report snapshot for cross-module student workspace reads. */
 public record StudentReportSummaryView(
         UUID attemptPublicId,
         UUID sessionPublicId,

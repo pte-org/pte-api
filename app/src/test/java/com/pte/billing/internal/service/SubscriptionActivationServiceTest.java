@@ -24,6 +24,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -57,8 +59,6 @@ class SubscriptionActivationServiceTest {
         Plan plan = examPlan(planId);
         when(keyGenerator.generate(any(Plan.class), any(Instant.class))).thenReturn("PTE-EXAM-2026-ABC123");
         when(subscriptionRepository.existsByLicenseKey("PTE-EXAM-2026-ABC123")).thenReturn(false);
-        when(subscriptionRepository.findUsableForPlanRenewal(any(UUID.class), any(UUID.class), any(),
-                any(Instant.class))).thenReturn(List.of());
         when(persistence.save(any(Subscription.class))).thenAnswer(invocation -> {
             Subscription subscription = invocation.getArgument(0);
             subscription.setPublicId(subscriptionId);
@@ -74,23 +74,24 @@ class SubscriptionActivationServiceTest {
     }
 
     @Test
-    void activateExamPackageExtendsLatestSamePlanExpiryWithoutChangingSessionCap() {
+    void activateExamPackageStartsIndependentExpiryWithoutChangingSessionCap() {
         UUID tenantId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
         Plan plan = examPlan(planId);
         Instant existingExpiry = Instant.now().plus(Duration.ofDays(12));
         Subscription existing = new Subscription();
         existing.setExpiresAt(existingExpiry);
-        when(subscriptionRepository.findUsableForPlanRenewal(eq(tenantId), eq(planId),
-                eq(SubscriptionStatus.ACTIVE), any(Instant.class))).thenReturn(List.of(existing));
         when(keyGenerator.generate(any(Plan.class), any(Instant.class))).thenReturn("PTE-EXAM-2026-RENEW");
         when(subscriptionRepository.existsByLicenseKey("PTE-EXAM-2026-RENEW")).thenReturn(false);
         when(persistence.save(any(Subscription.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         SubscriptionActivationResponse result = service.activate(tenantId, plan, ActivationSource.PAYMENT);
 
-        assertThat(result.expiresAt()).isAfter(existingExpiry.plus(Duration.ofDays(29)));
+        assertThat(result.expiresAt()).isAfter(existingExpiry.plus(Duration.ofDays(17)));
+        assertThat(result.expiresAt()).isBefore(existingExpiry.plus(Duration.ofDays(19)));
         assertThat(result.maxStudentsPerSession()).isEqualTo(plan.getMaxStudentsPerSession());
+        verify(subscriptionRepository, never()).findUsableForPlanRenewal(any(UUID.class), any(UUID.class),
+                any(SubscriptionStatus.class), any(Instant.class));
     }
 
     @Test

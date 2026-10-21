@@ -5,6 +5,8 @@ import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.ProctorAssignment;
 import com.pte.session.domain.enums.ProctorRole;
 import com.pte.session.domain.enums.SessionStatus;
+import com.pte.session.dto.event.StudentEnrollmentConflictEvent;
+import com.pte.session.dto.response.SlotConflict;
 import com.pte.session.internal.dto.request.AssignProctorRequest;
 import com.pte.session.internal.dto.request.BulkEnrollRequest;
 import com.pte.session.internal.dto.request.EnrollStudentRequest;
@@ -19,8 +21,10 @@ import com.pte.session.internal.exception.EnrollmentNotFoundException;
 import com.pte.session.internal.exception.ExamAudienceLockedException;
 import com.pte.session.internal.exception.ProctorAssignmentNotFoundException;
 import com.pte.session.internal.exception.SessionCapacityExceededException;
+import com.pte.session.internal.exception.SessionTimeConflictException;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ProctorAssignmentRepository;
+import com.pte.identity.IdentityService;
 import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,6 +48,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -69,6 +74,9 @@ class EnrollmentServiceTest {
     private ApplicationEventPublisher eventPublisher;
 
     @Mock
+    private IdentityService identityService;
+
+    @Mock
     private ExamFormProvisioningService formProvisioningService;
 
     @Mock
@@ -79,7 +87,8 @@ class EnrollmentServiceTest {
     @BeforeEach
     void setUp() {
         enrollmentService = new EnrollmentService(sessionLifecycleService, enrollmentRepository,
-                proctorAssignmentRepository, eventPublisher, formProvisioningService, startedAttemptLookup);
+                proctorAssignmentRepository, eventPublisher, null, identityService,
+                formProvisioningService, startedAttemptLookup);
     }
 
     private ExamSession session(Long id, UUID publicId, UUID tenantId) {
@@ -113,6 +122,26 @@ class EnrollmentServiceTest {
                 new EnrollStudentRequest(studentPublicId), caller);
 
         assertThat(response.studentPublicId()).isEqualTo(studentPublicId);
+        verify(identityService).lockActiveStudentsInTenant(List.of(studentPublicId), tenantId);
+    }
+
+    @Test
+    void enrollStudent_rejectsIneligibleIdentityBeforeCheckingEnrollment() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        CurrentUser caller = hostAdmin(tenantId);
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+        doThrow(new IdentityService.IdentityNotEligibleException()).when(identityService)
+                .requireActiveStudentInTenant(studentPublicId, tenantId);
+
+        assertThatThrownBy(() -> enrollmentService.enrollStudent(sessionPublicId,
+                new EnrollStudentRequest(studentPublicId), caller))
+                .isInstanceOf(IdentityService.IdentityNotEligibleException.class);
+
+        verify(enrollmentRepository, never()).existsBySessionIdAndStudentPublicId(anyLong(), eq(studentPublicId));
+        verify(enrollmentRepository, never()).save(any());
     }
 
     @Test
@@ -128,6 +157,31 @@ class EnrollmentServiceTest {
         assertThatThrownBy(() -> enrollmentService.enrollStudent(sessionPublicId,
                 new EnrollStudentRequest(UUID.randomUUID()), caller))
                 .isInstanceOf(SessionCapacityExceededException.class);
+        verify(enrollmentRepository, never()).save(any());
+    }
+
+    @Test
+    void enrollStudent_rejectsOverlappingExistingSession() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        UUID conflictingSessionPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        session.setOpensAt(Instant.parse("2026-10-17T08:00:00Z"));
+        session.setClosesAt(Instant.parse("2026-10-17T10:00:00Z"));
+        CurrentUser caller = hostAdmin(tenantId);
+        EnrollmentRepository.SlotConflictProjection conflict = org.mockito.Mockito.mock(
+                EnrollmentRepository.SlotConflictProjection.class);
+
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+        when(enrollmentRepository.findConflictingEnrollments(eq(tenantId), eq(List.of(studentPublicId)),
+                eq(session.getOpensAt()), eq(session.getClosesAt()))).thenReturn(List.of(conflict));
+        when(conflict.getStudentPublicId()).thenReturn(studentPublicId);
+        when(conflict.getConflictingSessionPublicId()).thenReturn(conflictingSessionPublicId);
+
+        assertThatThrownBy(() -> enrollmentService.enrollStudent(sessionPublicId,
+                new EnrollStudentRequest(studentPublicId), caller))
+                .isInstanceOf(SessionTimeConflictException.class);
         verify(enrollmentRepository, never()).save(any());
     }
 
@@ -159,9 +213,54 @@ class EnrollmentServiceTest {
 
         assertThat(response.enrolled()).containsExactlyInAnyOrder(newId1, newId2);
         assertThat(response.alreadyEnrolled()).containsExactly(alreadyEnrolledId);
+        verify(identityService).lockActiveStudentsInTenant(
+                List.of(alreadyEnrolledId, newId1, newId2), tenantId);
         // Regression: capacity == null (unset here) must skip the capacity
         // check entirely, not just "pass" with a 0/default count.
         verify(enrollmentRepository, never()).countBySessionId(anyLong());
+    }
+
+    @Test
+    void bulkEnroll_skipsOverlappingStudents_andChecksCapacityAfterFiltering() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID conflictingStudentId = UUID.randomUUID();
+        UUID eligibleStudentId = UUID.randomUUID();
+        UUID conflictingSessionPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        session.setName("October morning exam");
+        session.setOpensAt(Instant.parse("2026-10-17T08:00:00Z"));
+        session.setClosesAt(Instant.parse("2026-10-17T10:00:00Z"));
+        session.setCapacity(2);
+        CurrentUser caller = hostAdmin(tenantId);
+        EnrollmentRepository.SlotConflictProjection conflict = org.mockito.Mockito.mock(
+                EnrollmentRepository.SlotConflictProjection.class);
+
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any()))
+                .thenReturn(List.of());
+        when(enrollmentRepository.findConflictingEnrollments(eq(tenantId),
+                eq(List.of(conflictingStudentId, eligibleStudentId)), eq(session.getOpensAt()),
+                eq(session.getClosesAt()))).thenReturn(List.of(conflict));
+        when(conflict.getStudentPublicId()).thenReturn(conflictingStudentId);
+        when(conflict.getConflictingSessionPublicId()).thenReturn(conflictingSessionPublicId);
+        when(conflict.getConflictingSessionName()).thenReturn("Earlier exam");
+        when(enrollmentRepository.countBySessionId(1L)).thenReturn(1L);
+        when(enrollmentRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<Enrollment> toSave = invocation.getArgument(0);
+            toSave.forEach(e -> e.setPublicId(UUID.randomUUID()));
+            return toSave;
+        });
+
+        BulkEnrollResponse response = enrollmentService.bulkEnroll(sessionPublicId,
+                new BulkEnrollRequest(List.of(conflictingStudentId, eligibleStudentId)), caller);
+
+        assertThat(response.enrolled()).containsExactly(eligibleStudentId);
+        assertThat(response.skippedByConflict()).containsExactly(
+                new SlotConflict(conflictingStudentId, conflictingSessionPublicId, "Earlier exam"));
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, org.mockito.Mockito.times(2)).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getAllValues()).anyMatch(event -> event instanceof StudentEnrollmentConflictEvent);
     }
 
     @Test
@@ -313,6 +412,24 @@ class EnrollmentServiceTest {
 
         assertThat(response.proctorPublicId()).isEqualTo(proctorPublicId);
         assertThat(response.role()).isEqualTo(ProctorRole.ASSISTANT_PROCTOR);
+    }
+
+    @Test
+    void assignProctor_rejectsIneligibleIdentityBeforeSaving() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID proctorPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        CurrentUser caller = hostAdmin(tenantId);
+        when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
+        doThrow(new IdentityService.IdentityNotEligibleException()).when(identityService)
+                .requireActiveProctorInTenant(proctorPublicId, tenantId);
+
+        assertThatThrownBy(() -> enrollmentService.assignProctor(sessionPublicId,
+                new AssignProctorRequest(proctorPublicId, null), caller))
+                .isInstanceOf(IdentityService.IdentityNotEligibleException.class);
+
+        verify(proctorAssignmentRepository, never()).save(any());
     }
 
     @Test

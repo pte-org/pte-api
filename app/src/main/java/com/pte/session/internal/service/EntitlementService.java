@@ -13,6 +13,7 @@ import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.session.internal.repository.ProctorAssignmentRepository;
 import com.pte.session.internal.repository.FormAssignmentRepository;
+import com.pte.tenancy.TenancyService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,16 +40,26 @@ public class EntitlementService {
     private final ProctorAssignmentRepository proctorAssignmentRepository;
     private final FormAssignmentRepository formAssignmentRepository;
     private final Clock clock;
+    private final TenancyService tenancyService;
 
     @Autowired
     public EntitlementService(ExamSessionRepository sessionRepository, EnrollmentRepository enrollmentRepository,
                               ProctorAssignmentRepository proctorAssignmentRepository,
-                              FormAssignmentRepository formAssignmentRepository, Clock clock) {
+                              FormAssignmentRepository formAssignmentRepository, Clock clock,
+                              TenancyService tenancyService) {
         this.sessionRepository = sessionRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.proctorAssignmentRepository = proctorAssignmentRepository;
         this.formAssignmentRepository = formAssignmentRepository;
         this.clock = clock;
+        this.tenancyService = tenancyService;
+    }
+
+    public EntitlementService(ExamSessionRepository sessionRepository, EnrollmentRepository enrollmentRepository,
+                              ProctorAssignmentRepository proctorAssignmentRepository,
+                              FormAssignmentRepository formAssignmentRepository, Clock clock) {
+        this(sessionRepository, enrollmentRepository, proctorAssignmentRepository, formAssignmentRepository, clock,
+                null);
     }
 
     /** Compatibility constructor for focused session unit tests. */
@@ -66,6 +77,9 @@ public class EntitlementService {
     public EntitlementResponse checkEntitlement(UUID sessionPublicId, UUID studentPublicId) {
         ExamSession session = sessionRepository.findByPublicId(sessionPublicId)
                 .orElseThrow(NotEntitledException::new);
+        if (tenancyService != null) {
+            tenancyService.assertTenantActive(session.getTenantId());
+        }
         if (!isEnrolled(session, studentPublicId)) {
             throw new NotEntitledException();
         }

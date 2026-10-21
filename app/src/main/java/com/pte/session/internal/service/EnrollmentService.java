@@ -6,6 +6,8 @@ import com.pte.session.domain.ProctorAssignment;
 import com.pte.session.domain.enums.ProctorRole;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.event.StudentEnrolledEvent;
+import com.pte.session.dto.event.StudentEnrollmentConflictEvent;
+import com.pte.session.dto.response.SlotConflict;
 import com.pte.session.internal.dto.request.AssignProctorRequest;
 import com.pte.session.internal.dto.request.BulkEnrollRequest;
 import com.pte.session.internal.dto.request.EnrollStudentRequest;
@@ -21,17 +23,22 @@ import com.pte.session.internal.exception.EnrollmentNotFoundException;
 import com.pte.session.internal.exception.ExamAudienceLockedException;
 import com.pte.session.internal.exception.ProctorAssignmentNotFoundException;
 import com.pte.session.internal.exception.SessionCapacityExceededException;
+import com.pte.session.internal.exception.SessionTimeConflictException;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ProctorAssignmentRepository;
+import com.pte.identity.IdentityService;
 import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.security.CurrentUser;
+import com.pte.tenancy.TenancyService;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -48,18 +55,45 @@ public class EnrollmentService {
     private final EnrollmentRepository enrollmentRepository;
     private final ProctorAssignmentRepository proctorAssignmentRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final TenancyService tenancyService;
+    private final IdentityService identityService;
     private final ExamFormProvisioningService formProvisioningService;
     private final StartedAttemptLookup startedAttemptLookup;
 
     public EnrollmentService(SessionLifecycleService sessionLifecycleService, EnrollmentRepository enrollmentRepository,
                              ProctorAssignmentRepository proctorAssignmentRepository,
-                             ApplicationEventPublisher eventPublisher,
-                             ExamFormProvisioningService formProvisioningService,
+                             ApplicationEventPublisher eventPublisher) {
+        this(sessionLifecycleService, enrollmentRepository, proctorAssignmentRepository, eventPublisher, null, null);
+    }
+
+    public EnrollmentService(SessionLifecycleService sessionLifecycleService, EnrollmentRepository enrollmentRepository,
+                             ProctorAssignmentRepository proctorAssignmentRepository,
+                             ApplicationEventPublisher eventPublisher, TenancyService tenancyService) {
+        this(sessionLifecycleService, enrollmentRepository, proctorAssignmentRepository, eventPublisher,
+                tenancyService, null);
+    }
+
+    public EnrollmentService(SessionLifecycleService sessionLifecycleService,
+                             EnrollmentRepository enrollmentRepository,
+                             ProctorAssignmentRepository proctorAssignmentRepository,
+                             ApplicationEventPublisher eventPublisher, TenancyService tenancyService,
+                             IdentityService identityService) {
+        this(sessionLifecycleService, enrollmentRepository, proctorAssignmentRepository, eventPublisher,
+                tenancyService, identityService, null, null);
+    }
+
+    @Autowired
+    public EnrollmentService(SessionLifecycleService sessionLifecycleService, EnrollmentRepository enrollmentRepository,
+                             ProctorAssignmentRepository proctorAssignmentRepository,
+                             ApplicationEventPublisher eventPublisher, TenancyService tenancyService,
+                             IdentityService identityService, ExamFormProvisioningService formProvisioningService,
                              StartedAttemptLookup startedAttemptLookup) {
         this.sessionLifecycleService = sessionLifecycleService;
         this.enrollmentRepository = enrollmentRepository;
         this.proctorAssignmentRepository = proctorAssignmentRepository;
         this.eventPublisher = eventPublisher;
+        this.tenancyService = tenancyService;
+        this.identityService = identityService;
         this.formProvisioningService = formProvisioningService;
         this.startedAttemptLookup = startedAttemptLookup;
     }
@@ -67,9 +101,16 @@ public class EnrollmentService {
     @Transactional
     public EnrollmentResponse enrollStudent(UUID sessionPublicId, EnrollStudentRequest request, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
+        assertTenantActive(session);
         requireManualAudienceMutationAllowed(session);
+        requireActiveStudent(request.studentPublicId(), session.getTenantId());
+        lockActiveStudents(List.of(request.studentPublicId()), session.getTenantId());
         if (enrollmentRepository.existsBySessionIdAndStudentPublicId(session.getId(), request.studentPublicId())) {
             throw new AlreadyEnrolledException();
+        }
+        List<SlotConflict> conflicts = findConflicts(session, List.of(request.studentPublicId()));
+        if (!conflicts.isEmpty()) {
+            throw new SessionTimeConflictException(conflicts.get(0).conflictingSessionPublicId());
         }
         if (session.getCapacity() != null && enrollmentRepository.countBySessionId(session.getId()) >= session.getCapacity()) {
             throw new SessionCapacityExceededException();
@@ -104,7 +145,9 @@ public class EnrollmentService {
     @Transactional
     public BulkEnrollResponse bulkEnroll(UUID sessionPublicId, BulkEnrollRequest request, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
+        assertTenantActive(session);
         requireManualAudienceMutationAllowed(session);
+        requireActiveStudents(request.studentPublicIds(), session.getTenantId());
         BulkEnrollResponse response = bulkEnrollLocked(session, request, caller);
         formProvisioningService.provision(session, response.enrolled(), caller);
         return response;
@@ -113,6 +156,8 @@ public class EnrollmentService {
     /** Canonical publish path: materializes the already generated audience before scheduling. */
     @Transactional
     BulkEnrollResponse bulkEnrollPublishedExam(ExamSession session, BulkEnrollRequest request, CurrentUser caller) {
+        assertTenantActive(session);
+        requireActiveStudents(request.studentPublicIds(), session.getTenantId());
         if (session.getStatus() != com.pte.session.domain.enums.SessionStatus.READY
                 || session.getGenerationJobPublicId() == null) {
             throw new ExamAudienceLockedException();
@@ -121,16 +166,29 @@ public class EnrollmentService {
     }
 
     private BulkEnrollResponse bulkEnrollLocked(ExamSession session, BulkEnrollRequest request, CurrentUser caller) {
+        lockActiveStudents(request.studentPublicIds(), session.getTenantId());
 
         List<UUID> existing = enrollmentRepository
                 .findBySessionIdAndStudentPublicIdIn(session.getId(), request.studentPublicIds())
                 .stream().map(Enrollment::getStudentPublicId).toList();
-        Set<UUID> alreadyEnrolled = new HashSet<>(existing);
+        Set<UUID> alreadyEnrolled = new LinkedHashSet<>(existing);
 
         List<Enrollment> toCreate = new ArrayList<>();
         Set<UUID> seenInBatch = new HashSet<>();
+        List<UUID> candidateStudentIds = new ArrayList<>();
         for (UUID studentPublicId : request.studentPublicIds()) {
             if (alreadyEnrolled.contains(studentPublicId) || !seenInBatch.add(studentPublicId)) {
+                continue;
+            }
+            candidateStudentIds.add(studentPublicId);
+        }
+
+        List<SlotConflict> skippedByConflict = findConflicts(session, candidateStudentIds);
+        Set<UUID> conflictStudentIds = skippedByConflict.stream()
+                .map(SlotConflict::studentPublicId)
+                .collect(java.util.stream.Collectors.toSet());
+        for (UUID studentPublicId : candidateStudentIds) {
+            if (conflictStudentIds.contains(studentPublicId)) {
                 continue;
             }
             Enrollment enrollment = new Enrollment();
@@ -161,9 +219,13 @@ public class EnrollmentService {
         for (Enrollment enrollment : saved) {
             publishEnrolled(session, enrollment.getStudentPublicId());
         }
+        if (!skippedByConflict.isEmpty()) {
+            eventPublisher.publishEvent(new StudentEnrollmentConflictEvent(session.getPublicId(),
+                    session.getTenantId(), session.getName(), skippedByConflict));
+        }
 
         List<UUID> enrolled = saved.stream().map(Enrollment::getStudentPublicId).toList();
-        return new BulkEnrollResponse(enrolled, List.copyOf(alreadyEnrolled));
+        return new BulkEnrollResponse(enrolled, List.copyOf(alreadyEnrolled), skippedByConflict);
     }
 
     @Transactional(readOnly = true)
@@ -210,6 +272,10 @@ public class EnrollmentService {
     @Transactional
     public ProctorAssignmentResponse assignProctor(UUID sessionPublicId, AssignProctorRequest request, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwned(sessionPublicId, caller);
+        assertTenantActive(session);
+        if (identityService != null) {
+            identityService.requireActiveProctorInTenant(request.proctorPublicId(), session.getTenantId());
+        }
         ProctorAssignment assignment = new ProctorAssignment();
         assignment.setSession(session);
         assignment.setProctorPublicId(request.proctorPublicId());
@@ -272,6 +338,17 @@ public class EnrollmentService {
         }
     }
 
+    private List<SlotConflict> findConflicts(ExamSession session, List<UUID> studentPublicIds) {
+        if (studentPublicIds.isEmpty()) {
+            return List.of();
+        }
+        return enrollmentRepository.findConflictingEnrollments(session.getTenantId(), studentPublicIds,
+                        session.getOpensAt(), session.getClosesAt()).stream()
+                .map(conflict -> new SlotConflict(conflict.getStudentPublicId(),
+                        conflict.getConflictingSessionPublicId(), conflict.getConflictingSessionName()))
+                .toList();
+    }
+
     /**
      * The roster is editable once the exam is published and before it runs (SCHEDULED) or after it ends
      * (CLOSED). Earlier statuses take their audience from the wizard's sources, and OPEN exams have students
@@ -280,6 +357,30 @@ public class EnrollmentService {
     private void requireManualAudienceMutationAllowed(ExamSession session) {
         if (session.getStatus() != SessionStatus.SCHEDULED && session.getStatus() != SessionStatus.CLOSED) {
             throw new ExamAudienceLockedException();
+        }
+    }
+
+    private void assertTenantActive(ExamSession session) {
+        if (tenancyService != null) {
+            tenancyService.assertTenantActive(session.getTenantId());
+        }
+    }
+
+    private void requireActiveStudent(UUID studentPublicId, UUID tenantId) {
+        if (identityService != null) {
+            identityService.requireActiveStudentInTenant(studentPublicId, tenantId);
+        }
+    }
+
+    private void requireActiveStudents(List<UUID> studentPublicIds, UUID tenantId) {
+        if (identityService != null) {
+            identityService.requireActiveStudentsInTenant(studentPublicIds, tenantId);
+        }
+    }
+
+    private void lockActiveStudents(List<UUID> studentPublicIds, UUID tenantId) {
+        if (identityService != null) {
+            identityService.lockActiveStudentsInTenant(studentPublicIds, tenantId);
         }
     }
 

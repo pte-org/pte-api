@@ -67,7 +67,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.publicId in :publicIds and u.tenantId = :tenantId "
-            + "and u.deleted = false order by u.id")
+            + "and u.deleted = false order by u.publicId")
     List<User> findWithLockByPublicIdsAndTenantId(@Param("publicIds") List<UUID> publicIds,
             @Param("tenantId") UUID tenantId);
 

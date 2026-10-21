@@ -12,6 +12,7 @@ import com.pte.session.internal.repository.ExamSessionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.pte.tenancy.TenancyService;
 import java.time.Clock;
 import java.util.UUID;
 
@@ -21,15 +22,22 @@ public class SessionOperationGuardService {
 
     private final ExamSessionRepository sessionRepository;
     private final Clock clock;
+    private final TenancyService tenancyService;
 
     public SessionOperationGuardService(ExamSessionRepository sessionRepository) {
-        this(sessionRepository, Clock.systemUTC());
+        this(sessionRepository, Clock.systemUTC(), null);
     }
 
     @Autowired
-    public SessionOperationGuardService(ExamSessionRepository sessionRepository, Clock clock) {
+    public SessionOperationGuardService(ExamSessionRepository sessionRepository, Clock clock,
+            TenancyService tenancyService) {
         this.sessionRepository = sessionRepository;
         this.clock = clock != null ? clock : Clock.systemUTC();
+        this.tenancyService = tenancyService;
+    }
+
+    public SessionOperationGuardService(ExamSessionRepository sessionRepository, Clock clock) {
+        this(sessionRepository, clock, null);
     }
 
     @Transactional
@@ -67,6 +75,14 @@ public class SessionOperationGuardService {
         ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
                 .orElseThrow(NotEntitledException::new);
         SessionEntryGate.requireOpen(session);
+    }
+
+    /** New attempts require an active tenant; existing attempt resume does not. */
+    @Transactional(readOnly = true)
+    public void assertTenantActiveForNewAttempt(UUID tenantId) {
+        if (tenancyService != null) {
+            tenancyService.assertTenantActive(tenantId);
+        }
     }
 
     @Transactional

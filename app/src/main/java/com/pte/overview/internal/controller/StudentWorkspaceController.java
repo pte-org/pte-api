@@ -1,9 +1,9 @@
-package com.pte.enrollment.internal.controller;
+package com.pte.overview.internal.controller;
 
-import com.pte.enrollment.internal.dto.response.StudentAttemptHistoryResponse;
-import com.pte.enrollment.internal.dto.response.StudentDetailResponse;
-import com.pte.enrollment.internal.dto.response.StudentPerformanceResponse;
-import com.pte.enrollment.internal.service.StudentWorkspaceQueryService;
+import com.pte.overview.internal.dto.response.StudentAttemptHistoryResponse;
+import com.pte.overview.internal.dto.response.StudentDetailResponse;
+import com.pte.overview.internal.dto.response.StudentPerformanceResponse;
+import com.pte.overview.internal.service.StudentWorkspaceQueryService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;

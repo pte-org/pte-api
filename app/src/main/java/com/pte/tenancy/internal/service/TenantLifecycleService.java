@@ -4,11 +4,16 @@ import com.pte.tenancy.domain.Organization;
 import com.pte.tenancy.domain.Tenant;
 import com.pte.tenancy.domain.enums.FacilityType;
 import com.pte.tenancy.domain.enums.TenantStatus;
+import com.pte.tenancy.TenantSuspensionDurationProvider;
+import com.pte.tenancy.TenantSuspensionImpact;
+import com.pte.tenancy.TenantSuspensionImpactProvider;
 import com.pte.tenancy.internal.exception.TenantCodeAlreadyUsedException;
 import com.pte.tenancy.internal.exception.TenantNameAlreadyUsedException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
 import com.pte.tenancy.internal.exception.TenantTaxCodeAlreadyUsedException;
+import com.pte.tenancy.internal.exception.TenantSuspensionImpactStaleException;
 import com.pte.tenancy.internal.dto.request.OnboardTenantRequest;
+import com.pte.tenancy.internal.dto.request.SuspendTenantRequest;
 import com.pte.tenancy.internal.dto.request.UpdateBrandingRequest;
 import com.pte.tenancy.internal.dto.response.TenantResponse;
 import com.pte.tenancy.internal.constant.TenancyConstants;
@@ -23,6 +28,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.Duration;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,15 +42,27 @@ public class TenantLifecycleService {
 
     private final TenantRepository tenantRepository;
     private final AuditLogService auditLogService;
+    private final TenantSuspensionDurationProvider suspensionDurationProvider;
+    private final TenantSuspensionImpactProvider suspensionImpactProvider;
+    private final Clock clock;
 
     public TenantLifecycleService(TenantRepository tenantRepository) {
-        this(tenantRepository, null);
+        this(tenantRepository, null, null, null, Clock.systemUTC());
+    }
+
+    public TenantLifecycleService(TenantRepository tenantRepository, AuditLogService auditLogService) {
+        this(tenantRepository, auditLogService, null, null, Clock.systemUTC());
     }
 
     @Autowired
-    public TenantLifecycleService(TenantRepository tenantRepository, AuditLogService auditLogService) {
+    public TenantLifecycleService(TenantRepository tenantRepository, AuditLogService auditLogService,
+            TenantSuspensionDurationProvider suspensionDurationProvider,
+            TenantSuspensionImpactProvider suspensionImpactProvider, Clock clock) {
         this.tenantRepository = tenantRepository;
         this.auditLogService = auditLogService;
+        this.suspensionDurationProvider = suspensionDurationProvider;
+        this.suspensionImpactProvider = suspensionImpactProvider;
+        this.clock = clock != null ? clock : Clock.systemUTC();
     }
 
     @Transactional
@@ -118,18 +140,62 @@ public class TenantLifecycleService {
 
     @Transactional
     public TenantResponse suspend(UUID publicId) {
-        return suspend(publicId, null);
+        return suspend(publicId, null, null);
     }
 
     @Transactional
     public TenantResponse suspend(UUID publicId, CurrentUser caller) {
+        return suspend(publicId, null, caller);
+    }
+
+    @Transactional
+    public TenantResponse suspend(UUID publicId, Integer requestedDays) {
+        return suspend(publicId, requestedDays, null);
+    }
+
+    @Transactional
+    public TenantResponse suspend(UUID publicId, Integer requestedDays, CurrentUser caller) {
         require(caller, PlatformOperation.TENANT_LIFECYCLE, TenancyConstants.OPERATION_TENANT_SUSPEND);
         Tenant tenant = tenantRepository.findByPublicId(publicId)
+                .orElseThrow(TenantNotFoundException::new);
+        int days = resolveSuspensionDays(requestedDays);
+        if (tenant.getStatus() == TenantStatus.SUSPENDED) {
+            return TenantMapper.toResponse(tenant);
+        }
+        Instant now = clock.instant();
+        tenant.suspendUntil(days == 0 ? null : now.plus(Duration.ofDays(days)));
+        audit(caller, TenancyConstants.EVENT_TENANT_SUSPENDED, publicId,
+                TenancyConstants.AUDIT_TENANT_SUSPENDED_SUMMARY);
+        return TenantMapper.toResponse(tenant);
+    }
+
+    /**
+     * Confirms a live suspension preview before mutating tenant state. The row
+     * lock keeps re-suspension idempotent and makes the final status transition
+     * atomic with the digest check.
+     */
+    @Transactional
+    public TenantResponse suspendWithConfirmation(UUID publicId, SuspendTenantRequest request,
+            CurrentUser caller) {
+        require(caller, PlatformOperation.TENANT_LIFECYCLE, TenancyConstants.OPERATION_TENANT_SUSPEND);
+        Tenant tenant = tenantRepository.findWithLockByPublicId(publicId)
                 .orElseThrow(TenantNotFoundException::new);
         if (tenant.getStatus() == TenantStatus.SUSPENDED) {
             return TenantMapper.toResponse(tenant);
         }
-        tenant.suspend();
+        int days = resolveSuspensionDays(request.days());
+        Instant now = clock.instant();
+        Instant suspendedUntil = days == 0 ? null : now.plus(Duration.ofDays(days));
+        if (suspensionImpactProvider == null) {
+            throw new TenantSuspensionImpactStaleException();
+        }
+        TenantSuspensionImpact liveImpact = suspensionImpactProvider.preview(publicId, now, suspendedUntil);
+        if (liveImpact.impactDigest() == null || request.impactDigest() == null
+                || !MessageDigest.isEqual(request.impactDigest().getBytes(StandardCharsets.UTF_8),
+                        liveImpact.impactDigest().getBytes(StandardCharsets.UTF_8))) {
+            throw new TenantSuspensionImpactStaleException();
+        }
+        tenant.suspendUntil(suspendedUntil);
         audit(caller, TenancyConstants.EVENT_TENANT_SUSPENDED, publicId,
                 TenancyConstants.AUDIT_TENANT_SUSPENDED_SUMMARY);
         return TenantMapper.toResponse(tenant);
@@ -152,6 +218,18 @@ public class TenantLifecycleService {
         audit(caller, TenancyConstants.EVENT_TENANT_REACTIVATED, publicId,
                 TenancyConstants.AUDIT_TENANT_REACTIVATED_SUMMARY);
         return TenantMapper.toResponse(tenant);
+    }
+
+    @Transactional(readOnly = true)
+    public TenantSuspensionImpact suspensionImpact(UUID publicId, Integer requestedDays) {
+        tenantRepository.findByPublicId(publicId).orElseThrow(TenantNotFoundException::new);
+        int days = resolveSuspensionDays(requestedDays);
+        Instant now = clock.instant();
+        Instant suspendedUntil = days == 0 ? null : now.plus(Duration.ofDays(days));
+        if (suspensionImpactProvider == null) {
+            return new TenantSuspensionImpact(publicId, days, suspendedUntil, 0, 0, List.of());
+        }
+        return suspensionImpactProvider.preview(publicId, now, suspendedUntil);
     }
 
     @Transactional
@@ -211,5 +289,15 @@ public class TenantLifecycleService {
         if (auditLogService != null && caller != null && publicId != null) {
             auditLogService.record(caller, TenancyConstants.AGGREGATE_TENANT, publicId.toString(), action, summary);
         }
+    }
+
+    private int resolveSuspensionDays(Integer requestedDays) {
+        int days = requestedDays == null
+                ? (suspensionDurationProvider == null ? 0 : suspensionDurationProvider.defaultSuspensionDays())
+                : requestedDays;
+        if (days < 0) {
+            throw new com.pte.tenancy.internal.exception.TenantSuspensionDaysInvalidException();
+        }
+        return days;
     }
 }

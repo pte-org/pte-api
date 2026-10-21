@@ -151,10 +151,13 @@ class UserRepositoryTest {
     @Test
     void examinerAssignmentQueryLocksOnlyRequestedTenantUsersInStableOrder() {
         Tenant tenant = persistTenant("tenant-lock-" + UUID.randomUUID());
-        User examinerA = createUser(tenant, "examiner-a-" + UUID.randomUUID(), Role.EXAMINER);
-        User examinerB = createUser(tenant, "examiner-b-" + UUID.randomUUID(), Role.EXAMINER);
+        User examinerA = createUser(tenant, "examiner-a-" + UUID.randomUUID(), Role.EXAMINER,
+                UUID.fromString("00000000-0000-0000-0000-000000000001"));
+        User examinerB = createUser(tenant, "examiner-b-" + UUID.randomUUID(), Role.EXAMINER,
+                UUID.fromString("00000000-0000-0000-0000-000000000002"));
         Tenant otherTenant = persistTenant("tenant-lock-other-" + UUID.randomUUID());
-        User otherExaminer = createUser(otherTenant, "examiner-other-" + UUID.randomUUID(), Role.EXAMINER);
+        User otherExaminer = createUser(otherTenant, "examiner-other-" + UUID.randomUUID(), Role.EXAMINER,
+                UUID.fromString("00000000-0000-0000-0000-000000000003"));
 
         List<User> locked = userRepository.findWithLockByPublicIdsAndTenantId(
                 List.of(examinerB.getPublicId(), otherExaminer.getPublicId(), examinerA.getPublicId()),
@@ -165,7 +168,12 @@ class UserRepositoryTest {
     }
 
     private User createUser(Tenant tenant, String username, Role role) {
+        return createUser(tenant, username, role, UUID.randomUUID());
+    }
+
+    private User createUser(Tenant tenant, String username, Role role, UUID publicId) {
         User user = new User();
+        user.setPublicId(publicId);
         user.setUsername(username);
         user.setEmail(username);
         user.setFullName(username);

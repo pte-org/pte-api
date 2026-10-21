@@ -1,5 +1,6 @@
 package com.pte.tenancy.internal.dto.response;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public record TenantResponse(
@@ -9,6 +10,7 @@ public record TenantResponse(
         String organizationType,
         String taxCode,
         String status,
+        Instant suspendedUntil,
         String packageName,
         int studentLimit,
         String logoUrl,
