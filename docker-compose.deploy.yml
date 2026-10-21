@@ -17,10 +17,8 @@
 #   2. Stretches healthcheck start_period. Spring Boot apps booting on 4 ARM
 #      cores do not always answer /actuator/health inside the 40s the base
 #      file allows, and compose would keep marking them unhealthy.
-#   3. Points media's presign host (inside `app`) at a public origin. The base
-#      value (http://localhost:9000) is correct for a laptop and wrong
-#      everywhere else — the URL is handed to a browser, not to another
-#      container.
+#   3. Media uploads and delivery use Cloudinary directly; no media origin is
+#      hosted by this stack.
 #   4. Narrows CORS_ALLOWED_ORIGINS to the two real hosted origins (the base
 #      file's localhost defaults are for local dev only).
 #   5. Adds Nginx + the two Next.js apps.
