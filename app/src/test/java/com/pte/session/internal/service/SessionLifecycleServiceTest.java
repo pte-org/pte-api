@@ -26,6 +26,7 @@ import com.pte.session.internal.exception.SessionTimeConflictException;
 import com.pte.session.internal.exception.NotEntitledException;
 import com.pte.session.internal.exception.SessionClosedException;
 import com.pte.session.internal.exception.SessionNotStartedException;
+import com.pte.session.internal.exception.SessionNotClosedForExaminerAssignmentException;
 import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
 import com.pte.session.internal.exception.SessionNotOpenToCloseException;
 import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionException;
@@ -624,6 +625,31 @@ class SessionLifecycleServiceTest {
 
         assertThatThrownBy(() -> service.lockClosedForReportPublication(session.getPublicId(), tenantId))
                 .isInstanceOf(SessionNotClosedForReportPublicationException.class);
+    }
+
+    @Test
+    void examinerAssignmentLockRejectsEveryNonClosedStatus() {
+        ExamSession session = existingSession(SessionStatus.OPEN, 100);
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+
+        for (SessionStatus status : List.of(SessionStatus.DRAFT, SessionStatus.PREPARING, SessionStatus.READY,
+                SessionStatus.SCHEDULED, SessionStatus.OPEN, SessionStatus.CANCELLED)) {
+            session.setStatus(status);
+            assertThatThrownBy(() -> service.lockForExaminerAssignment(session.getPublicId(), tenantId))
+                    .isInstanceOf(SessionNotClosedForExaminerAssignmentException.class);
+        }
+    }
+
+    @Test
+    void examinerAssignmentLockAllowsClosedSession() {
+        ExamSession session = existingSession(SessionStatus.CLOSED, 100);
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+
+        service.lockForExaminerAssignment(session.getPublicId(), tenantId);
+
+        verify(sessionRepository).findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId);
     }
 
     // ------------------------------------------------------------------

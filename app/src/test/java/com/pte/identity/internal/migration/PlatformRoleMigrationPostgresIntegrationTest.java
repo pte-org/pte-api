@@ -20,15 +20,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @EnabledIfSystemProperty(
         named = "platform.role.migration.db.url",
-        matches = "jdbc:postgresql://(127\\.0\\.0\\.1|pte-postgres):5432/pte_role_migration_test")
+        matches = "jdbc:postgresql://(127\\.0\\.0\\.1|pte-postgres):(5432|55440)/pte_role_migration_test")
 class PlatformRoleMigrationPostgresIntegrationTest {
+
+    private static final Set<String> ALLOWED_DATABASE_URLS = Set.of(
+            "jdbc:postgresql://127.0.0.1:5432/pte_role_migration_test",
+            "jdbc:postgresql://pte-postgres:5432/pte_role_migration_test",
+            "jdbc:postgresql://127.0.0.1:55440/pte_role_migration_test");
 
     @Test
     void legacyAuthorRowIsCanonicalizedAfterTheCompatibilityWindow() throws Exception {
         String url = System.getProperty("platform.role.migration.db.url");
-        if (!Set.of(
-                "jdbc:postgresql://127.0.0.1:5432/pte_role_migration_test",
-                "jdbc:postgresql://pte-postgres:5432/pte_role_migration_test").contains(url)) {
+        if (!ALLOWED_DATABASE_URLS.contains(url)) {
             throw new IllegalArgumentException("Only the dedicated local role migration database is permitted");
         }
 

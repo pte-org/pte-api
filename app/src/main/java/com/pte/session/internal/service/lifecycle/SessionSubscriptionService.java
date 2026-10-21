@@ -14,6 +14,8 @@ import com.pte.session.internal.mapper.SessionMapper;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.shared.security.CurrentUser;
+import com.pte.tenancy.TenancyService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,22 +32,35 @@ public class SessionSubscriptionService {
     private final BillingService billingService;
     private final SessionAccess access;
     private final SessionSubscriptionRules subscriptions;
+    private final TenancyService tenancyService;
 
     public SessionSubscriptionService(ExamSessionRepository sessionRepository,
             EnrollmentRepository enrollmentRepository,
             BillingService billingService,
             SessionAccess access,
             SessionSubscriptionRules subscriptions) {
+        this(sessionRepository, enrollmentRepository, billingService, access, subscriptions, null);
+    }
+
+    @Autowired
+    public SessionSubscriptionService(ExamSessionRepository sessionRepository,
+            EnrollmentRepository enrollmentRepository,
+            BillingService billingService,
+            SessionAccess access,
+            SessionSubscriptionRules subscriptions,
+            TenancyService tenancyService) {
         this.sessionRepository = sessionRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.billingService = billingService;
         this.access = access;
         this.subscriptions = subscriptions;
+        this.tenancyService = tenancyService;
     }
 
     @Transactional
     public SessionResponse changeSubscription(UUID publicId, ChangeSubscriptionRequest request, CurrentUser caller) {
         UUID tenantId = access.requireTenant(caller);
+        assertTenantActive(tenantId);
         ExamSession observed = access.observedSession(publicId, tenantId);
         if (observed.getStatus() != SessionStatus.SCHEDULED) {
             throw new PolicyLockedException();
@@ -91,6 +106,12 @@ public class SessionSubscriptionService {
             return SessionMapper.toResponse(session);
         } catch (DataIntegrityViolationException ex) {
             throw subscriptions.translateOverlap(ex);
+        }
+    }
+
+    private void assertTenantActive(UUID tenantId) {
+        if (tenancyService != null) {
+            tenancyService.assertTenantActive(tenantId);
         }
     }
 }

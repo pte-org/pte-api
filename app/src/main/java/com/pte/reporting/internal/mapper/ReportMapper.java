@@ -16,6 +16,11 @@ public final class ReportMapper {
     }
 
     public static ReportResponse toResponse(AttemptReport report, AttemptScoreSummary summary) {
+        return toResponse(report, summary, false);
+    }
+
+    public static ReportResponse toResponse(AttemptReport report, AttemptScoreSummary summary,
+            boolean includesUnselectedAiScores) {
         List<SkillScoreResponse> communicative = toSkillList(summary.skillScores());
         SkillScoreResponse overall = summary.overall() == null ? null : toResponse("OVERALL", summary.overall());
         return new ReportResponse(
@@ -25,7 +30,8 @@ public final class ReportMapper {
                 report.getPublishedAt(),
                 report.getReportSnapshotJson() != null,
                 overall,
-                communicative);
+                communicative,
+                includesUnselectedAiScores);
     }
 
     private static List<SkillScoreResponse> toSkillList(Map<Skill, SkillScore> skillScores) {
@@ -35,6 +41,6 @@ public final class ReportMapper {
     }
 
     private static SkillScoreResponse toResponse(String name, SkillScore score) {
-        return new SkillScoreResponse(name, score.score(), score.sufficientData());
+        return new SkillScoreResponse(name, score.score(), score.sufficientData(), score.appliedWeight());
     }
 }

@@ -74,6 +74,13 @@ class ScoreAggregationServiceTest {
                 selectedSource, selectedScore, true, null, 0);
     }
 
+    /** AI-scored, no source chosen yet: only its provisional score exists. */
+    private ReportScoringAnswerView unselectedAiAnswer(String taskType, int aiScore) {
+        return new ReportScoringAnswerView(UUID.randomUUID(), ATTEMPT_ID, TEMPLATE_ID, taskType, "SPEAKING",
+                "AI_SPEECH", aiScore, "REAL", "test-provider", "test-model", "v1", null,
+                null, null, false, "NO_SELECTED_SOURCE", 0, aiScore);
+    }
+
     private ReportScoringAnswerView answer(String taskType, int selectedScore) {
         return answer(taskType, selectedScore, selectedScore, null, selectedScore);
     }
@@ -101,6 +108,7 @@ class ScoreAggregationServiceTest {
         SkillScore reading = summary.skillScores().get(Skill.READING);
         assertThat(reading.sufficientData()).isTrue();
         assertThat(reading.score()).isEqualTo(50);
+        assertThat(reading.appliedWeight()).isEqualByComparingTo(bd(10));
     }
 
     @Test
@@ -147,6 +155,7 @@ class ScoreAggregationServiceTest {
         SkillScore speaking = summary.skillScores().get(Skill.SPEAKING);
         assertThat(speaking.sufficientData()).isFalse();
         assertThat(speaking.score()).isNull();
+        assertThat(speaking.appliedWeight()).isZero();
     }
 
     @Test
@@ -205,6 +214,7 @@ class ScoreAggregationServiceTest {
         assertThat(summary.overall()).isNotNull();
         assertThat(summary.overall().sufficientData()).isTrue();
         assertThat(summary.overall().score()).isEqualTo(90);
+        assertThat(summary.overall().appliedWeight()).isEqualByComparingTo(bd(4));
     }
 
     @Test
@@ -282,6 +292,45 @@ class ScoreAggregationServiceTest {
         AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
 
         assertThat(summary.skillScores().get(Skill.READING).score()).isEqualTo(74);
+    }
+
+    @Test
+    void aggregateProvisional_countsAnAnswerWithNoChosenSourceByItsAiScore() {
+        stubTestedSections("SPEAKING");
+        stubTemplate(item("READ_ALOUD", bd(0), bd(100), bd(0), bd(0), bd(0)));
+        stubAnswers(unselectedAiAnswer("READ_ALOUD", 50));
+
+        ProvisionalScoreSummary provisional = service.aggregateProvisional(ATTEMPT_ID, TENANT_ID);
+
+        assertThat(provisional.summary().skillScores().get(Skill.SPEAKING).score()).isEqualTo(50);
+        assertThat(provisional.includesUnselectedAiScores()).isTrue();
+        // The publishable rule is untouched: nothing is chosen, so there is nothing to report.
+        assertThat(service.aggregate(ATTEMPT_ID, TENANT_ID).skillScores().get(Skill.SPEAKING).sufficientData())
+                .isFalse();
+    }
+
+    @Test
+    void aggregateProvisional_withEveryAnswerChosenReportsNoFallback() {
+        stubTestedSections("READING");
+        stubTemplate(item("MC_READING_SINGLE", bd(0), bd(0), bd(0), bd(10), bd(0)));
+        stubAnswers(answer("MC_READING_SINGLE", 50));
+
+        ProvisionalScoreSummary provisional = service.aggregateProvisional(ATTEMPT_ID, TENANT_ID);
+
+        assertThat(provisional.summary().skillScores().get(Skill.READING).score()).isEqualTo(50);
+        assertThat(provisional.includesUnselectedAiScores()).isFalse();
+    }
+
+    @Test
+    void aggregateProvisional_aChosenScoreWinsOverTheAiScore() {
+        stubTestedSections("SPEAKING");
+        stubTemplate(item("READ_ALOUD", bd(0), bd(100), bd(0), bd(0), bd(0)));
+        stubAnswers(answer("READ_ALOUD", 90, 0, "EXAMINER", 0));
+
+        ProvisionalScoreSummary provisional = service.aggregateProvisional(ATTEMPT_ID, TENANT_ID);
+
+        assertThat(provisional.summary().skillScores().get(Skill.SPEAKING).score()).isEqualTo(10);
+        assertThat(provisional.includesUnselectedAiScores()).isFalse();
     }
 
     @Test

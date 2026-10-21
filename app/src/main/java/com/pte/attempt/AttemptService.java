@@ -1,5 +1,7 @@
 package com.pte.attempt;
 
+import com.pte.attempt.domain.ExamAttempt;
+import com.pte.attempt.dto.response.AttemptOwnerView;
 import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.attempt.dto.response.StudentAttemptHistoryView;
@@ -91,6 +93,11 @@ public class AttemptService implements StartedAttemptLookup {
         return submittedAnswerQueryService.findForSession(sessionPublicId, tenantId);
     }
 
+    /** Every answer of one attempt — scoring's ingestion right after the attempt is submitted. */
+    public List<SubmittedAnswerView> getSubmittedAnswersForAttempt(UUID attemptPublicId, UUID tenantId) {
+        return submittedAnswerQueryService.findForAttempt(attemptPublicId, tenantId);
+    }
+
     /** Throws if the attempt doesn't exist or hasn't reached SUBMITTED — reporting's report creation pull (Phase 10). */
     public AttemptSummaryView getSubmittedAttempt(UUID attemptPublicId) {
         return attemptSummaryQueryService.findSubmitted(attemptPublicId);
@@ -101,17 +108,17 @@ public class AttemptService implements StartedAttemptLookup {
         return attemptSummaryQueryService.findSubmittedForSession(sessionPublicId, tenantId);
     }
 
-    /** Tenant- and session-scoped attempt numbers for the host's submitted-answer list. */
-    public Map<UUID, Integer> getAttemptNumbers(UUID sessionPublicId, UUID tenantId,
+    /** Tenant- and session-scoped owner and attempt number of each given attempt, keyed by attempt publicId. */
+    public Map<UUID, AttemptOwnerView> getAttemptOwners(UUID sessionPublicId, UUID tenantId,
             Collection<UUID> attemptPublicIds) {
         if (attemptPublicIds == null || attemptPublicIds.isEmpty()) {
             return Map.of();
         }
         return examAttemptRepository.findBySessionPublicIdAndTenantIdAndPublicIdIn(sessionPublicId, tenantId,
                         List.copyOf(attemptPublicIds)).stream()
-                .collect(Collectors.toMap(
-                        com.pte.attempt.domain.ExamAttempt::getPublicId,
-                        com.pte.attempt.domain.ExamAttempt::getAttemptNumber));
+                .collect(Collectors.toMap(ExamAttempt::getPublicId, attempt -> new AttemptOwnerView(
+                        attempt.getPublicId(), attempt.getStudentPublicId(), attempt.getAttemptNumber(),
+                        attempt.getSubmittedAt())));
     }
 
     /** The pinned score template + tested sections for one attempt — reporting's weighted scoring (Phase 5). */

@@ -60,8 +60,8 @@ public final class ScoringConstants {
     public static final String TEMPLATE_SCORING_METHOD_MISMATCH =
             "Template scoring method disagrees with the pinned profile";
     public static final String TEMPLATE_SCORING_METHOD_UNKNOWN = "Template contains an unknown scoring method";
-    public static final String AI_PROVIDER_INVALID = "scoring.ai.provider must be stub or openai-compatible";
-    public static final String AI_SCORING_RETRIES_EXHAUSTED = "AI scoring retries exhausted";
+    public static final String AI_PROVIDER_INVALID =
+            "scoring.ai.provider must be stub, openai-compatible or azure-gemini";
     public static final String UNSUPPORTED_AI_TASK_TYPE = "Unsupported AI task type: %s";
     public static final String RAW_SCORE_RANGE_INVALID = "rawScore must be between 0 and 100";
     public static final String REVIEW_VERSION_HASH_UNAVAILABLE = "SHA-256 is required by the runtime";
@@ -71,7 +71,6 @@ public final class ScoringConstants {
     public static final String AI_MODEL_NOT_CONFIGURED = "AI model is not configured";
     public static final String AI_REQUEST_NO_MESSAGES = "AI request has no messages";
     public static final String AI_REQUEST_SERIALIZATION_FAILED = "Could not serialize AI request";
-    public static final String AI_PROVIDER_REQUEST_FAILED = "AI provider request failed";
     public static final String AI_EMPTY_RESPONSE = "AI provider returned an empty response";
     public static final String AI_RESPONSE_CONTENT_NOT_TEXT = "choices[0].message.content is not text";
     public static final String RAW_SCORE_NOT_INTEGER = "rawScore must be an integer";
@@ -89,6 +88,26 @@ public final class ScoringConstants {
     public static final String SPEECH_MEDIA_UNRESOLVED = "Speech media could not be resolved";
     public static final String SPEECH_MEDIA_DOWNLOAD_FAILED = "Speech media download failed";
     public static final String SPEECH_MEDIA_EMPTY = "Speech media download was empty";
+    public static final String PROMPT_IMAGE_TENANT_ID_MISSING = "Prompt image request is missing tenant ID";
+    public static final String PROMPT_IMAGE_RESOLUTION_FAILED = "Prompt image resolution failed";
+    public static final String PROMPT_IMAGE_UNRESOLVED = "Prompt image could not be resolved";
+    public static final String PROMPT_IMAGE_DOWNLOAD_FAILED = "Prompt image download failed";
+    public static final String PROMPT_IMAGE_EMPTY = "Prompt image download was empty";
+    public static final String PROMPT_IMAGE_TOO_LARGE = "Prompt image is larger than the allowed size";
+    public static final String PROMPT_IMAGE_TYPE_UNSUPPORTED = "Prompt image is not a PNG, JPEG or WebP file";
+    public static final String AI_SOURCE_TEXT_EMPTY = "The item has no source text to score against";
+    public static final String DESCRIBE_IMAGE_SOURCE_MISSING =
+            "Describe Image has neither a usable image nor a reference description";
+    public static final String GEMINI_FIELD_INVALID = "Gemini response field %s is missing or out of range";
+    public static final String AI_SCORER_DUPLICATE = "More than one AI scorer handles task type %s";
+    public static final String ANSWER_KEY_EMPTY = "Short-question answer key has no accepted answer";
+    public static final String AI_DETAIL_SERIALIZATION_FAILED = "Could not serialize the AI score detail";
+    public static final String AZURE_GEMINI_SETTINGS_INVALID =
+            "scoring.ai.provider=azure-gemini is missing or has invalid settings: %s";
+    // Vendor failures carry the classification code only, never the provider body.
+    public static final String AI_VENDOR_REQUEST_FAILED = "%s request failed: %s";
+    public static final String AUDIO_UNSUPPORTED = "Speech audio is not a readable PCM WAV recording";
+    public static final String AUDIO_TOO_LONG = "Speech audio is longer than %d seconds";
 
     private ScoringConstants() {
     }

@@ -17,6 +17,7 @@ public final class TenantMapper {
                 tenant.getOrganizationType(),
                 tenant.getTaxCode(),
                 tenant.getStatus().name(),
+                tenant.getSuspendedUntil(),
                 tenant.getPackageName(),
                 tenant.getStudentLimit(),
                 tenant.getLogoUrl(),

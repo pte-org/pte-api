@@ -1,8 +1,10 @@
 package com.pte.scoring.internal.controller;
 
+import com.pte.scoring.dto.request.CommitExaminerAssignmentRequest;
 import com.pte.scoring.dto.request.CreateExaminerAssignmentPreviewRequest;
 import com.pte.scoring.dto.response.ExaminerAssignmentOverviewResponse;
 import com.pte.scoring.dto.response.ExaminerAssignmentPreviewResponse;
+import com.pte.scoring.dto.response.ExaminerAssignmentRosterResponse;
 import com.pte.scoring.internal.service.ExaminerAssignmentService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
@@ -40,6 +42,17 @@ public class ExaminerAssignmentController {
         return ApiResponse.success(search == null || search.isBlank()
                 ? assignmentService.overview(sessionPublicId, caller, page, size)
                 : assignmentService.overview(sessionPublicId, caller, search, page, size));
+    }
+
+    @GetMapping("/roster")
+    public ApiResponse<ExaminerAssignmentRosterResponse> roster(@PathVariable UUID sessionPublicId) {
+        return ApiResponse.success(assignmentService.roster(sessionPublicId, currentUser()));
+    }
+
+    @PostMapping("/commit")
+    public ApiResponse<ExaminerAssignmentRosterResponse> commit(@PathVariable UUID sessionPublicId,
+            @Valid @RequestBody CommitExaminerAssignmentRequest request) {
+        return ApiResponse.success(assignmentService.commit(sessionPublicId, request, currentUser()));
     }
 
     @PostMapping("/previews")

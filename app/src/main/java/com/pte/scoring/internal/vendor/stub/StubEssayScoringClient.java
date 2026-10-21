@@ -3,7 +3,7 @@ package com.pte.scoring.internal.vendor.stub;
 import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.EssayScoringClient;
 import com.pte.scoring.domain.enums.AiProviderCategory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -17,8 +17,8 @@ import java.util.Map;
  * remove {@code @Component} here (or gate both behind {@code scoring.ai.provider}).
  */
 @Component
-@ConditionalOnProperty(
-        name = "scoring.ai.provider", havingValue = "stub", matchIfMissing = true)
+// azure-gemini keeps the stub until its scorers replace it; STUB results are never publishable.
+@ConditionalOnExpression("'${scoring.ai.provider:stub}' == 'stub' or '${scoring.ai.provider:stub}' == 'azure-gemini'")
 public class StubEssayScoringClient implements EssayScoringClient {
 
     private static final int PLACEHOLDER_SCORE = 60;

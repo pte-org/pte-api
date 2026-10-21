@@ -12,6 +12,9 @@ import java.util.UUID;
  * actually tested (FR-19) — no {@code enablingSkills} field: Grammar/Oral
  * Fluency/Pronunciation/Spelling/Vocabulary/Written Discourse are out of
  * scope, the pinned ScoreTemplate has no weight column for them.
+ *
+ * <p>{@code includesUnselectedAiScores} is only ever true on a Host's unpublished view: some answers have no
+ * chosen score source yet and were counted by their AI score.
  */
 public record ReportResponse(
         UUID attemptPublicId,
@@ -20,5 +23,6 @@ public record ReportResponse(
         Instant publishedAt,
         boolean immutableSnapshot,
         SkillScoreResponse overall,
-        List<SkillScoreResponse> communicativeSkills) {
+        List<SkillScoreResponse> communicativeSkills,
+        boolean includesUnselectedAiScores) {
 }

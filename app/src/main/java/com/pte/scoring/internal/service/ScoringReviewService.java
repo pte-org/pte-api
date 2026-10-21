@@ -1,6 +1,7 @@
 package com.pte.scoring.internal.service;
 
 import com.pte.attempt.AttemptService;
+import com.pte.attempt.dto.response.AttemptOwnerView;
 import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.scoring.domain.ScoringAnswer;
@@ -16,6 +17,7 @@ import com.pte.scoring.internal.exception.InvalidAnswerStatusException;
 import com.pte.scoring.internal.exception.ScoreSourceSelectionException;
 import com.pte.scoring.internal.constant.ScoreReviewConstants;
 import com.pte.scoring.internal.mapper.ScoringAnswerMapper;
+import com.pte.scoring.internal.repository.AiDetailFlags;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
 import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
 import com.pte.shared.security.CurrentUser;
@@ -59,6 +61,8 @@ public class ScoringReviewService {
     private final ScoringSessionStateRepository sessionStateRepository;
     private final EntityManager entityManager;
     private final AttemptService attemptService;
+    private final AiScoreDetailQueryService aiDetails;
+    private final ScoringEligibilityQueryService eligibility;
     private final com.pte.session.SessionService sessionService;
     private final com.pte.scoring.internal.repository.GradingCohortRepository cohortRepository;
 
@@ -66,7 +70,8 @@ public class ScoringReviewService {
     public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
             AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService,
             ScoringSessionStateRepository sessionStateRepository, EntityManager entityManager,
-            AttemptService attemptService, com.pte.session.SessionService sessionService,
+            AttemptService attemptService, AiScoreDetailQueryService aiDetails,
+            ScoringEligibilityQueryService eligibility, com.pte.session.SessionService sessionService,
             com.pte.scoring.internal.repository.GradingCohortRepository cohortRepository) {
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.answerPayloadDecoder = answerPayloadDecoder;
@@ -74,8 +79,19 @@ public class ScoringReviewService {
         this.sessionStateRepository = sessionStateRepository;
         this.entityManager = entityManager;
         this.attemptService = attemptService;
+        this.aiDetails = aiDetails;
+        this.eligibility = eligibility;
         this.sessionService = sessionService;
         this.cohortRepository = cohortRepository;
+    }
+
+    public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
+            AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService,
+            ScoringSessionStateRepository sessionStateRepository, EntityManager entityManager,
+            AttemptService attemptService, AiScoreDetailQueryService aiDetails,
+            ScoringEligibilityQueryService eligibility) {
+        this(scoringAnswerRepository, answerPayloadDecoder, mediaService, sessionStateRepository, entityManager,
+                attemptService, aiDetails, eligibility, null, null);
     }
 
     public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
@@ -89,12 +105,13 @@ public class ScoringReviewService {
     public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
             AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService,
             ScoringSessionStateRepository sessionStateRepository, EntityManager entityManager) {
-        this(scoringAnswerRepository, answerPayloadDecoder, mediaService, sessionStateRepository, entityManager, null);
+        this(scoringAnswerRepository, answerPayloadDecoder, mediaService, sessionStateRepository, entityManager,
+                null, null, null);
     }
 
     public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
             AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService) {
-        this(scoringAnswerRepository, answerPayloadDecoder, mediaService, null, null, null);
+        this(scoringAnswerRepository, answerPayloadDecoder, mediaService, null, null, null, null, null);
     }
 
     /**
@@ -104,33 +121,40 @@ public class ScoringReviewService {
      * always comes from {@code caller}, never a request parameter.
      */
     @Transactional(readOnly = true)
-    public AnswerListResponse listAnswers(UUID sessionPublicId, String statusFilter, Pageable pageable,
-                                          CurrentUser caller) {
-        return listAnswers(sessionPublicId, statusFilter, null, pageable, caller);
+    public AnswerListResponse listAnswers(UUID sessionPublicId, UUID attemptPublicId, String statusFilter,
+                                          Pageable pageable, CurrentUser caller) {
+        return listAnswers(sessionPublicId, attemptPublicId, statusFilter, null, pageable, caller);
     }
 
     @Transactional(readOnly = true)
-    public AnswerListResponse listAnswers(UUID sessionPublicId, String statusFilter, String search,
-            Pageable pageable, CurrentUser caller) {
+    public AnswerListResponse listAnswers(UUID sessionPublicId, UUID attemptPublicId, String statusFilter,
+            String search, Pageable pageable, CurrentUser caller) {
         ScoringAnswerStatus status = parseStatus(statusFilter);
         String normalizedSearch = search == null ? null : search.trim().toLowerCase(java.util.Locale.ROOT);
         if (normalizedSearch != null && normalizedSearch.isBlank()) {
             normalizedSearch = null;
         }
         Page<ScoringAnswer> page = normalizedSearch == null
-                ? scoringAnswerRepository.findForReview(caller.tenantId(), sessionPublicId, status, pageable)
-                : scoringAnswerRepository.findForReviewWithSearch(caller.tenantId(), sessionPublicId, status,
-                        normalizedSearch, parseSearchStatus(normalizedSearch), parseUuid(normalizedSearch), pageable);
+                ? scoringAnswerRepository.findForReview(caller.tenantId(), sessionPublicId, attemptPublicId, status,
+                        pageable)
+                : scoringAnswerRepository.findForReviewWithSearch(caller.tenantId(), sessionPublicId,
+                        attemptPublicId, status, normalizedSearch, parseSearchStatus(normalizedSearch),
+                        parseUuid(normalizedSearch), pageable);
         log.debug("Host {} listed answers (tenantId={}, sessionPublicId={}, status={}) -> {} results",
                 caller.userId(), caller.tenantId(), sessionPublicId, status, page.getNumberOfElements());
-        Map<UUID, Integer> attemptNumbers = attemptService == null ? Map.of()
-                : attemptService.getAttemptNumbers(sessionPublicId, caller.tenantId(), page.getContent().stream()
+        Map<UUID, AttemptOwnerView> attemptOwners = attemptService == null ? Map.of()
+                : attemptService.getAttemptOwners(sessionPublicId, caller.tenantId(), page.getContent().stream()
                         .map(ScoringAnswer::getAttemptPublicId).distinct().toList());
+        Map<UUID, AiDetailFlags> aiFlags = aiDetails == null ? Map.of()
+                : aiDetails.findFlags(caller.tenantId(), page.getContent().stream()
+                        .map(ScoringAnswer::getAnswerPublicId).toList());
         List<AnswerListItemResponse> items = page.getContent().stream()
                 .map(answer -> new AnswerListItemResponse(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
                         answer.getSessionPublicId(), answer.getTaskType(), answer.getStatus().name(),
                         answer.getRawScore(), answer.getTeacherScore(), answer.getCreatedAt(),
-                        attemptNumbers.get(answer.getAttemptPublicId())))
+                        attemptNumber(attemptOwners.get(answer.getAttemptPublicId())),
+                        isFallback(aiFlags.get(answer.getAnswerPublicId())),
+                        eligibility != null && eligibility.isAiEligible(answer)))
                 .toList();
         return new AnswerListResponse(items, page.getNumber(), page.getSize(), page.getTotalElements(),
                 page.getTotalPages());
@@ -150,7 +174,8 @@ public class ScoringReviewService {
         }
         return new AnswerReviewDetailResponse(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
                 answer.getSessionPublicId(), answer.getTaskType(), answer.getStatus().name(), answer.getRawScore(),
-                answer.getTeacherScore(), answer.getCreatedAt(), decoded);
+                answer.getTeacherScore(), answer.getCreatedAt(), decoded,
+                aiDetails == null ? null : aiDetails.find(answer));
     }
 
     /**
@@ -208,6 +233,14 @@ public class ScoringReviewService {
                     decoded.mediaPublicId(), tenantId, ex);
             return decoded;
         }
+    }
+
+    private static Integer attemptNumber(AttemptOwnerView owner) {
+        return owner == null ? null : owner.attemptNumber();
+    }
+
+    private static boolean isFallback(AiDetailFlags flags) {
+        return flags != null && flags.fallback();
     }
 
     private ScoringAnswerStatus parseStatus(String statusFilter) {

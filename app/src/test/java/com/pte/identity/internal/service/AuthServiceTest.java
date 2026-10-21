@@ -243,4 +243,19 @@ class AuthServiceTest {
         assertThat(options).containsExactly(new LoginOrganizationOptionResponse(
                 firstTenantId, "alpha", "Alpha Center", "language-center"));
     }
+
+    @Test
+    void loginOrganizations_keepsSuspendedTenantSelectableForAuthentication() {
+        UUID tenantId = UUID.randomUUID();
+        String username = "shared@suspended.example";
+        User user = activeUser(1L, tenantId, Role.HOST_ADMIN, username);
+        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(List.of(user));
+        when(loginHashRepository.findByUserId(1L)).thenReturn(Optional.of(hashFor(1L, PASSWORD)));
+        when(tenancyService.findLoginOrganization(tenantId)).thenReturn(Optional.of(
+                new LoginOrganizationOption(tenantId, "suspended-school", "Suspended School", "school")));
+
+        assertThat(authService.loginOrganizations(new LoginOrganizationOptionsRequest(username, PASSWORD)))
+                .containsExactly(new LoginOrganizationOptionResponse(
+                        tenantId, "suspended-school", "Suspended School", "school"));
+    }
 }

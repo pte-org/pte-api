@@ -1,7 +1,9 @@
 package com.pte.scoring.domain;
 
 import com.pte.scoring.domain.enums.AiProviderCategory;
+import com.pte.scoring.domain.enums.GradingMarkingMode;
 import com.pte.scoring.domain.enums.ScoreSource;
+import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -75,6 +77,60 @@ class ScoringAnswerWorkflowTest {
         answer.markAiScored(82, AiProviderCategory.REAL, "OPENAI_COMPATIBLE", "model-v2", null);
         answer.selectScoreSource(ScoreSource.AI, actor, selectedAt, null);
         assertThat(answer.getSelectedExaminerScorePublicId()).isNull();
+    }
+
+    @Test
+    void eachAiDispatchIssuesANewTokenAndOnlyTheLatestAwaitsAResult() {
+        ScoringAnswer answer = answerWithIdentity();
+        Instant firstDispatch = Instant.parse("2026-10-11T10:00:00Z");
+        Instant secondDispatch = Instant.parse("2026-10-11T10:20:00Z");
+
+        long first = answer.markAiDispatched(firstDispatch);
+
+        assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.AI_SCORING);
+        assertThat(answer.getAiDispatchedAt()).isEqualTo(firstDispatch);
+        assertThat(answer.isAwaitingAiResult(first)).isTrue();
+
+        long second = answer.markAiDispatched(secondDispatch);
+
+        assertThat(second).isGreaterThan(first);
+        assertThat(answer.getAiDispatchedAt()).isEqualTo(secondDispatch);
+        assertThat(answer.isAwaitingAiResult(first)).isFalse();
+        assertThat(answer.isAwaitingAiResult(second)).isTrue();
+
+        answer.markAiScored(70, AiProviderCategory.REAL, "AZURE_GEMINI", "model", null);
+        assertThat(answer.isAwaitingAiResult(second)).isFalse();
+    }
+
+    @Test
+    void rescoringAFailedAnswerKeepsTheHostsExaminerSelection() {
+        ScoringAnswer answer = answerWithIdentity();
+        ExaminerAnswerScore examinerScore = persisted(examinerScoreFor(answer));
+        UUID actor = UUID.randomUUID();
+        Instant selectedAt = Instant.parse("2026-10-11T09:00:00Z");
+        answer.selectScoreSource(ScoreSource.EXAMINER, actor, selectedAt, examinerScore);
+        answer.setStatus(ScoringAnswerStatus.SCORING_FAILED);
+
+        answer.markAiDispatched(Instant.parse("2026-10-11T10:00:00Z"));
+        answer.markAiScored(70, AiProviderCategory.REAL, "AZURE_GEMINI", "model", null);
+
+        assertThat(answer.getSelectedScoreSource()).isEqualTo(ScoreSource.EXAMINER);
+        assertThat(answer.getSelectedExaminerScorePublicId()).isEqualTo(examinerScore.getPublicId());
+        assertThat(answer.getSelectedScoreSourceByPublicId()).isEqualTo(actor);
+        assertThat(answer.getSelectedScoreSourceAt()).isEqualTo(selectedAt);
+    }
+
+    @Test
+    void gradingCohortReportsCompletionOnlyOnce() {
+        // GradingCohortService publishes SessionGradingCompletedEvent only when complete() returns true,
+        // so a late AI rescore that triggers another reconcile cannot announce completion twice.
+        GradingCohort cohort = new GradingCohort(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                "preview-v1", GradingMarkingMode.AI_ONLY, Instant.parse("2026-10-11T08:00:00Z"));
+        Instant completedAt = Instant.parse("2026-10-11T10:00:00Z");
+
+        assertThat(cohort.complete(completedAt)).isTrue();
+        assertThat(cohort.complete(Instant.parse("2026-10-11T11:00:00Z"))).isFalse();
+        assertThat(cohort.getCompletedAt()).isEqualTo(completedAt);
     }
 
     private ScoringAnswer answerWithIdentity() {

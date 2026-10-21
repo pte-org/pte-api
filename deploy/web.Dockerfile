@@ -20,6 +20,9 @@ RUN pnpm install --frozen-lockfile
 # bundle pointing at the localhost:8080 default in features/auth/constants.ts.
 ARG NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+# Same build-time rule: tenant-web's /proctor routes redirect to /proctor/unavailable unless this is "true".
+ARG NEXT_PUBLIC_PROCTOR_UI_ENABLED
+ENV NEXT_PUBLIC_PROCTOR_UI_ENABLED=${NEXT_PUBLIC_PROCTOR_UI_ENABLED}
 
 ARG APP
 ENV APP=${APP}

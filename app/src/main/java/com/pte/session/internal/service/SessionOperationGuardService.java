@@ -5,12 +5,14 @@ import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.internal.exception.HostContextRequiredException;
 import com.pte.session.internal.exception.SessionNotFoundException;
 import com.pte.session.internal.exception.NotEntitledException;
+import com.pte.session.internal.exception.SessionNotClosedForExaminerAssignmentException;
 import com.pte.session.internal.exception.SessionNotClosedForGradingCohortException;
 import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.pte.tenancy.TenancyService;
 import java.time.Clock;
 import java.util.UUID;
 
@@ -20,15 +22,22 @@ public class SessionOperationGuardService {
 
     private final ExamSessionRepository sessionRepository;
     private final Clock clock;
+    private final TenancyService tenancyService;
 
     public SessionOperationGuardService(ExamSessionRepository sessionRepository) {
-        this(sessionRepository, Clock.systemUTC());
+        this(sessionRepository, Clock.systemUTC(), null);
     }
 
     @Autowired
-    public SessionOperationGuardService(ExamSessionRepository sessionRepository, Clock clock) {
+    public SessionOperationGuardService(ExamSessionRepository sessionRepository, Clock clock,
+            TenancyService tenancyService) {
         this.sessionRepository = sessionRepository;
         this.clock = clock != null ? clock : Clock.systemUTC();
+        this.tenancyService = tenancyService;
+    }
+
+    public SessionOperationGuardService(ExamSessionRepository sessionRepository, Clock clock) {
+        this(sessionRepository, clock, null);
     }
 
     @Transactional
@@ -45,8 +54,11 @@ public class SessionOperationGuardService {
         if (tenantId == null) {
             throw new HostContextRequiredException();
         }
-        sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
                 .orElseThrow(SessionNotFoundException::new);
+        if (session.getStatus() != SessionStatus.CLOSED) {
+            throw new SessionNotClosedForExaminerAssignmentException();
+        }
     }
 
     @Transactional
@@ -63,6 +75,14 @@ public class SessionOperationGuardService {
         ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
                 .orElseThrow(NotEntitledException::new);
         SessionEntryGate.requireOpen(session);
+    }
+
+    /** New attempts require an active tenant; existing attempt resume does not. */
+    @Transactional(readOnly = true)
+    public void assertTenantActiveForNewAttempt(UUID tenantId) {
+        if (tenancyService != null) {
+            tenancyService.assertTenantActive(tenantId);
+        }
     }
 
     @Transactional

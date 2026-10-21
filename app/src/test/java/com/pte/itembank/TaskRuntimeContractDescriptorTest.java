@@ -14,11 +14,21 @@ class TaskRuntimeContractDescriptorTest {
                 "READ_ALOUD_V1", 1, "PTE.READ_ALOUD", 1, "RECORD_RESPONSE",
                 "READ_ALOUD_V1", 1, "AI_SPEECH", 1, "SCORED",
                 List.of("AUDIO_RECORDING"), "1.0.0", "PTE.READ_ALOUD_AUTHORING", 1,
-                new TaskAuthoringRequirements(false, false, true, false, false, false, false, false),
+                new TaskAuthoringRequirements(false, false, true, false, false, false, false, false, false),
                 "ACTIVE");
 
         assertThat(contract.active()).isTrue();
         assertThat(contract.scoringEnabled()).isTrue();
         assertThat(contract.requiredClientCapabilities()).containsExactly("AUDIO_RECORDING");
+    }
+
+    @Test
+    void standardAuthoringRequirementsCarryTheScoringInputs() {
+        assertThat(TaskRuntimeProfileRegistry.authoringRequirementsFor("REPEAT_SENTENCE").requiresReferenceAnswer())
+                .isTrue();
+        assertThat(TaskRuntimeProfileRegistry.authoringRequirementsFor("READ_ALOUD").requiresReferenceAnswer())
+                .isFalse();
+        assertThat(TaskRuntimeProfileRegistry.authoringRequirementsFor("SUMMARIZE_SPOKEN_TEXT").requiresPromptText())
+                .isTrue();
     }
 }

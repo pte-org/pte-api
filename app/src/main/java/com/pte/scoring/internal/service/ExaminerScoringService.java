@@ -11,6 +11,7 @@ import com.pte.scoring.domain.ScoringSessionState;
 import com.pte.scoring.domain.enums.ExaminerAnswerContentKind;
 import com.pte.scoring.domain.enums.ExaminerQueueStatus;
 import com.pte.scoring.dto.request.SubmitExaminerScoreRequest;
+import com.pte.scoring.dto.response.AiScoreDetailResponse;
 import com.pte.scoring.dto.response.ExaminerAnswerDetailResponse;
 import com.pte.scoring.dto.response.ExaminerAnswerPayloadResponse;
 import com.pte.scoring.dto.response.ExaminerAttemptDetailResponse;
@@ -55,6 +56,7 @@ import com.pte.scoring.internal.repository.ScoringAnswerRepository;
 import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
 import com.pte.scoring.domain.enums.ExaminerAnswerScoreStatus;
 import com.pte.session.SessionService;
+import com.pte.session.dto.response.SessionSummaryView;
 import com.pte.shared.security.CurrentUser;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -69,6 +71,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -108,6 +111,7 @@ public class ExaminerScoringService {
     private final ExaminerWorkspaceQueryService examinerWorkspaceQueryService;
     private final ExaminerWorkflowQueryService workflowQueryService;
     private final java.time.Clock clock;
+    private final AiScoreDetailQueryService aiDetails;
 
     @Autowired
     public ExaminerScoringService(ExaminerWorkQueueRepository workQueueRepository,
@@ -126,7 +130,7 @@ public class ExaminerScoringService {
             ExaminerWorkspaceReadRepository readRepository,
             ExaminerWorkspaceQueryService examinerWorkspaceQueryService,
             ExaminerWorkflowQueryService workflowQueryService,
-            java.time.Clock clock) {
+            java.time.Clock clock, AiScoreDetailQueryService aiDetails) {
         this.workQueueRepository = workQueueRepository;
         this.assignmentRepository = assignmentRepository;
         this.scoringAnswerRepository = scoringAnswerRepository;
@@ -147,6 +151,32 @@ public class ExaminerScoringService {
         this.examinerWorkspaceQueryService = examinerWorkspaceQueryService;
         this.workflowQueryService = workflowQueryService;
         this.clock = clock != null ? clock : java.time.Clock.systemUTC();
+        this.aiDetails = aiDetails;
+    }
+
+    /** Compatibility constructor for callers that do not need the AI score breakdown. */
+    public ExaminerScoringService(ExaminerWorkQueueRepository workQueueRepository,
+            ExaminerAttemptAssignmentRepository assignmentRepository,
+            ScoringAnswerRepository scoringAnswerRepository,
+            ExaminerAnswerScoreRepository examinerAnswerScoreRepository,
+            ScoringSessionStateRepository sessionStateRepository,
+            ScoringEligibilityQueryService eligibilityQueryService,
+            AnswerPayloadDecoder answerPayloadDecoder, IdentityService identityService,
+            AttemptService attemptService, MediaService mediaService, EntityManager entityManager,
+            ApplicationEventPublisher eventPublisher,
+            ExaminerReviewVersionService examinerReviewVersionService,
+            GradingCohortRepository gradingCohortRepository,
+            GradingCohortMemberRepository gradingCohortMemberRepository,
+            SessionService sessionService,
+            ExaminerWorkspaceReadRepository readRepository,
+            ExaminerWorkspaceQueryService examinerWorkspaceQueryService,
+            ExaminerWorkflowQueryService workflowQueryService,
+            java.time.Clock clock) {
+        this(workQueueRepository, assignmentRepository, scoringAnswerRepository, examinerAnswerScoreRepository,
+                sessionStateRepository, eligibilityQueryService, answerPayloadDecoder, identityService,
+                attemptService, mediaService, entityManager, eventPublisher, examinerReviewVersionService,
+                gradingCohortRepository, gradingCohortMemberRepository, sessionService, readRepository,
+                examinerWorkspaceQueryService, workflowQueryService, clock, null);
     }
 
     public ExaminerScoringService(ExaminerWorkQueueRepository workQueueRepository,
@@ -227,14 +257,34 @@ public class ExaminerScoringService {
     @Transactional(readOnly = true)
     public ExaminerWorkspaceOverviewResponse getWorkspaceOverview(CurrentUser caller) {
         CurrentUser examiner = requireActiveExaminer(caller);
+        ExaminerWorkspaceOverviewResponse overview;
         if (examinerWorkspaceQueryService != null) {
-            return examinerWorkspaceQueryService.getWorkspaceOverview(examiner);
-        }
-        if (readRepository != null) {
-            return readRepository.getWorkspaceOverview(examiner.tenantId(), examiner.userId(),
+            overview = examinerWorkspaceQueryService.getWorkspaceOverview(examiner);
+        } else if (readRepository != null) {
+            overview = readRepository.getWorkspaceOverview(examiner.tenantId(), examiner.userId(),
                     clock != null ? clock.instant() : Instant.now());
+        } else {
+            throw new UnsupportedOperationException("Workspace overview read repository not configured");
         }
-        throw new UnsupportedOperationException("Workspace overview read repository not configured");
+        if (overview == null) {
+            return null;
+        }
+        Map<UUID, String> names = sessionNames(overview.priorityItems().stream()
+                .map(com.pte.scoring.dto.response.ExaminerQueueItemResponse::sessionPublicId).toList(),
+                examiner.tenantId());
+        return new ExaminerWorkspaceOverviewResponse(overview.asOf(), overview.scope(), overview.counts(),
+                overview.progress(), overview.priorityItems().stream()
+                        .map(item -> item.withSessionName(names.get(item.sessionPublicId()))).toList());
+    }
+
+    /** Session display names for the given ids; absent when the session module is unavailable or has no match. */
+    private Map<UUID, String> sessionNames(Collection<UUID> sessionPublicIds, UUID tenantId) {
+        if (sessionService == null || sessionPublicIds.isEmpty()) {
+            return Map.of();
+        }
+        return sessionService.findSummaries(Set.copyOf(sessionPublicIds), tenantId).stream()
+                .filter(summary -> summary.name() != null)
+                .collect(Collectors.toMap(SessionSummaryView::publicId, SessionSummaryView::name, (a, b) -> a));
     }
 
     @Transactional(readOnly = true)
@@ -242,8 +292,17 @@ public class ExaminerScoringService {
             String status, UUID sessionPublicId, CurrentUser caller) {
         CurrentUser examiner = requireActiveExaminer(caller);
         if (readRepository != null) {
-            return readRepository.getReports(examiner.tenantId(), examiner.userId(),
+            ExaminerReportsResponse reports = readRepository.getReports(examiner.tenantId(), examiner.userId(),
                     fromDate, toDate, taskType, status, sessionPublicId);
+            if (reports == null) {
+                return null;
+            }
+            Map<UUID, String> names = sessionNames(reports.recentFinalizedItems().stream()
+                    .map(ExaminerReportsResponse.ExaminerReportRecentItem::sessionPublicId).toList(),
+                    examiner.tenantId());
+            return new ExaminerReportsResponse(reports.summary(), reports.taskTypeBreakdowns(),
+                    reports.recentFinalizedItems().stream()
+                            .map(item -> item.withSessionName(names.get(item.sessionPublicId()))).toList());
         }
         throw new UnsupportedOperationException("Workspace read repository not configured");
     }
@@ -264,7 +323,12 @@ public class ExaminerScoringService {
             result = workQueueRepository.findQueue(
                     examiner.tenantId(), examiner.userId(), sessionPublicId, status.name(), PageRequest.of(page, size));
         }
-        return new ExaminerQueueResponse(result.getContent(), result.getNumber(), result.getSize(),
+        Map<UUID, String> names = sessionNames(result.getContent().stream()
+                .map(com.pte.scoring.dto.response.ExaminerQueueItemResponse::sessionPublicId).toList(),
+                examiner.tenantId());
+        List<com.pte.scoring.dto.response.ExaminerQueueItemResponse> items = result.getContent().stream()
+                .map(item -> item.withSessionName(names.get(item.sessionPublicId()))).toList();
+        return new ExaminerQueueResponse(items, result.getNumber(), result.getSize(),
                 result.getTotalElements(), result.getTotalPages());
     }
 
@@ -363,11 +427,15 @@ public class ExaminerScoringService {
                         examiner.tenantId()).entrySet().stream()
                         .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> entry.getValue().url()));
 
+        // Only reached after the assignment check, and keyed by the verified answers rather than a client id.
+        Map<UUID, AiScoreDetailResponse> aiByAnswer = aiDetails == null ? Map.of()
+                : aiDetails.findAll(examiner.tenantId(), eligibleAnswers);
         List<ExaminerAnswerDetailResponse> details = eligibleAnswers.stream()
                 .map(answer -> toAnswerDetail(answer, scoresByAnswer.get(answer.getAnswerPublicId()),
                         promptsByItem.get(answer.getPinnedItemPublicId()),
                         decodedByAnswer.get(answer.getAnswerPublicId()), mediaUrls, examiner,
-                        assignment, cohort, member, sessionState, attemptCanFinalize, attemptBlockingReason))
+                        assignment, cohort, member, sessionState, attemptCanFinalize, attemptBlockingReason,
+                        aiByAnswer.getOrDefault(answer.getAnswerPublicId(), AiScoreDetailResponse.pending())))
                 .sorted(Comparator.comparingInt(answer -> answer.prompt().orderIndex()))
                 .toList();
         int submittedCount = (int) details.stream().filter(answer -> "SUBMITTED".equals(answer.status())).count();
@@ -375,7 +443,10 @@ public class ExaminerScoringService {
                 assignment.getEligibleAnswerCount(), submittedCount, details,
                 cohort != null ? cohort.getMarkingMode().name() : null,
                 cohort != null ? cohort.getStatus().name() : null,
-                publicationState, attemptCanFinalize, attemptBlockingReason, workflow);
+                publicationState, attemptCanFinalize, attemptBlockingReason, workflow,
+                sessionNames(List.of(sessionPublicId), examiner.tenantId()).get(sessionPublicId),
+                (int) workQueueRepository.countOrdinal(examiner.tenantId(), examiner.userId(), sessionPublicId,
+                        assignment.getAssignedAt(), assignment.getId()));
     }
 
     @Transactional
@@ -573,7 +644,7 @@ public class ExaminerScoringService {
             AttemptExaminerPromptView prompt, DecodedAnswerPayload decoded, Map<UUID, String> mediaUrls,
             CurrentUser examiner, ExaminerAttemptAssignment assignment, GradingCohort cohort,
             GradingCohortMember member, ScoringSessionState sessionState,
-            boolean attemptCanFinalize, String attemptBlockingReason) {
+            boolean attemptCanFinalize, String attemptBlockingReason, AiScoreDetailResponse ai) {
         if (savedScore != null && !savedScore.getExaminerPublicId().equals(examiner.userId())) {
             throw new ExaminerWorkNotFoundException();
         }
@@ -612,7 +683,7 @@ public class ExaminerScoringService {
                 safeResponse, savedScore == null ? "PENDING" : ExaminerAnswerScoreStatus.SUBMITTED.name(),
                 savedScore == null ? null : savedScore.getScore(),
                 savedScore == null ? null : savedScore.getSubmittedAt(),
-                aiRef, decision, reviewVersion, answerCanFinalize, answerBlockingReason);
+                aiRef, decision, reviewVersion, answerCanFinalize, answerBlockingReason, ai);
     }
 
     private String mediaUrl(Map<UUID, String> mediaUrls, UUID mediaPublicId) {

@@ -26,6 +26,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.pte.identity.internal.constant.IdentityConstants;
+import com.pte.shared.exception.DomainException;
+import org.springframework.http.HttpStatus;
+
 /**
  * The only door other modules use to reach {@code identity}. {@code
  * UserRepository} stays in {@code internal/} — a module reaching straight into
@@ -56,13 +60,14 @@ public class IdentityService implements StudentCountProvider {
     }
 
     /** Tenant-scoped student read used by the tenant student workspace. */
-    public Optional<User> findStudentByTenant(UUID publicId, UUID tenantId) {
+    public Optional<StudentIdentityView> findStudentByTenant(UUID publicId, UUID tenantId) {
         if (publicId == null || tenantId == null) {
             return Optional.empty();
         }
         return userRepository.findByPublicIdAndTenantId(publicId, tenantId)
                 .filter(user -> !user.isDeleted())
-                .filter(user -> user.getRoles().contains(Role.STUDENT));
+                .filter(user -> user.getRoles().contains(Role.STUDENT))
+                .map(StudentIdentityView::from);
     }
 
     public boolean existsById(UUID publicId) {
@@ -92,6 +97,69 @@ public class IdentityService implements StudentCountProvider {
 
     public List<User> findByTenantIdAndRole(UUID tenantId, Role role) {
         return userRepository.findByTenantIdAndRolesContaining(tenantId, role);
+    }
+
+    /** Returns only active, non-deleted recipients for tenant notifications. */
+    @Transactional(readOnly = true)
+    public List<User> findActiveByTenantIdAndRole(UUID tenantId, Role role) {
+        return findByTenantIdAndRole(tenantId, role).stream()
+                .filter(user -> !user.isDeleted() && user.getStatus() == UserStatus.ACTIVE)
+                .toList();
+    }
+
+    /** Resolves an active, non-deleted student in exactly one tenant. */
+    @Transactional(readOnly = true)
+    public Optional<User> findActiveStudentInTenant(UUID publicId, UUID tenantId) {
+        return findActiveInTenant(publicId, tenantId, Role.STUDENT);
+    }
+
+    /** Resolves an active, non-deleted proctor in exactly one tenant. */
+    @Transactional(readOnly = true)
+    public Optional<User> findActiveProctorInTenant(UUID publicId, UUID tenantId) {
+        return findActiveInTenant(publicId, tenantId, Role.PROCTOR);
+    }
+
+    /** Returns active students in one tenant in one repository call for batch commands. */
+    @Transactional(readOnly = true)
+    public Set<UUID> findActiveStudentPublicIds(UUID tenantId, Collection<UUID> publicIds) {
+        if (tenantId == null || publicIds == null || publicIds.isEmpty()) {
+            return Set.of();
+        }
+        List<UUID> targetIds = publicIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (targetIds.isEmpty()) {
+            return Set.of();
+        }
+        return userRepository.findByPublicIdInAndTenantIdAndDeletedFalse(targetIds, tenantId).stream()
+                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
+                .filter(user -> user.getRoles().contains(Role.STUDENT))
+                .map(User::getPublicId)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    /** Fails closed when a command references a non-eligible student identity. */
+    public void requireActiveStudentInTenant(UUID publicId, UUID tenantId) {
+        if (findActiveStudentInTenant(publicId, tenantId).isEmpty()) {
+            throw new IdentityNotEligibleException();
+        }
+    }
+
+    /** Fails closed for a batch when any referenced student is not eligible. */
+    public void requireActiveStudentsInTenant(Collection<UUID> publicIds, UUID tenantId) {
+        if (publicIds == null || publicIds.isEmpty()) {
+            throw new IdentityNotEligibleException();
+        }
+        List<UUID> requestedIds = publicIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (publicIds.stream().anyMatch(Objects::isNull)
+                || findActiveStudentPublicIds(tenantId, requestedIds).size() != requestedIds.size()) {
+            throw new IdentityNotEligibleException();
+        }
+    }
+
+    /** Fails closed when a command references a non-eligible proctor identity. */
+    public void requireActiveProctorInTenant(UUID publicId, UUID tenantId) {
+        if (findActiveProctorInTenant(publicId, tenantId).isEmpty()) {
+            throw new IdentityNotEligibleException();
+        }
     }
 
     /** Returns active, nondeleted members for an owned role fan-out contract. */
@@ -127,6 +195,30 @@ public class IdentityService implements StudentCountProvider {
                 .isPresent();
     }
 
+    /**
+     * Locks every requested active student identity in deterministic order for the duration of
+     * the caller transaction. Enrollment uses this as the serialization boundary before reading
+     * slot conflicts, checking capacity, and inserting rows.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockActiveStudentsInTenant(Collection<UUID> publicIds, UUID tenantId) {
+        if (tenantId == null || publicIds == null || publicIds.isEmpty()
+                || publicIds.stream().anyMatch(Objects::isNull)) {
+            throw new IdentityNotEligibleException();
+        }
+        List<UUID> orderedIds = publicIds.stream().distinct().sorted().toList();
+        List<User> lockedUsers = userRepository.findWithLockByPublicIdsAndTenantId(orderedIds, tenantId);
+        Set<UUID> lockedIds = lockedUsers.stream().map(User::getPublicId).collect(Collectors.toSet());
+        if (lockedUsers.size() != orderedIds.size()
+                || !lockedIds.equals(Set.copyOf(orderedIds))
+                || lockedUsers.stream().anyMatch(user -> user.isDeleted()
+                        || user.getStatus() != UserStatus.ACTIVE
+                        || !Objects.equals(user.getTenantId(), tenantId)
+                        || !user.getRoles().contains(Role.STUDENT))) {
+            throw new IdentityNotEligibleException();
+        }
+    }
+
     /** Returns only active EXAMINER identities in the supplied tenant; invalid IDs are omitted. */
     public List<ExaminerIdentityView> findActiveExaminers(UUID tenantId, List<UUID> examinerPublicIds) {
         if (tenantId == null || examinerPublicIds == null || examinerPublicIds.isEmpty()) {
@@ -136,6 +228,15 @@ public class IdentityService implements StudentCountProvider {
                 .filter(user -> user.getStatus() == UserStatus.ACTIVE && user.getRoles().contains(Role.EXAMINER))
                 .map(user -> new ExaminerIdentityView(user.getPublicId(), user.getFullName(), user.getEmail()))
                 .toList();
+    }
+
+    /** Display names of the tenant's users, keyed by public id; unknown or deleted ids are omitted. */
+    public Map<UUID, String> findFullNames(UUID tenantId, Collection<UUID> userPublicIds) {
+        if (tenantId == null || userPublicIds == null || userPublicIds.isEmpty()) {
+            return Map.of();
+        }
+        return userRepository.findByPublicIdInAndTenantIdAndDeletedFalse(List.copyOf(userPublicIds), tenantId).stream()
+                .collect(Collectors.toMap(User::getPublicId, User::getFullName));
     }
 
     /**
@@ -209,12 +310,22 @@ public class IdentityService implements StudentCountProvider {
     /** Fresh active PROCTOR check for current tenant; ensures non-deleted and ACTIVE status. */
     @Transactional(readOnly = true)
     public boolean isActiveProctor(UUID userPublicId, UUID tenantId) {
-        if (userPublicId == null || tenantId == null) {
-            return false;
+        return findActiveProctorInTenant(userPublicId, tenantId).isPresent();
+    }
+
+    private Optional<User> findActiveInTenant(UUID publicId, UUID tenantId, Role role) {
+        if (publicId == null || tenantId == null || role == null) {
+            return Optional.empty();
         }
-        return userRepository.findByPublicIdAndTenantId(userPublicId, tenantId)
+        return userRepository.findByPublicIdAndTenantId(publicId, tenantId)
                 .filter(user -> !user.isDeleted() && user.getStatus() == UserStatus.ACTIVE)
-                .filter(user -> user.getRoles().contains(Role.PROCTOR))
-                .isPresent();
+                .filter(user -> user.getRoles().contains(role));
+    }
+
+    /** Stable 404 contract for cross-tenant, wrong-role, deleted, or suspended identities. */
+    public static final class IdentityNotEligibleException extends DomainException {
+        public IdentityNotEligibleException() {
+            super(HttpStatus.NOT_FOUND, IdentityConstants.IDENTITY_NOT_ELIGIBLE);
+        }
     }
 }

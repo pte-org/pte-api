@@ -463,5 +463,6 @@ public class ClassService {
         if (!identityService.getTenantOf(studentPublicId).filter(tenantId::equals).isPresent()) {
             throw new StudentNotFoundException();
         }
+        identityService.requireActiveStudentInTenant(studentPublicId, tenantId);
     }
 }

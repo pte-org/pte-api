@@ -94,6 +94,7 @@ class TaskRuntimeContractServiceTest {
         contract.setRequiresWordCount(requirements.requiresWordCount());
         contract.setRequiresSingleCorrectOption(requirements.requiresSingleCorrectOption());
         contract.setUsesOptionOrderAsCorrectPosition(requirements.usesOptionOrderAsCorrectPosition());
+        contract.setRequiresReferenceAnswer(requirements.requiresReferenceAnswer());
         contract.setStatus(status);
         return contract;
     }

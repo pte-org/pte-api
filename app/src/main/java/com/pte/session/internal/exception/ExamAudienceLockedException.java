@@ -4,7 +4,7 @@ import com.pte.session.internal.constant.SessionConstants;
 import com.pte.shared.exception.DomainException;
 import org.springframework.http.HttpStatus;
 
-/** Manual roster mutations cannot bypass a generated exam's immutable audience. */
+/** The roster only changes before an exam runs or after it ends, never while it is being prepared or running. */
 public class ExamAudienceLockedException extends DomainException {
 
     public ExamAudienceLockedException() {

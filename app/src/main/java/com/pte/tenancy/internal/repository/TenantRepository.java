@@ -39,6 +39,9 @@ public interface TenantRepository extends JpaRepository<Tenant, Long> {
 
     List<Tenant> findByPublicIdInAndStatusAndDeletedFalse(Collection<UUID> publicIds, TenantStatus status);
 
+    List<Tenant> findByStatusAndSuspendedUntilIsNotNullAndSuspendedUntilLessThanEqualAndDeletedFalse(
+            TenantStatus status, Instant now);
+
     /** Overview: non-deleted tenants grouped by status (counts only). */
     @Query("select t.status, count(t) from Tenant t where t.deleted = false group by t.status")
     List<Object[]> countGroupedByStatus();

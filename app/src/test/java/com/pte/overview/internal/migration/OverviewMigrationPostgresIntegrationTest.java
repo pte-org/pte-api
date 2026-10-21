@@ -320,7 +320,7 @@ class OverviewMigrationPostgresIntegrationTest {
 
         queries.put("sessions by status", "select s.status, count(s.id) from " + SCHEMA + ".exam_sessions s "
                 + "where s.tenant_id = '" + tenantA + "' and s.deleted = false group by s.status");
-        expectedIndex.put("sessions by status", "idx_sessions_tenant_status");
+        expectedIndex.put("sessions by status", "idx_sessions_tenant_status|idx_sessions_tenant_window");
 
         queries.put("sessions created in window", "select count(s.id) from " + SCHEMA + ".exam_sessions s "
                 + "where s.tenant_id = '" + tenantA + "' and s.deleted = false "
@@ -342,8 +342,9 @@ class OverviewMigrationPostgresIntegrationTest {
             report.append("\n--- ").append(query.getKey()).append(" [planner default]\n").append(natural)
                     .append("\n--- ").append(query.getKey()).append(" [enable_seqscan=off]\n").append(forced)
                     .append('\n');
-            if (!forced.contains(expectedIndex.get(query.getKey()))) {
-                failures.add(query.getKey() + " cannot use " + expectedIndex.get(query.getKey()));
+            String[] acceptableIndexes = expectedIndex.get(query.getKey()).split("\\|");
+            if (Arrays.stream(acceptableIndexes).noneMatch(forced::contains)) {
+                failures.add(query.getKey() + " cannot use one of " + String.join(", ", acceptableIndexes));
             }
             if (mustBeIndexedNaturally.contains(query.getKey())
                     && (!natural.contains("Index") || natural.contains("Seq Scan on exam_attempts"))) {
@@ -1166,7 +1167,9 @@ class OverviewMigrationPostgresIntegrationTest {
             attemptIds[i] = attemptTemplate(tenants[i]);
             userIds[i] = userTemplate(tenants[i]);
         }
-        // sessions are untouched by V96 and keep the original two-tenant shape
+        // Sessions retain the two-tenant shape because the grouped-by-status query may legitimately use the existing
+        // tenant-window index when a tenant owns a large share of the table; the created-window query still verifies the
+        // dedicated V94 created-at index below.
         UUID[] sessionTenants = {tenantA, tenantB};
         long[] sessionIds = {sessionTemplate(tenantA), sessionTemplate(tenantB)};
         int attemptCopies = 2000; // x 20 tenants = 40000 rows, same totals as before

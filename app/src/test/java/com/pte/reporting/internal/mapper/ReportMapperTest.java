@@ -9,6 +9,7 @@ import com.pte.reporting.internal.service.SkillScore;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.UUID;
@@ -128,5 +129,17 @@ class ReportMapperTest {
                 .filter(s -> s.skill().equals("WRITING")).findFirst().orElseThrow();
         assertThat(writing.score()).isNull();
         assertThat(writing.sufficientData()).isFalse();
+    }
+
+    @Test
+    void toResponse_mapsAppliedWeightForScoreBreakdown() {
+        AttemptReport report = report(UUID.randomUUID(), UUID.randomUUID(), true, Instant.now());
+        Map<Skill, SkillScore> skillScores = new EnumMap<>(Skill.class);
+        skillScores.put(Skill.READING, SkillScore.of(74, BigDecimal.valueOf(25)));
+
+        ReportResponse response = ReportMapper.toResponse(report, new AttemptScoreSummary(null, skillScores));
+
+        SkillScoreResponse reading = response.communicativeSkills().getFirst();
+        assertThat(reading.appliedWeight()).isEqualByComparingTo(BigDecimal.valueOf(25));
     }
 }

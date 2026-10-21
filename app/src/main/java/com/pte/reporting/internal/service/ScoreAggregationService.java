@@ -84,7 +84,25 @@ public class ScoreAggregationService {
             List<ReportScoringAnswerView> answers) {
         AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
         ScoreTemplateResponse template = scoreTemplateService.getByPublicId(context.scoreTemplatePublicId());
-        return aggregateWithScores(attemptPublicId, averageSelectedScoresByTaskType(answers), context, template.items());
+        return aggregateWithScores(attemptPublicId,
+                averageScoresByTaskType(answers, ReportScoringAnswerView::selectedScore), context, template.items());
+    }
+
+    /**
+     * The Host's live view before publication: answers without a chosen score source count by their AI score.
+     * Published reports never use this — they keep {@link #aggregate}'s selected-score-only rule.
+     */
+    public ProvisionalScoreSummary aggregateProvisional(UUID attemptPublicId, UUID tenantId) {
+        List<ReportScoringAnswerView> answers = scoringService.getReportScoringInputsForAttempt(tenantId,
+                attemptPublicId);
+        AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
+        ScoreTemplateResponse template = scoreTemplateService.getByPublicId(context.scoreTemplatePublicId());
+        AttemptScoreSummary summary = aggregateWithScores(attemptPublicId,
+                averageScoresByTaskType(answers, ReportScoringAnswerView::provisionalScore), context,
+                template.items());
+        boolean usesUnselected = answers.stream()
+                .anyMatch(answer -> answer.selectedScore() == null && answer.provisionalScore() != null);
+        return new ProvisionalScoreSummary(summary, usesUnselected);
     }
 
     /** Loads pinned contexts/templates in batches before aggregating a session cohort. */
@@ -102,7 +120,8 @@ public class ScoreAggregationService {
             AttemptScoreContextView context = contexts.get(attemptPublicId);
             ScoreTemplateResponse template = templates.get(context.scoreTemplatePublicId());
             AttemptScoreSummary summary = aggregateWithScores(attemptPublicId,
-                    averageSelectedScoresByTaskType(answersByAttempt.getOrDefault(attemptPublicId, List.of())),
+                    averageScoresByTaskType(answersByAttempt.getOrDefault(attemptPublicId, List.of()),
+                            ReportScoringAnswerView::selectedScore),
                     context, template.items());
             results.put(attemptPublicId, new ReportScoreAggregation(context, summary));
         }
@@ -148,16 +167,20 @@ public class ScoreAggregationService {
         return result;
     }
 
-    /** Only the selected publishable score contributes; objective scores are supplied unchanged by scoring. */
-    private Map<String, BigDecimal> averageSelectedScoresByTaskType(List<ReportScoringAnswerView> answers) {
+    /**
+     * Only answers with a score from {@code scoreOf} contribute — the selected publishable score for reports,
+     * the provisional one for the Host's live view. Objective scores are supplied unchanged by scoring.
+     */
+    private Map<String, BigDecimal> averageScoresByTaskType(List<ReportScoringAnswerView> answers,
+            Function<ReportScoringAnswerView, Integer> scoreOf) {
         Map<String, List<ReportScoringAnswerView>> byTaskType = answers.stream()
-                .filter(answer -> answer.selectedScore() != null)
+                .filter(answer -> scoreOf.apply(answer) != null)
                 .collect(Collectors.groupingBy(answer ->
                         TaskTypeCodeCompatibility.normalizeTaskTypeKey(answer.taskType())));
         Map<String, BigDecimal> result = new HashMap<>();
         byTaskType.forEach((taskType, group) -> {
             BigDecimal sum = group.stream()
-                    .map(a -> BigDecimal.valueOf(a.selectedScore()))
+                    .map(a -> BigDecimal.valueOf(scoreOf.apply(a)))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             result.put(taskType, sum.divide(BigDecimal.valueOf(group.size()), MATH_CONTEXT));
         });
@@ -184,10 +207,10 @@ public class ScoreAggregationService {
             totalWeight = totalWeight.add(weight);
         }
         if (totalWeight.signum() <= 0) {
-            return SkillScore.insufficientData();
+            return SkillScore.insufficientData(totalWeight);
         }
         BigDecimal ratio = weightedSum.divide(totalWeight, MATH_CONTEXT);
         BigDecimal scaled = BigDecimal.valueOf(SCALE_FLOOR).add(BigDecimal.valueOf(SCALE_SPAN).multiply(ratio, MATH_CONTEXT));
-        return SkillScore.of(scaled.setScale(0, RoundingMode.HALF_UP).intValue());
+        return SkillScore.of(scaled.setScale(0, RoundingMode.HALF_UP).intValue(), totalWeight);
     }
 }

@@ -10,6 +10,8 @@ import com.pte.scoring.dto.response.ScoreSourceSelectionPreviewResponse;
 import com.pte.scoring.dto.response.ScoreSourceSelectionResultResponse;
 import com.pte.scoring.dto.response.ScoreSourceAuditResponse;
 import com.pte.scoring.internal.constant.ScoringConstants;
+import com.pte.scoring.internal.dto.response.AttemptReviewItemResponse;
+import com.pte.scoring.internal.service.ScoringAttemptReviewService;
 import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
@@ -32,10 +34,21 @@ public class HostScoreReviewController {
 
     private final ScoringService scoringService;
     private final SessionService sessionService;
+    private final ScoringAttemptReviewService attemptReviewService;
 
-    public HostScoreReviewController(ScoringService scoringService, SessionService sessionService) {
+    public HostScoreReviewController(ScoringService scoringService, SessionService sessionService,
+            ScoringAttemptReviewService attemptReviewService) {
         this.scoringService = scoringService;
         this.sessionService = sessionService;
+        this.attemptReviewService = attemptReviewService;
+    }
+
+    /** The submissions list: one row per student attempt, with how far its answers got through scoring. */
+    @GetMapping("/{sessionPublicId}/attempts")
+    public ApiResponse<List<AttemptReviewItemResponse>> listAttempts(@PathVariable UUID sessionPublicId) {
+        CurrentUser caller = currentUser();
+        sessionService.verifyHostAccess(sessionPublicId, caller.tenantId());
+        return ApiResponse.success(attemptReviewService.listAttempts(sessionPublicId, caller));
     }
 
     @GetMapping("/{sessionPublicId}/review")

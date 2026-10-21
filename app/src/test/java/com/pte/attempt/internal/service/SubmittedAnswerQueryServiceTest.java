@@ -88,6 +88,46 @@ class SubmittedAnswerQueryServiceTest {
     }
 
     @Test
+    void findForSession_carriesPinnedQuestionContentForAiScoring() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        UUID imagePromptRef = UUID.randomUUID();
+
+        ExamAttempt attempt = new ExamAttempt();
+        attempt.setPublicId(UUID.randomUUID());
+        attempt.setSessionPublicId(sessionPublicId);
+        attempt.setTenantId(tenantId);
+
+        PinnedItem pinnedItem = new PinnedItem();
+        pinnedItem.setPublicId(UUID.randomUUID());
+        pinnedItem.setTaskType("DESCRIBE_IMAGE");
+        pinnedItem.setPromptText("Describe the chart.");
+        pinnedItem.setReferenceAnswerText("Sales rose steadily.");
+        pinnedItem.setImagePromptRef(imagePromptRef);
+        pinnedItem.setImageUrl("https://expired.example/image.png");
+        pinnedItem.setMinWordCount(5);
+        pinnedItem.setMaxWordCount(75);
+        attachToPinnedSnapshot(pinnedItem, SCORE_TEMPLATE_ID);
+
+        AttemptAnswer answer = new AttemptAnswer();
+        answer.setPublicId(UUID.randomUUID());
+        answer.setAttempt(attempt);
+        answer.setPinnedItem(pinnedItem);
+        answer.setPayload("media-ref");
+
+        when(attemptAnswerRepository.findByAttempt_SessionPublicIdAndAttempt_TenantId(sessionPublicId, tenantId))
+                .thenReturn(List.of(answer));
+
+        SubmittedAnswerView view = service.findForSession(sessionPublicId, tenantId).get(0);
+
+        assertThat(view.promptText()).isEqualTo("Describe the chart.");
+        assertThat(view.referenceAnswerText()).isEqualTo("Sales rose steadily.");
+        assertThat(view.imagePromptRef()).isEqualTo(imagePromptRef);
+        assertThat(view.minWordCount()).isEqualTo(5);
+        assertThat(view.maxWordCount()).isEqualTo(75);
+    }
+
+    @Test
     void findForSession_mapsExpiredFlag() {
         UUID sessionPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();

@@ -105,6 +105,12 @@ public class SessionService {
         sessionLifecycleService.lockOpenForAttemptOperation(sessionPublicId, tenantId);
     }
 
+    /** New-attempt gate; resuming an existing attempt uses the operation lock only. */
+    @Transactional(readOnly = true)
+    public void assertTenantActiveForNewAttempt(UUID tenantId) {
+        sessionLifecycleService.assertTenantActiveForNewAttempt(tenantId);
+    }
+
     /** Locks the session row and asserts session is OPEN and within active exam window for proctoring operations. */
     @Transactional
     public void lockOpenWithinWindowForProctorOperation(UUID sessionPublicId, UUID tenantId) {

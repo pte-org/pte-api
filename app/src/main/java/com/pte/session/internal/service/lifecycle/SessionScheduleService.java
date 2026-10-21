@@ -15,6 +15,8 @@ import com.pte.session.internal.mapper.SessionMapper;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.tenancy.TenancyService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,23 +40,37 @@ public class SessionScheduleService {
     private final SessionSubscriptionRules subscriptions;
     private final AuditLogService auditLogService;
     private final Clock clock;
+    private final TenancyService tenancyService;
 
     public SessionScheduleService(ExamSessionRepository sessionRepository,
             SessionAccess access,
             SessionSubscriptionRules subscriptions,
             AuditLogService auditLogService,
             Clock clock) {
+        this(sessionRepository, access, subscriptions, auditLogService, clock, null);
+    }
+
+    @Autowired
+    public SessionScheduleService(ExamSessionRepository sessionRepository,
+            SessionAccess access,
+            SessionSubscriptionRules subscriptions,
+            AuditLogService auditLogService,
+            Clock clock,
+            TenancyService tenancyService) {
         this.sessionRepository = sessionRepository;
         this.access = access;
         this.subscriptions = subscriptions;
         this.auditLogService = auditLogService;
         this.clock = clock;
+        this.tenancyService = tenancyService;
     }
 
     @Transactional
     public SessionResponse patchSchedule(UUID publicId, PatchExamScheduleRequest request, CurrentUser caller) {
-        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId,
-                access.requireTenant(caller)).orElseThrow(SessionNotFoundException::new);
+        UUID tenantId = access.requireTenant(caller);
+        assertTenantActive(tenantId);
+        ExamSession session = sessionRepository.findWithLockByPublicIdAndTenantId(publicId, tenantId)
+                .orElseThrow(SessionNotFoundException::new);
         if (request.expectedVersion() != null
                 && !request.expectedVersion().equals(session.getDraftVersion())) {
             throw new ExamScheduleVersionConflictException();
@@ -159,6 +175,12 @@ public class SessionScheduleService {
 
     private CurrentUser systemCaller(ExamSession session) {
         return new CurrentUser(SessionConstants.SYSTEM_ACTOR_USER_ID, session.getTenantId(), List.of("SYSTEM"));
+    }
+
+    private void assertTenantActive(UUID tenantId) {
+        if (tenancyService != null) {
+            tenancyService.assertTenantActive(tenantId);
+        }
     }
 
     private void recordExamAudit(CurrentUser caller, ExamSession session, String action, String summary) {

@@ -154,6 +154,9 @@ public class AttemptLifecycleService {
             return resumeOrReject(latest.get(), caller);
         }
 
+        if (sessionService != null) {
+            sessionService.assertTenantActiveForNewAttempt(caller.tenantId());
+        }
         int maxRetries = configuredRetries(request.sessionPublicId(), caller.tenantId());
         long submittedAttempts = attemptRepository.countBySessionPublicIdAndStudentPublicIdAndStatus(
                 request.sessionPublicId(), studentPublicId, AttemptStatus.SUBMITTED);
@@ -604,10 +607,8 @@ public class AttemptLifecycleService {
      * own already-held lock — a cheap, harmless no-op, not a double-lock
      * hazard (same transaction, same row).
      *
-     * <p>No application event published here yet — scoring/reporting/
-     * notification (Phase 08/09/10) don't exist in the monolith yet; the
-     * lifecycle event this used to publish to the outbox will be added once
-     * a real in-process listener exists to receive it.
+     * <p>{@link ExamAttempt#submit()} registers an {@code AttemptSubmittedEvent}, which
+     * the repository publishes on save; scoring ingests the answers after commit.
      */
     private void completeAttempt(ExamAttempt attempt) {
         lockAttempt(attempt);

@@ -17,6 +17,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.ArrayList;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -55,6 +56,9 @@ public class Tenant extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private TenantStatus status = TenantStatus.ACTIVE;
 
+    /** Null means an indefinite suspension that only an administrator can lift. */
+    private Instant suspendedUntil;
+
     @Column(nullable = false)
     private String packageName;
 
@@ -78,11 +82,17 @@ public class Tenant extends BaseEntity {
     private Long version;
 
     public void suspend() {
+        suspendUntil(null);
+    }
+
+    public void suspendUntil(Instant suspendedUntil) {
         this.status = TenantStatus.SUSPENDED;
+        this.suspendedUntil = suspendedUntil;
     }
 
     public void reactivate() {
         this.status = TenantStatus.ACTIVE;
+        this.suspendedUntil = null;
     }
 
     public void updateBranding(String logoUrl, String primaryColor) {

@@ -22,5 +22,7 @@ public record HostScoreReviewView(
         boolean examinerAvailable,
         Integer teacherScore,
         String selectedScoreSource,
-        long lockVersion) {
+        long lockVersion,
+        boolean aiFallback,
+        String aiFailureReason) {
 }
