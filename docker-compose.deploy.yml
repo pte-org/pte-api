@@ -54,7 +54,7 @@ services:
       # Same-origin routing in the Nginx config means the browser never sends a
       # cross-origin request; this stays set as the fallback for any client
       # that is not served from these two hosts (the Flutter app, curl, Postman).
-      CORS_ALLOWED_ORIGINS: https://${TENANT_DOMAIN},https://${ADMIN_DOMAIN}
+      CORS_ALLOWED_ORIGINS: https://${TENANT_DOMAIN},https://${ADMIN_DOMAIN},https://${PRACTICE_DOMAIN}
 
   postgres:
     mem_limit: 1g
@@ -99,6 +99,28 @@ services:
     ports: !reset []
     networks: [pte-network]
 
+  web-practice:
+    build:
+      context: ../pte-practice
+      dockerfile: ../pte-api/deploy/practice.Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: https://${PRACTICE_DOMAIN:-pte-practice.duckdns.org}
+    mem_limit: 512m
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks: [pte-network]
+
   nginx:
     image: nginx:1.27-alpine
     container_name: pte-nginx
@@ -110,6 +132,7 @@ services:
     environment:
       TENANT_DOMAIN: ${TENANT_DOMAIN}
       ADMIN_DOMAIN: ${ADMIN_DOMAIN}
+      PRACTICE_DOMAIN: ${PRACTICE_DOMAIN:-pte-practice.duckdns.org}
     volumes:
       - ./deploy/nginx-entrypoint.sh:/usr/local/bin/nginx-entrypoint.sh:ro
       - ./deploy/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
