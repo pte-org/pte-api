@@ -153,8 +153,8 @@ jobs:
           # First deploys start Nginx in HTTP bootstrap mode. Obtain one
           # tenant/admin certificate through the shared webroot, then restart
           # Nginx so its command selects the validated TLS configuration.
-          letsencrypt_volume="$(docker volume inspect pte_letsencrypt --format '{{.Mountpoint}}')"
-          if [ ! -s "$letsencrypt_volume/live/pte-platform/fullchain.pem" ]; then
+          # Docker volume directories may not be readable by the SSH user.
+          if ! compose exec -T nginx sh -c 'test -s /etc/letsencrypt/live/pte-platform/fullchain.pem && test -s /etc/letsencrypt/live/pte-platform/privkey.pem'; then
             TENANT_DOMAIN="$(awk -F= '$1 == "TENANT_DOMAIN" { print substr($0, index($0, "=") + 1) }' .env)"
             ADMIN_DOMAIN="$(awk -F= '$1 == "ADMIN_DOMAIN" { print substr($0, index($0, "=") + 1) }' .env)"
             ACME_EMAIL="$(awk -F= '$1 == "ACME_EMAIL" { print substr($0, index($0, "=") + 1) }' .env)"
