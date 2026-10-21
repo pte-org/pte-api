@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,6 +18,8 @@ public interface ExaminerGradingWorkRepository extends JpaRepository<ExaminerGra
 
     Optional<ExaminerGradingWork> findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndDeletedFalse(
             UUID tenantId, UUID sessionPublicId, UUID attemptPublicId);
+
+    List<ExaminerGradingWork> findByTenantIdAndSessionPublicIdAndDeletedFalse(UUID tenantId, UUID sessionPublicId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT w FROM ExaminerGradingWork w WHERE w.tenantId = :tenantId AND w.assignmentPublicId = :assignmentPublicId AND w.deleted = false")

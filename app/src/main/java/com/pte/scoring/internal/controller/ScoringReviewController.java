@@ -45,15 +45,14 @@ public class ScoringReviewController {
     @GetMapping
     public ApiResponse<AnswerListResponse> list(
             @RequestParam(required = false) UUID sessionPublicId,
+            @RequestParam(required = false) UUID attemptPublicId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
         Pageable pageable = PageRequest.of(boundedPage(page), boundedSize(size));
-        CurrentUser caller = currentUser();
-        return ApiResponse.success(search == null || search.isBlank()
-                ? scoringReviewService.listAnswers(sessionPublicId, status, pageable, caller)
-                : scoringReviewService.listAnswers(sessionPublicId, status, search, pageable, caller));
+        return ApiResponse.success(scoringReviewService.listAnswers(sessionPublicId, attemptPublicId, status, search,
+                pageable, currentUser()));
     }
 
     @GetMapping("/{answerPublicId}")

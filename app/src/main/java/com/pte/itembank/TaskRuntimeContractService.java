@@ -121,7 +121,8 @@ public class TaskRuntimeContractService {
                         contract.isRequiresPromptText(), contract.isRequiresOptions(),
                         contract.isRequiresCorrectAnswer(), contract.isRequiresWordCount(),
                         contract.isRequiresSingleCorrectOption(),
-                        contract.isUsesOptionOrderAsCorrectPosition()),
+                        contract.isUsesOptionOrderAsCorrectPosition(),
+                        contract.isRequiresReferenceAnswer()),
                 contract.getStatus());
     }
 

@@ -41,6 +41,7 @@ public class QuestionValidationHelper {
         boolean requiresAudioPrompt = definition == null ? type != null && type.requiresAudioPrompt() : definition.isRequiresAudioPrompt();
         boolean requiresImagePrompt = definition == null ? type != null && type.requiresImagePrompt() : definition.isRequiresImagePrompt();
         boolean requiresPromptText = definition == null ? type != null && type.requiresPromptText() : definition.isRequiresPromptText();
+        boolean requiresReferenceAnswer = definition == null ? type != null && type.requiresReferenceAnswer() : definition.isRequiresReferenceAnswer();
         boolean requiresWordCount = definition == null ? type != null && type.requiresWordCount() : definition.isRequiresWordCount();
 
         if (!StringUtils.hasText(question.getTitle())) {
@@ -64,6 +65,15 @@ public class QuestionValidationHelper {
             throw new QuestionValidationException(ItembankConstants.WORD_COUNT_REQUIRED);
         }
         validateAnswers(question, type, definition);
+        if (requiresReferenceAnswer && !StringUtils.hasText(question.getReferenceAnswerText())) {
+            throw new QuestionValidationException(ItembankConstants.REFERENCE_ANSWER_REQUIRED);
+        }
+    }
+
+    /** The catalog key of the question's task type; the enum name is the fallback for questions without one. */
+    private static String taskKey(Question question) {
+        PteTaskType type = question.getPteTaskType();
+        return question.getTaskTypeKey() == null && type != null ? type.name() : question.getTaskTypeKey();
     }
 
     private void validateAnswers(Question question, PteTaskType type, QuestionTypeDefinition definition) {
@@ -105,7 +115,7 @@ public class QuestionValidationHelper {
             if (type == null) throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);
             return null;
         }
-        String key = question.getTaskTypeKey() == null && type != null ? type.name() : question.getTaskTypeKey();
+        String key = taskKey(question);
         if (key == null) {
             throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);
         }

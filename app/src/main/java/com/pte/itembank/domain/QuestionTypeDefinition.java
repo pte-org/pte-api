@@ -78,6 +78,9 @@ public class QuestionTypeDefinition extends BaseEntity {
     @Column(name = "requires_word_count", nullable = false)
     private boolean requiresWordCount;
 
+    @Column(name = "requires_reference_answer", nullable = false)
+    private boolean requiresReferenceAnswer;
+
     /** True for MC single-answer task types. */
     @Column(name = "requires_single_correct_option", nullable = false)
     private boolean requiresSingleCorrectOption;

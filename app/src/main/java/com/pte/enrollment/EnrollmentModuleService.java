@@ -96,6 +96,17 @@ public class EnrollmentModuleService {
         return filterActiveStudents(tenantId, studentPublicIds);
     }
 
+    /** The program a tenant's class belongs to; a class of another tenant looks like not-found. */
+    @Transactional(readOnly = true)
+    public UUID findProgramPublicIdOfClass(UUID tenantId, UUID classPublicId) {
+        StudentClass studentClass = studentClassRepository.findByPublicId(classPublicId)
+                .orElseThrow(StudentClassNotFoundException::new);
+        if (!studentClass.getProgram().getOrganization().getTenant().getPublicId().equals(tenantId)) {
+            throw new StudentClassNotFoundException();
+        }
+        return studentClass.getProgram().getPublicId();
+    }
+
     /** Resolves the union of current members in every non-archived class of a tenant program. */
     @Transactional(readOnly = true)
     public List<UUID> findActiveStudentPublicIdsByProgram(UUID tenantId, UUID programPublicId) {

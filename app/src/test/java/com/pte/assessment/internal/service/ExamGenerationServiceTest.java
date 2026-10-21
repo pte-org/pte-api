@@ -188,7 +188,7 @@ class ExamGenerationServiceTest {
     }
 
     @Test
-    void generate_orderIsSpeakingListeningReadingWriting_thenBySequence() {
+    void generate_orderIsSpeakingListeningReadingWriting_thenBySequence_summarizeSpokenTextClosesListening() {
         stubUnlimitedStock();
         // Reverse the fixture so sequence ordering is checked independently of input order.
         ScoreTemplateResponse template = v5Template();
@@ -220,10 +220,16 @@ class ExamGenerationServiceTest {
         expectedTaskTypes.add(PteTaskType.PERSONAL_INTRODUCTION);
         V5_ROWS.stream()
                 .sorted(java.util.Comparator.comparingInt((Row row) -> order.indexOf(row.section()))
-                        .thenComparingInt(Row::sequence))
+                        .thenComparingInt(row -> "SUMMARIZE_SPOKEN_TEXT".equals(row.taskType())
+                                ? Integer.MAX_VALUE : row.sequence()))
                 .map(row -> PteTaskType.valueOf(row.taskType()))
                 .forEach(expectedTaskTypes::add);
         assertThat(taskTypeCaptor.getAllValues()).containsExactlyElementsOf(expectedTaskTypes);
+        List<PteTaskType> drawn = taskTypeCaptor.getAllValues();
+        assertThat(drawn.indexOf(PteTaskType.SUMMARIZE_SPOKEN_TEXT))
+                .isEqualTo(drawn.indexOf(PteTaskType.WRITE_FROM_DICTATION) + 1);
+        assertThat(drawn.get(drawn.indexOf(PteTaskType.SUMMARIZE_SPOKEN_TEXT) + 1))
+                .isEqualTo(PteTaskType.FILL_IN_THE_BLANKS_DROPDOWN);
         // orderIndex is sequential starting at 0.
         for (int i = 0; i < captor.getValue().getItems().size(); i++) {
             assertThat(captor.getValue().getItems().get(i).getOrderIndex()).isEqualTo(i);

@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.repository;
 
+import com.pte.scoring.domain.ExaminerAttemptAssignment;
 import com.pte.scoring.dto.response.ExaminerQueueItemResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -10,6 +11,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,6 +26,9 @@ class ExaminerWorkspaceReadRepositoryTest {
 
     @Autowired
     private ExaminerWorkspaceReadRepository readRepository;
+
+    @Autowired
+    private jakarta.persistence.EntityManager entityManager;
 
     @ParameterizedTest
     @ValueSource(strings = {"ALL", "PENDING", "IN_PROGRESS", "COMPLETED"})
@@ -42,6 +47,36 @@ class ExaminerWorkspaceReadRepositoryTest {
 
         assertThat(resultDesc.getTotalElements()).isZero();
         assertThat(resultDesc.getContent()).isEmpty();
+    }
+
+    @Test
+    void queueItemsCarryTheirPositionAmongTheExaminersAssignmentsInTheSession() {
+        UUID tenantId = UUID.randomUUID();
+        UUID examinerId = UUID.randomUUID();
+        UUID otherExaminerId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        Instant base = Instant.parse("2026-10-01T00:00:00Z");
+        UUID first = assign(tenantId, sessionId, examinerId, base);
+        UUID second = assign(tenantId, sessionId, examinerId, base.plusSeconds(60));
+        UUID third = assign(tenantId, sessionId, examinerId, base.plusSeconds(120));
+        assign(tenantId, sessionId, otherExaminerId, base.plusSeconds(30));
+        assign(tenantId, UUID.randomUUID(), examinerId, base.minusSeconds(600));
+        entityManager.flush();
+
+        Page<ExaminerQueueItemResponse> result = readRepository.findQueue(
+                tenantId, examinerId, sessionId, "ALL", null, "ASSIGNED_ASC", PageRequest.of(0, 20));
+
+        assertThat(result.getContent()).extracting(ExaminerQueueItemResponse::attemptPublicId)
+                .containsExactly(first, second, third);
+        assertThat(result.getContent()).extracting(ExaminerQueueItemResponse::attemptOrdinal)
+                .containsExactly(1, 2, 3);
+    }
+
+    private UUID assign(UUID tenantId, UUID sessionId, UUID examinerId, Instant assignedAt) {
+        UUID attemptId = UUID.randomUUID();
+        entityManager.persist(new ExaminerAttemptAssignment(UUID.randomUUID(), tenantId, sessionId, attemptId,
+                examinerId, 1, UUID.randomUUID(), assignedAt));
+        return attemptId;
     }
 
     @Test

@@ -12,6 +12,16 @@ public final class ExaminerAssignmentConstants {
     public static final String MANUAL_EXAMINER_REQUIRED = "Manual mode requires an Examiner for every scope.";
     public static final String RANDOM_SCOPE_EXAMINER_FORBIDDEN =
             "Random mode uses one pooled Examiner list, not per-scope mappings.";
+    public static final String SESSION_SCOPE_RANDOM_ONLY =
+            "The whole-session scope can only be used in random mode.";
+    public static final String SESSION_SCOPE_MUST_MATCH_SESSION =
+            "The whole-session scope must reference the exam session being assigned.";
+    public static final String ALREADY_ASSIGNED = "Examiners are already assigned for this exam.";
+    public static final String ASSIGNMENT_MUST_COVER_EVERY_ATTEMPT =
+            "Assign every eligible attempt to exactly one Examiner.";
+    public static final String AI_ONLY_COHORT_REJECTED =
+            "Examiner assignments cannot be confirmed for AI_ONLY grading cohorts.";
+    public static final String EXCLUDED_ATTEMPT_REJECTED = "Cannot assign excluded attempts in the grading cohort.";
     public static final String DUPLICATE_SCOPE = "Duplicate scope in assignment request.";
     public static final String RANDOM_EXAMINERS_REQUIRED = "Random mode requires unique active Examiner IDs.";
     public static final String MANUAL_EXAMINER_LIST_FORBIDDEN =

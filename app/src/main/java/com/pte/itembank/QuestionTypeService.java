@@ -522,6 +522,7 @@ public class QuestionTypeService {
         definition.setRequiresSingleCorrectOption(
                 taskType == PteTaskType.MC_READING_SINGLE || taskType == PteTaskType.MC_LISTENING_SINGLE);
         definition.setUsesOptionOrderAsCorrectPosition(taskType == PteTaskType.RE_ORDER_PARAGRAPHS);
+        definition.setRequiresReferenceAnswer(taskType.requiresReferenceAnswer());
     }
 
     /**
@@ -606,6 +607,7 @@ public class QuestionTypeService {
         definition.setRequiresWordCount(requirements.requiresWordCount());
         definition.setRequiresSingleCorrectOption(requirements.requiresSingleCorrectOption());
         definition.setUsesOptionOrderAsCorrectPosition(requirements.usesOptionOrderAsCorrectPosition());
+        definition.setRequiresReferenceAnswer(requirements.requiresReferenceAnswer());
     }
 
     private boolean isRuntimeLocked(QuestionTypeDefinition definition) {

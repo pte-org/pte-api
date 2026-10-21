@@ -16,13 +16,16 @@ import com.pte.session.internal.dto.response.EnrollmentResponse;
 import com.pte.session.internal.dto.response.ProctorAssignmentResponse;
 import com.pte.session.internal.dto.response.StudentEnrollmentResponse;
 import com.pte.session.internal.exception.AlreadyEnrolledException;
+import com.pte.session.internal.exception.EnrolledStudentAlreadyStartedException;
 import com.pte.session.internal.exception.EnrollmentNotFoundException;
+import com.pte.session.internal.exception.ExamAudienceLockedException;
 import com.pte.session.internal.exception.ProctorAssignmentNotFoundException;
 import com.pte.session.internal.exception.SessionCapacityExceededException;
 import com.pte.session.internal.exception.SessionTimeConflictException;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.ProctorAssignmentRepository;
 import com.pte.identity.IdentityService;
+import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +39,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -72,12 +76,19 @@ class EnrollmentServiceTest {
     @Mock
     private IdentityService identityService;
 
+    @Mock
+    private ExamFormProvisioningService formProvisioningService;
+
+    @Mock
+    private StartedAttemptLookup startedAttemptLookup;
+
     private EnrollmentService enrollmentService;
 
     @BeforeEach
     void setUp() {
         enrollmentService = new EnrollmentService(sessionLifecycleService, enrollmentRepository,
-                proctorAssignmentRepository, eventPublisher, null, identityService);
+                proctorAssignmentRepository, eventPublisher, null, identityService,
+                formProvisioningService, startedAttemptLookup);
     }
 
     private ExamSession session(Long id, UUID publicId, UUID tenantId) {
@@ -529,6 +540,128 @@ class EnrollmentServiceTest {
         assertThat(enrollmentEvent.studentPublicId()).isEqualTo(studentPublicId);
         assertThat(enrollmentEvent.sessionPublicId()).isEqualTo(sessionPublicId);
         assertThat(enrollmentEvent.tenantId()).isEqualTo(tenantId);
+    }
+
+    @Test
+    void bulkEnroll_onWizardExam_provisionsFormsForNewStudents() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        session.setGenerationJobPublicId(UUID.randomUUID());
+        CurrentUser caller = hostAdmin(tenantId);
+        UUID newId = UUID.randomUUID();
+
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
+        when(enrollmentRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        enrollmentService.bulkEnroll(sessionPublicId, new BulkEnrollRequest(List.of(newId)), caller);
+
+        verify(formProvisioningService).provision(session, List.of(newId), caller);
+    }
+
+    @Test
+    void bulkEnroll_afterExamClosed_enrollsWithoutNotifying() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        session.setStatus(SessionStatus.CLOSED);
+        CurrentUser caller = hostAdmin(tenantId);
+        UUID newId = UUID.randomUUID();
+
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
+        when(enrollmentRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BulkEnrollResponse response = enrollmentService.bulkEnroll(sessionPublicId,
+                new BulkEnrollRequest(List.of(newId)), caller);
+
+        assertThat(response.enrolled()).containsExactly(newId);
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    void bulkEnroll_whileExamIsNotScheduledOrClosed_isLocked() {
+        for (SessionStatus status : List.of(SessionStatus.DRAFT, SessionStatus.PREPARING, SessionStatus.READY,
+                SessionStatus.OPEN, SessionStatus.CANCELLED)) {
+            UUID tenantId = UUID.randomUUID();
+            UUID sessionPublicId = UUID.randomUUID();
+            ExamSession session = session(1L, sessionPublicId, tenantId);
+            session.setStatus(status);
+            CurrentUser caller = hostAdmin(tenantId);
+            when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+
+            assertThatThrownBy(() -> enrollmentService.bulkEnroll(sessionPublicId,
+                    new BulkEnrollRequest(List.of(UUID.randomUUID())), caller))
+                    .as(status.name())
+                    .isInstanceOf(ExamAudienceLockedException.class);
+        }
+        verify(enrollmentRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void unenroll_whileExamIsOpen_isLocked() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        session.setStatus(SessionStatus.OPEN);
+        CurrentUser caller = hostAdmin(tenantId);
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+
+        assertThatThrownBy(() -> enrollmentService.unenroll(sessionPublicId, UUID.randomUUID(), caller))
+                .isInstanceOf(ExamAudienceLockedException.class);
+
+        verify(enrollmentRepository, never()).delete(any());
+    }
+
+    @Test
+    void unenroll_releasesTheStudentsForm() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID enrollmentPublicId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        CurrentUser caller = hostAdmin(tenantId);
+
+        Enrollment enrollment = new Enrollment();
+        enrollment.setPublicId(enrollmentPublicId);
+        enrollment.setSession(session);
+        enrollment.setStudentPublicId(studentPublicId);
+
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+        when(enrollmentRepository.findByPublicId(enrollmentPublicId)).thenReturn(Optional.of(enrollment));
+
+        enrollmentService.unenroll(sessionPublicId, enrollmentPublicId, caller);
+
+        verify(formProvisioningService).release(session, studentPublicId);
+        verify(enrollmentRepository).delete(enrollment);
+    }
+
+    @Test
+    void unenroll_studentWhoStartedTheExam_isRejected() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID enrollmentPublicId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        session.setStatus(SessionStatus.CLOSED);
+        CurrentUser caller = hostAdmin(tenantId);
+
+        Enrollment enrollment = new Enrollment();
+        enrollment.setPublicId(enrollmentPublicId);
+        enrollment.setSession(session);
+        enrollment.setStudentPublicId(studentPublicId);
+
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
+        when(enrollmentRepository.findByPublicId(enrollmentPublicId)).thenReturn(Optional.of(enrollment));
+        when(startedAttemptLookup.findStartedStudentPublicIds(tenantId, List.of(sessionPublicId),
+                List.of(studentPublicId))).thenReturn(Set.of(studentPublicId));
+
+        assertThatThrownBy(() -> enrollmentService.unenroll(sessionPublicId, enrollmentPublicId, caller))
+                .isInstanceOf(EnrolledStudentAlreadyStartedException.class);
+
+        verify(enrollmentRepository, never()).delete(any());
+        verify(formProvisioningService, never()).release(any(), any());
     }
 
     @Test

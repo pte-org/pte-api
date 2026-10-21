@@ -1,7 +1,6 @@
 package com.pte.scoring.internal.config;
 
 import com.pte.scoring.internal.constant.ScoringConstants;
-import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
@@ -12,31 +11,23 @@ import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.retry.interceptor.MethodInvocationRecoverer;
-import org.springframework.retry.interceptor.RetryOperationsInterceptor;
-import org.springframework.retry.interceptor.RetryInterceptorBuilder;
 
 /**
- * AI scoring work queue — a vendor call is slow/unreliable and needs bounded
- * retry + a DLQ, unlike objective scoring's synchronous path. {@code
- * AI_SCORING_QUEUE} dead-letters to {@code AI_SCORING_DLQ} after 3 failed
- * delivery attempts — the recoverer throws {@link AmqpRejectAndDontRequeueException}
- * once retries are exhausted, which the container turns into a
- * NACK-without-requeue, and the queue's {@code x-dead-letter-exchange} routes
- * it to the DLX. (NOTE: {@code RejectAndDontRequeueRecoverer} implements
- * AMQP's {@code MessageRecoverer}, not Spring Retry's {@code
- * MethodInvocationRecoverer} — the two are not interchangeable; this is the
- * correct type for {@code RetryInterceptorBuilder.recoverer(...)}.) A stuck
- * job lands somewhere host-visible ({@code ScoringAnswerStatus.SCORING_FAILED}),
- * never retries forever.
+ * AI scoring work queue — a vendor call is slow and unreliable, unlike
+ * objective scoring's synchronous path. There is no container-level retry:
+ * the worker's vendor clients retry each HTTP call themselves
+ * ({@code ProviderGuard}), so redelivering the whole job would only call every
+ * vendor again and pay twice. A listener that throws has its message rejected
+ * without requeue, and the queue's {@code x-dead-letter-exchange} routes it
+ * to {@code AI_SCORING_DLQ}, where the worker marks the answer
+ * {@code SCORING_FAILED} so a host sees it instead of it retrying forever.
  */
 @Configuration
 public class ScoringRabbitMqConfig {
 
-    private static final int MAX_ATTEMPTS = 3;
-    private static final long INITIAL_INTERVAL_MS = 2_000L;
-    private static final long MAX_INTERVAL_MS = 10_000L;
-    private static final double MULTIPLIER = 2.0;
+    // Two jobs at a time keeps the 512 MB app container and the vendors' rate limits comfortable.
+    private static final int WORK_QUEUE_CONSUMERS = 2;
+    private static final int DEAD_LETTER_CONSUMERS = 1;
 
     private static final String DEAD_LETTER_EXCHANGE = ScoringConstants.AI_SCORING_EXCHANGE + ".dlx";
 
@@ -74,34 +65,36 @@ public class ScoringRabbitMqConfig {
                 .with(ScoringConstants.AI_SCORING_ROUTING_KEY);
     }
 
-    @Bean
-    public RetryOperationsInterceptor aiScoringRetryInterceptor() {
-        MethodInvocationRecoverer<Object> recoverer = (args, cause) -> {
-            throw new AmqpRejectAndDontRequeueException(ScoringConstants.AI_SCORING_RETRIES_EXHAUSTED, cause);
-        };
-        return RetryInterceptorBuilder.stateless()
-                .maxAttempts(MAX_ATTEMPTS)
-                .backOffOptions(INITIAL_INTERVAL_MS, MULTIPLIER, MAX_INTERVAL_MS)
-                .recoverer(recoverer)
-                .build();
-    }
-
     // Named per-module (not the bare "rabbitListenerContainerFactory" every
     // @RabbitListener in this codebase used to default to when it lived in its
     // own microservice) — notification defines its own same-shaped factory,
     // and two @Bean methods of the same name/type in one Spring context is a
     // collision, not an override. Every @RabbitListener in this module must
-    // reference this exact factory name. MessageConverter is the one shared
+    // reference one of these factory names. MessageConverter is the one shared
     // bean from com.pte.shared.config.RabbitMessageConverterConfig — resolved
     // by type, unambiguous since only one MessageConverter bean exists.
     @Bean
     public SimpleRabbitListenerContainerFactory scoringRabbitListenerContainerFactory(
-            ConnectionFactory connectionFactory, MessageConverter jsonMessageConverter,
-            RetryOperationsInterceptor aiScoringRetryInterceptor) {
+            ConnectionFactory connectionFactory, MessageConverter jsonMessageConverter) {
+        return containerFactory(connectionFactory, jsonMessageConverter, WORK_QUEUE_CONSUMERS);
+    }
+
+    @Bean
+    public SimpleRabbitListenerContainerFactory scoringDeadLetterContainerFactory(
+            ConnectionFactory connectionFactory, MessageConverter jsonMessageConverter) {
+        return containerFactory(connectionFactory, jsonMessageConverter, DEAD_LETTER_CONSUMERS);
+    }
+
+    private static SimpleRabbitListenerContainerFactory containerFactory(ConnectionFactory connectionFactory,
+            MessageConverter messageConverter, int consumers) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
-        factory.setMessageConverter(jsonMessageConverter);
-        factory.setAdviceChain(aiScoringRetryInterceptor);
+        factory.setMessageConverter(messageConverter);
+        factory.setConcurrentConsumers(consumers);
+        factory.setMaxConcurrentConsumers(consumers);
+        // A job holds a consumer for up to a minute and a half; don't park more behind it.
+        factory.setPrefetchCount(1);
+        factory.setDefaultRequeueRejected(false);
         return factory;
     }
 }

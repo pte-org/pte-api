@@ -42,6 +42,7 @@ public final class GradingConstants {
     public static final String SHA256_UNAVAILABLE = "SHA-256 is required by the runtime";
     public static final String REASON_REQUIRED = "A reason is required.";
     public static final int DISPOSITION_REASON_LIMIT = 500;
+    public static final String AUTO_DISPOSITION_NOT_SUBMITTED = "Not submitted when the session closed.";
 
     private GradingConstants() { }
 }

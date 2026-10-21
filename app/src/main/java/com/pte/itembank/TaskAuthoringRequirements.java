@@ -9,5 +9,6 @@ public record TaskAuthoringRequirements(
         boolean requiresCorrectAnswer,
         boolean requiresWordCount,
         boolean requiresSingleCorrectOption,
-        boolean usesOptionOrderAsCorrectPosition) {
+        boolean usesOptionOrderAsCorrectPosition,
+        boolean requiresReferenceAnswer) {
 }

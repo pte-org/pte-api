@@ -28,6 +28,28 @@ class ExaminerWorkQueueRepositoryTest {
     private jakarta.persistence.EntityManager entityManager;
 
     @Test
+    void ordinalCountsOnlyTheExaminersEarlierAssignmentsInTheSameSession() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        UUID examinerId = UUID.randomUUID();
+        Instant base = Instant.parse("2026-10-01T00:00:00Z");
+        ExaminerAttemptAssignment first = new ExaminerAttemptAssignment(UUID.randomUUID(), tenantId, sessionId,
+                UUID.randomUUID(), examinerId, 1, UUID.randomUUID(), base);
+        ExaminerAttemptAssignment second = new ExaminerAttemptAssignment(UUID.randomUUID(), tenantId, sessionId,
+                UUID.randomUUID(), examinerId, 1, UUID.randomUUID(), base.plusSeconds(60));
+        entityManager.persist(first);
+        entityManager.persist(second);
+        entityManager.persist(new ExaminerAttemptAssignment(UUID.randomUUID(), tenantId, sessionId,
+                UUID.randomUUID(), UUID.randomUUID(), 1, UUID.randomUUID(), base.minusSeconds(60)));
+        entityManager.flush();
+
+        assertThat(repository.countOrdinal(tenantId, examinerId, sessionId, first.getAssignedAt(), first.getId()))
+                .isEqualTo(1);
+        assertThat(repository.countOrdinal(tenantId, examinerId, sessionId, second.getAssignedAt(), second.getId()))
+                .isEqualTo(2);
+    }
+
+    @Test
     void queueHidesAssignmentsOnceTheSessionIsPublished() {
         UUID tenantId = UUID.randomUUID();
         UUID sessionId = UUID.randomUUID();

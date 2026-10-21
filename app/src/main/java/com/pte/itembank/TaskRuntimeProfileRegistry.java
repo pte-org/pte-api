@@ -109,7 +109,8 @@ public final class TaskRuntimeProfileRegistry {
                 taskType.requiresCorrectAnswer(),
                 taskType.requiresWordCount(),
                 taskType == PteTaskType.MC_READING_SINGLE || taskType == PteTaskType.MC_LISTENING_SINGLE,
-                taskType == PteTaskType.RE_ORDER_PARAGRAPHS);
+                taskType == PteTaskType.RE_ORDER_PARAGRAPHS,
+                taskType.requiresReferenceAnswer());
     }
 
     private static boolean profileKeyMatches(TaskRuntimeProfileDescriptor profile,

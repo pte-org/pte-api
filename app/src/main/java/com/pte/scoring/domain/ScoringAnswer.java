@@ -77,6 +77,27 @@ public class ScoringAnswer extends BaseEntity {
     @Column(nullable = false)
     private boolean expired;
 
+    /** Pinned question content AI scoring reads; set only through {@link #applyQuestionContent}. */
+    @Setter(AccessLevel.NONE)
+    @Column(columnDefinition = "text")
+    private String promptText;
+
+    @Setter(AccessLevel.NONE)
+    @Column(columnDefinition = "text")
+    private String referenceAnswerText;
+
+    @Setter(AccessLevel.NONE)
+    @Column
+    private UUID imagePromptRef;
+
+    @Setter(AccessLevel.NONE)
+    @Column
+    private Integer minWordCount;
+
+    @Setter(AccessLevel.NONE)
+    @Column
+    private Integer maxWordCount;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ScoringAnswerStatus status = ScoringAnswerStatus.PENDING;
@@ -128,6 +149,18 @@ public class ScoringAnswer extends BaseEntity {
     private long lockVersion;
 
     /**
+     * Identifies the latest AI dispatch; a worker result counts only while the
+     * row still awaits this token, so a superseded job can never overwrite it.
+     */
+    @Setter(AccessLevel.NONE)
+    @Column(nullable = false)
+    private long dispatchToken;
+
+    @Setter(AccessLevel.NONE)
+    @Column
+    private Instant aiDispatchedAt;
+
+    /**
      * A host's own independent score — parallel to {@link #rawScore}, never
      * derived from it and never gating it. Which of the two counts as
      * "official" for student-facing reports is undecided (out of scope here).
@@ -137,6 +170,56 @@ public class ScoringAnswer extends BaseEntity {
 
     @Column
     private Instant teacherScoredAt;
+
+    /**
+     * @return whether anything changed, so a row whose content is already
+     *         current is not rewritten (and its version not bumped)
+     */
+    public boolean applyQuestionContent(String promptText, String referenceAnswerText, UUID imagePromptRef,
+            Integer minWordCount, Integer maxWordCount) {
+        if (Objects.equals(this.promptText, promptText)
+                && Objects.equals(this.referenceAnswerText, referenceAnswerText)
+                && Objects.equals(this.imagePromptRef, imagePromptRef)
+                && Objects.equals(this.minWordCount, minWordCount)
+                && Objects.equals(this.maxWordCount, maxWordCount)) {
+            return false;
+        }
+        this.promptText = promptText;
+        this.referenceAnswerText = referenceAnswerText;
+        this.imagePromptRef = imagePromptRef;
+        this.minWordCount = minWordCount;
+        this.maxWordCount = maxWordCount;
+        return true;
+    }
+
+    /** @return the new dispatch token the queued job must carry */
+    public long markAiDispatched(Instant dispatchedAt) {
+        this.status = ScoringAnswerStatus.AI_SCORING;
+        this.aiDispatchedAt = dispatchedAt;
+        return ++dispatchToken;
+    }
+
+    /**
+     * Whether a host's next scoring request would send this answer to the AI again: it failed, or its job was lost
+     * (never dispatched, or dispatched before {@code staleBefore}). Same rule as {@code findScoringWork}, minus PENDING.
+     */
+    public boolean isRescorable(Instant staleBefore) {
+        return status == ScoringAnswerStatus.SCORING_FAILED
+                || (status == ScoringAnswerStatus.AI_SCORING
+                && (aiDispatchedAt == null || aiDispatchedAt.isBefore(staleBefore)));
+    }
+
+    public boolean isAwaitingAiResult(long token) {
+        return status == ScoringAnswerStatus.AI_SCORING && dispatchToken == token;
+    }
+
+    /** A job's result is wanted only by the answer it was queued for, while that dispatch is the latest. */
+    public boolean isAwaitingAiResult(UUID tenantId, UUID sessionPublicId, UUID attemptPublicId, long token) {
+        return Objects.equals(this.tenantId, tenantId)
+                && Objects.equals(this.sessionPublicId, sessionPublicId)
+                && Objects.equals(this.attemptPublicId, attemptPublicId)
+                && isAwaitingAiResult(token);
+    }
 
     public void markScored(int rawScore) {
         if (rawScore < 0 || rawScore > 100) {

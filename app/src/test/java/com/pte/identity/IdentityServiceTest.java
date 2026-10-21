@@ -192,4 +192,23 @@ class IdentityServiceTest {
         student.setRoles(java.util.Set.of(Role.STUDENT));
         return student;
     }
+
+    @Test
+    void findFullNames_mapsTenantUsersByPublicId() {
+        UUID tenantId = UUID.randomUUID();
+        User ann = new User();
+        ann.setPublicId(UUID.randomUUID());
+        ann.setFullName("Ann Nguyen");
+        when(userRepository.findByPublicIdInAndTenantIdAndDeletedFalse(List.of(ann.getPublicId()), tenantId))
+                .thenReturn(List.of(ann));
+
+        assertThat(service.findFullNames(tenantId, List.of(ann.getPublicId())))
+                .containsExactly(java.util.Map.entry(ann.getPublicId(), "Ann Nguyen"));
+    }
+
+    @Test
+    void findFullNames_withoutIds_doesNotQuery() {
+        assertThat(service.findFullNames(UUID.randomUUID(), List.of())).isEmpty();
+        org.mockito.Mockito.verifyNoInteractions(userRepository);
+    }
 }

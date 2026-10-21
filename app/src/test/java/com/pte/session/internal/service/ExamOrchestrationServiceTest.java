@@ -7,6 +7,8 @@ import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.SubscriptionStatus;
 import com.pte.enrollment.EnrollmentModuleService;
 import com.pte.identity.IdentityService;
+import com.pte.identity.domain.Role;
+import com.pte.identity.domain.User;
 import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
@@ -23,12 +25,15 @@ import com.pte.session.domain.enums.FormMode;
 import com.pte.session.domain.enums.ReusePolicy;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.internal.constant.SessionConstants;
+import com.pte.session.internal.dto.request.AudienceSourceRequest;
+import com.pte.session.internal.dto.response.AudienceSourceResponse;
 import com.pte.session.internal.dto.request.CreateExamDraftRequest;
 import com.pte.session.internal.dto.request.PatchExamDraftRequest;
 import com.pte.session.internal.dto.response.AudienceMemberResponse;
 import com.pte.session.internal.dto.response.BulkEnrollResponse;
 import com.pte.session.dto.response.SlotConflict;
 import com.pte.session.internal.exception.ExamAudienceConflictException;
+import com.pte.session.internal.exception.AudienceSourceAlreadyCoveredException;
 import com.pte.session.internal.exception.ExamDraftConfigurationException;
 import com.pte.session.internal.exception.ExamDraftNotDeletableException;
 import com.pte.session.internal.exception.ExamDraftVersionConflictException;
@@ -204,6 +209,19 @@ class ExamOrchestrationServiceTest {
     }
 
     @Test
+    void createDraft_withRetries_isRejectedBecauseEveryStudentSitsOnce() {
+        stubTemplateAndSubscription();
+
+        assertThatThrownBy(() -> service.createDraft(new CreateExamDraftRequest(
+                "Retries", templateId, subscriptionId, opensAt, closesAt,
+                ExamMode.OFFICIAL_EXAM, null, null, "SERIES", 50, null, 2,
+                com.pte.session.domain.enums.LockdownMode.STRICT), hostAdmin))
+                .isInstanceOf(com.pte.session.internal.exception.ExamDraftConfigurationException.class);
+
+        verify(sessionRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void updateDraft_withoutLockdown_preservesStrictAfterRetryPatch() {
         ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
                 com.pte.session.domain.enums.LockdownMode.STRICT);
@@ -214,9 +232,9 @@ class ExamOrchestrationServiceTest {
 
         var response = service.updateDraft(session.getPublicId(), new PatchExamDraftRequest(
                 "Renamed", null, null, null, null, null, null, null, null, null,
-                0L, null, 2, null), hostAdmin);
+                0L, null, 0, null), hostAdmin);
 
-        assertThat(session.getMaxRetriesPerStudent()).isEqualTo(2);
+        assertThat(session.getMaxRetriesPerStudent()).isZero();
         assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
     }
 
@@ -461,6 +479,147 @@ class ExamOrchestrationServiceTest {
     }
 
     @Test
+    void addSource_rejectsStudentAlreadyCoveredByAddedClass() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        session.setId(21L);
+        UUID classPublicId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        ExamAudienceSource classSource = new ExamAudienceSource();
+        classSource.setSession(session);
+        classSource.setTenantId(tenantId);
+        classSource.setSourceType(AudienceSourceType.CLASS);
+        classSource.setSourcePublicId(classPublicId);
+        stubStudentSource(session, studentPublicId);
+        when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(21L)).thenReturn(List.of(classSource));
+        when(enrollmentModuleService.findActiveStudentPublicIds(tenantId, classPublicId))
+                .thenReturn(List.of(studentPublicId));
+
+        assertThatThrownBy(() -> service.addSource(session.getPublicId(),
+                new AudienceSourceRequest(AudienceSourceType.STUDENT, studentPublicId), hostAdmin))
+                .isInstanceOf(AudienceSourceAlreadyCoveredException.class);
+
+        verify(sourceRepository, never()).save(any());
+    }
+
+    @Test
+    void addSource_allowsStudentOutsideAddedClass() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        session.setId(22L);
+        UUID classPublicId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        ExamAudienceSource classSource = new ExamAudienceSource();
+        classSource.setSession(session);
+        classSource.setTenantId(tenantId);
+        classSource.setSourceType(AudienceSourceType.CLASS);
+        classSource.setSourcePublicId(classPublicId);
+        stubStudentSource(session, studentPublicId);
+        when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(22L)).thenReturn(List.of(classSource));
+        when(enrollmentModuleService.findActiveStudentPublicIds(tenantId, classPublicId))
+                .thenReturn(List.of(UUID.randomUUID()));
+        when(sourceRepository.save(any(ExamAudienceSource.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.addSource(session.getPublicId(),
+                new AudienceSourceRequest(AudienceSourceType.STUDENT, studentPublicId), hostAdmin);
+
+        verify(sourceRepository).save(any(ExamAudienceSource.class));
+    }
+
+    @Test
+    void addSource_rejectsClassOfAlreadyAddedProgram() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        session.setId(23L);
+        UUID programPublicId = UUID.randomUUID();
+        UUID classPublicId = UUID.randomUUID();
+        ExamAudienceSource programSource = new ExamAudienceSource();
+        programSource.setSession(session);
+        programSource.setTenantId(tenantId);
+        programSource.setSourceType(AudienceSourceType.PROGRAM);
+        programSource.setSourcePublicId(programPublicId);
+        when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
+        when(enrollmentModuleService.findActiveStudentPublicIds(tenantId, classPublicId)).thenReturn(List.of());
+        when(enrollmentModuleService.findProgramPublicIdOfClass(tenantId, classPublicId)).thenReturn(programPublicId);
+        when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(23L)).thenReturn(List.of(programSource));
+
+        assertThatThrownBy(() -> service.addSource(session.getPublicId(),
+                new AudienceSourceRequest(AudienceSourceType.CLASS, classPublicId), hostAdmin))
+                .isInstanceOf(AudienceSourceAlreadyCoveredException.class);
+
+        verify(sourceRepository, never()).save(any());
+    }
+
+    @Test
+    void addSource_allowsProgramEvenWhenOneOfItsClassesIsAlreadyAdded() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        session.setId(24L);
+        UUID programPublicId = UUID.randomUUID();
+        ExamAudienceSource classSource = new ExamAudienceSource();
+        classSource.setSession(session);
+        classSource.setTenantId(tenantId);
+        classSource.setSourceType(AudienceSourceType.CLASS);
+        classSource.setSourcePublicId(UUID.randomUUID());
+        when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
+        when(enrollmentModuleService.findActiveStudentPublicIdsByProgram(tenantId, programPublicId))
+                .thenReturn(List.of());
+        when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(24L)).thenReturn(List.of(classSource));
+        when(sourceRepository.save(any(ExamAudienceSource.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.addSource(session.getPublicId(),
+                new AudienceSourceRequest(AudienceSourceType.PROGRAM, programPublicId), hostAdmin);
+
+        verify(sourceRepository).save(any(ExamAudienceSource.class));
+    }
+
+    @Test
+    void addSources_savesEachNewStudentOnceAndAuditsOnce() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        session.setId(25L);
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        stubStudentSource(session, first);
+        stubStudent(second);
+        when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(25L)).thenReturn(List.of());
+        when(sourceRepository.save(any(ExamAudienceSource.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<AudienceSourceResponse> responses = service.addSources(session.getPublicId(), List.of(
+                new AudienceSourceRequest(AudienceSourceType.STUDENT, first),
+                new AudienceSourceRequest(AudienceSourceType.STUDENT, second),
+                new AudienceSourceRequest(AudienceSourceType.STUDENT, first)), hostAdmin);
+
+        assertThat(responses).extracting(AudienceSourceResponse::sourcePublicId).containsExactly(first, second);
+        verify(sourceRepository, times(2)).save(any(ExamAudienceSource.class));
+        verify(auditLogService).record(hostAdmin, SessionConstants.AGGREGATE_EXAM_SESSION,
+                session.getPublicId().toString(), session.getName(), session.getSessionCode(),
+                SessionConstants.EVENT_EXAM_AUDIENCE_SOURCE_ADDED, "2 sources");
+    }
+
+    @Test
+    void addSources_isIdempotentForSourcesAlreadyOnSession() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        session.setId(26L);
+        UUID studentPublicId = UUID.randomUUID();
+        ExamAudienceSource existing = new ExamAudienceSource();
+        existing.setSession(session);
+        existing.setTenantId(tenantId);
+        existing.setSourceType(AudienceSourceType.STUDENT);
+        existing.setSourcePublicId(studentPublicId);
+        stubStudentSource(session, studentPublicId);
+        when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(26L)).thenReturn(List.of(existing));
+
+        List<AudienceSourceResponse> responses = service.addSources(session.getPublicId(),
+                List.of(new AudienceSourceRequest(AudienceSourceType.STUDENT, studentPublicId)), hostAdmin);
+
+        assertThat(responses).hasSize(1);
+        verify(sourceRepository, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void publish_alreadyEnrolledCountsAsSuccessfulReconciliation() {
         ExamSession session = readyPublishSession();
         UUID studentId = UUID.randomUUID();
@@ -524,6 +683,51 @@ class ExamOrchestrationServiceTest {
         when(enrollmentRepository.findByTenantIdAndStudentPublicIdIn(tenantId, studentIds))
                 .thenReturn(List.of());
         when(memberRepository.findBySessionIdOrderByStudentPublicIdAsc(session.getId())).thenReturn(audience);
+    }
+
+    @Test
+    void addSources_failsWholeBatchWhenAnySourceIsAlreadyCovered() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        session.setId(27L);
+        UUID classPublicId = UUID.randomUUID();
+        UUID covered = UUID.randomUUID();
+        UUID outside = UUID.randomUUID();
+        ExamAudienceSource classSource = new ExamAudienceSource();
+        classSource.setSession(session);
+        classSource.setTenantId(tenantId);
+        classSource.setSourceType(AudienceSourceType.CLASS);
+        classSource.setSourcePublicId(classPublicId);
+        stubStudentSource(session, outside);
+        stubStudent(covered);
+        when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(27L)).thenReturn(List.of(classSource));
+        when(enrollmentModuleService.findActiveStudentPublicIds(tenantId, classPublicId))
+                .thenReturn(List.of(covered));
+        when(sourceRepository.save(any(ExamAudienceSource.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThatThrownBy(() -> service.addSources(session.getPublicId(), List.of(
+                new AudienceSourceRequest(AudienceSourceType.STUDENT, outside),
+                new AudienceSourceRequest(AudienceSourceType.STUDENT, covered)), hostAdmin))
+                .isInstanceOf(AudienceSourceAlreadyCoveredException.class);
+
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    private void stubStudent(UUID studentPublicId) {
+        User student = new User();
+        student.setPublicId(studentPublicId);
+        student.setTenantId(tenantId);
+        student.setRoles(java.util.Set.of(Role.STUDENT));
+        when(identityService.findById(studentPublicId)).thenReturn(Optional.of(student));
+    }
+
+    private void stubStudentSource(ExamSession session, UUID studentPublicId) {
+        when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
+        User student = new User();
+        student.setPublicId(studentPublicId);
+        student.setTenantId(tenantId);
+        student.setRoles(java.util.Set.of(Role.STUDENT));
+        when(identityService.findById(studentPublicId)).thenReturn(Optional.of(student));
     }
 
     private void stubTemplateAndSubscription() {

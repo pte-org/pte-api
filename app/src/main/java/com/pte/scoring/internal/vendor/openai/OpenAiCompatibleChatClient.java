@@ -4,15 +4,23 @@ import com.pte.scoring.internal.config.AiProviderProperties;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.vendor.AiProviderException;
 import com.pte.scoring.internal.vendor.AiScoreResult;
+import com.pte.scoring.internal.vendor.ProviderGuard;
+import com.pte.scoring.internal.vendor.VendorHttp;
+import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.domain.enums.AiProviderCategory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.net.SocketTimeoutException;
+import java.net.http.HttpTimeoutException;
+import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,20 +28,26 @@ import java.util.Map;
 /**
  * Small OpenAI-compatible chat transport shared by text and audio adapters.
  * It accepts only the strict JSON score envelope and never supplies a fallback
- * score when the provider response is unusable.
+ * score when the provider response is unusable. The HTTP call goes through a
+ * {@link ProviderGuard}, like the Azure and Gemini clients, so transient
+ * provider errors are retried within the job's budget.
  */
 @Component
 public class OpenAiCompatibleChatClient {
 
+    static final String VENDOR = "OPENAI_COMPATIBLE";
+
     private final RestClient restClient;
     private final AiProviderProperties properties;
     private final JsonMapper jsonMapper;
+    private final ProviderGuard guard;
 
     public OpenAiCompatibleChatClient(@Qualifier("aiProviderRestClient") RestClient restClient,
-                                      AiProviderProperties properties, JsonMapper jsonMapper) {
+                                      AiProviderProperties properties, JsonMapper jsonMapper, Clock clock) {
         this.restClient = restClient;
         this.properties = properties;
         this.jsonMapper = jsonMapper;
+        this.guard = ProviderGuard.standard(VENDOR, clock);
     }
 
     public AiScoreResult complete(String model, List<Map<String, Object>> messages) {
@@ -58,21 +72,33 @@ public class OpenAiCompatibleChatClient {
             throw new AiProviderException(ScoringConstants.AI_REQUEST_SERIALIZATION_FAILED, ex);
         }
 
-        String responseJson;
+        String responseJson = guard.call(() -> post(requestJson));
+        if (responseJson == null || responseJson.isBlank()) {
+            throw new AiProviderException(ScoringConstants.AI_EMPTY_RESPONSE);
+        }
+        return parseScore(responseJson, model);
+    }
+
+    private String post(String requestJson) {
         try {
-            responseJson = restClient.post()
+            return restClient.post()
                     .uri("/chat/completions")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(requestJson)
                     .retrieve()
                     .body(String.class);
+        } catch (RestClientResponseException ex) {
+            // The exception message quotes the provider body, so only the status and retry hint are kept.
+            int status = ex.getStatusCode().value();
+            HttpHeaders headers = ex.getResponseHeaders();
+            throw VendorHttp.httpFailure(VENDOR, VendorHttp.classifyStatus(status), status,
+                    VendorHttp.retryAfter(headers == null ? null : headers.getFirst(HttpHeaders.RETRY_AFTER)));
         } catch (RestClientException ex) {
-            throw new AiProviderException(ScoringConstants.AI_PROVIDER_REQUEST_FAILED, ex);
+            Throwable cause = ex.getMostSpecificCause();
+            boolean timedOut = cause instanceof SocketTimeoutException || cause instanceof HttpTimeoutException;
+            throw VendorHttp.failure(VENDOR,
+                    timedOut ? AiFailureReason.PROVIDER_TIMEOUT : AiFailureReason.PROVIDER_NETWORK_ERROR);
         }
-        if (responseJson == null || responseJson.isBlank()) {
-            throw new AiProviderException(ScoringConstants.AI_EMPTY_RESPONSE);
-        }
-        return parseScore(responseJson, model);
     }
 
     private AiScoreResult parseScore(String responseJson, String requestedModel) {
@@ -98,7 +124,7 @@ public class OpenAiCompatibleChatClient {
                     reportedModel = requestedModel;
                 }
                 return new AiScoreResult(rawScore.asInt(), subScores, feedback,
-                        AiProviderCategory.REAL, "OPENAI_COMPATIBLE", reportedModel, null);
+                        AiProviderCategory.REAL, VENDOR, reportedModel, null);
             } catch (IllegalArgumentException ex) {
                 throw invalidResponse(ex.getMessage(), ex);
             }
