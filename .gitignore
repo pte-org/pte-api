@@ -44,3 +44,4 @@ scripts/seed-e2e.state.json
 *.key
 
 .claude/
+.codex/

@@ -15,4 +15,8 @@ public interface AttemptAnswerRepository extends JpaRepository<AttemptAnswer, Lo
     /** Scoring's pull-based ingestion (Phase 08) — every answer submitted so far for the session, any attempt. */
     @EntityGraph(attributePaths = {"pinnedItem", "attempt"})
     List<AttemptAnswer> findByAttempt_SessionPublicIdAndAttempt_TenantId(UUID sessionPublicId, UUID tenantId);
+
+    /** Scoring's ingestion of one just-submitted attempt, without scanning the whole session. */
+    @EntityGraph(attributePaths = {"pinnedItem", "attempt"})
+    List<AttemptAnswer> findByAttempt_PublicIdAndAttempt_TenantId(UUID attemptPublicId, UUID tenantId);
 }

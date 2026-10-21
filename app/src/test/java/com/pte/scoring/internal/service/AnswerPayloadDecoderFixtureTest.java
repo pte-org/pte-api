@@ -85,6 +85,32 @@ class AnswerPayloadDecoderFixtureTest {
     }
 
     @Test
+    void emptyOptionsArray_isTreatedAsNoOptionsAndDecodesAsText() {
+        DecodedAnswerPayload essay = decoder.decode(answer("WRITE_ESSAY", "[]", "essay body"));
+
+        assertThat(essay.kind()).isEqualTo(AnswerPayloadKind.TEXT);
+        assertThat(essay.text()).isEqualTo("essay body");
+    }
+
+    @Test
+    void emptyOptionsArray_keepsPositionalAndWordIndexDecoding() {
+        DecodedAnswerPayload typeIn = decoder.decode(
+                answer("FILL_IN_THE_BLANKS_TYPE_IN", "[]", "alpha,,gamma"));
+        assertThat(typeIn.kind()).isEqualTo(AnswerPayloadKind.POSITIONAL_SELECTION);
+
+        DecodedAnswerPayload highlight = decoder.decode(
+                answer("HIGHLIGHT_INCORRECT_WORDS", " [ ] ", "3,7"));
+        assertThat(highlight.kind()).isEqualTo(AnswerPayloadKind.WORD_INDICES);
+    }
+
+    @Test
+    void unparsableOptions_stayUnrecognized() {
+        DecodedAnswerPayload decoded = decoder.decode(answer("MC_LISTENING_MULTIPLE", "not json", "1"));
+
+        assertThat(decoded.kind()).isEqualTo(AnswerPayloadKind.UNRECOGNIZED);
+    }
+
+    @Test
     void nullTaskType_fallsBackToTextWithoutSetLookupFailure() {
         DecodedAnswerPayload decoded = decoder.decode(answer(null, null, "untyped payload"));
 

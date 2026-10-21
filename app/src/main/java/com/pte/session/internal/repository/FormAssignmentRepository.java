@@ -13,4 +13,6 @@ public interface FormAssignmentRepository extends JpaRepository<FormAssignment, 
     long countBySessionId(Long sessionId);
 
     void deleteBySessionId(Long sessionId);
+
+    void deleteBySessionIdAndStudentPublicId(Long sessionId, UUID studentPublicId);
 }

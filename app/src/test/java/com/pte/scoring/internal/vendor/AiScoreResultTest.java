@@ -29,6 +29,30 @@ class AiScoreResultTest {
     }
 
     @Test
+    void result_carriesTranscriptDetailAndFallbackFlag() {
+        AiScoreResult full = new AiScoreResult(70, Map.of("content", 60), "feedback",
+                AiProviderCategory.REAL, "AZURE_GEMINI", "model", null, "the transcript", "{\"words\":3}", true);
+        AiScoreResult legacy = new AiScoreResult(70, Map.of(), "feedback",
+                AiProviderCategory.REAL, "OPENAI_COMPATIBLE", "model", null);
+
+        assertThat(full.transcript()).isEqualTo("the transcript");
+        assertThat(full.detailJson()).isEqualTo("{\"words\":3}");
+        assertThat(full.fallback()).isTrue();
+        assertThat(legacy.transcript()).isNull();
+        assertThat(legacy.detailJson()).isNull();
+        assertThat(legacy.fallback()).isFalse();
+    }
+
+    @Test
+    void result_toStringLeavesOutCandidateContent() {
+        AiScoreResult result = new AiScoreResult(70, Map.of(), "secret feedback",
+                AiProviderCategory.REAL, "AZURE_GEMINI", "model", null, "secret transcript", "{\"secret\":1}", false);
+
+        assertThat(result.toString()).contains("70", "AZURE_GEMINI", "model")
+                .doesNotContain("secret");
+    }
+
+    @Test
     void result_rejectsOutOfRangeRawAndSubScores() {
         assertThatThrownBy(() -> new AiScoreResult(101, Map.of(), "feedback",
                 AiProviderCategory.REAL, "TEST_PROVIDER", null, null))

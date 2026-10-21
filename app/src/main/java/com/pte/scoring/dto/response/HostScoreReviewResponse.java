@@ -10,6 +10,7 @@ public record HostScoreReviewResponse(
         int unassignedAttemptCount,
         int pendingExaminerAnswerCount,
         int unavailableSelectedAnswerCount,
+        int rescorableAnswerCount,
         List<HostScoreReviewView> answers,
         String markingMode,
         String cohortStatus,
@@ -23,9 +24,10 @@ public record HostScoreReviewResponse(
             int unassignedAttemptCount,
             int pendingExaminerAnswerCount,
             int unavailableSelectedAnswerCount,
+            int rescorableAnswerCount,
             List<HostScoreReviewView> answers) {
         this(reviewVersion, publicationLocked, aiEligibleAttemptCount, assignedAttemptCount,
                 unassignedAttemptCount, pendingExaminerAnswerCount, unavailableSelectedAnswerCount,
-                answers, null, null, !publicationLocked);
+                rescorableAnswerCount, answers, null, null, !publicationLocked);
     }
 }

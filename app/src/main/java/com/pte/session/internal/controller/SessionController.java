@@ -1,6 +1,7 @@
 package com.pte.session.internal.controller;
 
 import com.pte.session.dto.response.ExamPolicyResponse;
+import com.pte.session.internal.dto.request.AddAudienceSourcesRequest;
 import com.pte.session.internal.dto.request.ChangeSubscriptionRequest;
 import com.pte.session.internal.dto.request.AudienceSourceRequest;
 import com.pte.session.internal.dto.request.CreateSessionRequest;
@@ -85,6 +86,12 @@ public class SessionController {
     public ApiResponse<AudienceSourceResponse> addAudienceSource(@PathVariable UUID publicId,
             @Valid @RequestBody AudienceSourceRequest request) {
         return ApiResponse.success(examOrchestrationService.addSource(publicId, request, currentUser()));
+    }
+
+    @PostMapping("/{publicId}/audience-sources/bulk")
+    public ApiResponse<List<AudienceSourceResponse>> addAudienceSources(@PathVariable UUID publicId,
+            @Valid @RequestBody AddAudienceSourcesRequest request) {
+        return ApiResponse.success(examOrchestrationService.addSources(publicId, request.sources(), currentUser()));
     }
 
     @GetMapping("/{publicId}/audience-sources")

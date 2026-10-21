@@ -11,12 +11,22 @@ import java.util.Objects;
  * A vendor's scoring result. {@code rawScore} is 0–100 (same scale as {@link
  * com.pte.scoring.internal.service.ObjectiveScoringService} — required so
  * reporting's aggregation can average objective and AI scores uniformly).
- * {@code subScores} (skill name → 0–100) is carried for forward-compatibility
- * with finer-grained enabling-skill reporting — NOT persisted or consumed
- * anywhere yet (documented scope cut).
+ * {@code subScores} (criterion → 0–100), {@code feedback}, {@code transcript}
+ * and {@code detailJson} are stored on the answer's AI detail row; {@code
+ * fallback} marks a score produced without the full vendor pipeline.
+ *
+ * <p>{@link #toString()} leaves out the candidate's content (feedback,
+ * transcript, detail) so a result can never leak into a log line.
  */
 public record AiScoreResult(int rawScore, Map<String, Integer> subScores, String feedback,
-        AiProviderCategory providerCategory, String provider, String model, String providerVersion) {
+        AiProviderCategory providerCategory, String provider, String model, String providerVersion,
+        String transcript, String detailJson, boolean fallback) {
+
+    /** A result without transcript or detail, from adapters that produce neither. */
+    public AiScoreResult(int rawScore, Map<String, Integer> subScores, String feedback,
+            AiProviderCategory providerCategory, String provider, String model, String providerVersion) {
+        this(rawScore, subScores, feedback, providerCategory, provider, model, providerVersion, null, null, false);
+    }
 
     public AiScoreResult {
         if (rawScore < 0 || rawScore > 100) {
@@ -46,6 +56,12 @@ public record AiScoreResult(int rawScore, Map<String, Integer> subScores, String
         }
         subScores = Map.copyOf(safeSubScores);
         feedback = Objects.requireNonNullElse(feedback, "");
+    }
+
+    @Override
+    public String toString() {
+        return "AiScoreResult[rawScore=" + rawScore + ", providerCategory=" + providerCategory
+                + ", provider=" + provider + ", model=" + model + ", fallback=" + fallback + "]";
     }
 
     private static void requireLength(String value, int maxLength, String field) {

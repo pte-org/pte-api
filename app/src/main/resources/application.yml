@@ -181,6 +181,20 @@ identity:
     media-url-ttl-seconds: ${SCORING_AI_MEDIA_URL_TTL_SECONDS:120}
     connect-timeout-ms: ${SCORING_AI_CONNECT_TIMEOUT_MS:2000}
     read-timeout-ms: ${SCORING_AI_READ_TIMEOUT_MS:30000}
+    # Time one job may spend on vendor calls, retry waits included.
+    job-budget-ms: ${SCORING_AI_JOB_BUDGET_MS:90000}
+    # A host scoring request re-dispatches answers still AI_SCORING this long after dispatch.
+    stale-dispatch-minutes: ${SCORING_AI_STALE_DISPATCH_MINUTES:10}
+    # provider=azure-gemini: speech via Azure short-audio REST, text and images via Gemini.
+    # It reads connect-timeout-ms above but not read-timeout-ms; each vendor has its own timeout-ms.
+    azure:
+      speech-key: ${SCORING_AI_AZURE_SPEECH_KEY:}
+      speech-region: ${SCORING_AI_AZURE_SPEECH_REGION:}
+      timeout-ms: ${SCORING_AI_AZURE_TIMEOUT_MS:60000}
+    gemini:
+      api-key: ${SCORING_AI_GEMINI_API_KEY:}
+      model: ${SCORING_AI_GEMINI_MODEL:gemini-flash-lite-latest}
+      timeout-ms: ${SCORING_AI_GEMINI_TIMEOUT_MS:60000}
 
 task-types:
   rollout:

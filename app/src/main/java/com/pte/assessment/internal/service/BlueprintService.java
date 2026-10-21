@@ -237,7 +237,8 @@ public class BlueprintService {
                     && !section.name().equals(requested.section())) {
                 throw new BlueprintValidationException(AssessmentConstants.BLUEPRINT_ITEM_INVALID);
             }
-            normalized.add(new SortableItem(requested.questionPublicId(), section, templateItem.sequence(),
+            normalized.add(new SortableItem(requested.questionPublicId(), section,
+                    TemplateTaskOrder.sequenceInSection(section, taskTypeKey, templateItem.sequence()),
                     requested.orderIndex() == null ? inputIndex : requested.orderIndex(), inputIndex));
         }
 

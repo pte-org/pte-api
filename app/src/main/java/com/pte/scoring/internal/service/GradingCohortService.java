@@ -145,9 +145,41 @@ public class GradingCohortService {
                     GradingConstants.MARKING_MODE_CONFLICT_MESSAGE);
         }
         Map<UUID, String> dispositions = validateDispositions(candidates, request.outstandingDispositions());
-        Instant now = clock.instant();
+        GradingCohort cohort = freezeNewCohort(tenantId, sessionPublicId, actorPublicId, currentVersion,
+                request.markingMode(), candidates, dispositions);
+        return reconcileLocked(cohort, tenantId, sessionPublicId);
+    }
+
+    /**
+     * Freezes the session's manual-marking cohort when the Host commits examiner assignments, so the Host has a
+     * single step. Attempts that were never submitted are excluded with an automatic reason. No-op when a cohort
+     * already exists.
+     */
+    @Transactional
+    public void ensureManualCohort(UUID sessionPublicId, UUID tenantId, UUID actorPublicId) {
+        sessionService.lockClosedForGradingCohort(sessionPublicId, tenantId);
+        if (cohortRepository.findForUpdate(tenantId, sessionPublicId).isPresent()) {
+            return;
+        }
+        List<AttemptGradingCandidateView> candidates = currentCandidates(sessionPublicId, tenantId);
+        if (candidates.stream().noneMatch(AttemptGradingCandidateView::submitted)) {
+            throw error(HttpStatus.CONFLICT, GradingConstants.NO_PAPERS, GradingConstants.NO_PAPERS_MESSAGE);
+        }
+        Map<UUID, String> dispositions = candidates.stream()
+                .filter(candidate -> !candidate.submitted())
+                .collect(Collectors.toMap(AttemptGradingCandidateView::attemptPublicId,
+                        candidate -> GradingConstants.AUTO_DISPOSITION_NOT_SUBMITTED));
+        GradingCohort cohort = freezeNewCohort(tenantId, sessionPublicId, actorPublicId,
+                previewVersion(sessionPublicId, candidates), GradingMarkingMode.MANUAL_EXAMINER, candidates,
+                dispositions);
+        reconcileLocked(cohort, tenantId, sessionPublicId);
+    }
+
+    private GradingCohort freezeNewCohort(UUID tenantId, UUID sessionPublicId, UUID actorPublicId,
+            String previewVersion, GradingMarkingMode markingMode, List<AttemptGradingCandidateView> candidates,
+            Map<UUID, String> dispositions) {
         GradingCohort cohort = cohortRepository.saveAndFlush(new GradingCohort(tenantId, sessionPublicId,
-                actorPublicId, currentVersion, request.markingMode(), now));
+                actorPublicId, previewVersion, markingMode, clock.instant()));
         List<GradingCohortMember> members = candidates.stream()
                 .map(candidate -> new GradingCohortMember(cohort.getPublicId(), tenantId, sessionPublicId,
                         candidate.attemptPublicId(), candidate.studentPublicId(), candidate.status(),
@@ -155,7 +187,7 @@ public class GradingCohortService {
                 .toList();
         memberRepository.saveAll(members);
         memberRepository.flush();
-        return reconcileLocked(cohort, tenantId, sessionPublicId);
+        return cohort;
     }
 
     @Transactional

@@ -37,6 +37,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
@@ -68,8 +70,8 @@ class GradingCohortServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(sessionService.isSessionClosed(sessionId, tenantId)).thenReturn(true);
-        service = new GradingCohortService(sessionService, attemptService, ingestService, answerRepository,
+        lenient().when(sessionService.isSessionClosed(sessionId, tenantId)).thenReturn(true);
+        service =new GradingCohortService(sessionService, attemptService, ingestService, answerRepository,
                 assignmentRepository, examinerScoreRepository, cohortRepository, memberRepository, evaluator,
                 eventPublisher, Clock.fixed(Instant.parse("2026-10-03T10:00:00Z"), ZoneOffset.UTC));
     }
@@ -126,12 +128,76 @@ class GradingCohortServiceTest {
     }
 
     @Test
+    void reconcilingACompletedCohortNeitherAnnouncesCompletionAgainNorRewritesAnswers() {
+        var cohort = new com.pte.scoring.domain.GradingCohort(tenantId, sessionId, actorId, "preview-v1",
+                GradingMarkingMode.AI_ONLY, Instant.parse("2026-10-03T08:00:00Z"));
+        cohort.complete(Instant.parse("2026-10-03T09:00:00Z"));
+        when(cohortRepository.findForUpdate(tenantId, sessionId)).thenReturn(Optional.of(cohort));
+        when(evaluator.evaluate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new GradingEvaluation(true, 1, 0, 1, 1, List.of()));
+
+        service.reconcileIfPresent(sessionId, tenantId);
+
+        verify(cohortRepository, never()).saveAndFlush(any());
+        verify(eventPublisher, never()).publishEvent(any());
+        // Reconcile runs inside the AI worker's commit, so it only inserts new answers and never
+        // updates existing rows another worker may hold locked.
+        verify(ingestService).ingestForSession(sessionId, tenantId);
+        verify(ingestService, never()).ingestForScoring(any(), any());
+    }
+
+    @Test
     void previewRejectsAnOpenSessionBeforeReadingItsAttemptInventory() {
         when(sessionService.isSessionClosed(sessionId, tenantId)).thenReturn(false);
 
         assertThatThrownBy(() -> service.preview(sessionId, tenantId))
                 .isInstanceOf(GradingCohortException.class)
                 .hasMessageContaining("closed");
+    }
+
+    @Test
+    void ensuringAManualCohortFreezesItWithAnAutomaticReasonForUnsubmittedAttempts() {
+        stubCandidates();
+        when(cohortRepository.findForUpdate(tenantId, sessionId)).thenReturn(Optional.empty());
+        var cohortId = UUID.randomUUID();
+        when(cohortRepository.saveAndFlush(any())).thenAnswer(invocation -> {
+            var cohort = invocation.getArgument(0, com.pte.scoring.domain.GradingCohort.class);
+            cohort.setPublicId(cohortId);
+            return cohort;
+        });
+        when(memberRepository.findForUpdate(cohortId)).thenReturn(List.of());
+        when(attemptService.getGradingCoverage(any(), any(), any())).thenReturn(Map.of());
+        when(evaluator.evaluate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new GradingEvaluation(false, 1, 1, 1, 0, List.of()));
+
+        service.ensureManualCohort(sessionId, tenantId, actorId);
+
+        var cohort = org.mockito.ArgumentCaptor.forClass(com.pte.scoring.domain.GradingCohort.class);
+        verify(cohortRepository).saveAndFlush(cohort.capture());
+        assertThat(cohort.getValue().getMarkingMode()).isEqualTo(GradingMarkingMode.MANUAL_EXAMINER);
+        @SuppressWarnings("unchecked")
+        var members = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(memberRepository).saveAll(members.capture());
+        var saved = (List<com.pte.scoring.domain.GradingCohortMember>) members.getValue();
+        assertThat(saved).extracting(com.pte.scoring.domain.GradingCohortMember::getAttemptPublicId,
+                com.pte.scoring.domain.GradingCohortMember::isExcluded,
+                com.pte.scoring.domain.GradingCohortMember::getDispositionReason)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple(submittedAttemptId, false, null),
+                        org.assertj.core.groups.Tuple.tuple(outstandingAttemptId, true,
+                                com.pte.scoring.internal.constant.GradingConstants.AUTO_DISPOSITION_NOT_SUBMITTED));
+    }
+
+    @Test
+    void ensuringAManualCohortLeavesAnExistingCohortUntouched() {
+        var existing = new com.pte.scoring.domain.GradingCohort(tenantId, sessionId, actorId, "preview-v1",
+                GradingMarkingMode.MANUAL_EXAMINER, Instant.parse("2026-10-03T08:00:00Z"));
+        when(cohortRepository.findForUpdate(tenantId, sessionId)).thenReturn(Optional.of(existing));
+
+        service.ensureManualCohort(sessionId, tenantId, actorId);
+
+        verify(cohortRepository, never()).saveAndFlush(any());
+        verify(memberRepository, never()).saveAll(any());
     }
 
     private void stubCandidates() {

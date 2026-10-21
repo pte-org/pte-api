@@ -92,6 +92,9 @@ public class TaskRuntimeContract extends BaseEntity {
     @Column(name = "uses_option_order_as_correct_position", nullable = false)
     private boolean usesOptionOrderAsCorrectPosition;
 
+    @Column(name = "requires_reference_answer", nullable = false)
+    private boolean requiresReferenceAnswer;
+
     @Column(nullable = false, length = 16)
     private String status = "ACTIVE";
 }

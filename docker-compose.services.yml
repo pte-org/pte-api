@@ -93,6 +93,14 @@ services:
       # the authenticated walkthrough is approved.
       TASK_TYPES_CUSTOM_CREATION_ENABLED: ${TASK_TYPES_CUSTOM_CREATION_ENABLED:-false}
       TASK_TYPES_CUSTOM_TEMPLATE_ACTIVATION_ENABLED: ${TASK_TYPES_CUSTOM_TEMPLATE_ACTIVATION_ENABLED:-false}
+      # com.pte.scoring AI provider. stub (default) needs nothing; azure-gemini
+      # refuses to start unless AZURE_SPEECH_KEY, AZURE_SPEECH_REGION and
+      # GEMINI_API_KEY are set in the env file.
+      SCORING_AI_PROVIDER: ${SCORING_AI_PROVIDER:-stub}
+      SCORING_AI_AZURE_SPEECH_KEY: ${AZURE_SPEECH_KEY:-}
+      SCORING_AI_AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION:-}
+      SCORING_AI_GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      SCORING_AI_GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-lite-latest}
     depends_on:
       postgres:
         condition: service_healthy

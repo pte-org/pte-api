@@ -14,6 +14,10 @@ public final class SessionConstants {
             "GRADING_COHORT_SESSION_NOT_CLOSED";
     public static final String GRADING_COHORT_REQUIRES_CLOSED_SESSION_MESSAGE =
             "Close the exam session before freezing its grading cohort.";
+    public static final String EXAMINER_ASSIGNMENT_REQUIRES_CLOSED_SESSION =
+            "EXAMINER_ASSIGNMENT_SESSION_NOT_CLOSED";
+    public static final String EXAMINER_ASSIGNMENT_REQUIRES_CLOSED_SESSION_MESSAGE =
+            "Close the exam session before assigning examiners.";
 
     public static final String SESSION_NOT_FOUND = "SESSION_NOT_FOUND";
     public static final String ALREADY_ENROLLED = "ALREADY_ENROLLED";
@@ -71,6 +75,8 @@ public final class SessionConstants {
     public static final String EXAM_DRAFT_CONFIGURATION_INVALID = "EXAM_DRAFT_CONFIGURATION_INVALID";
     public static final String AUDIENCE_SOURCE_NOT_FOUND = "AUDIENCE_SOURCE_NOT_FOUND";
     public static final String EXAM_AUDIENCE_LOCKED = "EXAM_AUDIENCE_LOCKED";
+    public static final String ENROLLED_STUDENT_ALREADY_STARTED = "ENROLLED_STUDENT_ALREADY_STARTED";
+    public static final String AUDIENCE_SOURCE_ALREADY_COVERED = "AUDIENCE_SOURCE_ALREADY_COVERED";
     public static final String LEGACY_SESSION_CREATE_REQUIRES_NEW_WORKFLOW =
             "LEGACY_SESSION_CREATE_REQUIRES_NEW_WORKFLOW";
     public static final String EXAM_DRAFT_NOT_EDITABLE_FRIENDLY =
@@ -130,6 +136,9 @@ public final class SessionConstants {
     public static final String TEMPLATE_REFERENCE_REQUIRED = "Template reference is required";
     public static final String AUDIENCE_SOURCE_TYPE_REQUIRED = "Audience source type is required";
     public static final String AUDIENCE_SOURCE_REFERENCE_REQUIRED = "Audience source reference is required";
+    public static final String AUDIENCE_SOURCES_REQUIRED = "At least one audience source is required";
+    public static final String AUDIENCE_SOURCES_TOO_MANY = "Too many audience sources in one request";
+    public static final int MAX_AUDIENCE_SOURCES_PER_REQUEST = 2000;
 
     public static final String PROCTOR_REFERENCE_REQUIRED = "Proctor reference is required";
     public static final String AT_LEAST_ONE_STUDENT_REQUIRED = "At least one student is required";
@@ -144,7 +153,7 @@ public final class SessionConstants {
             "Mock and official exams must include every skill in the selected template.";
     public static final String TEMPLATE_SKILLS_UNAVAILABLE =
             "The selected exam template does not contain any supported skills.";
-    public static final String RETRY_COUNT_INVALID = "Set the retry count to a whole number from 0 to 9.";
+    public static final String RETRY_COUNT_INVALID = "Each student can take an exam only once, so the retry count must be 0.";
     public static final String SUBSCRIPTION_REFERENCE_REQUIRED = "Subscription reference is required";
     public static final String OPEN_TIME_REQUIRED = "Open time is required";
     public static final String OPEN_TIME_FUTURE = "Open time must be in the future";
@@ -160,7 +169,11 @@ public final class SessionConstants {
     public static final String EXAM_GENERATION_FRIENDLY =
             "The exam is still being prepared. Please wait until generation finishes before publishing it.";
     public static final String EXAM_AUDIENCE_LOCKED_FRIENDLY =
-            "This exam audience is already locked for generation or publishing and can no longer be changed here.";
+            "Students can't be added or removed while the exam is being prepared or running. Try again before it starts or after it ends.";
+    public static final String ENROLLED_STUDENT_ALREADY_STARTED_FRIENDLY =
+            "This student already started the exam, so they can't be removed from it.";
+    public static final String AUDIENCE_SOURCE_ALREADY_COVERED_FRIENDLY =
+            "This student or class is already included through a class or program added to this exam.";
     public static final String LEGACY_SESSION_CREATE_FRIENDLY =
             "This exam creation form is outdated. Start the exam from the new workflow so the template, audience, and student rules can be checked before publishing.";
     public static final String PREFLIGHT_AUDIENCE_CHANGED = "AUDIENCE_CHANGED_REQUIRES_REGENERATION";

@@ -138,6 +138,15 @@ public class IdentityService implements StudentCountProvider {
                 .toList();
     }
 
+    /** Display names of the tenant's users, keyed by public id; unknown or deleted ids are omitted. */
+    public Map<UUID, String> findFullNames(UUID tenantId, Collection<UUID> userPublicIds) {
+        if (tenantId == null || userPublicIds == null || userPublicIds.isEmpty()) {
+            return Map.of();
+        }
+        return userRepository.findByPublicIdInAndTenantIdAndDeletedFalse(List.copyOf(userPublicIds), tenantId).stream()
+                .collect(Collectors.toMap(User::getPublicId, User::getFullName));
+    }
+
     /**
      * Locks the selected tenant-owned user rows and returns only active Examiner identities.
      * The caller must hold one transaction through the protected write so suspension or role

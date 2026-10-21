@@ -31,6 +31,18 @@ public record ExaminerReportsResponse(
             Instant finalizedAt,
             long scoreCount,
             Double averageScore,
-            long workVersion
-    ) {}
+            long workVersion,
+            String sessionName,
+            int attemptOrdinal
+    ) {
+        public ExaminerReportRecentItem(UUID attemptPublicId, UUID sessionPublicId, Instant finalizedAt,
+                long scoreCount, Double averageScore, long workVersion) {
+            this(attemptPublicId, sessionPublicId, finalizedAt, scoreCount, averageScore, workVersion, null, 0);
+        }
+
+        public ExaminerReportRecentItem withSessionName(String name) {
+            return new ExaminerReportRecentItem(attemptPublicId, sessionPublicId, finalizedAt, scoreCount,
+                    averageScore, workVersion, name, attemptOrdinal);
+        }
+    }
 }

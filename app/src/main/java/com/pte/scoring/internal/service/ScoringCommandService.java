@@ -1,7 +1,6 @@
 package com.pte.scoring.internal.service;
 
 import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
@@ -26,8 +25,10 @@ import java.util.UUID;
  * queued to RabbitMQ, {@code UNSCORED} or a task type absent from the
  * template (e.g. {@code PERSONAL_INTRODUCTION}) stays {@code PENDING} —
  * honest completion, not a fake "skipped" status. Callable multiple times
- * for the same session as more answers come in (each call only
- * ingests/scores what's newly PENDING).
+ * for the same session as more answers come in: each call scores what is
+ * newly PENDING and sends again the AI answers that failed or whose job was
+ * lost ({@link ScoringAnswerRepository#findScoringWork}). Those rows go straight back to
+ * {@code AI_SCORING} under a new dispatch token, never through PENDING.
  */
 @Service
 public class ScoringCommandService {
@@ -88,11 +89,11 @@ public class ScoringCommandService {
             sessionService.lockForScoreReviewMutation(sessionPublicId, tenantId);
             publicationLockService.assertNotPublished(tenantId, sessionPublicId);
         }
-        scoringIngestService.ingestForSession(sessionPublicId, tenantId);
+        scoringIngestService.ingestForScoring(sessionPublicId, tenantId);
 
-        List<ScoringAnswer> pending = scoringAnswerRepository
-                .findBySessionPublicIdAndTenantIdAndStatus(sessionPublicId, tenantId, ScoringAnswerStatus.PENDING);
-        for (ScoringAnswer answer : pending) {
+        List<ScoringAnswer> work = scoringAnswerRepository.findScoringWork(sessionPublicId, tenantId,
+                aiScoringDispatcher.staleBefore());
+        for (ScoringAnswer answer : work) {
             Optional<TaskRuntimeProfileDescriptor> runtime = scoringMethodResolver.resolveProfile(
                     answer.getScoreTemplatePublicId(), answer.getTaskType());
             Optional<ScoringMethod> method = runtime.map(this::methodFor)
