@@ -7,8 +7,6 @@ import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.SubscriptionStatus;
 import com.pte.enrollment.EnrollmentModuleService;
 import com.pte.identity.IdentityService;
-import com.pte.identity.domain.Role;
-import com.pte.identity.domain.User;
 import com.pte.scoretemplate.ScoreTemplateService;
 import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
 import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
@@ -490,7 +488,7 @@ class ExamOrchestrationServiceTest {
         classSource.setTenantId(tenantId);
         classSource.setSourceType(AudienceSourceType.CLASS);
         classSource.setSourcePublicId(classPublicId);
-        stubStudentSource(session, studentPublicId);
+        stubOwnedSession(session);
         when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(21L)).thenReturn(List.of(classSource));
         when(enrollmentModuleService.findActiveStudentPublicIds(tenantId, classPublicId))
                 .thenReturn(List.of(studentPublicId));
@@ -514,7 +512,7 @@ class ExamOrchestrationServiceTest {
         classSource.setTenantId(tenantId);
         classSource.setSourceType(AudienceSourceType.CLASS);
         classSource.setSourcePublicId(classPublicId);
-        stubStudentSource(session, studentPublicId);
+        stubOwnedSession(session);
         when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(22L)).thenReturn(List.of(classSource));
         when(enrollmentModuleService.findActiveStudentPublicIds(tenantId, classPublicId))
                 .thenReturn(List.of(UUID.randomUUID()));
@@ -580,8 +578,7 @@ class ExamOrchestrationServiceTest {
         session.setId(25L);
         UUID first = UUID.randomUUID();
         UUID second = UUID.randomUUID();
-        stubStudentSource(session, first);
-        stubStudent(second);
+        stubOwnedSession(session);
         when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(25L)).thenReturn(List.of());
         when(sourceRepository.save(any(ExamAudienceSource.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -608,7 +605,7 @@ class ExamOrchestrationServiceTest {
         existing.setTenantId(tenantId);
         existing.setSourceType(AudienceSourceType.STUDENT);
         existing.setSourcePublicId(studentPublicId);
-        stubStudentSource(session, studentPublicId);
+        stubOwnedSession(session);
         when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(26L)).thenReturn(List.of(existing));
 
         List<AudienceSourceResponse> responses = service.addSources(session.getPublicId(),
@@ -698,8 +695,7 @@ class ExamOrchestrationServiceTest {
         classSource.setTenantId(tenantId);
         classSource.setSourceType(AudienceSourceType.CLASS);
         classSource.setSourcePublicId(classPublicId);
-        stubStudentSource(session, outside);
-        stubStudent(covered);
+        stubOwnedSession(session);
         when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(27L)).thenReturn(List.of(classSource));
         when(enrollmentModuleService.findActiveStudentPublicIds(tenantId, classPublicId))
                 .thenReturn(List.of(covered));
@@ -713,21 +709,8 @@ class ExamOrchestrationServiceTest {
         verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any());
     }
 
-    private void stubStudent(UUID studentPublicId) {
-        User student = new User();
-        student.setPublicId(studentPublicId);
-        student.setTenantId(tenantId);
-        student.setRoles(java.util.Set.of(Role.STUDENT));
-        when(identityService.findById(studentPublicId)).thenReturn(Optional.of(student));
-    }
-
-    private void stubStudentSource(ExamSession session, UUID studentPublicId) {
+    private void stubOwnedSession(ExamSession session) {
         when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
-        User student = new User();
-        student.setPublicId(studentPublicId);
-        student.setTenantId(tenantId);
-        student.setRoles(java.util.Set.of(Role.STUDENT));
-        when(identityService.findById(studentPublicId)).thenReturn(Optional.of(student));
     }
 
     private void stubTemplateAndSubscription() {
