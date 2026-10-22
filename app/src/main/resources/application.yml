@@ -16,6 +16,16 @@ rate-limit:
 practice:
   web:
     enabled: ${PRACTICE_WEB_ENABLED:false}
+  ai:
+    enabled: ${PRACTICE_AI_ENABLED:false}
+    api-key: ${PRACTICE_AI_GEMINI_API_KEY:${GEMINI_API_KEY:}}
+    model: ${PRACTICE_AI_GEMINI_MODEL:${GEMINI_MODEL:gemini-flash-lite-latest}}
+    rubric-version: ${PRACTICE_AI_RUBRIC_VERSION:pteprep-rubric-v1}
+    timeout-ms: ${PRACTICE_AI_TIMEOUT_MS:45000}
+    max-attempts: ${PRACTICE_AI_MAX_ATTEMPTS:3}
+    lease-seconds: ${PRACTICE_AI_LEASE_SECONDS:300}
+    poll-delay-ms: ${PRACTICE_AI_POLL_DELAY_MS:1000}
+    max-backoff-seconds: ${PRACTICE_AI_MAX_BACKOFF_SECONDS:120}
   email-auth:
     enabled: ${PRACTICE_EMAIL_AUTH_ENABLED:false}
   strict-entitlement:

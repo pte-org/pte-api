@@ -12,6 +12,11 @@ public final class PracticeConstants {
     public static final String PRACTICE_SESSION_PATH = "/api/v1/student/practice/sessions";
     public static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
     public static final String PRACTICE_WEB_ENABLED_PROPERTY = "practice.web.enabled";
+    public static final String PRACTICE_AI_ENABLED_PROPERTY = "practice.ai.enabled";
+    public static final String PRACTICE_EXPLANATION_EXCHANGE = "pte.practice.explanation";
+    public static final String PRACTICE_EXPLANATION_QUEUE = "pte.practice.explanation.jobs";
+    public static final String PRACTICE_EXPLANATION_DLQ = "pte.practice.explanation.jobs.dlq";
+    public static final String PRACTICE_EXPLANATION_ROUTING_KEY = "practice.explanation.generate";
     public static final String PRACTICE_EMAIL_AUTH_ENABLED_PROPERTY = "practice.email-auth.enabled";
     public static final String PRACTICE_STRICT_ENTITLEMENT_ENABLED_PROPERTY =
             "practice.strict-entitlement.enabled";
@@ -42,6 +47,23 @@ public final class PracticeConstants {
     public static final String PRACTICE_MEDIA_BINDING_REQUIRED = "PRACTICE_MEDIA_BINDING_REQUIRED";
     public static final String PRACTICE_MEDIA_SESSION_NOT_LIVE = "PRACTICE_MEDIA_SESSION_NOT_LIVE";
     public static final String PRACTICE_MEDIA_ITEM_NOT_RECORDABLE = "PRACTICE_MEDIA_ITEM_NOT_RECORDABLE";
+    public static final String PRACTICE_EXPLANATION_UNAVAILABLE = "PRACTICE_EXPLANATION_UNAVAILABLE";
+    public static final String PRACTICE_EXPLANATION_NOT_READY = "PRACTICE_EXPLANATION_NOT_READY";
+    public static final String PRACTICE_EXPLANATION_LANGUAGE_INVALID = "PRACTICE_EXPLANATION_LANGUAGE_INVALID";
+    public static final String PRACTICE_EXPLANATION_LANGUAGE_REQUIRED = "Language is required";
+    public static final String PRACTICE_EXPLANATION_IDEMPOTENCY_KEY_INVALID =
+            "PRACTICE_EXPLANATION_IDEMPOTENCY_KEY_INVALID";
+    public static final String PRACTICE_EXPLANATION_JOB_NOT_FOUND =
+            "PRACTICE_EXPLANATION_JOB_NOT_FOUND";
+    public static final String PRACTICE_EXPLANATION_JOB_NOT_FOUND_MESSAGE =
+            "The requested explanation job is no longer available.";
+    public static final String PRACTICE_EXPLANATION_IDEMPOTENCY_KEY_INVALID_MESSAGE =
+            "Explanation Idempotency-Key must be between 1 and 128 characters.";
+    public static final String PRACTICE_EXPLANATION_FAILURE_RETRYABLE = "PROVIDER_RETRYABLE";
+    public static final String PRACTICE_EXPLANATION_FAILURE_TERMINAL = "PROVIDER_TERMINAL";
+    public static final String PRACTICE_EXPLANATION_FAILURE_INTERNAL = "INTERNAL_ERROR";
+    public static final long PRACTICE_AI_LEASE_SAFETY_SECONDS = 30L;
+    public static final long PRACTICE_AI_MAX_LEASE_SECONDS = 300L;
 
     public static final String PRACTICE_IDEMPOTENCY_KEY_REQUIRED_MESSAGE =
             "Retry this practice action with a stable Idempotency-Key.";
@@ -75,6 +97,13 @@ public final class PracticeConstants {
             "The practice session is no longer accepting recordings.";
     public static final String PRACTICE_MEDIA_ITEM_NOT_RECORDABLE_MESSAGE =
             "This practice task does not accept a recording.";
+    public static final String PRACTICE_EXPLANATION_UNAVAILABLE_MESSAGE =
+            "AI explanation is not available for this practice answer yet.";
+    public static final String PRACTICE_EXPLANATION_NOT_READY_MESSAGE =
+            "Submit this practice answer before requesting an explanation.";
+    public static final String PRACTICE_EXPLANATION_LANGUAGE_INVALID_MESSAGE =
+            "Explanation language must be vi or en.";
+    public static final String PRACTICE_DEFAULT_RUBRIC_VERSION = "pteprep-rubric-v1";
 
     public static final String PRACTICE_PRODUCT_CODE = "PTE_CORE_PRACTICE";
     public static final String PRACTICE_PRODUCT_TITLE = "PTE Core Practice";
