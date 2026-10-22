@@ -29,5 +29,7 @@ public record QuestionResponse(
         boolean canDeleteDraft,
         boolean canArchive,
         String deleteBlockReason,
-        String pool) {
+        String pool,
+        boolean availableForPractice,
+        boolean availableForExam) {
 }

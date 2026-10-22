@@ -20,8 +20,9 @@ import java.util.UUID;
 
 /**
  * Student-owned task boundary for a practice session. It stores only the
- * renderer contract, a safe question snapshot and the student's draft/answer;
- * correct-answer data is deliberately excluded from this aggregate.
+ * renderer contract, a safe question snapshot and the student's draft/answer.
+ * Restricted reference material is pinned for backend-only post-submit
+ * evaluation and is never mapped into the student delivery response.
  */
 @Entity
 @Table(name = "practice_session_items", uniqueConstraints = {
@@ -77,6 +78,19 @@ public class PracticeSessionItem extends BaseEntity {
 
     @Column(name = "max_word_count")
     private Integer maxWordCount;
+
+    @Column(name = "audio_prompt_ref")
+    private UUID audioPromptRef;
+
+    @Column(name = "image_prompt_ref")
+    private UUID imagePromptRef;
+
+    /** Restricted answer material pinned for post-submit evaluation only. */
+    @Column(name = "reference_answer_text", columnDefinition = "text")
+    private String referenceAnswerText;
+
+    @Column(name = "correct_answer_text", columnDefinition = "text")
+    private String correctAnswerText;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)

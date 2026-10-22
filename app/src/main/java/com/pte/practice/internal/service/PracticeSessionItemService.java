@@ -3,6 +3,7 @@ package com.pte.practice.internal.service;
 import com.pte.attempt.ResponseConfidence;
 import com.pte.itembank.PracticeQuestionService;
 import com.pte.itembank.dto.response.PracticeQuestionContent;
+import com.pte.itembank.dto.response.PracticeQuestionEvaluationContent;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeSessionItem;
@@ -202,6 +203,15 @@ public class PracticeSessionItemService {
         item.setPromptText(content.promptText());
         item.setMinWordCount(content.minWordCount());
         item.setMaxWordCount(content.maxWordCount());
+        item.setAudioPromptRef(content.audioPromptRef());
+        item.setImagePromptRef(content.imagePromptRef());
+        PracticeQuestionEvaluationContent evaluationContent = practiceQuestionService
+                .findPublishedQuestionForEvaluation(content.publicId())
+                .orElseThrow(() -> new PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        PracticeConstants.PRACTICE_CONTENT_NOT_READY,
+                        PracticeConstants.PRACTICE_CONTENT_NOT_READY_MESSAGE));
+        item.setReferenceAnswerText(evaluationContent.referenceAnswerText());
+        item.setCorrectAnswerText(evaluationContent.correctAnswerText());
         try {
             item.setOptionsJson(jsonMapper.writeValueAsString(content.options()));
         } catch (RuntimeException ex) {

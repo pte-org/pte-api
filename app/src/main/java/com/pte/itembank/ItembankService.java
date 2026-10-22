@@ -59,7 +59,8 @@ import java.util.stream.Collectors;
  *
  * <p>Platform-owned question authoring and lookup. Every question is SHARED;
  * only platform users may write the bank, while generation reads APPROVED items
- * from the {@link QuestionPool#EXAM} pool only.
+ * marked for the exam channel. The legacy pool remains as a migration
+ * compatibility classification.
  */
 @Service
 public class ItembankService {
@@ -119,7 +120,14 @@ public class ItembankService {
         question.setTaskTypeKey(taskTypeKey);
         question.setTaskTypeSection(resolveTaskTypeSection(taskTypeKey, taskType));
         question.setVisibility(Visibility.SHARED);
-        question.setPool(parsePool(request.pool()));
+        QuestionPool pool = parsePool(request.pool());
+        question.setPool(pool);
+        boolean hasExplicitFlags = request.availableForPractice() != null || request.availableForExam() != null;
+        question.setAvailableForPractice(hasExplicitFlags
+                ? Boolean.TRUE.equals(request.availableForPractice()) : pool == QuestionPool.PRACTICE);
+        question.setAvailableForExam(hasExplicitFlags
+                ? Boolean.TRUE.equals(request.availableForExam()) : pool == QuestionPool.EXAM);
+        question.setAvailabilityFlagsExplicit(true);
         question.setTenantId(null);
         question.setAuthorUserPublicId(caller.userId());
         question.setStatus(QuestionStatus.DRAFT);
@@ -262,6 +270,15 @@ public class ItembankService {
         applyContent(question, request.title(), request.promptText(), request.audioPromptRef(),
                 request.imagePromptRef(), request.referenceAnswerText(), request.correctAnswerText(),
                 request.minWordCount(), request.maxWordCount(), request.options());
+        if (request.availableForPractice() != null) {
+            question.setAvailableForPractice(request.availableForPractice());
+        }
+        if (request.availableForExam() != null) {
+            question.setAvailableForExam(request.availableForExam());
+        }
+        if (request.availableForPractice() != null || request.availableForExam() != null) {
+            question.setAvailabilityFlagsExplicit(true);
+        }
         validationHelper.validate(question);
         validateMediaReferences(question, caller);
         audit(caller, ItembankConstants.AUDIT_UPDATED, question, "Updated question draft");
@@ -282,6 +299,9 @@ public class ItembankService {
                 ? source.getPteTaskType().getSection().name() : source.getTaskTypeSection());
         revision.setVisibility(source.getVisibility());
         revision.setPool(source.getPool());
+        revision.setAvailableForPractice(source.isAvailableForPractice());
+        revision.setAvailableForExam(source.isAvailableForExam());
+        revision.setAvailabilityFlagsExplicit(source.isAvailabilityFlagsExplicit());
         revision.setTenantId(source.getTenantId());
         revision.setAuthorUserPublicId(caller.userId());
         revision.setStatus(QuestionStatus.DRAFT);
@@ -575,7 +595,9 @@ public class ItembankService {
         Question question = questionRepository.findWithOptionsByPublicId(questionPublicId)
                 .orElseThrow(QuestionNotFoundException::new);
         if (question.getVisibility() != Visibility.SHARED || question.getStatus() != QuestionStatus.APPROVED
-                || !question.isCurrent() || question.getPool() != QuestionPool.EXAM) {
+                || !question.isCurrent()
+                || (!question.isAvailableForExam()
+                        && (question.isAvailabilityFlagsExplicit() || question.getPool() != QuestionPool.EXAM))) {
             throw new QuestionNotFoundException();
         }
         return toFreezeView(question);

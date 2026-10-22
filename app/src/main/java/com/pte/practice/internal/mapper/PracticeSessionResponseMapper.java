@@ -109,7 +109,8 @@ public class PracticeSessionResponseMapper {
 
     private PracticeTaskContentResponse toContent(PracticeSessionItem item) {
         if ((item.getPromptText() == null || item.getPromptText().isBlank())
-                && (item.getOptionsJson() == null || item.getOptionsJson().isBlank())) {
+                && (item.getOptionsJson() == null || item.getOptionsJson().isBlank())
+                && item.getAudioPromptRef() == null && item.getImagePromptRef() == null) {
             return null;
         }
         List<PracticeTaskContentResponse.Option> options = List.of();
@@ -122,7 +123,7 @@ public class PracticeSessionResponseMapper {
             }
         }
         return new PracticeTaskContentResponse(item.getPromptText(), item.getMinWordCount(),
-                item.getMaxWordCount(), options);
+                item.getMaxWordCount(), item.getAudioPromptRef(), item.getImagePromptRef(), options);
     }
 
     private long versionOf(PracticeSession session) {
