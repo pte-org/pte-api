@@ -14,6 +14,10 @@ import java.util.UUID;
 
 public interface PracticeSessionItemRepository extends JpaRepository<PracticeSessionItem, Long> {
 
+    Optional<PracticeSessionItem> findByIdAndDeletedFalse(Long id);
+
+    Optional<PracticeSessionItem> findByPublicIdAndDeletedFalse(UUID publicId);
+
     List<PracticeSessionItem> findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(Long practiceSessionId);
 
     List<PracticeSessionItem> findByPracticeSessionIdInAndDeletedFalseOrderByPracticeSessionIdAscOrderIndexAsc(

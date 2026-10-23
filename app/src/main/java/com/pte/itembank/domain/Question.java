@@ -88,6 +88,18 @@ public class Question extends BaseEntity {
     @Column(name = "is_current", nullable = false)
     private boolean current = true;
 
+    /** Independent product-channel publication flags. They are revision-level and
+     * must not be inferred from the legacy mutually exclusive pool after migration. */
+    @Column(name = "available_for_practice", nullable = false)
+    private boolean availableForPractice;
+
+    @Column(name = "available_for_exam", nullable = false)
+    private boolean availableForExam;
+
+    /** True when the revision has an explicit channel decision, including both false. */
+    @Column(name = "availability_flags_explicit", nullable = false)
+    private boolean availabilityFlagsExplicit;
+
     @jakarta.persistence.Version
     @Column(nullable = false)
     private long version;

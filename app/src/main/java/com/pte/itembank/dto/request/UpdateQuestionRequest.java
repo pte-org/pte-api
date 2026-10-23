@@ -16,5 +16,7 @@ public record UpdateQuestionRequest(
         Integer minWordCount,
         Integer maxWordCount,
         @Valid List<OptionRequest> options,
-        Long version) {
+        Long version,
+        Boolean availableForPractice,
+        Boolean availableForExam) {
 }
