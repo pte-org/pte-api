@@ -73,6 +73,10 @@ public class PracticeSessionItem extends BaseEntity {
     @Column(name = "options_json", columnDefinition = "text")
     private String optionsJson;
 
+    /** Backend-only option snapshot retaining answer keys for deterministic scoring. */
+    @Column(name = "objective_options_json", columnDefinition = "text")
+    private String objectiveOptionsJson;
+
     @Column(name = "min_word_count")
     private Integer minWordCount;
 
@@ -91,6 +95,85 @@ public class PracticeSessionItem extends BaseEntity {
 
     @Column(name = "correct_answer_text", columnDefinition = "text")
     private String correctAnswerText;
+
+    /** Deterministic result for objective tasks; AI feedback never overwrites it. */
+    @Column(name = "objective_score")
+    private Integer objectiveScore;
+
+    @Column(name = "objective_evaluated_at")
+    private Instant objectiveEvaluatedAt;
+
+    @Column(name = "objective_evaluator_version", length = 64)
+    private String objectiveEvaluatorVersion;
+
+    @Column(name = "objective_result_hash", length = 64)
+    private String objectiveResultHash;
+
+    @Column(name = "objective_evidence_identity_hash", length = 64)
+    private String objectiveEvidenceIdentityHash;
+
+    /** Deterministic response-form result used by writing and summary feedback. */
+    @Column(name = "form_word_count")
+    private Integer formWordCount;
+
+    @Column(name = "form_status", length = 32)
+    private String formStatus;
+
+    @Column(name = "form_evaluator_version", length = 64)
+    private String formEvaluatorVersion;
+
+    @Column(name = "form_result_hash", length = 64)
+    private String formResultHash;
+
+    @Column(name = "form_evidence_identity_hash", length = 64)
+    private String formEvidenceIdentityHash;
+
+    /** Provider result used for local practice scoring validation and review provenance. */
+    @Column(name = "ai_score")
+    private Integer aiScore;
+
+    @Column(name = "ai_score_status", length = 32)
+    private String aiScoreStatus;
+
+    @Column(name = "ai_sub_scores_json", columnDefinition = "text")
+    private String aiSubScoresJson;
+
+    @Column(name = "ai_provider", length = 64)
+    private String aiProvider;
+
+    @Column(name = "ai_model", length = 160)
+    private String aiModel;
+
+    @Column(name = "ai_provider_version", length = 100)
+    private String aiProviderVersion;
+
+    @Column(name = "ai_transcript", columnDefinition = "text")
+    private String aiTranscript;
+
+    @Column(name = "ai_detail_json", columnDefinition = "text")
+    private String aiDetailJson;
+
+    @Column(name = "ai_scored_at")
+    private Instant aiScoredAt;
+
+    @Column(name = "ai_result_hash", length = 64)
+    private String aiResultHash;
+
+    /** Immutable rubric provenance used by backend-only explanation workers. */
+    @Column(name = "rubric_revision_public_id")
+    private UUID rubricRevisionPublicId;
+
+    @Column(name = "rubric_revision_number")
+    private Integer rubricRevisionNumber;
+
+    @Column(name = "rubric_canonical_hash", length = 64)
+    private String rubricCanonicalHash;
+
+    @Column(name = "rubric_snapshot_json", columnDefinition = "text")
+    private String rubricSnapshotJson;
+
+    @Column(name = "runtime_compatibility_hash", length = 64)
+    private String runtimeCompatibilityHash;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
