@@ -13,12 +13,15 @@ import com.pte.practice.internal.repository.PracticeSessionItemRepository;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
 import com.pte.scoring.PracticeExplanationGenerator;
 import com.pte.scoring.PracticeAiProperties;
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
+import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.charset.StandardCharsets;
@@ -79,9 +82,28 @@ public class PracticeExplanationService {
                     PracticeConstants.PRACTICE_EXPLANATION_NOT_READY,
                     PracticeConstants.PRACTICE_EXPLANATION_NOT_READY_MESSAGE);
         }
+        if (!hasPinnedRubric(item)) {
+            throw new com.pte.practice.internal.exception.PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    PracticeConstants.PRACTICE_EXPLANATION_RUBRIC_REQUIRED,
+                    PracticeConstants.PRACTICE_EXPLANATION_RUBRIC_REQUIRED_MESSAGE);
+        }
+        TaskRuntimeProfileDescriptor runtime = TaskRuntimeProfileRegistry.descriptorFor(item.getTaskCode());
+        if (runtime != null && "OBJECTIVE".equals(runtime.scoringProfileKey())
+                && (item.getObjectiveResultHash() == null || item.getObjectiveResultHash().isBlank())) {
+            throw new com.pte.practice.internal.exception.PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    PracticeConstants.PRACTICE_EXPLANATION_OBJECTIVE_RESULT_REQUIRED,
+                    PracticeConstants.PRACTICE_EXPLANATION_OBJECTIVE_RESULT_REQUIRED_MESSAGE);
+        }
+        if (runtime != null && "AI_TEXT".equals(runtime.scoringProfileKey())
+                && (item.getFormResultHash() == null || item.getFormResultHash().isBlank())) {
+            throw new com.pte.practice.internal.exception.PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    PracticeConstants.PRACTICE_EXPLANATION_FORM_RESULT_REQUIRED,
+                    PracticeConstants.PRACTICE_EXPLANATION_FORM_RESULT_REQUIRED_MESSAGE);
+        }
 
-        String rubricVersion = rubricVersion();
-        String submissionHash = submissionHash(item, normalizedLanguage, rubricVersion);
+        String rubricVersion = rubricVersion(item);
+        String submissionHash = submissionHash(item, normalizedLanguage, rubricVersion,
+                item.getRubricCanonicalHash());
         var existing = explanationRepository.findByPracticeSessionItemIdAndLanguageAndGenerationSequenceAndDeletedFalse(
                 item.getId(), normalizedLanguage, 0);
         if (existing.isPresent() && existing.get().getSubmissionHash().equals(submissionHash)
@@ -104,6 +126,18 @@ public class PracticeExplanationService {
         explanation.setGenerationSequence(0);
         explanation.setSubmissionHash(submissionHash);
         explanation.setRubricVersion(rubricVersion);
+        explanation.setRubricRevisionPublicId(item.getRubricRevisionPublicId());
+        explanation.setRubricCanonicalHash(item.getRubricCanonicalHash());
+        explanation.setRubricProvenanceStatus("PINNED");
+        explanation.setObjectiveScore(item.getObjectiveScore());
+        explanation.setObjectiveEvaluatorVersion(item.getObjectiveEvaluatorVersion());
+        explanation.setObjectiveResultHash(item.getObjectiveResultHash());
+        explanation.setObjectiveEvidenceIdentityHash(item.getObjectiveEvidenceIdentityHash());
+        explanation.setFormWordCount(item.getFormWordCount());
+        explanation.setFormStatus(item.getFormStatus());
+        explanation.setFormEvaluatorVersion(item.getFormEvaluatorVersion());
+        explanation.setFormResultHash(item.getFormResultHash());
+        explanation.setFormEvidenceIdentityHash(item.getFormEvidenceIdentityHash());
         PracticeExplanationGenerator generator = generatorProvider.getIfAvailable();
         if (generator == null) {
             explanation.setStatus(PracticeExplanationStatus.UNAVAILABLE);
@@ -152,18 +186,29 @@ public class PracticeExplanationService {
 
     private PracticeExplanationResponse unavailableResponse(PracticeSessionItem item, String language) {
         return new PracticeExplanationResponse(null, item.getPublicId(), language,
-                PracticeExplanationStatus.UNAVAILABLE.name(), null, List.of(), List.of(), List.of(),
-                rubricVersion(), null, null, null, null, null, false, 0, null);
+                PracticeExplanationStatus.UNAVAILABLE.name(), null, List.of(), List.of(), List.of(), List.of(),
+                rubricVersion(item), null, null, null, null, null, false, 0, null,
+                item.getRubricRevisionPublicId(), item.getRubricCanonicalHash(),
+                item.getRubricRevisionPublicId() == null ? "LEGACY_RUBRIC_UNPINNED" : "PINNED",
+                item.getObjectiveScore(), item.getObjectiveEvaluatorVersion(), item.getObjectiveResultHash(),
+                item.getObjectiveEvidenceIdentityHash(), item.getFormWordCount(), item.getFormStatus(),
+                item.getFormEvaluatorVersion(), item.getFormResultHash(), item.getFormEvidenceIdentityHash());
     }
 
     private PracticeExplanationResponse toResponse(PracticeExplanation explanation, PracticeSessionItem item) {
         return new PracticeExplanationResponse(explanation.getPublicId(), item.getPublicId(),
                 explanation.getLanguage(), explanation.getStatus().name(), explanation.getSummary(),
                 readList(explanation.getStrengthsJson()), readList(explanation.getImprovementsJson()),
+                readList(explanation.getLimitationsJson()),
                 readRubric(explanation.getRubricFeedbackJson()), explanation.getRubricVersion(),
                 explanation.getRequestedModel(), explanation.getActualModelVersion(),
                 explanation.getSubmissionHash(), explanation.getGeneratedAt(), explanation.getFailureCode(),
-                explanation.isCanRetry(), explanation.getAttemptCount(), explanation.getNextAttemptAt());
+                explanation.isCanRetry(), explanation.getAttemptCount(), explanation.getNextAttemptAt(),
+                explanation.getRubricRevisionPublicId(), explanation.getRubricCanonicalHash(),
+                explanation.getRubricProvenanceStatus(), explanation.getObjectiveScore(),
+                explanation.getObjectiveEvaluatorVersion(), explanation.getObjectiveResultHash(),
+                explanation.getObjectiveEvidenceIdentityHash(), explanation.getFormWordCount(), explanation.getFormStatus(),
+                explanation.getFormEvaluatorVersion(), explanation.getFormResultHash(), explanation.getFormEvidenceIdentityHash());
     }
 
     private List<String> readList(String value) {
@@ -178,8 +223,26 @@ public class PracticeExplanationService {
     private List<PracticeExplanationResponse.RubricFeedback> readRubric(String value) {
         if (value == null || value.isBlank()) return List.of();
         try {
-            return jsonMapper.readValue(value,
-                    new TypeReference<List<PracticeExplanationResponse.RubricFeedback>>() { });
+            JsonNode root = jsonMapper.readTree(value);
+            if (!root.isArray()) {
+                return List.of();
+            }
+            List<PracticeExplanationResponse.RubricFeedback> result = new java.util.ArrayList<>();
+            for (JsonNode node : root) {
+                JsonNode evidence = node.get("evidence");
+                List<String> evidencePaths;
+                if (evidence != null && evidence.isArray()) {
+                    evidencePaths = jsonMapper.convertValue(evidence, new TypeReference<List<String>>() { });
+                } else {
+                    String legacyEvidence = node.path("evidence").asText("").trim();
+                    evidencePaths = legacyEvidence.isBlank() ? List.of() : List.of(legacyEvidence);
+                }
+                result.add(new PracticeExplanationResponse.RubricFeedback(
+                        node.path("criterionId").asText(null), node.path("level").asText(null),
+                        node.path("evidenceCoverage").asText("NOT_ASSESSABLE"),
+                        node.path("feedback").asText(null), evidencePaths));
+            }
+            return List.copyOf(result);
         } catch (RuntimeException exception) {
             return List.of();
         }
@@ -208,19 +271,40 @@ public class PracticeExplanationService {
         return normalized;
     }
 
-    private String submissionHash(PracticeSessionItem item, String language, String rubricVersion) {
+    private String submissionHash(PracticeSessionItem item, String language, String rubricVersion,
+            String rubricHash) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] bytes = (item.getTaskCode() + "\n" + item.getPromptText() + "\n"
                     + item.getSavedPayload() + "\n" + language + "\n"
-                    + rubricVersion).getBytes(StandardCharsets.UTF_8);
+                    + rubricVersion + "\n" + (rubricHash == null ? "LEGACY" : rubricHash) + "\n"
+                    + (item.getObjectiveEvaluatorVersion() == null ? "LEGACY_OBJECTIVE" : item.getObjectiveEvaluatorVersion())
+                    + "\n" + (item.getObjectiveResultHash() == null ? "NO_OBJECTIVE_RESULT" : item.getObjectiveResultHash())
+                    + "\n" + (item.getFormEvaluatorVersion() == null ? "NO_FORM_RESULT" : item.getFormEvaluatorVersion())
+                    + "\n" + (item.getFormResultHash() == null ? "NO_FORM_RESULT" : item.getFormResultHash()))
+                    .getBytes(StandardCharsets.UTF_8);
             return java.util.HexFormat.of().formatHex(digest.digest(bytes));
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException(PracticeConstants.PRACTICE_SHA256_UNAVAILABLE, exception);
         }
     }
 
-    private String rubricVersion() {
+    private String rubricVersion(PracticeSessionItem item) {
+        if (item.getRubricRevisionNumber() != null) {
+            return String.valueOf(item.getRubricRevisionNumber());
+        }
+        return configuredRubricVersion();
+    }
+
+    private boolean hasPinnedRubric(PracticeSessionItem item) {
+        return item.getRubricRevisionPublicId() != null
+                && item.getRubricRevisionNumber() != null
+                && item.getRubricCanonicalHash() != null && !item.getRubricCanonicalHash().isBlank()
+                && item.getRubricSnapshotJson() != null && !item.getRubricSnapshotJson().isBlank()
+                && item.getRuntimeCompatibilityHash() != null && !item.getRuntimeCompatibilityHash().isBlank();
+    }
+
+    private String configuredRubricVersion() {
         PracticeAiProperties properties = aiPropertiesProvider.getIfAvailable();
         if (properties == null || properties.getRubricVersion() == null
                 || properties.getRubricVersion().isBlank()) {

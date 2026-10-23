@@ -6,6 +6,7 @@ import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.response.PracticeQuestionContent;
 import com.pte.itembank.dto.response.PracticeQuestionEvaluationContent;
+import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.internal.repository.QuestionRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -68,8 +69,8 @@ public class PracticeQuestionService {
                 .map(question -> new PracticeQuestionEvaluationContent(question.getPublicId(),
                         question.getReferenceAnswerText(), question.getCorrectAnswerText(),
                         question.getOptions().stream()
-                                .map(option -> new PracticeQuestionContent.Option(option.getPublicId(),
-                                        option.getText(), option.getOrderIndex(), option.getBlankIndex()))
+                                .map(option -> new QuestionFreezeView.Option(option.getText(), option.isCorrect(),
+                                        option.getOrderIndex(), option.getBlankIndex(), option.getCorrectGapIndex()))
                                 .toList(), question.getAudioPromptRef(), question.getImagePromptRef()));
     }
 

@@ -119,11 +119,24 @@ public class PracticeExplanationJobTransitionService {
         if (explanation == null) {
             return;
         }
+        if (!java.util.Objects.equals(explanation.getObjectiveScore(), generated.objectiveScore())
+                || !java.util.Objects.equals(explanation.getObjectiveEvaluatorVersion(), generated.objectiveEvaluatorVersion())
+                || !java.util.Objects.equals(explanation.getObjectiveResultHash(), generated.objectiveResultHash())
+                || !java.util.Objects.equals(explanation.getObjectiveEvidenceIdentityHash(), generated.objectiveEvidenceIdentityHash())
+                || !java.util.Objects.equals(explanation.getFormWordCount(), generated.formWordCount())
+                || !java.util.Objects.equals(explanation.getFormStatus(), generated.formStatus())
+                || !java.util.Objects.equals(explanation.getFormEvaluatorVersion(), generated.formEvaluatorVersion())
+                || !java.util.Objects.equals(explanation.getFormResultHash(), generated.formResultHash())
+                || !java.util.Objects.equals(explanation.getFormEvidenceIdentityHash(), generated.formEvidenceIdentityHash())) {
+            failInTransaction(claim, PracticeConstants.PRACTICE_EXPLANATION_FAILURE_INTERNAL, false);
+            return;
+        }
         explanation.setStatus(PracticeExplanationStatus.AVAILABLE);
         explanation.setSummary(generated.summary());
         explanation.setStrengthsJson(generated.strengthsJson());
         explanation.setImprovementsJson(generated.improvementsJson());
         explanation.setRubricFeedbackJson(generated.rubricFeedbackJson());
+        explanation.setLimitationsJson(generated.limitationsJson());
         explanation.setActualModelVersion(generated.modelVersion());
         explanation.setRequestedModel(generated.providerVersion());
         explanation.setProviderVersion(PracticeExplanationGenerator.class.getName());

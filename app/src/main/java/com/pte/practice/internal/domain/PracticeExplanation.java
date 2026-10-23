@@ -60,8 +60,48 @@ public class PracticeExplanation extends BaseEntity {
     @Column(name = "rubric_feedback_json", columnDefinition = "text")
     private String rubricFeedbackJson;
 
+    @Column(name = "limitations_json", columnDefinition = "text")
+    private String limitationsJson;
+
     @Column(name = "rubric_version", nullable = false, length = 64)
     private String rubricVersion;
+
+    @Column(name = "rubric_revision_public_id")
+    private UUID rubricRevisionPublicId;
+
+    @Column(name = "rubric_canonical_hash", length = 64)
+    private String rubricCanonicalHash;
+
+    @Column(name = "rubric_provenance_status", length = 32)
+    private String rubricProvenanceStatus;
+
+    /** Snapshot of the deterministic objective result used by the explanation. */
+    @Column(name = "objective_score")
+    private Integer objectiveScore;
+
+    @Column(name = "objective_evaluator_version", length = 64)
+    private String objectiveEvaluatorVersion;
+
+    @Column(name = "objective_result_hash", length = 64)
+    private String objectiveResultHash;
+
+    @Column(name = "objective_evidence_identity_hash", length = 64)
+    private String objectiveEvidenceIdentityHash;
+
+    @Column(name = "form_word_count")
+    private Integer formWordCount;
+
+    @Column(name = "form_status", length = 32)
+    private String formStatus;
+
+    @Column(name = "form_evaluator_version", length = 64)
+    private String formEvaluatorVersion;
+
+    @Column(name = "form_result_hash", length = 64)
+    private String formResultHash;
+
+    @Column(name = "form_evidence_identity_hash", length = 64)
+    private String formEvidenceIdentityHash;
 
     @Column(name = "requested_model", length = 128)
     private String requestedModel;

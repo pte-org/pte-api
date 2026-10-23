@@ -16,6 +16,8 @@ public interface PracticeSessionItemRepository extends JpaRepository<PracticeSes
 
     Optional<PracticeSessionItem> findByIdAndDeletedFalse(Long id);
 
+    Optional<PracticeSessionItem> findByPublicIdAndDeletedFalse(UUID publicId);
+
     List<PracticeSessionItem> findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(Long practiceSessionId);
 
     List<PracticeSessionItem> findByPracticeSessionIdInAndDeletedFalseOrderByPracticeSessionIdAscOrderIndexAsc(
