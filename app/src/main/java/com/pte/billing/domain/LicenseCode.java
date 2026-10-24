@@ -8,6 +8,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -18,12 +19,12 @@ import java.util.UUID;
 @Entity
 @Table(name = "license_codes", indexes = {
         @Index(name = "idx_license_codes_status_expiry", columnList = "status,code_expires_at")
-})
+}, uniqueConstraints = @UniqueConstraint(name = "uk_license_codes_code", columnNames = "code"))
 @Getter
 @NoArgsConstructor
 public class LicenseCode extends BaseEntity {
 
-    @Column(nullable = false, unique = true, length = 32, updatable = false)
+    @Column(nullable = false, length = 32, updatable = false)
     private String code;
 
     @Column(nullable = false)

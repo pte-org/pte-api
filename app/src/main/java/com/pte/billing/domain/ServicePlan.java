@@ -23,11 +23,11 @@ import java.math.BigDecimal;
  * {@code PlanService} validates the two never mix, this entity does not.
  */
 @Entity
-@Table(name = "plans")
+@Table(name = "service_plans")
 @Getter
 @Setter
 @NoArgsConstructor
-public class Plan extends BaseEntity {
+public class ServicePlan extends BaseEntity {
 
     @Column(nullable = false, length = 255)
     private String name;
@@ -53,7 +53,7 @@ public class Plan extends BaseEntity {
     @Column
     private Integer maxStudentsPerSession;
 
-    /** STUDENT_CAPACITY only — added straight to tenant.studentLimit via QuotaTransaction, no Subscription involved. */
+    /** STUDENT_CAPACITY only — added straight to tenant.studentLimit via an Organization quota grant, no Subscription involved. */
     @Column
     private Integer extraStudentSlots;
 

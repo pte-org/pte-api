@@ -1,6 +1,6 @@
 package com.pte.billing.internal.repository;
 
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.PlanStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -15,15 +15,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface PlanRepository extends JpaRepository<Plan, Long> {
+public interface ServicePlanRepository extends JpaRepository<ServicePlan, Long> {
 
-    Optional<Plan> findByPublicId(UUID publicId);
+    Optional<ServicePlan> findByPublicId(UUID publicId);
 
-    List<Plan> findByPublicIdIn(Collection<UUID> publicIds);
+    List<ServicePlan> findByPublicIdIn(Collection<UUID> publicIds);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select p from Plan p where p.publicId = :publicId")
-    Optional<Plan> findByPublicIdForUpdate(@Param("publicId") UUID publicId);
+    @Query("select p from ServicePlan p where p.publicId = :publicId")
+    Optional<ServicePlan> findByPublicIdForUpdate(@Param("publicId") UUID publicId);
 
     @Query(value = """
             SELECT plan_id FROM orders WHERE plan_id IN (:ids)
@@ -39,14 +39,14 @@ public interface PlanRepository extends JpaRepository<Plan, Long> {
     Set<UUID> findOutstandingCodePlanIds(@Param("ids") Collection<UUID> ids, @Param("now") Instant now);
 
     /** Overview: non-deleted plans grouped by lifecycle status. */
-    @Query("select p.status, count(p) from Plan p where p.deleted = false group by p.status")
+    @Query("select p.status, count(p) from ServicePlan p where p.deleted = false group by p.status")
     List<Object[]> countGroupedByStatus();
 
     /** Overview: non-deleted plans grouped by plan type. */
-    @Query("select p.type, count(p) from Plan p where p.deleted = false group by p.type")
+    @Query("select p.type, count(p) from ServicePlan p where p.deleted = false group by p.type")
     List<Object[]> countGroupedByType();
 
-    List<Plan> findAllByOrderByCreatedAtDesc();
+    List<ServicePlan> findAllByOrderByCreatedAtDesc();
 
-    List<Plan> findByStatusOrderByCreatedAtDesc(PlanStatus status);
+    List<ServicePlan> findByStatusOrderByCreatedAtDesc(PlanStatus status);
 }
