@@ -18,9 +18,9 @@ import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeContractConstants;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.TaskTypeCodeCompatibility;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.session.SessionService;
 import com.pte.session.dto.response.EntitlementResponse;
 import org.springframework.stereotype.Service;
@@ -58,16 +58,16 @@ public class SnapshotPinService {
     private final AssessmentService assessmentService;
     private final MediaService mediaService;
     private final TaskTimingConfig taskTimingConfig;
-    private final ScoreTemplateService scoreTemplateService;
+    private final ExamDefinitionService examDefinitionService;
 
     public SnapshotPinService(SessionService sessionService, AssessmentService assessmentService,
                               MediaService mediaService, TaskTimingConfig taskTimingConfig,
-                              ScoreTemplateService scoreTemplateService) {
+                              ExamDefinitionService examDefinitionService) {
         this.sessionService = sessionService;
         this.assessmentService = assessmentService;
         this.mediaService = mediaService;
         this.taskTimingConfig = taskTimingConfig;
-        this.scoreTemplateService = scoreTemplateService;
+        this.examDefinitionService = examDefinitionService;
     }
 
     public PinnedExamSnapshot pin(ExamAttempt attempt, UUID sessionPublicId, UUID studentPublicId) {
@@ -84,8 +84,8 @@ public class SnapshotPinService {
         // publish time (spec FR-14) — NOT scoreTemplateService.getActive(),
         // so an attempt pinned today keeps reading the exact template its exam
         // was published under even after a later template is activated.
-        ScoreTemplateResponse scoreTemplate = scoreTemplateService.getByPublicId(content.scoreTemplatePublicId());
-        Map<String, ScoreTemplateItemResponse> templateItemsByTaskType = scoreTemplate.items().stream()
+        ExamDefinitionResponse examDefinition = examDefinitionService.getByPublicId(content.examDefinitionPublicId());
+        Map<String, ExamDefinitionItemResponse> templateItemsByTaskType = examDefinition.items().stream()
                 .collect(Collectors.toMap(item -> TaskTypeCodeCompatibility.normalizeTaskTypeKey(
                         item.taskTypeKey() == null ? item.taskType() : item.taskTypeKey()),
                         Function.identity(), (a, b) -> a));
@@ -94,9 +94,9 @@ public class SnapshotPinService {
         pinned.setAttempt(attempt);
         pinned.setSourceSnapshotPublicId(content.publicId());
         pinned.setSourceSessionPublicId(sessionPublicId);
-        pinned.setScoreTemplatePublicId(content.scoreTemplatePublicId());
-        pinned.setScoreTemplateVersion(content.scoreTemplateVersion() == null
-                ? scoreTemplate.version() : content.scoreTemplateVersion());
+        pinned.setScoreTemplatePublicId(content.examDefinitionPublicId());
+        pinned.setScoreTemplateVersion(content.examDefinitionVersion() == null
+                ? examDefinition.version() : content.examDefinitionVersion());
         pinned.setTenantId(entitlement.tenantId());
         pinned.setReplayPolicyType(entitlement.policy().replayPolicyType());
         pinned.setReplayPolicyLimit(entitlement.policy().replayPolicyLimit());
@@ -131,7 +131,7 @@ public class SnapshotPinService {
      * taskTimingConfig.timingFor} entirely, exactly as before Phase 3.
      */
     private PinnedItem toPinnedItem(SnapshotContentResponse.Item source,
-                                    Map<String, ScoreTemplateItemResponse> templateItemsByTaskType,
+                                    Map<String, ExamDefinitionItemResponse> templateItemsByTaskType,
                                     long audioUrlTtlSeconds, UUID tenantId) {
         String taskTypeCode = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
                 source.taskTypeKey() == null
@@ -154,7 +154,7 @@ public class SnapshotPinService {
         } catch (RuntimeException ex) {
             throw new ExamCapabilityException(AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE, List.of());
         }
-        ScoreTemplateItemResponse templateItem = templateItemsByTaskType.get(taskTypeCode);
+        ExamDefinitionItemResponse templateItem = templateItemsByTaskType.get(taskTypeCode);
         // Non-throwing when the template already has this taskType — most of
         // the 22 rows were deliberately REMOVED from task-timing.json (not just
         // individual fields), so the old throwing timingFor() would wrongly

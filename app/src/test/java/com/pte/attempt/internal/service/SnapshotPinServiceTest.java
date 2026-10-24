@@ -14,9 +14,9 @@ import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeContractConstants;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.session.SessionService;
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ExamPolicyResponse;
@@ -86,7 +86,7 @@ class SnapshotPinServiceTest {
     private TaskTimingConfig taskTimingConfig;
 
     @Mock
-    private ScoreTemplateService scoreTemplateService;
+    private ExamDefinitionService examDefinitionService;
 
     private SnapshotPinService service;
 
@@ -105,7 +105,7 @@ class SnapshotPinServiceTest {
         // pre-Phase-3 behavior these regression tests were written against.
         stubTemplateItems();
         service = new SnapshotPinService(sessionService, assessmentService, mediaService, taskTimingConfig,
-                scoreTemplateService);
+                examDefinitionService);
     }
 
     @Test
@@ -472,13 +472,13 @@ class SnapshotPinServiceTest {
     }
 
     /** Stubs the ACTIVE-at-pin-time template's items — empty by default (see setUp), override per test to exercise template-priority behavior. */
-    private void stubTemplateItems(ScoreTemplateItemResponse... items) {
-        when(scoreTemplateService.getByPublicId(SCORE_TEMPLATE_ID))
-                .thenReturn(new ScoreTemplateResponse(SCORE_TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "ACTIVE", List.of(items)));
+    private void stubTemplateItems(ExamDefinitionItemResponse... items) {
+        when(examDefinitionService.getByPublicId(SCORE_TEMPLATE_ID))
+                .thenReturn(new ExamDefinitionResponse(SCORE_TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "ACTIVE", List.of(items)));
     }
 
-    private ScoreTemplateItemResponse templateItem(String taskType, String section, int prepSeconds, int responseSeconds) {
-        return new ScoreTemplateItemResponse(taskType, section, 0, 1, 1, prepSeconds, responseSeconds,
+    private ExamDefinitionItemResponse templateItem(String taskType, String section, int prepSeconds, int responseSeconds) {
+        return new ExamDefinitionItemResponse(taskType, section, 0, 1, 1, prepSeconds, responseSeconds,
                 "OBJECTIVE", BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 

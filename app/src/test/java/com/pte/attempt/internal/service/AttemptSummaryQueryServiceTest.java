@@ -161,10 +161,10 @@ class AttemptSummaryQueryServiceTest {
     @Test
     void getScoreContext_returnsPinnedTemplateAndDistinctTestedSections() {
         UUID attemptPublicId = UUID.randomUUID();
-        UUID scoreTemplateId = UUID.randomUUID();
+        UUID examDefinitionId = UUID.randomUUID();
 
         PinnedExamSnapshot pinnedSnapshot = new PinnedExamSnapshot();
-        pinnedSnapshot.setScoreTemplatePublicId(scoreTemplateId);
+        pinnedSnapshot.setScoreTemplatePublicId(examDefinitionId);
         pinnedSnapshot.setScoreTemplateVersion(7);
         pinnedSnapshot.addItem(pinnedItem("SPEAKING"));
         pinnedSnapshot.addItem(pinnedItem("SPEAKING"));
@@ -178,7 +178,7 @@ class AttemptSummaryQueryServiceTest {
 
         AttemptScoreContextView context = service.getScoreContext(attemptPublicId);
 
-        assertThat(context.scoreTemplatePublicId()).isEqualTo(scoreTemplateId);
+        assertThat(context.scoreTemplatePublicId()).isEqualTo(examDefinitionId);
         assertThat(context.scoreTemplateVersion()).isEqualTo(7);
         assertThat(context.testedSections()).containsExactlyInAnyOrder("SPEAKING", "READING");
     }

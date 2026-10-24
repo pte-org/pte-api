@@ -34,9 +34,9 @@ class SubmittedAnswerQueryServiceTest {
     }
 
     /** Every {@code PinnedItem} belongs to a {@code PinnedExamSnapshot} in production — tests must wire it too, or {@code getPinnedSnapshot()} is null. */
-    private void attachToPinnedSnapshot(PinnedItem item, UUID scoreTemplateId) {
+    private void attachToPinnedSnapshot(PinnedItem item, UUID examDefinitionId) {
         PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
-        snapshot.setScoreTemplatePublicId(scoreTemplateId);
+        snapshot.setScoreTemplatePublicId(examDefinitionId);
         snapshot.addItem(item);
     }
 
