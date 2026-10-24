@@ -1,8 +1,8 @@
 package com.pte.billing.internal.service;
 
 import com.pte.billing.domain.Order;
-import com.pte.billing.domain.PaymentTransaction;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.OrderPayment;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.CommercialActivationSource;
 import com.pte.billing.CommercialActivationTarget;
 import com.pte.billing.CommercialOutcomeConfirmedEvent;
@@ -15,8 +15,10 @@ import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
 import com.pte.billing.internal.exception.PaymentWebhookException;
 import com.pte.billing.internal.exception.PlanNotFoundException;
 import com.pte.billing.internal.repository.OrderRepository;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.billing.internal.vendor.payos.PayOsClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.context.ApplicationEventPublisher;
@@ -30,22 +32,21 @@ import java.time.Instant;
 @Service
 public class PayOsWebhookService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(PayOsWebhookService.class);
+
     private final JsonMapper jsonMapper;
     private final PayOsClient payOsClient;
-    private final PaymentTransactionPersistenceService paymentTransactionPersistenceService;
     private final OrderRepository orderRepository;
-    private final PlanRepository planRepository;
+    private final ServicePlanRepository planRepository;
     private final SubscriptionActivationService subscriptionActivationService;
     private final ApplicationEventPublisher eventPublisher;
 
     public PayOsWebhookService(JsonMapper jsonMapper, PayOsClient payOsClient,
-            PaymentTransactionPersistenceService paymentTransactionPersistenceService,
-            OrderRepository orderRepository, PlanRepository planRepository,
+            OrderRepository orderRepository, ServicePlanRepository planRepository,
             SubscriptionActivationService subscriptionActivationService,
             ApplicationEventPublisher eventPublisher) {
         this.jsonMapper = jsonMapper;
         this.payOsClient = payOsClient;
-        this.paymentTransactionPersistenceService = paymentTransactionPersistenceService;
         this.orderRepository = orderRepository;
         this.planRepository = planRepository;
         this.subscriptionActivationService = subscriptionActivationService;
@@ -57,38 +58,39 @@ public class PayOsWebhookService {
         JsonNode payload = parsePayload(rawPayload);
         Long orderCode = extractOrderCode(payload);
         if (!payOsClient.verifyWebhookSignature(payload, payload.path("signature").asText(null))) {
-            paymentTransactionPersistenceService.recordRejected(
-                    PaymentTransaction.received(orderCode, rawPayload, false, Instant.now()));
+            LOGGER.warn("Rejected PayOS webhook with an invalid signature, orderCode={}", orderCode);
             throw new PaymentWebhookException(BillingConstants.PAYOS_SIGNATURE_INVALID);
         }
-
-        PaymentTransaction transaction = paymentTransactionPersistenceService.record(
-                PaymentTransaction.received(orderCode, rawPayload, true, Instant.now()));
         if (!isSuccessfulPayment(payload)) {
-            transaction.markProcessed();
+            acknowledgeNonSuccessful(orderCode, rawPayload);
             return;
         }
         if (orderCode == null) {
             throw new PaymentWebhookException(BillingConstants.PAYOS_WEBHOOK_INVALID);
         }
 
-        Order order = orderRepository.findByOrderCodeForUpdate(orderCode)
-                .orElseThrow(() -> new PaymentWebhookException(BillingConstants.PAYOS_ORDER_NOT_FOUND));
+        Order order = orderRepository.findByOrderCodeForUpdate(orderCode).orElseThrow(() -> {
+            // A signed notification for an order we do not know is the case ops must reconcile by hand.
+            LOGGER.warn("Signed PayOS payment for an unknown order, orderCode={} amount={} currency={}",
+                    orderCode, payload.path("data").path("amount"), payload.path("data").path("currency"));
+            return new PaymentWebhookException(BillingConstants.PAYOS_ORDER_NOT_FOUND);
+        });
+        OrderPayment receipt = order.receivePayment(rawPayload, Instant.now());
         if (order.getStatus() == OrderStatus.PAID) {
             // The row lock makes this branch safe when PayOS retries arrive
             // concurrently with the first webhook.
-            transaction.markProcessed();
+            receipt.markProcessed();
             return;
         }
         if (order.getStatus() != OrderStatus.PENDING) {
             // An expired/cancelled order must never be resurrected by a late
             // notification, but the valid notification is still acknowledged.
-            transaction.markProcessed();
+            receipt.markProcessed();
             return;
         }
 
         verifyOrderAmounts(order, payload.path("data"));
-        Plan plan = planRepository.findByPublicId(order.getPlanId())
+        ServicePlan plan = planRepository.findByPublicId(order.getPlanId())
                 .orElseThrow(PlanNotFoundException::new);
         SubscriptionActivationResponse activation = subscriptionActivationService.activate(
                 order.getTenantId(), plan, ActivationSource.PAYMENT);
@@ -102,7 +104,16 @@ public class PayOsWebhookService {
                 CommercialActivationTarget.ORDER,
                 order.getPublicId(),
                 activation.grantedStudentSlots()));
-        transaction.markProcessed();
+        receipt.markProcessed();
+    }
+
+    /** Failed or cancelled payments change nothing; they are kept as a receipt when the order is known. */
+    private void acknowledgeNonSuccessful(Long orderCode, String rawPayload) {
+        if (orderCode == null) {
+            return;
+        }
+        orderRepository.findByOrderCodeForUpdate(orderCode)
+                .ifPresent(order -> order.receivePayment(rawPayload, Instant.now()).markProcessed());
     }
 
     private JsonNode parsePayload(String rawPayload) {
@@ -149,11 +160,15 @@ public class PayOsWebhookService {
             throw new PaymentWebhookException(BillingConstants.PAYOS_WEBHOOK_INVALID);
         }
         if (order.getAmount().compareTo(webhookAmount) != 0) {
+            LOGGER.warn("Signed PayOS payment amount mismatch, orderCode={} expected={} received={}",
+                    order.getOrderCode(), order.getAmount(), webhookAmount);
             throw new PaymentWebhookException(BillingConstants.PAYOS_ORDER_AMOUNT_MISMATCH);
         }
 
         String currency = data.path("currency").asText(null);
         if (currency == null || !order.getCurrency().equalsIgnoreCase(currency)) {
+            LOGGER.warn("Signed PayOS payment currency mismatch, orderCode={} expected={} received={}",
+                    order.getOrderCode(), order.getCurrency(), currency);
             throw new PaymentWebhookException(BillingConstants.PAYOS_ORDER_CURRENCY_MISMATCH);
         }
     }

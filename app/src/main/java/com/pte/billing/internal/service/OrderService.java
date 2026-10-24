@@ -1,7 +1,7 @@
 package com.pte.billing.internal.service;
 
 import com.pte.billing.domain.Order;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.OrderStatus;
 import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.internal.constant.BillingConstants;
@@ -9,7 +9,7 @@ import com.pte.billing.internal.dto.response.OrderResponse;
 import com.pte.billing.internal.exception.OrderException;
 import com.pte.billing.internal.exception.PlanNotFoundException;
 import com.pte.billing.internal.repository.OrderRepository;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.billing.internal.vendor.payos.PayOsClient;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.web.PageMeta;
@@ -45,20 +45,20 @@ import jakarta.persistence.criteria.Predicate;
 public class OrderService {
 
     private final OrderRepository orderRepository;
-    private final PlanRepository planRepository;
+    private final ServicePlanRepository planRepository;
     private final OrderPersistenceService orderPersistenceService;
     private final PayOsClient payOsClient;
     private final AuditLogService auditLogService;
     private final TenancyService tenancyService;
 
-    public OrderService(OrderRepository orderRepository, PlanRepository planRepository,
+    public OrderService(OrderRepository orderRepository, ServicePlanRepository planRepository,
             OrderPersistenceService orderPersistenceService, PayOsClient payOsClient,
             AuditLogService auditLogService) {
         this(orderRepository, planRepository, orderPersistenceService, payOsClient, auditLogService, null);
     }
 
     @Autowired
-    public OrderService(OrderRepository orderRepository, PlanRepository planRepository,
+    public OrderService(OrderRepository orderRepository, ServicePlanRepository planRepository,
             OrderPersistenceService orderPersistenceService, PayOsClient payOsClient,
             AuditLogService auditLogService, TenancyService tenancyService) {
         this.orderRepository = orderRepository;
@@ -70,7 +70,7 @@ public class OrderService {
     }
 
     /** Compatibility constructor for focused billing tests. */
-    public OrderService(OrderRepository orderRepository, PlanRepository planRepository,
+    public OrderService(OrderRepository orderRepository, ServicePlanRepository planRepository,
             OrderPersistenceService orderPersistenceService, PayOsClient payOsClient) {
         this(orderRepository, planRepository, orderPersistenceService, payOsClient, null);
     }
@@ -86,7 +86,7 @@ public class OrderService {
             tenancyService.assertTenantActive(tenantId);
         }
 
-        Plan plan = planRepository.findByPublicId(planPublicId)
+        ServicePlan plan = planRepository.findByPublicId(planPublicId)
                 .orElseThrow(PlanNotFoundException::new);
         if (plan.getStatus() != PlanStatus.ACTIVE) {
             throw new OrderException(HttpStatus.CONFLICT, BillingConstants.ORDER_PLAN_NOT_ACTIVE);
@@ -171,7 +171,7 @@ public class OrderService {
             if (normalized.isBlank()) {
                 return cb.and(filters.toArray(Predicate[]::new));
             }
-            var plan = query.from(Plan.class);
+            var plan = query.from(ServicePlan.class);
             filters.add(cb.equal(plan.get("publicId"), root.get("planId")));
             filters.add(cb.isFalse(plan.get("deleted")));
             String pattern = "%" + normalized + "%";

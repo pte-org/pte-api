@@ -6,7 +6,7 @@ import com.pte.billing.CommercialOutcomeConfirmedEvent;
 import com.pte.billing.CommercialOutcomeType;
 import com.pte.billing.OrderExpiredEvent;
 import com.pte.billing.domain.Order;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.OrderStatus;
 import com.pte.billing.domain.enums.PlanStatus;
@@ -15,7 +15,7 @@ import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
 import com.pte.billing.internal.exception.OrderException;
 import com.pte.billing.internal.repository.OrderRepository;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -33,12 +33,12 @@ public class OrderPersistenceService {
 
     private final OrderRepository orderRepository;
     private final ApplicationEventPublisher eventPublisher;
-    private final PlanRepository planRepository;
+    private final ServicePlanRepository planRepository;
     private final SubscriptionActivationService subscriptionActivationService;
 
     @Autowired
     public OrderPersistenceService(OrderRepository orderRepository, ApplicationEventPublisher eventPublisher,
-            PlanRepository planRepository, SubscriptionActivationService subscriptionActivationService) {
+            ServicePlanRepository planRepository, SubscriptionActivationService subscriptionActivationService) {
         this.orderRepository = orderRepository;
         this.eventPublisher = eventPublisher;
         this.planRepository = planRepository;
@@ -47,14 +47,14 @@ public class OrderPersistenceService {
 
     /** Compatibility constructor for focused order-persistence tests. */
     public OrderPersistenceService(OrderRepository orderRepository, ApplicationEventPublisher eventPublisher,
-            PlanRepository planRepository) {
+            ServicePlanRepository planRepository) {
         this(orderRepository, eventPublisher, planRepository, null);
     }
 
     /** Commits the pending reservation before the remote PayOS call begins. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Order reserve(Order order) throws DataIntegrityViolationException {
-        Plan plan = planRepository.findByPublicIdForUpdate(order.getPlanId()).filter(p -> !p.isDeleted())
+        ServicePlan plan = planRepository.findByPublicIdForUpdate(order.getPlanId()).filter(p -> !p.isDeleted())
                 .orElseThrow(() -> new OrderException(HttpStatus.CONFLICT, BillingConstants.ORDER_PLAN_NOT_ACTIVE));
         if (plan.getStatus() != PlanStatus.ACTIVE) {
             throw new OrderException(HttpStatus.CONFLICT, BillingConstants.ORDER_PLAN_NOT_ACTIVE);
@@ -79,7 +79,7 @@ public class OrderPersistenceService {
             return order;
         }
 
-        Plan plan = planRepository.findByPublicIdForUpdate(order.getPlanId()).filter(p -> !p.isDeleted())
+        ServicePlan plan = planRepository.findByPublicIdForUpdate(order.getPlanId()).filter(p -> !p.isDeleted())
                 .filter(p -> p.getStatus() == PlanStatus.ACTIVE)
                 .orElseThrow(() -> new OrderException(HttpStatus.CONFLICT,
                         BillingConstants.ORDER_PLAN_NOT_ACTIVE));

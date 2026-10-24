@@ -1,8 +1,8 @@
 package com.pte.billing.internal.service;
 
 import com.pte.billing.domain.Order;
-import com.pte.billing.domain.PaymentTransaction;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.OrderPayment;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.OrderStatus;
 import com.pte.billing.domain.enums.PlanStatus;
@@ -14,7 +14,7 @@ import com.pte.billing.CommercialOutcomeType;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.exception.PaymentWebhookException;
 import com.pte.billing.internal.repository.OrderRepository;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.billing.internal.vendor.payos.PayOsClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,13 +48,10 @@ class PayOsWebhookServiceTest {
     private PayOsClient payOsClient;
 
     @Mock
-    private PaymentTransactionPersistenceService paymentTransactionPersistenceService;
-
-    @Mock
     private OrderRepository orderRepository;
 
     @Mock
-    private PlanRepository planRepository;
+    private ServicePlanRepository planRepository;
 
     @Mock
     private SubscriptionActivationService subscriptionActivationService;
@@ -68,7 +65,7 @@ class PayOsWebhookServiceTest {
     @BeforeEach
     void setUp() {
         service = new PayOsWebhookService(jsonMapper, payOsClient,
-                paymentTransactionPersistenceService, orderRepository, planRepository,
+                orderRepository, planRepository,
                 subscriptionActivationService, eventPublisher);
     }
 
@@ -77,13 +74,11 @@ class PayOsWebhookServiceTest {
         UUID tenantId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
         Order order = Order.pending(tenantId, planId, ORDER_CODE, new BigDecimal("50000.00"), "VND");
-        Plan plan = activePlan(planId);
+        ServicePlan plan = activePlan(planId);
         String payload = successfulPayload(ORDER_CODE, "signed");
 
         when(payOsClient.verifyWebhookSignature(any(JsonNode.class), org.mockito.ArgumentMatchers.eq("signed")))
                 .thenReturn(true);
-        when(paymentTransactionPersistenceService.record(any(PaymentTransaction.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
         when(orderRepository.findByOrderCodeForUpdate(ORDER_CODE)).thenReturn(Optional.of(order));
         when(planRepository.findByPublicId(planId)).thenReturn(Optional.of(plan));
         when(subscriptionActivationService.activate(tenantId, plan, ActivationSource.PAYMENT))
@@ -95,6 +90,7 @@ class PayOsWebhookServiceTest {
         service.handle(payload);
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(order.getPayments()).hasSize(2).allMatch(OrderPayment::isProcessed);
         verify(subscriptionActivationService, times(1))
                 .activate(tenantId, plan, ActivationSource.PAYMENT);
         verify(eventPublisher, times(1)).publishEvent(any(CommercialOutcomeConfirmedEvent.class));
@@ -108,12 +104,10 @@ class PayOsWebhookServiceTest {
         UUID orderId = UUID.randomUUID();
         Order order = Order.pending(tenantId, planId, ORDER_CODE, new BigDecimal("50000.00"), "VND");
         order.setPublicId(orderId);
-        Plan plan = activePlan(planId);
+        ServicePlan plan = activePlan(planId);
         String payload = successfulPayload(ORDER_CODE, "signed");
         when(payOsClient.verifyWebhookSignature(any(JsonNode.class), org.mockito.ArgumentMatchers.eq("signed")))
                 .thenReturn(true);
-        when(paymentTransactionPersistenceService.record(any(PaymentTransaction.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
         when(orderRepository.findByOrderCodeForUpdate(ORDER_CODE)).thenReturn(Optional.of(order));
         when(planRepository.findByPublicId(planId)).thenReturn(Optional.of(plan));
         when(subscriptionActivationService.activate(tenantId, plan, ActivationSource.PAYMENT))
@@ -133,7 +127,7 @@ class PayOsWebhookServiceTest {
     }
 
     @Test
-    void handle_invalidSignatureAuditsAndDoesNotActivate() {
+    void handle_invalidSignatureIsRejectedWithoutTouchingAnyOrder() {
         String payload = successfulPayload(ORDER_CODE, "forged");
         when(payOsClient.verifyWebhookSignature(any(JsonNode.class), org.mockito.ArgumentMatchers.eq("forged")))
                 .thenReturn(false);
@@ -142,11 +136,36 @@ class PayOsWebhookServiceTest {
                 .isInstanceOfSatisfying(PaymentWebhookException.class, ex ->
                         assertThat(ex.getMessage()).isEqualTo(BillingConstants.PAYOS_SIGNATURE_INVALID));
 
-        ArgumentCaptor<PaymentTransaction> captor = ArgumentCaptor.forClass(PaymentTransaction.class);
-        verify(paymentTransactionPersistenceService).recordRejected(captor.capture());
-        assertThat(captor.getValue().getOrderCode()).isEqualTo(ORDER_CODE);
-        assertThat(captor.getValue().isSignatureValid()).isFalse();
-        verify(paymentTransactionPersistenceService, never()).record(any());
+        verify(orderRepository, never()).findByOrderCodeForUpdate(any());
+        verify(subscriptionActivationService, never()).activate(any(), any(), any());
+    }
+
+    @Test
+    void handle_successfulPaymentForUnknownOrderIsRejected() {
+        String payload = successfulPayload(ORDER_CODE, "signed");
+        when(payOsClient.verifyWebhookSignature(any(JsonNode.class), org.mockito.ArgumentMatchers.eq("signed")))
+                .thenReturn(true);
+        when(orderRepository.findByOrderCodeForUpdate(ORDER_CODE)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.handle(payload))
+                .isInstanceOfSatisfying(PaymentWebhookException.class, ex ->
+                        assertThat(ex.getMessage()).isEqualTo(BillingConstants.PAYOS_ORDER_NOT_FOUND));
+
+        verify(subscriptionActivationService, never()).activate(any(), any(), any());
+    }
+
+    @Test
+    void handle_failedPaymentIsKeptAsAProcessedReceiptAndChangesNothing() {
+        Order order = Order.pending(UUID.randomUUID(), UUID.randomUUID(), ORDER_CODE, new BigDecimal("50000.00"), "VND");
+        String payload = successfulPayload(ORDER_CODE, "signed").replace("\"code\": \"00\"", "\"code\": \"01\"");
+        when(payOsClient.verifyWebhookSignature(any(JsonNode.class), org.mockito.ArgumentMatchers.eq("signed")))
+                .thenReturn(true);
+        when(orderRepository.findByOrderCodeForUpdate(ORDER_CODE)).thenReturn(Optional.of(order));
+
+        service.handle(payload);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(order.getPayments()).hasSize(1).allMatch(OrderPayment::isProcessed);
         verify(subscriptionActivationService, never()).activate(any(), any(), any());
     }
 
@@ -158,8 +177,6 @@ class PayOsWebhookServiceTest {
         String payload = successfulPayloadWithAmount(ORDER_CODE, "signed", "49000");
         when(payOsClient.verifyWebhookSignature(any(JsonNode.class), org.mockito.ArgumentMatchers.eq("signed")))
                 .thenReturn(true);
-        when(paymentTransactionPersistenceService.record(any(PaymentTransaction.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
         when(orderRepository.findByOrderCodeForUpdate(ORDER_CODE)).thenReturn(Optional.of(order));
 
         assertThatThrownBy(() -> service.handle(payload))
@@ -192,8 +209,8 @@ class PayOsWebhookServiceTest {
                 """.formatted(orderCode, amount, signature);
     }
 
-    private Plan activePlan(UUID publicId) {
-        Plan plan = new Plan();
+    private ServicePlan activePlan(UUID publicId) {
+        ServicePlan plan = new ServicePlan();
         plan.setPublicId(publicId);
         plan.setName("Exam");
         plan.setType(PlanType.EXAM_PACKAGE);

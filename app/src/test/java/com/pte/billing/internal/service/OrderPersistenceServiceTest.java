@@ -1,6 +1,6 @@
 package com.pte.billing.internal.service;
 
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.CommercialOutcomeConfirmedEvent;
 import com.pte.billing.OrderExpiredEvent;
 import com.pte.billing.domain.Order;
@@ -9,7 +9,7 @@ import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
 import com.pte.billing.internal.repository.OrderRepository;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,7 +39,7 @@ class OrderPersistenceServiceTest {
 
     private OrderPersistenceService service;
 
-    @Mock private PlanRepository planRepository;
+    @Mock private ServicePlanRepository planRepository;
 
     @Mock private SubscriptionActivationService subscriptionActivationService;
 
@@ -92,7 +92,7 @@ class OrderPersistenceServiceTest {
         Order order = Order.pending(tenantId, planId, 1_000_000_008L,
                 BigDecimal.ZERO, "VND");
         order.setPublicId(publicId);
-        Plan plan = new Plan();
+        ServicePlan plan = new ServicePlan();
         plan.setPublicId(planId);
         plan.setStatus(PlanStatus.ACTIVE);
         plan.setType(PlanType.EXAM_PACKAGE);

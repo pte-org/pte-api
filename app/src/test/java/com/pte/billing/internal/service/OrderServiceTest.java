@@ -1,7 +1,7 @@
 package com.pte.billing.internal.service;
 
 import com.pte.billing.domain.Order;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.OrderStatus;
 import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
@@ -10,7 +10,7 @@ import com.pte.billing.internal.dto.response.OrderResponse;
 import com.pte.billing.internal.dto.response.PlatformOrderResponse;
 import com.pte.billing.internal.exception.OrderException;
 import com.pte.billing.internal.repository.OrderRepository;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.billing.internal.vendor.payos.PayOsClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,7 +41,7 @@ class OrderServiceTest {
     private OrderRepository orderRepository;
 
     @Mock
-    private PlanRepository planRepository;
+    private ServicePlanRepository planRepository;
 
     @Mock
     private OrderPersistenceService orderPersistenceService;
@@ -60,7 +60,7 @@ class OrderServiceTest {
     void createOrder_reservesPlanPriceAndReturnsPaymentLink() {
         UUID tenantId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
-        Plan plan = activePlan(planId);
+        ServicePlan plan = activePlan(planId);
         Order reserved = Order.pending(tenantId, planId, 1_000_000_000L,
                 plan.getPrice(), plan.getCurrency());
 
@@ -89,7 +89,7 @@ class OrderServiceTest {
     void createOrder_zeroPriceCompletesWithoutPayOsAndReturnsPaidOrder() {
         UUID tenantId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
-        Plan plan = activePlan(planId);
+        ServicePlan plan = activePlan(planId);
         plan.setPrice(BigDecimal.ZERO);
         Order reserved = Order.pending(tenantId, planId, 1_000_000_001L,
                 BigDecimal.ZERO, plan.getCurrency());
@@ -134,7 +134,7 @@ class OrderServiceTest {
     void createOrder_rejectsInactivePlanBeforeCreatingOrder() {
         UUID tenantId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
-        Plan plan = activePlan(planId);
+        ServicePlan plan = activePlan(planId);
         plan.setStatus(PlanStatus.ARCHIVED);
         when(planRepository.findByPublicId(planId)).thenReturn(Optional.of(plan));
 
@@ -206,8 +206,8 @@ class OrderServiceTest {
         assertThat(projection.status()).isEqualTo("PENDING");
     }
 
-    private Plan activePlan(UUID publicId) {
-        Plan plan = new Plan();
+    private ServicePlan activePlan(UUID publicId) {
+        ServicePlan plan = new ServicePlan();
         plan.setPublicId(publicId);
         plan.setName("Exam");
         plan.setType(PlanType.EXAM_PACKAGE);
