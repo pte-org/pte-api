@@ -7,12 +7,12 @@ import com.pte.identity.PracticeIdentityService;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.practice.PracticeObservability;
-import com.pte.practice.internal.domain.PracticeEmailChallenge;
+import com.pte.practice.internal.domain.OtpChallenge;
 import com.pte.practice.internal.dto.request.PracticeEmailRequest;
 import com.pte.practice.internal.dto.request.PracticeVerifyRequest;
 import com.pte.practice.internal.event.PracticeEmailChallengeRequestedEvent;
 import com.pte.practice.internal.exception.InvalidPracticeChallengeException;
-import com.pte.practice.internal.repository.PracticeEmailChallengeRepository;
+import com.pte.practice.internal.repository.OtpChallengeRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -39,7 +39,7 @@ class PracticeEmailAuthServiceTest {
     @Mock
     private PracticeIdentityService identityService;
     @Mock
-    private PracticeEmailChallengeRepository challengeRepository;
+    private OtpChallengeRepository challengeRepository;
     @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
@@ -58,8 +58,8 @@ class PracticeEmailAuthServiceTest {
         when(identityService.getOrCreate("student@example.com")).thenReturn(identity);
         when(challengeRepository.countByIdentityIdAndCreatedAtAfterAndDeletedFalse(any(), any())).thenReturn(0L);
         when(passwordEncoder.encode(anyString())).thenReturn("hashed-code");
-        when(challengeRepository.save(any(PracticeEmailChallenge.class))).thenAnswer(invocation -> {
-            PracticeEmailChallenge challenge = invocation.getArgument(0);
+        when(challengeRepository.save(any(OtpChallenge.class))).thenAnswer(invocation -> {
+            OtpChallenge challenge = invocation.getArgument(0);
             challenge.setPublicId(challengeId);
             return challenge;
         });
@@ -81,7 +81,7 @@ class PracticeEmailAuthServiceTest {
         UUID shellUserId = UUID.randomUUID();
         PracticeIdentityService.IdentityHandle identity = new PracticeIdentityService.IdentityHandle(
                 11L, UUID.randomUUID(), "email-hash", PracticeIdentityStatus.ACTIVE);
-        PracticeEmailChallenge challenge = challenge(challengeId, 11L);
+        OtpChallenge challenge = challenge(challengeId, 11L);
         User shellUser = new User();
         shellUser.setPublicId(shellUserId);
         shellUser.setUsername("practice.shell");
@@ -109,7 +109,7 @@ class PracticeEmailAuthServiceTest {
         UUID challengeId = UUID.randomUUID();
         PracticeIdentityService.IdentityHandle identity = new PracticeIdentityService.IdentityHandle(
                 11L, UUID.randomUUID(), "email-hash", PracticeIdentityStatus.ACTIVE);
-        PracticeEmailChallenge challenge = challenge(challengeId, 11L);
+        OtpChallenge challenge = challenge(challengeId, 11L);
         when(challengeRepository.findWithLockByPublicIdAndDeletedFalse(challengeId))
                 .thenReturn(Optional.of(challenge));
         when(identityService.findById(11L)).thenReturn(Optional.of(identity));
@@ -130,7 +130,7 @@ class PracticeEmailAuthServiceTest {
         UUID challengeId = UUID.randomUUID();
         PracticeIdentityService.IdentityHandle identity = new PracticeIdentityService.IdentityHandle(
                 11L, UUID.randomUUID(), "email-hash", PracticeIdentityStatus.ACTIVE);
-        PracticeEmailChallenge challenge = challenge(challengeId, 11L);
+        OtpChallenge challenge = challenge(challengeId, 11L);
         challenge.setConsumedAt(Instant.now());
         when(challengeRepository.findWithLockByPublicIdAndDeletedFalse(challengeId))
                 .thenReturn(Optional.of(challenge));
@@ -148,7 +148,7 @@ class PracticeEmailAuthServiceTest {
         UUID challengeId = UUID.randomUUID();
         PracticeIdentityService.IdentityHandle identity = new PracticeIdentityService.IdentityHandle(
                 11L, UUID.randomUUID(), "email-hash", PracticeIdentityStatus.REVOKED);
-        PracticeEmailChallenge challenge = challenge(challengeId, 11L);
+        OtpChallenge challenge = challenge(challengeId, 11L);
         when(challengeRepository.findWithLockByPublicIdAndDeletedFalse(challengeId))
                 .thenReturn(Optional.of(challenge));
         when(identityService.findById(11L)).thenReturn(Optional.of(identity));
@@ -163,8 +163,8 @@ class PracticeEmailAuthServiceTest {
                 identityTokenService, observability, eventPublisher);
     }
 
-    private PracticeEmailChallenge challenge(UUID publicId, Long identityId) {
-        PracticeEmailChallenge challenge = new PracticeEmailChallenge();
+    private OtpChallenge challenge(UUID publicId, Long identityId) {
+        OtpChallenge challenge = new OtpChallenge();
         challenge.setPublicId(publicId);
         challenge.setIdentityId(identityId);
         challenge.setCodeHash("hashed-code");

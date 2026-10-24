@@ -14,13 +14,13 @@ import java.time.Instant;
 
 /** One hashed, single-use email verification challenge. */
 @Entity
-@Table(name = "practice_email_challenges", indexes = {
-        @Index(name = "idx_practice_email_challenges_identity_created", columnList = "identity_id,created_at")
+@Table(name = "otp_challenges", indexes = {
+        @Index(name = "idx_otp_challenges_identity_created", columnList = "identity_id,created_at")
 })
 @Getter
 @Setter
 @NoArgsConstructor
-public class PracticeEmailChallenge extends BaseEntity {
+public class OtpChallenge extends BaseEntity {
 
     @Column(name = "identity_id", nullable = false)
     private Long identityId;

@@ -6,14 +6,14 @@ import com.pte.identity.PracticeIdentityStatus;
 import com.pte.identity.PracticeIdentityService;
 import com.pte.practice.PracticeObservability;
 import com.pte.practice.internal.constant.PracticeConstants;
-import com.pte.practice.internal.domain.PracticeEmailChallenge;
+import com.pte.practice.internal.domain.OtpChallenge;
 import com.pte.practice.internal.dto.request.PracticeEmailRequest;
 import com.pte.practice.internal.dto.request.PracticeVerifyRequest;
 import com.pte.practice.internal.dto.response.PracticeChallengeResponse;
 import com.pte.practice.internal.event.PracticeEmailChallengeRequestedEvent;
 import com.pte.practice.internal.exception.InvalidPracticeChallengeException;
 import com.pte.practice.internal.exception.PracticeChallengeRateLimitException;
-import com.pte.practice.internal.repository.PracticeEmailChallengeRepository;
+import com.pte.practice.internal.repository.OtpChallengeRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -31,14 +31,14 @@ public class PracticeEmailAuthService {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final PracticeIdentityService identityService;
-    private final PracticeEmailChallengeRepository challengeRepository;
+    private final OtpChallengeRepository challengeRepository;
     private final PasswordEncoder passwordEncoder;
     private final IdentityTokenService identityTokenService;
     private final PracticeObservability observability;
     private final ApplicationEventPublisher eventPublisher;
 
     public PracticeEmailAuthService(PracticeIdentityService identityService,
-            PracticeEmailChallengeRepository challengeRepository, PasswordEncoder passwordEncoder,
+            OtpChallengeRepository challengeRepository, PasswordEncoder passwordEncoder,
             IdentityTokenService identityTokenService, PracticeObservability observability,
             ApplicationEventPublisher eventPublisher) {
         this.identityService = identityService;
@@ -63,11 +63,11 @@ public class PracticeEmailAuthService {
         }
 
         String code = nextCode();
-        PracticeEmailChallenge challenge = new PracticeEmailChallenge();
+        OtpChallenge challenge = new OtpChallenge();
         challenge.setIdentityId(identity.internalId());
         challenge.setCodeHash(passwordEncoder.encode(code));
         challenge.setExpiresAt(now.plus(PracticeConstants.VERIFICATION_CODE_TTL_MINUTES, ChronoUnit.MINUTES));
-        PracticeEmailChallenge saved = challengeRepository.save(challenge);
+        OtpChallenge saved = challengeRepository.save(challenge);
         observability.challengeRequested();
 
         String body = PracticeConstants.PRACTICE_EMAIL_BODY_TEMPLATE.formatted(
@@ -81,7 +81,7 @@ public class PracticeEmailAuthService {
     public IdentityTokenResponse verifyChallenge(PracticeVerifyRequest request) {
         try {
             String email = normalizeEmail(request.email());
-            PracticeEmailChallenge challenge = challengeRepository
+            OtpChallenge challenge = challengeRepository
                     .findWithLockByPublicIdAndDeletedFalse(request.challengeId())
                     .orElseThrow(InvalidPracticeChallengeException::new);
             PracticeIdentityService.IdentityHandle identity = identityService.findById(challenge.getIdentityId())
