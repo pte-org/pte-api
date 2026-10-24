@@ -9,7 +9,6 @@ import com.pte.enrollment.internal.repository.ProgramRepository;
 import com.pte.enrollment.internal.repository.StudentClassRepository;
 import com.pte.identity.IdentityService;
 import com.pte.tenancy.domain.Organization;
-import com.pte.tenancy.domain.Tenant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,10 +49,8 @@ class EnrollmentModuleServiceTest {
     }
 
     private StudentClass classForTenant(UUID tenantPublicId) {
-        Tenant tenant = new Tenant();
-        tenant.setPublicId(tenantPublicId);
         Organization organization = new Organization();
-        organization.setTenant(tenant);
+        organization.setPublicId(tenantPublicId);
         Program program = new Program();
         program.setOrganization(organization);
         StudentClass studentClass = new StudentClass();
@@ -132,7 +129,7 @@ class EnrollmentModuleServiceTest {
         Program program = programForTenant(tenantId, programPublicId);
         when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
         when(classMembershipRepository
-                .findByStudentClass_Program_Organization_Tenant_PublicIdAndStudentClass_Program_PublicId(
+                .findByStudentClass_Program_Organization_PublicIdAndStudentClass_Program_PublicId(
                         tenantId, programPublicId))
                 .thenReturn(List.of());
 
@@ -151,10 +148,8 @@ class EnrollmentModuleServiceTest {
     }
 
     private Program programForTenant(UUID tenantId, UUID programPublicId) {
-        Tenant tenant = new Tenant();
-        tenant.setPublicId(tenantId);
         Organization organization = new Organization();
-        organization.setTenant(tenant);
+        organization.setPublicId(tenantId);
         Program program = new Program();
         program.setPublicId(programPublicId);
         program.setOrganization(organization);

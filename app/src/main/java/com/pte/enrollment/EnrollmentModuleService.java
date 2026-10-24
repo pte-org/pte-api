@@ -79,7 +79,7 @@ public class EnrollmentModuleService {
     public List<UUID> findActiveStudentPublicIds(UUID tenantId, UUID classPublicId) {
         StudentClass studentClass = studentClassRepository.findByPublicId(classPublicId)
                 .orElseThrow(StudentClassNotFoundException::new);
-        if (!studentClass.getProgram().getOrganization().getTenant().getPublicId().equals(tenantId)) {
+        if (!studentClass.getProgram().getOrganization().getPublicId().equals(tenantId)) {
             throw new StudentClassNotFoundException();
         }
         if (studentClass.isDeleted() || studentClass.getStatus() != ClassStatus.ACTIVE
@@ -101,7 +101,7 @@ public class EnrollmentModuleService {
     public UUID findProgramPublicIdOfClass(UUID tenantId, UUID classPublicId) {
         StudentClass studentClass = studentClassRepository.findByPublicId(classPublicId)
                 .orElseThrow(StudentClassNotFoundException::new);
-        if (!studentClass.getProgram().getOrganization().getTenant().getPublicId().equals(tenantId)) {
+        if (!studentClass.getProgram().getOrganization().getPublicId().equals(tenantId)) {
             throw new StudentClassNotFoundException();
         }
         return studentClass.getProgram().getPublicId();
@@ -113,15 +113,14 @@ public class EnrollmentModuleService {
         if (programRepository != null) {
             programRepository.findByPublicId(programPublicId)
                     .filter(program -> program.getOrganization() != null
-                            && program.getOrganization().getTenant() != null
-                            && tenantId.equals(program.getOrganization().getTenant().getPublicId()))
+                            && tenantId.equals(program.getOrganization().getPublicId()))
                     .filter(program -> !program.isDeleted()
                             && program.getStatus() == ProgramStatus.ACTIVE
                             && program.isCurrentlyActive(LocalDate.now()))
                     .orElseThrow(ProgramNotFoundException::new);
         }
         List<UUID> studentPublicIds = classMembershipRepository
-                .findByStudentClass_Program_Organization_Tenant_PublicIdAndStudentClass_Program_PublicId(
+                .findByStudentClass_Program_Organization_PublicIdAndStudentClass_Program_PublicId(
                         tenantId, programPublicId).stream()
                 .map(ClassMembership::getStudentPublicId)
                 .distinct()

@@ -35,7 +35,7 @@ public class EnrollmentOverviewService {
     @Transactional(readOnly = true)
     public AcademicCounts academicCounts(UUID tenantId) {
         return new AcademicCounts(
-                programRepository.countByOrganization_Tenant_PublicIdAndStatusAndDeletedFalse(
+                programRepository.countByOrganization_PublicIdAndStatusAndDeletedFalse(
                         tenantId, ProgramStatus.ACTIVE),
                 studentClassRepository.countActiveForTenant(tenantId),
                 classMembershipRepository.countAssignedForTenant(tenantId));

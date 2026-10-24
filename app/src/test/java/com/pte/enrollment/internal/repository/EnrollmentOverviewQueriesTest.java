@@ -8,14 +8,14 @@ import com.pte.enrollment.domain.StudentClass;
 import com.pte.enrollment.domain.enums.ClassStatus;
 import com.pte.enrollment.domain.enums.ProgramStatus;
 import com.pte.tenancy.domain.Organization;
-import com.pte.tenancy.domain.Tenant;
+import com.pte.tenancy.domain.enums.FacilityType;
+import com.pte.tenancy.domain.enums.OrganizationStatus;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 
-import java.lang.reflect.Field;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,31 +43,15 @@ class EnrollmentOverviewQueriesTest {
     @Autowired
     private ClassMembershipRepository memberships;
 
-    private Tenant tenant() {
-        Tenant tenant = new Tenant();
-        tenant.setCode("t-" + UUID.randomUUID());
-        tenant.setName("Tenant " + UUID.randomUUID());
-        tenant.setOrganizationType("SCHOOL");
-        tenant.setPackageName("starter");
-        tenant.setStudentLimit(500);
-        em.persist(tenant);
-        em.flush();
-        return tenant;
-    }
-
-    private Organization organization(Tenant tenant) {
+    private Organization organization() {
         Organization organization = new Organization();
-        organization.setName("Branch " + UUID.randomUUID());
-        organization.setTenant(tenant);
-        // facilityType is mandatory; its enum lives in a package tenancy does not expose to this module,
-        // so pick a constant reflectively instead of importing it.
-        try {
-            Field facilityType = Organization.class.getDeclaredField("facilityType");
-            facilityType.setAccessible(true);
-            facilityType.set(organization, facilityType.getType().getEnumConstants()[0]);
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException(ex);
-        }
+        organization.setCode("t-" + UUID.randomUUID());
+        organization.setName("Tenant " + UUID.randomUUID());
+        organization.setOrganizationType("SCHOOL");
+        organization.setPackageName("starter");
+        organization.setStudentLimit(500);
+        organization.setFacilityType(FacilityType.MAIN);
+        organization.setStatus(OrganizationStatus.ACTIVE);
         em.persist(organization);
         em.flush();
         return organization;
@@ -102,9 +86,7 @@ class EnrollmentOverviewQueriesTest {
 
     @Test
     void programsCountOnlyActiveNonDeletedProgramsOfTheTenant() {
-        Tenant tenant = tenant();
-        // The schema allows exactly one organization per tenant (uk_organizations_tenant).
-        Organization branch = organization(tenant);
+        Organization branch = organization();
         program(branch, ProgramStatus.ACTIVE, false);
         program(branch, ProgramStatus.ACTIVE, false);
         program(branch, ProgramStatus.ACTIVE, false);
@@ -112,13 +94,12 @@ class EnrollmentOverviewQueriesTest {
         program(branch, ProgramStatus.SUSPENDED, false);
         program(branch, ProgramStatus.ACTIVE, true); // archived
 
-        assertThat(service.academicCounts(tenant.getPublicId()).programs()).isEqualTo(3);
+        assertThat(service.academicCounts(branch.getPublicId()).programs()).isEqualTo(3);
     }
 
     @Test
     void activeClassesExcludeInactiveSuspendedDeletedAndThoseOfDeletedPrograms() {
-        Tenant tenant = tenant();
-        Organization branch = organization(tenant);
+        Organization branch = organization();
         Program live = program(branch, ProgramStatus.ACTIVE, false);
         Program archived = program(branch, ProgramStatus.ACTIVE, true);
         studentClass(live, ClassStatus.ACTIVE, false);
@@ -128,14 +109,14 @@ class EnrollmentOverviewQueriesTest {
         studentClass(live, ClassStatus.ACTIVE, true); // class archived
         studentClass(archived, ClassStatus.ACTIVE, false); // program archived
 
-        assertThat(service.academicCounts(tenant.getPublicId()).activeClasses()).isEqualTo(2);
+        assertThat(service.academicCounts(branch.getPublicId()).activeClasses()).isEqualTo(2);
     }
 
     @Test
     void assignedLearnersCountLiveMembershipsInLiveClassesOnly() {
-        Tenant tenant = tenant();
+        Organization tenant = organization();
         UUID tenantId = tenant.getPublicId();
-        Program program = program(organization(tenant), ProgramStatus.ACTIVE, false);
+        Program program = program(tenant, ProgramStatus.ACTIVE, false);
         StudentClass live = studentClass(program, ClassStatus.ACTIVE, false);
         StudentClass deletedClass = studentClass(program, ClassStatus.ACTIVE, true);
         membership(live, tenantId, false);
@@ -148,13 +129,13 @@ class EnrollmentOverviewQueriesTest {
 
     @Test
     void countsNeverCrossTheTenantBoundary() {
-        Tenant tenantA = tenant();
-        Tenant tenantB = tenant();
-        Program programA = program(organization(tenantA), ProgramStatus.ACTIVE, false);
+        Organization tenantA = organization();
+        Organization tenantB = organization();
+        Program programA = program(tenantA, ProgramStatus.ACTIVE, false);
         StudentClass classA = studentClass(programA, ClassStatus.ACTIVE, false);
         membership(classA, tenantA.getPublicId(), false);
 
-        Organization branchB = organization(tenantB);
+        Organization branchB = tenantB;
         for (int i = 0; i < 3; i++) {
             Program programB = program(branchB, ProgramStatus.ACTIVE, false);
             StudentClass classB = studentClass(programB, ClassStatus.ACTIVE, false);
@@ -168,7 +149,7 @@ class EnrollmentOverviewQueriesTest {
 
     @Test
     void aTenantWithNoAcademicStructureHasAllZeroCounts() {
-        program(organization(tenant()), ProgramStatus.ACTIVE, false);
+        program(organization(), ProgramStatus.ACTIVE, false);
 
         assertThat(service.academicCounts(UUID.randomUUID())).isEqualTo(new AcademicCounts(0, 0, 0));
     }

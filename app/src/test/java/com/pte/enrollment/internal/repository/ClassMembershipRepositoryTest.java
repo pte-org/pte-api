@@ -4,10 +4,9 @@ import com.pte.enrollment.domain.ClassMembership;
 import com.pte.tenancy.domain.Organization;
 import com.pte.enrollment.domain.Program;
 import com.pte.enrollment.domain.StudentClass;
-import com.pte.tenancy.domain.Tenant;
 import com.pte.tenancy.domain.enums.FacilityType;
+import com.pte.tenancy.domain.enums.OrganizationStatus;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
-import com.pte.tenancy.internal.repository.TenantRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -40,22 +39,15 @@ class ClassMembershipRepositoryTest {
     @Autowired
     private OrganizationRepository organizationRepository;
 
-    @Autowired
-    private TenantRepository tenantRepository;
-
     private StudentClass persistClassUnderNewTenant(String tenantName, String programName, String className) {
-        Tenant tenant = new Tenant();
-        tenant.setCode("tenant-" + UUID.randomUUID());
-        tenant.setName(tenantName + " " + UUID.randomUUID());
-        tenant.setOrganizationType("SCHOOL");
-        tenant.setPackageName("starter");
-        tenant.setStudentLimit(500);
-        tenant = tenantRepository.save(tenant);
-
         Organization organization = new Organization();
-        organization.setName("Downtown Branch");
-        organization.setFacilityType(FacilityType.BRANCH);
-        organization.setTenant(tenant);
+        organization.setCode("tenant-" + UUID.randomUUID());
+        organization.setName(tenantName + " " + UUID.randomUUID());
+        organization.setOrganizationType("SCHOOL");
+        organization.setPackageName("starter");
+        organization.setStudentLimit(500);
+        organization.setFacilityType(FacilityType.MAIN);
+        organization.setStatus(OrganizationStatus.ACTIVE);
         organization = organizationRepository.save(organization);
 
         Program program = new Program();
@@ -81,13 +73,13 @@ class ClassMembershipRepositoryTest {
     void findByTenant_returnsOnlyThatTenantsRows() {
         StudentClass tenantAClass = persistClassUnderNewTenant("Tenant A", "Khối 12", "12A1");
         StudentClass tenantBClass = persistClassUnderNewTenant("Tenant B", "Khối 12", "12A1");
-        UUID tenantAPublicId = tenantAClass.getProgram().getOrganization().getTenant().getPublicId();
+        UUID tenantAPublicId = tenantAClass.getProgram().getOrganization().getPublicId();
 
         ClassMembership tenantAMembership = persistMembership(tenantAClass, tenantAPublicId);
-        persistMembership(tenantBClass, tenantBClass.getProgram().getOrganization().getTenant().getPublicId());
+        persistMembership(tenantBClass, tenantBClass.getProgram().getOrganization().getPublicId());
 
         List<ClassMembership> results = classMembershipRepository
-                .findByStudentClass_Program_Organization_Tenant_PublicId(tenantAPublicId);
+                .findByStudentClass_Program_Organization_PublicId(tenantAPublicId);
 
         assertThat(results).extracting(ClassMembership::getPublicId)
                 .containsExactly(tenantAMembership.getPublicId());
@@ -96,7 +88,7 @@ class ClassMembershipRepositoryTest {
     @Test
     void findByTenantAndProgram_returnsOnlyThatProgramsRowsWithinTenant() {
         StudentClass tenantAProgram1Class = persistClassUnderNewTenant("Tenant A", "Khối 12", "12A1");
-        UUID tenantAPublicId = tenantAProgram1Class.getProgram().getOrganization().getTenant().getPublicId();
+        UUID tenantAPublicId = tenantAProgram1Class.getProgram().getOrganization().getPublicId();
         Organization tenantAOrganization = tenantAProgram1Class.getProgram().getOrganization();
 
         Program tenantAProgram2 = new Program();
@@ -112,7 +104,7 @@ class ClassMembershipRepositoryTest {
         persistMembership(tenantAProgram2Class, tenantAPublicId);
 
         List<ClassMembership> results = classMembershipRepository
-                .findByStudentClass_Program_Organization_Tenant_PublicIdAndStudentClass_Program_PublicId(
+                .findByStudentClass_Program_Organization_PublicIdAndStudentClass_Program_PublicId(
                         tenantAPublicId, tenantAProgram1Class.getProgram().getPublicId());
 
         assertThat(results).extracting(ClassMembership::getPublicId)
@@ -122,16 +114,16 @@ class ClassMembershipRepositoryTest {
     @Test
     void findByTenantAndProgram_crossTenantProgramId_returnsEmptyNeverTheOtherTenantsRoster() {
         StudentClass tenantAClass = persistClassUnderNewTenant("Tenant A", "Khối 12", "12A1");
-        UUID tenantAPublicId = tenantAClass.getProgram().getOrganization().getTenant().getPublicId();
+        UUID tenantAPublicId = tenantAClass.getProgram().getOrganization().getPublicId();
         persistMembership(tenantAClass, tenantAPublicId);
 
         StudentClass tenantBClass = persistClassUnderNewTenant("Tenant B", "Khối 12", "12A1");
-        persistMembership(tenantBClass, tenantBClass.getProgram().getOrganization().getTenant().getPublicId());
+        persistMembership(tenantBClass, tenantBClass.getProgram().getOrganization().getPublicId());
         UUID tenantBProgramPublicId = tenantBClass.getProgram().getPublicId();
 
         // Tenant A's caller passing Tenant B's programPublicId must get nothing back — never Tenant B's roster.
         List<ClassMembership> results = classMembershipRepository
-                .findByStudentClass_Program_Organization_Tenant_PublicIdAndStudentClass_Program_PublicId(
+                .findByStudentClass_Program_Organization_PublicIdAndStudentClass_Program_PublicId(
                         tenantAPublicId, tenantBProgramPublicId);
 
         assertThat(results).isEmpty();

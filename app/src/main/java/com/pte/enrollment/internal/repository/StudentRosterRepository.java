@@ -36,17 +36,15 @@ public interface StudentRosterRepository extends Repository<StudentClass, Long> 
                       SELECT 1
                       FROM programs c_programs
                       JOIN organizations c_organizations ON c_organizations.id = c_programs.organization_id
-                      JOIN tenants c_tenants ON c_tenants.id = c_organizations.tenant_id
                       WHERE c_programs.id = c.program_id
-                        AND c_tenants.public_id = :tenantId)
+                        AND c_organizations.public_id = :tenantId)
             LEFT JOIN programs p
                    ON p.id = c.program_id
                   AND EXISTS (
                       SELECT 1
                       FROM organizations p_organizations
-                      JOIN tenants p_tenants ON p_tenants.id = p_organizations.tenant_id
                       WHERE p_organizations.id = p.organization_id
-                        AND p_tenants.public_id = :tenantId)
+                        AND p_organizations.public_id = :tenantId)
             WHERE u.tenant_id = :tenantId
               AND u.deleted = FALSE
               AND (:search = ''
@@ -82,17 +80,15 @@ public interface StudentRosterRepository extends Repository<StudentClass, Long> 
                       SELECT 1
                       FROM programs c_programs
                       JOIN organizations c_organizations ON c_organizations.id = c_programs.organization_id
-                      JOIN tenants c_tenants ON c_tenants.id = c_organizations.tenant_id
                       WHERE c_programs.id = c.program_id
-                        AND c_tenants.public_id = :tenantId)
+                        AND c_organizations.public_id = :tenantId)
             LEFT JOIN programs p
                    ON p.id = c.program_id
                   AND EXISTS (
                       SELECT 1
                       FROM organizations p_organizations
-                      JOIN tenants p_tenants ON p_tenants.id = p_organizations.tenant_id
                       WHERE p_organizations.id = p.organization_id
-                        AND p_tenants.public_id = :tenantId)
+                        AND p_organizations.public_id = :tenantId)
             WHERE u.tenant_id = :tenantId
               AND u.deleted = FALSE
               AND (:search = ''

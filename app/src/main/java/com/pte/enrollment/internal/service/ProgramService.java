@@ -177,7 +177,7 @@ public class ProgramService {
                 .orElseThrow(ProgramNotFoundException::new);
         Organization organization = program.getOrganization();
         if (!organization.getPublicId().equals(organizationPublicId)
-                || !organization.getTenant().getPublicId().equals(caller.tenantId())) {
+                || !organization.getPublicId().equals(caller.tenantId())) {
             throw new ProgramNotFoundException();
         }
         return program;

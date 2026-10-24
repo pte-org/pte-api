@@ -5,7 +5,6 @@ import com.pte.enrollment.domain.LecturerAssignment;
 import com.pte.tenancy.domain.Organization;
 import com.pte.enrollment.domain.Program;
 import com.pte.enrollment.domain.StudentClass;
-import com.pte.tenancy.domain.Tenant;
 import com.pte.tenancy.domain.enums.FacilityType;
 import com.pte.enrollment.internal.exception.LecturerAlreadyAssignedException;
 import com.pte.enrollment.internal.exception.LecturerAssignmentNotFoundException;
@@ -66,19 +65,11 @@ class AssignmentServiceTest {
         service = new AssignmentService(classService, lecturerAssignmentRepository, auditLogService);
     }
 
-    private Tenant tenantWithPublicId(UUID publicId) {
-        Tenant tenant = new Tenant();
-        tenant.setPublicId(publicId);
-        tenant.setName("Acme School");
-        return tenant;
-    }
-
-    private Organization organizationOf(UUID orgPublicId, Tenant tenant) {
+    private Organization organizationOf(UUID publicId) {
         Organization organization = new Organization();
-        organization.setPublicId(orgPublicId);
-        organization.setName("Downtown Branch");
-        organization.setFacilityType(FacilityType.BRANCH);
-        organization.setTenant(tenant);
+        organization.setPublicId(publicId);
+        organization.setName("Acme School");
+        organization.setFacilityType(FacilityType.MAIN);
         return organization;
     }
 
@@ -103,9 +94,9 @@ class AssignmentServiceTest {
     @Test
     void assignLecturer_saves() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
+        UUID organizationPublicId = tenantPublicId;
         UUID programPublicId = UUID.randomUUID();
-        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
+        Program program = programOf(programPublicId, organizationOf(tenantPublicId));
         UUID classPublicId = UUID.randomUUID();
         StudentClass studentClass = classOf(classPublicId, program);
         UUID assigneePublicId = UUID.randomUUID();
@@ -131,9 +122,9 @@ class AssignmentServiceTest {
     void assignLecturer_classBelongsToDifferentTenant_throwsNotFoundWithoutSaving() {
         UUID callerTenantId = UUID.randomUUID();
         UUID otherTenantId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
+        UUID organizationPublicId = otherTenantId;
         UUID programPublicId = UUID.randomUUID();
-        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(otherTenantId)));
+        Program program = programOf(programPublicId, organizationOf(otherTenantId));
         UUID classPublicId = UUID.randomUUID();
         StudentClass studentClass = classOf(classPublicId, program);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
@@ -150,9 +141,9 @@ class AssignmentServiceTest {
     @Test
     void assignLecturer_duplicateAssignment_rejectedByConstraint() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
+        UUID organizationPublicId = tenantPublicId;
         UUID programPublicId = UUID.randomUUID();
-        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
+        Program program = programOf(programPublicId, organizationOf(tenantPublicId));
         UUID classPublicId = UUID.randomUUID();
         StudentClass studentClass = classOf(classPublicId, program);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
@@ -169,9 +160,9 @@ class AssignmentServiceTest {
     @Test
     void listLecturers_returnsAssigneesForClass() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
+        UUID organizationPublicId = tenantPublicId;
         UUID programPublicId = UUID.randomUUID();
-        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
+        Program program = programOf(programPublicId, organizationOf(tenantPublicId));
         UUID classPublicId = UUID.randomUUID();
         StudentClass studentClass = classOf(classPublicId, program);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
@@ -195,9 +186,9 @@ class AssignmentServiceTest {
     @Test
     void unassignLecturer_deletes() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
+        UUID organizationPublicId = tenantPublicId;
         UUID programPublicId = UUID.randomUUID();
-        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
+        Program program = programOf(programPublicId, organizationOf(tenantPublicId));
         UUID classPublicId = UUID.randomUUID();
         StudentClass studentClass = classOf(classPublicId, program);
         UUID assignmentPublicId = UUID.randomUUID();
@@ -220,9 +211,9 @@ class AssignmentServiceTest {
     @Test
     void unassignLecturer_notFound_throws() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
+        UUID organizationPublicId = tenantPublicId;
         UUID programPublicId = UUID.randomUUID();
-        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
+        Program program = programOf(programPublicId, organizationOf(tenantPublicId));
         UUID classPublicId = UUID.randomUUID();
         StudentClass studentClass = classOf(classPublicId, program);
         UUID assignmentPublicId = UUID.randomUUID();
@@ -239,9 +230,9 @@ class AssignmentServiceTest {
     @Test
     void unassignThenReassignLecturer_succeeds() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
+        UUID organizationPublicId = tenantPublicId;
         UUID programPublicId = UUID.randomUUID();
-        Program program = programOf(programPublicId, organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId)));
+        Program program = programOf(programPublicId, organizationOf(tenantPublicId));
         UUID classPublicId = UUID.randomUUID();
         StudentClass studentClass = classOf(classPublicId, program);
         UUID assigneePublicId = UUID.randomUUID();

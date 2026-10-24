@@ -60,9 +60,9 @@ public interface ClassMembershipRepository extends JpaRepository<ClassMembership
               and p.status = com.pte.enrollment.domain.enums.ProgramStatus.ACTIVE
               and (p.startDate is null or p.startDate <= CURRENT_DATE)
               and (p.endDate is null or p.endDate >= CURRENT_DATE)
-              and o.tenant.publicId = :tenantId
+              and o.publicId = :tenantId
             """)
-    List<ClassMembership> findByStudentClass_Program_Organization_Tenant_PublicId(
+    List<ClassMembership> findByStudentClass_Program_Organization_PublicId(
             @Param("tenantId") UUID tenantPublicId);
 
     /** Filtered variant of the above â€” both tenant and program are AND-ed in the same query. */
@@ -80,9 +80,9 @@ public interface ClassMembershipRepository extends JpaRepository<ClassMembership
               and p.status = com.pte.enrollment.domain.enums.ProgramStatus.ACTIVE
               and (p.startDate is null or p.startDate <= CURRENT_DATE)
               and (p.endDate is null or p.endDate >= CURRENT_DATE)
-              and o.tenant.publicId = :tenantId
+              and o.publicId = :tenantId
               and p.publicId = :programPublicId
             """)
-    List<ClassMembership> findByStudentClass_Program_Organization_Tenant_PublicIdAndStudentClass_Program_PublicId(
+    List<ClassMembership> findByStudentClass_Program_Organization_PublicIdAndStudentClass_Program_PublicId(
             @Param("tenantId") UUID tenantPublicId, @Param("programPublicId") UUID programPublicId);
 }

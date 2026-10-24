@@ -383,9 +383,9 @@ public class ClassService {
     public List<ClassMembershipResponse> listMemberships(UUID programPublicId, CurrentUser caller) {
         List<ClassMembership> memberships = programPublicId != null
                 ? classMembershipRepository
-                        .findByStudentClass_Program_Organization_Tenant_PublicIdAndStudentClass_Program_PublicId(
+                        .findByStudentClass_Program_Organization_PublicIdAndStudentClass_Program_PublicId(
                                 caller.tenantId(), programPublicId)
-                : classMembershipRepository.findByStudentClass_Program_Organization_Tenant_PublicId(caller.tenantId());
+                : classMembershipRepository.findByStudentClass_Program_Organization_PublicId(caller.tenantId());
         return memberships.stream().map(ClassMembershipMapper::toResponse).toList();
     }
 
@@ -411,7 +411,7 @@ public class ClassService {
                 .orElseThrow(ProgramNotFoundException::new);
         Organization organization = program.getOrganization();
         if (!organization.getPublicId().equals(organizationPublicId)
-                || !organization.getTenant().getPublicId().equals(caller.tenantId())) {
+                || !organization.getPublicId().equals(caller.tenantId())) {
             throw new ProgramNotFoundException();
         }
         return program;
@@ -431,7 +431,7 @@ public class ClassService {
         Organization organization = program.getOrganization();
         if (!program.getPublicId().equals(programPublicId)
                 || !organization.getPublicId().equals(organizationPublicId)
-                || !organization.getTenant().getPublicId().equals(caller.tenantId())) {
+                || !organization.getPublicId().equals(caller.tenantId())) {
             throw new StudentClassNotFoundException();
         }
         return studentClass;
@@ -444,7 +444,7 @@ public class ClassService {
     private StudentClass loadClassForTenant(UUID classPublicId, UUID tenantId) {
         StudentClass studentClass = studentClassRepository.findByPublicId(classPublicId)
                 .orElseThrow(StudentClassNotFoundException::new);
-        if (!studentClass.getProgram().getOrganization().getTenant().getPublicId().equals(tenantId)) {
+        if (!studentClass.getProgram().getOrganization().getPublicId().equals(tenantId)) {
             throw new StudentClassNotFoundException();
         }
         return studentClass;
@@ -460,7 +460,7 @@ public class ClassService {
     }
 
     private void assertStudentBelongsToTenant(UUID studentPublicId, UUID tenantId) {
-        if (!identityService.getTenantOf(studentPublicId).filter(tenantId::equals).isPresent()) {
+        if (!identityService.isMemberOf(studentPublicId, tenantId)) {
             throw new StudentNotFoundException();
         }
         identityService.requireActiveStudentInTenant(studentPublicId, tenantId);

@@ -12,7 +12,6 @@ import com.pte.identity.IdentityService;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.domain.Organization;
-import com.pte.tenancy.domain.Tenant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -59,7 +58,7 @@ class ClassServiceTenantIsolationTest {
     void bulkAssignCrossTenantStudentId_rejectsAndCreatesNothing() {
         UUID callerTenantId = UUID.randomUUID();
         UUID foreignTenantId = UUID.randomUUID();
-        UUID organizationId = UUID.randomUUID();
+        UUID organizationId = callerTenantId;
         UUID programId = UUID.randomUUID();
         UUID classId = UUID.randomUUID();
         UUID foreignStudentId = UUID.randomUUID();
@@ -68,16 +67,13 @@ class ClassServiceTenantIsolationTest {
         studentClass.setPublicId(classId);
         Program program = new Program();
         program.setPublicId(programId);
-        Tenant tenant = new Tenant();
-        tenant.setPublicId(callerTenantId);
         Organization organization = new Organization();
         organization.setPublicId(organizationId);
-        organization.setTenant(tenant);
         program.setOrganization(organization);
         studentClass.setProgram(program);
 
         when(studentClassRepository.findByPublicId(classId)).thenReturn(Optional.of(studentClass));
-        when(identityService.getTenantOf(foreignStudentId)).thenReturn(Optional.of(foreignTenantId));
+        when(identityService.isMemberOf(foreignStudentId, callerTenantId)).thenReturn(false);
 
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
 

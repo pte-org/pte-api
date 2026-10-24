@@ -20,7 +20,7 @@ public interface StudentClassRepository extends JpaRepository<StudentClass, Long
 
     /** Overview: active, non-deleted classes of a tenant whose program is not deleted either. */
     @Query("SELECT COUNT(c) FROM StudentClass c JOIN c.program p JOIN p.organization o "
-            + "WHERE o.tenant.publicId = :tenantPublicId AND c.deleted = false AND p.deleted = false "
+            + "WHERE o.publicId = :tenantPublicId AND c.deleted = false AND p.deleted = false "
             + "AND c.status = com.pte.enrollment.domain.enums.ClassStatus.ACTIVE")
     long countActiveForTenant(@Param("tenantPublicId") UUID tenantPublicId);
 

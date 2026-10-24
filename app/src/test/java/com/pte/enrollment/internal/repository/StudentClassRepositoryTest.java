@@ -4,10 +4,9 @@ import com.pte.enrollment.domain.ClassMembership;
 import com.pte.tenancy.domain.Organization;
 import com.pte.enrollment.domain.Program;
 import com.pte.enrollment.domain.StudentClass;
-import com.pte.tenancy.domain.Tenant;
 import com.pte.tenancy.domain.enums.FacilityType;
+import com.pte.tenancy.domain.enums.OrganizationStatus;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
-import com.pte.tenancy.internal.repository.TenantRepository;
 import com.pte.enrollment.internal.dto.response.ClassStudentCountResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,22 +42,15 @@ class StudentClassRepositoryTest {
     @Autowired
     private OrganizationRepository organizationRepository;
 
-    @Autowired
-    private TenantRepository tenantRepository;
-
     private Program persistProgram(String programName) {
-        Tenant tenant = new Tenant();
-        tenant.setCode("acme-" + UUID.randomUUID());
-        tenant.setName("Acme School " + UUID.randomUUID());
-        tenant.setOrganizationType("SCHOOL");
-        tenant.setPackageName("starter");
-        tenant.setStudentLimit(500);
-        tenant = tenantRepository.save(tenant);
-
         Organization organization = new Organization();
-        organization.setName("Downtown Branch");
-        organization.setFacilityType(FacilityType.BRANCH);
-        organization.setTenant(tenant);
+        organization.setCode("acme-" + UUID.randomUUID());
+        organization.setName("Acme School " + UUID.randomUUID());
+        organization.setOrganizationType("SCHOOL");
+        organization.setPackageName("starter");
+        organization.setStudentLimit(500);
+        organization.setFacilityType(FacilityType.MAIN);
+        organization.setStatus(OrganizationStatus.ACTIVE);
         organization = organizationRepository.save(organization);
 
         Program program = new Program();
@@ -97,7 +89,7 @@ class StudentClassRepositoryTest {
     @Test
     void countStudentsByClassForProgram_returnsCorrectCountPerClass() {
         Program program = persistProgram("Khối 12");
-        UUID tenantId = program.getOrganization().getTenant().getPublicId();
+        UUID tenantId = program.getOrganization().getPublicId();
         StudentClass classA = persistClass(program, "12A1");
         StudentClass classB = persistClass(program, "12A2");
         persistMembership(classA, tenantId);
