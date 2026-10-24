@@ -2,6 +2,7 @@ package com.pte.shared.audit;
 
 import com.pte.shared.audit.domain.AuditLog;
 import com.pte.shared.audit.dto.AuditLogResponse;
+import com.pte.shared.audit.internal.constant.AuditLogConstants;
 import com.pte.shared.audit.internal.repository.AuditLogRepository;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.web.PageMeta;
@@ -64,7 +65,14 @@ public class AuditLogService {
 
     private void recordInternal(CurrentUser caller, String aggregateType, String aggregateId, String resourceName,
             String resourceCode, String action, String summary) {
+        auditLogRepository.save(newAuditLog(caller, aggregateType, aggregateId, resourceName, resourceCode,
+                action, summary));
+    }
+
+    private AuditLog newAuditLog(CurrentUser caller, String aggregateType, String aggregateId, String resourceName,
+            String resourceCode, String action, String summary) {
         AuditLog auditLog = new AuditLog();
+        auditLog.setActorRole(String.join(AuditLogConstants.ROLE_SEPARATOR, caller.roles()));
         auditLog.setTenantId(caller.tenantId());
         auditLog.setActorUserId(caller.userId());
         auditLog.setAggregateType(aggregateType);
@@ -73,7 +81,7 @@ public class AuditLogService {
         auditLog.setResourceCode(resourceCode);
         auditLog.setAction(action);
         auditLog.setSummary(summary);
-        auditLogRepository.save(auditLog);
+        return auditLog;
     }
 
     @Transactional(readOnly = true)
