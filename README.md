@@ -46,7 +46,12 @@ curl http://localhost:8091/actuator/health
 
 After bringing up the full stack (Option 2), seed test data using `scripts/seed-e2e.ps1`:
 
-**Prerequisites (one-time setup):**
+> **Local-schema profile (entity consolidation, 2026-10):** with `APP_SPRING_PROFILES=local-schema` in `.env.local` the
+> app builds the schema with Hibernate on an empty database and seeds `admin@test.local` (PLATFORM_ADMIN) from
+> `app/src/main/resources/db/dev-seed/`, so the manual bootstrap SQL below is not needed. See
+> `pte-doc/projects/plans/quang-entity-consolidation/local-dev-runbook.md`.
+
+**Prerequisites (one-time setup, deployed-style Flyway database only):**
 
 Before running the seed script, bootstrap a `PLATFORM_ADMIN` account directly via SQL â€” pte-api has no self-registration endpoint. This requires:
 
@@ -60,17 +65,13 @@ docker run --rm httpd:2.4-alpine htpasswd -nbBC 10 "" 'Password123!'
 2. Connect to the `iam` database and run this SQL once:
 
 ```sql
--- username = email for a PLATFORM_ADMIN (plans/quang-tenant-commercialization
--- Phase 1) â€” login now looks up by username, not email.
-INSERT INTO users (public_id, username, email, full_name, tenant_id, status, deleted, created_at, updated_at)
-VALUES (gen_random_uuid(), 'admin@test.local', 'admin@test.local', 'Bootstrap Admin', NULL, 'ACTIVE', false, now(), now())
+-- username = email for a PLATFORM_ADMIN; the credential hash lives on the account itself.
+INSERT INTO users (public_id, username, email, full_name, credential_hash, status, deleted, must_change_password, created_at, updated_at)
+VALUES (gen_random_uuid(), 'admin@test.local', 'admin@test.local', 'Bootstrap Admin', '<BCRYPT_HASH>', 'ACTIVE', false, false, now(), now())
 RETURNING id;
--- Capture the printed id value, use it as <USER_ID> in the next two statements
+-- Capture the printed id value, use it as <USER_ID> in the next statement
 
 INSERT INTO user_roles (user_id, role) VALUES (<USER_ID>, 'PLATFORM_ADMIN');
-
-INSERT INTO login_hashes (public_id, user_id, hash, deleted, created_at, updated_at)
-VALUES (gen_random_uuid(), <USER_ID>, '<BCRYPT_HASH>', false, now(), now());
 ```
 
 **Running the seed script:**
