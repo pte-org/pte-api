@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * A hashed refresh token. Only the hash is stored — the raw token is returned
@@ -30,6 +31,10 @@ public class RefreshToken extends BaseEntity {
 
     @Column(nullable = false, unique = true)
     private String tokenHash;
+
+    /** Organization chosen at login; null for an account that signed in without one (platform or practice). */
+    @Column(name = "organization_id")
+    private UUID organizationId;
 
     @Column(nullable = false)
     private Instant expiresAt;

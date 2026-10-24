@@ -2,10 +2,8 @@ package com.pte.identity.internal.service;
 
 import com.pte.identity.UserCredentialsEmailRequestedEvent;
 import com.pte.identity.domain.Role;
-import com.pte.identity.internal.domain.LoginHash;
 import com.pte.identity.internal.dto.request.UpdatePlatformUserProfileRequest;
 import com.pte.identity.internal.dto.response.UserResponse;
-import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.domain.User;
 import com.pte.shared.audit.AuditLogService;
@@ -38,8 +36,6 @@ class PlatformUserLifecycleServiceTest {
     @Mock
     private UserRepository userRepository;
     @Mock
-    private LoginHashRepository loginHashRepository;
-    @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
     private UserProvisioningHelper provisioningHelper;
@@ -55,9 +51,9 @@ class PlatformUserLifecycleServiceTest {
 
     @BeforeEach
     void setUp() {
-        platformUserService = new PlatformUserService(userRepository, loginHashRepository, passwordEncoder,
+        platformUserService = new PlatformUserService(userRepository, passwordEncoder,
                 provisioningHelper, auditLogService, refreshTokenService, eventPublisher);
-        service = new PlatformUserLifecycleService(platformUserService, userRepository, loginHashRepository,
+        service = new PlatformUserLifecycleService(platformUserService, userRepository,
                 passwordEncoder, refreshTokenService, eventPublisher, auditLogService);
     }
 
@@ -106,17 +102,15 @@ class PlatformUserLifecycleServiceTest {
         CurrentUser caller = admin();
         UUID publicId = UUID.randomUUID();
         User user = target(publicId);
-        LoginHash loginHash = new LoginHash();
-        loginHash.setUserId(user.getId());
-        loginHash.setHash("old-hash");
+        user.setCredentialHash("old-hash");
         stubActiveTarget(publicId, user);
-        when(loginHashRepository.findByUserId(user.getId())).thenReturn(Optional.of(loginHash));
         when(passwordEncoder.encode(any(String.class))).thenReturn("new-hash");
         when(userRepository.save(user)).thenReturn(user);
 
         UserResponse response = service.resetPassword(publicId, caller);
 
         assertThat(response.mustChangePassword()).isTrue();
+        assertThat(user.getCredentialHash()).isEqualTo("new-hash");
         assertThat(response.toString()).doesNotContain("new-hash");
         verify(refreshTokenService).revokeAllForUser(user.getId());
         ArgumentCaptor<UserCredentialsEmailRequestedEvent> event =

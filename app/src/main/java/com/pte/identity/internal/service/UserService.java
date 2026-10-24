@@ -1,10 +1,10 @@
 package com.pte.identity.internal.service;
 
 import com.pte.identity.UserCredentialsEmailRequestedEvent;
+import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.constant.IdentityConstants;
-import com.pte.identity.internal.domain.LoginHash;
 import com.pte.identity.internal.dto.request.BulkCreateUserRow;
 import com.pte.identity.internal.dto.request.BulkCreateUsersRequest;
 import com.pte.identity.internal.dto.request.ChangePasswordRequest;
@@ -19,19 +19,19 @@ import com.pte.identity.internal.dto.response.UserDirectoryEntryResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.DuplicateEmailInBatchException;
 import com.pte.identity.internal.exception.EmailAlreadyUsedException;
-import com.pte.identity.internal.exception.ForbiddenUserManagementException;
 import com.pte.identity.internal.exception.ForbiddenPasswordResetException;
+import com.pte.identity.internal.exception.ForbiddenUserManagementException;
 import com.pte.identity.internal.exception.InvalidLoginException;
-import com.pte.identity.internal.exception.UserNotFoundException;
-import com.pte.identity.internal.exception.UserEmailRequiredException;
 import com.pte.identity.internal.exception.StudentCredentialEmailNotAllowedException;
+import com.pte.identity.internal.exception.UserEmailRequiredException;
+import com.pte.identity.internal.exception.UserNotFoundException;
 import com.pte.identity.internal.mapper.UserMapper;
-import com.pte.identity.internal.repository.LoginHashRepository;
+import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.util.PasswordGenerator;
 import com.pte.identity.internal.util.UsernameGenerator;
-import com.pte.shared.security.CurrentUser;
 import com.pte.shared.audit.AuditLogService;
+import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -41,54 +41,45 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * User provisioning + lookup, tenant-isolated. A host creates users only within
- * its own tenant; a platform admin can target a tenant.
- *
- * <p>Ported from {@code services/iam}'s {@code UserService}. Two changes from
- * the microservice version, both required by plan.md's global constraints:
- * <ul>
- *   <li>No synchronization message writes on create/suspend/reactivate/resetPassword — those
- *       existed only to notify other services (admin's now-deleted roster
- *       read model, notification's email trigger) across a process boundary
- *       that no longer exists here.</li>
- *   <li>{@link #me} always returns a null {@code organizationType} for now
- *       instead of reading a locally-cached {@code TenantRegistry} kept in
- *       sync via RabbitMQ from admin's Tenant/Organization data — the same
- *       kind of cross-service read model as the roster bug Phase 03 removes,
- *       just discovered a phase earlier. Once Phase 03 ports {@code tenancy},
- *       this becomes a direct in-process call.</li>
- * </ul>
+ * User provisioning + lookup, tenant-isolated. A host manages only accounts that are members of its own
+ * organization; a platform admin can target an organization. An e-mail that already belongs to an account joins
+ * that account to the organization instead of creating a second account.
  */
 @Service
 public class UserService {
 
-    /** Roles a tenant-scoped caller (HOST_ADMIN) may reset — rescuing a locked-out Student/Proctor, not a peer admin. */
     private final UserRepository userRepository;
-    private final LoginHashRepository loginHashRepository;
+    private final OrganizationMemberRepository memberRepository;
+    private final OrganizationMemberDirectory memberDirectory;
     private final PasswordEncoder passwordEncoder;
     private final UserProvisioningHelper provisioningHelper;
     private final UserBulkCreateWriter bulkCreateWriter;
     private final TenancyService tenancyService;
     private final ApplicationEventPublisher eventPublisher;
     private final AuditLogService auditLogService;
+    private final RefreshTokenService refreshTokenService;
 
-    public UserService(UserRepository userRepository, LoginHashRepository loginHashRepository,
-                       PasswordEncoder passwordEncoder, UserProvisioningHelper provisioningHelper,
-                       UserBulkCreateWriter bulkCreateWriter, TenancyService tenancyService,
-                       ApplicationEventPublisher eventPublisher, AuditLogService auditLogService) {
+    public UserService(UserRepository userRepository, OrganizationMemberRepository memberRepository,
+                       OrganizationMemberDirectory memberDirectory, PasswordEncoder passwordEncoder,
+                       UserProvisioningHelper provisioningHelper, UserBulkCreateWriter bulkCreateWriter,
+                       TenancyService tenancyService, ApplicationEventPublisher eventPublisher,
+                       AuditLogService auditLogService, RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
-        this.loginHashRepository = loginHashRepository;
+        this.memberRepository = memberRepository;
+        this.memberDirectory = memberDirectory;
         this.passwordEncoder = passwordEncoder;
         this.provisioningHelper = provisioningHelper;
         this.bulkCreateWriter = bulkCreateWriter;
         this.tenancyService = tenancyService;
         this.eventPublisher = eventPublisher;
         this.auditLogService = auditLogService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @Transactional
@@ -96,56 +87,52 @@ public class UserService {
         UUID tenantId = provisioningHelper.resolveTargetTenant(caller, request.tenantId());
         Set<Role> roles = provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles());
         provisioningHelper.validateTenantScope(caller, tenantId, roles);
-
-        // username = email for every role created through this single-user
-        // endpoint (plans/quang-tenant-commercialization Phase 1) — including
-        // STUDENT for now; per-tenant student username generation only
-        // applies to the bulk roster-import path (Phase 8), not here. Since
-        // username carries the real DB uniqueness constraint now, duplicate
-        // detection checks it, not email.
-        if (userRepository.existsByUsernameAndTenantId(request.email(), tenantId)) {
+        // username = email for every role created through this single-user endpoint; per-organization student
+        // username generation only applies to the bulk roster-import path.
+        Optional<User> existing = userRepository.findByUsername(request.email());
+        // A platform account never joins an organization, and an e-mail held by another live account under a
+        // different username would make e-mail based identity resolution ambiguous.
+        if (existing.isPresent() && (existing.get().isDeleted() || existing.get().hasPlatformRole()
+                || memberRepository.findByUser_IdAndOrganizationIdAndDeletedFalse(
+                        existing.get().getId(), tenantId).isPresent())
+                || existing.isEmpty() && userRepository.existsByEmailIgnoreCaseAndDeletedFalse(request.email())) {
             throw new EmailAlreadyUsedException();
         }
         if (roles.contains(Role.STUDENT)) {
             tenancyService.assertCanAddStudents(tenantId, 1L);
         }
+        User account = existing.orElseGet(() -> newAccount(request));
+        OrganizationMember member = new OrganizationMember();
+        member.setUser(account);
+        member.setOrganizationId(tenantId);
+        member.setRoles(new HashSet<>(roles));
+        // saveAndFlush: callers of IdentityService reads right after create() need the generated createdAt, e.g.
+        // enrollment's roster sort key.
+        return UserMapper.toResponse(memberRepository.saveAndFlush(member));
+    }
 
+    private User newAccount(CreateUserRequest request) {
         User user = new User();
         user.setUsername(request.email());
         user.setEmail(request.email());
         user.setFullName(request.fullName());
-        user.setTenantId(tenantId);
-        user.setRoles(roles);
         user.setStudentCode(request.studentCode());
         user.setClassName(request.className());
         user.setPhone(request.phone());
         user.setDateOfBirth(request.dateOfBirth());
-        // saveAndFlush kept from the microservice version: callers of
-        // IdentityService.findById() immediately after create() need the
-        // Hibernate-generated createdAt, e.g. enrollment's roster sort key
-        // (Phase 03) — not an synchronization message concern, a same-transaction read concern.
-        User saved = userRepository.saveAndFlush(user);
-
-        LoginHash loginHash = new LoginHash();
-        loginHash.setUserId(saved.getId());
-        loginHash.setHash(passwordEncoder.encode(request.password()));
-        loginHashRepository.save(loginHash);
-
-        return UserMapper.toResponse(saved);
+        user.setCredentialHash(passwordEncoder.encode(request.password()));
+        return userRepository.saveAndFlush(user);
     }
 
     /**
-     * A within-batch duplicate email rejects the whole request (nothing
-     * written); a conflict with an EXISTING user just skips that row and
-     * reports it. Each row runs in its own {@link UserBulkCreateWriter}
-     * (REQUIRES_NEW) transaction, so a rare concurrent-duplicate race only
-     * loses that one row.
+     * A within-batch duplicate email rejects the whole request (nothing written); a row whose e-mail is already a
+     * member of this organization is skipped and reported. Each row runs in its own {@link UserBulkCreateWriter}
+     * (REQUIRES_NEW) transaction, so a rare concurrent-duplicate race only loses that one row.
      */
     @Transactional
     public BulkCreateUsersResponse createBulk(BulkCreateUsersRequest request, CurrentUser caller) {
         provisioningHelper.authorizeBulkStudentCreation(caller);
         UUID tenantId = provisioningHelper.resolveTargetTenant(caller, request.tenantId());
-
         Set<String> seenInBatch = new HashSet<>();
         for (BulkCreateUserRow row : request.rows()) {
             String email = normalizeOptional(row.email());
@@ -153,31 +140,29 @@ public class UserService {
                 throw new DuplicateEmailInBatchException();
             }
         }
-
         List<BulkCreateUserRow> rows = request.rows();
         List<String> emails = rows.stream()
                 .map(BulkCreateUserRow::email)
                 .map(UserService::normalizeOptional)
                 .filter(email -> email != null)
+                .map(email -> email.toLowerCase(Locale.ROOT))
                 .toList();
         Set<String> existingEmails = emails.isEmpty()
                 ? Set.of()
-                : new HashSet<>(userRepository.findByTenantIdAndEmailIn(tenantId, emails)
-                        .stream().map(User::getEmail).map(UserService::normalizeOptional).toList());
-
+                : new HashSet<>(memberRepository.findActiveByOrganizationAndEmails(tenantId, emails)
+                        .stream().map(member -> member.getUser().getEmail()).map(UserService::normalizeOptional)
+                        .filter(email -> email != null).map(email -> email.toLowerCase(Locale.ROOT)).toList());
         long adding = rows.stream()
                 .filter(row -> {
                     String email = normalizeOptional(row.email());
-                    return email == null || !existingEmails.contains(email);
+                    return email == null || !existingEmails.contains(email.toLowerCase(Locale.ROOT));
                 })
                 .count();
         if (adding > 0L) {
             tenancyService.assertCanAddStudents(tenantId, adding);
         }
-
         List<CreatedUser> created = new ArrayList<>();
         List<RowError> skipped = new ArrayList<>();
-
         String tenantCode = null;
         for (int i = 0; i < rows.size(); i++) {
             BulkCreateUserRow row = rows.get(i);
@@ -186,11 +171,10 @@ public class UserService {
             String fullName = normalizeOptional(row.fullName());
             UserBulkCreateWriter.Row writerRow = new UserBulkCreateWriter.Row(
                     email, fullName, row.studentCode(), row.className(), row.phone(), row.dateOfBirth());
-            if (email != null && existingEmails.contains(email)) {
+            if (email != null && existingEmails.contains(email.toLowerCase(Locale.ROOT))) {
                 skipped.add(new RowError(rowIndex, email, IdentityConstants.EMAIL_ALREADY_USED));
                 continue;
             }
-
             Optional<UserBulkCreateWriter.Result> result;
             if (email == null) {
                 if (tenantCode == null) {
@@ -200,7 +184,6 @@ public class UserService {
             } else {
                 result = bulkCreateWriter.createOne(writerRow, tenantId);
             }
-
             result
                     .ifPresentOrElse(
                             createdResult -> created.add(new CreatedUser(createdResult.user().getPublicId(),
@@ -211,7 +194,6 @@ public class UserService {
                                     email == null ? IdentityConstants.ROSTER_IMPORT_FAILED
                                             : IdentityConstants.EMAIL_ALREADY_USED)));
         }
-
         return new BulkCreateUsersResponse(created, skipped);
     }
 
@@ -237,7 +219,7 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public UserResponse get(UUID publicId, CurrentUser caller) {
-        return UserMapper.toResponse(findScoped(publicId, caller));
+        return findScoped(publicId, caller, false).toResponse();
     }
 
     /** Updates only the profile fields allowed by the tenant student workspace. */
@@ -247,36 +229,33 @@ public class UserService {
         if (caller == null || caller.tenantId() == null || !caller.hasRole(Role.HOST_ADMIN.name())) {
             throw new ForbiddenUserManagementException();
         }
-        User user = userRepository.findWithLockByPublicIdAndTenantId(publicId, caller.tenantId())
-                .orElseThrow(UserNotFoundException::new);
-        if (!user.getRoles().contains(Role.STUDENT)) {
+        OrganizationMember member = memberDirectory.requireMemberForUpdate(caller.tenantId(), publicId);
+        if (!member.hasRole(Role.STUDENT) || !memberDirectory.isExclusivelyOwned(member)) {
             throw new ForbiddenUserManagementException();
         }
-
+        User user = member.getUser();
         String email = normalizeOptional(request.email());
-        if (email != null) {
-            boolean usedByAnotherUser = userRepository.findByTenantIdAndEmailIn(caller.tenantId(), List.of(email))
-                    .stream()
-                    .anyMatch(candidate -> !candidate.getPublicId().equals(publicId)
-                            && email.equalsIgnoreCase(candidate.getEmail()));
-            if (usedByAnotherUser) {
-                throw new EmailAlreadyUsedException();
-            }
+        if (email != null && (memberRepository.existsCanonicalEmail(caller.tenantId(),
+                email.toLowerCase(Locale.ROOT), publicId)
+                || userRepository.existsByEmailIgnoreCaseAndDeletedFalseAndIdNot(email, user.getId()))) {
+            throw new EmailAlreadyUsedException();
         }
-
         user.setFullName(request.fullName().trim());
         user.setEmail(email);
         user.setPhone(normalizeOptional(request.phone()));
         user.setDateOfBirth(request.dateOfBirth());
-        return UserMapper.toResponse(user);
+        return UserMapper.toResponse(member);
     }
 
     @Transactional(readOnly = true)
     public UserResponse me(CurrentUser caller) {
         User user = userRepository.findByPublicId(caller.userId())
                 .orElseThrow(UserNotFoundException::new);
-        String organizationType = tenancyService.findOrganizationType(user.getTenantId()).orElse(null);
-        return UserMapper.toResponse(user, organizationType);
+        OrganizationMember member = caller.tenantId() == null ? null
+                : memberDirectory.find(caller.tenantId(), caller.userId()).orElse(null);
+        String organizationType = caller.tenantId() == null ? null
+                : tenancyService.findOrganizationType(caller.tenantId()).orElse(null);
+        return UserMapper.toResponse(user, member, organizationType);
     }
 
     @Transactional(readOnly = true)
@@ -285,19 +264,16 @@ public class UserService {
         if (tenantId == null) {
             return List.of();
         }
-        return userRepository.findByTenantId(tenantId).stream()
-                .filter(user -> provisioningHelper.canManageTarget(caller, user.getRoles()))
+        return memberRepository.findActiveByOrganization(tenantId).stream()
+                .filter(member -> provisioningHelper.canManageTarget(caller, member.getRoles()))
                 .map(UserMapper::toResponse)
                 .toList();
     }
 
     /**
-     * Every user in the caller's tenant — including HOST_ADMIN accounts — for display
-     * purposes only (e.g. resolving an Audit Log actor's name). Deliberately skips the
-     * {@code canManageTarget} filter {@link #listByTenant} applies: that filter answers
-     * "who may I administer," not "whose name may I see," and a HOST_ADMIN can never
-     * manage its own or a peer HOST_ADMIN account, which made every admin-performed
-     * audit entry resolve to no name at all.
+     * Every member of the caller's organization, including HOST_ADMIN accounts, for display purposes only (e.g.
+     * resolving an audit log actor's name). It deliberately skips the {@code canManageTarget} filter that
+     * {@link #listByTenant} applies: that filter answers "who may I administer", not "whose name may I see".
      */
     @Transactional(readOnly = true)
     public List<UserDirectoryEntryResponse> listDirectory(CurrentUser caller) {
@@ -305,96 +281,99 @@ public class UserService {
         if (tenantId == null) {
             return List.of();
         }
-        return userRepository.findByTenantId(tenantId).stream()
-                .map(user -> new UserDirectoryEntryResponse(user.getPublicId(), user.getFullName()))
+        return memberRepository.findActiveByOrganization(tenantId).stream()
+                .map(member -> new UserDirectoryEntryResponse(member.getUser().getPublicId(),
+                        member.getUser().getFullName()))
                 .toList();
     }
 
     @Transactional
     public UserResponse suspend(UUID publicId, CurrentUser caller) {
-        User user = findScopedWithLock(publicId, caller);
-        user.suspend();
-        return UserMapper.toResponse(user);
+        Target target = findScoped(publicId, caller, true);
+        target.suspend();
+        if (target.member() != null) {
+            refreshTokenService.revokeForMembership(target.user().getId(), target.organizationId());
+        } else {
+            refreshTokenService.revokeAllForUser(target.user().getId());
+        }
+        return target.toResponse();
     }
 
     /** Reactivation is idempotent. */
     @Transactional
     public UserResponse reactivate(UUID publicId, CurrentUser caller) {
-        User user = findScopedWithLock(publicId, caller);
-        if (user.isSuspended()) {
-            user.reactivate();
-        }
-        return UserMapper.toResponse(user);
+        Target target = findScoped(publicId, caller, true);
+        target.reactivate();
+        return target.toResponse();
     }
 
     @Transactional
     public UserResponse resetPassword(UUID publicId, ResetPasswordRequest request, CurrentUser caller) {
-        User user = findScoped(publicId, caller);
-        if (!provisioningHelper.canManageTarget(caller, user.getRoles())) {
+        Target target = findScoped(publicId, caller, false);
+        if (!provisioningHelper.canManageTarget(caller, target.roles()) || !mayChangeCredential(caller, target)) {
             throw new ForbiddenPasswordResetException();
         }
-        LoginHash loginHash = loginHashRepository.findByUserId(user.getId())
-                .orElseThrow(UserNotFoundException::new);
-        loginHash.setHash(passwordEncoder.encode(request.newPassword()));
-        loginHashRepository.save(loginHash);
+        target.user().setCredentialHash(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(target.user());
         auditLogService.record(caller, IdentityConstants.USER_AGGREGATE, publicId.toString(),
                 IdentityConstants.USER_PASSWORD_RESET, IdentityConstants.USER_PASSWORD_RESET_SUMMARY);
-
-        return UserMapper.toResponse(user);
+        return target.toResponse();
     }
 
     /**
-     * Generates a fresh temporary password and queues it for delivery. The
-     * previous password is intentionally not recoverable because only a hash
-     * is stored. The cleartext value is returned exactly once to the
-     * authenticated operator and carried only by the in-memory notification
-     * event after the transaction commits.
+     * Generates a fresh temporary password and queues it for delivery. The previous password is intentionally not
+     * recoverable because only a hash is stored. The cleartext value is returned exactly once to the authenticated
+     * operator and carried only by the in-memory notification event after the transaction commits.
      */
     @Transactional
     public GeneratedCredentialsResponse sendGeneratedCredentials(UUID publicId, CurrentUser caller) {
-        User user = findScoped(publicId, caller);
-        if (!provisioningHelper.canManageTarget(caller, user.getRoles())) {
+        Target target = findScoped(publicId, caller, false);
+        if (!provisioningHelper.canManageTarget(caller, target.roles()) || !mayChangeCredential(caller, target)) {
             throw new ForbiddenPasswordResetException();
         }
-        if (user.getRoles().contains(Role.STUDENT)) {
+        if (target.roles().contains(Role.STUDENT)) {
             throw new StudentCredentialEmailNotAllowedException();
         }
+        User user = target.user();
         if (user.getEmail() == null || user.getEmail().isBlank()) {
             throw new UserEmailRequiredException();
         }
-
         String temporaryPassword = rotateTemporaryPassword(user);
         eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(
-                UUID.randomUUID(), user.getPublicId(), user.getTenantId(), user.getUsername(), user.getEmail(),
+                UUID.randomUUID(), user.getPublicId(), target.organizationId(), user.getUsername(), user.getEmail(),
                 user.getFullName(), temporaryPassword));
-
         return new GeneratedCredentialsResponse(user.getPublicId(), user.getUsername(), user.getEmail(),
                 user.getFullName(), temporaryPassword, true);
     }
 
     /**
-     * Generates a fresh Student credential for Host verification without
-     * sending email. The cleartext password is returned only in this response.
+     * Generates a fresh Student credential for Host verification without sending email. The cleartext password is
+     * returned only in this response.
      */
     @Transactional
     public GeneratedCredentialsResponse generateStudentCredentials(UUID publicId, CurrentUser caller) {
-        User user = findScoped(publicId, caller);
-        if (!provisioningHelper.canManageTarget(caller, user.getRoles())
-                || !user.getRoles().contains(Role.STUDENT)) {
+        Target target = findScoped(publicId, caller, false);
+        if (!provisioningHelper.canManageTarget(caller, target.roles())
+                || !target.roles().contains(Role.STUDENT) || !mayChangeCredential(caller, target)) {
             throw new ForbiddenPasswordResetException();
         }
-
+        User user = target.user();
         String temporaryPassword = rotateTemporaryPassword(user);
         return new GeneratedCredentialsResponse(user.getPublicId(), user.getUsername(), user.getEmail(),
                 user.getFullName(), temporaryPassword, false);
     }
 
+    /**
+     * The credential is global to the account. A Host may change it only for an account the organization alone
+     * owns; platform operators are judged by the union of the account's roles instead.
+     */
+    private boolean mayChangeCredential(CurrentUser caller, Target target) {
+        return caller.isPlatformUser() || target.member() != null && memberDirectory.isExclusivelyOwned(target.member());
+    }
+
     private String rotateTemporaryPassword(User user) {
         String temporaryPassword = PasswordGenerator.generateReadable();
-        LoginHash loginHash = loginHashRepository.findByUserId(user.getId())
-                .orElseThrow(UserNotFoundException::new);
-        loginHash.setHash(passwordEncoder.encode(temporaryPassword));
-        loginHashRepository.save(loginHash);
+        user.setCredentialHash(passwordEncoder.encode(temporaryPassword));
         user.setMustChangePassword(true);
         userRepository.save(user);
         return temporaryPassword;
@@ -408,13 +387,11 @@ public class UserService {
         }
         User user = userRepository.findByPublicId(caller.userId())
                 .orElseThrow(UserNotFoundException::new);
-        LoginHash loginHash = loginHashRepository.findByUserId(user.getId())
-                .orElseThrow(UserNotFoundException::new);
-        if (!passwordEncoder.matches(request.currentPassword(), loginHash.getHash())) {
+        if (user.getCredentialHash() == null
+                || !passwordEncoder.matches(request.currentPassword(), user.getCredentialHash())) {
             throw new InvalidLoginException();
         }
-        loginHash.setHash(passwordEncoder.encode(request.newPassword()));
-        loginHashRepository.save(loginHash);
+        user.setCredentialHash(passwordEncoder.encode(request.newPassword()));
         user.setMustChangePassword(false);
         userRepository.save(user);
     }
@@ -422,28 +399,70 @@ public class UserService {
     @Transactional(readOnly = true)
     public List<UserResponse> listForTenant(UUID tenantId, CurrentUser caller) {
         provisioningHelper.authorizePlatformTenantListing(caller);
-        return userRepository.findByTenantId(tenantId).stream()
-                .filter(user -> provisioningHelper.canManageTarget(caller, user.getRoles()))
+        return memberRepository.findActiveByOrganization(tenantId).stream()
+                .filter(member -> provisioningHelper.canManageTarget(caller, member.getRoles()))
                 .map(UserMapper::toResponse)
                 .toList();
     }
 
-    private User findScoped(UUID publicId, CurrentUser caller) {
-        User user = caller.isPlatformUser()
-                ? userRepository.findByPublicId(publicId).orElseThrow(UserNotFoundException::new)
-                : userRepository.findByPublicIdAndTenantId(publicId, caller.tenantId())
-                        .orElseThrow(UserNotFoundException::new);
-        provisioningHelper.authorizeTarget(caller, user.getRoles());
-        return user;
+    /**
+     * Resolves the target of a management call. A tenant caller reaches only members of its own organization; a
+     * platform caller reaches any account and is judged by every role the account holds.
+     */
+    private Target findScoped(UUID publicId, CurrentUser caller, boolean lock) {
+        Target target;
+        if (caller.isPlatformUser()) {
+            User user = (lock ? userRepository.findWithLockByPublicId(publicId)
+                    : userRepository.findByPublicIdAndDeletedFalse(publicId))
+                    .orElseThrow(UserNotFoundException::new);
+            target = Target.ofAccount(user, memberRepository.findByUser_IdAndDeletedFalse(user.getId()));
+        } else {
+            OrganizationMember member = lock ? memberDirectory.requireMemberForUpdate(caller.tenantId(), publicId)
+                    : memberDirectory.requireMember(caller.tenantId(), publicId);
+            target = Target.ofMember(member);
+        }
+        provisioningHelper.authorizeTarget(caller, target.roles());
+        return target;
     }
 
-    /** Serializes eligibility-changing identity operations with assignment commits. */
-    private User findScopedWithLock(UUID publicId, CurrentUser caller) {
-        User user = caller.isPlatformUser()
-                ? userRepository.findWithLockByPublicId(publicId).orElseThrow(UserNotFoundException::new)
-                : userRepository.findWithLockByPublicIdAndTenantId(publicId, caller.tenantId())
-                        .orElseThrow(UserNotFoundException::new);
-        provisioningHelper.authorizeTarget(caller, user.getRoles());
-        return user;
+    /** The account a call acts on, with the roles it is judged by and the membership (if one organization). */
+    private record Target(User user, OrganizationMember member, Set<Role> roles) {
+
+        static Target ofMember(OrganizationMember member) {
+            return new Target(member.getUser(), member, Set.copyOf(member.getRoles()));
+        }
+
+        static Target ofAccount(User user, List<OrganizationMember> members) {
+            Set<Role> roles = new HashSet<>(user.getRoles());
+            members.forEach(member -> roles.addAll(member.getRoles()));
+            return new Target(user, members.size() == 1 ? members.get(0) : null, Set.copyOf(roles));
+        }
+
+        UUID organizationId() {
+            return member == null ? null : member.getOrganizationId();
+        }
+
+        UserResponse toResponse() {
+            return UserMapper.toResponse(user, member, null);
+        }
+
+        /** Suspension is per organization for a Host, and account-wide for a platform operator. */
+        void suspend() {
+            if (member != null) {
+                member.suspend();
+            } else {
+                user.suspend();
+            }
+        }
+
+        void reactivate() {
+            if (member != null) {
+                if (member.getStatus() == com.pte.identity.domain.UserStatus.SUSPENDED) {
+                    member.reactivate();
+                }
+            } else if (user.isSuspended()) {
+                user.reactivate();
+            }
+        }
     }
 }

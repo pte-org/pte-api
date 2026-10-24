@@ -1,5 +1,6 @@
 package com.pte.identity;
 
+import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 
@@ -21,15 +22,16 @@ public record StudentIdentityView(
         LocalDate dateOfBirth,
         boolean mustChangePassword) {
 
-    public static StudentIdentityView from(User user) {
+    public static StudentIdentityView from(OrganizationMember member) {
+        User user = member.getUser();
         return new StudentIdentityView(
                 user.getPublicId(),
                 user.getUsername(),
                 user.getEmail(),
                 user.getFullName(),
-                user.getTenantId(),
+                member.getOrganizationId(),
                 user.getStatus().name(),
-                user.getRoles().stream().map(Role::name).sorted().toList(),
+                member.getRoles().stream().map(Role::name).sorted().toList(),
                 user.getStudentCode(),
                 user.getPhone(),
                 user.getDateOfBirth(),
