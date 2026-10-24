@@ -3,30 +3,30 @@ package com.pte.tenancy.internal.mapper;
 import com.pte.tenancy.domain.Organization;
 import com.pte.tenancy.internal.dto.response.OrganizationResponse;
 
-import java.util.UUID;
-
-/**
- * Maps {@link Organization} to its response DTO. Takes {@code tenantPublicId}
- * explicitly rather than reading it off {@code organization.getTenant()} â€”
- * callers already know it (from the request path or the just-saved parent),
- * so this avoids ever lazy-loading the {@code tenant} association per row.
- */
+/** Maps the {@link Organization} entity to its response DTO. */
 public final class OrganizationMapper {
 
     private OrganizationMapper() {
     }
 
-    public static OrganizationResponse toResponse(Organization organization, UUID tenantPublicId) {
+    public static OrganizationResponse toResponse(Organization organization) {
         return new OrganizationResponse(
                 organization.getPublicId(),
-                tenantPublicId,
+                organization.getCode(),
                 organization.getName(),
+                organization.getOrganizationType(),
+                organization.getTaxCode(),
+                organization.getStatus().name(),
+                organization.getSuspendedUntil(),
+                organization.getPackageName(),
+                organization.getStudentLimit(),
+                organization.getLogoUrl(),
+                organization.getPrimaryColor(),
                 organization.getAddress(),
                 organization.getProvinceCode(),
                 organization.getProvinceName(),
                 organization.getWardCode(),
                 organization.getWardName(),
-                organization.getFacilityType().name(),
-                organization.getStatus().name());
+                organization.getFacilityType().name());
     }
 }

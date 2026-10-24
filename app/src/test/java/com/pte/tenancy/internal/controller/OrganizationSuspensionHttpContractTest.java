@@ -5,9 +5,10 @@ import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.exception.GlobalExceptionHandler;
 import com.pte.tenancy.TenantSuspensionImpact;
 import com.pte.tenancy.internal.dto.request.SuspendTenantRequest;
-import com.pte.tenancy.internal.dto.response.TenantResponse;
-import com.pte.tenancy.internal.service.QuotaTransactionService;
-import com.pte.tenancy.internal.service.TenantLifecycleService;
+import com.pte.tenancy.internal.dto.response.OrganizationResponse;
+import com.pte.tenancy.internal.service.QuotaGrantService;
+import com.pte.tenancy.internal.service.OrganizationLifecycleService;
+import com.pte.tenancy.internal.service.OrganizationService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,8 +32,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** Standalone MVC verifies tenant suspension request and impact response contracts. */
 class TenantSuspensionHttpContractTest {
 
-    private final TenantLifecycleService lifecycleService = mock(TenantLifecycleService.class);
-    private final QuotaTransactionService quotaTransactionService = mock(QuotaTransactionService.class);
+    private final OrganizationLifecycleService lifecycleService = mock(OrganizationLifecycleService.class);
+    private final OrganizationService organizationService = mock(OrganizationService.class);
+    private final QuotaGrantService quotaGrantService = mock(QuotaGrantService.class);
     private final CurrentUser actor = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
     private MockedStatic<CurrentUserContext> context;
     private MockMvc mvc;
@@ -41,7 +43,7 @@ class TenantSuspensionHttpContractTest {
     void setup() {
         context = org.mockito.Mockito.mockStatic(CurrentUserContext.class);
         context.when(CurrentUserContext::required).thenReturn(actor);
-        mvc = MockMvcBuilders.standaloneSetup(new TenantController(lifecycleService, quotaTransactionService))
+        mvc = MockMvcBuilders.standaloneSetup(new OrganizationController(organizationService, lifecycleService, quotaGrantService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -56,11 +58,11 @@ class TenantSuspensionHttpContractTest {
         UUID tenantId = UUID.randomUUID();
         Instant suspendedUntil = Instant.parse("2026-10-24T00:00:00Z");
         SuspendTenantRequest request = new SuspendTenantRequest(7, "impact-digest");
-        when(lifecycleService.suspendWithConfirmation(tenantId, request, actor)).thenReturn(new TenantResponse(
+        when(lifecycleService.suspendWithConfirmation(tenantId, request, actor)).thenReturn(new OrganizationResponse(
                 tenantId, "TENANT", "Tenant", "SCHOOL", "TAX", "SUSPENDED", suspendedUntil,
-                "starter", 100, null, null));
+                "starter", 100, null, null, null, null, null, null, null, "MAIN"));
 
-        mvc.perform(post("/api/v1/tenants/{publicId}/suspend", tenantId)
+        mvc.perform(post("/api/v1/organizations/{publicId}/suspend", tenantId)
                         .contentType(APPLICATION_JSON)
                         .content("{\"days\":7,\"impactDigest\":\"impact-digest\"}"))
                 .andExpect(status().isOk())
@@ -80,7 +82,7 @@ class TenantSuspensionHttpContractTest {
                 List.of(new TenantSuspensionImpact.SubscriptionImpact(
                         subscriptionId, UUID.randomUUID(), suspendedUntil, 7))));
 
-        mvc.perform(get("/api/v1/tenants/{publicId}/suspension-impact", tenantId).param("days", "7"))
+        mvc.perform(get("/api/v1/organizations/{publicId}/suspension-impact", tenantId).param("days", "7"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.suspensionDays").value(7))
                 .andExpect(jsonPath("$.data.activeSubscriptionCount").value(2))

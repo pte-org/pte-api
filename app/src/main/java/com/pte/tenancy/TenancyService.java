@@ -1,22 +1,21 @@
 package com.pte.tenancy;
 
 import com.pte.tenancy.domain.Organization;
-import com.pte.tenancy.domain.Tenant;
-import com.pte.tenancy.domain.enums.TenantStatus;
+import com.pte.tenancy.domain.enums.OrganizationStatus;
 import com.pte.tenancy.internal.exception.OrganizationNotFoundException;
 import com.pte.tenancy.internal.exception.InvalidStudentCountException;
 import com.pte.tenancy.internal.exception.StudentLimitExceededException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
 import com.pte.tenancy.internal.exception.TenantSuspendedException;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
-import com.pte.tenancy.internal.repository.TenantRepository;
-import com.pte.tenancy.internal.service.TenantLifecycleService;
-import com.pte.tenancy.internal.service.QuotaTransactionService;
+import com.pte.tenancy.internal.service.OrganizationLifecycleService;
+import com.pte.tenancy.internal.service.QuotaGrantService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -28,37 +27,35 @@ import java.util.stream.Collectors;
 public class TenancyService {
 
     private final OrganizationRepository organizationRepository;
-    private final TenantRepository tenantRepository;
-    private final TenantLifecycleService tenantLifecycleService;
-    private final QuotaTransactionService quotaTransactionService;
+        private final OrganizationLifecycleService organizationLifecycleService;
+    private final QuotaGrantService quotaGrantService;
     private final StudentCountProvider studentCountProvider;
 
-    public TenancyService(OrganizationRepository organizationRepository, TenantRepository tenantRepository,
-            TenantLifecycleService tenantLifecycleService, QuotaTransactionService quotaTransactionService,
+    public TenancyService(OrganizationRepository organizationRepository,
+            OrganizationLifecycleService organizationLifecycleService, QuotaGrantService quotaGrantService,
             StudentCountProvider studentCountProvider) {
         this.organizationRepository = organizationRepository;
-        this.tenantRepository = tenantRepository;
-        this.tenantLifecycleService = tenantLifecycleService;
-        this.quotaTransactionService = quotaTransactionService;
+        this.organizationLifecycleService = organizationLifecycleService;
+        this.quotaGrantService = quotaGrantService;
         this.studentCountProvider = studentCountProvider;
     }
 
     /** {@code billing.TenantApplicationService.submit()} — is this code still free to reserve? */
     public boolean existsByCode(String code) {
-        return tenantRepository.existsByCode(code);
+        return organizationRepository.existsByCodeAndStatusNot(code, OrganizationStatus.REJECTED);
     }
 
     /** {@code billing.TenantApplicationService.submit()} — is this name already reserved? */
     public boolean existsByName(String name) {
-        return tenantRepository.existsByName(name);
+        return organizationRepository.existsByNameAndStatusNot(name, OrganizationStatus.REJECTED);
     }
 
     /** Reuses the tenant lock; acquire before identity locks when guarding tenant-owned delivery. */
     @Transactional(propagation = Propagation.MANDATORY)
     public boolean lockActiveTenant(UUID tenantPublicId) {
         if (tenantPublicId == null) { return false; }
-        return tenantRepository.findWithLockByPublicId(tenantPublicId)
-                .filter(tenant -> !tenant.isDeleted() && tenant.getStatus() == TenantStatus.ACTIVE)
+        return organizationRepository.findWithLockByPublicId(tenantPublicId)
+                .filter(tenant -> !tenant.isDeleted() && tenant.getStatus() == OrganizationStatus.ACTIVE)
                 .isPresent();
     }
 
@@ -68,8 +65,8 @@ public class TenancyService {
         if (tenantPublicIds == null || tenantPublicIds.isEmpty()) {
             return Set.of();
         }
-        return tenantRepository.findByPublicIdInAndStatusAndDeletedFalse(tenantPublicIds, TenantStatus.ACTIVE)
-                .stream().map(Tenant::getPublicId).collect(Collectors.toUnmodifiableSet());
+        return organizationRepository.findByPublicIdInAndStatusAndDeletedFalse(tenantPublicIds, OrganizationStatus.ACTIVE)
+                .stream().map(Organization::getPublicId).collect(Collectors.toUnmodifiableSet());
     }
 
     /**
@@ -82,9 +79,9 @@ public class TenancyService {
         if (tenantPublicIds == null || tenantPublicIds.isEmpty()) {
             return Map.of();
         }
-        return tenantRepository.findByPublicIdIn(tenantPublicIds).stream()
+        return organizationRepository.findByPublicIdIn(tenantPublicIds).stream()
                 .collect(Collectors.toUnmodifiableMap(
-                        Tenant::getPublicId,
+                        Organization::getPublicId,
                         tenant -> new TenantSummary(tenant.getPublicId(), tenant.getName(), tenant.isDeleted())));
     }
 
@@ -95,30 +92,78 @@ public class TenancyService {
         if (tenantPublicIds == null || tenantPublicIds.isEmpty()) {
             return Map.of();
         }
-        return tenantRepository.findByPublicIdIn(tenantPublicIds).stream()
+        return organizationRepository.findByPublicIdIn(tenantPublicIds).stream()
                 .collect(Collectors.toUnmodifiableMap(
-                        Tenant::getPublicId,
+                        Organization::getPublicId,
                         tenant -> new TenantOrganizationSummary(
                                 tenant.getPublicId(), tenant.getName(), tenant.getOrganizationType(),
                                 tenant.isDeleted())));
     }
 
-    /** {@code billing.TenantApplicationService.approve()} — creates the tenant an approved application promised. */
-    public Tenant createTenant(String name, String organizationType, String code, String taxCode, int studentLimit) {
-        return tenantLifecycleService.createFromApplication(name, organizationType, code, taxCode, studentLimit);
+    /** Billing: records a public onboarding application as a PENDING organization (joins the caller's transaction). */
+    public Organization submitApplication(String name, String organizationType, String code, String taxCode,
+            String contactEmail, String contactPhone) {
+        return organizationLifecycleService.submitApplication(name, organizationType, code, taxCode, contactEmail,
+                contactPhone);
+    }
+
+    /** Billing: approves a locked pending application and grants its free student limit. */
+    public Organization approveApplication(Organization application, java.util.UUID reviewerPublicId,
+            int studentLimit) {
+        return organizationLifecycleService.approveApplication(application, reviewerPublicId, studentLimit);
+    }
+
+    /** Billing: rejects a locked pending application; code and name become free again. */
+    public Organization rejectApplication(Organization application, java.util.UUID reviewerPublicId, String reason) {
+        return organizationLifecycleService.rejectApplication(application, reviewerPublicId, reason);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Organization> listApplications() {
+        return organizationRepository.findAllApplications();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Organization> findApplication(UUID applicationPublicId) {
+        return organizationRepository.findApplication(applicationPublicId);
+    }
+
+    /** Pessimistic lock so two reviewers cannot decide the same application. */
+    public Optional<Organization> findApplicationForUpdate(UUID applicationPublicId) {
+        return organizationRepository.findApplicationForUpdate(applicationPublicId);
+    }
+
+    @Transactional(readOnly = true)
+    public long countPendingApplications() {
+        return organizationRepository.countApplicationsByStatus(OrganizationStatus.PENDING);
+    }
+
+    public long countApplicationsByStatus(OrganizationStatus status) {
+        return organizationRepository.countApplicationsByStatus(status);
+    }
+
+    @Transactional(readOnly = true)
+    public long countApplicationsReceivedBetween(java.time.Instant from, java.time.Instant to) {
+        return organizationRepository.countApplicationsReceivedBetween(from, to);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Organization> findOldestPendingApplications(int limit) {
+        return organizationRepository.findOldestApplicationsByStatus(OrganizationStatus.PENDING,
+                org.springframework.data.domain.PageRequest.of(0, limit));
     }
 
     /** Billing activation path for STUDENT_CAPACITY plans. */
     public UUID grantQuota(UUID tenantPublicId, int amount, String note) {
-        return quotaTransactionService.grantForSystem(tenantPublicId, amount, note).publicId();
+        return quotaGrantService.grantForSystem(tenantPublicId, amount, note).publicId();
     }
 
     /** Returns whether a tenant is active and not soft-deleted for fan-out decisions. */
     @Transactional(readOnly = true)
     public boolean isActiveTenant(UUID tenantPublicId) {
         return tenantPublicId != null
-                && tenantRepository.findByPublicId(tenantPublicId)
-                .filter(tenant -> !tenant.isDeleted() && tenant.getStatus() == TenantStatus.ACTIVE)
+                && organizationRepository.findByPublicId(tenantPublicId)
+                .filter(tenant -> !tenant.isDeleted() && tenant.getStatus() == OrganizationStatus.ACTIVE)
                 .isPresent();
     }
 
@@ -126,12 +171,12 @@ public class TenancyService {
     @Transactional(readOnly = true)
     public void assertTenantActive(UUID tenantPublicId) {
         requireTenantId(tenantPublicId);
-        Tenant tenant = tenantRepository.findByPublicId(tenantPublicId)
+        Organization tenant = organizationRepository.findByPublicId(tenantPublicId)
                 .orElseThrow(TenantNotFoundException::new);
         if (tenant.isDeleted()) {
             throw new TenantNotFoundException();
         }
-        if (tenant.getStatus() == TenantStatus.SUSPENDED) {
+        if (tenant.getStatus() == OrganizationStatus.SUSPENDED) {
             throw new TenantSuspendedException();
         }
     }
@@ -140,7 +185,7 @@ public class TenancyService {
     @Transactional(readOnly = true)
     public StudentQuota getStudentQuota(UUID tenantPublicId) {
         requireTenantId(tenantPublicId);
-        Tenant tenant = tenantRepository.findByPublicId(tenantPublicId)
+        Organization tenant = organizationRepository.findByPublicId(tenantPublicId)
                 .orElseThrow(TenantNotFoundException::new);
         return new StudentQuota(studentCountProvider.countStudents(tenantPublicId), tenant.getStudentLimit());
     }
@@ -149,15 +194,15 @@ public class TenancyService {
     @Transactional(readOnly = true)
     public long countOrganizations(UUID tenantPublicId) {
         requireTenantId(tenantPublicId);
-        return organizationRepository.countByTenant_PublicIdAndDeletedFalse(tenantPublicId);
+        return organizationRepository.existsByPublicId(tenantPublicId) ? 1L : 0L;
     }
 
     /** Returns the effective student limit configured for a tenant. */
     @Transactional(readOnly = true)
     public int getStudentLimit(UUID tenantPublicId) {
         requireTenantId(tenantPublicId);
-        return tenantRepository.findByPublicId(tenantPublicId)
-                .map(Tenant::getStudentLimit)
+        return organizationRepository.findByPublicId(tenantPublicId)
+                .map(Organization::getStudentLimit)
                 .orElseThrow(TenantNotFoundException::new);
     }
 
@@ -165,8 +210,8 @@ public class TenancyService {
     @Transactional(readOnly = true)
     public String getTenantCode(UUID tenantPublicId) {
         requireTenantId(tenantPublicId);
-        return tenantRepository.findByPublicId(tenantPublicId)
-                .map(Tenant::getCode)
+        return organizationRepository.findByPublicId(tenantPublicId)
+                .map(Organization::getCode)
                 .orElseThrow(TenantNotFoundException::new);
     }
 
@@ -182,12 +227,12 @@ public class TenancyService {
             throw new InvalidStudentCountException();
         }
         requireTenantId(tenantPublicId);
-        Tenant tenant = tenantRepository.findWithLockByPublicId(tenantPublicId)
+        Organization tenant = organizationRepository.findWithLockByPublicId(tenantPublicId)
                 .orElseThrow(TenantNotFoundException::new);
         if (tenant.isDeleted()) {
             throw new TenantNotFoundException();
         }
-        if (tenant.getStatus() == TenantStatus.SUSPENDED) {
+        if (tenant.getStatus() == OrganizationStatus.SUSPENDED) {
             throw new TenantSuspendedException();
         }
         long current = studentCountProvider.countStudents(tenantPublicId);
@@ -205,7 +250,7 @@ public class TenancyService {
 
     /** Returns the tenant's display type without exposing tenancy repositories. */
     public Optional<String> findOrganizationType(UUID tenantId) {
-        return tenantRepository.findOrganizationTypeByPublicId(tenantId);
+        return organizationRepository.findOrganizationTypeByPublicId(tenantId);
     }
 
     /**
@@ -215,20 +260,23 @@ public class TenancyService {
      */
     @Transactional(readOnly = true)
     public Optional<LoginOrganizationOption> findLoginOrganization(UUID tenantId) {
-        return tenantRepository.findByPublicId(tenantId)
+        return organizationRepository.findByPublicId(tenantId)
                 .filter(tenant -> !tenant.isDeleted())
                 .map(tenant -> new LoginOrganizationOption(
                         tenant.getPublicId(), tenant.getCode(), tenant.getName(), tenant.getOrganizationType()));
     }
 
-    /** Resolves an organization only when it belongs to the supplied tenant. */
+    /**
+     * Resolves the caller's own organization. Since an organization is the tenant, the id must equal the tenant id;
+     * anything else is reported as not found so ids from another tenant never leak.
+     */
+    @Transactional(readOnly = true)
     public Organization findOrganizationOwned(UUID organizationPublicId, UUID tenantId) {
-        Organization organization = organizationRepository.findByPublicId(organizationPublicId)
-                .orElseThrow(OrganizationNotFoundException::new);
-        if (organization.getTenant() == null
-                || !organization.getTenant().getPublicId().equals(tenantId)) {
+        if (tenantId == null || !tenantId.equals(organizationPublicId)) {
             throw new OrganizationNotFoundException();
         }
-        return organization;
+        return organizationRepository.findByPublicId(organizationPublicId)
+                .filter(organization -> !organization.isDeleted())
+                .orElseThrow(OrganizationNotFoundException::new);
     }
 }

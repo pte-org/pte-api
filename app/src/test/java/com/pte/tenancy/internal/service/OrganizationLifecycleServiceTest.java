@@ -1,8 +1,8 @@
 package com.pte.tenancy.internal.service;
 
-import com.pte.tenancy.domain.Tenant;
+import com.pte.tenancy.domain.Organization;
 import com.pte.tenancy.domain.enums.FacilityType;
-import com.pte.tenancy.domain.enums.TenantStatus;
+import com.pte.tenancy.domain.enums.OrganizationStatus;
 import com.pte.tenancy.TenantSuspensionImpact;
 import com.pte.tenancy.internal.exception.TenantNameAlreadyUsedException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
@@ -12,8 +12,8 @@ import com.pte.tenancy.internal.dto.request.OnboardTenantRequest;
 import com.pte.tenancy.internal.dto.request.SuspendTenantRequest;
 import com.pte.tenancy.internal.dto.request.UpdateBrandingRequest;
 import com.pte.tenancy.internal.exception.TenantSuspensionImpactStaleException;
-import com.pte.tenancy.internal.dto.response.TenantResponse;
-import com.pte.tenancy.internal.repository.TenantRepository;
+import com.pte.tenancy.internal.dto.response.OrganizationResponse;
+import com.pte.tenancy.internal.repository.OrganizationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,30 +37,30 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class TenantLifecycleServiceTest {
+class OrganizationLifecycleServiceTest {
 
     @Mock
-    private TenantRepository tenantRepository;
+    private OrganizationRepository organizationRepository;
 
     @org.mockito.Mock
     private com.pte.tenancy.TenantSuspensionImpactProvider suspensionImpactProvider;
 
-    private TenantLifecycleService service;
+    private OrganizationLifecycleService service;
 
     @BeforeEach
     void setUp() {
-        service = new TenantLifecycleService(tenantRepository);
+        service = new OrganizationLifecycleService(organizationRepository);
     }
 
-    private Tenant activeTenant(UUID publicId) {
-        Tenant tenant = new Tenant();
+    private Organization activeTenant(UUID publicId) {
+        Organization tenant = new Organization();
         tenant.setPublicId(publicId);
         tenant.setCode("acme-school");
         tenant.setName("Acme School");
         tenant.setOrganizationType("SCHOOL");
         tenant.setPackageName("starter");
         tenant.setStudentLimit(500);
-        tenant.setStatus(TenantStatus.ACTIVE);
+        tenant.setStatus(OrganizationStatus.ACTIVE);
         return tenant;
     }
 
@@ -68,54 +68,53 @@ class TenantLifecycleServiceTest {
     void onboard_savesTenant() {
         OnboardTenantRequest request = new OnboardTenantRequest("acme-school", "Acme School", "SCHOOL",
                 "0123456789", "starter", 500);
-        when(tenantRepository.existsByName("Acme School")).thenReturn(false);
-        when(tenantRepository.save(any(Tenant.class))).thenAnswer(invocation -> {
-            Tenant saved = invocation.getArgument(0);
+        when(organizationRepository.existsByNameAndStatusNot("Acme School", OrganizationStatus.REJECTED)).thenReturn(false);
+        when(organizationRepository.save(any(Organization.class))).thenAnswer(invocation -> {
+            Organization saved = invocation.getArgument(0);
             saved.setPublicId(UUID.randomUUID());
             return saved;
         });
 
-        TenantResponse response = service.onboard(request);
+        OrganizationResponse response = service.onboard(request);
 
         assertThat(response.name()).isEqualTo("Acme School");
         assertThat(response.status()).isEqualTo("ACTIVE");
 
-        ArgumentCaptor<Tenant> savedTenant = ArgumentCaptor.forClass(Tenant.class);
-        verify(tenantRepository).save(savedTenant.capture());
-        assertThat(savedTenant.getValue().getOrganizations()).hasSize(1);
-        assertThat(savedTenant.getValue().getOrganizations().get(0).getName()).isEqualTo("Acme School");
-        assertThat(savedTenant.getValue().getOrganizations().get(0).getFacilityType())
-                .isEqualTo(FacilityType.MAIN);
-        assertThat(savedTenant.getValue().getTaxCode()).isEqualTo("0123456789");
+        ArgumentCaptor<Organization> savedOrganization = ArgumentCaptor.forClass(Organization.class);
+        verify(organizationRepository).save(savedOrganization.capture());
+        assertThat(savedOrganization.getValue().getName()).isEqualTo("Acme School");
+        assertThat(savedOrganization.getValue().getFacilityType()).isEqualTo(FacilityType.MAIN);
+        assertThat(savedOrganization.getValue().getStatus()).isEqualTo(OrganizationStatus.ACTIVE);
+        assertThat(savedOrganization.getValue().getTaxCode()).isEqualTo("0123456789");
     }
 
     @Test
     void onboard_duplicateName_throwsWithoutSaving() {
         OnboardTenantRequest request = new OnboardTenantRequest("acme-school", "Acme School", "SCHOOL",
                 "0123456789", "starter", 500);
-        when(tenantRepository.existsByName("Acme School")).thenReturn(true);
+        when(organizationRepository.existsByNameAndStatusNot("Acme School", OrganizationStatus.REJECTED)).thenReturn(true);
 
         assertThatThrownBy(() -> service.onboard(request)).isInstanceOf(TenantNameAlreadyUsedException.class);
-        verify(tenantRepository, never()).save(any());
+        verify(organizationRepository, never()).save(any());
     }
 
     @Test
     void onboard_duplicateTaxCode_throwsWithoutSaving() {
         OnboardTenantRequest request = new OnboardTenantRequest("new-school", "New School", "SCHOOL",
                 "0123456789", "starter", 500);
-        when(tenantRepository.existsByTaxCode("0123456789")).thenReturn(true);
+        when(organizationRepository.existsByTaxCodeAndStatusInAndPublicIdNot(eq("0123456789"), any(), any())).thenReturn(true);
 
         assertThatThrownBy(() -> service.onboard(request)).isInstanceOf(TenantTaxCodeAlreadyUsedException.class);
-        verify(tenantRepository, never()).save(any());
+        verify(organizationRepository, never()).save(any());
     }
 
     @Test
     void suspend_activeTenant_transitions() {
         UUID publicId = UUID.randomUUID();
-        Tenant tenant = activeTenant(publicId);
-        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        Organization tenant = activeTenant(publicId);
+        when(organizationRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
 
-        TenantResponse response = service.suspend(publicId);
+        OrganizationResponse response = service.suspend(publicId);
 
         assertThat(response.status()).isEqualTo("SUSPENDED");
     }
@@ -123,13 +122,13 @@ class TenantLifecycleServiceTest {
     @Test
     void suspend_withRequestedDays_setsBoundedEnd() {
         UUID publicId = UUID.randomUUID();
-        Tenant tenant = activeTenant(publicId);
+        Organization tenant = activeTenant(publicId);
         Instant now = Instant.parse("2026-10-17T00:00:00Z");
-        service = new TenantLifecycleService(tenantRepository, null, () -> 30, null,
+        service = new OrganizationLifecycleService(organizationRepository, null, () -> 30, null,
                 Clock.fixed(now, ZoneOffset.UTC));
-        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        when(organizationRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
 
-        TenantResponse response = service.suspend(publicId, 7);
+        OrganizationResponse response = service.suspend(publicId, 7);
 
         assertThat(response.status()).isEqualTo("SUSPENDED");
         assertThat(response.suspendedUntil()).isEqualTo(now.plusSeconds(7 * 86_400L));
@@ -138,13 +137,13 @@ class TenantLifecycleServiceTest {
     @Test
     void suspend_withoutRequestedDays_usesPlatformDefault() {
         UUID publicId = UUID.randomUUID();
-        Tenant tenant = activeTenant(publicId);
+        Organization tenant = activeTenant(publicId);
         Instant now = Instant.parse("2026-10-17T00:00:00Z");
-        service = new TenantLifecycleService(tenantRepository, null, () -> 3, null,
+        service = new OrganizationLifecycleService(organizationRepository, null, () -> 3, null,
                 Clock.fixed(now, ZoneOffset.UTC));
-        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        when(organizationRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
 
-        TenantResponse response = service.suspend(publicId);
+        OrganizationResponse response = service.suspend(publicId);
 
         assertThat(response.suspendedUntil()).isEqualTo(now.plusSeconds(3 * 86_400L));
     }
@@ -152,10 +151,10 @@ class TenantLifecycleServiceTest {
     @Test
     void suspend_withZeroDays_isIndefinite() {
         UUID publicId = UUID.randomUUID();
-        Tenant tenant = activeTenant(publicId);
-        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        Organization tenant = activeTenant(publicId);
+        when(organizationRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
 
-        TenantResponse response = service.suspend(publicId, 0);
+        OrganizationResponse response = service.suspend(publicId, 0);
 
         assertThat(response.suspendedUntil()).isNull();
     }
@@ -163,24 +162,24 @@ class TenantLifecycleServiceTest {
     @Test
     void suspend_withNegativeDays_isRejectedBeforeStateChange() {
         UUID publicId = UUID.randomUUID();
-        Tenant tenant = activeTenant(publicId);
-        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        Organization tenant = activeTenant(publicId);
+        when(organizationRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
 
         assertThatThrownBy(() -> service.suspend(publicId, -1))
                 .isInstanceOf(TenantSuspensionDaysInvalidException.class);
-        assertThat(tenant.getStatus()).isEqualTo(TenantStatus.ACTIVE);
+        assertThat(tenant.getStatus()).isEqualTo(OrganizationStatus.ACTIVE);
     }
 
     @Test
     void suspensionImpact_delegatesWithResolvedWindow() {
         UUID publicId = UUID.randomUUID();
-        Tenant tenant = activeTenant(publicId);
+        Organization tenant = activeTenant(publicId);
         Instant now = Instant.parse("2026-10-17T00:00:00Z");
         TenantSuspensionImpact expected = new TenantSuspensionImpact(publicId, 5,
                 now.plusSeconds(5 * 86_400L), 2, 7, List.of());
-        service = new TenantLifecycleService(tenantRepository, null, () -> 30,
+        service = new OrganizationLifecycleService(organizationRepository, null, () -> 30,
                 suspensionImpactProvider, Clock.fixed(now, ZoneOffset.UTC));
-        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        when(organizationRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
         when(suspensionImpactProvider.preview(publicId, now, expected.suspendedUntil())).thenReturn(expected);
 
         assertThat(service.suspensionImpact(publicId, 5)).isEqualTo(expected);
@@ -190,10 +189,10 @@ class TenantLifecycleServiceTest {
     @Test
     void platformManagerCanSuspendTenant() {
         UUID publicId = UUID.randomUUID();
-        Tenant tenant = activeTenant(publicId);
-        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        Organization tenant = activeTenant(publicId);
+        when(organizationRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
 
-        TenantResponse response = service.suspend(publicId,
+        OrganizationResponse response = service.suspend(publicId,
                 new com.pte.shared.security.CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_MANAGER")));
 
         assertThat(response.status()).isEqualTo("SUSPENDED");
@@ -202,11 +201,11 @@ class TenantLifecycleServiceTest {
     @Test
     void suspend_alreadySuspended_isIdempotentNoOp() {
         UUID publicId = UUID.randomUUID();
-        Tenant tenant = activeTenant(publicId);
-        tenant.setStatus(TenantStatus.SUSPENDED);
-        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        Organization tenant = activeTenant(publicId);
+        tenant.setStatus(OrganizationStatus.SUSPENDED);
+        when(organizationRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
 
-        TenantResponse response = service.suspend(publicId);
+        OrganizationResponse response = service.suspend(publicId);
 
         assertThat(response.status()).isEqualTo("SUSPENDED");
     }
@@ -214,45 +213,45 @@ class TenantLifecycleServiceTest {
     @Test
     void suspendWithConfirmation_rejectsStaleImpactBeforeStateChange() {
         UUID publicId = UUID.randomUUID();
-        Tenant tenant = activeTenant(publicId);
+        Organization tenant = activeTenant(publicId);
         Instant now = Instant.parse("2026-10-17T00:00:00Z");
         TenantSuspensionImpact impact = new TenantSuspensionImpact(publicId, 7,
                 now.plusSeconds(7 * 86_400L), 1, 7, List.of(), 7 * 86_400L, 0, "live-digest");
-        service = new TenantLifecycleService(tenantRepository, null, () -> 30,
+        service = new OrganizationLifecycleService(organizationRepository, null, () -> 30,
                 suspensionImpactProvider, Clock.fixed(now, ZoneOffset.UTC));
-        when(tenantRepository.findWithLockByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        when(organizationRepository.findWithLockByPublicId(publicId)).thenReturn(Optional.of(tenant));
         when(suspensionImpactProvider.preview(publicId, now, impact.suspendedUntil())).thenReturn(impact);
 
         assertThatThrownBy(() -> service.suspendWithConfirmation(publicId,
                 new SuspendTenantRequest(7, "stale-digest"), null))
                 .isInstanceOf(TenantSuspensionImpactStaleException.class);
-        assertThat(tenant.getStatus()).isEqualTo(TenantStatus.ACTIVE);
+        assertThat(tenant.getStatus()).isEqualTo(OrganizationStatus.ACTIVE);
     }
 
     @Test
     void suspendWithConfirmation_appliesMatchingImpactAndUsesTenantLock() {
         UUID publicId = UUID.randomUUID();
-        Tenant tenant = activeTenant(publicId);
+        Organization tenant = activeTenant(publicId);
         Instant now = Instant.parse("2026-10-17T00:00:00Z");
         TenantSuspensionImpact impact = new TenantSuspensionImpact(publicId, 7,
                 now.plusSeconds(7 * 86_400L), 1, 7, List.of(), 7 * 86_400L, 0, "live-digest");
-        service = new TenantLifecycleService(tenantRepository, null, () -> 30,
+        service = new OrganizationLifecycleService(organizationRepository, null, () -> 30,
                 suspensionImpactProvider, Clock.fixed(now, ZoneOffset.UTC));
-        when(tenantRepository.findWithLockByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        when(organizationRepository.findWithLockByPublicId(publicId)).thenReturn(Optional.of(tenant));
         when(suspensionImpactProvider.preview(publicId, now, impact.suspendedUntil())).thenReturn(impact);
 
-        TenantResponse response = service.suspendWithConfirmation(publicId,
+        OrganizationResponse response = service.suspendWithConfirmation(publicId,
                 new SuspendTenantRequest(7, "live-digest"), null);
 
         assertThat(response.status()).isEqualTo("SUSPENDED");
         assertThat(response.suspendedUntil()).isEqualTo(impact.suspendedUntil());
-        verify(tenantRepository).findWithLockByPublicId(publicId);
+        verify(organizationRepository).findWithLockByPublicId(publicId);
     }
 
     @Test
     void suspend_unknownTenant_throwsNotFound() {
         UUID publicId = UUID.randomUUID();
-        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.empty());
+        when(organizationRepository.findByPublicId(publicId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.suspend(publicId)).isInstanceOf(TenantNotFoundException.class);
     }
@@ -260,11 +259,11 @@ class TenantLifecycleServiceTest {
     @Test
     void reactivate_suspendedTenant_transitions() {
         UUID publicId = UUID.randomUUID();
-        Tenant tenant = activeTenant(publicId);
-        tenant.setStatus(TenantStatus.SUSPENDED);
-        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        Organization tenant = activeTenant(publicId);
+        tenant.setStatus(OrganizationStatus.SUSPENDED);
+        when(organizationRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
 
-        TenantResponse response = service.reactivate(publicId);
+        OrganizationResponse response = service.reactivate(publicId);
 
         assertThat(response.status()).isEqualTo("ACTIVE");
     }
@@ -272,10 +271,10 @@ class TenantLifecycleServiceTest {
     @Test
     void reactivate_alreadyActive_isIdempotentNoOp() {
         UUID publicId = UUID.randomUUID();
-        Tenant tenant = activeTenant(publicId);
-        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        Organization tenant = activeTenant(publicId);
+        when(organizationRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
 
-        TenantResponse response = service.reactivate(publicId);
+        OrganizationResponse response = service.reactivate(publicId);
 
         assertThat(response.status()).isEqualTo("ACTIVE");
     }
@@ -283,7 +282,7 @@ class TenantLifecycleServiceTest {
     @Test
     void reactivate_unknownTenant_throwsNotFound() {
         UUID publicId = UUID.randomUUID();
-        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.empty());
+        when(organizationRepository.findByPublicId(publicId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.reactivate(publicId)).isInstanceOf(TenantNotFoundException.class);
     }
@@ -291,10 +290,10 @@ class TenantLifecycleServiceTest {
     @Test
     void updateBranding_setsFields() {
         UUID publicId = UUID.randomUUID();
-        Tenant tenant = activeTenant(publicId);
-        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
+        Organization tenant = activeTenant(publicId);
+        when(organizationRepository.findByPublicId(publicId)).thenReturn(Optional.of(tenant));
 
-        TenantResponse response = service.updateBranding(publicId,
+        OrganizationResponse response = service.updateBranding(publicId,
                 new UpdateBrandingRequest("https://cdn.example.com/logo.png", "#1A2B3C"));
 
         assertThat(response.logoUrl()).isEqualTo("https://cdn.example.com/logo.png");
@@ -304,7 +303,7 @@ class TenantLifecycleServiceTest {
     @Test
     void updateBranding_unknownTenant_throwsNotFound() {
         UUID publicId = UUID.randomUUID();
-        when(tenantRepository.findByPublicId(publicId)).thenReturn(Optional.empty());
+        when(organizationRepository.findByPublicId(publicId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.updateBranding(publicId, new UpdateBrandingRequest(null, null)))
                 .isInstanceOf(TenantNotFoundException.class);

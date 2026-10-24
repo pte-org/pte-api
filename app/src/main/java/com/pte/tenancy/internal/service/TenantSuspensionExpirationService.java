@@ -1,9 +1,9 @@
 package com.pte.tenancy.internal.service;
 
-import com.pte.tenancy.domain.Tenant;
-import com.pte.tenancy.domain.enums.TenantStatus;
+import com.pte.tenancy.domain.Organization;
+import com.pte.tenancy.domain.enums.OrganizationStatus;
 import com.pte.tenancy.internal.constant.TenancyConstants;
-import com.pte.tenancy.internal.repository.TenantRepository;
+import com.pte.tenancy.internal.repository.OrganizationRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import org.slf4j.Logger;
@@ -23,18 +23,18 @@ public class TenantSuspensionExpirationService {
 
     private static final Logger log = LoggerFactory.getLogger(TenantSuspensionExpirationService.class);
 
-    private final TenantRepository tenantRepository;
+    private final OrganizationRepository organizationRepository;
     private final Clock clock;
     private final AuditLogService auditLogService;
 
-    public TenantSuspensionExpirationService(TenantRepository tenantRepository, Clock clock) {
-        this(tenantRepository, clock, null);
+    public TenantSuspensionExpirationService(OrganizationRepository organizationRepository, Clock clock) {
+        this(organizationRepository, clock, null);
     }
 
     @Autowired
-    public TenantSuspensionExpirationService(TenantRepository tenantRepository, Clock clock,
+    public TenantSuspensionExpirationService(OrganizationRepository organizationRepository, Clock clock,
             AuditLogService auditLogService) {
-        this.tenantRepository = tenantRepository;
+        this.organizationRepository = organizationRepository;
         this.clock = clock != null ? clock : Clock.systemUTC();
         this.auditLogService = auditLogService;
     }
@@ -44,9 +44,9 @@ public class TenantSuspensionExpirationService {
     public int reactivateDueTenants() {
         Instant now = clock.instant();
         int reactivated = 0;
-        for (Tenant tenant : tenantRepository
+        for (Organization tenant : organizationRepository
                 .findByStatusAndSuspendedUntilIsNotNullAndSuspendedUntilLessThanEqualAndDeletedFalse(
-                        TenantStatus.SUSPENDED, now)) {
+                        OrganizationStatus.SUSPENDED, now)) {
             tenant.reactivate();
             if (auditLogService != null) {
                 auditLogService.record(
