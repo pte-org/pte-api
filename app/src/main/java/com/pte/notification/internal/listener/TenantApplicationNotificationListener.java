@@ -15,6 +15,41 @@ import java.util.UUID;
 @Component
 public class TenantApplicationNotificationListener {
 
+    /** Approval mail for a contact who had no account yet: carries the generated temporary credentials. */
+    private static final String NEW_ACCOUNT_APPROVED_BODY = """
+            Hello,
+
+            We are pleased to let you know that your organization application has been approved.
+
+            Organization: %s
+            Tenant code: %s
+            Username: %s
+            Temporary password: %s
+
+            Please change the temporary password after your first sign-in.
+
+            Regards,
+            PTE Prep Platform Team
+            """;
+
+    /** Approval mail for a contact who already has an account: no new credentials are issued. */
+    private static final String EXISTING_ACCOUNT_APPROVED_BODY = """
+            Hello,
+
+            We are pleased to let you know that your organization application has been approved.
+
+            Organization: %s
+            Tenant code: %s
+            Username: %s
+
+            This organization was added to your existing account. Sign in with your current password and choose
+            this organization.
+
+            Regards,
+            PTE Prep Platform Team
+            """;
+
+
     private final NotificationDispatchService dispatchService;
     private final BillingSettingsService billingSettingsService;
 
@@ -45,22 +80,11 @@ public class TenantApplicationNotificationListener {
     @TransactionalEventListener
     public void onApplicationApproved(TenantApplicationApprovedEvent event) {
         String subject = "PTE Prep - Your application was approved";
-        String body = """
-                Hello,
-
-                We are pleased to let you know that your organization application has been approved.
-
-                Organization: %s
-                Tenant code: %s
-                Username: %s
-                Temporary password: %s
-
-                Please change the temporary password after your first sign-in.
-
-                Regards,
-                PTE Prep Platform Team
-                """.formatted(event.organizationName(), event.tenantCode(), event.hostAdminUsername(),
-                event.hostAdminPassword());
+        String body = event.hostAdminPassword() == null
+                ? EXISTING_ACCOUNT_APPROVED_BODY.formatted(
+                        event.organizationName(), event.tenantCode(), event.hostAdminUsername())
+                : NEW_ACCOUNT_APPROVED_BODY.formatted(event.organizationName(), event.tenantCode(),
+                        event.hostAdminUsername(), event.hostAdminPassword());
 
         dispatchService.dispatchExternalSensitive(NotificationType.TENANT_APPLICATION_APPROVED, event.contactEmail(),
                 event.tenantPublicId(), dedupeKey(event.applicationPublicId(), "approved"), subject, body);

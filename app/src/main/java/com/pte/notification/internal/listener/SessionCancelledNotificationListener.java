@@ -48,18 +48,11 @@ public class SessionCancelledNotificationListener {
         String cancelledAt = event.cancelledAt() == null ? Instant.now().toString() : event.cancelledAt().toString();
         String body = NotificationConstants.SESSION_CANCELLED_BODY.formatted(sessionLabel, cancelledAt);
         for (UUID staffPublicId : staffPublicIds) {
-            identityService.findById(staffPublicId)
-                    .filter(user -> isEligibleStaff(user, event.tenantId()))
+            identityService.findActiveStaffInTenant(staffPublicId, event.tenantId())
                     .ifPresent(user -> dispatchService.dispatch(NotificationType.SESSION_CANCELLED, user,
                             event.tenantId(), NotificationConstants.SESSION_CANCELLED_SUBJECT, body,
                             NotificationConstants.SESSION_CANCELLED_DEDUPE_KEY.formatted(
                                     event.sessionPublicId(), user.getPublicId())));
         }
-    }
-
-    private boolean isEligibleStaff(User user, UUID tenantId) {
-        return user != null && !user.isDeleted() && user.getStatus() == UserStatus.ACTIVE
-                && tenantId.equals(user.getTenantId()) && user.getRoles() != null
-                && (user.getRoles().contains(Role.PROCTOR) || user.getRoles().contains(Role.EXAMINER));
     }
 }
