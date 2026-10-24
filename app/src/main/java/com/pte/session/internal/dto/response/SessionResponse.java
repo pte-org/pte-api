@@ -21,7 +21,7 @@ public record SessionResponse(
         String status,
         ExamPolicyResponse policy,
         Integer capacity,
-        UUID templatePublicId,
+        UUID examDefinitionPublicId,
         Integer templateVersion,
         ExamMode examMode,
         FormMode formMode,

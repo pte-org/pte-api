@@ -65,9 +65,9 @@ import com.pte.session.internal.repository.ExamGenerationJobRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.session.internal.repository.EnrollmentRepository;
 import com.pte.session.internal.repository.FormAssignmentRepository;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.audit.AuditLogService;
@@ -107,7 +107,7 @@ public class ExamOrchestrationService {
     private final SessionLifecycleService sessionLifecycleService;
     private final EnrollmentService enrollmentService;
     private final AssessmentService assessmentService;
-    private final ScoreTemplateService scoreTemplateService;
+    private final ExamDefinitionService examDefinitionService;
     private final BillingService billingService;
     private final EnrollmentModuleService enrollmentModuleService;
     private final IdentityService identityService;
@@ -128,7 +128,7 @@ public class ExamOrchestrationService {
             SessionLifecycleService sessionLifecycleService,
             EnrollmentService enrollmentService,
             AssessmentService assessmentService,
-            ScoreTemplateService scoreTemplateService,
+            ExamDefinitionService examDefinitionService,
             BillingService billingService,
             EnrollmentModuleService enrollmentModuleService,
             IdentityService identityService,
@@ -138,7 +138,7 @@ public class ExamOrchestrationService {
             ApplicationEventPublisher eventPublisher) {
         this(sessionRepository, sourceRepository, memberRepository, jobRepository, formRepository,
                 formAssignmentRepository, enrollmentRepository, sessionLifecycleService, enrollmentService,
-                assessmentService, scoreTemplateService, billingService, enrollmentModuleService, identityService,
+                assessmentService, examDefinitionService, billingService, enrollmentModuleService, identityService,
                 startedAttemptLookup, auditLogService, sessionCodeGenerator, eventPublisher, null);
     }
 
@@ -153,7 +153,7 @@ public class ExamOrchestrationService {
             SessionLifecycleService sessionLifecycleService,
             EnrollmentService enrollmentService,
             AssessmentService assessmentService,
-            ScoreTemplateService scoreTemplateService,
+            ExamDefinitionService examDefinitionService,
             BillingService billingService,
             EnrollmentModuleService enrollmentModuleService,
             IdentityService identityService,
@@ -172,7 +172,7 @@ public class ExamOrchestrationService {
         this.sessionLifecycleService = sessionLifecycleService;
         this.enrollmentService = enrollmentService;
         this.assessmentService = assessmentService;
-        this.scoreTemplateService = scoreTemplateService;
+        this.examDefinitionService = examDefinitionService;
         this.billingService = billingService;
         this.enrollmentModuleService = enrollmentModuleService;
         this.identityService = identityService;
@@ -190,7 +190,7 @@ public class ExamOrchestrationService {
         validateWindow(request.opensAt(), request.closesAt());
         SubscriptionView subscription = lockedActiveSubscription(request.subscriptionPublicId(), tenantId);
         validateSubscriptionWindowAndCapacity(subscription, request.opensAt(), request.closesAt(), request.capacity());
-        var template = scoreTemplateService.findActiveByPublicId(request.templatePublicId())
+        var template = examDefinitionService.findActiveByPublicId(request.examDefinitionPublicId())
                 .orElseThrow(() -> new ExamDraftConfigurationException(SessionConstants.EXAM_TEMPLATE_ACTIVE_REQUIRED));
 
         ExamMode mode = request.examMode() == null ? ExamMode.OFFICIAL_EXAM : request.examMode();
@@ -266,15 +266,15 @@ public class ExamOrchestrationService {
         LockdownMode previousLockdownMode = session.getPolicy() == null ? null : session.getPolicy().getLockdownMode();
         UUID previousTemplatePublicId = session.getTemplatePublicId();
         Integer previousTemplateVersion = session.getTemplateVersion();
-        ScoreTemplateResponse selectedTemplate = null;
+        ExamDefinitionResponse selectedTemplate = null;
         if (request.name() != null) {
             if (request.name().isBlank()) {
                 throw new ExamDraftConfigurationException(SessionConstants.SESSION_NAME_REQUIRED);
             }
             session.setName(request.name().trim());
         }
-        if (request.templatePublicId() != null) {
-            selectedTemplate = scoreTemplateService.findActiveByPublicId(request.templatePublicId())
+        if (request.examDefinitionPublicId() != null) {
+            selectedTemplate = examDefinitionService.findActiveByPublicId(request.examDefinitionPublicId())
                     .orElseThrow(() -> new ExamDraftConfigurationException(SessionConstants.EXAM_TEMPLATE_ACTIVE_REQUIRED));
             session.setTemplatePublicId(selectedTemplate.publicId());
             session.setTemplateVersion(selectedTemplate.version());
@@ -305,7 +305,7 @@ public class ExamOrchestrationService {
             if (session.getTemplatePublicId() == null) {
                 throw new ExamDraftConfigurationException(SessionConstants.EXAM_TEMPLATE_ACTIVE_REQUIRED);
             }
-            selectedTemplate = scoreTemplateService.getByPublicId(session.getTemplatePublicId());
+            selectedTemplate = examDefinitionService.getByPublicId(session.getTemplatePublicId());
         }
         Set<String> templateSkills = resolveTemplateSkills(selectedTemplate);
         boolean templateChanged = !java.util.Objects.equals(previousTemplatePublicId, session.getTemplatePublicId())
@@ -667,7 +667,7 @@ public class ExamOrchestrationService {
     }
 
     private ExamPreflightResponse preflightInternal(ExamSession session, boolean persistAudience) {
-        ScoreTemplateFeasibilityResponse template = assessmentService
+        ExamDefinitionFeasibilityResponse template = assessmentService
                 .getTemplateFeasibility(session.getTemplatePublicId(), session.getSelectedSkills());
         SubscriptionView subscription = billingService.getActiveSubscription(session.getSubscriptionId(), session.getTenantId())
                 .orElse(null);
@@ -964,7 +964,7 @@ public class ExamOrchestrationService {
         }
     }
 
-    private Set<String> resolveTemplateSkills(ScoreTemplateResponse template) {
+    private Set<String> resolveTemplateSkills(ExamDefinitionResponse template) {
         if (template == null || template.items() == null || template.items().isEmpty()) {
             throw new ExamDraftConfigurationException(SessionConstants.TEMPLATE_SKILLS_UNAVAILABLE);
         }

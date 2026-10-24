@@ -84,8 +84,8 @@ public class SessionCreationService {
         session.setSubscriptionId(subscription.publicId());
         session.setLicenseKey(subscription.licenseKey());
         session.setSnapshotPublicId(snapshot.publicId());
-        session.setTemplatePublicId(snapshot.scoreTemplatePublicId());
-        session.setTemplateVersion(snapshot.scoreTemplateVersion());
+        session.setTemplatePublicId(snapshot.examDefinitionPublicId());
+        session.setTemplateVersion(snapshot.examDefinitionVersion());
         session.setOpensAt(request.opensAt());
         session.setClosesAt(request.closesAt());
         session.setCapacity(request.capacity());

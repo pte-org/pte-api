@@ -7,9 +7,9 @@ import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.SubscriptionStatus;
 import com.pte.enrollment.EnrollmentModuleService;
 import com.pte.identity.IdentityService;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.session.domain.ExamPolicy;
 import com.pte.session.domain.ExamAudienceMember;
 import com.pte.session.domain.ExamAudienceSource;
@@ -96,7 +96,7 @@ class ExamOrchestrationServiceTest {
     @Mock
     private AssessmentService assessmentService;
     @Mock
-    private ScoreTemplateService scoreTemplateService;
+    private ExamDefinitionService examDefinitionService;
     @Mock
     private BillingService billingService;
     @Mock
@@ -126,7 +126,7 @@ class ExamOrchestrationServiceTest {
     void setUp() {
         service = new ExamOrchestrationService(sessionRepository, sourceRepository, memberRepository,
                 jobRepository, formRepository, formAssignmentRepository, enrollmentRepository,
-                sessionLifecycleService, enrollmentService, assessmentService, scoreTemplateService,
+                sessionLifecycleService, enrollmentService, assessmentService, examDefinitionService,
                 billingService, enrollmentModuleService, identityService, startedAttemptLookup, auditLogService,
                 sessionCodeGenerator, eventPublisher, tenancyService);
         tenantId = UUID.randomUUID();
@@ -146,7 +146,7 @@ class ExamOrchestrationServiceTest {
                 ExamMode.OFFICIAL_EXAM, null, null, null, 50), hostAdmin))
                 .isInstanceOf(TenantSuspendedException.class);
 
-        verifyNoInteractions(scoreTemplateService, billingService, sessionRepository);
+        verifyNoInteractions(examDefinitionService, billingService, sessionRepository);
     }
 
     @Test
@@ -168,7 +168,7 @@ class ExamOrchestrationServiceTest {
         assertThat(response.formMode()).isEqualTo(FormMode.UNIQUE_FORM_PER_STUDENT);
         assertThat(response.reusePolicy()).isEqualTo(ReusePolicy.EXCLUDE_STARTED_IN_SERIES);
         assertThat(response.seriesKey()).isEqualTo("HK1-2026");
-        assertThat(response.templatePublicId()).isEqualTo(templateId);
+        assertThat(response.examDefinitionPublicId()).isEqualTo(templateId);
         assertThat(response.templateVersion()).isEqualTo(3);
         assertThat(response.policy().lockdownMode()).isEqualTo("STRICT");
         assertThat(response.sessionCode()).isEqualTo("FPT-261010-K7QM");
@@ -179,7 +179,7 @@ class ExamOrchestrationServiceTest {
 
     @Test
     void createDraft_partialSkillSelection_isRejected() {
-        when(scoreTemplateService.findActiveByPublicId(templateId)).thenReturn(Optional.of(
+        when(examDefinitionService.findActiveByPublicId(templateId)).thenReturn(Optional.of(
                 twoSkillTemplateResponse()));
         stubSubscriptionForDraft();
 
@@ -224,7 +224,7 @@ class ExamOrchestrationServiceTest {
         ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
                 com.pte.session.domain.enums.LockdownMode.STRICT);
         when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
-        when(scoreTemplateService.getByPublicId(templateId)).thenReturn(templateResponse());
+        when(examDefinitionService.getByPublicId(templateId)).thenReturn(templateResponse());
         stubSubscriptionForDraft();
         when(sessionRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -257,7 +257,7 @@ class ExamOrchestrationServiceTest {
     void updateDraft_legacyDraftWithoutModeOrLockdown_derivesOfficialStrictDefault() {
         ExamSession session = draftSession(null, null);
         when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
-        when(scoreTemplateService.getByPublicId(templateId)).thenReturn(templateResponse());
+        when(examDefinitionService.getByPublicId(templateId)).thenReturn(templateResponse());
         stubSubscriptionForDraft();
         when(sessionRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -275,7 +275,7 @@ class ExamOrchestrationServiceTest {
                 com.pte.session.domain.enums.LockdownMode.STRICT);
         session.setSessionCode("FPT-261010-K7QM");
         when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
-        when(scoreTemplateService.getByPublicId(templateId)).thenReturn(templateResponse());
+        when(examDefinitionService.getByPublicId(templateId)).thenReturn(templateResponse());
         stubSubscriptionForDraft();
         when(sessionRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -673,7 +673,7 @@ class ExamOrchestrationServiceTest {
         when(billingService.getActiveSubscription(subscriptionId, tenantId))
                 .thenReturn(Optional.of(subscription));
         when(assessmentService.getTemplateFeasibility(session.getTemplatePublicId(), session.getSelectedSkills()))
-                .thenReturn(new com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse(
+                .thenReturn(new com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse(
                         templateId, 3, true, List.of()));
         when(sessionRepository.findFirstOverlapping(any(), any(), any(), any())).thenReturn(Optional.empty());
         when(sourceRepository.findBySessionIdOrderByCreatedAtAsc(session.getId())).thenReturn(sources);
@@ -714,7 +714,7 @@ class ExamOrchestrationServiceTest {
     }
 
     private void stubTemplateAndSubscription() {
-        when(scoreTemplateService.findActiveByPublicId(templateId)).thenReturn(Optional.of(
+        when(examDefinitionService.findActiveByPublicId(templateId)).thenReturn(Optional.of(
                 templateResponse()));
         when(billingService.getActiveSubscription(subscriptionId, tenantId)).thenReturn(Optional.of(
                 new SubscriptionView(subscriptionId, tenantId, UUID.randomUUID(), "LIC-TEST",
@@ -722,19 +722,19 @@ class ExamOrchestrationServiceTest {
                         SubscriptionStatus.ACTIVE, ActivationSource.LICENSE_CODE)));
     }
 
-    private ScoreTemplateResponse templateResponse() {
-        return new ScoreTemplateResponse(templateId, "PTE", 3, "PTE template", "ACTIVE", List.of(
-                new ScoreTemplateItemResponse("READ_ALOUD", "SPEAKING", 1, 1, 1, 10, 30,
+    private ExamDefinitionResponse templateResponse() {
+        return new ExamDefinitionResponse(templateId, "PTE", 3, "PTE template", "ACTIVE", List.of(
+                new ExamDefinitionItemResponse("READ_ALOUD", "SPEAKING", 1, 1, 1, 10, 30,
                         "OBJECTIVE", BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO,
                         BigDecimal.ZERO, BigDecimal.ZERO)));
     }
 
-    private ScoreTemplateResponse twoSkillTemplateResponse() {
-        return new ScoreTemplateResponse(templateId, "PTE", 3, "PTE template", "ACTIVE", List.of(
-                new ScoreTemplateItemResponse("READ_ALOUD", "SPEAKING", 1, 1, 1, 10, 30,
+    private ExamDefinitionResponse twoSkillTemplateResponse() {
+        return new ExamDefinitionResponse(templateId, "PTE", 3, "PTE template", "ACTIVE", List.of(
+                new ExamDefinitionItemResponse("READ_ALOUD", "SPEAKING", 1, 1, 1, 10, 30,
                         "OBJECTIVE", BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO,
                         BigDecimal.ZERO, BigDecimal.ZERO),
-                new ScoreTemplateItemResponse("ESSAY", "WRITING", 2, 1, 1, 0, 1200,
+                new ExamDefinitionItemResponse("ESSAY", "WRITING", 2, 1, 1, 0, 1200,
                         "SUBJECTIVE", BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO,
                         BigDecimal.ZERO, BigDecimal.ZERO)));
     }

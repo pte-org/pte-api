@@ -15,7 +15,7 @@ import java.util.UUID;
 
 public record PatchExamDraftRequest(
         String name,
-        UUID templatePublicId,
+        UUID examDefinitionPublicId,
         UUID subscriptionPublicId,
         Instant opensAt,
         Instant closesAt,
@@ -31,19 +31,19 @@ public record PatchExamDraftRequest(
         LockdownMode lockdownMode) {
 
     /** Source-compatible constructor for callers predating explicit skill/retry configuration. */
-    public PatchExamDraftRequest(String name, UUID templatePublicId, UUID subscriptionPublicId,
+    public PatchExamDraftRequest(String name, UUID examDefinitionPublicId, UUID subscriptionPublicId,
             Instant opensAt, Instant closesAt, ExamMode examMode, FormMode formMode,
             ReusePolicy reusePolicy, String seriesKey, Integer capacity, Long expectedVersion) {
-        this(name, templatePublicId, subscriptionPublicId, opensAt, closesAt, examMode, formMode, reusePolicy,
+        this(name, examDefinitionPublicId, subscriptionPublicId, opensAt, closesAt, examMode, formMode, reusePolicy,
                 seriesKey, capacity, expectedVersion, null, null, null);
     }
 
     /** Source-compatible constructor for callers using the previous full request shape. */
-    public PatchExamDraftRequest(String name, UUID templatePublicId, UUID subscriptionPublicId,
+    public PatchExamDraftRequest(String name, UUID examDefinitionPublicId, UUID subscriptionPublicId,
             Instant opensAt, Instant closesAt, ExamMode examMode, FormMode formMode,
             ReusePolicy reusePolicy, String seriesKey, Integer capacity, Long expectedVersion,
             List<String> selectedSkills, Integer maxRetriesPerStudent) {
-        this(name, templatePublicId, subscriptionPublicId, opensAt, closesAt, examMode, formMode, reusePolicy,
+        this(name, examDefinitionPublicId, subscriptionPublicId, opensAt, closesAt, examMode, formMode, reusePolicy,
                 seriesKey, capacity, expectedVersion, selectedSkills, maxRetriesPerStudent, null);
     }
 }

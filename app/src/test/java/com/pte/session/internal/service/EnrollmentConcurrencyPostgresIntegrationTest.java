@@ -1,8 +1,10 @@
 package com.pte.session.internal.service;
 
 import com.pte.identity.IdentityService;
+import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
+import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.session.domain.Enrollment;
 import com.pte.session.domain.ExamPolicy;
@@ -81,6 +83,9 @@ class EnrollmentConcurrencyPostgresIntegrationTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private OrganizationMemberRepository memberRepository;
 
     @Autowired
     private IdentityService identityService;
@@ -244,10 +249,14 @@ class EnrollmentConcurrencyPostgresIntegrationTest {
         return tx(() -> {
             User user = new User();
             user.setUsername("phase15-" + UUID.randomUUID());
-            user.setTenantId(tenantId);
             user.setStatus(com.pte.identity.domain.UserStatus.ACTIVE);
-            user.setRoles(Set.of(Role.STUDENT));
-            return userRepository.saveAndFlush(user).getPublicId();
+            User saved = userRepository.saveAndFlush(user);
+            OrganizationMember member = new OrganizationMember();
+            member.setUser(saved);
+            member.setOrganizationId(tenantId);
+            member.setRoles(new java.util.HashSet<>(Set.of(Role.STUDENT)));
+            memberRepository.saveAndFlush(member);
+            return saved.getPublicId();
         });
     }
 

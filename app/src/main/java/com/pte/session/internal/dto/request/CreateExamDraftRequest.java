@@ -19,7 +19,7 @@ import java.util.UUID;
 
 public record CreateExamDraftRequest(
         @NotBlank(message = SessionConstants.SESSION_NAME_REQUIRED) String name,
-        @NotNull(message = SessionConstants.TEMPLATE_REFERENCE_REQUIRED) UUID templatePublicId,
+        @NotNull(message = SessionConstants.TEMPLATE_REFERENCE_REQUIRED) UUID examDefinitionPublicId,
         @NotNull(message = SessionConstants.SUBSCRIPTION_REFERENCE_REQUIRED) UUID subscriptionPublicId,
         @NotNull(message = SessionConstants.OPEN_TIME_REQUIRED) @Future(message = SessionConstants.OPEN_TIME_FUTURE) Instant opensAt,
         @NotNull(message = SessionConstants.CLOSE_TIME_REQUIRED) Instant closesAt,
@@ -34,19 +34,19 @@ public record CreateExamDraftRequest(
         LockdownMode lockdownMode) {
 
     /** Source-compatible constructor for callers predating explicit skill/retry configuration. */
-    public CreateExamDraftRequest(String name, UUID templatePublicId, UUID subscriptionPublicId,
+    public CreateExamDraftRequest(String name, UUID examDefinitionPublicId, UUID subscriptionPublicId,
             Instant opensAt, Instant closesAt, ExamMode examMode, FormMode formMode,
             ReusePolicy reusePolicy, String seriesKey, Integer capacity) {
-        this(name, templatePublicId, subscriptionPublicId, opensAt, closesAt, examMode, formMode, reusePolicy,
+        this(name, examDefinitionPublicId, subscriptionPublicId, opensAt, closesAt, examMode, formMode, reusePolicy,
                 seriesKey, capacity, null, null, null);
     }
 
     /** Source-compatible constructor for callers using the previous full request shape. */
-    public CreateExamDraftRequest(String name, UUID templatePublicId, UUID subscriptionPublicId,
+    public CreateExamDraftRequest(String name, UUID examDefinitionPublicId, UUID subscriptionPublicId,
             Instant opensAt, Instant closesAt, ExamMode examMode, FormMode formMode,
             ReusePolicy reusePolicy, String seriesKey, Integer capacity,
             List<String> selectedSkills, Integer maxRetriesPerStudent) {
-        this(name, templatePublicId, subscriptionPublicId, opensAt, closesAt, examMode, formMode, reusePolicy,
+        this(name, examDefinitionPublicId, subscriptionPublicId, opensAt, closesAt, examMode, formMode, reusePolicy,
                 seriesKey, capacity, selectedSkills, maxRetriesPerStudent, null);
     }
 }
