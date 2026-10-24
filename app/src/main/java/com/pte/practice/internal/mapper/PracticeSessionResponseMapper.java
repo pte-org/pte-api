@@ -1,5 +1,6 @@
 package com.pte.practice.internal.mapper;
 
+import com.pte.media.MediaService;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeSessionItem;
@@ -12,6 +13,8 @@ import com.pte.practice.internal.dto.response.PracticeTaskContentResponse;
 import com.pte.practice.internal.dto.response.PracticeTaskResponse;
 import com.pte.practice.internal.service.PracticeCatalogService;
 import com.pte.practice.internal.service.PracticeSessionItemService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
 import tools.jackson.core.JacksonException;
@@ -19,29 +22,36 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /** Maps the session aggregate and its pinned items to the student API view. */
 @Component
 public class PracticeSessionResponseMapper {
 
+    private static final Logger log = LoggerFactory.getLogger(PracticeSessionResponseMapper.class);
+
     private final PracticeCatalogService catalogService;
     private final PracticeSessionItemService itemService;
     private final JsonMapper jsonMapper;
+    private final MediaService mediaService;
 
     public PracticeSessionResponseMapper(PracticeCatalogService catalogService,
             PracticeSessionItemService itemService) {
-        this(catalogService, itemService, JsonMapper.builder().build());
+        this(catalogService, itemService, JsonMapper.builder().build(), null);
     }
 
     @Autowired
     public PracticeSessionResponseMapper(PracticeCatalogService catalogService,
-            PracticeSessionItemService itemService, JsonMapper jsonMapper) {
+            PracticeSessionItemService itemService, JsonMapper jsonMapper, MediaService mediaService) {
         this.catalogService = catalogService;
         this.itemService = itemService;
         this.jsonMapper = jsonMapper;
+        this.mediaService = mediaService;
     }
 
     public PracticeSessionResponse toResponse(PracticeSession session) {
@@ -88,10 +98,11 @@ public class PracticeSessionResponseMapper {
                 (int) items.stream().filter(item -> item.getStatus() == PracticeSessionItemStatus.ANSWERED).count(),
                 totalItemCount,
                 sections,
-                currentItem == null ? null : toTaskResponse(currentItem));
+                currentItem == null ? null : toTaskResponse(currentItem, session.getTenantId()),
+                null);
     }
 
-    private PracticeTaskResponse toTaskResponse(PracticeSessionItem item) {
+    private PracticeTaskResponse toTaskResponse(PracticeSessionItem item, UUID tenantId) {
         return new PracticeTaskResponse(
                 item.getPublicId(),
                 item.getOrderIndex(),
@@ -104,10 +115,10 @@ public class PracticeSessionResponseMapper {
                 item.getStatus(),
                 item.getSavedPayload(),
                 item.getConfidence(),
-                toContent(item));
+                toContent(item, tenantId));
     }
 
-    private PracticeTaskContentResponse toContent(PracticeSessionItem item) {
+    private PracticeTaskContentResponse toContent(PracticeSessionItem item, UUID tenantId) {
         if ((item.getPromptText() == null || item.getPromptText().isBlank())
                 && (item.getOptionsJson() == null || item.getOptionsJson().isBlank())
                 && item.getAudioPromptRef() == null && item.getImagePromptRef() == null) {
@@ -122,8 +133,41 @@ public class PracticeSessionResponseMapper {
                 throw new IllegalStateException("PRACTICE_CONTENT_SNAPSHOT_INVALID", ex);
             }
         }
+        Map<UUID, String> mediaUrls = presignPromptMedia(item, tenantId);
         return new PracticeTaskContentResponse(item.getPromptText(), item.getMinWordCount(),
-                item.getMaxWordCount(), item.getAudioPromptRef(), item.getImagePromptRef(), options);
+                item.getMaxWordCount(), item.getAudioPromptRef(), item.getImagePromptRef(), options,
+                urlOf(mediaUrls, item.getAudioPromptRef()), urlOf(mediaUrls, item.getImagePromptRef()));
+    }
+
+    /** Immutable maps reject a null key, and a task may have no audio or no image. */
+    private String urlOf(Map<UUID, String> mediaUrls, UUID ref) {
+        return ref == null ? null : mediaUrls.get(ref);
+    }
+
+    /**
+     * Students cannot resolve media refs themselves, so the prompt audio and image (and nothing else) are presigned
+     * here. A media failure leaves the URL empty rather than failing the whole session read.
+     */
+    private Map<UUID, String> presignPromptMedia(PracticeSessionItem item, UUID tenantId) {
+        Set<UUID> refs = new LinkedHashSet<>();
+        if (item.getAudioPromptRef() != null) {
+            refs.add(item.getAudioPromptRef());
+        }
+        if (item.getImagePromptRef() != null) {
+            refs.add(item.getImagePromptRef());
+        }
+        if (refs.isEmpty() || mediaService == null) {
+            return Map.of();
+        }
+        try {
+            Map<UUID, String> urls = new HashMap<>();
+            mediaService.presignGetAll(refs, PracticeConstants.PRACTICE_PROMPT_MEDIA_TTL_SECONDS, tenantId)
+                    .forEach((id, presigned) -> urls.put(id, presigned.url()));
+            return urls;
+        } catch (RuntimeException ex) {
+            log.warn("Practice prompt media could not be presigned for item {}", item.getPublicId(), ex);
+            return Map.of();
+        }
     }
 
     private long versionOf(PracticeSession session) {

@@ -5,7 +5,10 @@ import com.pte.practice.internal.dto.request.PracticeAnswerRequest;
 import com.pte.practice.internal.dto.request.PracticeSaveAndExitRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionActionRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionStartRequest;
+import com.pte.practice.internal.dto.response.PracticeItemResultResponse;
+import com.pte.practice.internal.dto.response.PracticeReviewResponse;
 import com.pte.practice.internal.dto.response.PracticeSessionResponse;
+import com.pte.practice.internal.service.PracticeReviewService;
 import com.pte.practice.internal.service.PracticeSessionService;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -30,9 +33,11 @@ import java.util.UUID;
 public class PracticeSessionController {
 
     private final PracticeSessionService sessionService;
+    private final PracticeReviewService reviewService;
 
-    public PracticeSessionController(PracticeSessionService sessionService) {
+    public PracticeSessionController(PracticeSessionService sessionService, PracticeReviewService reviewService) {
         this.sessionService = sessionService;
+        this.reviewService = reviewService;
     }
 
     @PostMapping
@@ -79,6 +84,23 @@ public class PracticeSessionController {
                 CurrentUserContext.required()));
     }
 
+    /** Poll target while an AI-scored answer is SCORING. */
+    @GetMapping("/{publicId}/items/{itemPublicId}/result")
+    public ApiResponse<PracticeItemResultResponse> result(
+            @PathVariable UUID publicId,
+            @PathVariable UUID itemPublicId) {
+        return ApiResponse.success(sessionService.itemResult(publicId, itemPublicId,
+                CurrentUserContext.required()));
+    }
+
+    @PostMapping("/{publicId}/items/{itemPublicId}/scoring/retry")
+    public ApiResponse<PracticeItemResultResponse> retryScoring(
+            @PathVariable UUID publicId,
+            @PathVariable UUID itemPublicId) {
+        return ApiResponse.success(sessionService.retryScoring(publicId, itemPublicId,
+                CurrentUserContext.required()));
+    }
+
     @PostMapping("/{publicId}/items/{itemPublicId}/skip")
     public ApiResponse<PracticeSessionResponse> skip(
             @PathVariable UUID publicId,
@@ -88,6 +110,11 @@ public class PracticeSessionController {
             @Valid @RequestBody PracticeSessionActionRequest request) {
         return ApiResponse.success(sessionService.skip(publicId, itemPublicId, request, idempotencyKey,
                 CurrentUserContext.required()));
+    }
+
+    @GetMapping("/{publicId}/review")
+    public ApiResponse<PracticeReviewResponse> review(@PathVariable UUID publicId) {
+        return ApiResponse.success(reviewService.get(publicId, CurrentUserContext.required()));
     }
 
     @PostMapping("/{publicId}/save-and-exit")
