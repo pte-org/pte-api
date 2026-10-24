@@ -59,11 +59,11 @@ ADMIN_TOKEN=$(api POST /api/v1/auth/login "" "{\"username\":\"$ADMIN_EMAIL\",\"p
 
 echo "== Onboarding Tenant =="
 TENANT_CODE="seed-$RUN_ID"
-TENANT_ID=$(api POST /api/v1/tenants "$ADMIN_TOKEN" "{\"code\":\"$TENANT_CODE\",\"name\":\"Seed Tenant $RUN_ID\",\"organizationType\":\"SCHOOL\",\"packageName\":\"STANDARD\",\"studentLimit\":100}" | jq -r '.data.publicId')
+TENANT_ID=$(api POST /api/v1/organizations "$ADMIN_TOKEN" "{\"code\":\"$TENANT_CODE\",\"name\":\"Seed Tenant $RUN_ID\",\"organizationType\":\"SCHOOL\",\"packageName\":\"STANDARD\",\"studentLimit\":100}" | jq -r '.data.publicId')
 echo "  tenant: $TENANT_ID (code: $TENANT_CODE)"
 
-echo "== Reading provisioned Organization =="
-ORG_ID=$(api GET "/api/v1/tenants/$TENANT_ID/organizations" "$ADMIN_TOKEN" | jq -r '.data[0].publicId')
+echo "== Organization id (same as tenant id) =="
+ORG_ID="$TENANT_ID" # the tenant is itself the organization
 echo "  organization: $ORG_ID"
 
 echo "== Creating HOST_ADMIN user =="

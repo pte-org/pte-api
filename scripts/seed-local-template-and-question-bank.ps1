@@ -269,14 +269,14 @@ function Test-TemplateShape {
 function Get-OrCreateDraftTemplate {
     param([string]$Code)
 
-    $templates = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/score-templates" -Token $script:AdminToken)
+    $templates = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/exam-definitions" -Token $script:AdminToken)
     $template = $templates |
         Where-Object { $_.code -eq $Code } |
         Sort-Object -Property version -Descending |
         Select-Object -First 1
 
     if ($null -eq $template) {
-        return Invoke-SeedApi -Method POST -Path "/api/v1/score-templates" -Token $script:AdminToken -Body @{
+        return Invoke-SeedApi -Method POST -Path "/api/v1/exam-definitions" -Token $script:AdminToken -Body @{
             code          = $Code
             name          = "PTE local practice template"
             templatePolicy = "CUSTOM"
@@ -288,17 +288,17 @@ function Get-OrCreateDraftTemplate {
         return $template
     }
     if ($status -eq "PENDING_APPROVAL") {
-        $template = Invoke-SeedApi -Method POST -Path "/api/v1/score-templates/$($template.publicId)/approve" -Token $script:AdminToken
+        $template = Invoke-SeedApi -Method POST -Path "/api/v1/exam-definitions/$($template.publicId)/approve" -Token $script:AdminToken
         $status = "$($template.status)".ToUpperInvariant()
     }
     if ($status -eq "RETIRED") {
-        return Invoke-SeedApi -Method POST -Path "/api/v1/score-templates/$($template.publicId)/clone" -Token $script:AdminToken
+        return Invoke-SeedApi -Method POST -Path "/api/v1/exam-definitions/$($template.publicId)/clone" -Token $script:AdminToken
     }
     if ($status -eq "DRAFT") {
         return $template
     }
     if ($status -eq "ACTIVE") {
-        return Invoke-SeedApi -Method POST -Path "/api/v1/score-templates" -Token $script:AdminToken -Body @{
+        return Invoke-SeedApi -Method POST -Path "/api/v1/exam-definitions" -Token $script:AdminToken -Body @{
             code           = $Code
             name           = "PTE local practice template"
             templatePolicy = "CUSTOM"
@@ -351,12 +351,12 @@ if ($QuestionPool -eq "EXAM") {
     Write-Host "== Creating or reusing the custom template draft =="
     $template = Get-OrCreateDraftTemplate -Code $templateCode
     if ("$($template.status)".ToUpperInvariant() -ne "ACTIVE") {
-        $template = Invoke-SeedApi -Method PUT -Path "/api/v1/score-templates/$($template.publicId)/items" -Token $script:AdminToken -Body @{
+        $template = Invoke-SeedApi -Method PUT -Path "/api/v1/exam-definitions/$($template.publicId)/items" -Token $script:AdminToken -Body @{
             name           = "PTE local practice template"
             templatePolicy = "CUSTOM"
             items          = New-DesiredTemplateItems
         }
-        $template = Invoke-SeedApi -Method POST -Path "/api/v1/score-templates/$($template.publicId)/activate" -Token $script:AdminToken
+        $template = Invoke-SeedApi -Method POST -Path "/api/v1/exam-definitions/$($template.publicId)/activate" -Token $script:AdminToken
     }
 } else {
     Write-Host "== Skipping exam score-template seed for PRACTICE pool =="
