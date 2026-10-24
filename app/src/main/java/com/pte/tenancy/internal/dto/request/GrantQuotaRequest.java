@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
-/** Admin grants additional quota to a Tenant â€” the only action this phase implements. */
+/** A platform admin grants additional student seats to an organization. */
 public record GrantQuotaRequest(
         @NotBlank(message = TenancyConstants.PACKAGE_NAME_REQUIRED)
         String packageName,
