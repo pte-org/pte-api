@@ -3,6 +3,7 @@ package com.pte.identity.internal.repository;
 import com.pte.identity.IdentityOverviewService;
 import com.pte.identity.IdentityOverviewService.StaffCounts;
 import com.pte.identity.IdentityOverviewService.StudentStatusCounts;
+import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
@@ -38,21 +39,41 @@ class IdentityOverviewQueriesTest {
     private UserRepository users;
 
     @Autowired
+    private OrganizationMemberRepository members;
+
+    @Autowired
     private EntityManager em;
 
+    /**
+     * A tenant user is an account plus its membership; a null tenant is a platform account holding the roles itself.
+     * Status and soft-delete are set on both, since organization queries read the membership and the account.
+     */
     private User user(UUID tenant, UserStatus status, boolean deleted, Instant createdAt, Role... roles) {
         User u = new User();
         u.setUsername("u-" + UUID.randomUUID());
         u.setEmail(u.getUsername() + "@example.test");
-        u.setTenantId(tenant);
         u.setStatus(status);
         u.setDeleted(deleted);
-        u.setRoles(new HashSet<>(Arrays.asList(roles)));
+        if (tenant == null) {
+            u.setRoles(new HashSet<>(Arrays.asList(roles)));
+        }
         users.saveAndFlush(u);
+        Long createdId = u.getId();
+        String createdEntity = "User";
+        if (tenant != null) {
+            OrganizationMember m = new OrganizationMember();
+            m.setUser(u);
+            m.setOrganizationId(tenant);
+            m.setStatus(status);
+            m.setRoles(new HashSet<>(Arrays.asList(roles)));
+            members.saveAndFlush(m);
+            createdId = m.getId();
+            createdEntity = "OrganizationMember";
+        }
         if (createdAt != null) {
             // createdAt is @CreationTimestamp + not updatable: rewrite it with a bulk update.
-            em.createQuery("update User u set u.createdAt = :createdAt where u.id = :id")
-                    .setParameter("createdAt", createdAt).setParameter("id", u.getId()).executeUpdate();
+            em.createQuery("update " + createdEntity + " e set e.createdAt = :createdAt where e.id = :id")
+                    .setParameter("createdAt", createdAt).setParameter("id", createdId).executeUpdate();
         }
         em.clear();
         return u;
