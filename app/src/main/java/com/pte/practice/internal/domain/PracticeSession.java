@@ -35,9 +35,6 @@ public class PracticeSession extends BaseEntity {
     @Column(name = "student_public_id", nullable = false)
     private UUID studentPublicId;
 
-    @Column(name = "identity_public_id", nullable = false)
-    private UUID identityPublicId;
-
     @Column(name = "tenant_id", nullable = false)
     private UUID tenantId;
 

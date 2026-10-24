@@ -1,8 +1,5 @@
 package com.pte.practice.internal.service;
 
-import com.pte.identity.PracticeIdentityService;
-import com.pte.identity.PracticeMembershipStatus;
-import com.pte.identity.domain.UserStatus;
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.attempt.ResponseConfidence;
@@ -64,8 +61,6 @@ class PracticeSessionServiceTest {
     @Mock
     private PracticeEntitlementService entitlementService;
     @Mock
-    private PracticeIdentityService identityService;
-    @Mock
     private PracticeAnswerValidationService answerValidationService;
 
     private PracticeCatalogService catalogService;
@@ -81,7 +76,7 @@ class PracticeSessionServiceTest {
         tenantId = UUID.randomUUID();
         sessionId = UUID.randomUUID();
         now = Instant.parse("2026-10-07T12:00:00Z");
-        caller = new CurrentUser(studentId, null, List.of("STUDENT"));
+        caller = new CurrentUser(studentId, tenantId, List.of("STUDENT"));
         lenient().when(questionTypeService.list(true)).thenReturn(List.of(
                 new com.pte.itembank.dto.response.QuestionTypeResponse(
                         UUID.randomUUID(), "MC_READING_SINGLE", "Multiple-choice Reading (Single)", "MCS",
@@ -93,14 +88,12 @@ class PracticeSessionServiceTest {
                 answerValidationService);
         PracticeSessionResponseMapper responseMapper = new PracticeSessionResponseMapper(catalogService, itemService);
         service = new PracticeSessionService(sessionRepository, sessionPersistenceService, operationRepository,
-                catalogService, entitlementService, itemService, responseMapper, identityService,
+                catalogService, entitlementService, itemService, responseMapper,
                 Clock.fixed(now, ZoneOffset.UTC));
     }
 
     @Test
     void startCreatesOverviewAndSameKeyReplaysTheSameSession() {
-        PracticeIdentityService.PracticeIdentityView identity = identity();
-        when(identityService.resolveForShellUser(caller.userId())).thenReturn(Optional.of(identity));
         java.util.concurrent.atomic.AtomicReference<PracticeSession> persisted =
                 new java.util.concurrent.atomic.AtomicReference<>();
         when(sessionRepository.findByStudentPublicIdAndStartIdempotencyKeyAndDeletedFalse(
@@ -334,12 +327,6 @@ class PracticeSessionServiceTest {
     private PracticeSessionStartRequest startRequest() {
         return new PracticeSessionStartRequest("PTE_CORE_PRACTICE", tenantId,
                 Set.of("MC_READING_SINGLE"), new PracticeCapabilityManifest(Set.of("OPTION_SELECTION"), "1.0.0"));
-    }
-
-    private PracticeIdentityService.PracticeIdentityView identity() {
-        return new PracticeIdentityService.PracticeIdentityView(UUID.randomUUID(), caller.userId(),
-                UserStatus.ACTIVE, List.of(new PracticeIdentityService.PracticeMembershipView(
-                        UUID.randomUUID(), tenantId, PracticeMembershipStatus.ACTIVE, UserStatus.ACTIVE, true)));
     }
 
     private PracticeSession savedSession() {

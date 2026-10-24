@@ -98,9 +98,6 @@ public final class IdentityConstants {
     public static final long ACCESS_TOKEN_TTL_SECONDS = 900L;      // 15 minutes
     public static final long REFRESH_TOKEN_TTL_SECONDS = 604_800L; // 7 days
 
-    public static final String PRACTICE_AUTH_REQUEST_PATH = "/api/v1/auth/practice/request";
-    public static final String PRACTICE_AUTH_VERIFY_PATH = "/api/v1/auth/practice/verify";
-
     private IdentityConstants() {
     }
 }

@@ -1,6 +1,5 @@
 package com.pte.practice.internal.service;
 
-import com.pte.identity.PracticeIdentityService;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeSessionItem;
@@ -15,7 +14,6 @@ import com.pte.practice.internal.dto.request.PracticeSessionStartRequest;
 import com.pte.practice.internal.dto.response.PracticeItemResultResponse;
 import com.pte.practice.internal.dto.response.PracticeSessionResponse;
 import com.pte.practice.internal.exception.PracticeIdempotencyException;
-import com.pte.practice.internal.exception.PracticeNotEntitledException;
 import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.exception.PracticeSessionNotFoundException;
 import com.pte.practice.internal.mapper.PracticeSessionResponseMapper;
@@ -56,7 +54,6 @@ public class PracticeSessionService {
     private final PracticeSessionItemService itemService;
     private final PracticeSessionResponseMapper responseMapper;
     private final PracticeEntitlementService entitlementService;
-    private final PracticeIdentityService identityService;
     private final Clock clock;
 
     public PracticeSessionService(PracticeSessionRepository sessionRepository,
@@ -64,7 +61,7 @@ public class PracticeSessionService {
             PracticeSessionOperationRepository operationRepository,
             PracticeCatalogService catalogService, PracticeEntitlementService entitlementService,
             PracticeSessionItemService itemService, PracticeSessionResponseMapper responseMapper,
-            PracticeIdentityService identityService, Clock clock) {
+            Clock clock) {
         this.sessionRepository = sessionRepository;
         this.sessionPersistenceService = sessionPersistenceService;
         this.operationRepository = operationRepository;
@@ -72,7 +69,6 @@ public class PracticeSessionService {
         this.itemService = itemService;
         this.responseMapper = responseMapper;
         this.entitlementService = entitlementService;
-        this.identityService = identityService;
         this.clock = clock;
     }
 
@@ -91,14 +87,11 @@ public class PracticeSessionService {
         }
 
         catalogService.requireStartable(request.productCode(), request.safeTaskTypeCodes(), request.capabilities());
-        PracticeIdentityService.PracticeIdentityView identity = identityService
-                .resolveForShellUser(caller.userId()).orElseThrow(PracticeNotEntitledException::new);
-        requireActiveMembership(identity, request.organizationId());
 
         PracticeSession session = new PracticeSession();
         session.setStudentPublicId(caller.userId());
-        session.setIdentityPublicId(identity.identityPublicId());
-        session.setTenantId(request.organizationId());
+        // assertUnlocked already proved the requested organization is the caller's own tenant.
+        session.setTenantId(caller.tenantId());
         session.setProductCode(request.productCode());
         session.setTitle(PracticeConstants.PRACTICE_PRODUCT_TITLE);
         session.setTimeLimitSeconds(PracticeConstants.PRACTICE_TIME_LIMIT_SECONDS);
@@ -352,16 +345,6 @@ public class PracticeSessionService {
     private PracticeSession findOwnedForUpdate(UUID publicId, UUID studentPublicId) {
         return sessionRepository.findWithLockByPublicIdAndStudentPublicId(publicId, studentPublicId)
                 .orElseThrow(PracticeSessionNotFoundException::new);
-    }
-
-    private void requireActiveMembership(PracticeIdentityService.PracticeIdentityView identity,
-            UUID organizationId) {
-        boolean linked = identity.memberships().stream()
-                .anyMatch(membership -> organizationId.equals(membership.tenantId())
-                        && membership.isActiveStudent());
-        if (!linked) {
-            throw new PracticeNotEntitledException();
-        }
     }
 
     private void requireVersion(PracticeSession session, long expectedVersion) {

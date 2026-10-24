@@ -1,6 +1,5 @@
 package com.pte.practice.internal.service;
 
-import com.pte.identity.PracticeIdentityService;
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeSessionItem;
 import com.pte.practice.internal.dto.response.PracticeItemResultResponse;
@@ -50,7 +49,7 @@ class PracticeSessionServiceScoringTest {
     void setUp() {
         service = new PracticeSessionService(sessionRepository, null, mock(PracticeSessionOperationRepository.class),
                 null, entitlementService, itemService, mock(PracticeSessionResponseMapper.class),
-                mock(PracticeIdentityService.class), Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC));
         session = new PracticeSession();
         session.setId(42L);
         session.setTenantId(UUID.randomUUID());
