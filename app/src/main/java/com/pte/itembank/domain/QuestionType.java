@@ -4,6 +4,7 @@ import com.pte.itembank.domain.enums.PteSection;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import org.hibernate.annotations.DynamicUpdate;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Index;
@@ -23,13 +24,14 @@ import org.hibernate.type.SqlTypes;
  * second task-type vocabulary in source code.
  */
 @Entity
+@DynamicUpdate
 @Table(name = "question_types", indexes = {
         @Index(name = "idx_question_types_active_order", columnList = "active, display_order")
 })
 @Getter
 @Setter
 @NoArgsConstructor
-public class QuestionTypeDefinition extends BaseEntity {
+public class QuestionType extends BaseEntity {
 
     @Column(nullable = false, length = 64, unique = true)
     private String code;
