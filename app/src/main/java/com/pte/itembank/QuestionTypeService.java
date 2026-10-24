@@ -1,6 +1,6 @@
 package com.pte.itembank;
 
-import com.pte.itembank.domain.QuestionTypeDefinition;
+import com.pte.itembank.domain.QuestionType;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.dto.request.CreateTaskTypeRequest;
@@ -34,7 +34,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -52,32 +54,29 @@ public class QuestionTypeService {
     private final QuestionTypeRepository repository;
     private final TaskRuntimeProfileService runtimeProfileService;
     private final TaskRuntimeContractService runtimeContractService;
-    private final TaskTypePublicationUsageService publicationUsageService;
     private final AuditLogService auditLogService;
     private final TaskTypeObservability observability;
 
     @Autowired
     public QuestionTypeService(QuestionTypeRepository repository, TaskRuntimeProfileService runtimeProfileService,
             TaskRuntimeContractService runtimeContractService,
-            TaskTypePublicationUsageService publicationUsageService,
             AuditLogService auditLogService, TaskTypeObservability observability) {
         this.repository = repository;
         this.runtimeProfileService = runtimeProfileService;
         this.runtimeContractService = runtimeContractService;
-        this.publicationUsageService = publicationUsageService;
         this.auditLogService = auditLogService;
         this.observability = observability;
     }
 
     /** Compatibility constructor for focused catalog tests. */
     public QuestionTypeService(QuestionTypeRepository repository) {
-        this(repository, null, new TaskRuntimeContractService(), null, null, null);
+        this(repository, null, new TaskRuntimeContractService(), null, null);
     }
 
     @Transactional(readOnly = true)
     public List<QuestionTypeResponse> list(boolean activeOnly) {
         markLegacyAdapterUse();
-        List<QuestionTypeDefinition> definitions = activeOnly
+        List<QuestionType> definitions = activeOnly
                 ? repository.findAllByDeletedFalseAndActiveTrueOrderByDisplayOrderAscCodeAsc()
                 : repository.findAllByDeletedFalseOrderByDisplayOrderAscCodeAsc();
         definitions = definitions.stream()
@@ -92,7 +91,7 @@ public class QuestionTypeService {
     @Transactional(readOnly = true)
     public QuestionTypeResponse get(UUID publicId) {
         markLegacyAdapterUse();
-        QuestionTypeDefinition definition = findByPublicId(publicId);
+        QuestionType definition = findByPublicId(publicId);
         if (!TaskTypeCodeCompatibility.isStandard(definition.getTaskTypeKey() == null
                 ? definition.getCode() : definition.getTaskTypeKey())) {
             throw new QuestionTypeNotFoundException();
@@ -104,11 +103,11 @@ public class QuestionTypeService {
     @Transactional(readOnly = true)
     public TaskTypePageResponse listTaskTypes(boolean activeOnly, String cursor, int limit) {
         int boundedLimit = Math.max(1, Math.min(limit <= 0 ? 50 : limit, 100));
-        List<QuestionTypeDefinition> definitions = activeOnly
+        List<QuestionType> definitions = activeOnly
                 ? repository.findAllByDeletedFalseAndActiveTrueOrderByDisplayOrderAscCodeAsc()
                 : repository.findAllByDeletedFalseOrderByDisplayOrderAscCodeAsc();
         int offset = parseCursor(cursor);
-        List<QuestionTypeDefinition> page = definitions.stream()
+        List<QuestionType> page = definitions.stream()
                 .skip(offset).limit(boundedLimit).toList();
         List<QuestionTypeResponse> responses = page.stream()
                 .map(definition -> QuestionTypeMapper.toResponse(definition,
@@ -121,7 +120,7 @@ public class QuestionTypeService {
 
     @Transactional(readOnly = true)
     public QuestionTypeResponse getTaskType(UUID publicId) {
-        QuestionTypeDefinition definition = findByPublicId(publicId);
+        QuestionType definition = findByPublicId(publicId);
         return QuestionTypeMapper.toResponse(definition,
                 resolveDynamicContract(definition), isRuntimeLocked(definition));
     }
@@ -136,7 +135,7 @@ public class QuestionTypeService {
     /** Public module-facade lookup used by template and snapshot validation. */
     @Transactional(readOnly = true)
     public TaskRuntimeContractDescriptor resolveRuntimeContract(String taskTypeKey) {
-        QuestionTypeDefinition definition = repository.findByTaskTypeKeyAndDeletedFalse(
+        QuestionType definition = repository.findByTaskTypeKeyAndDeletedFalse(
                         TaskTypeCodeCompatibility.normalizeTaskTypeKey(taskTypeKey))
                 .orElseThrow(QuestionTypeNotFoundException::new);
         TaskRuntimeContractDescriptor contract = resolveDynamicContract(definition);
@@ -181,7 +180,7 @@ public class QuestionTypeService {
         }
         PteSection section = parseSection(request.section());
         TaskRuntimeContractDescriptor contract = resolveContract(request.screenKey(), request.contractVersion());
-        QuestionTypeDefinition definition = new QuestionTypeDefinition();
+        QuestionType definition = new QuestionType();
         definition.setCode(taskTypeKey);
         definition.setTaskTypeKey(taskTypeKey);
         definition.setDisplayName(TaskTypeKeyNormalizer.normalizeDisplayLabel(request.displayName()));
@@ -220,7 +219,7 @@ public class QuestionTypeService {
 
     @Transactional
     public QuestionTypeResponse updateTaskType(UUID publicId, UpdateTaskTypeRequest request, CurrentUser caller) {
-        QuestionTypeDefinition definition = findByPublicId(publicId);
+        QuestionType definition = findByPublicId(publicId);
         requireDraftModification(caller, definition);
         if (caller != null && !caller.hasRole(SecurityRoles.PLATFORM_ADMIN)
                 && "ACTIVE".equals(definition.getLifecycleStatus())) {
@@ -280,7 +279,7 @@ public class QuestionTypeService {
 
     @Transactional
     public QuestionTypeResponse submitTaskType(UUID publicId, CurrentUser caller) {
-        QuestionTypeDefinition definition = findByPublicId(publicId);
+        QuestionType definition = findByPublicId(publicId);
         requireDraftModification(caller, definition);
         if (!"DRAFT".equals(definition.getLifecycleStatus())) {
             throw new org.springframework.security.access.AccessDeniedException(
@@ -288,7 +287,7 @@ public class QuestionTypeService {
         }
         definition.setActive(false);
         definition.setLifecycleStatus("PENDING_APPROVAL");
-        QuestionTypeDefinition saved = repository.save(definition);
+        QuestionType saved = repository.save(definition);
         audit(caller, ItembankConstants.TASK_TYPE_SUBMITTED, publicId,
                 "Submitted task type for academic approval");
         return QuestionTypeMapper.toResponse(saved, resolveDynamicContract(saved), isRuntimeLocked(saved));
@@ -296,7 +295,7 @@ public class QuestionTypeService {
 
     @Transactional
     public QuestionTypeResponse approveTaskType(UUID publicId, CurrentUser caller) {
-        QuestionTypeDefinition definition = findByPublicId(publicId);
+        QuestionType definition = findByPublicId(publicId);
         requireGovernance(caller, definition.getAuthorUserPublicId());
         if (!"PENDING_APPROVAL".equals(definition.getLifecycleStatus())) {
             throw new org.springframework.security.access.AccessDeniedException(
@@ -304,7 +303,7 @@ public class QuestionTypeService {
         }
         definition.setActive(true);
         definition.setLifecycleStatus("ACTIVE");
-        QuestionTypeDefinition saved = repository.save(definition);
+        QuestionType saved = repository.save(definition);
         audit(caller, ItembankConstants.TASK_TYPE_APPROVED, publicId,
                 "Approved and activated task type");
         audit(caller, ItembankConstants.TASK_TYPE_PUBLISHED, publicId,
@@ -319,7 +318,7 @@ public class QuestionTypeService {
 
     @Transactional
     public void retireTaskType(UUID publicId, CurrentUser caller) {
-        QuestionTypeDefinition definition = findByPublicId(publicId);
+        QuestionType definition = findByPublicId(publicId);
         requireGovernance(caller, definition.getAuthorUserPublicId());
         definition.setActive(false);
         definition.setLifecycleStatus("RETIRED");
@@ -362,14 +361,14 @@ public class QuestionTypeService {
         PteTaskType taskType = TaskTypeCodeCompatibility.parse(code);
         validateSection(taskType, request.section());
 
-        QuestionTypeDefinition definition = repository.findByCode(code)
+        QuestionType definition = repository.findByCode(code)
                 .map(existing -> {
                     if (!existing.isDeleted()) {
                         throw new QuestionTypeCodeAlreadyUsedException();
                     }
                     return existing;
                 })
-                .orElseGet(QuestionTypeDefinition::new);
+                .orElseGet(QuestionType::new);
 
         definition.setDeleted(false);
         definition.setCode(code);
@@ -403,7 +402,7 @@ public class QuestionTypeService {
 
     @Transactional
     public QuestionTypeResponse update(UUID publicId, UpdateQuestionTypeRequest request, CurrentUser caller) {
-        QuestionTypeDefinition definition = findByPublicId(publicId);
+        QuestionType definition = findByPublicId(publicId);
         requireDraftModification(caller, definition);
         if (caller != null && !caller.hasRole(SecurityRoles.PLATFORM_ADMIN)
                 && "ACTIVE".equals(definition.getLifecycleStatus())) {
@@ -432,7 +431,7 @@ public class QuestionTypeService {
 
     @Transactional
     public void delete(UUID publicId, CurrentUser caller) {
-        QuestionTypeDefinition definition = findByPublicId(publicId);
+        QuestionType definition = findByPublicId(publicId);
         requireGovernance(caller, definition.getAuthorUserPublicId());
         definition.setActive(false);
         definition.setDeleted(true);
@@ -442,7 +441,7 @@ public class QuestionTypeService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<QuestionTypeDefinition> findDefinitionByCode(String code) {
+    public Optional<QuestionType> findDefinitionByCode(String code) {
         // A deleted catalog row must remain readable by validation/delivery so
         // existing questions keep their authored behavior and stable code.
         return repository.findByCode(TaskTypeCodeCompatibility.normalizeForLookup(code));
@@ -451,10 +450,10 @@ public class QuestionTypeService {
     @Transactional(readOnly = true)
     public boolean isActive(String code) {
         return repository.findByCodeAndDeletedFalse(TaskTypeCodeCompatibility.normalizeForLookup(code))
-                .map(QuestionTypeDefinition::isActive).orElse(false);
+                .map(QuestionType::isActive).orElse(false);
     }
 
-    private QuestionTypeDefinition findByPublicId(UUID publicId) {
+    private QuestionType findByPublicId(UUID publicId) {
         return repository.findByPublicIdAndDeletedFalse(publicId)
                 .orElseThrow(QuestionTypeNotFoundException::new);
     }
@@ -468,7 +467,7 @@ public class QuestionTypeService {
         }
     }
 
-    private void requireDraftModification(CurrentUser caller, QuestionTypeDefinition definition) {
+    private void requireDraftModification(CurrentUser caller, QuestionType definition) {
         if (caller != null && !SecurityPolicy.canModifyAcademicDraft(caller, definition.getAuthorUserPublicId())) {
             deny(caller, definition.getPublicId(), ItembankConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
         }
@@ -512,7 +511,7 @@ public class QuestionTypeService {
         }
     }
 
-    private void applyCanonicalRequirements(QuestionTypeDefinition definition, PteTaskType taskType) {
+    private void applyCanonicalRequirements(QuestionType definition, PteTaskType taskType) {
         definition.setRequiresAudioPrompt(taskType.requiresAudioPrompt());
         definition.setRequiresImagePrompt(taskType.requiresImagePrompt());
         definition.setRequiresPromptText(taskType.requiresPromptText());
@@ -533,11 +532,11 @@ public class QuestionTypeService {
     public Optional<String> findSectionByTaskTypeKey(String taskTypeKey) {
         String normalizedKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(taskTypeKey);
         return repository.findByTaskTypeKeyAndDeletedFalse(normalizedKey)
-                .map(QuestionTypeDefinition::getSection)
+                .map(QuestionType::getSection)
                 .map(Enum::name);
     }
 
-    private Map<String, TaskRuntimeProfileDescriptor> resolveProfiles(List<QuestionTypeDefinition> definitions) {
+    private Map<String, TaskRuntimeProfileDescriptor> resolveProfiles(List<QuestionType> definitions) {
         if (definitions.isEmpty()) {
             return Map.of();
         }
@@ -548,7 +547,7 @@ public class QuestionTypeService {
             return fallback;
         }
         return runtimeProfileService.resolveActiveByTaskTypeCodes(
-                definitions.stream().map(QuestionTypeDefinition::getCode).toList());
+                definitions.stream().map(QuestionType::getCode).toList());
     }
 
     private TaskRuntimeProfileDescriptor resolveProfile(String code) {
@@ -557,7 +556,7 @@ public class QuestionTypeService {
                 : runtimeProfileService.resolveActive(code);
     }
 
-    private TaskRuntimeContractDescriptor resolveDynamicContract(QuestionTypeDefinition definition) {
+    private TaskRuntimeContractDescriptor resolveDynamicContract(QuestionType definition) {
         if (definition.getScreenKey() != null && definition.getRuntimeProfileVersion() != null
                 && runtimeContractService != null) {
             try {
@@ -583,7 +582,7 @@ public class QuestionTypeService {
         }
     }
 
-    private void applyRuntimeContract(QuestionTypeDefinition definition,
+    private void applyRuntimeContract(QuestionType definition,
             TaskRuntimeContractDescriptor contract) {
         definition.setScreenKey(contract.screenKey());
         definition.setRuntimeProfileKey(contract.profileKey());
@@ -610,11 +609,26 @@ public class QuestionTypeService {
         definition.setRequiresReferenceAnswer(requirements.requiresReferenceAnswer());
     }
 
-    private boolean isRuntimeLocked(QuestionTypeDefinition definition) {
-        return definition.getRuntimeLockedAt() != null
-                || (publicationUsageService != null
-                && publicationUsageService.isRuntimeLocked(definition.getTaskTypeKey() == null
-                ? definition.getCode() : definition.getTaskTypeKey()));
+    private boolean isRuntimeLocked(QuestionType definition) {
+        return definition.getRuntimeLockedAt() != null;
+    }
+
+    /**
+     * Called when a score template that uses these task types is activated: the first publication stamps the
+     * type, and from then on its runtime binding can no longer change.
+     */
+    @Transactional
+    public void recordPublishedUse(Collection<String> taskTypeKeys, Instant publishedAt) {
+        for (String rawKey : taskTypeKeys) {
+            repository.findByTaskTypeKey(TaskTypeCodeCompatibility.normalizeTaskTypeKey(rawKey)).ifPresent(type -> {
+                if (type.getFirstPublishedAt() == null) {
+                    type.setFirstPublishedAt(publishedAt);
+                }
+                if (type.getRuntimeLockedAt() == null) {
+                    type.setRuntimeLockedAt(publishedAt);
+                }
+            });
+        }
     }
 
     private void markLegacyAdapterUse() {
