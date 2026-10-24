@@ -1,8 +1,8 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.dto.response.AiEligibleAttemptView;
 import com.pte.scoring.internal.repository.ScoringAnswerRepository;
@@ -28,13 +28,13 @@ class ScoringEligibilityQueryServiceTest {
     @Mock
     private ScoringAnswerRepository answerRepository;
     @Mock
-    private ScoreTemplateService scoreTemplateService;
+    private ExamDefinitionService examDefinitionService;
 
     private ScoringEligibilityQueryService service;
 
     @BeforeEach
     void setUp() {
-        service = new ScoringEligibilityQueryService(answerRepository, new ScoringMethodResolver(scoreTemplateService));
+        service = new ScoringEligibilityQueryService(answerRepository, new ScoringMethodResolver(examDefinitionService));
     }
 
     @Test
@@ -46,7 +46,7 @@ class ScoringEligibilityQueryServiceTest {
         when(answerRepository.findBySessionPublicIdAndTenantId(session, tenant)).thenReturn(List.of(
                 answer("CUSTOM_SPEECH", aiAttempt), answer("CUSTOM_TEXT", aiAttempt),
                 answer("CUSTOM_OBJECTIVE", objectiveAttempt), answer("CUSTOM_UNSCORED", UUID.randomUUID())));
-        when(scoreTemplateService.getByPublicId(templateId)).thenReturn(new ScoreTemplateResponse(
+        when(examDefinitionService.getByPublicId(templateId)).thenReturn(new ExamDefinitionResponse(
                 templateId, "CUSTOM", 1, "Custom", "RETIRED", List.of(
                         item("CUSTOM_SPEECH", "AI_SPEECH"), item("CUSTOM_TEXT", "AI_TEXT"),
                         item("CUSTOM_OBJECTIVE", "OBJECTIVE"), item("CUSTOM_UNSCORED", "UNSCORED"))));
@@ -54,7 +54,7 @@ class ScoringEligibilityQueryServiceTest {
         List<AiEligibleAttemptView> result = service.findEligibleAttempts(session, tenant, null);
 
         assertThat(result).containsExactly(new AiEligibleAttemptView(aiAttempt, 2));
-        verify(scoreTemplateService).getByPublicId(templateId);
+        verify(examDefinitionService).getByPublicId(templateId);
     }
 
     @Test
@@ -72,8 +72,8 @@ class ScoringEligibilityQueryServiceTest {
         return answer;
     }
 
-    private ScoreTemplateItemResponse item(String taskType, String method) {
-        return new ScoreTemplateItemResponse(taskType, "SPEAKING", 0, 1, 1, 0, 0, method,
+    private ExamDefinitionItemResponse item(String taskType, String method) {
+        return new ExamDefinitionItemResponse(taskType, "SPEAKING", 0, 1, 1, 0, 0, method,
                 BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 }

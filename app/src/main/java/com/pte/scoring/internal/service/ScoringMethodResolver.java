@@ -3,8 +3,8 @@ package com.pte.scoring.internal.service;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.TaskTypeCodeCompatibility;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.exception.InvalidScoringProfileException;
@@ -31,11 +31,11 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class ScoringMethodResolver {
 
-    private final ScoreTemplateService scoreTemplateService;
+    private final ExamDefinitionService examDefinitionService;
     private final Map<UUID, Map<String, ResolvedTaskProfile>> cacheByTemplate = new ConcurrentHashMap<>();
 
-    public ScoringMethodResolver(ScoreTemplateService scoreTemplateService) {
-        this.scoreTemplateService = scoreTemplateService;
+    public ScoringMethodResolver(ExamDefinitionService examDefinitionService) {
+        this.examDefinitionService = examDefinitionService;
     }
 
     /** Empty when {@code taskType} has no row in this template (e.g. PERSONAL_INTRODUCTION) — callers treat that the same as UNSCORED: leave the answer PENDING. */
@@ -59,7 +59,7 @@ public class ScoringMethodResolver {
 
     private Map<String, ResolvedTaskProfile> loadTemplate(UUID scoreTemplatePublicId) {
         Map<String, ResolvedTaskProfile> resolved = new LinkedHashMap<>();
-        for (ScoreTemplateItemResponse item : scoreTemplateService.getByPublicId(scoreTemplatePublicId).items()) {
+        for (ExamDefinitionItemResponse item : examDefinitionService.getByPublicId(scoreTemplatePublicId).items()) {
             String taskType = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
                     item.taskTypeKey() == null ? item.taskType() : item.taskTypeKey());
             resolved.put(taskType, resolveItem(taskType, item));
@@ -67,7 +67,7 @@ public class ScoringMethodResolver {
         return Map.copyOf(resolved);
     }
 
-    private ResolvedTaskProfile resolveItem(String canonicalTaskType, ScoreTemplateItemResponse item) {
+    private ResolvedTaskProfile resolveItem(String canonicalTaskType, ExamDefinitionItemResponse item) {
         TaskRuntimeProfileDescriptor runtime = item.runtime();
         if (runtime == null) {
             // Compatibility adapter for templates created before the runtime

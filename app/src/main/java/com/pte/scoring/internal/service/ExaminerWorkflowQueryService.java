@@ -1,7 +1,7 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.scoring.domain.ExaminerAnswerDraft;
 import com.pte.scoring.domain.ExaminerAttemptAssignment;
 import com.pte.scoring.domain.ExaminerGradingEvent;
@@ -62,7 +62,7 @@ public class ExaminerWorkflowQueryService {
     private final GradingCohortRepository cohortRepository;
     private final GradingCohortMemberRepository memberRepository;
     private final ScoringAnswerRepository answerRepository;
-    private final ScoreTemplateService scoreTemplateService;
+    private final ExamDefinitionService examDefinitionService;
     private final ObjectMapper objectMapper;
 
     @Autowired
@@ -77,7 +77,7 @@ public class ExaminerWorkflowQueryService {
             GradingCohortRepository cohortRepository,
             GradingCohortMemberRepository memberRepository,
             ScoringAnswerRepository answerRepository,
-            ScoreTemplateService scoreTemplateService,
+            ExamDefinitionService examDefinitionService,
             @Autowired(required = false) ObjectMapper objectMapper) {
         this.workRepository = workRepository;
         this.draftRepository = draftRepository;
@@ -89,7 +89,7 @@ public class ExaminerWorkflowQueryService {
         this.cohortRepository = cohortRepository;
         this.memberRepository = memberRepository;
         this.answerRepository = answerRepository;
-        this.scoreTemplateService = scoreTemplateService;
+        this.examDefinitionService = examDefinitionService;
         this.objectMapper = objectMapper != null
                 ? objectMapper
                 : tools.jackson.databind.json.JsonMapper.builder().findAndAddModules().build();
@@ -106,10 +106,10 @@ public class ExaminerWorkflowQueryService {
             GradingCohortRepository cohortRepository,
             GradingCohortMemberRepository memberRepository,
             ScoringAnswerRepository answerRepository,
-            ScoreTemplateService scoreTemplateService) {
+            ExamDefinitionService examDefinitionService) {
         this(workRepository, draftRepository, eventRepository, issueRepository, assignmentRepository,
                 scoreRepository, sessionStateRepository, cohortRepository, memberRepository, answerRepository,
-                scoreTemplateService, null);
+                examDefinitionService, null);
     }
 
     public ExaminerWorkflowView buildWorkflowView(ExaminerAttemptAssignment assignment, UUID tenantId) {
@@ -287,7 +287,7 @@ public class ExaminerWorkflowQueryService {
 
         for (UUID templateId : templateIds) {
             try {
-                ScoreTemplateResponse template = scoreTemplateService.getByPublicId(templateId);
+                ExamDefinitionResponse template = examDefinitionService.getByPublicId(templateId);
                 if (template != null) {
                     templates.add(new ExaminerGuidelinesResponse.ExaminerTemplateGuidelineItem(templateId, template.items()));
                 }

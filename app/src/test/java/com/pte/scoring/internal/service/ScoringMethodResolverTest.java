@@ -2,9 +2,9 @@ package com.pte.scoring.internal.service;
 
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.exception.InvalidScoringProfileException;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,29 +35,29 @@ class ScoringMethodResolverTest {
     private static final UUID TEMPLATE_ID = UUID.randomUUID();
 
     @Mock
-    private ScoreTemplateService scoreTemplateService;
+    private ExamDefinitionService examDefinitionService;
 
     private ScoringMethodResolver resolver;
 
     @BeforeEach
     void setUp() {
-        resolver = new ScoringMethodResolver(scoreTemplateService);
+        resolver = new ScoringMethodResolver(examDefinitionService);
     }
 
-    private ScoreTemplateItemResponse item(String taskType, String scoringMethod) {
-        return new ScoreTemplateItemResponse(taskType, "SPEAKING", 0, 1, 1, 0, 0, scoringMethod,
+    private ExamDefinitionItemResponse item(String taskType, String scoringMethod) {
+        return new ExamDefinitionItemResponse(taskType, "SPEAKING", 0, 1, 1, 0, 0, scoringMethod,
                 BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 
-    private ScoreTemplateItemResponse item(String taskType, String scoringMethod,
+    private ExamDefinitionItemResponse item(String taskType, String scoringMethod,
             TaskRuntimeProfileDescriptor runtime) {
-        return new ScoreTemplateItemResponse(taskType, "SPEAKING", 0, 1, 1, 0, 0, scoringMethod,
+        return new ExamDefinitionItemResponse(taskType, "SPEAKING", 0, 1, 1, 0, 0, scoringMethod,
                 BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, runtime);
     }
 
     @Test
     void resolve_taskTypeInTemplate_returnsItsScoringMethod() {
-        when(scoreTemplateService.getByPublicId(TEMPLATE_ID)).thenReturn(new ScoreTemplateResponse(
+        when(examDefinitionService.getByPublicId(TEMPLATE_ID)).thenReturn(new ExamDefinitionResponse(
                 TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "ACTIVE",
                 List.of(item("READ_ALOUD", "AI_SPEECH"), item("MC_READING_SINGLE", "OBJECTIVE"))));
 
@@ -67,7 +67,7 @@ class ScoringMethodResolverTest {
 
     @Test
     void resolve_taskTypeNotInTemplate_returnsEmpty() {
-        when(scoreTemplateService.getByPublicId(TEMPLATE_ID)).thenReturn(new ScoreTemplateResponse(
+        when(examDefinitionService.getByPublicId(TEMPLATE_ID)).thenReturn(new ExamDefinitionResponse(
                 TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "ACTIVE", List.of(item("READ_ALOUD", "AI_SPEECH"))));
 
         assertThat(resolver.resolve(TEMPLATE_ID, "PERSONAL_INTRODUCTION")).isEqualTo(Optional.empty());
@@ -75,18 +75,18 @@ class ScoringMethodResolverTest {
 
     @Test
     void resolve_cachesByTemplateId_doesNotRefetchOnSecondCall() {
-        when(scoreTemplateService.getByPublicId(TEMPLATE_ID)).thenReturn(new ScoreTemplateResponse(
+        when(examDefinitionService.getByPublicId(TEMPLATE_ID)).thenReturn(new ExamDefinitionResponse(
                 TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "ACTIVE", List.of(item("READ_ALOUD", "AI_SPEECH"))));
 
         resolver.resolve(TEMPLATE_ID, "READ_ALOUD");
         resolver.resolve(TEMPLATE_ID, "READ_ALOUD");
 
-        verify(scoreTemplateService, times(1)).getByPublicId(TEMPLATE_ID);
+        verify(examDefinitionService, times(1)).getByPublicId(TEMPLATE_ID);
     }
 
     @Test
     void resolve_unscoredScoringMethod_returnsUnscored() {
-        when(scoreTemplateService.getByPublicId(TEMPLATE_ID)).thenReturn(new ScoreTemplateResponse(
+        when(examDefinitionService.getByPublicId(TEMPLATE_ID)).thenReturn(new ExamDefinitionResponse(
                 TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "ACTIVE", List.of(item("PERSONAL_INTRODUCTION", "UNSCORED"))));
 
         assertThat(resolver.resolve(TEMPLATE_ID, "PERSONAL_INTRODUCTION")).contains(ScoringMethod.UNSCORED);
@@ -94,7 +94,7 @@ class ScoringMethodResolverTest {
 
     @Test
     void resolve_legacyAlias_usesCanonicalLookupKey() {
-        when(scoreTemplateService.getByPublicId(TEMPLATE_ID)).thenReturn(new ScoreTemplateResponse(
+        when(examDefinitionService.getByPublicId(TEMPLATE_ID)).thenReturn(new ExamDefinitionResponse(
                 TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "ACTIVE",
                 List.of(item("FILL_BLANKS_READING_WRITING", "OBJECTIVE"))));
 
@@ -105,7 +105,7 @@ class ScoringMethodResolverTest {
     @Test
     void resolve_runtimeProfile_mustMatchAllowlistedScoringContract() {
         TaskRuntimeProfileDescriptor runtime = TaskRuntimeProfileRegistry.descriptorFor("READ_ALOUD");
-        when(scoreTemplateService.getByPublicId(TEMPLATE_ID)).thenReturn(new ScoreTemplateResponse(
+        when(examDefinitionService.getByPublicId(TEMPLATE_ID)).thenReturn(new ExamDefinitionResponse(
                 TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "ACTIVE",
                 List.of(item("READ_ALOUD", "OBJECTIVE", runtime))));
 
@@ -121,7 +121,7 @@ class ScoringMethodResolverTest {
                 active.taskTypeCode(), active.profileKey(), active.profileVersion(), active.behaviorKey(),
                 active.rendererKey(), active.answerSchemaVersion(), active.scoringProfileKey(),
                 active.scoringProfileVersion(), active.requiredClientCapabilities(), "RETIRED");
-        when(scoreTemplateService.getByPublicId(TEMPLATE_ID)).thenReturn(new ScoreTemplateResponse(
+        when(examDefinitionService.getByPublicId(TEMPLATE_ID)).thenReturn(new ExamDefinitionResponse(
                 TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "RETIRED",
                 List.of(item("READ_ALOUD", "AI_SPEECH", retired))));
 
@@ -138,7 +138,7 @@ class ScoringMethodResolverTest {
                 standard.requiredClientCapabilities(), standard.status(), standard.screenKey(),
                 standard.contractVersion(), standard.scoringMode(), standard.minSupportedAppVersion(),
                 "PTE.MC_READING_SINGLE_PLUS_AUTHORING", 1);
-        when(scoreTemplateService.getByPublicId(TEMPLATE_ID)).thenReturn(new ScoreTemplateResponse(
+        when(examDefinitionService.getByPublicId(TEMPLATE_ID)).thenReturn(new ExamDefinitionResponse(
                 TEMPLATE_ID, "CUSTOM", 1, "Custom", "ACTIVE",
                 List.of(item("MC_READING_SINGLE_PLUS", "OBJECTIVE", custom))));
 

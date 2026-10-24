@@ -1,6 +1,6 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoretemplate.ScoreTemplateService;
+import com.pte.assessment.ExamDefinitionService;
 import com.pte.scoring.domain.ExaminerAttemptAssignment;
 import com.pte.scoring.domain.ExaminerGradingEvent;
 import com.pte.scoring.domain.ExaminerGradingWork;
@@ -62,7 +62,7 @@ class ExaminerWorkflowQueryServiceTest {
     @Mock
     private ScoringAnswerRepository answerRepository;
     @Mock
-    private ScoreTemplateService scoreTemplateService;
+    private ExamDefinitionService examDefinitionService;
 
     private final ObjectMapper objectMapper = tools.jackson.databind.json.JsonMapper.builder().findAndAddModules().build();
     private ExaminerWorkflowQueryService queryService;
@@ -73,7 +73,7 @@ class ExaminerWorkflowQueryServiceTest {
                 workRepository, draftRepository, eventRepository, issueRepository,
                 assignmentRepository, scoreRepository, sessionStateRepository,
                 cohortRepository, memberRepository, answerRepository,
-                scoreTemplateService, objectMapper
+                examDefinitionService, objectMapper
         );
     }
 
