@@ -1,9 +1,8 @@
 package com.pte.billing.internal.service;
 
-import com.pte.billing.domain.TenantApplication;
 import com.pte.billing.domain.enums.TenantApplicationStatus;
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.repository.TenantApplicationRepository;
+import com.pte.billing.internal.mapper.TenantApplicationMapper;
 import com.pte.identity.IdentityService;
 import com.pte.identity.domain.HostAdminCreated;
 import com.pte.identity.domain.Role;
@@ -11,7 +10,9 @@ import com.pte.identity.domain.User;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.tenancy.TenancyService;
-import com.pte.tenancy.domain.Tenant;
+import com.pte.tenancy.domain.Organization;
+import com.pte.tenancy.domain.enums.OrganizationStatus;
+import com.pte.tenancy.internal.repository.OrganizationRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
@@ -29,6 +30,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -81,7 +83,7 @@ class TenantApplicationReviewPostgresIntegrationTest {
     }
 
     @Autowired
-    private TenantApplicationRepository applications;
+    private OrganizationRepository applications;
 
     @Autowired
     private TenantApplicationService service;
@@ -107,13 +109,12 @@ class TenantApplicationReviewPostgresIntegrationTest {
     @Test
     void tenApproveRejectRacesCommitExactlyOneTerminalDecision() throws Exception {
         when(platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY)).thenReturn(75);
-        when(tenancyService.createTenant(anyString(), anyString(), anyString(), anyString(), anyInt()))
-                .thenAnswer(invocation -> tenant(invocation.getArgument(0), invocation.getArgument(2)));
+        delegateApplicationReviewToRepository();
         when(identityService.createHostAdmin(any(), anyString()))
                 .thenAnswer(invocation -> new HostAdminCreated(hostAdmin(invocation.getArgument(1)), "one-time"));
 
         for (int i = 0; i < 10; i++) {
-            TenantApplication application = pending("race-" + i);
+            Organization application = pending("race-" + i);
             clearInvocations(tenancyService, identityService, eventPublisher);
             CurrentUser approver = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
             CurrentUser rejector = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
@@ -126,14 +127,14 @@ class TenantApplicationReviewPostgresIntegrationTest {
 
             assertThat(outcomes.stream().filter(value -> value == null).count()).isEqualTo(1);
             assertThat(outcomes.stream().filter(value -> value != null).count()).isEqualTo(1);
-            TenantApplication persisted = tx(() -> applications.findByPublicId(application.getPublicId()).orElseThrow());
-            assertThat(persisted.getStatus()).isIn(TenantApplicationStatus.APPROVED,
+            Organization persisted = tx(() -> applications.findByPublicId(application.getPublicId()).orElseThrow());
+            assertThat(TenantApplicationMapper.statusOf(persisted)).isIn(TenantApplicationStatus.APPROVED,
                     TenantApplicationStatus.REJECTED);
-            if (persisted.getStatus() == TenantApplicationStatus.APPROVED) {
-                verify(tenancyService, times(1)).createTenant(anyString(), anyString(), anyString(), anyString(), anyInt());
+            if (TenantApplicationMapper.statusOf(persisted) == TenantApplicationStatus.APPROVED) {
+                verify(tenancyService, times(1)).approveApplication(any(Organization.class), any(), anyInt());
                 verify(identityService, times(1)).createHostAdmin(any(), anyString());
             } else {
-                verify(tenancyService, never()).createTenant(anyString(), anyString(), anyString(), anyString(), anyInt());
+                verify(tenancyService, never()).approveApplication(any(Organization.class), any(), anyInt());
                 verify(identityService, never()).createHostAdmin(any(), anyString());
             }
         }
@@ -141,10 +142,9 @@ class TenantApplicationReviewPostgresIntegrationTest {
 
     @Test
     void approvalFailureLeavesPendingApplication() {
-        TenantApplication application = pending("failure");
+        Organization application = pending("failure");
         when(platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY)).thenReturn(75);
-        when(tenancyService.createTenant(anyString(), anyString(), anyString(), anyString(), anyInt()))
-                .thenReturn(tenant(application.getOrgName(), application.getRequestedCode()));
+        delegateApplicationReviewToRepository();
         when(identityService.createHostAdmin(any(), anyString()))
                 .thenThrow(new IllegalStateException("identity unavailable"));
 
@@ -153,20 +153,20 @@ class TenantApplicationReviewPostgresIntegrationTest {
                 .isInstanceOf(IllegalStateException.class);
 
         assertThat(tx(() -> applications.findByPublicId(application.getPublicId()).orElseThrow().getStatus()))
-                .isEqualTo(TenantApplicationStatus.PENDING);
+                .isEqualTo(OrganizationStatus.PENDING);
     }
 
     @Test
     void pendingRequestedCodeIsUniqueUntilTheApplicationReachesATerminalState() {
         String code = "partial-" + UUID.randomUUID().toString().substring(0, 8);
-        TenantApplication first = pendingWithCode(code);
+        Organization first = pendingWithCode(code);
 
         assertThatThrownBy(() -> tx(() -> applications.saveAndFlush(application(code))))
                 .isInstanceOf(DataIntegrityViolationException.class);
 
         tx(() -> {
-            TenantApplication persisted = applications.findByPublicId(first.getPublicId()).orElseThrow();
-            persisted.setStatus(TenantApplicationStatus.REJECTED);
+            Organization persisted = applications.findByPublicId(first.getPublicId()).orElseThrow();
+            persisted.setStatus(OrganizationStatus.REJECTED);
             applications.saveAndFlush(persisted);
             return null;
         });
@@ -175,31 +175,40 @@ class TenantApplicationReviewPostgresIntegrationTest {
                 .doesNotThrowAnyException();
     }
 
-    private TenantApplication pending(String suffix) {
+    private Organization pending(String suffix) {
         String unique = suffix + "-" + UUID.randomUUID().toString().substring(0, 8);
         return pendingWithCode("review-" + unique);
     }
 
-    private TenantApplication pendingWithCode(String code) {
+    private Organization pendingWithCode(String code) {
         return tx(() -> applications.saveAndFlush(application(code)));
     }
 
-    private TenantApplication application(String code) {
-        TenantApplication application = new TenantApplication();
-        application.setOrgName("Review fixture " + code);
-        application.setOrgType("SCHOOL");
-        application.setRequestedCode(code);
+    private Organization application(String code) {
+        Organization application = new Organization();
+        application.setName("Review fixture " + code);
+        application.setOrganizationType("SCHOOL");
+        application.setCode(code);
         application.setContactEmail("review-" + code + "@example.test");
         application.setTaxCode("TAX-" + code);
         return application;
     }
 
-    private Tenant tenant(String name, String code) {
-        Tenant tenant = new Tenant();
-        tenant.setPublicId(UUID.randomUUID());
-        tenant.setName(name);
-        tenant.setCode(code);
-        return tenant;
+    /** The mocked tenancy module still reads and decides the real application rows, as the production one does. */
+    private void delegateApplicationReviewToRepository() {
+        when(tenancyService.findApplicationForUpdate(any()))
+                .thenAnswer(invocation -> applications.findApplicationForUpdate(invocation.getArgument(0)));
+        when(tenancyService.approveApplication(any(Organization.class), any(), anyInt())).thenAnswer(invocation -> {
+            Organization application = invocation.getArgument(0);
+            application.setStudentLimit(invocation.getArgument(2));
+            application.approve(invocation.getArgument(1), Instant.now());
+            return applications.saveAndFlush(application);
+        });
+        when(tenancyService.rejectApplication(any(Organization.class), any(), any())).thenAnswer(invocation -> {
+            Organization application = invocation.getArgument(0);
+            application.reject(invocation.getArgument(1), Instant.now(), invocation.getArgument(2));
+            return applications.saveAndFlush(application);
+        });
     }
 
     private User hostAdmin(String username) {
