@@ -1,8 +1,8 @@
 package com.pte.assessment.internal.service;
 
 import com.pte.assessment.domain.ExamBlueprint;
-import com.pte.assessment.domain.ExamSnapshot;
-import com.pte.assessment.domain.SnapshotItem;
+import com.pte.assessment.domain.ExamVersion;
+import com.pte.assessment.domain.ExamVersionItem;
 import com.pte.assessment.domain.enums.BlueprintStatus;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.dto.response.SnapshotResponse;
@@ -12,7 +12,7 @@ import com.pte.assessment.internal.exception.EmptyBlueprintException;
 import com.pte.assessment.internal.exception.SnapshotRuntimeContractException;
 import com.pte.assessment.internal.mapper.SnapshotMapper;
 import com.pte.assessment.internal.repository.ExamBlueprintRepository;
-import com.pte.assessment.internal.repository.ExamSnapshotRepository;
+import com.pte.assessment.internal.repository.ExamVersionRepository;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.TaskRuntimeContractConstants;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
@@ -23,9 +23,9 @@ import com.pte.itembank.TaskTypeObservability;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.dto.response.QuestionFreezeView;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,19 +52,19 @@ import java.util.UUID;
 public class SnapshotPublishService {
 
     private final ExamBlueprintRepository blueprintRepository;
-    private final ExamSnapshotRepository snapshotRepository;
+    private final ExamVersionRepository snapshotRepository;
     private final ItembankService itembankService;
     private final AssessmentAccessPolicy accessPolicy;
     private final JsonMapper jsonMapper;
-    private final ScoreTemplateService scoreTemplateService;
+    private final ExamDefinitionService examDefinitionService;
     private final TaskRuntimeProfileService runtimeProfileService;
     private final AuditLogService auditLogService;
     private final TaskTypeObservability observability;
 
     @Autowired
-    public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, ExamSnapshotRepository snapshotRepository,
+    public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, ExamVersionRepository snapshotRepository,
                                   ItembankService itembankService, AssessmentAccessPolicy accessPolicy,
-                                  JsonMapper jsonMapper, ScoreTemplateService scoreTemplateService,
+                                  JsonMapper jsonMapper, ExamDefinitionService examDefinitionService,
                                   TaskRuntimeProfileService runtimeProfileService,
                                   AuditLogService auditLogService,
                                   TaskTypeObservability observability) {
@@ -73,27 +73,27 @@ public class SnapshotPublishService {
         this.itembankService = itembankService;
         this.accessPolicy = accessPolicy;
         this.jsonMapper = jsonMapper;
-        this.scoreTemplateService = scoreTemplateService;
+        this.examDefinitionService = examDefinitionService;
         this.runtimeProfileService = runtimeProfileService;
         this.auditLogService = auditLogService;
         this.observability = observability;
     }
 
     /** Compatibility constructor for focused tests predating runtime provenance. */
-    public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, ExamSnapshotRepository snapshotRepository,
+    public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, ExamVersionRepository snapshotRepository,
                                   ItembankService itembankService, AssessmentAccessPolicy accessPolicy,
-                                  JsonMapper jsonMapper, ScoreTemplateService scoreTemplateService) {
+                                  JsonMapper jsonMapper, ExamDefinitionService examDefinitionService) {
         this(blueprintRepository, snapshotRepository, itembankService, accessPolicy, jsonMapper,
-                scoreTemplateService, null, null, null);
+                examDefinitionService, null, null, null);
     }
 
     /** Compatibility constructor for tests that provide the runtime service but not audit infrastructure. */
-    public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, ExamSnapshotRepository snapshotRepository,
+    public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, ExamVersionRepository snapshotRepository,
                                   ItembankService itembankService, AssessmentAccessPolicy accessPolicy,
-                                  JsonMapper jsonMapper, ScoreTemplateService scoreTemplateService,
+                                  JsonMapper jsonMapper, ExamDefinitionService examDefinitionService,
                                   TaskRuntimeProfileService runtimeProfileService) {
         this(blueprintRepository, snapshotRepository, itembankService, accessPolicy, jsonMapper,
-                scoreTemplateService, runtimeProfileService, null, null);
+                examDefinitionService, runtimeProfileService, null, null);
     }
 
     @Transactional
@@ -104,7 +104,7 @@ public class SnapshotPublishService {
     /** Publishes with an explicit template/provenance for the orchestration flow. */
     @Transactional
     public SnapshotResponse publish(UUID blueprintPublicId, CurrentUser caller,
-            ScoreTemplateResponse requestedTemplate, Long generationSeed,
+            ExamDefinitionResponse requestedTemplate, Long generationSeed,
             String generationAlgorithmVersion, String poolPolicyFingerprint) {
         ExamBlueprint blueprint = blueprintRepository.findWithItemsByPublicId(blueprintPublicId)
                 .orElseThrow(BlueprintNotFoundException::new);
@@ -118,21 +118,21 @@ public class SnapshotPublishService {
         // template (NoActiveScoreTemplateException, not caught here — it must
         // surface as a loud configuration error) leaves the blueprint DRAFT and
         // saves no snapshot (spec FR-13's immutable pin starts from a real value).
-        ScoreTemplateResponse activeTemplate = requestedTemplate != null
-                ? requestedTemplate : scoreTemplateService.getActive();
+        ExamDefinitionResponse activeTemplate = requestedTemplate != null
+                ? requestedTemplate : examDefinitionService.getActive();
 
         int version = (int) snapshotRepository.countBySourceBlueprintPublicId(blueprintPublicId) + 1;
-        ExamSnapshot snapshot = new ExamSnapshot();
+        ExamVersion snapshot = new ExamVersion();
         snapshot.setName(blueprint.getName());
         snapshot.setVersion(version);
         snapshot.setSourceBlueprintPublicId(blueprintPublicId);
-        snapshot.setScoreTemplatePublicId(activeTemplate.publicId());
-        snapshot.setScoreTemplateVersion(activeTemplate.version());
+        snapshot.setExamDefinitionPublicId(activeTemplate.publicId());
+        snapshot.setExamDefinitionVersion(activeTemplate.version());
         snapshot.setGenerationSeed(generationSeed);
         snapshot.setGenerationAlgorithmVersion(generationAlgorithmVersion);
         snapshot.setPoolPolicyFingerprint(poolPolicyFingerprint);
         snapshot.setTenantId(blueprint.getTenantId());
-        java.util.Map<String, ScoreTemplateItemResponse> templateItemsByTaskType = activeTemplate.items().stream()
+        java.util.Map<String, ExamDefinitionItemResponse> templateItemsByTaskType = activeTemplate.items().stream()
                 .collect(java.util.stream.Collectors.toMap(item -> TaskTypeCodeCompatibility
                                 .normalizeTaskTypeKey(item.taskTypeKey() == null ? item.taskType() : item.taskTypeKey()),
                         java.util.function.Function.identity(), (first, ignored) -> first));
@@ -158,7 +158,7 @@ public class SnapshotPublishService {
             throw ex;
         }
 
-        ExamSnapshot saved = snapshotRepository.save(snapshot);
+        ExamVersion saved = snapshotRepository.save(snapshot);
         blueprint.setStatus(BlueprintStatus.PUBLISHED);
         blueprintRepository.save(blueprint);
         return SnapshotMapper.toResponse(saved);
@@ -171,7 +171,7 @@ public class SnapshotPublishService {
      */
     @Transactional(readOnly = true)
     public SnapshotContentResponse getContent(UUID publicId) {
-        ExamSnapshot snapshot = snapshotRepository.findWithItemsByPublicId(publicId)
+        ExamVersion snapshot = snapshotRepository.findWithItemsByPublicId(publicId)
                 .orElseThrow(BlueprintNotFoundException::new);
         return SnapshotMapper.toContentResponse(snapshot);
     }
@@ -185,14 +185,14 @@ public class SnapshotPublishService {
      */
     @Transactional(readOnly = true)
     public SnapshotResponse getSummary(UUID publicId) {
-        ExamSnapshot snapshot = snapshotRepository.findWithItemsByPublicId(publicId)
+        ExamVersion snapshot = snapshotRepository.findWithItemsByPublicId(publicId)
                 .orElseThrow(BlueprintNotFoundException::new);
         return SnapshotMapper.toResponse(snapshot);
     }
 
     @Transactional(readOnly = true)
     public SnapshotResponse get(UUID publicId, CurrentUser caller) {
-        ExamSnapshot snapshot = snapshotRepository.findWithItemsByPublicId(publicId)
+        ExamVersion snapshot = snapshotRepository.findWithItemsByPublicId(publicId)
                 .orElseThrow(BlueprintNotFoundException::new);
         if (!accessPolicy.canRead(snapshot.getTenantId(), snapshot.getTenantId() == null, caller)) {
             throw new BlueprintNotFoundException();
@@ -200,9 +200,9 @@ public class SnapshotPublishService {
         return SnapshotMapper.toResponse(snapshot);
     }
 
-    private SnapshotItem toSnapshotItem(QuestionFreezeView question, PteSection section, int orderIndex,
-            java.util.Map<String, ScoreTemplateItemResponse> templateItemsByTaskType) {
-        SnapshotItem item = new SnapshotItem();
+    private ExamVersionItem toSnapshotItem(QuestionFreezeView question, PteSection section, int orderIndex,
+            java.util.Map<String, ExamDefinitionItemResponse> templateItemsByTaskType) {
+        ExamVersionItem item = new ExamVersionItem();
         item.setSourceQuestionPublicId(question.sourceQuestionPublicId());
         item.setPteTaskType(question.pteTaskType());
         String taskTypeKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
@@ -230,8 +230,8 @@ public class SnapshotPublishService {
     }
 
     private TaskRuntimeProfileDescriptor resolveRuntimeProfile(String taskTypeKey, PteTaskType legacyTaskType,
-            java.util.Map<String, ScoreTemplateItemResponse> templateItemsByTaskType) {
-        ScoreTemplateItemResponse templateItem = templateItemsByTaskType.get(taskTypeKey);
+            java.util.Map<String, ExamDefinitionItemResponse> templateItemsByTaskType) {
+        ExamDefinitionItemResponse templateItem = templateItemsByTaskType.get(taskTypeKey);
         TaskRuntimeProfileDescriptor runtime = templateItem == null && legacyTaskType != null && !legacyTaskType.isScored()
                 ? TaskRuntimeProfileRegistry.descriptorFor(legacyTaskType.name())
                 : templateItem == null && runtimeProfileService == null
@@ -262,7 +262,7 @@ public class SnapshotPublishService {
     }
 
     private void validateRuntimeProfiles(List<QuestionFreezeView> frozenQuestions,
-            java.util.Map<String, ScoreTemplateItemResponse> templateItemsByTaskType) {
+            java.util.Map<String, ExamDefinitionItemResponse> templateItemsByTaskType) {
         if (runtimeProfileService == null) {
             return;
         }

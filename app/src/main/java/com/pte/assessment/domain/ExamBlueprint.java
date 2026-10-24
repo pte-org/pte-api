@@ -2,14 +2,15 @@ package com.pte.assessment.domain;
 
 import com.pte.assessment.domain.enums.BlueprintStatus;
 import com.pte.shared.domain.BaseEntity;
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
@@ -23,7 +24,7 @@ import java.util.UUID;
 
 /**
  * A generated exam composition: an ordered set of approved SHARED questions
- * from {@code itembank}. Publishing freezes it into an immutable {@link ExamSnapshot}.
+ * from {@code itembank}. Publishing freezes it into an immutable {@link ExamVersion}.
  */
 @Entity
 @Table(name = "exam_blueprints", indexes = {
@@ -55,12 +56,12 @@ public class ExamBlueprint extends BaseEntity {
     @Column(nullable = false)
     private long version;
 
-    @OneToMany(mappedBy = "blueprint", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "blueprint_items", joinColumns = @JoinColumn(name = "blueprint_id"))
     @OrderBy("orderIndex ASC")
     private List<BlueprintItem> items = new ArrayList<>();
 
     public void addItem(BlueprintItem item) {
-        item.setBlueprint(this);
         items.add(item);
     }
 }

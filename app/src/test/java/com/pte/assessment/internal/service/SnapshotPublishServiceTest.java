@@ -2,22 +2,22 @@ package com.pte.assessment.internal.service;
 
 import com.pte.assessment.domain.BlueprintItem;
 import com.pte.assessment.domain.ExamBlueprint;
-import com.pte.assessment.domain.ExamSnapshot;
+import com.pte.assessment.domain.ExamVersion;
 import com.pte.assessment.domain.enums.BlueprintStatus;
 import com.pte.assessment.dto.response.SnapshotResponse;
 import com.pte.assessment.internal.exception.BlueprintNotFoundException;
 import com.pte.assessment.internal.exception.EmptyBlueprintException;
 import com.pte.assessment.internal.repository.ExamBlueprintRepository;
-import com.pte.assessment.internal.repository.ExamSnapshotRepository;
+import com.pte.assessment.internal.repository.ExamVersionRepository;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.dto.response.QuestionFreezeView;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
-import com.pte.scoretemplate.internal.exception.NoActiveScoreTemplateException;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
+import com.pte.assessment.internal.exception.NoActiveExamDefinitionException;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,11 +52,11 @@ class SnapshotPublishServiceTest {
     @Mock
     private ExamBlueprintRepository blueprintRepository;
     @Mock
-    private ExamSnapshotRepository snapshotRepository;
+    private ExamVersionRepository snapshotRepository;
     @Mock
     private ItembankService itembankService;
     @Mock
-    private ScoreTemplateService scoreTemplateService;
+    private ExamDefinitionService examDefinitionService;
 
     private static final UUID ACTIVE_TEMPLATE_ID = UUID.randomUUID();
 
@@ -66,17 +66,17 @@ class SnapshotPublishServiceTest {
     @BeforeEach
     void setUp() {
         service = new SnapshotPublishService(blueprintRepository, snapshotRepository, itembankService,
-                new AssessmentAccessPolicy(), JsonMapper.builder().build(), scoreTemplateService);
+                new AssessmentAccessPolicy(), JsonMapper.builder().build(), examDefinitionService);
         caller = new CurrentUser(UUID.randomUUID(), TENANT_ID, List.of("HOST_ADMIN"));
     }
 
     /** Stubs the ACTIVE template every {@code publish} test needs, unless a test overrides it (e.g. no-active-template). */
     private void stubActiveTemplate() {
-        when(scoreTemplateService.getActive()).thenReturn(activeTemplateResponse());
+        when(examDefinitionService.getActive()).thenReturn(activeTemplateResponse());
     }
 
-    private ScoreTemplateResponse activeTemplateResponse() {
-        return new ScoreTemplateResponse(ACTIVE_TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "ACTIVE", List.of());
+    private ExamDefinitionResponse activeTemplateResponse() {
+        return new ExamDefinitionResponse(ACTIVE_TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "ACTIVE", List.of());
     }
 
     private ExamBlueprint blueprintWithOneItem(UUID questionPublicId) {
@@ -133,8 +133,8 @@ class SnapshotPublishServiceTest {
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).title()).isEqualTo("title");
         assertThat(blueprint.getStatus()).isEqualTo(BlueprintStatus.PUBLISHED);
-        assertThat(response.scoreTemplatePublicId()).isEqualTo(ACTIVE_TEMPLATE_ID);
-        assertThat(response.scoreTemplateVersion()).isEqualTo(1);
+        assertThat(response.examDefinitionPublicId()).isEqualTo(ACTIVE_TEMPLATE_ID);
+        assertThat(response.examDefinitionVersion()).isEqualTo(1);
     }
 
     @Test
@@ -161,12 +161,12 @@ class SnapshotPublishServiceTest {
         when(blueprintRepository.findWithItemsByPublicId(blueprintId)).thenReturn(Optional.of(blueprint));
         when(itembankService.freeze(questionId)).thenReturn(frozenQuestion(questionId));
         when(snapshotRepository.countBySourceBlueprintPublicId(blueprintId)).thenReturn(0L);
-        var captor = org.mockito.ArgumentCaptor.forClass(ExamSnapshot.class);
+        var captor = org.mockito.ArgumentCaptor.forClass(ExamVersion.class);
         when(snapshotRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
-        ScoreTemplateItemResponse templateItem = new ScoreTemplateItemResponse(
+        ExamDefinitionItemResponse templateItem = new ExamDefinitionItemResponse(
                 "MC_READING_SINGLE", "READING", 1, 2, 3, 0, 60, "OBJECTIVE", null, null, null, null, null,
                 TaskRuntimeProfileRegistry.descriptorFor("MC_READING_SINGLE"));
-        when(scoreTemplateService.getActive()).thenReturn(new ScoreTemplateResponse(
+        when(examDefinitionService.getActive()).thenReturn(new ExamDefinitionResponse(
                 ACTIVE_TEMPLATE_ID, "PTE", 1, "PTE", "ACTIVE", List.of(templateItem)));
 
         service.publish(blueprintId, caller);
@@ -184,9 +184,9 @@ class SnapshotPublishServiceTest {
         UUID questionId = UUID.randomUUID();
         ExamBlueprint blueprint = blueprintWithOneItem(questionId);
         when(blueprintRepository.findWithItemsByPublicId(blueprintId)).thenReturn(Optional.of(blueprint));
-        when(scoreTemplateService.getActive()).thenThrow(new NoActiveScoreTemplateException());
+        when(examDefinitionService.getActive()).thenThrow(new NoActiveExamDefinitionException());
 
-        assertThatThrownBy(() -> service.publish(blueprintId, caller)).isInstanceOf(NoActiveScoreTemplateException.class);
+        assertThatThrownBy(() -> service.publish(blueprintId, caller)).isInstanceOf(NoActiveExamDefinitionException.class);
 
         verify(snapshotRepository, never()).save(any());
         assertThat(blueprint.getStatus()).isNotEqualTo(BlueprintStatus.PUBLISHED);
@@ -202,7 +202,7 @@ class SnapshotPublishServiceTest {
                 questionId, PteTaskType.FILL_IN_THE_BLANKS_DRAG_AND_DROP, "title", "prompt", null, null, null, null, null, null,
                 List.of(new QuestionFreezeView.Option("word", true, 0, null, 3))));
         when(snapshotRepository.countBySourceBlueprintPublicId(blueprintId)).thenReturn(0L);
-        var captor = org.mockito.ArgumentCaptor.forClass(ExamSnapshot.class);
+        var captor = org.mockito.ArgumentCaptor.forClass(ExamVersion.class);
         when(snapshotRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
         stubActiveTemplate();
 
@@ -223,7 +223,7 @@ class SnapshotPublishServiceTest {
     @Test
     void getContent_returnsFullFidelityIncludingAnswerKey() {
         UUID publicId = UUID.randomUUID();
-        ExamSnapshot snapshot = new ExamSnapshot();
+        ExamVersion snapshot = new ExamVersion();
         snapshot.setName("Mock Test A");
         snapshot.setVersion(1);
         snapshot.setSourceBlueprintPublicId(UUID.randomUUID());

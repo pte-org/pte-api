@@ -7,8 +7,8 @@ import com.pte.assessment.internal.constant.AssessmentConstants;
 import com.pte.assessment.internal.service.ExamGenerationService;
 import com.pte.assessment.internal.service.SnapshotPromptQueryService;
 import com.pte.assessment.internal.service.SnapshotPublishService;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -37,22 +37,22 @@ public class AssessmentService {
 
     private final SnapshotPublishService snapshotPublishService;
     private final ExamGenerationService examGenerationService;
-    private final ScoreTemplateService scoreTemplateService;
+    private final ExamDefinitionService examDefinitionService;
     private final SnapshotPromptQueryService snapshotPromptQueryService;
 
     @Autowired
     public AssessmentService(SnapshotPublishService snapshotPublishService, ExamGenerationService examGenerationService,
-            ScoreTemplateService scoreTemplateService, SnapshotPromptQueryService snapshotPromptQueryService) {
+            ExamDefinitionService examDefinitionService, SnapshotPromptQueryService snapshotPromptQueryService) {
         this.snapshotPublishService = snapshotPublishService;
         this.examGenerationService = examGenerationService;
-        this.scoreTemplateService = scoreTemplateService;
+        this.examDefinitionService = examDefinitionService;
         this.snapshotPromptQueryService = snapshotPromptQueryService;
     }
 
     /** Compatibility constructor for callers/tests that do not use Examiner prompt retrieval. */
     public AssessmentService(SnapshotPublishService snapshotPublishService, ExamGenerationService examGenerationService,
-            ScoreTemplateService scoreTemplateService) {
-        this(snapshotPublishService, examGenerationService, scoreTemplateService, null);
+            ExamDefinitionService examDefinitionService) {
+        this(snapshotPublishService, examGenerationService, examDefinitionService, null);
     }
 
     /** Compatibility constructor for focused assessment unit tests. */
@@ -102,17 +102,17 @@ public class AssessmentService {
 
     /** Answer-free feasibility for the exact sections that deterministic generation will include. */
     @Transactional(readOnly = true)
-    public ScoreTemplateFeasibilityResponse getTemplateFeasibility(UUID templatePublicId,
+    public ExamDefinitionFeasibilityResponse getTemplateFeasibility(UUID templatePublicId,
             Set<String> selectedSkills) {
         return examGenerationService.getTemplateFeasibility(templatePublicId, selectedSkills);
     }
 
     /** Safe, answer-free readiness report used by authoring/admin screens. */
     @Transactional(readOnly = true)
-    public ScoreTemplateFeasibilityResponse getTemplateFeasibility(UUID templatePublicId) {
-        if (scoreTemplateService == null) {
-            throw new IllegalStateException(AssessmentConstants.TEMPLATE_FEASIBILITY_DEPENDENCIES_NOT_CONFIGURED);
+    public ExamDefinitionFeasibilityResponse getTemplateFeasibility(UUID templatePublicId) {
+        if (examDefinitionService == null) {
+            throw new IllegalStateException(com.pte.assessment.internal.constant.ExamDefinitionConstants.TEMPLATE_FEASIBILITY_DEPENDENCIES_NOT_CONFIGURED);
         }
-        return scoreTemplateService.getTemplateFeasibility(templatePublicId);
+        return examDefinitionService.getTemplateFeasibility(templatePublicId);
     }
 }

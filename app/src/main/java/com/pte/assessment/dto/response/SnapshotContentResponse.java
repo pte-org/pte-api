@@ -16,15 +16,15 @@ public record SnapshotContentResponse(
         UUID publicId,
         String name,
         int version,
-        UUID scoreTemplatePublicId,
-        Integer scoreTemplateVersion,
+        UUID examDefinitionPublicId,
+        Integer examDefinitionVersion,
         UUID tenantId,
         List<Item> items) {
 
     /** Source-compatible constructor for callers created before template-version pinning. */
-    public SnapshotContentResponse(UUID publicId, String name, int version, UUID scoreTemplatePublicId,
+    public SnapshotContentResponse(UUID publicId, String name, int version, UUID examDefinitionPublicId,
             UUID tenantId, List<Item> items) {
-        this(publicId, name, version, scoreTemplatePublicId, null, tenantId, items);
+        this(publicId, name, version, examDefinitionPublicId, null, tenantId, items);
     }
 
     public record Item(

@@ -3,16 +3,10 @@ package com.pte.assessment.domain;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
-import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
+import jakarta.persistence.Embeddable;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.Index;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -26,18 +20,14 @@ import java.util.UUID;
  * mutable {@code itembank.Question}. Correct answers are retained here for the
  * scoring module; attempt strips them before serving to a student.
  */
-@Entity
-@Table(name = "snapshot_items", indexes = {
-        @Index(name = "idx_snapshot_items_snapshot", columnList = "snapshot_id")
-})
+@Embeddable
 @Getter
 @Setter
 @NoArgsConstructor
-public class SnapshotItem extends BaseEntity {
+public class ExamVersionItem {
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "snapshot_id", nullable = false)
-    private ExamSnapshot snapshot;
+    @Column(name = "public_id", nullable = false, updatable = false)
+    private UUID publicId = UUID.randomUUID();
 
     @Column(nullable = false)
     private UUID sourceQuestionPublicId;

@@ -14,9 +14,9 @@ import com.pte.assessment.internal.repository.ExamBlueprintRepository;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.domain.enums.PteTaskType;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,16 +52,16 @@ public class ExamGenerationService {
     private static final List<PteSection> SECTION_ORDER =
             List.of(PteSection.SPEAKING, PteSection.LISTENING, PteSection.READING, PteSection.WRITING);
 
-    private final ScoreTemplateService scoreTemplateService;
+    private final ExamDefinitionService examDefinitionService;
     private final ItembankService itembankService;
     private final ExamBlueprintRepository blueprintRepository;
     private final SnapshotPublishService snapshotPublishService;
     private final Random random = new Random();
 
-    public ExamGenerationService(ScoreTemplateService scoreTemplateService, ItembankService itembankService,
+    public ExamGenerationService(ExamDefinitionService examDefinitionService, ItembankService itembankService,
                                  ExamBlueprintRepository blueprintRepository,
                                  SnapshotPublishService snapshotPublishService) {
-        this.scoreTemplateService = scoreTemplateService;
+        this.examDefinitionService = examDefinitionService;
         this.itembankService = itembankService;
         this.blueprintRepository = blueprintRepository;
         this.snapshotPublishService = snapshotPublishService;
@@ -70,7 +70,7 @@ public class ExamGenerationService {
     @Transactional
     public SnapshotResponse generate(String name, Set<String> skills, CurrentUser caller) {
         Set<PteSection> selectedSections = parseSkills(skills);
-        ScoreTemplateResponse template = scoreTemplateService.getActive();
+        ExamDefinitionResponse template = examDefinitionService.getActive();
         List<Requirement> requirements = buildRequirements(template, selectedSections, true);
         List<RolledRequirement> rolled = requirements.stream().map(this::roll).toList();
 
@@ -104,7 +104,7 @@ public class ExamGenerationService {
     @Transactional
     public SnapshotResponse generateDeterministic(String name, UUID templatePublicId, long seed,
             CurrentUser caller, Set<String> selectedSkills) {
-        ScoreTemplateResponse template = scoreTemplateService.findActiveByPublicId(templatePublicId)
+        ExamDefinitionResponse template = examDefinitionService.findActiveByPublicId(templatePublicId)
                 .orElseThrow(TemplateNotActiveException::new);
         Set<PteSection> selectedSections = resolveSelectedSections(template, selectedSkills);
         List<Requirement> requirements = buildRequirements(template, selectedSections,
@@ -134,9 +134,9 @@ public class ExamGenerationService {
 
     /** Scope-aware host readiness using the exact same requirement resolver as deterministic generation. */
     @Transactional(readOnly = true)
-    public com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse getTemplateFeasibility(
+    public com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse getTemplateFeasibility(
             UUID templatePublicId, Set<String> selectedSkills) {
-        ScoreTemplateResponse template = scoreTemplateService.getByPublicId(templatePublicId);
+        ExamDefinitionResponse template = examDefinitionService.getByPublicId(templatePublicId);
         Set<PteSection> selectedSections = resolveSelectedSections(template, selectedSkills);
         List<Requirement> requirements = buildRequirements(template, selectedSections,
                 !"CUSTOM".equalsIgnoreCase(template.templatePolicy()));
@@ -145,23 +145,23 @@ public class ExamGenerationService {
                         item.maxCount()))
                 .toList();
         Map<String, Long> available = publishedCounts(required);
-        List<com.pte.scoretemplate.dto.response.ScoreTemplateSlotFeasibilityResponse> slots = requirements.stream()
+        List<com.pte.assessment.dto.response.ExamDefinitionSlotFeasibilityResponse> slots = requirements.stream()
                 .map(item -> {
                     long count = available.getOrDefault(item.taskTypeKey(), 0L);
                     boolean ready = count >= item.maxCount();
-                    return new com.pte.scoretemplate.dto.response.ScoreTemplateSlotFeasibilityResponse(
+                    return new com.pte.assessment.dto.response.ExamDefinitionSlotFeasibilityResponse(
                             item.taskTypeKey(), item.section().name(), item.maxCount(), count, ready,
                             ready ? null : "INSUFFICIENT_POOL");
                 })
                 .toList();
-        return new com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse(
+        return new com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse(
                 template.publicId(), template.version(), !slots.isEmpty()
                         && slots.stream().allMatch(
-                                com.pte.scoretemplate.dto.response.ScoreTemplateSlotFeasibilityResponse::ready),
+                                com.pte.assessment.dto.response.ExamDefinitionSlotFeasibilityResponse::ready),
                 slots);
     }
 
-    private Set<PteSection> resolveSelectedSections(ScoreTemplateResponse template, Set<String> requestedSkills) {
+    private Set<PteSection> resolveSelectedSections(ExamDefinitionResponse template, Set<String> requestedSkills) {
         Set<PteSection> available = template.items().stream()
                 .map(item -> parseSection(item.section()))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
@@ -199,9 +199,9 @@ public class ExamGenerationService {
         }
     }
 
-    private List<Requirement> buildRequirements(ScoreTemplateResponse template, Set<PteSection> selectedSections,
+    private List<Requirement> buildRequirements(ExamDefinitionResponse template, Set<PteSection> selectedSections,
             boolean includeImplicitPersonalIntroduction) {
-        Map<PteSection, List<ScoreTemplateItemResponse>> itemsBySection = template.items().stream()
+        Map<PteSection, List<ExamDefinitionItemResponse>> itemsBySection = template.items().stream()
                 .collect(Collectors.groupingBy(i -> PteSection.valueOf(i.section())));
 
         List<Requirement> requirements = new ArrayList<>();
