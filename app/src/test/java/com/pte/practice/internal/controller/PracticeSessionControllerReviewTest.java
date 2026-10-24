@@ -1,6 +1,7 @@
 package com.pte.practice.internal.controller;
 
 import com.pte.practice.internal.dto.response.PracticeReviewResponse;
+import com.pte.practice.internal.dto.response.PracticeTaskContentResponse;
 import com.pte.practice.internal.service.PracticeReviewService;
 import com.pte.practice.internal.service.PracticeSessionService;
 import com.pte.shared.security.CurrentUser;
@@ -53,7 +54,8 @@ class PracticeSessionControllerReviewTest {
         when(reviewService.get(sessionId, caller)).thenReturn(new PracticeReviewResponse(sessionId, List.of(
                 new PracticeReviewResponse.Item(itemId, 0, "WRITE_ESSAY", "Write Essay", "WRITING", "ANSWERED",
                         "Prompt", "{\"text\":\"x\"}", "WRITE_ESSAY_V1", null, null, 72, "SCORED",
-                        Map.of("content", 70), "GEMINI", "model", scoredAt))));
+                        Map.of("content", 70), "GEMINI", "model", scoredAt,
+                        List.of(new PracticeTaskContentResponse.Option(null, "First", 0, null))))));
 
         mvc.perform(get("/api/v1/student/practice/sessions/{id}/review", sessionId))
                 .andExpect(status().isOk())
@@ -61,6 +63,8 @@ class PracticeSessionControllerReviewTest {
                 .andExpect(jsonPath("$.data.items[0].publicId").value(itemId.toString()))
                 .andExpect(jsonPath("$.data.items[0].aiScore").value(72))
                 .andExpect(jsonPath("$.data.items[0].aiScoreStatus").value("SCORED"))
-                .andExpect(jsonPath("$.data.items[0].aiSubScores.content").value(70));
+                .andExpect(jsonPath("$.data.items[0].aiSubScores.content").value(70))
+                .andExpect(jsonPath("$.data.items[0].options[0].text").value("First"))
+                .andExpect(jsonPath("$.data.items[0].options[0].orderIndex").value(0));
     }
 }

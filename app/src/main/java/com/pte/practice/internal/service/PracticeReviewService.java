@@ -2,14 +2,18 @@ package com.pte.practice.internal.service;
 
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.dto.response.PracticeReviewResponse;
+import com.pte.practice.internal.dto.response.PracticeTaskContentResponse;
 import com.pte.practice.internal.repository.PracticeSessionItemRepository;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Clock;
+import java.util.List;
 import java.util.UUID;
 
 /** Review projection of a session's items and their scores; it never starts scoring itself. */
@@ -46,7 +50,20 @@ public class PracticeReviewService {
                         item.getSavedPayload(), item.getRendererKey(), item.getObjectiveScore(),
                         item.getObjectiveEvaluatedAt(), item.getAiScore(), item.getAiScoreStatus(),
                         PracticeScoringStateService.readSubScores(jsonMapper, item.getAiSubScoresJson()),
-                        item.getAiProvider(), item.getAiModel(), item.getAiScoredAt()))
+                        item.getAiProvider(), item.getAiModel(), item.getAiScoredAt(),
+                        readOptions(item.getOptionsJson())))
                 .toList());
+    }
+
+    /** The pinned option texts let the review show what was picked; a damaged snapshot only hides them. */
+    private List<PracticeTaskContentResponse.Option> readOptions(String optionsJson) {
+        if (optionsJson == null || optionsJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            return jsonMapper.readValue(optionsJson, new TypeReference<List<PracticeTaskContentResponse.Option>>() { });
+        } catch (JacksonException ex) {
+            return List.of();
+        }
     }
 }
