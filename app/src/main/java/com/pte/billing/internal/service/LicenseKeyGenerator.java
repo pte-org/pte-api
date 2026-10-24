@@ -1,6 +1,6 @@
 package com.pte.billing.internal.service;
 
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 
 import org.springframework.stereotype.Component;
 
@@ -33,7 +33,7 @@ public class LicenseKeyGenerator {
      * bounded normalized form of the plan name. The random suffix excludes
      * 0/O/1/I/l to keep printed keys easy to read.
      */
-    public String generate(Plan plan, Instant activatedAt) {
+    public String generate(ServicePlan plan, Instant activatedAt) {
         StringBuilder suffix = new StringBuilder(RANDOM_PART_LENGTH);
         for (int index = 0; index < RANDOM_PART_LENGTH; index++) {
             suffix.append(ALPHABET.charAt(secureRandom.nextInt(ALPHABET.length())));
@@ -42,7 +42,7 @@ public class LicenseKeyGenerator {
         return "PTE-" + planCode(plan) + "-" + year + "-" + suffix;
     }
 
-    private String planCode(Plan plan) {
+    private String planCode(ServicePlan plan) {
         String normalized = plan.getName() == null
                 ? "PLAN"
                 : plan.getName().trim().replaceAll("[^A-Za-z0-9]+", "-")

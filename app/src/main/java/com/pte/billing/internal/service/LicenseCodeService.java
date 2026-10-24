@@ -7,7 +7,7 @@ import com.pte.billing.CommercialActivationTarget;
 import com.pte.billing.CommercialOutcomeConfirmedEvent;
 import com.pte.billing.CommercialOutcomeType;
 import com.pte.billing.domain.LicenseCode;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.Subscription;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.LicenseCodeStatus;
@@ -22,7 +22,7 @@ import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
 import com.pte.billing.internal.exception.LicenseCodeException;
 import com.pte.billing.internal.exception.PlanNotFoundException;
 import com.pte.billing.internal.repository.LicenseCodeRepository;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.billing.internal.repository.SubscriptionRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
@@ -69,7 +69,7 @@ public class LicenseCodeService {
     private static final Duration REVOKE_PREVIEW_TTL = Duration.ofMinutes(5);
 
     private final LicenseCodeRepository licenseCodeRepository;
-    private final PlanRepository planRepository;
+    private final ServicePlanRepository planRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final LicenseCodePersistenceService licenseCodePersistenceService;
     private final LicenseCodeGenerator licenseCodeGenerator;
@@ -80,7 +80,7 @@ public class LicenseCodeService {
     private final Clock clock;
 
     @Autowired
-    public LicenseCodeService(LicenseCodeRepository licenseCodeRepository, PlanRepository planRepository,
+    public LicenseCodeService(LicenseCodeRepository licenseCodeRepository, ServicePlanRepository planRepository,
             SubscriptionRepository subscriptionRepository,
             LicenseCodePersistenceService licenseCodePersistenceService,
             LicenseCodeGenerator licenseCodeGenerator,
@@ -111,25 +111,20 @@ public class LicenseCodeService {
             throw new LicenseCodeException(HttpStatus.BAD_REQUEST, BillingConstants.LICENSE_CODE_EXPIRY_PRECISION_INVALID);
         }
         String fingerprint = fingerprint(planPublicId, codeExpiresAt);
-        var prior = licenseCodePersistenceService.replay(caller.userId(), key, fingerprint);
-        if (prior.isPresent()) return prior.get();
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         for (int attempt = 1; attempt <= MAX_ISSUE_ATTEMPTS; attempt++) {
             String code = licenseCodeGenerator.generate();
             LicenseCode licenseCode = LicenseCode.issue(code, planPublicId, caller.userId(), now, codeExpiresAt);
             try {
                 LicenseIssueReceipt receipt = licenseCodePersistenceService.issue(licenseCode, key, fingerprint);
-                if (auditLogService != null) {
+                if (auditLogService != null && !receipt.replayed()) {
                     auditLogService.record(caller, BillingConstants.LICENSE_CODE_AGGREGATE,
-                            String.valueOf(licenseCode.getPublicId() == null ? key : licenseCode.getPublicId()),
+                            String.valueOf(receipt.publicId()),
                             BillingConstants.AUDIT_LICENSE_ISSUE, BillingConstants.LICENSE_CODE_ISSUE_AUDIT_SUMMARY);
                 }
                 return receipt;
             } catch (DataIntegrityViolationException ex) {
-                if (constraint(ex, BillingConstants.LICENSE_ISSUE_INTENT_CONSTRAINT)) {
-                    var winner = licenseCodePersistenceService.replay(caller.userId(), key, fingerprint);
-                    if (winner.isPresent()) return winner.get();
-                } else if (!constraint(ex, "license_codes_code_key") && !constraint(ex, "uk_license_codes_code")) {
+                if (!constraint(ex, BillingConstants.LICENSE_CODE_UNIQUE_CONSTRAINT)) {
                     throw new LicenseCodeException(HttpStatus.INTERNAL_SERVER_ERROR,
                             BillingConstants.LICENSE_CODE_ISSUE_FAILED, ex);
                 }
@@ -260,8 +255,8 @@ public class LicenseCodeService {
             return List.of();
         }
         Set<UUID> planIds = codes.stream().map(LicenseCode::getPlanId).collect(Collectors.toSet());
-        Map<UUID, Plan> plans = planIds.isEmpty() ? Map.of() : planRepository.findByPublicIdIn(planIds).stream()
-                .collect(Collectors.toUnmodifiableMap(Plan::getPublicId, Function.identity()));
+        Map<UUID, ServicePlan> plans = planIds.isEmpty() ? Map.of() : planRepository.findByPublicIdIn(planIds).stream()
+                .collect(Collectors.toUnmodifiableMap(ServicePlan::getPublicId, Function.identity()));
         Set<UUID> tenantIds = codes.stream().map(LicenseCode::getRedeemedByTenantId)
                 .filter(Objects::nonNull).collect(Collectors.toSet());
         Map<UUID, TenantSummary> recipients = tenancyService.findTenantSummaries(tenantIds);
@@ -352,7 +347,7 @@ public class LicenseCodeService {
         LicenseCode licenseCode = licenseCodeRepository.findByCodeForUpdate(codeValue)
                 .orElseThrow(() -> new LicenseCodeException(HttpStatus.NOT_FOUND,
                         BillingConstants.LICENSE_CODE_NOT_FOUND));
-        Plan plan = planRepository.findByPublicIdForUpdate(licenseCode.getPlanId())
+        ServicePlan plan = planRepository.findByPublicIdForUpdate(licenseCode.getPlanId())
                 .filter(p -> !p.isDeleted())
                 .orElseThrow(PlanNotFoundException::new);
         SubscriptionActivationResponse activation = subscriptionActivationService.activate(
@@ -398,7 +393,7 @@ public class LicenseCodeService {
             throw new LicenseCodeException(HttpStatus.GONE, BillingConstants.LICENSE_CODE_EXPIRED);
         }
 
-        Plan plan = planRepository.findByPublicId(code.getPlanId())
+        ServicePlan plan = planRepository.findByPublicId(code.getPlanId())
                 .filter(candidate -> !candidate.isDeleted())
                 .orElseThrow(() -> new LicenseCodeException(HttpStatus.CONFLICT,
                         BillingConstants.LICENSE_CODE_PLAN_REQUIRED));

@@ -1,62 +1,71 @@
 package com.pte.billing.internal.service;
 
 import com.pte.billing.domain.LicenseCode;
-import com.pte.billing.domain.LicenseIssueIntent;
-import com.pte.billing.domain.enums.PlanType;
-import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
-import com.pte.billing.internal.repository.LicenseIssueIntentRepository;
-import com.pte.billing.internal.repository.LicenseCodeRepository;
-import com.pte.billing.internal.repository.PlanRepository;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.PlanStatus;
+import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.internal.constant.BillingConstants;
+import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
 import com.pte.billing.internal.exception.LicenseCodeException;
 import com.pte.billing.internal.exception.PlanNotFoundException;
+import com.pte.billing.internal.repository.LicenseCodeRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
+import com.pte.shared.idempotency.IdempotencyDecision;
+import com.pte.shared.idempotency.IdempotencyKeyService;
+import com.pte.shared.idempotency.domain.IdempotencyScope;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+
+import tools.jackson.databind.json.JsonMapper;
+
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Optional;
+import java.util.Map;
 import java.util.UUID;
 
-/** Isolates license-code inserts so a unique-code collision can be retried. */
+/**
+ * Isolates license-code inserts so a unique-code collision can be retried. Issuance dedupe and the replay receipt
+ * live in the shared idempotency store (scope {@code LICENSE_ISSUE}); the stored result is the issued code's id,
+ * so no bearer code or request body is kept.
+ */
 @Service
 public class LicenseCodePersistenceService {
 
     private final LicenseCodeRepository licenseCodeRepository;
-    private final PlanRepository planRepository;
-    private final LicenseIssueIntentRepository intentRepository;
+    private final ServicePlanRepository planRepository;
+    private final IdempotencyKeyService idempotencyKeyService;
+    private final JsonMapper jsonMapper;
     private final Clock clock;
 
-    public LicenseCodePersistenceService(LicenseCodeRepository licenseCodeRepository, PlanRepository planRepository,
-            LicenseIssueIntentRepository intentRepository, Clock clock) {
+    public LicenseCodePersistenceService(LicenseCodeRepository licenseCodeRepository,
+            ServicePlanRepository planRepository, IdempotencyKeyService idempotencyKeyService, JsonMapper jsonMapper, Clock clock) {
         this.licenseCodeRepository = licenseCodeRepository;
         this.planRepository = planRepository;
-        this.intentRepository = intentRepository;
+        this.idempotencyKeyService = idempotencyKeyService;
+        this.jsonMapper = jsonMapper;
         this.clock = clock;
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
-    public Optional<LicenseIssueReceipt> replay(UUID actor, UUID key, String fingerprint) {
-        return intentRepository.findByActorPublicIdAndOperationAndIdempotencyKey(
-                actor, BillingConstants.LICENSE_ISSUE_OPERATION, key).map(intent -> receipt(intent, fingerprint));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public LicenseIssueReceipt issue(LicenseCode code, UUID key, String fingerprint) {
-        Optional<LicenseIssueIntent> existing = intentRepository.findByActorPublicIdAndOperationAndIdempotencyKey(
-                code.getIssuedBy(), BillingConstants.LICENSE_ISSUE_OPERATION, key);
-        if (existing.isPresent()) return receipt(existing.get(), fingerprint);
+        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        String idempotencyKey = code.getIssuedBy() + BillingConstants.LICENSE_ISSUE_KEY_SEPARATOR + key;
+        IdempotencyDecision decision = idempotencyKeyService.begin(
+                IdempotencyScope.LICENSE_ISSUE, idempotencyKey, null, fingerprint, now);
+        switch (decision.outcome()) {
+            case REPLAY:
+                return replayedReceipt(decision.resultJson(), now);
+            case CONFLICT:
+                throw new LicenseCodeException(HttpStatus.CONFLICT, BillingConstants.LICENSE_CODE_IDEMPOTENCY_KEY_REUSED);
+            default:
+                break;
+        }
 
-        Plan plan = planRepository.findByPublicIdForUpdate(code.getPlanId())
+        ServicePlan plan = planRepository.findByPublicIdForUpdate(code.getPlanId())
                 .filter(p -> !p.isDeleted()).orElseThrow(PlanNotFoundException::new);
-        // A winning request may have committed while this request waited for the Plan lock.
-        existing = intentRepository.findByActorPublicIdAndOperationAndIdempotencyKey(
-                code.getIssuedBy(), BillingConstants.LICENSE_ISSUE_OPERATION, key);
-        if (existing.isPresent()) return receipt(existing.get(), fingerprint);
         if (plan.getStatus() != PlanStatus.ACTIVE) {
             throw new LicenseCodeException(HttpStatus.CONFLICT, BillingConstants.LICENSE_CODE_PLAN_NOT_ACTIVE);
         }
@@ -64,25 +73,24 @@ public class LicenseCodePersistenceService {
             throw new LicenseCodeException(HttpStatus.CONFLICT, BillingConstants.LICENSE_CODE_EXAM_PLAN_REQUIRED);
         }
         PlanService.validateExamBenefits(plan.getDurationDays(), plan.getMaxStudentsPerSession(), plan.getExtraStudentSlots());
-        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         if (code.getCodeExpiresAt() != null && !code.getCodeExpiresAt().isAfter(now)) {
             throw new LicenseCodeException(HttpStatus.UNPROCESSABLE_ENTITY, BillingConstants.LICENSE_CODE_EXPIRY_INVALID);
         }
         LicenseCode saved = licenseCodeRepository.saveAndFlush(code);
-        intentRepository.saveAndFlush(LicenseIssueIntent.create(code.getIssuedBy(),
-                BillingConstants.LICENSE_ISSUE_OPERATION, key, fingerprint, saved.getPublicId()));
+        idempotencyKeyService.complete(IdempotencyScope.LICENSE_ISSUE, idempotencyKey, null,
+                jsonMapper.writeValueAsString(Map.of(BillingConstants.LICENSE_ISSUE_RESULT_FIELD,
+                        saved.getPublicId().toString())));
         return receipt(saved, now, false);
     }
 
-    private LicenseIssueReceipt receipt(LicenseIssueIntent intent, String fingerprint) {
-        if (!intent.getPayloadFingerprint().equals(fingerprint)) {
-            throw new LicenseCodeException(HttpStatus.CONFLICT, BillingConstants.LICENSE_CODE_IDEMPOTENCY_KEY_REUSED);
-        }
-        LicenseCode code = licenseCodeRepository.findByPublicId(intent.getLicenseCodePublicId())
+    private LicenseIssueReceipt replayedReceipt(String resultJson, Instant now) {
+        UUID issuedCodePublicId = UUID.fromString(
+                jsonMapper.readTree(resultJson).path(BillingConstants.LICENSE_ISSUE_RESULT_FIELD).asText());
+        LicenseCode code = licenseCodeRepository.findByPublicId(issuedCodePublicId)
                 .filter(result -> !result.isDeleted())
                 .orElseThrow(() -> new LicenseCodeException(HttpStatus.GONE,
                         BillingConstants.LICENSE_CODE_ISSUE_RESULT_MISSING));
-        return receipt(code, clock.instant().truncatedTo(ChronoUnit.MICROS), true);
+        return receipt(code, now, true);
     }
 
     private LicenseIssueReceipt receipt(LicenseCode code, Instant now, boolean replayed) {

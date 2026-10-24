@@ -1,7 +1,7 @@
 package com.pte.billing.internal.service;
 
 import com.pte.billing.domain.LicenseCode;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.Subscription;
 import com.pte.billing.CommercialActivationTarget;
 import com.pte.billing.CommercialOutcomeConfirmedEvent;
@@ -22,7 +22,7 @@ import com.pte.billing.internal.dto.response.AdminLicenseCodeSummary;
 import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
 import com.pte.billing.internal.exception.LicenseCodeException;
 import com.pte.billing.internal.repository.LicenseCodeRepository;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.billing.internal.repository.SubscriptionRepository;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.audit.AuditLogService;
@@ -65,7 +65,7 @@ class LicenseCodeServiceTest {
     private LicenseCodeRepository licenseCodeRepository;
 
     @Mock
-    private PlanRepository planRepository;
+    private ServicePlanRepository planRepository;
 
     @Mock
     private SubscriptionRepository subscriptionRepository;
@@ -90,15 +90,16 @@ class LicenseCodeServiceTest {
 
     private LicenseCodeService service;
 
-    @Test void replayDoesNotValidateCurrentPlanOrGenerateAnotherCode() {
+    @Test void replayReturnsTheStoredReceiptWithoutValidatingTheCurrentPlan() {
         UUID planId = UUID.randomUUID();
         UUID key = UUID.randomUUID();
         CurrentUser admin = platformAdmin();
         LicenseIssueReceipt receipt = new LicenseIssueReceipt(UUID.randomUUID(), planId, "ISSUED", "EXPIRED",
                 Instant.EPOCH, Instant.EPOCH.plusSeconds(1), true);
-        when(licenseCodePersistenceService.replay(eq(admin.userId()), eq(key), any())).thenReturn(Optional.of(receipt));
+        when(licenseCodeGenerator.generate()).thenReturn("UNUSED-CANDIDATE");
+        when(licenseCodePersistenceService.issue(any(), eq(key), any())).thenReturn(receipt);
         assertThat(service.issue(planId, receipt.codeExpiresAt(), key, admin)).isSameAs(receipt);
-        verify(licenseCodeGenerator, never()).generate();
+        verify(licenseCodeGenerator, org.mockito.Mockito.times(1)).generate();
         verify(planRepository, never()).findByPublicId(any());
     }
 
@@ -108,7 +109,7 @@ class LicenseCodeServiceTest {
         org.mockito.Mockito.verifyNoInteractions(licenseCodePersistenceService);
     }
 
-    @Test void finerThanMicrosecondPrecisionFailsBeforeIntentLookup() {
+    @Test void finerThanMicrosecondPrecisionFailsBeforeAnyPersistence() {
         assertThatThrownBy(() -> service.issue(UUID.randomUUID(), Instant.parse("2030-01-01T00:00:00.000000001Z"),
                 UUID.randomUUID(), platformAdmin())).isInstanceOfSatisfying(LicenseCodeException.class,
                         ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
@@ -128,7 +129,7 @@ class LicenseCodeServiceTest {
     @Test void recognizedCodeCollisionRetriesWholeTransaction() {
         when(licenseCodeGenerator.generate()).thenReturn("COLLISION", "SUCCESS");
         var violation = new org.hibernate.exception.ConstraintViolationException("fixture", new java.sql.SQLException(),
-                "license_codes_code_key");
+                BillingConstants.LICENSE_CODE_UNIQUE_CONSTRAINT);
         LicenseIssueReceipt receipt = new LicenseIssueReceipt(UUID.randomUUID(), UUID.randomUUID(), "ISSUED", "ISSUED",
                 Instant.EPOCH, null, false);
         when(licenseCodePersistenceService.issue(any(), any(), any()))
@@ -164,7 +165,7 @@ class LicenseCodeServiceTest {
                 Instant.now(), null);
         code.setPublicId(UUID.randomUUID());
         code.markRedeemed(tenantId, Instant.now());
-        Plan plan = activePlan(planId);
+        ServicePlan plan = activePlan(planId);
         when(licenseCodeRepository.findAdminPage(eq(LicenseCodeStatus.REDEEMED), eq(planId), eq(tenantId),
                 any(Instant.class), eq(PageRequest.of(0, 25))))
                 .thenReturn(new PageImpl<>(List.of(code), PageRequest.of(0, 25), 1));
@@ -191,7 +192,7 @@ class LicenseCodeServiceTest {
         LicenseCode code = LicenseCode.issue("ABCD-EFGH-JKLM-NPQR-STUV", planId, UUID.randomUUID(),
                 Instant.now(), null);
         code.setPublicId(UUID.randomUUID());
-        Plan plan = activePlan(planId);
+        ServicePlan plan = activePlan(planId);
         when(licenseCodeRepository.findAdminPage(eq(LicenseCodeStatus.ISSUED), eq(null), eq(null),
                 any(Instant.class), eq(PageRequest.of(0, 25))))
                 .thenReturn(new PageImpl<>(List.of(code), PageRequest.of(0, 25), 1));
@@ -307,7 +308,7 @@ class LicenseCodeServiceTest {
                 });
         when(licenseCodeRepository.findByCodeForUpdate(code.getCode())).thenReturn(Optional.of(code));
         when(planRepository.findByPublicIdForUpdate(code.getPlanId())).thenReturn(Optional.of(activePlan(code.getPlanId())));
-        when(subscriptionActivationService.activate(eq(tenantId), any(Plan.class), eq(ActivationSource.LICENSE_CODE)))
+        when(subscriptionActivationService.activate(eq(tenantId), any(ServicePlan.class), eq(ActivationSource.LICENSE_CODE)))
                 .thenReturn(activation);
         when(subscriptionRepository.findByLicenseKey(activation.licenseKey())).thenReturn(Optional.of(subscription));
         when(licenseCodeRepository.saveAndFlush(code)).thenReturn(code);
@@ -321,7 +322,7 @@ class LicenseCodeServiceTest {
         assertThat(code.getSubscriptionId()).isEqualTo(subscription.getPublicId());
         verify(licenseCodeRepository).markRedeemed(eq(code.getCode()), eq(tenantId), any(),
                 eq(LicenseCodeStatus.ISSUED), eq(LicenseCodeStatus.REDEEMED));
-        verify(subscriptionActivationService).activate(eq(tenantId), any(Plan.class), eq(ActivationSource.LICENSE_CODE));
+        verify(subscriptionActivationService).activate(eq(tenantId), any(ServicePlan.class), eq(ActivationSource.LICENSE_CODE));
         ArgumentCaptor<CommercialOutcomeConfirmedEvent> eventCaptor =
                 ArgumentCaptor.forClass(CommercialOutcomeConfirmedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
@@ -352,7 +353,7 @@ class LicenseCodeServiceTest {
         when(licenseCodeRepository.findByCodeForUpdate(code.getCode())).thenReturn(Optional.of(code));
         when(licenseCodeRepository.findByCode(code.getCode())).thenReturn(Optional.of(code));
         when(planRepository.findByPublicIdForUpdate(code.getPlanId())).thenReturn(Optional.of(activePlan(code.getPlanId())));
-        when(subscriptionActivationService.activate(eq(tenantId), any(Plan.class), eq(ActivationSource.LICENSE_CODE)))
+        when(subscriptionActivationService.activate(eq(tenantId), any(ServicePlan.class), eq(ActivationSource.LICENSE_CODE)))
                 .thenReturn(activation);
         when(subscriptionRepository.findByLicenseKey(activation.licenseKey())).thenReturn(Optional.of(subscription));
         when(licenseCodeRepository.saveAndFlush(code)).thenReturn(code);
@@ -364,7 +365,7 @@ class LicenseCodeServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
                     assertThat(ex.getMessage()).isEqualTo(BillingConstants.LICENSE_CODE_ALREADY_REDEEMED);
                 });
-        verify(subscriptionActivationService).activate(eq(tenantId), any(Plan.class), eq(ActivationSource.LICENSE_CODE));
+        verify(subscriptionActivationService).activate(eq(tenantId), any(ServicePlan.class), eq(ActivationSource.LICENSE_CODE));
         verify(eventPublisher, org.mockito.Mockito.times(1))
                 .publishEvent(any(CommercialOutcomeConfirmedEvent.class));
     }
@@ -463,8 +464,8 @@ class LicenseCodeServiceTest {
         return LicenseCode.issue(value, UUID.randomUUID(), UUID.randomUUID(), Instant.now(), null);
     }
 
-    private Plan activePlan(UUID planId) {
-        Plan plan = new Plan();
+    private ServicePlan activePlan(UUID planId) {
+        ServicePlan plan = new ServicePlan();
         plan.setPublicId(planId);
         plan.setName("Exam");
         plan.setType(PlanType.EXAM_PACKAGE);

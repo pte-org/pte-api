@@ -2,7 +2,7 @@ package com.pte.billing.internal.service;
 
 import com.pte.billing.SubscriptionRevocationImpactQuery;
 import com.pte.billing.domain.LicenseCode;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.Subscription;
 import com.pte.billing.domain.enums.LicenseCodeStatus;
 import com.pte.billing.domain.enums.PlanStatus;
@@ -14,8 +14,7 @@ import com.pte.billing.internal.dto.response.LicenseRevokePreviewResponse;
 import com.pte.billing.internal.dto.response.LicenseRevokeResponse;
 import com.pte.billing.internal.exception.LicenseCodeException;
 import com.pte.billing.internal.repository.LicenseCodeRepository;
-import com.pte.billing.internal.repository.LicenseIssueIntentRepository;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.billing.internal.repository.SubscriptionRepository;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.audit.AuditLogService;
@@ -52,7 +51,7 @@ class LicenseCodeRevocationServiceTest {
     private static final Instant NOW = Instant.parse("2030-01-01T00:00:00Z");
 
     @Mock private LicenseCodeRepository licenseCodeRepository;
-    @Mock private PlanRepository planRepository;
+    @Mock private ServicePlanRepository planRepository;
     @Mock private SubscriptionRepository subscriptionRepository;
     @Mock private LicenseCodePersistenceService persistenceService;
     @Mock private LicenseCodeGenerator generator;
@@ -70,7 +69,7 @@ class LicenseCodeRevocationServiceTest {
     private UUID sessionId;
     private LicenseCode code;
     private Subscription subscription;
-    private Plan plan;
+    private ServicePlan plan;
 
     @BeforeEach
     void setUp() {
@@ -91,7 +90,7 @@ class LicenseCodeRevocationServiceTest {
         code.markRedeemed(tenantId, NOW.minusSeconds(30));
         code.linkSubscription(subscriptionId);
 
-        plan = new Plan();
+        plan = new ServicePlan();
         plan.setPublicId(planId);
         plan.setType(PlanType.EXAM_PACKAGE);
         plan.setStatus(PlanStatus.ACTIVE);
