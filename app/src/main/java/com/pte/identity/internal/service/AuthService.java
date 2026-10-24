@@ -1,16 +1,16 @@
 package com.pte.identity.internal.service;
 
+import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.constant.IdentityConstants;
-import com.pte.identity.internal.domain.LoginHash;
-import com.pte.identity.internal.dto.request.LoginRequest;
 import com.pte.identity.internal.dto.request.LoginOrganizationOptionsRequest;
+import com.pte.identity.internal.dto.request.LoginRequest;
 import com.pte.identity.internal.dto.request.RefreshRequest;
 import com.pte.identity.internal.dto.response.LoginOrganizationOptionResponse;
 import com.pte.identity.internal.dto.response.TokenResponse;
 import com.pte.identity.internal.exception.InvalidLoginException;
 import com.pte.identity.internal.exception.InvalidRefreshTokenException;
-import com.pte.identity.internal.repository.LoginHashRepository;
+import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.security.AccessTokenIssuer;
 import com.pte.tenancy.LoginOrganizationOption;
@@ -26,25 +26,25 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Login / refresh / logout. Emits access + refresh tokens; access is a signed
- * RS256 JWT (stateless, validated in-process), refresh is an opaque rotating
- * token stored hashed.
+ * Login / refresh / logout. One account can belong to several organizations: the organization chosen at login is
+ * baked into the access token and bound to the refresh token, so a token never crosses organizations. Access is a
+ * signed RS256 JWT (stateless, validated in-process), refresh is an opaque rotating token stored hashed.
  */
 @Service
 public class AuthService {
 
     private final UserRepository userRepository;
-    private final LoginHashRepository loginHashRepository;
+    private final OrganizationMemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
     private final AccessTokenIssuer accessTokenIssuer;
     private final RefreshTokenService refreshTokenService;
     private final TenancyService tenancyService;
 
-    public AuthService(UserRepository userRepository, LoginHashRepository loginHashRepository,
+    public AuthService(UserRepository userRepository, OrganizationMemberRepository memberRepository,
                        PasswordEncoder passwordEncoder, AccessTokenIssuer accessTokenIssuer,
                        RefreshTokenService refreshTokenService, TenancyService tenancyService) {
         this.userRepository = userRepository;
-        this.loginHashRepository = loginHashRepository;
+        this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.accessTokenIssuer = accessTokenIssuer;
         this.refreshTokenService = refreshTokenService;
@@ -53,83 +53,45 @@ public class AuthService {
 
     @Transactional
     public TokenResponse login(LoginRequest request) {
-        User user = resolveUser(request);
-        validateCredentials(user, request.password());
-        return issueTokens(user);
+        User user = authenticate(request.username(), request.password());
+        return issueTokens(user, resolveMember(user, request.tenantId()));
     }
 
     /**
-     * Verifies the supplied credentials before returning tenant choices. This
-     * avoids exposing which organizations contain an email to unauthenticated
-     * callers while still allowing the UI to disambiguate duplicate logins.
+     * Verifies the supplied credentials before returning organization choices. This avoids exposing which
+     * organizations an account belongs to for unauthenticated callers while still letting the UI disambiguate.
      */
     @Transactional(readOnly = true)
     public List<LoginOrganizationOptionResponse> loginOrganizations(LoginOrganizationOptionsRequest request) {
+        User user = authenticate(request.username(), request.password());
         List<LoginOrganizationOptionResponse> options = new ArrayList<>();
-        Set<UUID> seenTenantIds = new HashSet<>();
-        boolean credentialMatched = false;
-
-        for (User user : userRepository.findByUsernameAndDeletedFalse(request.username())) {
-            if (user.isSuspended()) {
+        Set<UUID> seenOrganizationIds = new HashSet<>();
+        for (OrganizationMember member : memberRepository.findByUser_IdAndDeletedFalse(user.getId())) {
+            if (!member.isActive() || !seenOrganizationIds.add(member.getOrganizationId())) {
                 continue;
             }
-            LoginHash loginHash = loginHashRepository.findByUserId(user.getId())
-                    .orElse(null);
-            if (loginHash == null || !passwordEncoder.matches(request.password(), loginHash.getHash())) {
-                continue;
-            }
-            credentialMatched = true;
-            if (user.getTenantId() == null || !seenTenantIds.add(user.getTenantId())) {
-                continue;
-            }
-            tenancyService.findLoginOrganization(user.getTenantId())
+            tenancyService.findLoginOrganization(member.getOrganizationId())
                     .map(this::toResponse)
                     .ifPresent(options::add);
-        }
-
-        if (!credentialMatched) {
-            throw new InvalidLoginException();
         }
         return options;
     }
 
-    private User resolveUser(LoginRequest request) {
-        if (request.tenantId() != null) {
-            return userRepository.findByUsernameAndTenantIdAndDeletedFalse(request.username(), request.tenantId())
-                    .orElseThrow(InvalidLoginException::new);
-        }
-        List<User> matches = userRepository.findByUsernameAndDeletedFalse(request.username());
-        if (matches.size() != 1) {
-            throw new InvalidLoginException();
-        }
-        return matches.get(0);
-    }
-
-    private void validateCredentials(User user, String password) {
-        if (user.isSuspended()) {
-            throw new InvalidLoginException();
-        }
-        LoginHash loginHash = loginHashRepository.findByUserId(user.getId())
-                .orElseThrow(InvalidLoginException::new);
-        if (!passwordEncoder.matches(password, loginHash.getHash())) {
-            throw new InvalidLoginException();
-        }
-    }
-
-    private LoginOrganizationOptionResponse toResponse(LoginOrganizationOption option) {
-        return new LoginOrganizationOptionResponse(
-                option.tenantId(), option.tenantCode(), option.organizationName(), option.organizationType());
-    }
-
     @Transactional
     public TokenResponse refresh(RefreshRequest request) {
-        Long userId = refreshTokenService.consume(request.refreshToken());
-        User user = userRepository.findByIdAndDeletedFalse(userId)
+        RefreshSession session = refreshTokenService.consume(request.refreshToken());
+        User user = userRepository.findByIdAndDeletedFalse(session.userId())
                 .orElseThrow(InvalidRefreshTokenException::new);
         if (user.isSuspended()) {
             throw new InvalidRefreshTokenException();
         }
-        return issueTokens(user);
+        OrganizationMember member = null;
+        if (session.organizationId() != null) {
+            member = memberRepository.findByUser_IdAndOrganizationIdAndDeletedFalse(
+                    user.getId(), session.organizationId())
+                    .filter(OrganizationMember::isActive).orElseThrow(InvalidRefreshTokenException::new);
+        }
+        return issueTokens(user, member);
     }
 
     @Transactional
@@ -137,9 +99,49 @@ public class AuthService {
         refreshTokenService.revoke(request.refreshToken());
     }
 
-    private TokenResponse issueTokens(User user) {
-        String accessToken = accessTokenIssuer.issue(user);
-        String refreshToken = refreshTokenService.issue(user);
+    private User authenticate(String username, String password) {
+        User user = userRepository.findByUsernameAndDeletedFalse(username)
+                .orElseThrow(InvalidLoginException::new);
+        if (user.isSuspended() || user.getCredentialHash() == null
+                || !passwordEncoder.matches(password, user.getCredentialHash())) {
+            throw new InvalidLoginException();
+        }
+        return user;
+    }
+
+    /**
+     * The membership a login signs in to: the requested organization, or the only one the account has. An account
+     * with several organizations must pick one (the client lists them through login options first). An account
+     * with no organization signs in with its own roles (platform or practice-only).
+     */
+    private OrganizationMember resolveMember(User user, UUID requestedOrganizationId) {
+        if (requestedOrganizationId != null) {
+            return memberRepository.findByUser_IdAndOrganizationIdAndDeletedFalse(user.getId(), requestedOrganizationId)
+                    .filter(OrganizationMember::isActive).orElseThrow(InvalidLoginException::new);
+        }
+        List<OrganizationMember> members = memberRepository.findByUser_IdAndDeletedFalse(user.getId()).stream()
+                .filter(OrganizationMember::isActive).toList();
+        if (members.size() > 1) {
+            throw new InvalidLoginException();
+        }
+        if (members.isEmpty()) {
+            if (user.getRoles().isEmpty()) {
+                throw new InvalidLoginException();
+            }
+            return null;
+        }
+        return members.get(0);
+    }
+
+    private LoginOrganizationOptionResponse toResponse(LoginOrganizationOption option) {
+        return new LoginOrganizationOptionResponse(
+                option.tenantId(), option.tenantCode(), option.organizationName(), option.organizationType());
+    }
+
+    private TokenResponse issueTokens(User user, OrganizationMember member) {
+        UUID organizationId = member == null ? null : member.getOrganizationId();
+        String accessToken = accessTokenIssuer.issue(user, member);
+        String refreshToken = refreshTokenService.issue(user, organizationId);
         return TokenResponse.bearer(accessToken, refreshToken, IdentityConstants.ACCESS_TOKEN_TTL_SECONDS,
                 user.isMustChangePassword());
     }

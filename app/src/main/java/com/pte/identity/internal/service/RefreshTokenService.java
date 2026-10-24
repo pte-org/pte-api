@@ -29,10 +29,11 @@ public class RefreshTokenService {
     }
 
     @Transactional
-    public String issue(User user) {
+    public String issue(User user, UUID organizationId) {
         String raw = UUID.randomUUID() + "." + UUID.randomUUID();
         RefreshToken token = new RefreshToken();
         token.setUserId(user.getId());
+        token.setOrganizationId(organizationId);
         token.setTokenHash(tokenHasher.hash(raw));
         token.setExpiresAt(Instant.now().plusSeconds(IdentityConstants.REFRESH_TOKEN_TTL_SECONDS));
         token.setRevoked(false);
@@ -41,20 +42,26 @@ public class RefreshTokenService {
     }
 
     @Transactional
-    public Long consume(String rawToken) {
+    public RefreshSession consume(String rawToken) {
         RefreshToken token = refreshTokenRepository.findByTokenHash(tokenHasher.hash(rawToken))
                 .orElseThrow(InvalidRefreshTokenException::new);
         if (!token.isActive(Instant.now())) {
             throw new InvalidRefreshTokenException();
         }
         token.setRevoked(true);
-        return token.getUserId();
+        return new RefreshSession(token.getUserId(), token.getOrganizationId());
     }
 
     @Transactional
     public void revoke(String rawToken) {
         refreshTokenRepository.findByTokenHash(tokenHasher.hash(rawToken))
                 .ifPresent(token -> token.setRevoked(true));
+    }
+
+    /** Revokes the refresh tokens bound to one organization when its membership is suspended or removed. */
+    @Transactional
+    public void revokeForMembership(Long userId, UUID organizationId) {
+        refreshTokenRepository.revokeAllActiveByUserIdAndOrganizationId(userId, organizationId);
     }
 
     /** Revokes every active refresh token when a user loses account access. */

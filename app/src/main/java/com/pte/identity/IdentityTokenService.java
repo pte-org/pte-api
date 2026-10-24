@@ -1,7 +1,7 @@
 package com.pte.identity;
 
-import com.pte.identity.domain.User;
 import com.pte.identity.domain.Role;
+import com.pte.identity.domain.User;
 import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.identity.internal.exception.InvalidLoginException;
 import com.pte.identity.internal.repository.UserRepository;
@@ -27,15 +27,15 @@ public class IdentityTokenService {
         this.refreshTokenService = refreshTokenService;
     }
 
+    /** Issues an organization-less token for a verified practice account (its own STUDENT role). */
     @Transactional
     public IdentityTokenResponse issueForVerifiedUser(UUID userPublicId) {
         User user = userRepository.findByPublicId(userPublicId)
                 .filter(candidate -> !candidate.isDeleted() && !candidate.isSuspended())
-                .filter(candidate -> candidate.getTenantId() == null
-                        && candidate.getRoles().contains(Role.STUDENT))
+                .filter(candidate -> candidate.getRoles().contains(Role.STUDENT))
                 .orElseThrow(InvalidLoginException::new);
-        String accessToken = accessTokenIssuer.issue(user);
-        String refreshToken = refreshTokenService.issue(user);
+        String accessToken = accessTokenIssuer.issue(user, null);
+        String refreshToken = refreshTokenService.issue(user, null);
         return new IdentityTokenResponse(accessToken, refreshToken, "Bearer",
                 IdentityConstants.ACCESS_TOKEN_TTL_SECONDS, user.isMustChangePassword());
     }
