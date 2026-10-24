@@ -10,11 +10,11 @@ import com.pte.assessment.internal.controller.BlueprintController;
 import com.pte.identity.internal.controller.PlatformUserController;
 import com.pte.itembank.internal.controller.QuestionController;
 import com.pte.notification.internal.controller.AnnouncementController;
-import com.pte.scoretemplate.internal.controller.ScoreTemplateController;
+import com.pte.assessment.internal.controller.ExamDefinitionController;
 import com.pte.support.internal.controller.AdminSupportTicketController;
 import com.pte.shared.audit.internal.controller.PlatformAuditLogController;
 import com.pte.identity.internal.controller.PlatformUserDirectoryController;
-import com.pte.tenancy.internal.controller.TenantController;
+import com.pte.tenancy.internal.controller.OrganizationController;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;
 
@@ -32,7 +32,11 @@ class PlatformManagerControllerSecurityTest {
         assertMethod(TenantApplicationController.class, "list", MANAGER);
         assertMethod(TenantApplicationController.class, "get", MANAGER);
         assertMethod(TenantApplicationController.class, "approve", MANAGER);
-        assertMethod(TenantController.class, null, MANAGER);
+        // The merged controller has no class-level rule: every platform governance operation carries it per method.
+        for (String operation : new String[] {"onboard", "suspend", "suspensionImpact", "reactivate",
+                "updateBranding"}) {
+            assertMethod(OrganizationController.class, operation, MANAGER);
+        }
         assertMethod(PlanController.class, "create", MANAGER);
         assertMethod(PlanController.class, "update", MANAGER);
         assertMethod(PlanController.class, "activate", MANAGER);
@@ -52,7 +56,7 @@ class PlatformManagerControllerSecurityTest {
         assertMethod(SubscriptionController.class, null, "hasRole('HOST_ADMIN')");
         assertMethod(QuestionController.class, null,
                 "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')");
-        assertMethod(ScoreTemplateController.class, "approve",
+        assertMethod(ExamDefinitionController.class, "approve",
                 "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')");
         assertMethod(BlueprintController.class, "approve",
                 "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')");
@@ -61,8 +65,8 @@ class PlatformManagerControllerSecurityTest {
         assertMethod(AdminLicenseCodeController.class, "revoke", ADMIN);
         assertMethod(LicenseCodeController.class, "listLegacy", ADMIN);
         assertMethod(LicenseCodeController.class, "revokeLegacy", ADMIN);
-        assertMethod(TenantController.class, "grantQuota", ADMIN);
-        assertMethod(TenantController.class, "quotaHistory", ADMIN);
+        assertMethod(OrganizationController.class, "grantQuota", ADMIN);
+        assertMethod(OrganizationController.class, "quotaHistory", ADMIN);
     }
 
     private void assertMethod(Class<?> type, String methodName, String expected) throws Exception {

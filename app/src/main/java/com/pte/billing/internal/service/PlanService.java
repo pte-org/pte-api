@@ -1,6 +1,6 @@
 package com.pte.billing.internal.service;
 
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.internal.constant.BillingConstants;
@@ -13,7 +13,7 @@ import com.pte.billing.internal.exception.PlanNotFoundException;
 import com.pte.billing.internal.exception.PlanStateException;
 import com.pte.billing.internal.exception.PlanValidationException;
 import com.pte.billing.internal.mapper.PlanMapper;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.PlatformOperation;
@@ -40,17 +40,17 @@ public class PlanService {
     private static final int MAX_DESCRIPTION_LENGTH = 255;
     private static final int MAX_EXAM_DURATION_DAYS = 3650;
 
-    private final PlanRepository planRepository;
+    private final ServicePlanRepository planRepository;
     private final AuditLogService auditLogService;
 
     @Autowired
-    public PlanService(PlanRepository planRepository, AuditLogService auditLogService) {
+    public PlanService(ServicePlanRepository planRepository, AuditLogService auditLogService) {
         this.planRepository = planRepository;
         this.auditLogService = auditLogService;
     }
 
     /** Compatibility constructor for existing focused tests. */
-    public PlanService(PlanRepository planRepository) {
+    public PlanService(ServicePlanRepository planRepository) {
         this(planRepository, null);
     }
 
@@ -69,7 +69,7 @@ public class PlanService {
         validate(request.name(), request.description(), request.price(), request.currency(), type,
                 request.durationDays(), request.maxStudentsPerSession(), request.extraStudentSlots());
 
-        Plan plan = new Plan();
+        ServicePlan plan = new ServicePlan();
         apply(plan, request.name(), request.description(), request.price(), request.currency(), type,
                 request.durationDays(), request.maxStudentsPerSession(), request.extraStudentSlots());
         PlanResponse result = response(persist(plan));
@@ -119,7 +119,7 @@ public class PlanService {
         if (request == null) {
             throw new PlanValidationException(BillingConstants.PLAN_VERSION_REQUIRED);
         }
-        Plan plan = findForUpdate(publicId);
+        ServicePlan plan = findForUpdate(publicId);
         requireExpectedVersion(plan, request.expectedVersion());
         if (plan.getStatus() == PlanStatus.ARCHIVED) {
             throw new PlanStateException(BillingConstants.PLAN_ARCHIVED_NOT_EDITABLE);
@@ -156,7 +156,7 @@ public class PlanService {
         if (request == null) {
             throw new PlanValidationException(BillingConstants.PLAN_VERSION_REQUIRED);
         }
-        Plan plan = findForUpdate(publicId);
+        ServicePlan plan = findForUpdate(publicId);
         requireExpectedVersion(plan, request.expectedVersion());
         if (plan.getStatus() != PlanStatus.DRAFT) {
             throw new PlanStateException(BillingConstants.PLAN_MUST_BE_DRAFT_TO_ACTIVATE);
@@ -180,7 +180,7 @@ public class PlanService {
         if (request == null) {
             throw new PlanValidationException(BillingConstants.PLAN_VERSION_REQUIRED);
         }
-        Plan plan = findForUpdate(publicId);
+        ServicePlan plan = findForUpdate(publicId);
         requireExpectedVersion(plan, request.expectedVersion());
         if (plan.getStatus() == PlanStatus.ARCHIVED) {
             throw new PlanStateException(BillingConstants.PLAN_ALREADY_ARCHIVED);
@@ -199,7 +199,7 @@ public class PlanService {
     @Transactional
     public void deleteDraft(UUID publicId, CurrentUser caller) {
         require(caller, PlatformOperation.PLAN_DRAFT_WRITE);
-        Plan plan = planRepository.findByPublicIdForUpdate(publicId)
+        ServicePlan plan = planRepository.findByPublicIdForUpdate(publicId)
                 .orElseThrow(PlanNotFoundException::new);
         if (plan.isDeleted()) {
             return;
@@ -216,19 +216,19 @@ public class PlanService {
         audit(caller, BillingConstants.PLAN_DRAFT_DELETED, publicId, BillingConstants.PLAN_DRAFT_DELETED_SUMMARY);
     }
 
-    private Plan find(UUID publicId) {
+    private ServicePlan find(UUID publicId) {
         return planRepository.findByPublicId(publicId)
                 .filter(plan -> !plan.isDeleted())
                 .orElseThrow(PlanNotFoundException::new);
     }
 
-    private Plan findForUpdate(UUID publicId) {
+    private ServicePlan findForUpdate(UUID publicId) {
         return planRepository.findByPublicIdForUpdate(publicId)
                 .filter(plan -> !plan.isDeleted())
                 .orElseThrow(PlanNotFoundException::new);
     }
 
-    private void requireExpectedVersion(Plan plan, Long expectedVersion) {
+    private void requireExpectedVersion(ServicePlan plan, Long expectedVersion) {
         if (expectedVersion == null || expectedVersion < 0) {
             throw new PlanValidationException(BillingConstants.PLAN_VERSION_INVALID);
         }
@@ -237,7 +237,7 @@ public class PlanService {
         }
     }
 
-    private Plan persist(Plan plan) {
+    private ServicePlan persist(ServicePlan plan) {
         try {
             return planRepository.saveAndFlush(plan);
         } catch (OptimisticLockingFailureException ex) {
@@ -250,7 +250,7 @@ public class PlanService {
                 BillingConstants.PLAN_VERSION_CONFLICT_MESSAGE);
     }
 
-    private void requireNoOutstandingCodes(Plan plan) {
+    private void requireNoOutstandingCodes(ServicePlan plan) {
         if (planRepository.findOutstandingCodePlanIds(List.of(plan.getPublicId()), Instant.now())
                 .contains(plan.getPublicId())) {
             throw new PlanLifecycleException(BillingConstants.PLAN_HAS_OUTSTANDING_CODES,
@@ -258,15 +258,15 @@ public class PlanService {
         }
     }
 
-    private PlanResponse response(Plan plan) {
+    private PlanResponse response(ServicePlan plan) {
         return responses(List.of(plan)).getFirst();
     }
 
-    private List<PlanResponse> responses(List<Plan> plans) {
+    private List<PlanResponse> responses(List<ServicePlan> plans) {
         if (plans.isEmpty()) {
             return List.of();
         }
-        List<UUID> ids = plans.stream().map(Plan::getPublicId).toList();
+        List<UUID> ids = plans.stream().map(ServicePlan::getPublicId).toList();
         Set<UUID> referenced = planRepository.findReferencedPlanIds(ids);
         Set<UUID> outstanding = planRepository.findOutstandingCodePlanIds(ids, Instant.now());
         return plans.stream()
@@ -275,7 +275,7 @@ public class PlanService {
                 .toList();
     }
 
-    private void apply(Plan plan, String name, String description, BigDecimal price, String currency,
+    private void apply(ServicePlan plan, String name, String description, BigDecimal price, String currency,
             PlanType type, Integer durationDays, Integer maxStudentsPerSession, Integer extraStudentSlots) {
         plan.setName(name.trim());
         plan.setDescription(description == null || description.trim().isEmpty() ? null : description.trim());

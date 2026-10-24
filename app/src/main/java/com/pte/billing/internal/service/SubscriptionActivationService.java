@@ -1,6 +1,6 @@
 package com.pte.billing.internal.service;
 
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.Subscription;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.PlanStatus;
@@ -46,15 +46,15 @@ public class SubscriptionActivationService {
      * tenancy quota ledger instead.
      */
     @Transactional
-    public SubscriptionActivationResponse activate(UUID tenantId, Plan plan, ActivationSource source) {
+    public SubscriptionActivationResponse activate(UUID tenantId, ServicePlan plan, ActivationSource source) {
         validateRequest(tenantId, plan, source);
 
         if (plan.getType() == PlanType.STUDENT_CAPACITY) {
             int slots = plan.getExtraStudentSlots();
-            UUID quotaTransactionId = tenancyService.grantQuota(tenantId, slots,
+            UUID quotaGrantId = tenancyService.grantQuota(tenantId, slots,
                     "Activated STUDENT_CAPACITY plan " + plan.getPublicId());
             return SubscriptionActivationResponse.forStudentCapacity(tenantId, plan.getPublicId(), slots,
-                    quotaTransactionId);
+                    quotaGrantId);
         }
 
         Instant startsAt = Instant.now();
@@ -71,7 +71,7 @@ public class SubscriptionActivationService {
                 subscription.getPublicId());
     }
 
-    private Subscription saveWithUniqueLicenseKey(UUID tenantId, Plan plan, ActivationSource source,
+    private Subscription saveWithUniqueLicenseKey(UUID tenantId, ServicePlan plan, ActivationSource source,
             Instant startsAt) {
         Instant expiresAt = calculateExpiryAfterRenewal(plan, startsAt);
         // The pre-check can discard a generated key without touching the DB.
@@ -107,14 +107,14 @@ public class SubscriptionActivationService {
                 BillingConstants.LICENSE_KEY_GENERATION_FAILED);
     }
 
-    private Instant calculateExpiryAfterRenewal(Plan plan, Instant startsAt) {
+    private Instant calculateExpiryAfterRenewal(ServicePlan plan, Instant startsAt) {
         // Each activation is an independent commercial lane. A still-active
         // subscription must not extend a new purchase's expiry beyond its own
         // start time; overlap is visible, not silently compounded.
         return startsAt.plus(Duration.ofDays(plan.getDurationDays()));
     }
 
-    private void validateRequest(UUID tenantId, Plan plan, ActivationSource source) {
+    private void validateRequest(UUID tenantId, ServicePlan plan, ActivationSource source) {
         if (tenantId == null) {
             throw invalid(BillingConstants.SUBSCRIPTION_TENANT_REQUIRED);
         }

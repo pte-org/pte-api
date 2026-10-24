@@ -56,12 +56,12 @@ class ArchiveLifecyclePostgresIntegrationTest {
         properties.add("spring.datasource.password", () -> "");
         properties.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
     }
-    @Autowired PlanRepository plans;
+    @Autowired ServicePlanRepository plans;
     @Autowired QuestionRepository questions;
     @Autowired LicenseCodeRepository codes;
     @Autowired OrderRepository orders;
     @Autowired SubscriptionRepository subscriptions;
-    @Autowired com.pte.assessment.internal.repository.ExamSnapshotRepository snapshots;
+    @Autowired com.pte.assessment.internal.repository.ExamVersionRepository snapshots;
     @Autowired PlanService planService;
     @Autowired QuestionDeletionService questionDeletion;
     @Autowired LicenseCodePersistenceService issuance;
@@ -71,9 +71,9 @@ class ArchiveLifecyclePostgresIntegrationTest {
 
     private <T> T tx(Supplier<T> action) { return new TransactionTemplate(transactions).execute(status -> action.get()); }
     private void runTx(Runnable action) { tx(() -> { action.run(); return null; }); }
-    private Plan plan(PlanStatus status) {
+    private ServicePlan plan(PlanStatus status) {
         return tx(() -> {
-            Plan plan = new Plan(); plan.setName("Lifecycle fixture"); plan.setType(PlanType.EXAM_PACKAGE);
+            ServicePlan plan = new ServicePlan(); plan.setName("Lifecycle fixture"); plan.setType(PlanType.EXAM_PACKAGE);
             plan.setCurrency("VND"); plan.setPrice(BigDecimal.TEN); plan.setDurationDays(30);
             plan.setMaxStudentsPerSession(20); plan.setStatus(status);
             return plans.saveAndFlush(plan);
@@ -93,7 +93,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
     }
 
     @Test void planDeletionCommitsTombstoneAndOneAuditAndNormalReadsReturnNotFound() {
-        Plan plan = plan(PlanStatus.DRAFT);
+        ServicePlan plan = plan(PlanStatus.DRAFT);
         planService.deleteDraft(plan.getPublicId(), admin);
         planService.deleteDraft(plan.getPublicId(), admin);
         assertThat(tx(() -> plans.findByPublicId(plan.getPublicId()).orElseThrow().isDeleted())).isTrue();
@@ -114,7 +114,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
     }
 
     @Test void oldCancelledOrderAndExpiredCodeStillProtectDraft() {
-        Plan plan = plan(PlanStatus.DRAFT);
+        ServicePlan plan = plan(PlanStatus.DRAFT);
         runTx(() -> {
             Order order = Order.pending(UUID.randomUUID(), plan.getPublicId(), System.nanoTime(), BigDecimal.TEN, "VND");
             order.cancel(); orders.saveAndFlush(order);
@@ -127,7 +127,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
     }
 
     @Test void auditFailureRollsBackDeletionInTheSameTransaction() {
-        Plan plan = plan(PlanStatus.DRAFT);
+        ServicePlan plan = plan(PlanStatus.DRAFT);
         AuditLogService audit = mock(AuditLogService.class);
         doThrow(new IllegalStateException("Injected audit failure")).when(audit).record(any(), anyString(), anyString(), anyString(), anyString());
         PlanService failingService = new PlanService(plans, audit);
@@ -138,7 +138,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
 
     @Test void tenIssueArchiveRacesNeverLeaveRedeemableCodeOnArchivedPlan() throws Exception {
         for (int i = 0; i < 10; i++) {
-            Plan plan = plan(PlanStatus.ACTIVE);
+            ServicePlan plan = plan(PlanStatus.ACTIVE);
             LicenseCode code = LicenseCode.issue("TEST-" + UUID.randomUUID().toString().substring(0, 20), plan.getPublicId(), admin.userId(), Instant.now(), null);
             List<Throwable> results = race(() -> issuance.issue(code, UUID.randomUUID(), "0".repeat(64)),
                     () -> planService.archive(plan.getPublicId(), new PlanTransitionRequest(plan.getVersion())));
@@ -152,11 +152,11 @@ class ArchiveLifecyclePostgresIntegrationTest {
 
     @Test void tenDeleteActivateRacesHaveExactlyOneDurableWinner() throws Exception {
         for (int i = 0; i < 10; i++) {
-            Plan plan = plan(PlanStatus.DRAFT);
+            ServicePlan plan = plan(PlanStatus.DRAFT);
             List<Throwable> results = race(() -> planService.deleteDraft(plan.getPublicId(), admin),
                     () -> planService.activate(plan.getPublicId(), new PlanTransitionRequest(plan.getVersion())));
             assertThat(results.stream().filter(t -> t != null).count()).isEqualTo(1);
-            Plan result = tx(() -> plans.findByPublicId(plan.getPublicId()).orElseThrow());
+            ServicePlan result = tx(() -> plans.findByPublicId(plan.getPublicId()).orElseThrow());
             assertThat(result.isDeleted() && result.getStatus() == PlanStatus.ACTIVE).isFalse();
             assertThat(result.isDeleted() || result.getStatus() == PlanStatus.ACTIVE).isTrue();
             assertThat(auditCount(plan.getPublicId())).isEqualTo(result.isDeleted() ? 1 : 0);
@@ -165,7 +165,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
 
     @Test void tenIssueEntitlementEditRacesSerializeAndFurtherEditsAreBlocked() throws Exception {
         for (int i = 0; i < 10; i++) {
-            Plan plan = plan(PlanStatus.ACTIVE);
+            ServicePlan plan = plan(PlanStatus.ACTIVE);
             LicenseCode code = LicenseCode.issue("TEST-" + UUID.randomUUID().toString().substring(0, 20),
                     plan.getPublicId(), admin.userId(), Instant.now(), null);
             PlanUpdateRequest edit = new PlanUpdateRequest(plan.getName(), null, "EXAM_PACKAGE", BigDecimal.TEN,
@@ -173,7 +173,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
             List<Throwable> results = race(() -> issuance.issue(code, UUID.randomUUID(), "0".repeat(64)), () -> planService.update(plan.getPublicId(), edit));
             assertThat(results.getFirst()).isNull();
             if (results.get(1) != null) assertThat(results.get(1)).isInstanceOf(PlanLifecycleException.class);
-            Plan persisted = tx(() -> plans.findByPublicId(plan.getPublicId()).orElseThrow());
+            ServicePlan persisted = tx(() -> plans.findByPublicId(plan.getPublicId()).orElseThrow());
             assertThat(persisted.getDurationDays()).isEqualTo(results.get(1) == null ? 60 : 30);
             assertThat(persisted.getMaxStudentsPerSession()).isEqualTo(results.get(1) == null ? 40 : 20);
             assertThat(tx(() -> codes.findByCode(code.getCode()))).isPresent();
@@ -185,7 +185,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
     }
 
     @Test void retirementPreservesPaidReceiptAndSubscriptionContract() {
-        Plan plan = plan(PlanStatus.ACTIVE);
+        ServicePlan plan = plan(PlanStatus.ACTIVE);
         UUID tenant = UUID.randomUUID();
         Instant start = Instant.now().minusSeconds(60).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
         Instant expiry = start.plusSeconds(30 * 86400L);
@@ -230,12 +230,12 @@ class ArchiveLifecyclePostgresIntegrationTest {
             Question published = questions.findById(question.getId()).orElseThrow();
             published.setStatus(QuestionStatus.APPROVED); published.setEverPublished(true);
         });
-        com.pte.assessment.domain.ExamSnapshot snapshot = tx(() -> {
-            var frozen = new com.pte.assessment.domain.ExamSnapshot();
+        com.pte.assessment.domain.ExamVersion snapshot = tx(() -> {
+            var frozen = new com.pte.assessment.domain.ExamVersion();
             frozen.setName("Pinned lifecycle fixture"); frozen.setVersion(1);
             frozen.setSourceBlueprintPublicId(UUID.randomUUID());
-            frozen.setScoreTemplatePublicId(UUID.randomUUID()); frozen.setScoreTemplateVersion(1);
-            var item = new com.pte.assessment.domain.SnapshotItem();
+            frozen.setExamDefinitionPublicId(UUID.randomUUID()); frozen.setExamDefinitionVersion(1);
+            var item = new com.pte.assessment.domain.ExamVersionItem();
             item.setSourceQuestionPublicId(question.getPublicId()); item.setPteTaskType(PteTaskType.READ_ALOUD);
             item.setTaskTypeKey("READ_ALOUD"); item.setSection(PteSection.SPEAKING); item.setOrderIndex(1);
             item.setTitle(question.getTitle()); item.setPromptText(question.getPromptText()); item.setOptionsJson("[]");
@@ -247,7 +247,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
                 .isInstanceOf(com.pte.itembank.internal.exception.QuestionDeletionException.class);
         runTx(() -> {
             var retained = snapshots.findById(snapshot.getId()).orElseThrow();
-            assertThat(retained.getScoreTemplatePublicId()).isEqualTo(snapshot.getScoreTemplatePublicId());
+            assertThat(retained.getExamDefinitionPublicId()).isEqualTo(snapshot.getExamDefinitionPublicId());
             assertThat(retained.getItems()).hasSize(1);
             assertThat(retained.getItems().getFirst().getPromptText()).isEqualTo(question.getPromptText());
             assertThat(retained.getItems().getFirst().getOptionsJson()).isEqualTo("[]");

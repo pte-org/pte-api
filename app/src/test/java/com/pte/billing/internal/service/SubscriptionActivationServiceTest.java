@@ -1,6 +1,6 @@
 package com.pte.billing.internal.service;
 
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.Subscription;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.PlanStatus;
@@ -56,8 +56,8 @@ class SubscriptionActivationServiceTest {
         UUID tenantId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
         UUID subscriptionId = UUID.randomUUID();
-        Plan plan = examPlan(planId);
-        when(keyGenerator.generate(any(Plan.class), any(Instant.class))).thenReturn("PTE-EXAM-2026-ABC123");
+        ServicePlan plan = examPlan(planId);
+        when(keyGenerator.generate(any(ServicePlan.class), any(Instant.class))).thenReturn("PTE-EXAM-2026-ABC123");
         when(subscriptionRepository.existsByLicenseKey("PTE-EXAM-2026-ABC123")).thenReturn(false);
         when(persistence.save(any(Subscription.class))).thenAnswer(invocation -> {
             Subscription subscription = invocation.getArgument(0);
@@ -77,11 +77,11 @@ class SubscriptionActivationServiceTest {
     void activateExamPackageStartsIndependentExpiryWithoutChangingSessionCap() {
         UUID tenantId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
-        Plan plan = examPlan(planId);
+        ServicePlan plan = examPlan(planId);
         Instant existingExpiry = Instant.now().plus(Duration.ofDays(12));
         Subscription existing = new Subscription();
         existing.setExpiresAt(existingExpiry);
-        when(keyGenerator.generate(any(Plan.class), any(Instant.class))).thenReturn("PTE-EXAM-2026-RENEW");
+        when(keyGenerator.generate(any(ServicePlan.class), any(Instant.class))).thenReturn("PTE-EXAM-2026-RENEW");
         when(subscriptionRepository.existsByLicenseKey("PTE-EXAM-2026-RENEW")).thenReturn(false);
         when(persistence.save(any(Subscription.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -98,20 +98,20 @@ class SubscriptionActivationServiceTest {
     void activateStudentCapacityReturnsExactQuotaLedgerTarget() {
         UUID tenantId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
-        UUID quotaTransactionId = UUID.randomUUID();
-        Plan plan = capacityPlan(planId);
+        UUID quotaGrantId = UUID.randomUUID();
+        ServicePlan plan = capacityPlan(planId);
         when(tenancyService.grantQuota(tenantId, 40,
-                "Activated STUDENT_CAPACITY plan " + planId)).thenReturn(quotaTransactionId);
+                "Activated STUDENT_CAPACITY plan " + planId)).thenReturn(quotaGrantId);
 
         SubscriptionActivationResponse result = service.activate(tenantId, plan, ActivationSource.LICENSE_CODE);
 
         assertThat(result.kind()).isEqualTo(SubscriptionActivationResponse.ActivationKind.STUDENT_CAPACITY);
-        assertThat(result.targetPublicId()).isEqualTo(quotaTransactionId);
+        assertThat(result.targetPublicId()).isEqualTo(quotaGrantId);
         assertThat(result.grantedStudentSlots()).isEqualTo(40);
     }
 
-    private Plan examPlan(UUID planId) {
-        Plan plan = new Plan();
+    private ServicePlan examPlan(UUID planId) {
+        ServicePlan plan = new ServicePlan();
         plan.setPublicId(planId);
         plan.setName("Exam");
         plan.setType(PlanType.EXAM_PACKAGE);
@@ -123,8 +123,8 @@ class SubscriptionActivationServiceTest {
         return plan;
     }
 
-    private Plan capacityPlan(UUID planId) {
-        Plan plan = new Plan();
+    private ServicePlan capacityPlan(UUID planId) {
+        ServicePlan plan = new ServicePlan();
         plan.setPublicId(planId);
         plan.setName("Capacity");
         plan.setType(PlanType.STUDENT_CAPACITY);

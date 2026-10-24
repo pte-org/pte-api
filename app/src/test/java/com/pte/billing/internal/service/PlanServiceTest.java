@@ -1,6 +1,6 @@
 package com.pte.billing.internal.service;
 
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.internal.constant.BillingConstants;
@@ -12,7 +12,7 @@ import com.pte.billing.internal.exception.PlanLifecycleException;
 import com.pte.billing.internal.exception.PlanNotFoundException;
 import com.pte.billing.internal.exception.PlanStateException;
 import com.pte.billing.internal.exception.PlanValidationException;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,7 +41,7 @@ import static org.mockito.Mockito.when;
 class PlanServiceTest {
 
     @Mock
-    private PlanRepository planRepository;
+    private ServicePlanRepository planRepository;
 
     @Mock
     private AuditLogService auditLogService;
@@ -54,14 +54,14 @@ class PlanServiceTest {
         lenient().when(planRepository.findReferencedPlanIds(any())).thenReturn(Set.of());
         lenient().when(planRepository.findOutstandingCodePlanIds(any(), any())).thenReturn(Set.of());
         lenient().doAnswer(invocation -> {
-            Plan plan = invocation.getArgument(0);
+            ServicePlan plan = invocation.getArgument(0);
             if (plan.getPublicId() == null) {
                 plan.setPublicId(UUID.randomUUID());
             } else {
                 plan.setVersion(plan.getVersion() + 1);
             }
             return plan;
-        }).when(planRepository).saveAndFlush(any(Plan.class));
+        }).when(planRepository).saveAndFlush(any(ServicePlan.class));
     }
 
     @Test
@@ -125,7 +125,7 @@ class PlanServiceTest {
     @Test
     void updateRejectsNegativeExpectedVersionBeforeMutation() {
         UUID id = UUID.randomUUID();
-        Plan plan = plan(id, PlanStatus.DRAFT);
+        ServicePlan plan = plan(id, PlanStatus.DRAFT);
         when(planRepository.findByPublicIdForUpdate(id)).thenReturn(Optional.of(plan));
 
         assertThatThrownBy(() -> service.update(id, new PlanUpdateRequest("New", null, "STUDENT_CAPACITY",
@@ -138,7 +138,7 @@ class PlanServiceTest {
     @Test
     void transitionRejectsStaleExpectedVersion() {
         UUID id = UUID.randomUUID();
-        Plan plan = plan(id, PlanStatus.DRAFT);
+        ServicePlan plan = plan(id, PlanStatus.DRAFT);
         plan.setVersion(2L);
         when(planRepository.findByPublicIdForUpdate(id)).thenReturn(Optional.of(plan));
 
@@ -177,7 +177,7 @@ class PlanServiceTest {
     @Test
     void activateOnlyAllowsDraftPlansAndReturnsIncrementedVersion() {
         UUID publicId = UUID.randomUUID();
-        Plan plan = plan(publicId, PlanStatus.DRAFT);
+        ServicePlan plan = plan(publicId, PlanStatus.DRAFT);
         when(planRepository.findByPublicIdForUpdate(publicId)).thenReturn(Optional.of(plan));
 
         PlanResponse response = service.activate(publicId, new PlanTransitionRequest(0L));
@@ -200,7 +200,7 @@ class PlanServiceTest {
     @Test
     void activateRejectsLegacyInvalidCurrencyBeforePublishing() {
         UUID publicId = UUID.randomUUID();
-        Plan legacy = plan(publicId, PlanStatus.DRAFT);
+        ServicePlan legacy = plan(publicId, PlanStatus.DRAFT);
         legacy.setCurrency("USD");
         when(planRepository.findByPublicIdForUpdate(publicId)).thenReturn(Optional.of(legacy));
 
@@ -212,7 +212,7 @@ class PlanServiceTest {
     @Test
     void archiveHidesPlanFromActiveListButAdminCanStillGetIt() {
         UUID publicId = UUID.randomUUID();
-        Plan plan = plan(publicId, PlanStatus.ACTIVE);
+        ServicePlan plan = plan(publicId, PlanStatus.ACTIVE);
         when(planRepository.findByPublicId(publicId)).thenReturn(Optional.of(plan));
         when(planRepository.findByPublicIdForUpdate(publicId)).thenReturn(Optional.of(plan));
         when(planRepository.findByStatusOrderByCreatedAtDesc(PlanStatus.ACTIVE)).thenReturn(List.of());
@@ -229,7 +229,7 @@ class PlanServiceTest {
     @Test
     void deleteUnusedDraftIsSoftAndAuditedOnlyOnce() {
         UUID id = UUID.randomUUID();
-        Plan plan = plan(id, PlanStatus.DRAFT);
+        ServicePlan plan = plan(id, PlanStatus.DRAFT);
         CurrentUser admin = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
         when(planRepository.findByPublicIdForUpdate(id)).thenReturn(Optional.of(plan));
         service.deleteDraft(id, admin);
@@ -242,7 +242,7 @@ class PlanServiceTest {
     @Test
     void deleteRejectsAnyHistoricalReference() {
         UUID id = UUID.randomUUID();
-        Plan plan = plan(id, PlanStatus.DRAFT);
+        ServicePlan plan = plan(id, PlanStatus.DRAFT);
         when(planRepository.findByPublicIdForUpdate(id)).thenReturn(Optional.of(plan));
         when(planRepository.findReferencedPlanIds(List.of(id))).thenReturn(Set.of(id));
         assertThatThrownBy(() -> service.deleteDraft(id,
@@ -264,7 +264,7 @@ class PlanServiceTest {
     @Test
     void outstandingCodesBlockArchiveAndBenefitChanges() {
         UUID id = UUID.randomUUID();
-        Plan plan = plan(id, PlanStatus.ACTIVE);
+        ServicePlan plan = plan(id, PlanStatus.ACTIVE);
         when(planRepository.findByPublicIdForUpdate(id)).thenReturn(Optional.of(plan));
         when(planRepository.findOutstandingCodePlanIds(org.mockito.ArgumentMatchers.eq(List.of(id)), any()))
                 .thenReturn(Set.of(id));
@@ -280,7 +280,7 @@ class PlanServiceTest {
     @Test
     void staleUpdateIsRejectedWithoutOverwritingTheLockedPlan() {
         UUID id = UUID.randomUUID();
-        Plan plan = plan(id, PlanStatus.DRAFT);
+        ServicePlan plan = plan(id, PlanStatus.DRAFT);
         plan.setVersion(3L);
         when(planRepository.findByPublicIdForUpdate(id)).thenReturn(Optional.of(plan));
 
@@ -298,7 +298,7 @@ class PlanServiceTest {
     @Test
     void tombstoneCannotBeReadOrActivated() {
         UUID id = UUID.randomUUID();
-        Plan plan = plan(id, PlanStatus.DRAFT);
+        ServicePlan plan = plan(id, PlanStatus.DRAFT);
         plan.setDeleted(true);
         when(planRepository.findByPublicId(id)).thenReturn(Optional.of(plan));
         when(planRepository.findByPublicIdForUpdate(id)).thenReturn(Optional.of(plan));
@@ -315,8 +315,8 @@ class PlanServiceTest {
         verifyNoInteractions(planRepository);
     }
 
-    private Plan plan(UUID publicId, PlanStatus status) {
-        Plan plan = new Plan();
+    private ServicePlan plan(UUID publicId, PlanStatus status) {
+        ServicePlan plan = new ServicePlan();
         plan.setPublicId(publicId);
         plan.setName("Plan");
         plan.setType(PlanType.STUDENT_CAPACITY);

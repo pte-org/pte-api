@@ -3,8 +3,9 @@ package com.pte.billing.internal.constant;
 /** Error codes and validation messages owned by the billing module. */
 public final class BillingConstants {
 
-    public static final String LICENSE_ISSUE_OPERATION = "ISSUE_LICENSE_CODE";
-    public static final String LICENSE_ISSUE_INTENT_CONSTRAINT = "uk_license_issue_intents_actor_operation_key";
+    public static final String LICENSE_CODE_UNIQUE_CONSTRAINT = "uk_license_codes_code";
+    public static final String LICENSE_ISSUE_KEY_SEPARATOR = ":";
+    public static final String LICENSE_ISSUE_RESULT_FIELD = "licenseCodePublicId";
     public static final String LICENSE_CODE_IDEMPOTENCY_KEY_REQUIRED = "LICENSE_CODE_IDEMPOTENCY_KEY_REQUIRED";
     public static final String LICENSE_CODE_IDEMPOTENCY_KEY_INVALID = "LICENSE_CODE_IDEMPOTENCY_KEY_INVALID";
     public static final String LICENSE_CODE_IDEMPOTENCY_KEY_REQUIRED_MESSAGE = "Reload this page before issuing a license code.";

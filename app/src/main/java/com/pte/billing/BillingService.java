@@ -1,9 +1,9 @@
 package com.pte.billing;
 
 import com.pte.billing.domain.enums.SubscriptionStatus;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.PlanType;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.billing.internal.repository.SubscriptionRepository;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.shared.audit.AuditLogService;
@@ -32,11 +32,11 @@ import java.util.UUID;
 public class BillingService {
 
     private final SubscriptionRepository subscriptionRepository;
-    private final PlanRepository planRepository;
+    private final ServicePlanRepository planRepository;
     private final AuditLogService auditLogService;
 
     @Autowired
-    public BillingService(SubscriptionRepository subscriptionRepository, PlanRepository planRepository,
+    public BillingService(SubscriptionRepository subscriptionRepository, ServicePlanRepository planRepository,
             AuditLogService auditLogService) {
         this.subscriptionRepository = subscriptionRepository;
         this.planRepository = planRepository;
@@ -44,7 +44,7 @@ public class BillingService {
     }
 
     /** Compatibility constructor for focused billing tests. */
-    public BillingService(SubscriptionRepository subscriptionRepository, PlanRepository planRepository) {
+    public BillingService(SubscriptionRepository subscriptionRepository, ServicePlanRepository planRepository) {
         this(subscriptionRepository, planRepository, null);
     }
 
@@ -176,7 +176,7 @@ public class BillingService {
                 .filter(java.util.Objects::nonNull)
                 .collect(java.util.stream.Collectors.toSet());
         return planRepository.findByPublicIdIn(planIds).stream()
-                .map(Plan::getType)
+                .map(ServicePlan::getType)
                 .anyMatch(PlanType.EXAM_PACKAGE::equals);
     }
 }

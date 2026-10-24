@@ -1,12 +1,12 @@
 package com.pte.billing;
 
 import com.pte.billing.domain.Subscription;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.domain.enums.SubscriptionStatus;
 import com.pte.billing.internal.repository.SubscriptionRepository;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.web.PagedResult;
 import org.springframework.data.domain.PageImpl;
@@ -35,7 +35,7 @@ class BillingServiceTest {
     private SubscriptionRepository subscriptionRepository;
 
     @Mock
-    private PlanRepository planRepository;
+    private ServicePlanRepository planRepository;
 
     @Test
     void getActiveSubscriptionByPublicId_scopesToTenantAndChecksUsableWindow() {
@@ -92,7 +92,7 @@ class BillingServiceTest {
         UUID planId = UUID.randomUUID();
         Subscription subscription = subscription(UUID.randomUUID(), tenantId, SubscriptionStatus.ACTIVE);
         subscription.setPlanId(planId);
-        Plan plan = new Plan();
+        ServicePlan plan = new ServicePlan();
         plan.setPublicId(planId);
         plan.setType(PlanType.EXAM_PACKAGE);
         when(subscriptionRepository
