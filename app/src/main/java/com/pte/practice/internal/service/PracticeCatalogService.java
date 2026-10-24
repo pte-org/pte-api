@@ -56,21 +56,19 @@ public class PracticeCatalogService {
         Map<String, PracticeCatalogTaskResponse> tasks = new LinkedHashMap<>();
         for (QuestionTypeResponse definition : questionTypeService.list(true)) {
             PracticeCatalogTaskResponse task = taskMapper.mapDefinition(definition);
-            tasks.putIfAbsent(task.code(), task);
+            if (!PracticeConstants.PRACTICE_HIDDEN_TASK_CODES.contains(task.code())) {
+                tasks.putIfAbsent(task.code(), task);
+            }
         }
 
         // Keep the shell discoverable if a persisted catalog row is missing.
         // Such entries are explicitly visible-only and cannot be selected for
         // execution until canonical content is published.
         for (PteTaskType taskType : PteTaskType.values()) {
-            tasks.putIfAbsent(taskType.name(), taskMapper.fallbackTask(taskType));
+            if (!PracticeConstants.PRACTICE_HIDDEN_TASK_CODES.contains(taskType.name())) {
+                tasks.putIfAbsent(taskType.name(), taskMapper.fallbackTask(taskType));
+            }
         }
-        tasks.putIfAbsent(PracticeConstants.PRACTICE_WRITE_EMAIL_TASK_CODE, new PracticeCatalogTaskResponse(
-                PracticeConstants.PRACTICE_WRITE_EMAIL_TASK_CODE,
-                PracticeConstants.PRACTICE_WRITE_EMAIL_TASK_LABEL, PteSection.WRITING.name(), true,
-                PracticeCatalogAvailability.UNAVAILABLE, PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME,
-                null, null, null, null, null, List.of(), PracticeConstants.PRACTICE_BLOCKED_CONTRACT_STATUS,
-                PracticeConstants.PRACTICE_REFERENCE_GAP_PROVENANCE));
         return new PracticeCatalogResponse(
                 PracticeConstants.PRACTICE_PRODUCT_CODE,
                 PracticeConstants.PRACTICE_PRODUCT_TITLE,
