@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Collection;
@@ -26,6 +27,15 @@ public interface PracticeSessionItemRepository extends JpaRepository<PracticeSes
     Optional<PracticeSessionItem> findByPublicIdAndPracticeSessionIdAndDeletedFalse(
             UUID publicId, Long practiceSessionId);
 
+    /** AI submissions the student started since {@code since}; the per-user rate limit reads this. */
+    @Query("""
+            select count(item) from PracticeSessionItem item, PracticeSession owner
+             where item.practiceSessionId = owner.id
+               and owner.studentPublicId = :studentPublicId
+               and item.scoringRequestedAt > :since
+            """)
+    long countScoringRequestsSince(@Param("studentPublicId") UUID studentPublicId, @Param("since") Instant since);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select item from PracticeSessionItem item
@@ -35,4 +45,15 @@ public interface PracticeSessionItemRepository extends JpaRepository<PracticeSes
             """)
     Optional<PracticeSessionItem> findWithLockByPublicIdAndPracticeSessionId(
             @Param("publicId") UUID publicId, @Param("practiceSessionId") Long practiceSessionId);
+
+    /** The session's items still awaiting a score, locked so recovery writes cannot race the worker or a retry. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select item from PracticeSessionItem item
+             where item.practiceSessionId = :practiceSessionId
+               and item.deleted = false
+               and item.scoringStatus = com.pte.practice.internal.domain.enums.PracticeScoringStatus.SCORING
+             order by item.orderIndex
+            """)
+    List<PracticeSessionItem> findScoringForUpdate(@Param("practiceSessionId") Long practiceSessionId);
 }

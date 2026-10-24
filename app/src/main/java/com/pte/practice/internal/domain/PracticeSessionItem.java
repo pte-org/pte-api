@@ -1,6 +1,7 @@
 package com.pte.practice.internal.domain;
 
 import com.pte.attempt.ResponseConfidence;
+import com.pte.practice.internal.domain.enums.PracticeScoringStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
@@ -103,31 +104,6 @@ public class PracticeSessionItem extends BaseEntity {
     @Column(name = "objective_evaluated_at")
     private Instant objectiveEvaluatedAt;
 
-    @Column(name = "objective_evaluator_version", length = 64)
-    private String objectiveEvaluatorVersion;
-
-    @Column(name = "objective_result_hash", length = 64)
-    private String objectiveResultHash;
-
-    @Column(name = "objective_evidence_identity_hash", length = 64)
-    private String objectiveEvidenceIdentityHash;
-
-    /** Deterministic response-form result used by writing and summary feedback. */
-    @Column(name = "form_word_count")
-    private Integer formWordCount;
-
-    @Column(name = "form_status", length = 32)
-    private String formStatus;
-
-    @Column(name = "form_evaluator_version", length = 64)
-    private String formEvaluatorVersion;
-
-    @Column(name = "form_result_hash", length = 64)
-    private String formResultHash;
-
-    @Column(name = "form_evidence_identity_hash", length = 64)
-    private String formEvidenceIdentityHash;
-
     /** Provider result used for local practice scoring validation and review provenance. */
     @Column(name = "ai_score")
     private Integer aiScore;
@@ -159,21 +135,33 @@ public class PracticeSessionItem extends BaseEntity {
     @Column(name = "ai_result_hash", length = 64)
     private String aiResultHash;
 
-    /** Immutable rubric provenance used by backend-only explanation workers. */
-    @Column(name = "rubric_revision_public_id")
-    private UUID rubricRevisionPublicId;
+    @Column(name = "ai_feedback", columnDefinition = "text")
+    private String aiFeedback;
 
-    @Column(name = "rubric_revision_number")
-    private Integer rubricRevisionNumber;
+    /** Scoring lifecycle shared by every route; the worker only writes a result for the current dispatch token. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "scoring_status", nullable = false, length = 16)
+    private PracticeScoringStatus scoringStatus = PracticeScoringStatus.NONE;
 
-    @Column(name = "rubric_canonical_hash", length = 64)
-    private String rubricCanonicalHash;
+    @Column(name = "scoring_dispatch_token")
+    private UUID scoringDispatchToken;
 
-    @Column(name = "rubric_snapshot_json", columnDefinition = "text")
-    private String rubricSnapshotJson;
+    /** Max-age base: set when the answer is submitted or a retry is accepted. */
+    @Column(name = "scoring_requested_at")
+    private Instant scoringRequestedAt;
 
-    @Column(name = "runtime_compatibility_hash", length = 64)
-    private String runtimeCompatibilityHash;
+    /** Stale base: set on every dispatch, including a re-dispatch. */
+    @Column(name = "scoring_dispatched_at")
+    private Instant scoringDispatchedAt;
+
+    @Column(name = "scoring_attempts", nullable = false)
+    private int scoringAttempts;
+
+    @Column(name = "scoring_redispatch_count", nullable = false)
+    private int scoringRedispatchCount;
+
+    @Column(name = "scoring_failure_code", length = 32)
+    private String scoringFailureCode;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)

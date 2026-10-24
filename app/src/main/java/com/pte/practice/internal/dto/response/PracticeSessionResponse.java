@@ -7,7 +7,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-/** Student-safe overview/resume projection for a standalone practice session. */
+/**
+ * Student-safe overview/resume projection for a standalone practice session. {@code itemResult} is filled only
+ * in the response to an answer, so the client sees the score of the item it just submitted.
+ */
 public record PracticeSessionResponse(
         UUID publicId,
         PracticeSessionSourceType sourceType,
@@ -28,9 +31,17 @@ public record PracticeSessionResponse(
         int answeredItemCount,
         int totalItemCount,
         List<PracticeCatalogSectionResponse> sections,
-        PracticeTaskResponse currentTask) {
+        PracticeTaskResponse currentTask,
+        PracticeItemResultResponse itemResult) {
 
     public PracticeSessionResponse {
         sections = sections == null ? List.of() : List.copyOf(sections);
+    }
+
+    public PracticeSessionResponse withItemResult(PracticeItemResultResponse result) {
+        return new PracticeSessionResponse(publicId, sourceType, productCode, title, organizationId, catalogVersion,
+                timeLimitSeconds, status, version, startedAt, deadlineAt, completedAt, discardedAt,
+                saveAndExitAvailable, canAdvance, nextAction, answeredItemCount, totalItemCount, sections,
+                currentTask, result);
     }
 }

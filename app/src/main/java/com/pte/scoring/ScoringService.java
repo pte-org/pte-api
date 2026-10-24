@@ -13,10 +13,6 @@ import com.pte.scoring.dto.response.ReportPublicationScoringView;
 import com.pte.scoring.dto.request.FinalizeGradingCohortRequest;
 import com.pte.scoring.dto.response.GradingCohortPreviewResponse;
 import com.pte.scoring.dto.response.GradingCohortResponse;
-import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.internal.service.ObjectiveScoringService;
-import com.pte.itembank.TaskRuntimeProfileDescriptor;
-import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.scoring.internal.service.ExaminerWorkQueryService;
 import com.pte.scoring.internal.service.ScorePublicationLockService;
 import com.pte.scoring.internal.service.ScoreSourceSelectionService;
@@ -31,9 +27,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 
 /**
  * The only door other modules use to reach {@code scoring}. Every internal
@@ -48,9 +41,6 @@ import java.security.NoSuchAlgorithmException;
 @Service
 public class ScoringService {
 
-    private static final String PRACTICE_OBJECTIVE_EVALUATOR_VERSION = "objective-scoring-v1";
-    private static final String PRACTICE_FORM_EVALUATOR_VERSION = "form-check-v1";
-
     private final ScoredAnswerQueryService scoredAnswerQueryService;
     private final ScoringEligibilityQueryService scoringEligibilityQueryService;
     private final ExaminerWorkQueryService examinerWorkQueryService;
@@ -58,7 +48,6 @@ public class ScoringService {
     private final ScoreSourceSelectionService scoreSourceSelectionService;
     private final ScorePublicationLockService scorePublicationLockService;
     private final GradingCohortService gradingCohortService;
-    private final ObjectiveScoringService objectiveScoringService;
     private final PracticeAiScoringService practiceAiScoringService;
 
     @Autowired
@@ -69,7 +58,6 @@ public class ScoringService {
             ScoreSourceSelectionService scoreSourceSelectionService,
             ScorePublicationLockService scorePublicationLockService,
             GradingCohortService gradingCohortService,
-            ObjectiveScoringService objectiveScoringService,
             PracticeAiScoringService practiceAiScoringService) {
         this.scoredAnswerQueryService = scoredAnswerQueryService;
         this.scoringEligibilityQueryService = scoringEligibilityQueryService;
@@ -78,22 +66,7 @@ public class ScoringService {
         this.scoreSourceSelectionService = scoreSourceSelectionService;
         this.scorePublicationLockService = scorePublicationLockService;
         this.gradingCohortService = gradingCohortService;
-        this.objectiveScoringService = objectiveScoringService;
         this.practiceAiScoringService = practiceAiScoringService;
-    }
-
-    /** Compatibility constructor for callers that do not use practice AI scoring. */
-    public ScoringService(ScoredAnswerQueryService scoredAnswerQueryService,
-            ScoringEligibilityQueryService scoringEligibilityQueryService,
-            ExaminerWorkQueryService examinerWorkQueryService,
-            ScoringReviewReadQueryService scoringReviewReadQueryService,
-            ScoreSourceSelectionService scoreSourceSelectionService,
-            ScorePublicationLockService scorePublicationLockService,
-            GradingCohortService gradingCohortService,
-            ObjectiveScoringService objectiveScoringService) {
-        this(scoredAnswerQueryService, scoringEligibilityQueryService, examinerWorkQueryService,
-                scoringReviewReadQueryService, scoreSourceSelectionService, scorePublicationLockService,
-                gradingCohortService, objectiveScoringService, null);
     }
 
     /** Compatibility constructor for focused facade tests. */
@@ -104,34 +77,28 @@ public class ScoringService {
             ScoreSourceSelectionService scoreSourceSelectionService,
             ScorePublicationLockService scorePublicationLockService) {
         this(scoredAnswerQueryService, scoringEligibilityQueryService, examinerWorkQueryService,
-                scoringReviewReadQueryService, scoreSourceSelectionService, scorePublicationLockService, null);
-    }
-
-    /** Compatibility constructor for callers that do not use Practice objective evaluation. */
-    public ScoringService(ScoredAnswerQueryService scoredAnswerQueryService,
-            ScoringEligibilityQueryService scoringEligibilityQueryService,
-            ExaminerWorkQueryService examinerWorkQueryService,
-            ScoringReviewReadQueryService scoringReviewReadQueryService,
-            ScoreSourceSelectionService scoreSourceSelectionService,
-            ScorePublicationLockService scorePublicationLockService,
-            GradingCohortService gradingCohortService) {
-        this(scoredAnswerQueryService, scoringEligibilityQueryService, examinerWorkQueryService,
-                scoringReviewReadQueryService, scoreSourceSelectionService, scorePublicationLockService,
-                gradingCohortService, null);
+                scoringReviewReadQueryService, scoreSourceSelectionService, scorePublicationLockService, null, null);
     }
 
     /**
-     * Scores a recorded practice response through the active task scorer. The
-     * practice module persists the returned provenance; this method does not
-     * create an exam attempt or mutate scoring rows.
+     * Scores one practice answer on the exam's 0-100 scale through the same scorers
+     * the exam uses. Creates no exam attempt and writes no scoring rows.
+     *
+     * @throws PracticeScoringException with a public reason when it cannot be scored
      */
-    public Optional<PracticeAiEvaluation> evaluatePracticeSpeech(String taskType,
-            String audioMediaPublicId, String promptText, String referenceAnswerText, UUID tenantId) {
+    public PracticeAiEvaluation scorePracticeAnswer(PracticeScoringRequest request) {
         if (practiceAiScoringService == null) {
-            return Optional.empty();
+            throw new PracticeScoringException(PracticeScoringFailure.INTERNAL);
         }
-        return practiceAiScoringService.evaluateSpeech(taskType, audioMediaPublicId, promptText,
-                referenceAnswerText, tenantId);
+        return practiceAiScoringService.score(request);
+    }
+
+    /** How the exam would score this task type; unknown codes are {@link PracticeScoringRoute#UNSUPPORTED}. */
+    public PracticeScoringRoute practiceScoringRoute(String taskType) {
+        if (practiceAiScoringService == null) {
+            return PracticeScoringRoute.UNSUPPORTED;
+        }
+        return practiceAiScoringService.routeFor(taskType);
     }
 
     public List<ScoredAnswerView> getScoredAnswersForAttempt(UUID attemptPublicId, UUID tenantId) {
@@ -217,79 +184,6 @@ public class ScoringService {
         return gradingCohortService != null
                 ? gradingCohortService.getCohortPublicationView(sessionPublicId, tenantId)
                 : java.util.Optional.empty();
-    }
-
-    /**
-     * Evaluates an objective Practice answer through the scoring module's shared
-     * deterministic algorithms. AI-only task types return an empty result.
-     */
-    public Optional<PracticeObjectiveEvaluation> evaluatePracticeObjective(String taskType, String payload,
-            String correctAnswerText, String optionsJson) {
-        if (objectiveScoringService == null) {
-            return Optional.empty();
-        }
-        try {
-            TaskRuntimeProfileDescriptor runtime = TaskRuntimeProfileRegistry.descriptorFor(taskType);
-            if (runtime == null || !"OBJECTIVE".equals(runtime.scoringProfileKey())) {
-                return Optional.empty();
-            }
-            ScoringAnswer answer = new ScoringAnswer();
-            answer.setTaskType(taskType);
-            answer.setPayload(payload);
-            answer.setCorrectAnswerText(correctAnswerText);
-            answer.setOptionsJson(optionsJson);
-            int rawScore = objectiveScoringService.score(answer, runtime);
-            String resultHash = sha256(String.join("\n", "objective-result", PRACTICE_OBJECTIVE_EVALUATOR_VERSION,
-                    nullToEmpty(taskType), nullToEmpty(payload), nullToEmpty(correctAnswerText),
-                    nullToEmpty(optionsJson), String.valueOf(rawScore)));
-            String evidenceIdentityHash = sha256("objective_result\n" + resultHash);
-            return Optional.of(new PracticeObjectiveEvaluation(rawScore, PRACTICE_OBJECTIVE_EVALUATOR_VERSION,
-                    resultHash, evidenceIdentityHash));
-        } catch (RuntimeException exception) {
-            return Optional.empty();
-        }
-    }
-
-    /**
-     * Evaluates response-form constraints without assigning a language score.
-     * The result is deterministic and can be cited by the tutor as FORM_RESULT.
-     */
-    public Optional<PracticeFormEvaluation> evaluatePracticeForm(String taskType, String responseText,
-            Integer minWordCount, Integer maxWordCount) {
-        if (responseText == null) {
-            return Optional.empty();
-        }
-        try {
-            TaskRuntimeProfileDescriptor runtime = TaskRuntimeProfileRegistry.descriptorFor(taskType);
-            if (runtime == null || !"AI_TEXT".equals(runtime.scoringProfileKey())) {
-                return Optional.empty();
-            }
-            String trimmed = responseText.trim();
-            int wordCount = trimmed.isEmpty() ? 0 : trimmed.split("\\s+").length;
-            String status = minWordCount != null && wordCount < minWordCount ? "BELOW_MINIMUM"
-                    : maxWordCount != null && wordCount > maxWordCount ? "ABOVE_MAXIMUM" : "IN_RANGE";
-            String resultHash = sha256(String.join("\n", "form-result", PRACTICE_FORM_EVALUATOR_VERSION,
-                    nullToEmpty(taskType), String.valueOf(wordCount), String.valueOf(minWordCount),
-                    String.valueOf(maxWordCount), sha256(responseText)));
-            String evidenceIdentityHash = sha256("form_result\n" + resultHash);
-            return Optional.of(new PracticeFormEvaluation(wordCount, status, PRACTICE_FORM_EVALUATOR_VERSION,
-                    resultHash, evidenceIdentityHash));
-        } catch (RuntimeException exception) {
-            return Optional.empty();
-        }
-    }
-
-    private String sha256(String value) {
-        try {
-            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 is unavailable", exception);
-        }
-    }
-
-    private String nullToEmpty(String value) {
-        return value == null ? "" : value;
     }
 
     public java.util.Optional<List<String>> evaluateManualPublicationBlockers(

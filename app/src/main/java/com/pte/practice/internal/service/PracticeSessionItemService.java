@@ -7,32 +7,32 @@ import com.pte.itembank.dto.response.PracticeQuestionEvaluationContent;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeSessionItem;
+import com.pte.practice.internal.domain.enums.PracticeScoringStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.request.PracticeAnswerRequest;
 import com.pte.practice.internal.dto.request.PracticeCapabilityManifest;
 import com.pte.practice.internal.dto.response.PracticeCatalogTaskResponse;
+import com.pte.practice.internal.dto.response.PracticeItemResultResponse;
 import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.exception.PracticeSessionNotFoundException;
 import com.pte.practice.internal.repository.PracticeSessionItemRepository;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.practice.PracticeResponseMediaValidator;
+import com.pte.scoring.PracticeAiEvaluation;
+import com.pte.scoring.PracticeScoringException;
+import com.pte.scoring.PracticeScoringFailure;
 import com.pte.scoring.ScoringService;
-import com.pte.scoring.PracticeFormEvaluation;
-import com.pte.itembank.TaskRuntimeProfileRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.databind.JsonNode;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -50,9 +50,9 @@ public class PracticeSessionItemService {
     private final PracticeResponseMediaValidator mediaValidator;
     private final PracticeQuestionService practiceQuestionService;
     private final JsonMapper jsonMapper;
-    private final PracticeRubricBindingService rubricBindingService;
     private final ScoringService scoringService;
-    private final PracticeSpeechScoringDispatcher speechScoringDispatcher;
+    private final PracticeScoringStateService scoringStateService;
+    private final PracticeScoringRequestFactory scoringRequestFactory;
 
     public PracticeSessionItemService(PracticeSessionItemRepository itemRepository,
             PracticeCatalogService catalogService, PracticeAnswerValidationService answerValidationService) {
@@ -70,17 +70,17 @@ public class PracticeSessionItemService {
     public PracticeSessionItemService(PracticeSessionItemRepository itemRepository,
             PracticeCatalogService catalogService, PracticeAnswerValidationService answerValidationService,
             PracticeResponseMediaValidator mediaValidator, PracticeQuestionService practiceQuestionService,
-            JsonMapper jsonMapper, PracticeRubricBindingService rubricBindingService, ScoringService scoringService,
-            PracticeSpeechScoringDispatcher speechScoringDispatcher) {
+            JsonMapper jsonMapper, ScoringService scoringService, PracticeScoringStateService scoringStateService,
+            PracticeScoringRequestFactory scoringRequestFactory) {
         this.itemRepository = itemRepository;
         this.catalogService = catalogService;
         this.answerValidationService = answerValidationService;
         this.mediaValidator = mediaValidator;
         this.practiceQuestionService = practiceQuestionService;
         this.jsonMapper = jsonMapper;
-        this.rubricBindingService = rubricBindingService;
         this.scoringService = scoringService;
-        this.speechScoringDispatcher = speechScoringDispatcher;
+        this.scoringStateService = scoringStateService;
+        this.scoringRequestFactory = scoringRequestFactory;
     }
 
     public void createItemsIfNeeded(PracticeSession session) {
@@ -140,12 +140,10 @@ public class PracticeSessionItemService {
         validateRecordedMedia(session, item, request.payload(), caller);
         item.setSavedPayload(request.payload());
         item.setConfidence(request.confidence());
-        evaluateObjective(item, now);
-        evaluateForm(item);
+        scoreOrQueue(session, item, now);
         item.setStatus(PracticeSessionItemStatus.ANSWERED);
         item.setAnsweredAt(now);
         itemRepository.saveAndFlush(item);
-        dispatchPracticeSpeechScoring(session, item);
     }
 
     public void saveDraft(PracticeSession session, PracticeSessionItem item, String payload,
@@ -198,186 +196,75 @@ public class PracticeSessionItemService {
         mediaValidator.validatePracticeResponseAudio(mediaPublicId, session.getPublicId(), item.getPublicId(), caller);
     }
 
-    private void evaluateObjective(PracticeSessionItem item, Instant evaluatedAt) {
-        if (scoringService == null || !usesScoringProfile(item, "OBJECTIVE")) {
-            return;
-        }
-        // Items created before the answer-key snapshot migration cannot be
-        // scored safely. Fail closed instead of persisting an incorrect zero.
-        if (item.getObjectiveOptionsJson() == null || item.getObjectiveOptionsJson().isBlank()) {
-            throw deterministicScoringUnavailable();
-        }
-        String canonicalPayload = objectivePayload(item);
-        if (canonicalPayload == null) {
-            throw deterministicScoringUnavailable();
-        }
-        var result = scoringService.evaluatePracticeObjective(item.getTaskCode(), canonicalPayload,
-                item.getCorrectAnswerText(), item.getObjectiveOptionsJson());
-        if (result.isEmpty()) {
-            throw deterministicScoringUnavailable();
-        }
-        result.ifPresent(value -> {
-            item.setObjectiveScore(value.rawScore());
-            item.setObjectiveEvaluatedAt(evaluatedAt);
-            item.setObjectiveEvaluatorVersion(value.evaluatorVersion());
-            item.setObjectiveResultHash(value.resultHash());
-            item.setObjectiveEvidenceIdentityHash(value.evidenceIdentityHash());
-        });
+    /** Result of this item's scoring for the answer/poll response; null when scoring is not wired (unit tests). */
+    public PracticeItemResultResponse resultOf(PracticeSessionItem item) {
+        return scoringStateService == null ? null : scoringStateService.resultOf(item);
     }
 
-    /** Converts the public renderer payload into the canonical form expected by objective scorers. */
-    private String objectivePayload(PracticeSessionItem item) {
-        String payload = item.getSavedPayload();
-        if (jsonMapper == null || payload == null || payload.isBlank()) {
-            return payload;
+    /** Repairs lost or stuck AI jobs of this session; called on every session read. */
+    public void recoverScoring(PracticeSession session, Instant now) {
+        if (scoringStateService == null || session.getId() == null) {
+            return;
         }
-        try {
-            JsonNode root = jsonMapper.readTree(payload);
-            return switch (item.getRendererKey()) {
-                case "MC_READING_SINGLE_V1", "MC_LISTENING_SINGLE_V1", "SELECT_MISSING_WORD_V1",
-                        "HIGHLIGHT_CORRECT_SUMMARY_V1" -> root.path("selectedOption").asText(payload);
-                case "MC_READING_MULTIPLE_V1", "MC_LISTENING_MULTIPLE_V1" -> joinTextArray(root.path("selectedOptions"), payload);
-                case "RE_ORDER_PARAGRAPHS_V1" -> joinTextArray(root.path("order"), payload);
-                case "FILL_IN_THE_BLANKS_DRAG_AND_DROP_V1" -> joinBlankSelections(root.path("placements"),
-                        item.getObjectiveOptionsJson(), false, payload);
-                case "FILL_IN_THE_BLANKS_DROPDOWN_V1" -> joinBlankSelections(root.path("selections"),
-                        item.getObjectiveOptionsJson(), true, payload);
-                default -> payload;
-            };
-        } catch (RuntimeException exception) {
-            return payload;
+        // Loaded under a lock so the recovery write sees the worker's latest state instead of a stale snapshot.
+        List<PracticeSessionItem> scoring = itemRepository.findScoringForUpdate(session.getId());
+        if (scoring != null) {
+            scoring.forEach(item -> scoringStateService.recover(session, item, now));
         }
+    }
+
+    public void recoverScoring(PracticeSession session, PracticeSessionItem item, Instant now) {
+        if (scoringStateService != null && item.getScoringStatus() == PracticeScoringStatus.SCORING) {
+            scoringStateService.recover(session, item, now);
+        }
+    }
+
+    /** Re-submits a FAILED item to the scorer; the caller holds the item lock. */
+    public PracticeItemResultResponse retryScoring(PracticeSession session, PracticeSessionItem item, Instant now) {
+        return scoringStateService.retry(session, item, now);
     }
 
     /**
-     * Converts the renderer's word values into the stable option indexes used
-     * by the deterministic scorer. Blank positions remain positional, so an
-     * unanswered middle or trailing blank is preserved as an empty entry.
+     * Same split as the exam: objective types are scored inside the call, speech and writing are queued for the
+     * worker, tasks with no score (Personal Introduction) are only recorded.
      */
-    private String joinBlankSelections(JsonNode selections, String optionsJson, boolean groupedByBlank,
-            String fallback) {
-        if (selections == null || !selections.isObject() || optionsJson == null || optionsJson.isBlank()) {
-            return fallback;
-        }
-        List<PracticeEvaluationOption> options;
-        try {
-            options = jsonMapper.readValue(optionsJson, new TypeReference<List<PracticeEvaluationOption>>() {
-            });
-        } catch (RuntimeException exception) {
-            return fallback;
-        }
-        int blankCount = options.stream()
-                .mapToInt(option -> groupedByBlank ? valueOrMinusOne(option.blankIndex())
-                        : valueOrMinusOne(option.correctGapIndex()))
-                .max()
-                .orElse(-1) + 1;
-        if (blankCount <= 0) {
-            return fallback;
-        }
-        List<String> orderIndexes = new ArrayList<>(blankCount);
-        for (int blankIndex = 0; blankIndex < blankCount; blankIndex++) {
-            final int gapIndex = blankIndex;
-            String selectedText = selections.path(String.valueOf(gapIndex)).asText("");
-            if (selectedText.isBlank()) {
-                orderIndexes.add("");
-                continue;
-            }
-            List<PracticeEvaluationOption> matches = options.stream()
-                    .filter(option -> sameWord(option.text(), selectedText))
-                    .filter(option -> !groupedByBlank || Integer.valueOf(gapIndex).equals(option.blankIndex()))
-                    .toList();
-            // The renderer currently submits text values. Duplicate text in a
-            // word bank/group would make that payload ambiguous, so fail closed
-            // instead of awarding the index of an arbitrary matching option.
-            if (matches.size() != 1) {
-                return null;
-            }
-            orderIndexes.add(String.valueOf(matches.get(0).orderIndex()));
-        }
-        return String.join(",", orderIndexes);
-    }
-
-    private boolean sameWord(String left, String right) {
-        return left != null && right != null
-                && left.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT)
-                        .equals(right.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT));
-    }
-
-    private int valueOrMinusOne(Integer value) {
-        return value == null ? -1 : value;
-    }
-
-    private String joinTextArray(JsonNode node, String fallback) {
-        if (node == null || !node.isArray() || node.isEmpty()) {
-            return fallback;
-        }
-        List<String> values = new ArrayList<>();
-        node.forEach(value -> values.add(value.asText()));
-        return String.join(",", values);
-    }
-
-    private void evaluateForm(PracticeSessionItem item) {
-        if (scoringService == null || !usesScoringProfile(item, "AI_TEXT")) {
+    private void scoreOrQueue(PracticeSession session, PracticeSessionItem item, Instant now) {
+        if (scoringService == null || scoringStateService == null) {
             return;
         }
-        if (jsonMapper == null || item.getSavedPayload() == null) {
-            throw deterministicScoringUnavailable();
-        }
-        try {
-            String responseText = jsonMapper.readTree(item.getSavedPayload()).path("text").asText(null);
-            var result = scoringService.evaluatePracticeForm(item.getTaskCode(), responseText,
-                    item.getMinWordCount(), item.getMaxWordCount());
-            if (result.isEmpty()) {
-                throw deterministicScoringUnavailable();
-            }
-            result.ifPresent(value -> applyFormResult(item, value));
-        } catch (PracticeSessionException exception) {
-            throw exception;
-        } catch (RuntimeException exception) {
-            throw deterministicScoringUnavailable();
+        switch (scoringService.practiceScoringRoute(item.getTaskCode())) {
+            case OBJECTIVE -> scoreObjective(session, item, now);
+            case AI_SPEECH, AI_TEXT -> scoringStateService.startScoring(session, item, now);
+            case UNSCORED -> { }
+            case UNSUPPORTED -> throw new PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME,
+                    PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME_MESSAGE);
         }
     }
 
-    private boolean usesScoringProfile(PracticeSessionItem item, String profileKey) {
-        try {
-            var runtime = TaskRuntimeProfileRegistry.descriptorFor(item.getTaskCode());
-            return runtime != null && profileKey.equals(runtime.scoringProfileKey());
-        } catch (RuntimeException exception) {
-            return false;
+    private void scoreObjective(PracticeSession session, PracticeSessionItem item, Instant now) {
+        // Items created before the answer-key snapshot migration cannot be scored
+        // safely. Fail closed instead of persisting an incorrect zero.
+        if (item.getObjectiveOptionsJson() == null || item.getObjectiveOptionsJson().isBlank()) {
+            throw deterministicScoringUnavailable();
         }
+        PracticeAiEvaluation evaluation;
+        try {
+            evaluation = scoringService.scorePracticeAnswer(scoringRequestFactory.build(item, session.getTenantId()));
+        } catch (PracticeScoringException exception) {
+            if (exception.failure() == PracticeScoringFailure.INVALID_PAYLOAD) {
+                throw new PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        PracticeConstants.PRACTICE_ANSWER_INVALID, PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
+            }
+            throw deterministicScoringUnavailable();
+        }
+        scoringStateService.recordInline(item, evaluation, now);
     }
 
     private PracticeSessionException deterministicScoringUnavailable() {
         return new PracticeSessionException(HttpStatus.SERVICE_UNAVAILABLE,
                 PracticeConstants.PRACTICE_DETERMINISTIC_SCORING_UNAVAILABLE,
                 PracticeConstants.PRACTICE_DETERMINISTIC_SCORING_UNAVAILABLE_MESSAGE);
-    }
-
-    private void dispatchPracticeSpeechScoring(PracticeSession session, PracticeSessionItem item) {
-        if (speechScoringDispatcher == null || jsonMapper == null
-                || !PracticeConstants.PRACTICE_RECORDING_RENDERER_KEYS.contains(item.getRendererKey())
-                || item.getSavedPayload() == null) {
-            return;
-        }
-        try {
-            var payload = jsonMapper.readTree(item.getSavedPayload());
-            String mediaPublicId = payload.path("mediaPublicId").asText(null);
-            if (mediaPublicId == null || mediaPublicId.isBlank()) {
-                return;
-            }
-            speechScoringDispatcher.dispatchAfterCommit(item.getPublicId(), session.getTenantId());
-        } catch (RuntimeException ignored) {
-            // The answer is already durable; malformed optional media metadata does
-            // not make a valid practice response fail.
-        }
-    }
-
-    private void applyFormResult(PracticeSessionItem item, PracticeFormEvaluation result) {
-        item.setFormWordCount(result.wordCount());
-        item.setFormStatus(result.status());
-        item.setFormEvaluatorVersion(result.evaluatorVersion());
-        item.setFormResultHash(result.resultHash());
-        item.setFormEvidenceIdentityHash(result.evidenceIdentityHash());
     }
 
     private Set<String> splitCsv(String csv) {
@@ -410,9 +297,6 @@ public class PracticeSessionItemService {
                         PracticeConstants.PRACTICE_CONTENT_NOT_READY_MESSAGE));
         item.setReferenceAnswerText(evaluationContent.referenceAnswerText());
         item.setCorrectAnswerText(evaluationContent.correctAnswerText());
-        if (rubricBindingService != null) {
-            rubricBindingService.pin(item, taskCode);
-        }
         try {
             item.setOptionsJson(jsonMapper.writeValueAsString(content.options()));
             item.setObjectiveOptionsJson(jsonMapper.writeValueAsString(evaluationContent.options()));
@@ -421,9 +305,5 @@ public class PracticeSessionItemService {
                     PracticeConstants.PRACTICE_CONTENT_NOT_READY,
                     PracticeConstants.PRACTICE_CONTENT_NOT_READY_MESSAGE);
         }
-    }
-
-    private record PracticeEvaluationOption(String text, boolean correct, int orderIndex, Integer blankIndex,
-            Integer correctGapIndex) {
     }
 }

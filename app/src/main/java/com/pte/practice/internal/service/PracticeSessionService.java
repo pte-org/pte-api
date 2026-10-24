@@ -12,6 +12,7 @@ import com.pte.practice.internal.dto.request.PracticeAnswerRequest;
 import com.pte.practice.internal.dto.request.PracticeSaveAndExitRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionActionRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionStartRequest;
+import com.pte.practice.internal.dto.response.PracticeItemResultResponse;
 import com.pte.practice.internal.dto.response.PracticeSessionResponse;
 import com.pte.practice.internal.exception.PracticeIdempotencyException;
 import com.pte.practice.internal.exception.PracticeNotEntitledException;
@@ -127,6 +128,7 @@ public class PracticeSessionService {
     public PracticeSessionResponse get(UUID publicId, CurrentUser caller) {
         PracticeSession session = findOwned(publicId, caller.userId());
         expireIfNeeded(session);
+        itemService.recoverScoring(session, clock.instant());
         return responseMapper.toResponse(session);
     }
 
@@ -203,7 +205,9 @@ public class PracticeSessionService {
                         session.getId(), PracticeSessionOperationType.ANSWER, idempotencyKey);
         if (existingOperation.isPresent()) {
             assertSameHash(existingOperation.get().getRequestHash(), requestHash);
-            return responseMapper.toResponse(session);
+            PracticeSessionItem answered = itemService.findForUpdate(session, itemPublicId);
+            itemService.recoverScoring(session, clock.instant());
+            return responseMapper.toResponse(session).withItemResult(itemService.resultOf(answered));
         }
         requireLiveInProgress(session, request.clientVersion());
         Instant now = clock.instant();
@@ -212,7 +216,28 @@ public class PracticeSessionService {
         itemService.completeIfFinished(session, now);
         session.setLastActivityAt(now);
         saveOperation(session, PracticeSessionOperationType.ANSWER, idempotencyKey, requestHash);
-        return saveAndMap(session);
+        return saveAndMap(session).withItemResult(itemService.resultOf(item));
+    }
+
+    /**
+     * Poll for one item's score. The item row is locked so the stale-job repair cannot race the worker's write.
+     * Ownership is checked through the session, so another student's or tenant's item is not found.
+     */
+    @Transactional
+    public PracticeItemResultResponse itemResult(UUID publicId, UUID itemPublicId, CurrentUser caller) {
+        PracticeSession session = findOwned(publicId, caller.userId());
+        PracticeSessionItem item = itemService.findForUpdate(session, itemPublicId);
+        itemService.recoverScoring(session, item, clock.instant());
+        return itemService.resultOf(item);
+    }
+
+    /** Re-submits a FAILED AI item (at most the configured retries); a SCORED item is final. */
+    @Transactional
+    public PracticeItemResultResponse retryScoring(UUID publicId, UUID itemPublicId, CurrentUser caller) {
+        PracticeSession session = findOwnedForUpdate(publicId, caller.userId());
+        entitlementService.assertUnlocked(caller, session.getTenantId());
+        PracticeSessionItem item = itemService.findForUpdate(session, itemPublicId);
+        return itemService.retryScoring(session, item, clock.instant());
     }
 
     @Transactional

@@ -1,5 +1,6 @@
 package com.pte.practice.internal.service;
 
+import com.pte.itembank.PracticeQuestionService;
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
@@ -106,6 +107,50 @@ class PracticeCatalogServiceTest {
 
         assertThat(result.ready()).isFalse();
         assertThat(result.blockedTaskTypes()).containsExactly("READ_ALOUD");
+    }
+
+    @Test
+    void everyVisibleTaskTypeIsRunnableOnceItHasPublishedPracticeContent() {
+        PracticeQuestionService questions = org.mockito.Mockito.mock(PracticeQuestionService.class);
+        when(questions.hasPublishedQuestion(org.mockito.ArgumentMatchers.anyString())).thenReturn(true);
+        when(questionTypeService.list(true)).thenReturn(List.of());
+        PracticeCatalogService withContent = new PracticeCatalogService(questionTypeService, questions);
+
+        List<PracticeCatalogTaskResponse> tasks = withContent.getCatalog().sections().stream()
+                .flatMap(section -> section.taskTypes().stream()).toList();
+
+        assertThat(tasks).hasSize(22);
+        assertThat(tasks).extracting(PracticeCatalogTaskResponse::availability)
+                .containsOnly(PracticeCatalogAvailability.RUNNABLE);
+        assertThat(tasks).extracting(PracticeCatalogTaskResponse::code)
+                .doesNotContain("PERSONAL_INTRODUCTION", "WRITE_EMAIL");
+    }
+
+    @Test
+    void taskTypesWithoutPublishedPracticeContentAreVisibleButNotRunnable() {
+        PracticeQuestionService questions = org.mockito.Mockito.mock(PracticeQuestionService.class);
+        when(questions.hasPublishedQuestion(org.mockito.ArgumentMatchers.anyString())).thenReturn(false);
+        when(questionTypeService.list(true)).thenReturn(List.of());
+        PracticeCatalogService withoutContent = new PracticeCatalogService(questionTypeService, questions);
+
+        List<PracticeCatalogTaskResponse> tasks = withoutContent.getCatalog().sections().stream()
+                .flatMap(section -> section.taskTypes().stream()).toList();
+
+        assertThat(tasks).extracting(PracticeCatalogTaskResponse::availability)
+                .containsOnly(PracticeCatalogAvailability.VISIBLE);
+        assertThat(tasks).extracting(PracticeCatalogTaskResponse::unavailableReason)
+                .containsOnly("PRACTICE_CONTENT_NOT_READY");
+    }
+
+    @Test
+    void personalIntroductionAndWriteEmailCannotBeStarted() {
+        when(questionTypeService.list(true)).thenReturn(List.of(active("PERSONAL_INTRODUCTION", "SPEAKING")));
+
+        PracticePreflightResponse response = service.preflight(new PracticePreflightRequest(
+                "PTE_CORE_PRACTICE", Set.of("PERSONAL_INTRODUCTION", "WRITE_EMAIL"), null));
+
+        assertThat(response.ready()).isFalse();
+        assertThat(response.blockedTaskTypes()).containsExactlyInAnyOrder("PERSONAL_INTRODUCTION", "WRITE_EMAIL");
     }
 
     private QuestionTypeResponse active(String code, String section) {
