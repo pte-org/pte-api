@@ -1,11 +1,11 @@
 package com.pte.media.internal.service;
 
-import com.pte.media.domain.MediaObject;
+import com.pte.media.domain.MediaAsset;
 import com.pte.media.domain.enums.MediaStatus;
 import com.pte.media.domain.enums.CloudinaryDeliveryType;
 import com.pte.media.internal.dto.request.CloudinaryUploadRequest;
 import com.pte.media.internal.dto.response.CloudinaryUploadResponse;
-import com.pte.media.internal.repository.MediaObjectRepository;
+import com.pte.media.internal.repository.MediaAssetRepository;
 import com.pte.media.internal.constant.MediaConstants;
 import com.pte.shared.practice.PracticeMediaBindingPort;
 import com.pte.shared.practice.PracticeMediaConstants;
@@ -39,14 +39,14 @@ import static org.mockito.Mockito.when;
 class CloudinaryMediaServiceTest {
 
     @Mock
-    private MediaObjectRepository repository;
+    private MediaAssetRepository repository;
 
     @Mock
     private PracticeMediaBindingPort practiceMediaBindingService;
 
     @Test
     void studentResponseUploadUsesPublicSubmissionFolderAndStudentOwnership() throws Exception {
-        when(repository.save(any(MediaObject.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(MediaAsset.class))).thenAnswer(invocation -> invocation.getArgument(0));
         UUID studentId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
 
@@ -66,9 +66,9 @@ class CloudinaryMediaServiceTest {
         assertThat(response.signature()).isEqualTo(expectedUploadSignature);
         assertThat(URI.create(response.uploadUrl()).getRawQuery()).isNull();
 
-        ArgumentCaptor<MediaObject> captor = ArgumentCaptor.forClass(MediaObject.class);
+        ArgumentCaptor<MediaAsset> captor = ArgumentCaptor.forClass(MediaAsset.class);
         verify(repository).save(captor.capture());
-        MediaObject media = captor.getValue();
+        MediaAsset media = captor.getValue();
         assertThat(media.getOwnerPublicId()).isEqualTo(studentId);
         assertThat(media.getTenantId()).isEqualTo(tenantId);
         assertThat(media.isAudioPrompt()).isFalse();
@@ -82,7 +82,7 @@ class CloudinaryMediaServiceTest {
 
     @Test
     void examAttemptResponseUploadKeepsTheSubmissionSizeLimit() {
-        when(repository.save(any(MediaObject.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(MediaAsset.class))).thenAnswer(invocation -> invocation.getArgument(0));
         CurrentUser student = new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("STUDENT"));
 
         CloudinaryUploadResponse response = service().requestUpload(
@@ -100,7 +100,7 @@ class CloudinaryMediaServiceTest {
 
     @Test
     void practiceResponseUploadBindsTheRecordingToTheLivePracticeItem() {
-        when(repository.save(any(MediaObject.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(MediaAsset.class))).thenAnswer(invocation -> invocation.getArgument(0));
         CurrentUser student = new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("STUDENT"));
         UUID sessionId = UUID.randomUUID();
         UUID itemId = UUID.randomUUID();
@@ -111,9 +111,9 @@ class CloudinaryMediaServiceTest {
                 student);
 
         verify(practiceMediaBindingService).assertCanUseResponseAudio(sessionId, itemId, student);
-        ArgumentCaptor<MediaObject> captor = ArgumentCaptor.forClass(MediaObject.class);
+        ArgumentCaptor<MediaAsset> captor = ArgumentCaptor.forClass(MediaAsset.class);
         verify(repository).save(captor.capture());
-        MediaObject media = captor.getValue();
+        MediaAsset media = captor.getValue();
         assertThat(media.getPracticeSessionPublicId()).isEqualTo(sessionId);
         assertThat(media.getPracticeItemPublicId()).isEqualTo(itemId);
         assertThat(media.getPurpose()).isEqualTo(PracticeMediaConstants.RESPONSE_AUDIO_PURPOSE);
@@ -141,7 +141,7 @@ class CloudinaryMediaServiceTest {
 
     @Test
     void academicStaffCanRequestAuthoringMedia() {
-        when(repository.save(any(MediaObject.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(MediaAsset.class))).thenAnswer(invocation -> invocation.getArgument(0));
         UUID staffId = UUID.randomUUID();
 
         CloudinaryUploadResponse response = service().requestUpload(
@@ -149,7 +149,7 @@ class CloudinaryMediaServiceTest {
                 new CurrentUser(staffId, null, List.of("ACADEMIC_STAFF")));
 
         assertThat(response.folder()).isEqualTo("pte/authoring");
-        ArgumentCaptor<MediaObject> captor = ArgumentCaptor.forClass(MediaObject.class);
+        ArgumentCaptor<MediaAsset> captor = ArgumentCaptor.forClass(MediaAsset.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getOwnerPublicId()).isEqualTo(staffId);
     }
@@ -200,8 +200,8 @@ class CloudinaryMediaServiceTest {
         UUID tenantId = UUID.randomUUID();
         UUID firstId = UUID.randomUUID();
         UUID secondId = UUID.randomUUID();
-        MediaObject first = uploaded(firstId, tenantId, "https://media.test/first");
-        MediaObject second = uploaded(secondId, null, "https://media.test/second");
+        MediaAsset first = uploaded(firstId, tenantId, "https://media.test/first");
+        MediaAsset second = uploaded(secondId, null, "https://media.test/second");
         when(repository.findAllForTrustedTenant(List.of(firstId, secondId), tenantId))
                 .thenReturn(List.of(first, second));
 
@@ -218,7 +218,7 @@ class CloudinaryMediaServiceTest {
     void authenticatedMediaUsesTimeLimitedSignedCloudinaryDownloadUrl() throws Exception {
         UUID tenantId = UUID.randomUUID();
         UUID mediaId = UUID.randomUUID();
-        MediaObject media = uploaded(mediaId, tenantId,
+        MediaAsset media = uploaded(mediaId, tenantId,
                 "https://res.cloudinary.com/test-cloud/video/authenticated/file.wav");
         media.setCloudinaryDeliveryType(CloudinaryDeliveryType.AUTHENTICATED);
         when(repository.findAllForTrustedTenant(List.of(mediaId), tenantId)).thenReturn(List.of(media));
@@ -259,7 +259,7 @@ class CloudinaryMediaServiceTest {
                 .isInstanceOf(com.pte.media.internal.exception.MediaNotFoundException.class);
 
         UUID pendingId = UUID.randomUUID();
-        MediaObject pending = uploaded(pendingId, tenantId, "https://media.test/pending");
+        MediaAsset pending = uploaded(pendingId, tenantId, "https://media.test/pending");
         pending.setStatus(MediaStatus.PENDING_UPLOAD);
         when(repository.findAllForTrustedTenant(List.of(pendingId), tenantId)).thenReturn(List.of(pending));
 
@@ -278,8 +278,8 @@ class CloudinaryMediaServiceTest {
         verify(repository).findAllForTrustedTenant(List.of(mediaId), tenantId);
     }
 
-    private MediaObject uploaded(UUID publicId, UUID tenantId, String secureUrl) {
-        MediaObject media = new MediaObject();
+    private MediaAsset uploaded(UUID publicId, UUID tenantId, String secureUrl) {
+        MediaAsset media = new MediaAsset();
         media.setPublicId(publicId);
         media.setTenantId(tenantId);
         media.setCloudinaryPublicId("cloudinary/" + publicId);

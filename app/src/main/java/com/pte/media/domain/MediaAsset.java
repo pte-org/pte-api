@@ -27,7 +27,7 @@ import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
-public class MediaObject extends BaseEntity {
+public class MediaAsset extends BaseEntity {
 
     @Column
     private UUID tenantId;

@@ -1,6 +1,6 @@
 package com.pte.media.internal.service;
 
-import com.pte.media.domain.MediaObject;
+import com.pte.media.domain.MediaAsset;
 import com.pte.media.domain.enums.CloudinaryDeliveryType;
 import com.pte.media.domain.enums.MediaStatus;
 import com.pte.media.internal.dto.request.CloudinaryCompleteRequest;
@@ -12,7 +12,7 @@ import com.pte.media.internal.exception.MediaNotFoundException;
 import com.pte.media.internal.exception.MediaNotYetUploadedException;
 import com.pte.media.internal.exception.UnsupportedContentTypeException;
 import com.pte.media.internal.constant.MediaConstants;
-import com.pte.media.internal.repository.MediaObjectRepository;
+import com.pte.media.internal.repository.MediaAssetRepository;
 import com.pte.shared.practice.PracticeMediaBindingPort;
 import com.pte.shared.practice.PracticeMediaConstants;
 import com.pte.shared.practice.PracticeResponseMediaValidator;
@@ -52,7 +52,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
     private static final Set<String> AUDIO_TYPES = Set.of("audio/wav");
     private static final long SIGNATURE_TTL_SECONDS = 900;
 
-    private final MediaObjectRepository repository;
+    private final MediaAssetRepository repository;
     private final String cloudName;
     private final String apiKey;
     private final String apiSecret;
@@ -62,7 +62,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
     private final AuditLogService auditLogService;
 
     @Autowired
-    public CloudinaryMediaService(MediaObjectRepository repository,
+    public CloudinaryMediaService(MediaAssetRepository repository,
             @Value("${cloudinary.cloud-name:}") String cloudName,
             @Value("${cloudinary.api-key:}") String apiKey,
             @Value("${cloudinary.api-secret:}") String apiSecret,
@@ -74,20 +74,20 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
     }
 
     /** Kept for focused media tests and legacy callers that do not exercise practice binding. */
-    public CloudinaryMediaService(MediaObjectRepository repository, String cloudName, String apiKey,
+    public CloudinaryMediaService(MediaAssetRepository repository, String cloudName, String apiKey,
             String apiSecret, String authoringFolder, String submissionFolder) {
         this(repository, cloudName, apiKey, apiSecret, authoringFolder, submissionFolder, null, null, false);
     }
 
     /** Compatibility constructor for tests/callers that provide practice binding only. */
-    public CloudinaryMediaService(MediaObjectRepository repository, String cloudName, String apiKey,
+    public CloudinaryMediaService(MediaAssetRepository repository, String cloudName, String apiKey,
             String apiSecret, String authoringFolder, String submissionFolder,
             PracticeMediaBindingPort practiceMediaBindingService) {
         this(repository, cloudName, apiKey, apiSecret, authoringFolder, submissionFolder,
                 practiceMediaBindingService, null, false);
     }
 
-    private CloudinaryMediaService(MediaObjectRepository repository, String cloudName, String apiKey,
+    private CloudinaryMediaService(MediaAssetRepository repository, String cloudName, String apiKey,
             String apiSecret, String authoringFolder, String submissionFolder,
             PracticeMediaBindingPort practiceMediaBindingService, AuditLogService auditLogService, boolean ignored) {
         this.repository = repository;
@@ -139,7 +139,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
         // signed upload small and let public media use its stable secure URL.
         String signature = sign("folder=" + folder + "&public_id=" + publicId + "&timestamp=" + timestamp);
 
-        MediaObject media = new MediaObject();
+        MediaAsset media = new MediaAsset();
         media.setPublicId(mediaPublicId);
         media.setTenantId(caller.tenantId());
         media.setOwnerPublicId(caller.userId());
@@ -165,7 +165,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
 
     @Transactional
     public void completeUpload(UUID mediaPublicId, CloudinaryCompleteRequest request, CurrentUser caller) {
-        MediaObject media = repository.findByPublicId(mediaPublicId)
+        MediaAsset media = repository.findByPublicId(mediaPublicId)
                 .filter(candidate -> candidate.getOwnerPublicId().equals(caller.userId()))
                 .orElseThrow(MediaNotFoundException::new);
         if (media.getStatus() == MediaStatus.UPLOADED) {
@@ -206,7 +206,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
 
     @Transactional(readOnly = true)
     public MediaPreviewResponse preview(UUID mediaPublicId, CurrentUser caller) {
-        MediaObject media = repository.findByPublicId(mediaPublicId)
+        MediaAsset media = repository.findByPublicId(mediaPublicId)
                 .filter(candidate -> candidate.getOwnerPublicId().equals(caller.userId()) || caller.hasRole("PLATFORM_ADMIN"))
                 .orElseThrow(MediaNotFoundException::new);
         if (media.getStatus() != MediaStatus.UPLOADED || media.getSecureUrl() == null) {
@@ -243,12 +243,12 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
             return Map.of();
         }
 
-        Map<UUID, MediaObject> mediaByPublicId = new HashMap<>();
+        Map<UUID, MediaAsset> mediaByPublicId = new HashMap<>();
         repository.findAllForTrustedTenant(requestedIds, tenantId)
                 .forEach(media -> mediaByPublicId.put(media.getPublicId(), media));
         Map<UUID, PresignedDownloadResponse> resolved = new HashMap<>();
         for (UUID mediaPublicId : requestedIds) {
-            MediaObject media = mediaByPublicId.get(mediaPublicId);
+            MediaAsset media = mediaByPublicId.get(mediaPublicId);
             if (media == null) {
                 throw new MediaNotFoundException();
             }
@@ -258,7 +258,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
     }
 
     private PresignedDownloadResponse toTrustedDownloadResponse(
-            MediaObject media, long requestedTtlSeconds, UUID tenantId) {
+            MediaAsset media, long requestedTtlSeconds, UUID tenantId) {
         if (media.getCloudinaryPublicId() == null) {
             throw new MediaNotFoundException();
         }
@@ -276,7 +276,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
         return new PresignedDownloadResponse(privateDownloadUrl(media, ttl), ttl, media.getDurationSeconds());
     }
 
-    private String privateDownloadUrl(MediaObject media, long ttlSeconds) {
+    private String privateDownloadUrl(MediaAsset media, long ttlSeconds) {
         long timestamp = Instant.now().getEpochSecond();
         Map<String, String> signedParameters = new TreeMap<>();
         signedParameters.put("attachment", "false");
@@ -311,7 +311,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
     }
 
     public void validateAuthoringMedia(UUID mediaPublicId, String assetKind, CurrentUser caller) {
-        MediaObject media = repository.findByPublicId(mediaPublicId).orElseThrow(MediaNotFoundException::new);
+        MediaAsset media = repository.findByPublicId(mediaPublicId).orElseThrow(MediaNotFoundException::new);
         if (media.getCloudinaryPublicId() == null || media.getStatus() != MediaStatus.UPLOADED) {
             throw new MediaNotYetUploadedException();
         }
@@ -334,7 +334,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
                 || caller.userId() == null) {
             throw new MediaNotFoundException();
         }
-        MediaObject media = repository.findByPublicId(mediaPublicId)
+        MediaAsset media = repository.findByPublicId(mediaPublicId)
                 .filter(candidate -> candidate.getOwnerPublicId().equals(caller.userId()))
                 .orElseThrow(MediaNotFoundException::new);
         if (!isPracticeResponseAudio(media)
@@ -378,7 +378,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
         }
     }
 
-    private void requirePracticeBinding(MediaObject media, CurrentUser caller) {
+    private void requirePracticeBinding(MediaAsset media, CurrentUser caller) {
         if (practiceMediaBindingService == null
                 || media.getPracticeSessionPublicId() == null
                 || media.getPracticeItemPublicId() == null
@@ -389,7 +389,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
                 media.getPracticeSessionPublicId(), media.getPracticeItemPublicId(), caller);
     }
 
-    private boolean isPracticeResponseAudio(MediaObject media) {
+    private boolean isPracticeResponseAudio(MediaAsset media) {
         return PracticeMediaConstants.RESPONSE_AUDIO_PURPOSE.equals(media.getPurpose());
     }
 
