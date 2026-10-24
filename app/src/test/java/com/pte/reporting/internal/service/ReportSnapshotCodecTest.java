@@ -23,7 +23,7 @@ class ReportSnapshotCodecTest {
         UUID publicationId = UUID.randomUUID();
         UUID publisherId = UUID.randomUUID();
         UUID examSnapshotId = UUID.randomUUID();
-        UUID scoreTemplateId = UUID.randomUUID();
+        UUID examDefinitionId = UUID.randomUUID();
         int scoreTemplateVersion = 7;
         Instant publishedAt = Instant.parse("2026-09-24T10:15:30Z");
         AttemptScoreSummary summary = new AttemptScoreSummary(null, Map.of(Skill.WRITING, SkillScore.of(81)));
@@ -31,7 +31,7 @@ class ReportSnapshotCodecTest {
                 "WRITE_ESSAY", "WRITING", "AI_TEXT", 75, "REAL", "provider", "model", "v2", 81,
                 "EXAMINER", 81, true, null, 3);
 
-        String json = codec.encode(publicationId, publisherId, publishedAt, 4, examSnapshotId, scoreTemplateId,
+        String json = codec.encode(publicationId, publisherId, publishedAt, 4, examSnapshotId, examDefinitionId,
                 scoreTemplateVersion, summary, List.of(input));
         ReportSnapshot snapshot = codec.decode(json);
 
@@ -40,7 +40,7 @@ class ReportSnapshotCodecTest {
         assertThat(snapshot.publishedAt()).isEqualTo(publishedAt);
         assertThat(snapshot.cohortSize()).isEqualTo(4);
         assertThat(snapshot.examSnapshotPublicId()).isEqualTo(examSnapshotId);
-        assertThat(snapshot.scoreTemplatePublicId()).isEqualTo(scoreTemplateId);
+        assertThat(snapshot.scoreTemplatePublicId()).isEqualTo(examDefinitionId);
         assertThat(snapshot.scoreTemplateVersion()).isEqualTo(scoreTemplateVersion);
         assertThat(snapshot.scoreSummary()).isEqualTo(summary);
         assertThat(snapshot.scoreInputs()).containsExactly(new ReportSnapshotScoreInput(answerId, templateId,

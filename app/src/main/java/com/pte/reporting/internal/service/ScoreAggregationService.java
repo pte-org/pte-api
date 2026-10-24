@@ -4,9 +4,9 @@ import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.reporting.domain.enums.Skill;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.scoring.ScoringService;
 import com.pte.scoring.dto.response.ReportScoringAnswerView;
 import com.pte.scoring.dto.response.ScoredAnswerView;
@@ -54,25 +54,25 @@ public class ScoreAggregationService {
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     private static final MathContext MATH_CONTEXT = MathContext.DECIMAL64;
 
-    private static final Map<Skill, Function<ScoreTemplateItemResponse, BigDecimal>> SKILL_WEIGHT_ACCESSORS =
+    private static final Map<Skill, Function<ExamDefinitionItemResponse, BigDecimal>> SKILL_WEIGHT_ACCESSORS =
             new EnumMap<>(Skill.class);
 
     static {
-        SKILL_WEIGHT_ACCESSORS.put(Skill.SPEAKING, ScoreTemplateItemResponse::speakingWeight);
-        SKILL_WEIGHT_ACCESSORS.put(Skill.WRITING, ScoreTemplateItemResponse::writingWeight);
-        SKILL_WEIGHT_ACCESSORS.put(Skill.READING, ScoreTemplateItemResponse::readingWeight);
-        SKILL_WEIGHT_ACCESSORS.put(Skill.LISTENING, ScoreTemplateItemResponse::listeningWeight);
+        SKILL_WEIGHT_ACCESSORS.put(Skill.SPEAKING, ExamDefinitionItemResponse::speakingWeight);
+        SKILL_WEIGHT_ACCESSORS.put(Skill.WRITING, ExamDefinitionItemResponse::writingWeight);
+        SKILL_WEIGHT_ACCESSORS.put(Skill.READING, ExamDefinitionItemResponse::readingWeight);
+        SKILL_WEIGHT_ACCESSORS.put(Skill.LISTENING, ExamDefinitionItemResponse::listeningWeight);
     }
 
     private final ScoringService scoringService;
     private final AttemptService attemptService;
-    private final ScoreTemplateService scoreTemplateService;
+    private final ExamDefinitionService examDefinitionService;
 
     public ScoreAggregationService(ScoringService scoringService, AttemptService attemptService,
-                                   ScoreTemplateService scoreTemplateService) {
+                                   ExamDefinitionService examDefinitionService) {
         this.scoringService = scoringService;
         this.attemptService = attemptService;
-        this.scoreTemplateService = scoreTemplateService;
+        this.examDefinitionService = examDefinitionService;
     }
 
     public AttemptScoreSummary aggregate(UUID attemptPublicId, UUID tenantId) {
@@ -83,7 +83,7 @@ public class ScoreAggregationService {
     public AttemptScoreSummary aggregateFromInputs(UUID attemptPublicId, UUID tenantId,
             List<ReportScoringAnswerView> answers) {
         AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
-        ScoreTemplateResponse template = scoreTemplateService.getByPublicId(context.scoreTemplatePublicId());
+        ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.scoreTemplatePublicId());
         return aggregateWithScores(attemptPublicId,
                 averageScoresByTaskType(answers, ReportScoringAnswerView::selectedScore), context, template.items());
     }
@@ -96,7 +96,7 @@ public class ScoreAggregationService {
         List<ReportScoringAnswerView> answers = scoringService.getReportScoringInputsForAttempt(tenantId,
                 attemptPublicId);
         AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
-        ScoreTemplateResponse template = scoreTemplateService.getByPublicId(context.scoreTemplatePublicId());
+        ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.scoreTemplatePublicId());
         AttemptScoreSummary summary = aggregateWithScores(attemptPublicId,
                 averageScoresByTaskType(answers, ReportScoringAnswerView::provisionalScore), context,
                 template.items());
@@ -114,11 +114,11 @@ public class ScoreAggregationService {
         Map<UUID, AttemptScoreContextView> contexts = attemptService.getScoreContexts(attemptPublicIds);
         Set<UUID> templateIds = contexts.values().stream()
                 .map(AttemptScoreContextView::scoreTemplatePublicId).collect(Collectors.toSet());
-        Map<UUID, ScoreTemplateResponse> templates = scoreTemplateService.getByPublicIds(templateIds);
+        Map<UUID, ExamDefinitionResponse> templates = examDefinitionService.getByPublicIds(templateIds);
         Map<UUID, ReportScoreAggregation> results = new HashMap<>();
         for (UUID attemptPublicId : attemptPublicIds) {
             AttemptScoreContextView context = contexts.get(attemptPublicId);
-            ScoreTemplateResponse template = templates.get(context.scoreTemplatePublicId());
+            ExamDefinitionResponse template = templates.get(context.scoreTemplatePublicId());
             AttemptScoreSummary summary = aggregateWithScores(attemptPublicId,
                     averageScoresByTaskType(answersByAttempt.getOrDefault(attemptPublicId, List.of()),
                             ReportScoringAnswerView::selectedScore),
@@ -132,12 +132,12 @@ public class ScoreAggregationService {
     public AttemptScoreSummary aggregateLegacyPublished(UUID attemptPublicId, UUID tenantId) {
         List<ScoredAnswerView> answers = scoringService.getScoredAnswersForAttempt(attemptPublicId, tenantId);
         AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
-        ScoreTemplateResponse template = scoreTemplateService.getByPublicId(context.scoreTemplatePublicId());
+        ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.scoreTemplatePublicId());
         return aggregateWithScores(attemptPublicId, averageRawScoresByTaskType(answers), context, template.items());
     }
 
     private AttemptScoreSummary aggregateWithScores(UUID attemptPublicId, Map<String, BigDecimal> avgRawByTaskType,
-            AttemptScoreContextView context, List<ScoreTemplateItemResponse> templateItems) {
+            AttemptScoreContextView context, List<ExamDefinitionItemResponse> templateItems) {
         Map<Skill, SkillScore> skillScores = new EnumMap<>(Skill.class);
         for (Skill skill : Skill.values()) {
             if (context.testedSections().contains(skill.name())) {
@@ -148,7 +148,7 @@ public class ScoreAggregationService {
         boolean allFourSkillsTested = Set.of("SPEAKING", "WRITING", "READING", "LISTENING")
                 .stream().allMatch(section -> context.testedSections().contains(section));
         SkillScore overall = allFourSkillsTested
-                ? computeWeighted(templateItems, avgRawByTaskType, ScoreTemplateItemResponse::overallWeight)
+                ? computeWeighted(templateItems, avgRawByTaskType, ExamDefinitionItemResponse::overallWeight)
                 : null;
 
         return new AttemptScoreSummary(overall, skillScores);
@@ -188,12 +188,12 @@ public class ScoreAggregationService {
     }
 
     /** FR-18, applied with whichever weight column {@code weightAccessor} selects (one of the 4 skills, or Overall). */
-    private SkillScore computeWeighted(List<ScoreTemplateItemResponse> templateItems,
+    private SkillScore computeWeighted(List<ExamDefinitionItemResponse> templateItems,
                                        Map<String, BigDecimal> avgRawByTaskType,
-                                       Function<ScoreTemplateItemResponse, BigDecimal> weightAccessor) {
+                                       Function<ExamDefinitionItemResponse, BigDecimal> weightAccessor) {
         BigDecimal weightedSum = BigDecimal.ZERO;
         BigDecimal totalWeight = BigDecimal.ZERO;
-        for (ScoreTemplateItemResponse item : templateItems) {
+        for (ExamDefinitionItemResponse item : templateItems) {
             BigDecimal weight = weightAccessor.apply(item);
             if (weight == null || weight.signum() <= 0) {
                 continue;

@@ -70,7 +70,7 @@ class ReportPublishServiceTest {
         UUID answerId = UUID.randomUUID();
         UUID publicationId = UUID.randomUUID();
         UUID examSnapshotId = UUID.randomUUID();
-        UUID scoreTemplateId = UUID.randomUUID();
+        UUID examDefinitionId = UUID.randomUUID();
         int scoreTemplateVersion = 7;
         AttemptSummaryView attempt = new AttemptSummaryView(attemptId, sessionId, studentId, tenantId,
                 examSnapshotId);
@@ -84,10 +84,10 @@ class ReportPublishServiceTest {
         when(attemptReportRepository.findByAttemptPublicId(attemptId)).thenReturn(Optional.of(report));
         when(aggregationService.aggregateBatchFromInputs(Set.of(attemptId), Map.of(attemptId, List.of(input))))
                 .thenReturn(Map.of(attemptId, new ReportScoreAggregation(
-                        new AttemptScoreContextView(scoreTemplateId, scoreTemplateVersion, Set.of("SPEAKING")),
+                        new AttemptScoreContextView(examDefinitionId, scoreTemplateVersion, Set.of("SPEAKING")),
                         summary)));
         when(snapshotCodec.encode(eq(publicationId), eq(actorId), any(), eq(1), eq(examSnapshotId),
-                eq(scoreTemplateId), eq(scoreTemplateVersion), eq(summary), eq(List.of(input))))
+                eq(examDefinitionId), eq(scoreTemplateVersion), eq(summary), eq(List.of(input))))
                 .thenReturn("immutable-snapshot");
 
         int published = service.publishSession(sessionId, tenantId, actorId);
