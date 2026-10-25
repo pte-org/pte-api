@@ -2,14 +2,15 @@ package com.pte.session.internal.service.lifecycle;
 
 import com.pte.billing.BillingService;
 import com.pte.billing.SubscriptionView;
-import com.pte.session.internal.exception.InvalidSessionWindowException;
-import com.pte.session.internal.exception.SessionSubscriptionCapacityException;
-import com.pte.session.internal.exception.SessionSubscriptionNotFoundException;
-import com.pte.session.internal.exception.SessionTimeConflictException;
-import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionException;
+import com.pte.session.internal.exception.capacity.InvalidSessionWindowException;
+import com.pte.session.internal.exception.capacity.SessionSubscriptionCapacityException;
+import com.pte.session.internal.exception.capacity.SessionSubscriptionNotFoundException;
+import com.pte.session.internal.exception.capacity.SessionTimeConflictException;
+import com.pte.session.internal.exception.capacity.SessionWindowOutsideSubscriptionException;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -22,11 +23,14 @@ public class SessionSubscriptionRules {
 
     private final ExamSessionRepository sessionRepository;
     private final BillingService billingService;
+    private final Clock clock;
 
     public SessionSubscriptionRules(ExamSessionRepository sessionRepository,
-            BillingService billingService) {
+            BillingService billingService,
+            Clock clock) {
         this.sessionRepository = sessionRepository;
         this.billingService = billingService;
+        this.clock = clock;
     }
 
     public SubscriptionView lockedActiveSubscription(UUID subscriptionId, UUID tenantId) {
@@ -43,7 +47,7 @@ public class SessionSubscriptionRules {
 
     public void validateSubscriptionWindowAndCapacity(SubscriptionView subscription, Instant opensAt,
             Instant closesAt, long capacityOrEnrollmentCount, boolean enrollmentCount) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         if (subscription == null || subscription.status() == null || subscription.maxStudentsPerSession() == null
                 || subscription.maxStudentsPerSession() <= 0 || !subscription.isUsableAt(now)) {
             throw new SessionSubscriptionNotFoundException();

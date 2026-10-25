@@ -1,8 +1,8 @@
 package com.pte.session.internal.controller;
 
 import com.pte.session.internal.dto.request.AssignClassRequest;
-import com.pte.session.internal.dto.response.SessionClassAssignmentResponse;
-import com.pte.session.internal.service.SessionClassSourceService;
+import com.pte.session.internal.dto.response.audience.SessionClassAssignmentResponse;
+import com.pte.session.internal.service.audience.SessionClassSourceService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;

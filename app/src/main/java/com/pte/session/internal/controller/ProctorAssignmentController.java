@@ -2,8 +2,8 @@ package com.pte.session.internal.controller;
 
 import com.pte.session.internal.dto.request.AssignProctorRequest;
 import com.pte.session.internal.dto.request.UpdateProctorRoleRequest;
-import com.pte.session.internal.dto.response.ProctorAssignmentResponse;
-import com.pte.session.internal.service.ProctorAssignmentService;
+import com.pte.session.internal.dto.response.proctor.ProctorAssignmentResponse;
+import com.pte.session.internal.service.staff.ProctorAssignmentService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;

@@ -1,5 +1,12 @@
 package com.pte.session.internal.service;
 
+import com.pte.session.internal.service.audience.AudienceResolver;
+import com.pte.session.internal.service.audience.ExamAudienceService;
+import com.pte.session.internal.service.draft.ExamDraftService;
+import com.pte.session.internal.service.draft.ExamPublishService;
+import com.pte.session.internal.service.draft.ExamSkillSelection;
+import com.pte.session.internal.service.draft.SessionCodeGenerator;
+import com.pte.session.internal.service.enrollment.EnrollmentService;
 import com.pte.assessment.AssessmentService;
 import com.pte.billing.BillingService;
 import com.pte.billing.SubscriptionView;
@@ -22,17 +29,17 @@ import com.pte.session.domain.enums.ReusePolicy;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.dto.request.AudienceSourceRequest;
-import com.pte.session.internal.dto.response.AudienceSourceResponse;
+import com.pte.session.internal.dto.response.audience.AudienceSourceResponse;
 import com.pte.session.internal.dto.request.CreateExamDraftRequest;
 import com.pte.session.internal.dto.request.PatchExamDraftRequest;
-import com.pte.session.internal.dto.response.AudienceMemberResponse;
-import com.pte.session.internal.dto.response.BulkEnrollResponse;
+import com.pte.session.internal.dto.response.audience.AudienceMemberResponse;
+import com.pte.session.internal.dto.response.enrollment.BulkEnrollResponse;
 import com.pte.session.dto.response.SlotConflict;
-import com.pte.session.internal.exception.ExamAudienceConflictException;
-import com.pte.session.internal.exception.AudienceSourceAlreadyCoveredException;
-import com.pte.session.internal.exception.ExamDraftConfigurationException;
-import com.pte.session.internal.exception.ExamDraftNotDeletableException;
-import com.pte.session.internal.exception.ExamDraftVersionConflictException;
+import com.pte.session.internal.exception.audience.ExamAudienceConflictException;
+import com.pte.session.internal.exception.audience.AudienceSourceAlreadyCoveredException;
+import com.pte.session.internal.exception.draft.ExamDraftConfigurationException;
+import com.pte.session.internal.exception.draft.ExamDraftNotDeletableException;
+import com.pte.session.internal.exception.draft.ExamDraftVersionConflictException;
 import com.pte.session.internal.repository.ExamRegistrationRepository;
 import com.pte.session.internal.repository.ExamSessionAudienceSourceRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
@@ -118,12 +125,12 @@ class ExamWorkflowServicesTest {
         AudienceResolver resolver = new AudienceResolver(sourceRepository, registrationRepository,
                 enrollmentModuleService, identityService, startedAttemptLookup);
         draftService = new ExamDraftService(sessionRepository, access, new ExamSkillSelection(), sessionLifecycleService,
-                examDefinitionService, billingService, sessionCodeGenerator);
+                examDefinitionService, billingService, sessionCodeGenerator, java.time.Clock.systemUTC());
         audienceService = new ExamAudienceService(sourceRepository, registrationRepository, access, resolver,
                 enrollmentModuleService);
         publishService = new ExamPublishService(sessionRepository, access, sessionLifecycleService,
                 enrollmentService, assessmentService, billingService, resolver, registrationRepository,
-                eventPublisher);
+                eventPublisher, java.time.Clock.systemUTC());
         tenantId = UUID.randomUUID();
         templateId = UUID.randomUUID();
         subscriptionId = UUID.randomUUID();
@@ -195,7 +202,7 @@ class ExamWorkflowServicesTest {
                 "Invalid official", templateId, subscriptionId, opensAt, closesAt,
                 ExamMode.OFFICIAL_EXAM, null, "SERIES", 50, null, null,
                 com.pte.session.domain.enums.LockdownMode.STANDARD), hostAdmin))
-                .isInstanceOf(com.pte.session.internal.exception.InvalidLockdownModeException.class);
+                .isInstanceOf(com.pte.session.internal.exception.draft.InvalidLockdownModeException.class);
 
         verify(sessionRepository, never()).saveAndFlush(any());
     }
@@ -208,7 +215,7 @@ class ExamWorkflowServicesTest {
                 "Retries", templateId, subscriptionId, opensAt, closesAt,
                 ExamMode.OFFICIAL_EXAM, null, "SERIES", 50, null, 2,
                 com.pte.session.domain.enums.LockdownMode.STRICT), hostAdmin))
-                .isInstanceOf(com.pte.session.internal.exception.ExamDraftConfigurationException.class);
+                .isInstanceOf(com.pte.session.internal.exception.draft.ExamDraftConfigurationException.class);
 
         verify(sessionRepository, never()).saveAndFlush(any());
     }
@@ -240,7 +247,7 @@ class ExamWorkflowServicesTest {
         assertThatThrownBy(() -> draftService.updateDraft(session.getPublicId(), new PatchExamDraftRequest(
                 null, null, null, null, null, null, null, null, null,
                 0L, null, null, com.pte.session.domain.enums.LockdownMode.STANDARD), hostAdmin))
-                .isInstanceOf(com.pte.session.internal.exception.InvalidLockdownModeException.class);
+                .isInstanceOf(com.pte.session.internal.exception.draft.InvalidLockdownModeException.class);
 
         assertThat(session.getPolicy().getLockdownMode())
                 .isEqualTo(com.pte.session.domain.enums.LockdownMode.STRICT);
@@ -335,7 +342,7 @@ class ExamWorkflowServicesTest {
         when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
 
         assertThatThrownBy(() -> publishService.cancel(session.getPublicId(), hostAdmin))
-                .isInstanceOf(com.pte.session.internal.exception.SessionNotCancellableException.class);
+                .isInstanceOf(com.pte.session.internal.exception.lifecycle.SessionNotCancellableException.class);
         verify(sessionRepository, never()).save(any());
     }
 
@@ -654,7 +661,7 @@ class ExamWorkflowServicesTest {
                 .thenReturn(Optional.of(session));
 
         assertThatThrownBy(() -> publishService.generation(session.getPublicId(), hostAdmin))
-                .isInstanceOf(com.pte.session.internal.exception.GenerationNotReadyException.class);
+                .isInstanceOf(com.pte.session.internal.exception.draft.GenerationNotReadyException.class);
     }
 
     private ExamSession readyPublishSession() {

@@ -1,5 +1,6 @@
 package com.pte.session.internal.dto.response;
 
+import com.pte.session.internal.dto.response.audience.AudiencePreviewResponse;
 import com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse;
 
 import java.util.List;

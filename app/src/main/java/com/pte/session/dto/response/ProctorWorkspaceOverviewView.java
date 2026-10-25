@@ -1,6 +1,6 @@
 package com.pte.session.dto.response;
 
-import com.pte.session.internal.dto.response.ProctorOverviewCountsResponse;
+import com.pte.session.internal.dto.response.proctor.ProctorOverviewCountsResponse;
 
 import java.time.Instant;
 import java.util.List;

@@ -1,5 +1,6 @@
 package com.pte.session.internal.service;
 
+import com.pte.session.internal.service.draft.SessionCodeGenerator;
 import com.pte.assessment.AssessmentService;
 import com.pte.assessment.dto.response.SnapshotResponse;
 import com.pte.billing.BillingService;
@@ -19,17 +20,17 @@ import com.pte.session.internal.dto.request.ChangeSubscriptionRequest;
 import com.pte.session.internal.dto.request.CreateSessionRequest;
 import com.pte.session.internal.dto.request.PatchExamPolicyRequest;
 import com.pte.session.internal.dto.response.SessionResponse;
-import com.pte.session.internal.exception.PolicyLockedException;
-import com.pte.session.internal.exception.SessionSubscriptionCapacityException;
-import com.pte.session.internal.exception.SessionSubscriptionNotFoundException;
-import com.pte.session.internal.exception.SessionTimeConflictException;
-import com.pte.session.internal.exception.NotEntitledException;
-import com.pte.session.internal.exception.SessionClosedException;
-import com.pte.session.internal.exception.SessionNotStartedException;
-import com.pte.session.internal.exception.SessionNotClosedForExaminerAssignmentException;
-import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
-import com.pte.session.internal.exception.SessionNotOpenToCloseException;
-import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionException;
+import com.pte.session.internal.exception.draft.PolicyLockedException;
+import com.pte.session.internal.exception.capacity.SessionSubscriptionCapacityException;
+import com.pte.session.internal.exception.capacity.SessionSubscriptionNotFoundException;
+import com.pte.session.internal.exception.capacity.SessionTimeConflictException;
+import com.pte.session.internal.exception.enrollment.NotEntitledException;
+import com.pte.session.internal.exception.lifecycle.SessionClosedException;
+import com.pte.session.internal.exception.lifecycle.SessionNotStartedException;
+import com.pte.session.internal.exception.lifecycle.SessionNotClosedForExaminerAssignmentException;
+import com.pte.session.internal.exception.lifecycle.SessionNotClosedForReportPublicationException;
+import com.pte.session.internal.exception.lifecycle.SessionNotOpenToCloseException;
+import com.pte.session.internal.exception.capacity.SessionWindowOutsideSubscriptionException;
 import com.pte.session.internal.mapper.SessionMapper;
 import com.pte.session.domain.enums.AudienceMemberStatus;
 import com.pte.session.internal.repository.ExamRegistrationRepository;
@@ -112,7 +113,7 @@ class SessionLifecycleServiceTest {
     @BeforeEach
     void setUp() {
         SessionAccess access = new SessionAccess(sessionRepository);
-        SessionSubscriptionRules subscriptions = new SessionSubscriptionRules(sessionRepository, billingService);
+        SessionSubscriptionRules subscriptions = new SessionSubscriptionRules(sessionRepository, billingService, java.time.Clock.systemUTC());
         service = new SessionLifecycleService(access,
                 new SessionCreationService(sessionRepository, assessmentService, sessionCodeGenerator,
                         access, subscriptions),
@@ -124,7 +125,7 @@ class SessionLifecycleServiceTest {
                         Clock.systemUTC()),
                 new SessionReadService(sessionRepository, access),
                 new SessionReminderService(sessionRepository),
-                new SessionRevocationService(sessionRepository, eventPublisher),
+                new SessionRevocationService(sessionRepository, eventPublisher, java.time.Clock.systemUTC()),
                 new SessionOperationGuardService(sessionRepository));
         tenantId = UUID.randomUUID();
         subscriptionId = UUID.randomUUID();
@@ -307,7 +308,7 @@ class SessionLifecycleServiceTest {
                         Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
                         ExamMode.OFFICIAL_EXAM, LockdownMode.STANDARD, 100),
                 hostAdmin))
-                .isInstanceOf(com.pte.session.internal.exception.InvalidLockdownModeException.class);
+                .isInstanceOf(com.pte.session.internal.exception.draft.InvalidLockdownModeException.class);
 
         verify(sessionRepository, never()).save(any());
     }
@@ -505,7 +506,7 @@ class SessionLifecycleServiceTest {
 
         assertThatThrownBy(() -> service.patchPolicy(session.getPublicId(),
                 new PatchExamPolicyRequest(null, null, null, null, null, LockdownMode.STANDARD), hostAdmin))
-                .isInstanceOf(com.pte.session.internal.exception.InvalidLockdownModeException.class);
+                .isInstanceOf(com.pte.session.internal.exception.draft.InvalidLockdownModeException.class);
     }
 
     @Test
@@ -518,7 +519,7 @@ class SessionLifecycleServiceTest {
 
         assertThatThrownBy(() -> service.patchPolicy(session.getPublicId(),
                 new PatchExamPolicyRequest(null, null, null, null, null, LockdownMode.NONE), hostAdmin))
-                .isInstanceOf(com.pte.session.internal.exception.InvalidLockdownModeException.class);
+                .isInstanceOf(com.pte.session.internal.exception.draft.InvalidLockdownModeException.class);
     }
 
     @Test

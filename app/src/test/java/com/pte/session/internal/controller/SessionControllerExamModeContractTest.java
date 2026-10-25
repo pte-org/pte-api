@@ -1,9 +1,9 @@
 package com.pte.session.internal.controller;
 
-import com.pte.session.internal.service.ExamAudienceService;
-import com.pte.session.internal.service.ExamDraftService;
-import com.pte.session.internal.service.ExamPublishService;
-import com.pte.session.internal.service.SessionExamPreviewService;
+import com.pte.session.internal.service.audience.ExamAudienceService;
+import com.pte.session.internal.service.draft.ExamDraftService;
+import com.pte.session.internal.service.draft.ExamPublishService;
+import com.pte.session.internal.service.draft.SessionExamPreviewService;
 import com.pte.session.internal.service.SessionLifecycleService;
 import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.exception.GlobalExceptionHandler;

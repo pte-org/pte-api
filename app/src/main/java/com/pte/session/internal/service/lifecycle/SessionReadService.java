@@ -6,7 +6,7 @@ import com.pte.session.internal.dto.response.SessionResponse;
 import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.session.dto.response.SessionSummaryView;
 import com.pte.session.internal.exception.SessionNotFoundException;
-import com.pte.session.internal.exception.NotEntitledException;
+import com.pte.session.internal.exception.enrollment.NotEntitledException;
 import com.pte.session.internal.mapper.SessionMapper;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.shared.security.CurrentUser;
