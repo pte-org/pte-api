@@ -48,7 +48,7 @@ class PracticeEntitlementServiceTest {
     @BeforeEach
     void setUp() {
         service = new PracticeEntitlementService(
-                practiceIdentityService, billingService, tenancyService, true, observability);
+                practiceIdentityService, billingService, tenancyService, true, observability, java.time.Clock.systemUTC());
         shellUserId = UUID.randomUUID();
         tenantId = UUID.randomUUID();
     }
@@ -136,7 +136,7 @@ class PracticeEntitlementServiceTest {
     @Test
     void disabledStrictEntitlementRemainsFailClosed() {
         PracticeEntitlementService disabledService = new PracticeEntitlementService(
-                practiceIdentityService, billingService, tenancyService, false, observability);
+                practiceIdentityService, billingService, tenancyService, false, observability, java.time.Clock.systemUTC());
         CurrentUser caller = new CurrentUser(shellUserId, null, List.of("STUDENT"));
 
         assertThatThrownBy(() -> disabledService.assertUnlocked(caller, null))

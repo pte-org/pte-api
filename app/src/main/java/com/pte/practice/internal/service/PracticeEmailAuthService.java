@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Locale;
@@ -36,24 +37,27 @@ public class PracticeEmailAuthService {
     private final IdentityTokenService identityTokenService;
     private final PracticeObservability observability;
     private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
     public PracticeEmailAuthService(PracticeIdentityService identityService,
             OtpChallengeRepository challengeRepository, PasswordEncoder passwordEncoder,
             IdentityTokenService identityTokenService, PracticeObservability observability,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            Clock clock) {
         this.identityService = identityService;
         this.challengeRepository = challengeRepository;
         this.passwordEncoder = passwordEncoder;
         this.identityTokenService = identityTokenService;
         this.observability = observability;
         this.eventPublisher = eventPublisher;
+        this.clock = clock;
     }
 
     @Transactional
     public PracticeChallengeResponse requestChallenge(PracticeEmailRequest request) {
         String email = normalizeEmail(request.email());
         PracticeIdentityService.IdentityHandle identity = identityService.getOrCreate(email);
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Instant windowStart = now.minus(PracticeConstants.CHALLENGE_REQUEST_WINDOW_MINUTES, ChronoUnit.MINUTES);
         long recentRequests = challengeRepository.countByIdentityIdAndCreatedAtAfterAndDeletedFalse(
                 identity.internalId(), windowStart);
@@ -89,7 +93,7 @@ public class PracticeEmailAuthService {
                     .filter(candidate -> identityService.matchesEmail(candidate, email))
                     .orElseThrow(InvalidPracticeChallengeException::new);
 
-            Instant now = Instant.now();
+            Instant now = clock.instant();
             if (challenge.isConsumedOrExpired(now)) {
                 throw new InvalidPracticeChallengeException();
             }

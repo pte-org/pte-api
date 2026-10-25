@@ -1,4 +1,4 @@
-package com.pte.practice.internal.service;
+package com.pte.practice.internal.service.session;
 
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.repository.PracticeSessionRepository;

@@ -18,7 +18,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import java.time.Clock;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -37,17 +37,20 @@ public class PracticeEntitlementService {
     private final TenancyService tenancyService;
     private final boolean strictEntitlementEnabled;
     private final PracticeObservability observability;
+    private final Clock clock;
 
     public PracticeEntitlementService(PracticeIdentityService practiceIdentityService,
             BillingService billingService, TenancyService tenancyService,
             @Value("${" + PracticeConstants.PRACTICE_STRICT_ENTITLEMENT_ENABLED_PROPERTY + ":false}")
             boolean strictEntitlementEnabled,
-            PracticeObservability observability) {
+            PracticeObservability observability,
+            Clock clock) {
         this.practiceIdentityService = practiceIdentityService;
         this.billingService = billingService;
         this.tenancyService = tenancyService;
         this.strictEntitlementEnabled = strictEntitlementEnabled;
         this.observability = observability;
+        this.clock = clock;
     }
 
     @Transactional
@@ -154,6 +157,6 @@ public class PracticeEntitlementService {
                 organization,
                 List.copyOf(organizations),
                 new PracticeEntitlementResponse.PracticeStatus(state),
-                Instant.now().plus(PracticeConstants.ENTITLEMENT_REFRESH_SECONDS, ChronoUnit.SECONDS));
+                clock.instant().plus(PracticeConstants.ENTITLEMENT_REFRESH_SECONDS, ChronoUnit.SECONDS));
     }
 }

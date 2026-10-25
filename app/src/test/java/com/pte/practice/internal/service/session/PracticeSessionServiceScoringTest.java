@@ -1,5 +1,7 @@
-package com.pte.practice.internal.service;
+package com.pte.practice.internal.service.session;
 
+import com.pte.practice.internal.service.PracticeEntitlementService;
+import com.pte.practice.internal.service.PracticeResponseService;
 import com.pte.identity.PracticeIdentityService;
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeResponse;

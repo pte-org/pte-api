@@ -1,5 +1,9 @@
-package com.pte.practice.internal.service;
+package com.pte.practice.internal.service.session;
 
+import com.pte.practice.internal.service.PracticeAnswerValidationService;
+import com.pte.practice.internal.service.PracticeCatalogService;
+import com.pte.practice.internal.service.PracticeEntitlementService;
+import com.pte.practice.internal.service.PracticeResponseService;
 import com.pte.identity.PracticeIdentityService;
 import com.pte.identity.PracticeMembershipStatus;
 import com.pte.identity.domain.UserStatus;
@@ -10,7 +14,6 @@ import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
-import com.pte.practice.internal.domain.enums.PracticeSessionOperationType;
 import com.pte.practice.internal.dto.request.PracticeAnswerRequest;
 import com.pte.practice.internal.dto.request.PracticeSaveAndExitRequest;
 import com.pte.practice.internal.dto.request.PracticeCapabilityManifest;

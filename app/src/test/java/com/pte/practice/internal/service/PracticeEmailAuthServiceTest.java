@@ -160,7 +160,7 @@ class PracticeEmailAuthServiceTest {
 
     private PracticeEmailAuthService newService() {
         return new PracticeEmailAuthService(identityService, challengeRepository, passwordEncoder,
-                identityTokenService, observability, eventPublisher);
+                identityTokenService, observability, eventPublisher, java.time.Clock.systemUTC());
     }
 
     private OtpChallenge challenge(UUID publicId, Long identityId) {

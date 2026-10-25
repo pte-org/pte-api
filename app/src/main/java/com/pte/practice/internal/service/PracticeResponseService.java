@@ -19,9 +19,6 @@ import com.pte.practice.internal.exception.PracticeSessionNotFoundException;
 import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.practice.PracticeResponseMediaValidator;
-import com.pte.scoring.PracticeAiEvaluation;
-import com.pte.scoring.PracticeScoringException;
-import com.pte.scoring.PracticeScoringFailure;
 import com.pte.scoring.ScoringService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -50,9 +47,8 @@ public class PracticeResponseService {
     private final PracticeResponseMediaValidator mediaValidator;
     private final PracticeQuestionService practiceQuestionService;
     private final JsonMapper jsonMapper;
-    private final ScoringService scoringService;
     private final PracticeScoringStateService scoringStateService;
-    private final PracticeScoringRequestFactory scoringRequestFactory;
+    private final PracticeAnswerScoringRouter scoringRouter;
 
     public PracticeResponseService(PracticeResponseRepository itemRepository,
             PracticeCatalogService catalogService, PracticeAnswerValidationService answerValidationService) {
@@ -78,9 +74,9 @@ public class PracticeResponseService {
         this.mediaValidator = mediaValidator;
         this.practiceQuestionService = practiceQuestionService;
         this.jsonMapper = jsonMapper;
-        this.scoringService = scoringService;
         this.scoringStateService = scoringStateService;
-        this.scoringRequestFactory = scoringRequestFactory;
+        this.scoringRouter = new PracticeAnswerScoringRouter(scoringService, scoringStateService,
+                scoringRequestFactory);
     }
 
     public void createItemsIfNeeded(PracticeSession session) {
@@ -140,7 +136,7 @@ public class PracticeResponseService {
         validateRecordedMedia(session, item, request.payload(), caller);
         item.setSavedPayload(request.payload());
         item.setConfidence(request.confidence());
-        scoreOrQueue(session, item, now);
+        scoringRouter.scoreOrQueue(session, item, now);
         item.setStatus(PracticeResponseStatus.ANSWERED);
         item.setAnsweredAt(now);
         itemRepository.saveAndFlush(item);
@@ -222,49 +218,6 @@ public class PracticeResponseService {
     /** Re-submits a FAILED item to the scorer; the caller holds the item lock. */
     public PracticeItemResultResponse retryScoring(PracticeSession session, PracticeResponse item, Instant now) {
         return scoringStateService.retry(session, item, now);
-    }
-
-    /**
-     * Same split as the exam: objective types are scored inside the call, speech and writing are queued for the
-     * worker, tasks with no score (Personal Introduction) are only recorded.
-     */
-    private void scoreOrQueue(PracticeSession session, PracticeResponse item, Instant now) {
-        if (scoringService == null || scoringStateService == null) {
-            return;
-        }
-        switch (scoringService.practiceScoringRoute(item.getTaskCode())) {
-            case OBJECTIVE -> scoreObjective(session, item, now);
-            case AI_SPEECH, AI_TEXT -> scoringStateService.startScoring(session, item, now);
-            case UNSCORED -> { }
-            case UNSUPPORTED -> throw new PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME,
-                    PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME_MESSAGE);
-        }
-    }
-
-    private void scoreObjective(PracticeSession session, PracticeResponse item, Instant now) {
-        // Items created before the answer-key snapshot migration cannot be scored
-        // safely. Fail closed instead of persisting an incorrect zero.
-        if (item.getObjectiveOptionsJson() == null || item.getObjectiveOptionsJson().isBlank()) {
-            throw deterministicScoringUnavailable();
-        }
-        PracticeAiEvaluation evaluation;
-        try {
-            evaluation = scoringService.scorePracticeAnswer(scoringRequestFactory.build(item, session.getTenantId()));
-        } catch (PracticeScoringException exception) {
-            if (exception.failure() == PracticeScoringFailure.INVALID_PAYLOAD) {
-                throw new PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
-                        PracticeConstants.PRACTICE_ANSWER_INVALID, PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
-            }
-            throw deterministicScoringUnavailable();
-        }
-        scoringStateService.recordInline(item, evaluation, now);
-    }
-
-    private PracticeSessionException deterministicScoringUnavailable() {
-        return new PracticeSessionException(HttpStatus.SERVICE_UNAVAILABLE,
-                PracticeConstants.PRACTICE_DETERMINISTIC_SCORING_UNAVAILABLE,
-                PracticeConstants.PRACTICE_DETERMINISTIC_SCORING_UNAVAILABLE_MESSAGE);
     }
 
     private Set<String> splitCsv(String csv) {
