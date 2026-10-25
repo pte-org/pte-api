@@ -6,7 +6,6 @@ import com.pte.shared.web.ApiResponse;
 import com.pte.tenancy.TenantSuspensionImpact;
 import com.pte.tenancy.internal.dto.request.GrantQuotaRequest;
 import com.pte.tenancy.internal.dto.request.OnboardTenantRequest;
-import com.pte.tenancy.internal.dto.request.SuspendTenantRequest;
 import com.pte.tenancy.internal.dto.request.UpdateBrandingRequest;
 import com.pte.tenancy.internal.dto.request.UpdateOrganizationProfileRequest;
 import com.pte.tenancy.internal.dto.response.OrganizationResponse;

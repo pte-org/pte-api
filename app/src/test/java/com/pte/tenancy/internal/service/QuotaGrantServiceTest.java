@@ -38,7 +38,7 @@ class QuotaGrantServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new QuotaGrantService(organizationRepository, java.time.Clock.systemUTC());
+        service = new QuotaGrantService(organizationRepository, com.pte.TestClocks.fixed());
     }
 
     private Organization organization(UUID publicId) {

@@ -35,7 +35,7 @@ public class TenantSuspensionExpirationService {
     public TenantSuspensionExpirationService(OrganizationRepository organizationRepository, Clock clock,
             AuditLogService auditLogService) {
         this.organizationRepository = organizationRepository;
-        this.clock = clock != null ? clock : Clock.systemUTC();
+        this.clock = clock;
         this.auditLogService = auditLogService;
     }
 

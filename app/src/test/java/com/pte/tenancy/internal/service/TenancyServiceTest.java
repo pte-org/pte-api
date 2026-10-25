@@ -35,7 +35,6 @@ class TenancyServiceTest {
     @Mock
     private OrganizationRepository organizationRepository;
 
-
     @Mock
     private OrganizationLifecycleService organizationLifecycleService;
 

@@ -49,7 +49,7 @@ class OrganizationLifecycleServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new OrganizationLifecycleService(organizationRepository);
+        service = new OrganizationLifecycleService(organizationRepository, null, null, null, com.pte.TestClocks.fixed());
     }
 
     private Organization activeTenant(UUID publicId) {

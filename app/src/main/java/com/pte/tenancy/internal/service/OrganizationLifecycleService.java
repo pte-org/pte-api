@@ -41,22 +41,13 @@ public class OrganizationLifecycleService {
     private final OrganizationSuspension suspension;
     private final Clock clock;
 
-    public OrganizationLifecycleService(OrganizationRepository organizationRepository) {
-        this(organizationRepository, null, null, null, Clock.systemUTC());
-    }
-
-    public OrganizationLifecycleService(OrganizationRepository organizationRepository,
-            AuditLogService auditLogService) {
-        this(organizationRepository, auditLogService, null, null, Clock.systemUTC());
-    }
-
     @Autowired
     public OrganizationLifecycleService(OrganizationRepository organizationRepository,
             AuditLogService auditLogService, TenantSuspensionDurationProvider suspensionDurationProvider,
             TenantSuspensionImpactProvider suspensionImpactProvider, Clock clock) {
         this.organizationRepository = organizationRepository;
         this.operationAudit = new OrganizationOperationAudit(auditLogService);
-        this.clock = clock != null ? clock : Clock.systemUTC();
+        this.clock = clock;
         this.suspension = new OrganizationSuspension(organizationRepository, operationAudit,
                 suspensionDurationProvider, suspensionImpactProvider, this.clock);
     }
