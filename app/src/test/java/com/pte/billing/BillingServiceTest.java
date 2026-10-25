@@ -39,7 +39,7 @@ class BillingServiceTest {
 
     @Test
     void getActiveSubscriptionByPublicId_scopesToTenantAndChecksUsableWindow() {
-        BillingService service = new BillingService(subscriptionRepository, planRepository);
+        BillingService service = new BillingService(subscriptionRepository, planRepository, null, com.pte.TestClocks.fixed());
         UUID subscriptionId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         Subscription subscription = subscription(subscriptionId, tenantId, SubscriptionStatus.ACTIVE);
@@ -53,7 +53,7 @@ class BillingServiceTest {
 
     @Test
     void getSubscriptionByPublicIdReturnsInactiveTenantOwnedSubscription() {
-        BillingService service = new BillingService(subscriptionRepository, planRepository);
+        BillingService service = new BillingService(subscriptionRepository, planRepository, null, com.pte.TestClocks.fixed());
         UUID subscriptionId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         Subscription subscription = subscription(subscriptionId, tenantId, SubscriptionStatus.CANCELLED);
@@ -68,7 +68,7 @@ class BillingServiceTest {
 
     @Test
     void lockSubscriptions_usesAscendingPublicIdOrder() {
-        BillingService service = new BillingService(subscriptionRepository, planRepository);
+        BillingService service = new BillingService(subscriptionRepository, planRepository, null, com.pte.TestClocks.fixed());
         UUID tenantId = UUID.randomUUID();
         UUID low = UUID.fromString("00000000-0000-0000-0000-000000000001");
         UUID high = UUID.fromString("00000000-0000-0000-0000-000000000002");
@@ -87,7 +87,7 @@ class BillingServiceTest {
 
     @Test
     void activeExamPackageIsDifferentFromCapacityOnlyPlan() {
-        BillingService service = new BillingService(subscriptionRepository, planRepository);
+        BillingService service = new BillingService(subscriptionRepository, planRepository, null, com.pte.TestClocks.fixed());
         UUID tenantId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
         Subscription subscription = subscription(UUID.randomUUID(), tenantId, SubscriptionStatus.ACTIVE);
@@ -107,7 +107,7 @@ class BillingServiceTest {
 
     @Test
     void platformManagerSubscriptionReadAppliesTenantFilterServerSide() {
-        BillingService service = new BillingService(subscriptionRepository, planRepository);
+        BillingService service = new BillingService(subscriptionRepository, planRepository, null, com.pte.TestClocks.fixed());
         UUID tenantId = UUID.randomUUID();
         Subscription subscription = subscription(UUID.randomUUID(), tenantId, SubscriptionStatus.ACTIVE);
         when(subscriptionRepository.findByDeletedFalseAndTenantIdOrderByCreatedAtDesc(eq(tenantId), org.mockito.ArgumentMatchers.any()))

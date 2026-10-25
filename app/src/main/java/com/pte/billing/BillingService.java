@@ -46,11 +46,6 @@ public class BillingService {
         this.clock = clock;
     }
 
-    /** Compatibility constructor for focused billing tests. */
-    public BillingService(SubscriptionRepository subscriptionRepository, ServicePlanRepository planRepository) {
-        this(subscriptionRepository, planRepository, null, Clock.systemUTC());
-    }
-
     /** Returns empty when the key is unknown, tenant-owned elsewhere, expired, or cancelled. */
     @Transactional(readOnly = true)
     public Optional<SubscriptionView> getActiveSubscription(String licenseKey, UUID tenantId) {

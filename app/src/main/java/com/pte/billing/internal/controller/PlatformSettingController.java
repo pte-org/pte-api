@@ -38,5 +38,4 @@ public class PlatformSettingController {
         return ApiResponse.success(platformSettingService.updateBatch(request, CurrentUserContext.required()));
     }
 
-
 }

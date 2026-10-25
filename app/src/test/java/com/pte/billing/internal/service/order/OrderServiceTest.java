@@ -55,7 +55,7 @@ class OrderServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new OrderService(orderRepository, planRepository, orderPersistenceService, payOsClient);
+        service = new OrderService(orderRepository, planRepository, orderPersistenceService, payOsClient, null, null);
     }
 
     @Test

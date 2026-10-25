@@ -2,7 +2,6 @@ package com.pte.billing.internal.service.subscription;
 
 import com.pte.billing.internal.service.subscription.SubscriptionPersistenceService;
 import com.pte.billing.domain.Subscription;
-import com.pte.billing.internal.repository.SubscriptionRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;

@@ -40,7 +40,7 @@ class OrderExpirationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new OrderExpirationService(orderRepository, orderPersistenceService, payOsClient, 24, java.time.Clock.systemUTC());
+        service = new OrderExpirationService(orderRepository, orderPersistenceService, payOsClient, 24, com.pte.TestClocks.fixed());
     }
 
     @Test

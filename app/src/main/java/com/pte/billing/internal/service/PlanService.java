@@ -42,11 +42,6 @@ public class PlanService {
         this.store = new PlanVersionedStore(planRepository, clock);
     }
 
-    /** Compatibility constructor for existing focused tests. */
-    public PlanService(ServicePlanRepository planRepository) {
-        this(planRepository, null, Clock.systemUTC());
-    }
-
     @Transactional
     public PlanResponse create(PlanRequest request) {
         return create(request, null);

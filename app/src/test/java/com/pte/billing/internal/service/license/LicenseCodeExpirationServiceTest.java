@@ -1,7 +1,6 @@
 package com.pte.billing.internal.service.license;
 
 import com.pte.billing.internal.service.license.LicenseCodeExpirationService;
-import com.pte.billing.domain.LicenseCode;
 import com.pte.billing.domain.enums.LicenseCodeStatus;
 import com.pte.billing.internal.repository.LicenseCodeRepository;
 import org.junit.jupiter.api.Test;
@@ -21,7 +20,7 @@ class LicenseCodeExpirationServiceTest {
 
     @Test
     void expireDueCodes_marksOnlyIssuedExpiredCodes() {
-        LicenseCodeExpirationService service = new LicenseCodeExpirationService(licenseCodeRepository, java.time.Clock.systemUTC());
+        LicenseCodeExpirationService service = new LicenseCodeExpirationService(licenseCodeRepository, com.pte.TestClocks.fixed());
         when(licenseCodeRepository.markExpired(org.mockito.ArgumentMatchers.any(), eq(LicenseCodeStatus.ISSUED),
                 eq(LicenseCodeStatus.EXPIRED))).thenReturn(1);
 

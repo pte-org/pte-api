@@ -51,12 +51,6 @@ public class OrderService {
     private final AuditLogService auditLogService;
     private final TenancyService tenancyService;
 
-    public OrderService(OrderRepository orderRepository, ServicePlanRepository planRepository,
-            OrderPersistenceService orderPersistenceService, PayOsClient payOsClient,
-            AuditLogService auditLogService) {
-        this(orderRepository, planRepository, orderPersistenceService, payOsClient, auditLogService, null);
-    }
-
     @Autowired
     public OrderService(OrderRepository orderRepository, ServicePlanRepository planRepository,
             OrderPersistenceService orderPersistenceService, PayOsClient payOsClient,
@@ -67,12 +61,6 @@ public class OrderService {
         this.payOsClient = payOsClient;
         this.auditLogService = auditLogService;
         this.tenancyService = tenancyService;
-    }
-
-    /** Compatibility constructor for focused billing tests. */
-    public OrderService(OrderRepository orderRepository, ServicePlanRepository planRepository,
-            OrderPersistenceService orderPersistenceService, PayOsClient payOsClient) {
-        this(orderRepository, planRepository, orderPersistenceService, payOsClient, null);
     }
 
     public OrderResponse createOrder(UUID tenantId, UUID planPublicId) {

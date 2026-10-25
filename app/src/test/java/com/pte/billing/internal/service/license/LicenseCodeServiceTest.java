@@ -159,7 +159,7 @@ class LicenseCodeServiceTest {
     void setUp() {
         service = new LicenseCodeService(licenseCodeRepository, planRepository, subscriptionRepository,
                 licenseCodePersistenceService, licenseCodeGenerator, subscriptionActivationService, eventPublisher,
-                auditLogService, tenancyService, java.time.Clock.systemUTC());
+                auditLogService, tenancyService, com.pte.TestClocks.fixed());
     }
 
     @Test

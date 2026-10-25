@@ -64,8 +64,7 @@ class TenantApplicationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TenantApplicationService(tenancyService, identityService,
-                platformSettingService, eventPublisher);
+        service = new TenantApplicationService(tenancyService, identityService, platformSettingService, eventPublisher, null);
     }
 
     private SubmitApplicationRequest submitRequest(String code) {

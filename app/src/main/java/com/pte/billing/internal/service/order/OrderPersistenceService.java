@@ -49,12 +49,6 @@ public class OrderPersistenceService {
         this.subscriptionActivationService = subscriptionActivationService;
     }
 
-    /** Compatibility constructor for focused order-persistence tests. */
-    public OrderPersistenceService(OrderRepository orderRepository, ApplicationEventPublisher eventPublisher,
-            ServicePlanRepository planRepository) {
-        this(orderRepository, eventPublisher, planRepository, null, Clock.systemUTC());
-    }
-
     /** Commits the pending reservation before the remote PayOS call begins. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Order reserve(Order order) throws DataIntegrityViolationException {

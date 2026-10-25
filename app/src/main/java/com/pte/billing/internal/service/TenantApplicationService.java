@@ -57,13 +57,6 @@ public class TenantApplicationService {
         this.auditLogService = auditLogService;
     }
 
-    /** Compatibility constructor for existing focused tests and public submit wiring. */
-    public TenantApplicationService(
-            TenancyService tenancyService, IdentityService identityService,
-            PlatformSettingService platformSettingService, ApplicationEventPublisher eventPublisher) {
-        this(tenancyService, identityService, platformSettingService, eventPublisher, null);
-    }
-
     /**
      * Public, no auth — see class javadoc and {@code SecurityConfig.PUBLIC_PATHS}.
      */

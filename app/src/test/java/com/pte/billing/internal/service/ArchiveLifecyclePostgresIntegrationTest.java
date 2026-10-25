@@ -135,7 +135,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
         ServicePlan plan = plan(PlanStatus.DRAFT);
         AuditLogService audit = mock(AuditLogService.class);
         doThrow(new IllegalStateException("Injected audit failure")).when(audit).record(any(), anyString(), anyString(), anyString(), anyString());
-        PlanService failingService = new PlanService(plans, audit, java.time.Clock.systemUTC());
+        PlanService failingService = new PlanService(plans, audit, com.pte.TestClocks.fixed());
         assertThatThrownBy(() -> runTx(() -> failingService.deleteDraft(plan.getPublicId(), admin))).isInstanceOf(IllegalStateException.class);
         assertThat(tx(() -> plans.findByPublicId(plan.getPublicId()).orElseThrow().isDeleted())).isFalse();
         assertThat(auditCount(plan.getPublicId())).isZero();
@@ -246,7 +246,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
             item.setTitle(question.getTitle()); item.setPromptText(question.getPromptText()); item.setOptionsJson("[]");
             frozen.addItem(item); return snapshots.saveAndFlush(frozen);
         });
-        ItembankService itembank = new ItembankService(questions, mock(QuestionValidationHelper.class), new ItembankAccessPolicy());
+        ItembankService itembank = com.pte.itembank.ItembankFixtures.itembankService(questions, mock(QuestionValidationHelper.class), new ItembankAccessPolicy());
         runTx(() -> itembank.archive(question.getPublicId(), admin));
         assertThatThrownBy(() -> questionDeletion.deleteDraft(question.getPublicId(), admin))
                 .isInstanceOf(com.pte.itembank.internal.exception.QuestionDeletionException.class);
@@ -262,7 +262,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
     }
 
     @Test void tenDeleteSubmitRacesCannotResurrectDeletedQuestion() throws Exception {
-        ItembankService itembank = new ItembankService(questions, mock(QuestionValidationHelper.class), new ItembankAccessPolicy());
+        ItembankService itembank = com.pte.itembank.ItembankFixtures.itembankService(questions, mock(QuestionValidationHelper.class), new ItembankAccessPolicy());
         for (int i = 0; i < 10; i++) {
             Question question = draft();
             List<Throwable> results = race(() -> questionDeletion.deleteDraft(question.getPublicId(), admin),

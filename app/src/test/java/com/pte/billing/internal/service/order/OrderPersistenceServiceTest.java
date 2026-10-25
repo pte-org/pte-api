@@ -47,7 +47,7 @@ class OrderPersistenceServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new OrderPersistenceService(orderRepository, eventPublisher, planRepository);
+        service = new OrderPersistenceService(orderRepository, eventPublisher, planRepository, null, com.pte.TestClocks.fixed());
     }
 
     @Test
@@ -105,7 +105,7 @@ class OrderPersistenceServiceTest {
                 tenantId, planId, "PTE-TEST", java.time.Instant.now(),
                 java.time.Instant.now().plusSeconds(60), 1, "ACTIVE", "PAYMENT", subscriptionId);
         service = new OrderPersistenceService(orderRepository, eventPublisher, planRepository,
-                subscriptionActivationService, java.time.Clock.systemUTC());
+                subscriptionActivationService, com.pte.TestClocks.fixed());
         when(orderRepository.findByPublicIdForUpdateAndDeletedFalse(publicId)).thenReturn(Optional.of(order));
         when(planRepository.findByPublicIdForUpdate(planId)).thenReturn(Optional.of(plan));
         when(subscriptionActivationService.activate(tenantId, plan,

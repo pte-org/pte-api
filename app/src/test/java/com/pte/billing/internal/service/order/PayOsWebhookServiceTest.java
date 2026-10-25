@@ -68,7 +68,7 @@ class PayOsWebhookServiceTest {
     void setUp() {
         service = new PayOsWebhookService(jsonMapper, payOsClient,
                 orderRepository, planRepository,
-                subscriptionActivationService, eventPublisher, java.time.Clock.systemUTC());
+                subscriptionActivationService, eventPublisher, com.pte.TestClocks.fixed());
     }
 
     @Test

@@ -24,7 +24,7 @@ class LicenseCodePersistenceServiceTest {
                 new com.pte.shared.idempotency.IdempotencyDecision(
                         com.pte.shared.idempotency.IdempotencyOutcome.NEW, null));
         LicenseCodePersistenceService service = new LicenseCodePersistenceService(codes, plans,
-                idempotency, tools.jackson.databind.json.JsonMapper.builder().build(), java.time.Clock.systemUTC());
+                idempotency, tools.jackson.databind.json.JsonMapper.builder().build(), com.pte.TestClocks.fixed());
         UUID planId = UUID.randomUUID();
         ServicePlan plan = new ServicePlan();
         plan.setStatus(PlanStatus.ARCHIVED);

@@ -50,7 +50,7 @@ class PlanServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PlanService(planRepository, auditLogService, java.time.Clock.systemUTC());
+        service = new PlanService(planRepository, auditLogService, com.pte.TestClocks.fixed());
         lenient().when(planRepository.findReferencedPlanIds(any())).thenReturn(Set.of());
         lenient().when(planRepository.findOutstandingCodePlanIds(any(), any())).thenReturn(Set.of());
         lenient().doAnswer(invocation -> {
