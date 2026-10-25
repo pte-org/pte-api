@@ -13,6 +13,7 @@ import com.pte.identity.IdentityService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.List;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -29,12 +30,15 @@ public class EnrollmentModuleService {
     private final ClassStudentRepository classStudentRepository;
     private final ProgramRepository programRepository;
     private final IdentityService identityService;
+    private final Clock clock;
 
     @org.springframework.beans.factory.annotation.Autowired
     public EnrollmentModuleService(TrainingClassRepository trainingClassRepository,
                                    ClassStudentRepository classStudentRepository,
                                    ProgramRepository programRepository,
-                                   IdentityService identityService) {
+                                   IdentityService identityService,
+                                   Clock clock) {
+        this.clock = clock;
         this.trainingClassRepository = trainingClassRepository;
         this.classStudentRepository = classStudentRepository;
         this.programRepository = programRepository;
@@ -44,7 +48,7 @@ public class EnrollmentModuleService {
     public EnrollmentModuleService(TrainingClassRepository trainingClassRepository,
                                    ClassStudentRepository classStudentRepository,
                                    ProgramRepository programRepository) {
-        this(trainingClassRepository, classStudentRepository, programRepository, null);
+        this(trainingClassRepository, classStudentRepository, programRepository, null, Clock.systemUTC());
     }
 
     /** Compatibility constructor for focused enrollment facade unit tests. */
@@ -85,7 +89,7 @@ public class EnrollmentModuleService {
         if (trainingClass.isDeleted() || trainingClass.getStatus() != ClassStatus.ACTIVE
                 || trainingClass.getProgram().isDeleted()
                 || trainingClass.getProgram().getStatus() != ProgramStatus.ACTIVE
-                || !trainingClass.getProgram().isCurrentlyActive(LocalDate.now())) {
+                || !trainingClass.getProgram().isCurrentlyActive(LocalDate.now(clock))) {
             throw new StudentClassNotFoundException();
         }
         List<UUID> studentPublicIds = classStudentRepository
@@ -116,7 +120,7 @@ public class EnrollmentModuleService {
                             && tenantId.equals(program.getOrganization().getPublicId()))
                     .filter(program -> !program.isDeleted()
                             && program.getStatus() == ProgramStatus.ACTIVE
-                            && program.isCurrentlyActive(LocalDate.now()))
+                            && program.isCurrentlyActive(LocalDate.now(clock)))
                     .orElseThrow(ProgramNotFoundException::new);
         }
         List<UUID> studentPublicIds = classStudentRepository

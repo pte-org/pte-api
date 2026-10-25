@@ -106,7 +106,7 @@ class EnrollmentModuleServiceTest {
                 .thenReturn(java.util.Set.of(activeStudentId));
 
         EnrollmentModuleService filteredService = new EnrollmentModuleService(
-                trainingClassRepository, classStudentRepository, programRepository, identityService);
+                trainingClassRepository, classStudentRepository, programRepository, identityService, java.time.Clock.systemUTC());
 
         assertThat(filteredService.findActiveStudentPublicIds(tenantId, classPublicId))
                 .containsExactly(activeStudentId);
