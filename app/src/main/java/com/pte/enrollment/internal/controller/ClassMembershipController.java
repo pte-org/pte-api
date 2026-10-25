@@ -1,7 +1,7 @@
 package com.pte.enrollment.internal.controller;
 
 import com.pte.enrollment.internal.dto.response.ClassMembershipResponse;
-import com.pte.enrollment.internal.service.ClassService;
+import com.pte.enrollment.internal.service.ClassStudentService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -26,16 +26,16 @@ import java.util.UUID;
 @PreAuthorize("hasRole('HOST_ADMIN')")
 public class ClassMembershipController {
 
-    private final ClassService classService;
+    private final ClassStudentService studentService;
 
-    public ClassMembershipController(ClassService classService) {
-        this.classService = classService;
+    public ClassMembershipController(ClassStudentService studentService) {
+        this.studentService = studentService;
     }
 
     @GetMapping
     public ApiResponse<List<ClassMembershipResponse>> list(
             @RequestParam(required = false) UUID programPublicId) {
-        return ApiResponse.success(classService.listMemberships(programPublicId, currentUser()));
+        return ApiResponse.success(studentService.listMemberships(programPublicId, currentUser()));
     }
 
     private CurrentUser currentUser() {

@@ -16,31 +16,31 @@ import lombok.Setter;
 import java.util.UUID;
 
 /**
- * A Lecturer assigned to supervise a {@link StudentClass} â€” "just like a
- * Proctor," mirrors {@code scheduling.ProctorAssignment}'s shape exactly:
+ * A Lecturer assigned to supervise a {@link TrainingClass} â€” "just like a
+ * Proctor," mirrors {@code scheduling.ExamSessionProctor}'s shape exactly:
  * target entity + bare {@code assigneePublicId} (iam's {@code publicId},
- * never a cross-service FK) + denormalized {@code tenantId}. No role
- * sub-enum, unlike {@code ProctorAssignment} â€” the feature spec doesn't ask
+ * never a cross-service FK) + denormalized {@code organizationId}. No role
+ * sub-enum, unlike {@code ExamSessionProctor} â€” the feature spec doesn't ask
  * for a Lecturer sub-classification.
  */
 @Entity
-@Table(name = "lecturer_assignments", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"student_class_id", "assignee_public_id"})
+@Table(name = "class_lecturers", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"class_id", "assignee_public_id"})
 }, indexes = {
-        @Index(name = "idx_lecturer_assignments_class", columnList = "student_class_id")
+        @Index(name = "idx_class_lecturers_class", columnList = "class_id")
 })
 @Getter
 @Setter
 @NoArgsConstructor
-public class LecturerAssignment extends BaseEntity {
+public class ClassLecturer extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "student_class_id", nullable = false)
-    private StudentClass studentClass;
+    @JoinColumn(name = "class_id", nullable = false)
+    private TrainingClass trainingClass;
 
     @Column(name = "assignee_public_id", nullable = false)
     private UUID assigneePublicId;
 
-    @Column(nullable = false)
-    private UUID tenantId;
+    @Column(name = "organization_id", nullable = false)
+    private UUID organizationId;
 }

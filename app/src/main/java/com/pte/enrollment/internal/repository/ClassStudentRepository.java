@@ -1,6 +1,6 @@
 package com.pte.enrollment.internal.repository;
 
-import com.pte.enrollment.domain.ClassMembership;
+import com.pte.enrollment.domain.ClassStudent;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -10,30 +10,30 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface ClassMembershipRepository extends JpaRepository<ClassMembership, Long> {
+public interface ClassStudentRepository extends JpaRepository<ClassStudent, Long> {
 
-    Optional<ClassMembership> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
+    Optional<ClassStudent> findByPublicIdAndOrganizationId(UUID publicId, UUID tenantId);
 
-    boolean existsByStudentPublicIdAndTenantId(UUID studentPublicId, UUID tenantId);
+    boolean existsByStudentPublicIdAndOrganizationId(UUID studentPublicId, UUID tenantId);
 
-    List<ClassMembership> findByTenantIdAndStudentPublicIdIn(UUID tenantId, List<UUID> studentPublicIds);
+    List<ClassStudent> findByOrganizationIdAndStudentPublicIdIn(UUID tenantId, List<UUID> studentPublicIds);
 
     /** Current assignment read for the tenant student workspace. */
-    @EntityGraph(attributePaths = {"studentClass", "studentClass.program"})
-    Optional<ClassMembership> findByTenantIdAndStudentPublicId(UUID tenantId, UUID studentPublicId);
+    @EntityGraph(attributePaths = {"trainingClass", "trainingClass.program"})
+    Optional<ClassStudent> findByOrganizationIdAndStudentPublicId(UUID tenantId, UUID studentPublicId);
 
     /** Overview: learners currently placed in a (non-deleted) class of the tenant. */
-    @Query("SELECT COUNT(m) FROM ClassMembership m JOIN m.studentClass c "
-            + "WHERE m.tenantId = :tenantId AND m.deleted = false AND c.deleted = false")
+    @Query("SELECT COUNT(m) FROM ClassStudent m JOIN m.trainingClass c "
+            + "WHERE m.organizationId = :tenantId AND m.deleted = false AND c.deleted = false")
     long countAssignedForTenant(@Param("tenantId") UUID tenantId);
 
-    /** Used by {@code StudentClass} archive/deactivate's active-members guard. */
-    boolean existsByTenantIdAndStudentClass_PublicId(UUID tenantId, UUID classPublicId);
+    /** Used by {@code TrainingClass} archive/deactivate's active-members guard. */
+    boolean existsByOrganizationIdAndTrainingClass_PublicId(UUID tenantId, UUID classPublicId);
 
-    List<ClassMembership> findByTenantIdAndStudentClass_PublicId(UUID tenantId, UUID classPublicId);
+    List<ClassStudent> findByOrganizationIdAndTrainingClass_PublicId(UUID tenantId, UUID classPublicId);
 
     /** Backs Phase 12's split â€” resolves only the Host-selected subset that's actually in the source Class, ignoring any stray/foreign id. */
-    List<ClassMembership> findByTenantIdAndStudentClass_PublicIdAndStudentPublicIdIn(
+    List<ClassStudent> findByOrganizationIdAndTrainingClass_PublicIdAndStudentPublicIdIn(
             UUID tenantId, UUID classPublicId, List<UUID> studentPublicIds);
 
     /**
@@ -42,17 +42,17 @@ public interface ClassMembershipRepository extends JpaRepository<ClassMembership
      * all reuse. {@code caller.tenantId()} MUST always be passed in by the
      * caller; no program-only overload of this query may ever be added (a
      * cross-tenant leak here poisons Phase 10's bulk-enroll input). The
-     * {@code @EntityGraph} forces a single query with the {@code studentClass}
-     * and {@code studentClass.program} associations join-fetched, so mapping
+     * {@code @EntityGraph} forces a single query with the {@code trainingClass}
+     * and {@code trainingClass.program} associations join-fetched, so mapping
      * each row to a response never triggers a lazy load per row.
      */
-    @EntityGraph(attributePaths = {"studentClass", "studentClass.program"})
+    @EntityGraph(attributePaths = {"trainingClass", "trainingClass.program"})
     @Query("""
-            select m from ClassMembership m
-            join fetch m.studentClass c
+            select m from ClassStudent m
+            join fetch m.trainingClass c
             join fetch c.program p
             join p.organization o
-            where m.tenantId = :tenantId
+            where m.organizationId = :tenantId
               and m.deleted = false
               and c.deleted = false
               and c.status = com.pte.enrollment.domain.enums.ClassStatus.ACTIVE
@@ -62,17 +62,17 @@ public interface ClassMembershipRepository extends JpaRepository<ClassMembership
               and (p.endDate is null or p.endDate >= CURRENT_DATE)
               and o.publicId = :tenantId
             """)
-    List<ClassMembership> findByStudentClass_Program_Organization_PublicId(
+    List<ClassStudent> findByTrainingClass_Program_Organization_PublicId(
             @Param("tenantId") UUID tenantPublicId);
 
     /** Filtered variant of the above â€” both tenant and program are AND-ed in the same query. */
-    @EntityGraph(attributePaths = {"studentClass", "studentClass.program"})
+    @EntityGraph(attributePaths = {"trainingClass", "trainingClass.program"})
     @Query("""
-            select m from ClassMembership m
-            join fetch m.studentClass c
+            select m from ClassStudent m
+            join fetch m.trainingClass c
             join fetch c.program p
             join p.organization o
-            where m.tenantId = :tenantId
+            where m.organizationId = :tenantId
               and m.deleted = false
               and c.deleted = false
               and c.status = com.pte.enrollment.domain.enums.ClassStatus.ACTIVE
@@ -83,6 +83,6 @@ public interface ClassMembershipRepository extends JpaRepository<ClassMembership
               and o.publicId = :tenantId
               and p.publicId = :programPublicId
             """)
-    List<ClassMembership> findByStudentClass_Program_Organization_PublicIdAndStudentClass_Program_PublicId(
+    List<ClassStudent> findByTrainingClass_Program_Organization_PublicIdAndTrainingClass_Program_PublicId(
             @Param("tenantId") UUID tenantPublicId, @Param("programPublicId") UUID programPublicId);
 }

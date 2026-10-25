@@ -16,7 +16,7 @@ import com.pte.enrollment.internal.dto.response.ProgramDashboardResponse;
 import com.pte.enrollment.internal.dto.response.ProgramResponse;
 import com.pte.tenancy.TenancyService;
 import com.pte.enrollment.internal.repository.ProgramRepository;
-import com.pte.enrollment.internal.repository.StudentClassRepository;
+import com.pte.enrollment.internal.repository.TrainingClassRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,7 +48,7 @@ class ProgramServiceTest {
     private TenancyService tenancyService;
 
     @Mock
-    private StudentClassRepository studentClassRepository;
+    private TrainingClassRepository trainingClassRepository;
 
 
     @Mock
@@ -58,7 +58,7 @@ class ProgramServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ProgramService(programRepository, tenancyService, studentClassRepository,
+        service = new ProgramService(programRepository, tenancyService, trainingClassRepository,
                 auditLogService);
     }
 
@@ -353,7 +353,7 @@ class ProgramServiceTest {
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
 
         when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
-        when(studentClassRepository.existsByProgram_PublicIdAndDeletedFalse(programPublicId)).thenReturn(true);
+        when(trainingClassRepository.existsByProgram_PublicIdAndDeletedFalse(programPublicId)).thenReturn(true);
 
         assertThatThrownBy(() -> service.archive(organizationPublicId, programPublicId, caller))
                 .isInstanceOf(ProgramHasActiveClassesException.class);
@@ -377,7 +377,7 @@ class ProgramServiceTest {
                 new ClassStudentCountResponse(UUID.randomUUID(), "12A3", 0L));
 
         when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
-        when(studentClassRepository.countStudentsByClassForProgram(programPublicId)).thenReturn(rows);
+        when(trainingClassRepository.countStudentsByClassForProgram(programPublicId)).thenReturn(rows);
 
         ProgramDashboardResponse response = service.getDashboard(organizationPublicId, programPublicId, caller);
 
@@ -401,6 +401,6 @@ class ProgramServiceTest {
 
         assertThatThrownBy(() -> service.getDashboard(organizationPublicId, programPublicId, caller))
                 .isInstanceOf(ProgramNotFoundException.class);
-        verify(studentClassRepository, never()).countStudentsByClassForProgram(any());
+        verify(trainingClassRepository, never()).countStudentsByClassForProgram(any());
     }
 }

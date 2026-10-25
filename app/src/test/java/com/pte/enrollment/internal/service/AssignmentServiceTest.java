@@ -1,19 +1,19 @@
 package com.pte.enrollment.internal.service;
 
 import com.pte.enrollment.internal.constant.EnrollmentConstants;
-import com.pte.enrollment.domain.LecturerAssignment;
+import com.pte.enrollment.domain.ClassLecturer;
 import com.pte.tenancy.domain.Organization;
 import com.pte.enrollment.domain.Program;
-import com.pte.enrollment.domain.StudentClass;
+import com.pte.enrollment.domain.TrainingClass;
 import com.pte.tenancy.domain.enums.FacilityType;
 import com.pte.enrollment.internal.exception.LecturerAlreadyAssignedException;
 import com.pte.enrollment.internal.exception.LecturerAssignmentNotFoundException;
 import com.pte.enrollment.internal.exception.StudentClassNotFoundException;
 import com.pte.enrollment.internal.dto.request.AssignLecturerRequest;
 import com.pte.enrollment.internal.dto.response.LecturerAssignmentResponse;
-import com.pte.enrollment.internal.repository.LecturerAssignmentRepository;
+import com.pte.enrollment.internal.repository.ClassLecturerRepository;
 import com.pte.enrollment.internal.repository.ProgramRepository;
-import com.pte.enrollment.internal.repository.StudentClassRepository;
+import com.pte.enrollment.internal.repository.TrainingClassRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,13 +39,13 @@ import static org.mockito.Mockito.when;
 class AssignmentServiceTest {
 
     @Mock
-    private StudentClassRepository studentClassRepository;
+    private TrainingClassRepository trainingClassRepository;
 
     @Mock
     private ProgramRepository programRepository;
 
     @Mock
-    private LecturerAssignmentRepository lecturerAssignmentRepository;
+    private ClassLecturerRepository classLecturerRepository;
 
     @Mock
     private AuditLogService auditLogService;
@@ -61,8 +61,8 @@ class AssignmentServiceTest {
         // calls a ClassService write method (only the package-private findOwned via
         // AssignmentService), so it's never invoked; the mock verified below is AssignmentService's
         // own, separate injected instance.
-        ClassService classService = new ClassService(studentClassRepository, null, programRepository, null, null);
-        service = new AssignmentService(classService, lecturerAssignmentRepository, auditLogService);
+        ClassService classService = new ClassService(trainingClassRepository, programRepository, null);
+        service = new AssignmentService(classService, classLecturerRepository, auditLogService);
     }
 
     private Organization organizationOf(UUID publicId) {
@@ -81,12 +81,12 @@ class AssignmentServiceTest {
         return program;
     }
 
-    private StudentClass classOf(UUID classPublicId, Program program) {
-        StudentClass studentClass = new StudentClass();
-        studentClass.setPublicId(classPublicId);
-        studentClass.setName("12A1");
-        studentClass.setProgram(program);
-        return studentClass;
+    private TrainingClass classOf(UUID classPublicId, Program program) {
+        TrainingClass trainingClass = new TrainingClass();
+        trainingClass.setPublicId(classPublicId);
+        trainingClass.setName("12A1");
+        trainingClass.setProgram(program);
+        return trainingClass;
     }
 
     // --- Lecturer ---
@@ -98,13 +98,13 @@ class AssignmentServiceTest {
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organizationOf(tenantPublicId));
         UUID classPublicId = UUID.randomUUID();
-        StudentClass studentClass = classOf(classPublicId, program);
+        TrainingClass trainingClass = classOf(classPublicId, program);
         UUID assigneePublicId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
 
-        when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-        when(lecturerAssignmentRepository.save(any(LecturerAssignment.class))).thenAnswer(invocation -> {
-            LecturerAssignment saved = invocation.getArgument(0);
+        when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+        when(classLecturerRepository.save(any(ClassLecturer.class))).thenAnswer(invocation -> {
+            ClassLecturer saved = invocation.getArgument(0);
             saved.setPublicId(UUID.randomUUID());
             return saved;
         });
@@ -126,16 +126,16 @@ class AssignmentServiceTest {
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organizationOf(otherTenantId));
         UUID classPublicId = UUID.randomUUID();
-        StudentClass studentClass = classOf(classPublicId, program);
+        TrainingClass trainingClass = classOf(classPublicId, program);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
 
-        when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
+        when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
 
         assertThatThrownBy(() -> service.assignLecturer(organizationPublicId, programPublicId, classPublicId,
                 new AssignLecturerRequest(UUID.randomUUID()), caller))
                 .isInstanceOf(StudentClassNotFoundException.class);
 
-        verify(lecturerAssignmentRepository, never()).save(any());
+        verify(classLecturerRepository, never()).save(any());
     }
 
     @Test
@@ -145,11 +145,11 @@ class AssignmentServiceTest {
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organizationOf(tenantPublicId));
         UUID classPublicId = UUID.randomUUID();
-        StudentClass studentClass = classOf(classPublicId, program);
+        TrainingClass trainingClass = classOf(classPublicId, program);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
 
-        when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-        when(lecturerAssignmentRepository.save(any(LecturerAssignment.class)))
+        when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+        when(classLecturerRepository.save(any(ClassLecturer.class)))
                 .thenThrow(new DataIntegrityViolationException("unique violation"));
 
         assertThatThrownBy(() -> service.assignLecturer(organizationPublicId, programPublicId, classPublicId,
@@ -164,16 +164,16 @@ class AssignmentServiceTest {
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organizationOf(tenantPublicId));
         UUID classPublicId = UUID.randomUUID();
-        StudentClass studentClass = classOf(classPublicId, program);
+        TrainingClass trainingClass = classOf(classPublicId, program);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
 
-        LecturerAssignment assignment = new LecturerAssignment();
+        ClassLecturer assignment = new ClassLecturer();
         assignment.setPublicId(UUID.randomUUID());
         assignment.setAssigneePublicId(UUID.randomUUID());
-        assignment.setStudentClass(studentClass);
+        assignment.setTrainingClass(trainingClass);
 
-        when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-        when(lecturerAssignmentRepository.findByTenantIdAndStudentClass_PublicId(caller.tenantId(), classPublicId))
+        when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+        when(classLecturerRepository.findByOrganizationIdAndTrainingClass_PublicId(caller.tenantId(), classPublicId))
                 .thenReturn(List.of(assignment));
 
         List<LecturerAssignmentResponse> result = service.listLecturers(organizationPublicId, programPublicId,
@@ -190,20 +190,20 @@ class AssignmentServiceTest {
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organizationOf(tenantPublicId));
         UUID classPublicId = UUID.randomUUID();
-        StudentClass studentClass = classOf(classPublicId, program);
+        TrainingClass trainingClass = classOf(classPublicId, program);
         UUID assignmentPublicId = UUID.randomUUID();
-        LecturerAssignment assignment = new LecturerAssignment();
+        ClassLecturer assignment = new ClassLecturer();
         assignment.setPublicId(assignmentPublicId);
-        assignment.setStudentClass(studentClass);
+        assignment.setTrainingClass(trainingClass);
         assignment.setAssigneePublicId(UUID.randomUUID());
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
 
-        when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-        when(lecturerAssignmentRepository.findByPublicIdAndTenantId(assignmentPublicId, caller.tenantId())).thenReturn(Optional.of(assignment));
+        when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+        when(classLecturerRepository.findByPublicIdAndOrganizationId(assignmentPublicId, caller.tenantId())).thenReturn(Optional.of(assignment));
 
         service.unassignLecturer(organizationPublicId, programPublicId, classPublicId, assignmentPublicId, caller);
 
-        verify(lecturerAssignmentRepository).delete(assignment);
+        verify(classLecturerRepository).delete(assignment);
         verify(auditLogService).record(eq(caller), eq(EnrollmentConstants.AGGREGATE_CLASS), eq(classPublicId.toString()),
                 eq(EnrollmentConstants.EVENT_LECTURER_UNASSIGNED), any());
     }
@@ -215,12 +215,12 @@ class AssignmentServiceTest {
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organizationOf(tenantPublicId));
         UUID classPublicId = UUID.randomUUID();
-        StudentClass studentClass = classOf(classPublicId, program);
+        TrainingClass trainingClass = classOf(classPublicId, program);
         UUID assignmentPublicId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
 
-        when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-        when(lecturerAssignmentRepository.findByPublicIdAndTenantId(assignmentPublicId, caller.tenantId())).thenReturn(Optional.empty());
+        when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+        when(classLecturerRepository.findByPublicIdAndOrganizationId(assignmentPublicId, caller.tenantId())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.unassignLecturer(organizationPublicId, programPublicId, classPublicId,
                 assignmentPublicId, caller))
@@ -234,25 +234,25 @@ class AssignmentServiceTest {
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organizationOf(tenantPublicId));
         UUID classPublicId = UUID.randomUUID();
-        StudentClass studentClass = classOf(classPublicId, program);
+        TrainingClass trainingClass = classOf(classPublicId, program);
         UUID assigneePublicId = UUID.randomUUID();
         UUID firstAssignmentPublicId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
 
-        LecturerAssignment firstAssignment = new LecturerAssignment();
+        ClassLecturer firstAssignment = new ClassLecturer();
         firstAssignment.setPublicId(firstAssignmentPublicId);
-        firstAssignment.setStudentClass(studentClass);
+        firstAssignment.setTrainingClass(trainingClass);
         firstAssignment.setAssigneePublicId(assigneePublicId);
 
-        when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-        when(lecturerAssignmentRepository.findByPublicIdAndTenantId(firstAssignmentPublicId, caller.tenantId())).thenReturn(Optional.of(firstAssignment));
+        when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+        when(classLecturerRepository.findByPublicIdAndOrganizationId(firstAssignmentPublicId, caller.tenantId())).thenReturn(Optional.of(firstAssignment));
 
         service.unassignLecturer(organizationPublicId, programPublicId, classPublicId, firstAssignmentPublicId, caller);
 
         // Constraint released on delete — same assignee can be assigned again without the mocked
         // save throwing (a real DB would allow this once the row is gone).
-        when(lecturerAssignmentRepository.save(any(LecturerAssignment.class))).thenAnswer(invocation -> {
-            LecturerAssignment saved = invocation.getArgument(0);
+        when(classLecturerRepository.save(any(ClassLecturer.class))).thenAnswer(invocation -> {
+            ClassLecturer saved = invocation.getArgument(0);
             saved.setPublicId(UUID.randomUUID());
             return saved;
         });

@@ -1,12 +1,12 @@
 package com.pte.enrollment;
 
-import com.pte.enrollment.domain.ClassMembership;
+import com.pte.enrollment.domain.ClassStudent;
 import com.pte.enrollment.domain.Program;
-import com.pte.enrollment.domain.StudentClass;
+import com.pte.enrollment.domain.TrainingClass;
 import com.pte.enrollment.internal.exception.StudentClassNotFoundException;
-import com.pte.enrollment.internal.repository.ClassMembershipRepository;
+import com.pte.enrollment.internal.repository.ClassStudentRepository;
 import com.pte.enrollment.internal.repository.ProgramRepository;
-import com.pte.enrollment.internal.repository.StudentClassRepository;
+import com.pte.enrollment.internal.repository.TrainingClassRepository;
 import com.pte.identity.IdentityService;
 import com.pte.tenancy.domain.Organization;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,9 +33,9 @@ import static org.mockito.Mockito.when;
 class EnrollmentModuleServiceTest {
 
     @Mock
-    private StudentClassRepository studentClassRepository;
+    private TrainingClassRepository trainingClassRepository;
     @Mock
-    private ClassMembershipRepository classMembershipRepository;
+    private ClassStudentRepository classStudentRepository;
     @Mock
     private ProgramRepository programRepository;
     @Mock
@@ -45,30 +45,30 @@ class EnrollmentModuleServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new EnrollmentModuleService(studentClassRepository, classMembershipRepository, programRepository);
+        service = new EnrollmentModuleService(trainingClassRepository, classStudentRepository, programRepository);
     }
 
-    private StudentClass classForTenant(UUID tenantPublicId) {
+    private TrainingClass classForTenant(UUID tenantPublicId) {
         Organization organization = new Organization();
         organization.setPublicId(tenantPublicId);
         Program program = new Program();
         program.setOrganization(organization);
-        StudentClass studentClass = new StudentClass();
-        studentClass.setProgram(program);
-        return studentClass;
+        TrainingClass trainingClass = new TrainingClass();
+        trainingClass.setProgram(program);
+        return trainingClass;
     }
 
     @Test
     void findActiveStudentPublicIds_returnsAllMembersOfClass() {
         UUID tenantId = UUID.randomUUID();
         UUID classPublicId = UUID.randomUUID();
-        StudentClass studentClass = classForTenant(tenantId);
-        when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-        ClassMembership m1 = new ClassMembership();
+        TrainingClass trainingClass = classForTenant(tenantId);
+        when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+        ClassStudent m1 = new ClassStudent();
         m1.setStudentPublicId(UUID.randomUUID());
-        ClassMembership m2 = new ClassMembership();
+        ClassStudent m2 = new ClassStudent();
         m2.setStudentPublicId(UUID.randomUUID());
-        when(classMembershipRepository.findByTenantIdAndStudentClass_PublicId(tenantId, classPublicId))
+        when(classStudentRepository.findByOrganizationIdAndTrainingClass_PublicId(tenantId, classPublicId))
                 .thenReturn(List.of(m1, m2));
 
         List<UUID> result = service.findActiveStudentPublicIds(tenantId, classPublicId);
@@ -81,8 +81,8 @@ class EnrollmentModuleServiceTest {
         UUID tenantId = UUID.randomUUID();
         UUID otherTenantId = UUID.randomUUID();
         UUID classPublicId = UUID.randomUUID();
-        StudentClass studentClass = classForTenant(otherTenantId);
-        when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
+        TrainingClass trainingClass = classForTenant(otherTenantId);
+        when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
 
         assertThatThrownBy(() -> service.findActiveStudentPublicIds(tenantId, classPublicId))
                 .isInstanceOf(StudentClassNotFoundException.class);
@@ -92,21 +92,21 @@ class EnrollmentModuleServiceTest {
     void findActiveStudentPublicIds_excludesIdentityRecordsThatAreNoLongerEligible() {
         UUID tenantId = UUID.randomUUID();
         UUID classPublicId = UUID.randomUUID();
-        StudentClass studentClass = classForTenant(tenantId);
+        TrainingClass trainingClass = classForTenant(tenantId);
         UUID activeStudentId = UUID.randomUUID();
         UUID suspendedStudentId = UUID.randomUUID();
-        ClassMembership activeMembership = new ClassMembership();
+        ClassStudent activeMembership = new ClassStudent();
         activeMembership.setStudentPublicId(activeStudentId);
-        ClassMembership suspendedMembership = new ClassMembership();
+        ClassStudent suspendedMembership = new ClassStudent();
         suspendedMembership.setStudentPublicId(suspendedStudentId);
-        when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-        when(classMembershipRepository.findByTenantIdAndStudentClass_PublicId(tenantId, classPublicId))
+        when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+        when(classStudentRepository.findByOrganizationIdAndTrainingClass_PublicId(tenantId, classPublicId))
                 .thenReturn(List.of(activeMembership, suspendedMembership));
         when(identityService.findActiveStudentPublicIds(tenantId, List.of(activeStudentId, suspendedStudentId)))
                 .thenReturn(java.util.Set.of(activeStudentId));
 
         EnrollmentModuleService filteredService = new EnrollmentModuleService(
-                studentClassRepository, classMembershipRepository, programRepository, identityService);
+                trainingClassRepository, classStudentRepository, programRepository, identityService);
 
         assertThat(filteredService.findActiveStudentPublicIds(tenantId, classPublicId))
                 .containsExactly(activeStudentId);
@@ -116,7 +116,7 @@ class EnrollmentModuleServiceTest {
     void findActiveStudentPublicIds_unknownClass_throwsNotFound() {
         UUID tenantId = UUID.randomUUID();
         UUID classPublicId = UUID.randomUUID();
-        when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.empty());
+        when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.findActiveStudentPublicIds(tenantId, classPublicId))
                 .isInstanceOf(StudentClassNotFoundException.class);
@@ -128,8 +128,8 @@ class EnrollmentModuleServiceTest {
         UUID programPublicId = UUID.randomUUID();
         Program program = programForTenant(tenantId, programPublicId);
         when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
-        when(classMembershipRepository
-                .findByStudentClass_Program_Organization_PublicIdAndStudentClass_Program_PublicId(
+        when(classStudentRepository
+                .findByTrainingClass_Program_Organization_PublicIdAndTrainingClass_Program_PublicId(
                         tenantId, programPublicId))
                 .thenReturn(List.of());
 

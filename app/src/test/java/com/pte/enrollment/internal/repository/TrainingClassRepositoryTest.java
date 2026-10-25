@@ -1,9 +1,9 @@
 package com.pte.enrollment.internal.repository;
 
-import com.pte.enrollment.domain.ClassMembership;
+import com.pte.enrollment.domain.ClassStudent;
 import com.pte.tenancy.domain.Organization;
 import com.pte.enrollment.domain.Program;
-import com.pte.enrollment.domain.StudentClass;
+import com.pte.enrollment.domain.TrainingClass;
 import com.pte.tenancy.domain.enums.FacilityType;
 import com.pte.tenancy.domain.enums.OrganizationStatus;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
@@ -25,16 +25,16 @@ import static org.assertj.core.api.Assertions.tuple;
  * mock of the repository (as {@code ProgramServiceTest} uses) proves the
  * service layer consumes the result correctly, but never actually runs the
  * JPQL — this test proves the query itself is correct against a live
- * embedded database, same rationale as {@code ClassMembershipRepositoryTest}.
+ * embedded database, same rationale as {@code ClassStudentRepositoryTest}.
  */
 @DataJpaTest
-class StudentClassRepositoryTest {
+class TrainingClassRepositoryTest {
 
     @Autowired
-    private StudentClassRepository studentClassRepository;
+    private TrainingClassRepository trainingClassRepository;
 
     @Autowired
-    private ClassMembershipRepository classMembershipRepository;
+    private ClassStudentRepository classStudentRepository;
 
     @Autowired
     private ProgramRepository programRepository;
@@ -59,27 +59,27 @@ class StudentClassRepositoryTest {
         return programRepository.save(program);
     }
 
-    private StudentClass persistClass(Program program, String className) {
-        StudentClass studentClass = new StudentClass();
-        studentClass.setName(className);
-        studentClass.setProgram(program);
-        return studentClassRepository.save(studentClass);
+    private TrainingClass persistClass(Program program, String className) {
+        TrainingClass trainingClass = new TrainingClass();
+        trainingClass.setName(className);
+        trainingClass.setProgram(program);
+        return trainingClassRepository.save(trainingClass);
     }
 
-    private void persistMembership(StudentClass studentClass, UUID tenantId) {
-        ClassMembership membership = new ClassMembership();
-        membership.setStudentClass(studentClass);
+    private void persistMembership(TrainingClass trainingClass, UUID tenantId) {
+        ClassStudent membership = new ClassStudent();
+        membership.setTrainingClass(trainingClass);
         membership.setStudentPublicId(UUID.randomUUID());
-        membership.setTenantId(tenantId);
-        classMembershipRepository.save(membership);
+        membership.setOrganizationId(tenantId);
+        classStudentRepository.save(membership);
     }
 
     @Test
     void countStudentsByClassForProgram_returnsZeroForClassWithNoMembers_notAMissingRow() {
         Program program = persistProgram("Khối 12");
-        StudentClass emptyClass = persistClass(program, "12A1");
+        TrainingClass emptyClass = persistClass(program, "12A1");
 
-        List<ClassStudentCountResponse> rows = studentClassRepository.countStudentsByClassForProgram(
+        List<ClassStudentCountResponse> rows = trainingClassRepository.countStudentsByClassForProgram(
                 program.getPublicId());
 
         assertThat(rows).extracting(ClassStudentCountResponse::classPublicId, ClassStudentCountResponse::studentCount)
@@ -90,13 +90,13 @@ class StudentClassRepositoryTest {
     void countStudentsByClassForProgram_returnsCorrectCountPerClass() {
         Program program = persistProgram("Khối 12");
         UUID tenantId = program.getOrganization().getPublicId();
-        StudentClass classA = persistClass(program, "12A1");
-        StudentClass classB = persistClass(program, "12A2");
+        TrainingClass classA = persistClass(program, "12A1");
+        TrainingClass classB = persistClass(program, "12A2");
         persistMembership(classA, tenantId);
         persistMembership(classA, tenantId);
         persistMembership(classB, tenantId);
 
-        List<ClassStudentCountResponse> rows = studentClassRepository.countStudentsByClassForProgram(
+        List<ClassStudentCountResponse> rows = trainingClassRepository.countStudentsByClassForProgram(
                 program.getPublicId());
 
         assertThat(rows).extracting(ClassStudentCountResponse::classPublicId, ClassStudentCountResponse::studentCount)
@@ -108,12 +108,12 @@ class StudentClassRepositoryTest {
     @Test
     void countStudentsByClassForProgram_excludesArchivedClasses() {
         Program program = persistProgram("Khối 12");
-        StudentClass activeClass = persistClass(program, "12A1");
-        StudentClass archivedClass = persistClass(program, "12A2");
+        TrainingClass activeClass = persistClass(program, "12A1");
+        TrainingClass archivedClass = persistClass(program, "12A2");
         archivedClass.setDeleted(true);
-        studentClassRepository.save(archivedClass);
+        trainingClassRepository.save(archivedClass);
 
-        List<ClassStudentCountResponse> rows = studentClassRepository.countStudentsByClassForProgram(
+        List<ClassStudentCountResponse> rows = trainingClassRepository.countStudentsByClassForProgram(
                 program.getPublicId());
 
         assertThat(rows).extracting(ClassStudentCountResponse::classPublicId)
@@ -124,10 +124,10 @@ class StudentClassRepositoryTest {
     void countStudentsByClassForProgram_excludesClassesFromOtherPrograms() {
         Program programA = persistProgram("Khối 12");
         Program programB = persistProgram("Khối 11");
-        StudentClass classUnderA = persistClass(programA, "12A1");
+        TrainingClass classUnderA = persistClass(programA, "12A1");
         persistClass(programB, "11A1");
 
-        List<ClassStudentCountResponse> rows = studentClassRepository.countStudentsByClassForProgram(
+        List<ClassStudentCountResponse> rows = trainingClassRepository.countStudentsByClassForProgram(
                 programA.getPublicId());
 
         assertThat(rows).extracting(ClassStudentCountResponse::classPublicId)

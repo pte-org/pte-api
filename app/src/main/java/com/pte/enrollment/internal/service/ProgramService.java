@@ -15,7 +15,7 @@ import com.pte.enrollment.internal.dto.response.ProgramDashboardResponse;
 import com.pte.enrollment.internal.dto.response.ProgramResponse;
 import com.pte.enrollment.internal.mapper.ProgramMapper;
 import com.pte.enrollment.internal.repository.ProgramRepository;
-import com.pte.enrollment.internal.repository.StudentClassRepository;
+import com.pte.enrollment.internal.repository.TrainingClassRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.tenancy.TenancyService;
 import com.pte.shared.security.CurrentUser;
@@ -38,15 +38,15 @@ public class ProgramService {
 
     private final ProgramRepository programRepository;
     private final TenancyService tenancyService;
-    private final StudentClassRepository studentClassRepository;
+    private final TrainingClassRepository trainingClassRepository;
     private final AuditLogService auditLogService;
 
     public ProgramService(ProgramRepository programRepository, TenancyService tenancyService,
-            StudentClassRepository studentClassRepository,
+            TrainingClassRepository trainingClassRepository,
             AuditLogService auditLogService) {
         this.programRepository = programRepository;
         this.tenancyService = tenancyService;
-        this.studentClassRepository = studentClassRepository;
+        this.trainingClassRepository = trainingClassRepository;
         this.auditLogService = auditLogService;
     }
 
@@ -119,7 +119,7 @@ public class ProgramService {
     /**
      * Visibility/lifecycle flag via the inherited {@code deleted} column, NOT a
      * hard delete â€” archived Programs stay fetchable by {@link #get} but drop
-     * out of {@link #list}. Rejects if any non-deleted {@code StudentClass}
+     * out of {@link #list}. Rejects if any non-deleted {@code TrainingClass}
      * still exists under this Program â€” the Host must archive/move the Classes
      * first (Phase 3 retrofit).
      */
@@ -129,7 +129,7 @@ public class ProgramService {
         if (program.isDeleted()) {
             return ProgramMapper.toResponse(program, organizationPublicId);
         }
-        if (studentClassRepository.existsByProgram_PublicIdAndDeletedFalse(programPublicId)) {
+        if (trainingClassRepository.existsByProgram_PublicIdAndDeletedFalse(programPublicId)) {
             throw new ProgramHasActiveClassesException();
         }
         program.setDeleted(true);        auditLogService.record(caller, EnrollmentConstants.AGGREGATE_PROGRAM, programPublicId.toString(),
@@ -149,14 +149,14 @@ public class ProgramService {
     }
 
     /**
-     * One grouped query (see {@code StudentClassRepository.countStudentsByClassForProgram})
+     * One grouped query (see {@code TrainingClassRepository.countStudentsByClassForProgram})
      * for class/student counts under this Program â€” never client-side
      * aggregation over a potentially large membership list, and never N+1.
      */
     @Transactional(readOnly = true)
     public ProgramDashboardResponse getDashboard(UUID organizationPublicId, UUID programPublicId, CurrentUser caller) {
         findOwned(organizationPublicId, programPublicId, caller);
-        List<ClassStudentCountResponse> classes = studentClassRepository.countStudentsByClassForProgram(programPublicId);
+        List<ClassStudentCountResponse> classes = trainingClassRepository.countStudentsByClassForProgram(programPublicId);
         long studentCount = classes.stream().mapToLong(ClassStudentCountResponse::studentCount).sum();
         return new ProgramDashboardResponse(programPublicId, classes.size(), studentCount, classes);
     }

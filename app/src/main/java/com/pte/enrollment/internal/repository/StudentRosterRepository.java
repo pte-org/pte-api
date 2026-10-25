@@ -1,6 +1,6 @@
 package com.pte.enrollment.internal.repository;
 
-import com.pte.enrollment.domain.StudentClass;
+import com.pte.enrollment.domain.TrainingClass;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.Repository;
@@ -10,7 +10,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.UUID;
 
 /** The enrollment-side read port for the identity/enrollment roster join. */
-public interface StudentRosterRepository extends Repository<StudentClass, Long> {
+public interface StudentRosterRepository extends Repository<TrainingClass, Long> {
 
     @Query(value = """
             SELECT CAST(u.public_id AS VARCHAR) AS studentPublicId,
@@ -27,11 +27,11 @@ public interface StudentRosterRepository extends Repository<StudentClass, Long> 
                    u.username AS username,
                    u.must_change_password AS mustChangePassword
             FROM identity_student_directory u
-            LEFT JOIN class_memberships m
+            LEFT JOIN class_students m
                    ON m.student_public_id = u.public_id
-                  AND m.tenant_id = :tenantId
-            LEFT JOIN student_classes c
-                   ON c.id = m.student_class_id
+                  AND m.organization_id = :tenantId
+            LEFT JOIN classes c
+                   ON c.id = m.class_id
                   AND EXISTS (
                       SELECT 1
                       FROM programs c_programs
@@ -71,11 +71,11 @@ public interface StudentRosterRepository extends Repository<StudentClass, Long> 
             countQuery = """
             SELECT COUNT(DISTINCT u.id)
             FROM identity_student_directory u
-            LEFT JOIN class_memberships m
+            LEFT JOIN class_students m
                    ON m.student_public_id = u.public_id
-                  AND m.tenant_id = :tenantId
-            LEFT JOIN student_classes c
-                   ON c.id = m.student_class_id
+                  AND m.organization_id = :tenantId
+            LEFT JOIN classes c
+                   ON c.id = m.class_id
                   AND EXISTS (
                       SELECT 1
                       FROM programs c_programs

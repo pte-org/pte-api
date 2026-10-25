@@ -1,9 +1,9 @@
 package com.pte.enrollment.internal.mapper;
 
-import com.pte.enrollment.domain.ClassMembership;
+import com.pte.enrollment.domain.ClassStudent;
 import com.pte.tenancy.domain.Organization;
 import com.pte.enrollment.domain.Program;
-import com.pte.enrollment.domain.StudentClass;
+import com.pte.enrollment.domain.TrainingClass;
 import com.pte.enrollment.internal.dto.response.ClassMembershipResponse;
 import org.junit.jupiter.api.Test;
 
@@ -11,7 +11,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class ClassMembershipMapperTest {
+class ClassStudentMapperTest {
 
     @Test
     void toResponse_mapsAllFieldsIncludingNamesFromLoadedAssociations() {
@@ -23,20 +23,20 @@ class ClassMembershipMapperTest {
         program.setName("Khối 12");
         program.setOrganization(organization);
 
-        StudentClass studentClass = new StudentClass();
-        studentClass.setPublicId(UUID.randomUUID());
-        studentClass.setName("12A1");
-        studentClass.setProgram(program);
+        TrainingClass trainingClass = new TrainingClass();
+        trainingClass.setPublicId(UUID.randomUUID());
+        trainingClass.setName("12A1");
+        trainingClass.setProgram(program);
 
-        ClassMembership membership = new ClassMembership();
+        ClassStudent membership = new ClassStudent();
         membership.setPublicId(UUID.randomUUID());
-        membership.setStudentClass(studentClass);
+        membership.setTrainingClass(trainingClass);
         membership.setStudentPublicId(UUID.randomUUID());
 
-        ClassMembershipResponse response = ClassMembershipMapper.toResponse(membership);
+        ClassMembershipResponse response = ClassStudentMapper.toResponse(membership);
 
         assertThat(response.publicId()).isEqualTo(membership.getPublicId());
-        assertThat(response.classPublicId()).isEqualTo(studentClass.getPublicId());
+        assertThat(response.classPublicId()).isEqualTo(trainingClass.getPublicId());
         assertThat(response.className()).isEqualTo("12A1");
         assertThat(response.programPublicId()).isEqualTo(program.getPublicId());
         assertThat(response.programName()).isEqualTo("Khối 12");

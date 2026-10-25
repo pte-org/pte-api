@@ -1,10 +1,10 @@
 package com.pte.enrollment.internal.service;
 
 import com.pte.enrollment.internal.constant.EnrollmentConstants;
-import com.pte.enrollment.domain.ClassMembership;
+import com.pte.enrollment.domain.ClassStudent;
 import com.pte.tenancy.domain.Organization;
 import com.pte.enrollment.domain.Program;
-import com.pte.enrollment.domain.StudentClass;
+import com.pte.enrollment.domain.TrainingClass;
 import com.pte.enrollment.domain.enums.ClassStatus;
 import com.pte.tenancy.domain.enums.FacilityType;
 import com.pte.enrollment.internal.exception.ClassHasActiveMembersException;
@@ -25,9 +25,9 @@ import com.pte.enrollment.internal.dto.response.ClassMembershipResponse;
 import com.pte.enrollment.internal.dto.response.ClassResponse;
 import com.pte.enrollment.internal.dto.response.MergeClassesResponse;
 import com.pte.enrollment.internal.dto.response.SplitClassResponse;
-import com.pte.enrollment.internal.repository.ClassMembershipRepository;
+import com.pte.enrollment.internal.repository.ClassStudentRepository;
 import com.pte.enrollment.internal.repository.ProgramRepository;
-import com.pte.enrollment.internal.repository.StudentClassRepository;
+import com.pte.enrollment.internal.repository.TrainingClassRepository;
 import com.pte.identity.IdentityService;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
@@ -56,10 +56,10 @@ import static org.mockito.Mockito.when;
 class ClassServiceTest {
 
         @Mock
-        private StudentClassRepository studentClassRepository;
+        private TrainingClassRepository trainingClassRepository;
 
         @Mock
-        private ClassMembershipRepository classMembershipRepository;
+        private ClassStudentRepository classStudentRepository;
 
         @Mock
         private ProgramRepository programRepository;
@@ -71,11 +71,19 @@ class ClassServiceTest {
         private AuditLogService auditLogService;
 
         private ClassService service;
+        private ClassLifecycleService lifecycleService;
+        private ClassStudentService studentService;
+        private ClassReorganizationService reorganizationService;
 
         @BeforeEach
         void setUp() {
-                service = new ClassService(studentClassRepository, classMembershipRepository, programRepository,
+                service = new ClassService(trainingClassRepository, programRepository, auditLogService);
+                lifecycleService = new ClassLifecycleService(trainingClassRepository, classStudentRepository, service,
+                                auditLogService);
+                studentService = new ClassStudentService(classStudentRepository, trainingClassRepository, service,
                                 identityService, auditLogService);
+                reorganizationService = new ClassReorganizationService(classStudentRepository,
+                                trainingClassRepository, service, auditLogService);
         }
 
         private Organization organizationOf(UUID publicId) {
@@ -94,19 +102,19 @@ class ClassServiceTest {
                 return program;
         }
 
-        private StudentClass classOf(UUID classPublicId, Program program) {
-                StudentClass studentClass = new StudentClass();
-                studentClass.setPublicId(classPublicId);
-                studentClass.setName("12A1");
-                studentClass.setStatus(ClassStatus.ACTIVE);
-                studentClass.setProgram(program);
-                return studentClass;
+        private TrainingClass classOf(UUID classPublicId, Program program) {
+                TrainingClass trainingClass = new TrainingClass();
+                trainingClass.setPublicId(classPublicId);
+                trainingClass.setName("12A1");
+                trainingClass.setStatus(ClassStatus.ACTIVE);
+                trainingClass.setProgram(program);
+                return trainingClass;
         }
 
-        private ClassMembership membershipOf(UUID membershipPublicId, StudentClass studentClass, UUID studentPublicId) {
-                ClassMembership membership = new ClassMembership();
+        private ClassStudent membershipOf(UUID membershipPublicId, TrainingClass trainingClass, UUID studentPublicId) {
+                ClassStudent membership = new ClassStudent();
                 membership.setPublicId(membershipPublicId);
-                membership.setStudentClass(studentClass);
+                membership.setTrainingClass(trainingClass);
                 membership.setStudentPublicId(studentPublicId);
                 return membership;
         }
@@ -124,11 +132,11 @@ class ClassServiceTest {
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
                 when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
-                when(studentClassRepository.existsByProgram_PublicIdAndNameIgnoreCaseAndDeletedFalse(programPublicId,
+                when(trainingClassRepository.existsByProgram_PublicIdAndNameIgnoreCaseAndDeletedFalse(programPublicId,
                                 "12A1"))
                                 .thenReturn(false);
-                when(studentClassRepository.save(any(StudentClass.class))).thenAnswer(invocation -> {
-                        StudentClass saved = invocation.getArgument(0);
+                when(trainingClassRepository.save(any(TrainingClass.class))).thenAnswer(invocation -> {
+                        TrainingClass saved = invocation.getArgument(0);
                         saved.setPublicId(UUID.randomUUID());
                         return saved;
                 });
@@ -160,7 +168,7 @@ class ClassServiceTest {
                 assertThatThrownBy(() -> service.create(organizationPublicId, programPublicId,
                                 new CreateClassRequest("12A1"), caller))
                                 .isInstanceOf(ProgramNotFoundException.class);
-                verify(studentClassRepository, never()).save(any());
+                verify(trainingClassRepository, never()).save(any());
         }
 
         @Test
@@ -174,14 +182,14 @@ class ClassServiceTest {
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
                 when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
-                when(studentClassRepository.existsByProgram_PublicIdAndNameIgnoreCaseAndDeletedFalse(programPublicId,
+                when(trainingClassRepository.existsByProgram_PublicIdAndNameIgnoreCaseAndDeletedFalse(programPublicId,
                                 "12A1"))
                                 .thenReturn(true);
 
                 assertThatThrownBy(() -> service.create(organizationPublicId, programPublicId,
                                 new CreateClassRequest("12A1"), caller))
                                 .isInstanceOf(StudentClassNameAlreadyUsedException.class);
-                verify(studentClassRepository, never()).save(any());
+                verify(trainingClassRepository, never()).save(any());
         }
 
         // --- get / tenant-mismatch ---
@@ -195,11 +203,11 @@ class ClassServiceTest {
                 UUID classPublicId = UUID.randomUUID();
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
-                StudentClass studentClass = classOf(classPublicId, program);
+                TrainingClass trainingClass = classOf(classPublicId, program);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
+                when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
 
                 assertThatThrownBy(() -> service.get(organizationPublicId, programPublicId, classPublicId, caller))
                                 .isInstanceOf(StudentClassNotFoundException.class);
@@ -213,11 +221,11 @@ class ClassServiceTest {
                 UUID requestedProgramPublicId = UUID.randomUUID();
                 Program program = programOf(actualProgramPublicId, organization);
                 UUID classPublicId = UUID.randomUUID();
-                StudentClass studentClass = classOf(classPublicId, program);
+                TrainingClass trainingClass = classOf(classPublicId, program);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
+                when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
 
                 assertThatThrownBy(() -> service.get(organization.getPublicId(), requestedProgramPublicId,
                                 classPublicId, caller))
@@ -234,11 +242,11 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID classPublicId = UUID.randomUUID();
-                StudentClass studentClass = classOf(classPublicId, program);
+                TrainingClass trainingClass = classOf(classPublicId, program);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
+                when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
 
                 ClassResponse response = service.update(organizationPublicId, programPublicId, classPublicId,
                                 new UpdateClassRequest("12A2"), caller);
@@ -259,13 +267,13 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID classPublicId = UUID.randomUUID();
-                StudentClass studentClass = classOf(classPublicId, program);
+                TrainingClass trainingClass = classOf(classPublicId, program);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
+                when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
 
-                ClassResponse response = service.suspend(organizationPublicId, programPublicId, classPublicId, caller);
+                ClassResponse response = lifecycleService.suspend(organizationPublicId, programPublicId, classPublicId, caller);
 
                 assertThat(response.status()).isEqualTo("SUSPENDED");
                 verify(auditLogService).record(eq(caller), eq(EnrollmentConstants.AGGREGATE_CLASS),
@@ -281,17 +289,17 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID classPublicId = UUID.randomUUID();
-                StudentClass studentClass = classOf(classPublicId, program);
+                TrainingClass trainingClass = classOf(classPublicId, program);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-                when(classMembershipRepository.existsByTenantIdAndStudentClass_PublicId(caller.tenantId(),
+                when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+                when(classStudentRepository.existsByOrganizationIdAndTrainingClass_PublicId(caller.tenantId(),
                                 classPublicId)).thenReturn(false);
 
-                ClassResponse response = service.archive(organizationPublicId, programPublicId, classPublicId, caller);
+                ClassResponse response = lifecycleService.archive(organizationPublicId, programPublicId, classPublicId, caller);
 
-                assertThat(studentClass.isDeleted()).isTrue();
+                assertThat(trainingClass.isDeleted()).isTrue();
                 assertThat(response.publicId()).isEqualTo(classPublicId);
                 verify(auditLogService).record(eq(caller), eq(EnrollmentConstants.AGGREGATE_CLASS),
                                 eq(classPublicId.toString()),
@@ -309,18 +317,18 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID classPublicId = UUID.randomUUID();
-                StudentClass studentClass = classOf(classPublicId, program);
+                TrainingClass trainingClass = classOf(classPublicId, program);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-                when(classMembershipRepository.existsByTenantIdAndStudentClass_PublicId(caller.tenantId(),
+                when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+                when(classStudentRepository.existsByOrganizationIdAndTrainingClass_PublicId(caller.tenantId(),
                                 classPublicId)).thenReturn(true);
 
-                assertThatThrownBy(() -> service.archive(organizationPublicId, programPublicId, classPublicId, caller))
+                assertThatThrownBy(() -> lifecycleService.archive(organizationPublicId, programPublicId, classPublicId, caller))
                                 .isInstanceOf(ClassHasActiveMembersException.class);
 
-                assertThat(studentClass.isDeleted()).isFalse();
+                assertThat(trainingClass.isDeleted()).isFalse();
         }
 
         @Test
@@ -331,19 +339,19 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID classPublicId = UUID.randomUUID();
-                StudentClass studentClass = classOf(classPublicId, program);
+                TrainingClass trainingClass = classOf(classPublicId, program);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-                when(classMembershipRepository.existsByTenantIdAndStudentClass_PublicId(caller.tenantId(),
+                when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+                when(classStudentRepository.existsByOrganizationIdAndTrainingClass_PublicId(caller.tenantId(),
                                 classPublicId)).thenReturn(true);
 
                 assertThatThrownBy(
-                                () -> service.deactivate(organizationPublicId, programPublicId, classPublicId, caller))
+                                () -> lifecycleService.deactivate(organizationPublicId, programPublicId, classPublicId, caller))
                                 .isInstanceOf(ClassHasActiveMembersException.class);
 
-                assertThat(studentClass.getStatus()).isEqualTo(ClassStatus.ACTIVE);
+                assertThat(trainingClass.getStatus()).isEqualTo(ClassStatus.ACTIVE);
         }
 
         // --- assign ---
@@ -356,21 +364,21 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID classPublicId = UUID.randomUUID();
-                StudentClass studentClass = classOf(classPublicId, program);
+                TrainingClass trainingClass = classOf(classPublicId, program);
                 UUID studentPublicId = UUID.randomUUID();
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-                when(classMembershipRepository.existsByStudentPublicIdAndTenantId(studentPublicId, caller.tenantId()))
+                when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+                when(classStudentRepository.existsByStudentPublicIdAndOrganizationId(studentPublicId, caller.tenantId()))
                                 .thenReturn(false);
-                when(classMembershipRepository.save(any(ClassMembership.class))).thenAnswer(invocation -> {
-                        ClassMembership saved = invocation.getArgument(0);
+                when(classStudentRepository.save(any(ClassStudent.class))).thenAnswer(invocation -> {
+                        ClassStudent saved = invocation.getArgument(0);
                         saved.setPublicId(UUID.randomUUID());
                         return saved;
                 });
 
-                ClassMembershipResponse response = service.assign(organizationPublicId, programPublicId, classPublicId,
+                ClassMembershipResponse response = studentService.assign(organizationPublicId, programPublicId, classPublicId,
                                 new AssignStudentRequest(studentPublicId), caller);
 
                 assertThat(response.studentPublicId()).isEqualTo(studentPublicId);
@@ -388,20 +396,20 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID classPublicId = UUID.randomUUID();
-                StudentClass studentClass = classOf(classPublicId, program);
+                TrainingClass trainingClass = classOf(classPublicId, program);
                 UUID studentPublicId = UUID.randomUUID();
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-                when(classMembershipRepository.existsByStudentPublicIdAndTenantId(studentPublicId, caller.tenantId()))
+                when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+                when(classStudentRepository.existsByStudentPublicIdAndOrganizationId(studentPublicId, caller.tenantId()))
                                 .thenReturn(true);
 
-                assertThatThrownBy(() -> service.assign(organizationPublicId, programPublicId, classPublicId,
+                assertThatThrownBy(() -> studentService.assign(organizationPublicId, programPublicId, classPublicId,
                                 new AssignStudentRequest(studentPublicId), caller))
                                 .isInstanceOf(StudentAlreadyInClassException.class);
 
-                verify(classMembershipRepository, never()).save(any());
+                verify(classStudentRepository, never()).save(any());
         }
 
         @Test
@@ -412,18 +420,18 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID classPublicId = UUID.randomUUID();
-                StudentClass studentClass = classOf(classPublicId, program);
+                TrainingClass trainingClass = classOf(classPublicId, program);
                 UUID studentPublicId = UUID.randomUUID();
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-                when(classMembershipRepository.existsByStudentPublicIdAndTenantId(studentPublicId, caller.tenantId()))
+                when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+                when(classStudentRepository.existsByStudentPublicIdAndOrganizationId(studentPublicId, caller.tenantId()))
                                 .thenReturn(false);
-                when(classMembershipRepository.save(any(ClassMembership.class)))
+                when(classStudentRepository.save(any(ClassStudent.class)))
                                 .thenThrow(new DataIntegrityViolationException("unique violation"));
 
-                assertThatThrownBy(() -> service.assign(organizationPublicId, programPublicId, classPublicId,
+                assertThatThrownBy(() -> studentService.assign(organizationPublicId, programPublicId, classPublicId,
                                 new AssignStudentRequest(studentPublicId), caller))
                                 .isInstanceOf(StudentAlreadyInClassException.class);
         }
@@ -438,7 +446,7 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID classPublicId = UUID.randomUUID();
-                StudentClass studentClass = classOf(classPublicId, program);
+                TrainingClass trainingClass = classOf(classPublicId, program);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
@@ -446,19 +454,19 @@ class ClassServiceTest {
                 UUID newId1 = UUID.randomUUID();
                 UUID newId2 = UUID.randomUUID();
 
-                ClassMembership existingMembership = new ClassMembership();
+                ClassStudent existingMembership = new ClassStudent();
                 existingMembership.setStudentPublicId(alreadyInClassId);
 
-                when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-                when(classMembershipRepository.findByTenantIdAndStudentPublicIdIn(eq(caller.tenantId()), any()))
+                when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+                when(classStudentRepository.findByOrganizationIdAndStudentPublicIdIn(eq(caller.tenantId()), any()))
                                 .thenReturn(List.of(existingMembership));
-                when(classMembershipRepository.saveAll(any())).thenAnswer(invocation -> {
-                        List<ClassMembership> toSave = invocation.getArgument(0);
+                when(classStudentRepository.saveAll(any())).thenAnswer(invocation -> {
+                        List<ClassStudent> toSave = invocation.getArgument(0);
                         toSave.forEach(m -> m.setPublicId(UUID.randomUUID()));
                         return toSave;
                 });
 
-                BulkAssignStudentsResponse response = service.bulkAssign(organizationPublicId, programPublicId,
+                BulkAssignStudentsResponse response = studentService.bulkAssign(organizationPublicId, programPublicId,
                                 classPublicId,
                                 new BulkAssignStudentsRequest(List.of(alreadyInClassId, newId1, newId2)), caller);
 
@@ -477,18 +485,18 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID classPublicId = UUID.randomUUID();
-                StudentClass studentClass = classOf(classPublicId, program);
+                TrainingClass trainingClass = classOf(classPublicId, program);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
                 UUID studentPublicId = UUID.randomUUID();
 
-                when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-                when(classMembershipRepository.findByTenantIdAndStudentPublicIdIn(eq(caller.tenantId()), any()))
+                when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+                when(classStudentRepository.findByOrganizationIdAndStudentPublicIdIn(eq(caller.tenantId()), any()))
                                 .thenReturn(List.of());
-                when(classMembershipRepository.saveAll(any()))
+                when(classStudentRepository.saveAll(any()))
                                 .thenThrow(new DataIntegrityViolationException("unique violation"));
 
-                assertThatThrownBy(() -> service.bulkAssign(organizationPublicId, programPublicId, classPublicId,
+                assertThatThrownBy(() -> studentService.bulkAssign(organizationPublicId, programPublicId, classPublicId,
                                 new BulkAssignStudentsRequest(List.of(studentPublicId)), caller))
                                 .isInstanceOf(StudentAlreadyInClassException.class);
         }
@@ -503,19 +511,19 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID classPublicId = UUID.randomUUID();
-                StudentClass studentClass = classOf(classPublicId, program);
+                TrainingClass trainingClass = classOf(classPublicId, program);
                 UUID membershipPublicId = UUID.randomUUID();
-                ClassMembership membership = membershipOf(membershipPublicId, studentClass, UUID.randomUUID());
+                ClassStudent membership = membershipOf(membershipPublicId, trainingClass, UUID.randomUUID());
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-                when(classMembershipRepository.findByPublicIdAndTenantId(membershipPublicId, caller.tenantId()))
+                when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+                when(classStudentRepository.findByPublicIdAndOrganizationId(membershipPublicId, caller.tenantId()))
                                 .thenReturn(Optional.of(membership));
 
-                service.unassign(organizationPublicId, programPublicId, classPublicId, membershipPublicId, caller);
+                studentService.unassign(organizationPublicId, programPublicId, classPublicId, membershipPublicId, caller);
 
-                verify(classMembershipRepository).delete(membership);
+                verify(classStudentRepository).delete(membership);
                 verify(auditLogService).record(eq(caller), eq(EnrollmentConstants.AGGREGATE_CLASS),
                                 eq(classPublicId.toString()),
                                 eq(EnrollmentConstants.EVENT_STUDENT_UNASSIGNED_FROM_CLASS), any());
@@ -529,22 +537,22 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID classPublicId = UUID.randomUUID();
-                StudentClass studentClass = classOf(classPublicId, program);
-                StudentClass otherClass = classOf(UUID.randomUUID(), program);
+                TrainingClass trainingClass = classOf(classPublicId, program);
+                TrainingClass otherClass = classOf(UUID.randomUUID(), program);
                 UUID membershipPublicId = UUID.randomUUID();
-                ClassMembership membership = membershipOf(membershipPublicId, otherClass, UUID.randomUUID());
+                ClassStudent membership = membershipOf(membershipPublicId, otherClass, UUID.randomUUID());
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(studentClass));
-                when(classMembershipRepository.findByPublicIdAndTenantId(membershipPublicId, caller.tenantId()))
+                when(trainingClassRepository.findByPublicId(classPublicId)).thenReturn(Optional.of(trainingClass));
+                when(classStudentRepository.findByPublicIdAndOrganizationId(membershipPublicId, caller.tenantId()))
                                 .thenReturn(Optional.of(membership));
 
-                assertThatThrownBy(() -> service.unassign(organizationPublicId, programPublicId, classPublicId,
+                assertThatThrownBy(() -> studentService.unassign(organizationPublicId, programPublicId, classPublicId,
                                 membershipPublicId, caller))
                                 .isInstanceOf(ClassMembershipNotFoundException.class);
 
-                verify(classMembershipRepository, never()).delete(any());
+                verify(classStudentRepository, never()).delete(any());
         }
 
         // --- transfer ---
@@ -557,31 +565,31 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID sourceClassPublicId = UUID.randomUUID();
-                StudentClass sourceClass = classOf(sourceClassPublicId, program);
+                TrainingClass sourceClass = classOf(sourceClassPublicId, program);
                 UUID targetClassPublicId = UUID.randomUUID();
-                StudentClass targetClass = classOf(targetClassPublicId, program);
+                TrainingClass targetClass = classOf(targetClassPublicId, program);
                 UUID membershipPublicId = UUID.randomUUID();
                 UUID studentPublicId = UUID.randomUUID();
-                ClassMembership membership = membershipOf(membershipPublicId, sourceClass, studentPublicId);
+                ClassStudent membership = membershipOf(membershipPublicId, sourceClass, studentPublicId);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
-                when(studentClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
-                when(classMembershipRepository.findByPublicIdAndTenantId(membershipPublicId, caller.tenantId()))
+                when(trainingClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
+                when(trainingClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
+                when(classStudentRepository.findByPublicIdAndOrganizationId(membershipPublicId, caller.tenantId()))
                                 .thenReturn(Optional.of(membership));
-                when(classMembershipRepository.save(membership)).thenReturn(membership);
+                when(classStudentRepository.save(membership)).thenReturn(membership);
 
-                ClassMembershipResponse response = service.transfer(organizationPublicId, programPublicId,
+                ClassMembershipResponse response = studentService.transfer(organizationPublicId, programPublicId,
                                 sourceClassPublicId,
                                 membershipPublicId, new TransferStudentRequest(targetClassPublicId), caller);
 
                 assertThat(response.publicId()).isEqualTo(membershipPublicId);
                 assertThat(response.classPublicId()).isEqualTo(targetClassPublicId);
-                assertThat(membership.getStudentClass()).isEqualTo(targetClass);
+                assertThat(membership.getTrainingClass()).isEqualTo(targetClass);
                 assertThat(membership.getStudentPublicId()).isEqualTo(studentPublicId);
-                verify(classMembershipRepository, never()).delete(any());
-                verify(classMembershipRepository).save(membership);
+                verify(classStudentRepository, never()).delete(any());
+                verify(classStudentRepository).save(membership);
                 verify(auditLogService).record(eq(caller), eq(EnrollmentConstants.AGGREGATE_CLASS),
                                 eq(targetClassPublicId.toString()),
                                 eq(EnrollmentConstants.EVENT_STUDENT_TRANSFERRED_CLASS), any());
@@ -596,27 +604,27 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(callerTenantId));
                 UUID sourceClassPublicId = UUID.randomUUID();
-                StudentClass sourceClass = classOf(sourceClassPublicId, program);
+                TrainingClass sourceClass = classOf(sourceClassPublicId, program);
                 UUID targetClassPublicId = UUID.randomUUID();
                 Program otherTenantProgram = programOf(UUID.randomUUID(),
                                 organizationOf(otherTenantId));
-                StudentClass targetClass = classOf(targetClassPublicId, otherTenantProgram);
+                TrainingClass targetClass = classOf(targetClassPublicId, otherTenantProgram);
                 UUID membershipPublicId = UUID.randomUUID();
-                ClassMembership membership = membershipOf(membershipPublicId, sourceClass, UUID.randomUUID());
+                ClassStudent membership = membershipOf(membershipPublicId, sourceClass, UUID.randomUUID());
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
-                when(studentClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
-                when(classMembershipRepository.findByPublicIdAndTenantId(membershipPublicId, caller.tenantId()))
+                when(trainingClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
+                when(trainingClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
+                when(classStudentRepository.findByPublicIdAndOrganizationId(membershipPublicId, caller.tenantId()))
                                 .thenReturn(Optional.of(membership));
 
-                assertThatThrownBy(() -> service.transfer(organizationPublicId, programPublicId, sourceClassPublicId,
+                assertThatThrownBy(() -> studentService.transfer(organizationPublicId, programPublicId, sourceClassPublicId,
                                 membershipPublicId, new TransferStudentRequest(targetClassPublicId), caller))
                                 .isInstanceOf(StudentClassNotFoundException.class);
 
-                assertThat(membership.getStudentClass()).isEqualTo(sourceClass);
-                verify(classMembershipRepository, never()).save(any());
+                assertThat(membership.getTrainingClass()).isEqualTo(sourceClass);
+                verify(classStudentRepository, never()).save(any());
         }
 
         @Test
@@ -629,21 +637,21 @@ class ClassServiceTest {
                 UUID targetProgramPublicId = UUID.randomUUID();
                 Program targetProgram = programOf(targetProgramPublicId, organization);
                 UUID sourceClassPublicId = UUID.randomUUID();
-                StudentClass sourceClass = classOf(sourceClassPublicId, sourceProgram);
+                TrainingClass sourceClass = classOf(sourceClassPublicId, sourceProgram);
                 UUID targetClassPublicId = UUID.randomUUID();
-                StudentClass targetClass = classOf(targetClassPublicId, targetProgram);
+                TrainingClass targetClass = classOf(targetClassPublicId, targetProgram);
                 UUID membershipPublicId = UUID.randomUUID();
-                ClassMembership membership = membershipOf(membershipPublicId, sourceClass, UUID.randomUUID());
+                ClassStudent membership = membershipOf(membershipPublicId, sourceClass, UUID.randomUUID());
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
-                when(studentClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
-                when(classMembershipRepository.findByPublicIdAndTenantId(membershipPublicId, caller.tenantId()))
+                when(trainingClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
+                when(trainingClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
+                when(classStudentRepository.findByPublicIdAndOrganizationId(membershipPublicId, caller.tenantId()))
                                 .thenReturn(Optional.of(membership));
-                when(classMembershipRepository.save(membership)).thenReturn(membership);
+                when(classStudentRepository.save(membership)).thenReturn(membership);
 
-                ClassMembershipResponse response = service.transfer(organizationPublicId, sourceProgramPublicId,
+                ClassMembershipResponse response = studentService.transfer(organizationPublicId, sourceProgramPublicId,
                                 sourceClassPublicId, membershipPublicId,
                                 new TransferStudentRequest(targetClassPublicId), caller);
 
@@ -661,42 +669,42 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID targetClassPublicId = UUID.randomUUID();
-                StudentClass targetClass = classOf(targetClassPublicId, program);
+                TrainingClass targetClass = classOf(targetClassPublicId, program);
                 UUID sourceClassAPublicId = UUID.randomUUID();
-                StudentClass sourceClassA = classOf(sourceClassAPublicId, program);
+                TrainingClass sourceClassA = classOf(sourceClassAPublicId, program);
                 UUID sourceClassBPublicId = UUID.randomUUID();
-                StudentClass sourceClassB = classOf(sourceClassBPublicId, program);
+                TrainingClass sourceClassB = classOf(sourceClassBPublicId, program);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
                 UUID studentA1 = UUID.randomUUID();
                 UUID studentA2 = UUID.randomUUID();
                 UUID studentB1 = UUID.randomUUID();
-                ClassMembership membershipA1 = membershipOf(UUID.randomUUID(), sourceClassA, studentA1);
-                ClassMembership membershipA2 = membershipOf(UUID.randomUUID(), sourceClassA, studentA2);
-                ClassMembership membershipB1 = membershipOf(UUID.randomUUID(), sourceClassB, studentB1);
+                ClassStudent membershipA1 = membershipOf(UUID.randomUUID(), sourceClassA, studentA1);
+                ClassStudent membershipA2 = membershipOf(UUID.randomUUID(), sourceClassA, studentA2);
+                ClassStudent membershipB1 = membershipOf(UUID.randomUUID(), sourceClassB, studentB1);
 
-                when(studentClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
-                when(studentClassRepository.findByPublicId(sourceClassAPublicId)).thenReturn(Optional.of(sourceClassA));
-                when(studentClassRepository.findByPublicId(sourceClassBPublicId)).thenReturn(Optional.of(sourceClassB));
-                when(classMembershipRepository.findByTenantIdAndStudentClass_PublicId(caller.tenantId(),
+                when(trainingClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
+                when(trainingClassRepository.findByPublicId(sourceClassAPublicId)).thenReturn(Optional.of(sourceClassA));
+                when(trainingClassRepository.findByPublicId(sourceClassBPublicId)).thenReturn(Optional.of(sourceClassB));
+                when(classStudentRepository.findByOrganizationIdAndTrainingClass_PublicId(caller.tenantId(),
                                 sourceClassAPublicId))
                                 .thenReturn(List.of(membershipA1, membershipA2));
-                when(classMembershipRepository.findByTenantIdAndStudentClass_PublicId(caller.tenantId(),
+                when(classStudentRepository.findByOrganizationIdAndTrainingClass_PublicId(caller.tenantId(),
                                 sourceClassBPublicId))
                                 .thenReturn(List.of(membershipB1));
-                when(classMembershipRepository.save(any(ClassMembership.class)))
+                when(classStudentRepository.save(any(ClassStudent.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-                MergeClassesResponse response = service.mergeClasses(organizationPublicId, programPublicId,
+                MergeClassesResponse response = reorganizationService.mergeClasses(organizationPublicId, programPublicId,
                                 targetClassPublicId,
                                 new MergeClassesRequest(List.of(sourceClassAPublicId, sourceClassBPublicId)), caller);
 
                 assertThat(response.targetClassPublicId()).isEqualTo(targetClassPublicId);
                 assertThat(response.movedStudentPublicIds()).containsExactlyInAnyOrder(studentA1, studentA2, studentB1);
-                assertThat(membershipA1.getStudentClass()).isEqualTo(targetClass);
-                assertThat(membershipA2.getStudentClass()).isEqualTo(targetClass);
-                assertThat(membershipB1.getStudentClass()).isEqualTo(targetClass);
+                assertThat(membershipA1.getTrainingClass()).isEqualTo(targetClass);
+                assertThat(membershipA2.getTrainingClass()).isEqualTo(targetClass);
+                assertThat(membershipB1.getTrainingClass()).isEqualTo(targetClass);
                 verify(auditLogService).record(eq(caller), eq(EnrollmentConstants.AGGREGATE_CLASS),
                                 eq(targetClassPublicId.toString()),
                                 eq(EnrollmentConstants.EVENT_CLASSES_MERGED), any());
@@ -711,24 +719,24 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(callerTenantId));
                 UUID targetClassPublicId = UUID.randomUUID();
-                StudentClass targetClass = classOf(targetClassPublicId, program);
+                TrainingClass targetClass = classOf(targetClassPublicId, program);
                 UUID sourceClassPublicId = UUID.randomUUID();
                 Program otherTenantProgram = programOf(UUID.randomUUID(),
                                 organizationOf(otherTenantId));
-                StudentClass sourceClass = classOf(sourceClassPublicId, otherTenantProgram);
+                TrainingClass sourceClass = classOf(sourceClassPublicId, otherTenantProgram);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
-                when(studentClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
+                when(trainingClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
+                when(trainingClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
 
                 assertThatThrownBy(
-                                () -> service.mergeClasses(organizationPublicId, programPublicId, targetClassPublicId,
+                                () -> reorganizationService.mergeClasses(organizationPublicId, programPublicId, targetClassPublicId,
                                                 new MergeClassesRequest(List.of(sourceClassPublicId)), caller))
                                 .isInstanceOf(StudentClassNotFoundException.class);
 
-                verify(classMembershipRepository, never()).findByTenantIdAndStudentClass_PublicId(any(), any());
-                verify(classMembershipRepository, never()).save(any());
+                verify(classStudentRepository, never()).findByOrganizationIdAndTrainingClass_PublicId(any(), any());
+                verify(classStudentRepository, never()).save(any());
         }
 
         @Test
@@ -740,19 +748,19 @@ class ClassServiceTest {
                 Program otherTenantProgram = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID targetClassPublicId = UUID.randomUUID();
-                StudentClass targetClass = classOf(targetClassPublicId, otherTenantProgram);
+                TrainingClass targetClass = classOf(targetClassPublicId, otherTenantProgram);
                 UUID sourceClassPublicId = UUID.randomUUID();
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
+                when(trainingClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
 
                 assertThatThrownBy(
-                                () -> service.mergeClasses(organizationPublicId, programPublicId, targetClassPublicId,
+                                () -> reorganizationService.mergeClasses(organizationPublicId, programPublicId, targetClassPublicId,
                                                 new MergeClassesRequest(List.of(sourceClassPublicId)), caller))
                                 .isInstanceOf(StudentClassNotFoundException.class);
 
-                verify(classMembershipRepository, never()).save(any());
+                verify(classStudentRepository, never()).save(any());
         }
 
         @Test
@@ -763,18 +771,18 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID targetClassPublicId = UUID.randomUUID();
-                StudentClass targetClass = classOf(targetClassPublicId, program);
+                TrainingClass targetClass = classOf(targetClassPublicId, program);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
+                when(trainingClassRepository.findByPublicId(targetClassPublicId)).thenReturn(Optional.of(targetClass));
 
-                MergeClassesResponse response = service.mergeClasses(organizationPublicId, programPublicId,
+                MergeClassesResponse response = reorganizationService.mergeClasses(organizationPublicId, programPublicId,
                                 targetClassPublicId,
                                 new MergeClassesRequest(List.of(targetClassPublicId)), caller);
 
                 assertThat(response.movedStudentPublicIds()).isEmpty();
-                verify(classMembershipRepository, never()).findByTenantIdAndStudentClass_PublicId(any(), any());
+                verify(classStudentRepository, never()).findByOrganizationIdAndTrainingClass_PublicId(any(), any());
                 // The audit log skips a "0 student(s) moved" row for a true no-op —
                 // same discipline as bulkAssign.
                 verify(auditLogService, never()).record(any(), any(), any(), any(), any());
@@ -790,40 +798,40 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID sourceClassPublicId = UUID.randomUUID();
-                StudentClass sourceClass = classOf(sourceClassPublicId, program);
+                TrainingClass sourceClass = classOf(sourceClassPublicId, program);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
                 UUID studentToMove1 = UUID.randomUUID();
                 UUID studentToMove2 = UUID.randomUUID();
-                ClassMembership membershipToMove1 = membershipOf(UUID.randomUUID(), sourceClass, studentToMove1);
-                ClassMembership membershipToMove2 = membershipOf(UUID.randomUUID(), sourceClass, studentToMove2);
+                ClassStudent membershipToMove1 = membershipOf(UUID.randomUUID(), sourceClass, studentToMove1);
+                ClassStudent membershipToMove2 = membershipOf(UUID.randomUUID(), sourceClass, studentToMove2);
 
-                when(studentClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
-                when(studentClassRepository.existsByProgram_PublicIdAndNameIgnoreCaseAndDeletedFalse(programPublicId,
+                when(trainingClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
+                when(trainingClassRepository.existsByProgram_PublicIdAndNameIgnoreCaseAndDeletedFalse(programPublicId,
                                 "12A2"))
                                 .thenReturn(false);
-                when(studentClassRepository.save(any(StudentClass.class))).thenAnswer(invocation -> {
-                        StudentClass saved = invocation.getArgument(0);
+                when(trainingClassRepository.save(any(TrainingClass.class))).thenAnswer(invocation -> {
+                        TrainingClass saved = invocation.getArgument(0);
                         saved.setPublicId(UUID.randomUUID());
                         return saved;
                 });
-                when(classMembershipRepository.findByTenantIdAndStudentClass_PublicIdAndStudentPublicIdIn(
+                when(classStudentRepository.findByOrganizationIdAndTrainingClass_PublicIdAndStudentPublicIdIn(
                                 eq(caller.tenantId()),
                                 eq(sourceClassPublicId), eq(List.of(studentToMove1, studentToMove2))))
                                 .thenReturn(List.of(membershipToMove1, membershipToMove2));
-                when(classMembershipRepository.save(any(ClassMembership.class)))
+                when(classStudentRepository.save(any(ClassStudent.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-                SplitClassResponse response = service.splitClass(organizationPublicId, programPublicId,
+                SplitClassResponse response = reorganizationService.splitClass(organizationPublicId, programPublicId,
                                 sourceClassPublicId,
                                 new SplitClassRequest("12A2", List.of(studentToMove1, studentToMove2)), caller);
 
                 assertThat(response.newClass().name()).isEqualTo("12A2");
                 assertThat(response.newClass().programPublicId()).isEqualTo(programPublicId);
                 assertThat(response.movedStudentPublicIds()).containsExactlyInAnyOrder(studentToMove1, studentToMove2);
-                assertThat(membershipToMove1.getStudentClass().getName()).isEqualTo("12A2");
-                assertThat(membershipToMove2.getStudentClass().getName()).isEqualTo("12A2");
+                assertThat(membershipToMove1.getTrainingClass().getName()).isEqualTo("12A2");
+                assertThat(membershipToMove2.getTrainingClass().getName()).isEqualTo("12A2");
                 verify(auditLogService).record(eq(caller), eq(EnrollmentConstants.AGGREGATE_CLASS), any(),
                                 eq(EnrollmentConstants.EVENT_CLASS_SPLIT), any());
         }
@@ -836,22 +844,22 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID sourceClassPublicId = UUID.randomUUID();
-                StudentClass sourceClass = classOf(sourceClassPublicId, program);
+                TrainingClass sourceClass = classOf(sourceClassPublicId, program);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
-                when(studentClassRepository.existsByProgram_PublicIdAndNameIgnoreCaseAndDeletedFalse(programPublicId,
+                when(trainingClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
+                when(trainingClassRepository.existsByProgram_PublicIdAndNameIgnoreCaseAndDeletedFalse(programPublicId,
                                 "12A1"))
                                 .thenReturn(true);
 
-                assertThatThrownBy(() -> service.splitClass(organizationPublicId, programPublicId, sourceClassPublicId,
+                assertThatThrownBy(() -> reorganizationService.splitClass(organizationPublicId, programPublicId, sourceClassPublicId,
                                 new SplitClassRequest("12A1", List.of(UUID.randomUUID())), caller))
                                 .isInstanceOf(StudentClassNameAlreadyUsedException.class);
 
-                verify(studentClassRepository, never()).save(any());
-                verify(classMembershipRepository, never())
-                                .findByTenantIdAndStudentClass_PublicIdAndStudentPublicIdIn(any(), any(), any());
+                verify(trainingClassRepository, never()).save(any());
+                verify(classStudentRepository, never())
+                                .findByOrganizationIdAndTrainingClass_PublicIdAndStudentPublicIdIn(any(), any(), any());
         }
 
         @Test
@@ -863,17 +871,17 @@ class ClassServiceTest {
                 Program program = programOf(programPublicId,
                                 organizationOf(organizationPublicId));
                 UUID sourceClassPublicId = UUID.randomUUID();
-                StudentClass sourceClass = classOf(sourceClassPublicId, program);
+                TrainingClass sourceClass = classOf(sourceClassPublicId, program);
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(studentClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
+                when(trainingClassRepository.findByPublicId(sourceClassPublicId)).thenReturn(Optional.of(sourceClass));
 
-                assertThatThrownBy(() -> service.splitClass(organizationPublicId, programPublicId, sourceClassPublicId,
+                assertThatThrownBy(() -> reorganizationService.splitClass(organizationPublicId, programPublicId, sourceClassPublicId,
                                 new SplitClassRequest("12A2", List.of(UUID.randomUUID())), caller))
                                 .isInstanceOf(StudentClassNotFoundException.class);
 
-                verify(studentClassRepository, never()).save(any());
+                verify(trainingClassRepository, never()).save(any());
         }
 
         // --- listMemberships ---
@@ -884,16 +892,16 @@ class ClassServiceTest {
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(classMembershipRepository.findByStudentClass_Program_Organization_PublicId(tenantPublicId))
+                when(classStudentRepository.findByTrainingClass_Program_Organization_PublicId(tenantPublicId))
                                 .thenReturn(List.of());
 
-                List<ClassMembershipResponse> result = service.listMemberships(null, caller);
+                List<ClassMembershipResponse> result = studentService.listMemberships(null, caller);
 
                 assertThat(result).isEmpty();
-                verify(classMembershipRepository)
-                                .findByStudentClass_Program_Organization_PublicId(tenantPublicId);
-                verify(classMembershipRepository, never())
-                                .findByStudentClass_Program_Organization_PublicIdAndStudentClass_Program_PublicId(
+                verify(classStudentRepository)
+                                .findByTrainingClass_Program_Organization_PublicId(tenantPublicId);
+                verify(classStudentRepository, never())
+                                .findByTrainingClass_Program_Organization_PublicIdAndTrainingClass_Program_PublicId(
                                                 any(), any());
         }
 
@@ -904,16 +912,16 @@ class ClassServiceTest {
                 CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
                 lenient().when(identityService.isMemberOf(any(), any())).thenReturn(true);
 
-                when(classMembershipRepository
-                                .findByStudentClass_Program_Organization_PublicIdAndStudentClass_Program_PublicId(
+                when(classStudentRepository
+                                .findByTrainingClass_Program_Organization_PublicIdAndTrainingClass_Program_PublicId(
                                                 tenantPublicId, programPublicId))
                                 .thenReturn(List.of());
 
-                List<ClassMembershipResponse> result = service.listMemberships(programPublicId, caller);
+                List<ClassMembershipResponse> result = studentService.listMemberships(programPublicId, caller);
 
                 assertThat(result).isEmpty();
-                verify(classMembershipRepository)
-                                .findByStudentClass_Program_Organization_PublicIdAndStudentClass_Program_PublicId(
+                verify(classStudentRepository)
+                                .findByTrainingClass_Program_Organization_PublicIdAndTrainingClass_Program_PublicId(
                                                 tenantPublicId, programPublicId);
         }
 }

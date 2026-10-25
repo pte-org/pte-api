@@ -2,9 +2,9 @@ package com.pte.enrollment.internal.repository;
 
 import com.pte.enrollment.EnrollmentOverviewService;
 import com.pte.enrollment.EnrollmentOverviewService.AcademicCounts;
-import com.pte.enrollment.domain.ClassMembership;
+import com.pte.enrollment.domain.ClassStudent;
 import com.pte.enrollment.domain.Program;
-import com.pte.enrollment.domain.StudentClass;
+import com.pte.enrollment.domain.TrainingClass;
 import com.pte.enrollment.domain.enums.ClassStatus;
 import com.pte.enrollment.domain.enums.ProgramStatus;
 import com.pte.tenancy.domain.Organization;
@@ -38,10 +38,10 @@ class EnrollmentOverviewQueriesTest {
     private ProgramRepository programs;
 
     @Autowired
-    private StudentClassRepository classes;
+    private TrainingClassRepository classes;
 
     @Autowired
-    private ClassMembershipRepository memberships;
+    private ClassStudentRepository memberships;
 
     private Organization organization() {
         Organization organization = new Organization();
@@ -66,20 +66,20 @@ class EnrollmentOverviewQueriesTest {
         return programs.save(program);
     }
 
-    private StudentClass studentClass(Program program, ClassStatus status, boolean deleted) {
-        StudentClass studentClass = new StudentClass();
-        studentClass.setName("Class " + UUID.randomUUID());
-        studentClass.setProgram(program);
-        studentClass.setStatus(status);
-        studentClass.setDeleted(deleted);
-        return classes.save(studentClass);
+    private TrainingClass trainingClass(Program program, ClassStatus status, boolean deleted) {
+        TrainingClass trainingClass = new TrainingClass();
+        trainingClass.setName("Class " + UUID.randomUUID());
+        trainingClass.setProgram(program);
+        trainingClass.setStatus(status);
+        trainingClass.setDeleted(deleted);
+        return classes.save(trainingClass);
     }
 
-    private ClassMembership membership(StudentClass studentClass, UUID tenantPublicId, boolean deleted) {
-        ClassMembership membership = new ClassMembership();
-        membership.setStudentClass(studentClass);
+    private ClassStudent membership(TrainingClass trainingClass, UUID tenantPublicId, boolean deleted) {
+        ClassStudent membership = new ClassStudent();
+        membership.setTrainingClass(trainingClass);
         membership.setStudentPublicId(UUID.randomUUID());
-        membership.setTenantId(tenantPublicId);
+        membership.setOrganizationId(tenantPublicId);
         membership.setDeleted(deleted);
         return memberships.save(membership);
     }
@@ -102,12 +102,12 @@ class EnrollmentOverviewQueriesTest {
         Organization branch = organization();
         Program live = program(branch, ProgramStatus.ACTIVE, false);
         Program archived = program(branch, ProgramStatus.ACTIVE, true);
-        studentClass(live, ClassStatus.ACTIVE, false);
-        studentClass(live, ClassStatus.ACTIVE, false);
-        studentClass(live, ClassStatus.INACTIVE, false);
-        studentClass(live, ClassStatus.SUSPENDED, false);
-        studentClass(live, ClassStatus.ACTIVE, true); // class archived
-        studentClass(archived, ClassStatus.ACTIVE, false); // program archived
+        trainingClass(live, ClassStatus.ACTIVE, false);
+        trainingClass(live, ClassStatus.ACTIVE, false);
+        trainingClass(live, ClassStatus.INACTIVE, false);
+        trainingClass(live, ClassStatus.SUSPENDED, false);
+        trainingClass(live, ClassStatus.ACTIVE, true); // class archived
+        trainingClass(archived, ClassStatus.ACTIVE, false); // program archived
 
         assertThat(service.academicCounts(branch.getPublicId()).activeClasses()).isEqualTo(2);
     }
@@ -117,8 +117,8 @@ class EnrollmentOverviewQueriesTest {
         Organization tenant = organization();
         UUID tenantId = tenant.getPublicId();
         Program program = program(tenant, ProgramStatus.ACTIVE, false);
-        StudentClass live = studentClass(program, ClassStatus.ACTIVE, false);
-        StudentClass deletedClass = studentClass(program, ClassStatus.ACTIVE, true);
+        TrainingClass live = trainingClass(program, ClassStatus.ACTIVE, false);
+        TrainingClass deletedClass = trainingClass(program, ClassStatus.ACTIVE, true);
         membership(live, tenantId, false);
         membership(live, tenantId, false);
         membership(live, tenantId, true); // membership removed
@@ -132,13 +132,13 @@ class EnrollmentOverviewQueriesTest {
         Organization tenantA = organization();
         Organization tenantB = organization();
         Program programA = program(tenantA, ProgramStatus.ACTIVE, false);
-        StudentClass classA = studentClass(programA, ClassStatus.ACTIVE, false);
+        TrainingClass classA = trainingClass(programA, ClassStatus.ACTIVE, false);
         membership(classA, tenantA.getPublicId(), false);
 
         Organization branchB = tenantB;
         for (int i = 0; i < 3; i++) {
             Program programB = program(branchB, ProgramStatus.ACTIVE, false);
-            StudentClass classB = studentClass(programB, ClassStatus.ACTIVE, false);
+            TrainingClass classB = trainingClass(programB, ClassStatus.ACTIVE, false);
             membership(classB, tenantB.getPublicId(), false);
             membership(classB, tenantB.getPublicId(), false);
         }

@@ -1,6 +1,6 @@
 package com.pte.enrollment.internal.repository;
 
-import com.pte.enrollment.domain.StudentClass;
+import com.pte.enrollment.domain.TrainingClass;
 import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
