@@ -7,14 +7,8 @@ import com.pte.itembank.dto.request.UpdateQuestionRequest;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.dto.response.QuestionResponse;
 import com.pte.itembank.dto.response.QuestionStatsResponse;
-import com.pte.itembank.internal.repository.QuestionRepository;
-import com.pte.itembank.internal.service.ItembankAccessPolicy;
-import com.pte.itembank.internal.service.QuestionValidationHelper;
-import com.pte.itembank.internal.service.lifecycle.QuestionApprovalService;
-import com.pte.shared.audit.AuditLogService;
 import com.pte.itembank.internal.service.lifecycle.QuestionCreationService;
 import com.pte.itembank.internal.service.lifecycle.QuestionLifecycleService;
-import com.pte.itembank.internal.service.QuestionMediaReferenceValidator;
 import com.pte.itembank.internal.service.QuestionPoolService;
 import com.pte.itembank.internal.service.QuestionQueryService;
 import com.pte.shared.security.CurrentUser;
@@ -48,27 +42,6 @@ public class ItembankService {
         this.creationService = creationService;
         this.lifecycleService = lifecycleService;
         this.queryService = queryService;
-    }
-
-    /** Wires the collaborators by hand for focused unit tests. */
-    public ItembankService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
-                           ItembankAccessPolicy accessPolicy, QuestionTypeService questionTypeService,
-                           AuditLogService auditLogService) {
-        QuestionPoolService poolService = new QuestionPoolService(questionRepository, questionTypeService);
-        this.queryService = new QuestionQueryService(questionRepository, poolService);
-        QuestionMediaReferenceValidator mediaValidator = new QuestionMediaReferenceValidator(null);
-        QuestionApprovalService approvalService = new QuestionApprovalService(questionRepository, validationHelper,
-                accessPolicy, auditLogService, mediaValidator);
-        this.lifecycleService = new QuestionLifecycleService(questionRepository, validationHelper, accessPolicy,
-                auditLogService, approvalService, mediaValidator);
-        this.creationService = new QuestionCreationService(questionRepository, validationHelper, accessPolicy,
-                questionTypeService, auditLogService, mediaValidator);
-    }
-
-    // Compatibility constructor for tests
-    public ItembankService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
-            ItembankAccessPolicy accessPolicy) {
-        this(questionRepository, validationHelper, accessPolicy, null, null);
     }
 
     // Creation

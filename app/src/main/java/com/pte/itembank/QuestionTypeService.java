@@ -9,15 +9,12 @@ import com.pte.itembank.dto.response.SupportedQuestionTypeResponse;
 import com.pte.itembank.dto.response.TaskTypeAvailabilityResponse;
 import com.pte.itembank.dto.response.TaskTypeCapabilityResponse;
 import com.pte.itembank.dto.response.TaskTypePageResponse;
-import com.pte.itembank.internal.repository.QuestionTypeRepository;
 import com.pte.itembank.internal.service.tasktype.lifecycle.DynamicTaskTypeService;
 import com.pte.itembank.internal.service.tasktype.lifecycle.StandardTaskTypeService;
 import com.pte.itembank.internal.service.tasktype.lifecycle.TaskTypeGovernanceService;
 import com.pte.itembank.internal.service.tasktype.TaskTypeCapabilityService;
 import com.pte.itembank.internal.service.tasktype.TaskTypeQueryService;
 import com.pte.itembank.internal.service.tasktype.TaskTypeRuntimeLockingService;
-import com.pte.itembank.internal.service.tasktype.RuntimeContractResolver;
-import com.pte.itembank.internal.service.tasktype.RuntimeProfileResolver;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -58,20 +55,6 @@ public class QuestionTypeService {
         this.dynamicTaskTypeService = dynamicTaskTypeService;
         this.governanceService = governanceService;
         this.runtimeLockingService = runtimeLockingService;
-    }
-
-    /** Compatibility constructor for focused catalog tests. */
-    public QuestionTypeService(QuestionTypeRepository repository) {
-        // Tests using this constructor can operate with limited dependencies
-        TaskRuntimeContractService contractService = new TaskRuntimeContractService();
-        RuntimeProfileResolver profileResolver = new RuntimeProfileResolver(null);
-        RuntimeContractResolver contractResolver = new RuntimeContractResolver(contractService);
-        this.queryService = new TaskTypeQueryService(repository, profileResolver, contractResolver, null);
-        this.capabilityService = new TaskTypeCapabilityService(repository, contractService);
-        this.standardTaskTypeService = new StandardTaskTypeService(repository, profileResolver, null);
-        this.dynamicTaskTypeService = new DynamicTaskTypeService(repository, contractResolver, null, null);
-        this.governanceService = new TaskTypeGovernanceService(repository, contractResolver, null);
-        this.runtimeLockingService = new TaskTypeRuntimeLockingService(repository);
     }
 
     // ========== Legacy catalog (standard types only) ==========

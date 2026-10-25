@@ -30,11 +30,6 @@ public class QuestionValidationHelper {
         this.questionTypeService = questionTypeService;
     }
 
-    /** Compatibility constructor for focused tests without the catalog bean. */
-    public QuestionValidationHelper() {
-        this.questionTypeService = null;
-    }
-
     public void validate(Question question) {
         PteTaskType type = question.getPteTaskType();
         QuestionType definition = definitionFor(question);

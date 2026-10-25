@@ -35,7 +35,7 @@ class QuestionTypeServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new QuestionTypeService(repository);
+        service = com.pte.itembank.ItembankFixtures.questionTypeService(repository);
     }
 
     @Test
