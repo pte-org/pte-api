@@ -1,40 +1,60 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ExaminerAnswerScore;
-import com.pte.scoring.domain.ScoreSourceAudit;
-import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.domain.ScoringSessionState;
+import com.pte.attempt.AttemptService;
+import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.domain.ExaminerEvaluation;
 import com.pte.scoring.domain.enums.AiProviderCategory;
 import com.pte.scoring.domain.enums.ScoreSource;
 import com.pte.scoring.domain.enums.ScoreSourceSelectionScope;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.dto.request.SelectScoreSourceRequest;
+import com.pte.scoring.dto.response.ScoreSourceAuditResponse;
+import com.pte.scoring.internal.constant.ScoreReviewConstants;
 import com.pte.scoring.internal.exception.ScoreSourceSelectionException;
-import com.pte.scoring.internal.repository.ExaminerAnswerScoreRepository;
-import com.pte.scoring.internal.repository.ScoreSourceAuditRepository;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
+import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
+import com.pte.scoring.support.EvaluationFixtures;
 import com.pte.session.SessionService;
+import com.pte.shared.audit.AuditChange;
+import com.pte.shared.audit.AuditHistoryEntry;
+import com.pte.shared.audit.AuditHistoryReader;
+import com.pte.shared.audit.AuditLogChangeWriter;
+import com.pte.shared.idempotency.IdempotencyDecision;
+import com.pte.shared.idempotency.IdempotencyKeyService;
+import com.pte.shared.idempotency.IdempotencyOutcome;
+import com.pte.shared.idempotency.domain.IdempotencyScope;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.web.PageMeta;
+import com.pte.shared.web.PagedResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * A host's bulk source choice: the choice itself is written on the attempt answers, the receipt lives in the shared
+ * idempotency table and each applied choice is a row of the audit trail.
+ */
 @ExtendWith(MockitoExtension.class)
 class ScoreSourceSelectionServiceTest {
 
@@ -42,45 +62,49 @@ class ScoreSourceSelectionServiceTest {
     private final UUID tenantId = UUID.randomUUID();
     private final UUID sessionId = UUID.randomUUID();
     private final UUID actorId = UUID.randomUUID();
-    private final UUID templateId = UUID.randomUUID();
+    private final JsonMapper jsonMapper = JsonMapper.builder().findAndAddModules().build();
 
     @Mock
     private SessionService sessionService;
     @Mock
-    private ScoringAnswerRepository answerRepository;
+    private AiEvaluationRepository evaluationRepository;
     @Mock
-    private ExaminerAnswerScoreRepository examinerScoreRepository;
+    private ExaminerEvaluationRepository examinerRepository;
     @Mock
-    private ScoringSessionStateRepository sessionStateRepository;
-    @Mock
-    private ScoreSourceAuditRepository auditRepository;
-    @Mock
-    private ScoringMethodResolver methodResolver;
+    private SessionGradingGateway gateway;
     @Mock
     private ScoringReviewReadQueryService readQueryService;
+    @Mock
+    private ScoreSelectionReader selectionReader;
+    @Mock
+    private AttemptService attemptService;
+    @Mock
+    private IdempotencyKeyService idempotencyKeyService;
+    @Mock
+    private AuditLogChangeWriter auditWriter;
+    @Mock
+    private AuditHistoryReader auditReader;
 
     private ScoreSourceSelectionService service;
     private CurrentUser host;
 
     @BeforeEach
     void setUp() {
-        service = new ScoreSourceSelectionService(sessionService, answerRepository, examinerScoreRepository,
-                sessionStateRepository, auditRepository, methodResolver, readQueryService);
+        service = new ScoreSourceSelectionService(sessionService, evaluationRepository, examinerRepository,
+                gateway, readQueryService, selectionReader, attemptService,
+                idempotencyKeyService, auditWriter, auditReader, jsonMapper);
         host = new CurrentUser(actorId, tenantId, List.of("HOST_ADMIN"));
+        lenient().when(selectionReader.forSession(sessionId, tenantId)).thenReturn(Map.of());
     }
 
     @Test
     void preview_sectionScopeCountsOnlyMatchingAiEligibleAnswers() {
-        ScoringAnswer speaking = answer("READ_ALOUD");
-        ScoringAnswer writing = answer("WRITE_ESSAY");
-        when(answerRepository.findBySessionPublicIdAndTenantId(sessionId, tenantId))
-                .thenReturn(List.of(speaking, writing));
-        when(examinerScoreRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(List.of());
-        when(methodResolver.resolve(templateId, "READ_ALOUD")).thenReturn(Optional.of(ScoringMethod.AI_SPEECH));
-        when(methodResolver.resolve(templateId, "WRITE_ESSAY")).thenReturn(Optional.of(ScoringMethod.AI_TEXT));
-        when(methodResolver.resolveSection(templateId, "READ_ALOUD")).thenReturn(Optional.of("SPEAKING"));
-        when(methodResolver.resolveSection(templateId, "WRITE_ESSAY")).thenReturn(Optional.of("WRITING"));
-        when(readQueryService.reviewVersion(any(), any())).thenReturn(REVIEW_VERSION);
+        AiEvaluation speaking = answer("READ_ALOUD", ScoringMethod.AI_SPEECH, "SPEAKING");
+        AiEvaluation writing = answer("WRITE_ESSAY", ScoringMethod.AI_TEXT, "WRITING");
+        AiEvaluation objective = answer("MC_READING_SINGLE", ScoringMethod.OBJECTIVE, "READING");
+        when(evaluationRepository.findBySessionPublicIdAndTenantId(sessionId, tenantId))
+                .thenReturn(List.of(speaking, writing, objective));
+        when(readQueryService.reviewVersion(any(), any(), any())).thenReturn(REVIEW_VERSION);
         SelectScoreSourceRequest request = new SelectScoreSourceRequest(ScoreSourceSelectionScope.SECTION,
                 "SPEAKING", ScoreSource.AI, null, null);
 
@@ -94,14 +118,13 @@ class ScoreSourceSelectionServiceTest {
 
     @Test
     void preview_distinguishesUnavailableExaminerSourceFromZeroScore() {
-        ScoringAnswer answer = answer("READ_ALOUD");
-        when(answerRepository.findBySessionPublicIdAndTenantId(sessionId, tenantId)).thenReturn(List.of(answer));
-        when(examinerScoreRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(List.of());
-        when(methodResolver.resolve(templateId, "READ_ALOUD")).thenReturn(Optional.of(ScoringMethod.AI_SPEECH));
-        when(readQueryService.reviewVersion(any(), any())).thenReturn(REVIEW_VERSION);
+        AiEvaluation answer = answer("READ_ALOUD", ScoringMethod.AI_SPEECH, "SPEAKING");
+        when(evaluationRepository.findBySessionPublicIdAndTenantId(sessionId, tenantId)).thenReturn(List.of(answer));
+        when(readQueryService.reviewVersion(any(), any(), any())).thenReturn(REVIEW_VERSION);
 
         var preview = service.preview(sessionId,
-                new SelectScoreSourceRequest(ScoreSourceSelectionScope.ALL, null, ScoreSource.EXAMINER, null, null), host);
+                new SelectScoreSourceRequest(ScoreSourceSelectionScope.ALL, null, ScoreSource.EXAMINER, null, null),
+                host);
 
         assertThat(preview.matchedAnswerCount()).isOne();
         assertThat(preview.availableAnswerCount()).isZero();
@@ -110,161 +133,161 @@ class ScoreSourceSelectionServiceTest {
     }
 
     @Test
-    void apply_selectsAvailableSourceAndWritesAuditCounts() {
-        ScoringAnswer answer = answer("READ_ALOUD");
+    void apply_selectsOnTheAttemptAnswersAndRecordsTheChoiceAsReceiptAndAudit() {
+        AiEvaluation answer = answer("READ_ALOUD", ScoringMethod.AI_SPEECH, "SPEAKING");
         UUID requestId = UUID.randomUUID();
-        when(auditRepository.findByTenantIdAndSessionPublicIdAndRequestPublicId(tenantId, sessionId, requestId))
-                .thenReturn(Optional.empty());
-        when(sessionStateRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(Optional.empty());
-        when(answerRepository.findSessionAnswersForUpdate(sessionId, tenantId)).thenReturn(List.of(answer));
-        when(examinerScoreRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(List.of());
-        when(methodResolver.resolve(templateId, "READ_ALOUD")).thenReturn(Optional.of(ScoringMethod.AI_SPEECH));
-        when(readQueryService.reviewVersion(any(), any())).thenReturn(REVIEW_VERSION);
-        when(auditRepository.saveAndFlush(any(ScoreSourceAudit.class))).thenAnswer(invocation -> {
-            ScoreSourceAudit audit = invocation.getArgument(0);
-            audit.setPublicId(UUID.randomUUID());
-            return audit;
-        });
+        stubNewRequest(requestId, List.of(answer));
         SelectScoreSourceRequest request = new SelectScoreSourceRequest(ScoreSourceSelectionScope.ALL, null,
                 ScoreSource.AI, REVIEW_VERSION, requestId);
 
         var result = service.apply(sessionId, request, host);
 
-        assertThat(answer.getSelectedScoreSource()).isEqualTo(ScoreSource.AI);
         assertThat(result.selectedSource()).isEqualTo(ScoreSource.AI);
         assertThat(result.affectedAnswerCount()).isOne();
         assertThat(result.previousUnselectedCount()).isOne();
         assertThat(result.replayed()).isFalse();
-        verify(answerRepository).saveAll(List.of(answer));
         verify(sessionService).lockForScoreReviewMutation(sessionId, tenantId);
+        verify(attemptService).selectScoreSource(eq(List.of(answer.getAnswerPublicId())), eq(tenantId), eq("AI"),
+                eq(actorId), any(Instant.class), eq(Map.of(answer.getAnswerPublicId(), answer.getPublicId())));
+        ArgumentCaptor<AuditChange> audit = ArgumentCaptor.forClass(AuditChange.class);
+        verify(auditWriter).record(eq(host), audit.capture());
+        assertThat(audit.getValue().aggregateType()).isEqualTo(ScoreReviewConstants.AUDIT_AGGREGATE_TYPE);
+        assertThat(audit.getValue().aggregateId()).isEqualTo(sessionId.toString());
+        assertThat(audit.getValue().requestPublicId()).isEqualTo(requestId);
+        verify(idempotencyKeyService).complete(eq(IdempotencyScope.SCORE_SELECTION), any(), eq(tenantId),
+                eq(audit.getValue().afterStateJson()));
+    }
+
+    @Test
+    void apply_selectingExaminerPointsTheAnswerAtTheSubmittedExaminerScore() {
+        AiEvaluation answer = answer("READ_ALOUD", ScoringMethod.AI_SPEECH, "SPEAKING");
+        ExaminerEvaluation examiner = ExaminerEvaluation.submittedDirectly(tenantId, sessionId,
+                answer.getAttemptPublicId(), answer.getAnswerPublicId(), UUID.randomUUID(), 70, Instant.now(), null,
+                null, null, null, null, null);
+        ReflectionTestUtils.setField(examiner, "publicId", UUID.randomUUID());
+        UUID requestId = UUID.randomUUID();
+        stubNewRequest(requestId, List.of(answer));
+        when(examinerRepository.findSubmittedBySession(tenantId, sessionId)).thenReturn(List.of(examiner));
+        SelectScoreSourceRequest request = new SelectScoreSourceRequest(ScoreSourceSelectionScope.ALL, null,
+                ScoreSource.EXAMINER, REVIEW_VERSION, requestId);
+
+        service.apply(sessionId, request, host);
+
+        verify(attemptService).selectScoreSource(eq(List.of(answer.getAnswerPublicId())), eq(tenantId),
+                eq("EXAMINER"), eq(actorId), any(Instant.class),
+                eq(Map.of(answer.getAnswerPublicId(), examiner.getPublicId())));
     }
 
     @Test
     void apply_rejectsStalePreviewWithoutMutation() {
-        ScoringAnswer answer = answer("READ_ALOUD");
+        AiEvaluation answer = answer("READ_ALOUD", ScoringMethod.AI_SPEECH, "SPEAKING");
         UUID requestId = UUID.randomUUID();
-        when(auditRepository.findByTenantIdAndSessionPublicIdAndRequestPublicId(tenantId, sessionId, requestId))
-                .thenReturn(Optional.empty());
-        when(sessionStateRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(Optional.empty());
-        when(answerRepository.findSessionAnswersForUpdate(sessionId, tenantId)).thenReturn(List.of(answer));
-        when(examinerScoreRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(List.of());
-        when(readQueryService.reviewVersion(any(), any())).thenReturn("new-version");
+        stubNewRequest(requestId, List.of(answer));
+        when(readQueryService.reviewVersion(any(), any(), any())).thenReturn("new-version");
         SelectScoreSourceRequest request = new SelectScoreSourceRequest(ScoreSourceSelectionScope.ALL, null,
                 ScoreSource.AI, REVIEW_VERSION, requestId);
 
         assertThatThrownBy(() -> service.apply(sessionId, request, host))
                 .isInstanceOf(ScoreSourceSelectionException.class);
 
-        verify(answerRepository, never()).saveAll(any());
-        verify(auditRepository, never()).saveAndFlush(any());
+        verify(attemptService, never()).selectScoreSource(any(), any(), any(), any(), any(), anyMap());
+        verify(auditWriter, never()).record(any(), any());
     }
 
     @Test
     void apply_rejectsUnavailableScoreAtomically() {
-        ScoringAnswer answer = answer("READ_ALOUD");
+        AiEvaluation answer = answer("READ_ALOUD", ScoringMethod.AI_SPEECH, "SPEAKING");
         UUID requestId = UUID.randomUUID();
-        when(auditRepository.findByTenantIdAndSessionPublicIdAndRequestPublicId(tenantId, sessionId, requestId))
-                .thenReturn(Optional.empty());
-        when(sessionStateRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(Optional.empty());
-        when(answerRepository.findSessionAnswersForUpdate(sessionId, tenantId)).thenReturn(List.of(answer));
-        when(examinerScoreRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(List.of());
-        when(methodResolver.resolve(templateId, "READ_ALOUD")).thenReturn(Optional.of(ScoringMethod.AI_SPEECH));
-        when(readQueryService.reviewVersion(any(), any())).thenReturn(REVIEW_VERSION);
+        stubNewRequest(requestId, List.of(answer));
         SelectScoreSourceRequest request = new SelectScoreSourceRequest(ScoreSourceSelectionScope.ALL, null,
                 ScoreSource.EXAMINER, REVIEW_VERSION, requestId);
 
         assertThatThrownBy(() -> service.apply(sessionId, request, host))
                 .isInstanceOf(ScoreSourceSelectionException.class);
 
-        assertThat(answer.getSelectedScoreSource()).isNull();
-        verify(answerRepository, never()).saveAll(any());
-        verify(auditRepository, never()).saveAndFlush(any());
+        verify(attemptService, never()).selectScoreSource(any(), any(), any(), any(), any(), anyMap());
+        verify(auditWriter, never()).record(any(), any());
     }
 
     @Test
-    void apply_retriesSameRequestFromAuditWithoutDuplicatingMutation() {
+    void apply_replaysTheStoredReceiptOfTheSameRequestWithoutMutating() {
         UUID requestId = UUID.randomUUID();
-        ScoreSourceAudit prior = new ScoreSourceAudit(tenantId, sessionId, actorId, ScoreSourceSelectionScope.ALL,
-                null, ScoreSource.AI, 1, requestId, 0, 0, 1, Instant.now());
-        prior.setPublicId(UUID.randomUUID());
-        when(auditRepository.findByTenantIdAndSessionPublicIdAndRequestPublicId(tenantId, sessionId, requestId))
-                .thenReturn(Optional.of(prior));
+        ScoreSourceAuditResponse prior = new ScoreSourceAuditResponse(UUID.randomUUID(), requestId, actorId,
+                ScoreSourceSelectionScope.ALL, null, ScoreSource.AI, 1, 0, 0, 1, Instant.now());
+        when(idempotencyKeyService.begin(eq(IdempotencyScope.SCORE_SELECTION), any(), eq(tenantId), any(), any()))
+                .thenReturn(new IdempotencyDecision(IdempotencyOutcome.REPLAY, jsonMapper.writeValueAsString(prior)));
         SelectScoreSourceRequest request = new SelectScoreSourceRequest(ScoreSourceSelectionScope.ALL, null,
                 ScoreSource.AI, REVIEW_VERSION, requestId);
 
         var result = service.apply(sessionId, request, host);
 
         assertThat(result.replayed()).isTrue();
-        assertThat(result.auditPublicId()).isEqualTo(prior.getPublicId());
-        verify(answerRepository, never()).findSessionAnswersForUpdate(sessionId, tenantId);
-        verify(auditRepository, never()).saveAndFlush(any());
+        assertThat(result.auditPublicId()).isEqualTo(prior.auditPublicId());
+        verify(evaluationRepository, never()).findSessionAnswersForUpdate(sessionId, tenantId);
+        verify(auditWriter, never()).record(any(), any());
     }
 
     @Test
-    void apply_rejectsRequestKeyPreviouslyUsedByAnotherHost() {
+    void apply_rejectsARequestKeyReusedForADifferentChoice() {
         UUID requestId = UUID.randomUUID();
-        ScoreSourceAudit prior = new ScoreSourceAudit(tenantId, sessionId, UUID.randomUUID(),
-                ScoreSourceSelectionScope.ALL, null, ScoreSource.AI, 1, requestId, 0, 0, 1, Instant.now());
-        when(auditRepository.findByTenantIdAndSessionPublicIdAndRequestPublicId(tenantId, sessionId, requestId))
-                .thenReturn(Optional.of(prior));
+        when(idempotencyKeyService.begin(eq(IdempotencyScope.SCORE_SELECTION), any(), eq(tenantId), any(), any()))
+                .thenReturn(new IdempotencyDecision(IdempotencyOutcome.CONFLICT, null));
         SelectScoreSourceRequest request = new SelectScoreSourceRequest(ScoreSourceSelectionScope.ALL, null,
                 ScoreSource.AI, REVIEW_VERSION, requestId);
 
         assertThatThrownBy(() -> service.apply(sessionId, request, host))
-                .isInstanceOf(ScoreSourceSelectionException.class);
+                .isInstanceOfSatisfying(ScoreSourceSelectionException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(ScoreReviewConstants.REQUEST_KEY_REUSED));
 
-        verify(answerRepository, never()).findSessionAnswersForUpdate(sessionId, tenantId);
-        verify(auditRepository, never()).saveAndFlush(any());
+        verify(evaluationRepository, never()).findSessionAnswersForUpdate(sessionId, tenantId);
     }
 
     @Test
     void apply_rejectsMutationAfterPublicationBarrier() {
         UUID requestId = UUID.randomUUID();
-        ScoringSessionState state = new ScoringSessionState(tenantId, sessionId);
-        state.lockForPublication(UUID.randomUUID(), Instant.now());
-        when(auditRepository.findByTenantIdAndSessionPublicIdAndRequestPublicId(tenantId, sessionId, requestId))
-                .thenReturn(Optional.empty());
-        when(sessionStateRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId))
-                .thenReturn(Optional.of(state));
+        when(idempotencyKeyService.begin(eq(IdempotencyScope.SCORE_SELECTION), any(), eq(tenantId), any(), any()))
+                .thenReturn(new IdempotencyDecision(IdempotencyOutcome.NEW, null));
+        when(gateway.isPublished(tenantId, sessionId)).thenReturn(true);
         SelectScoreSourceRequest request = new SelectScoreSourceRequest(ScoreSourceSelectionScope.ALL, null,
                 ScoreSource.AI, REVIEW_VERSION, requestId);
 
         assertThatThrownBy(() -> service.apply(sessionId, request, host))
                 .isInstanceOf(ScoreSourceSelectionException.class);
 
-        verify(answerRepository, never()).findSessionAnswersForUpdate(sessionId, tenantId);
-        verify(auditRepository, never()).saveAndFlush(any());
+        verify(evaluationRepository, never()).findSessionAnswersForUpdate(sessionId, tenantId);
+        verify(auditWriter, never()).record(any(), any());
     }
 
     @Test
-    void auditHistoryReturnsTenantScopedRecordedDecisions() {
-        ScoreSourceAudit audit = new ScoreSourceAudit(tenantId, sessionId, actorId,
-                ScoreSourceSelectionScope.SECTION, "SPEAKING", ScoreSource.EXAMINER, 3,
-                UUID.randomUUID(), 2, 0, 1, Instant.now());
-        audit.setPublicId(UUID.randomUUID());
-        when(auditRepository.findTop50ByTenantIdAndSessionPublicIdOrderByOccurredAtDesc(tenantId, sessionId))
-                .thenReturn(List.of(audit));
+    void auditHistoryReadsTheRecordedDecisionsFromTheAuditTrail() {
+        ScoreSourceAuditResponse recorded = new ScoreSourceAuditResponse(UUID.randomUUID(), UUID.randomUUID(),
+                actorId, ScoreSourceSelectionScope.SECTION, "SPEAKING", ScoreSource.EXAMINER, 3, 2, 0, 1,
+                Instant.parse("2026-10-24T08:00:00Z"));
+        AuditHistoryEntry row = new AuditHistoryEntry(UUID.randomUUID(), actorId, "HOST_ADMIN",
+                recorded.requestPublicId(), "summary", null, jsonMapper.writeValueAsString(recorded), Instant.now());
+        when(auditReader.history(tenantId, ScoreReviewConstants.AUDIT_AGGREGATE_TYPE, sessionId.toString(),
+                ScoreReviewConstants.AUDIT_ACTION, 0, 50)).thenReturn(new PagedResult<>(List.of(row),
+                new PageMeta(0, 50, 1, 1, true, true, false, false)));
 
         var history = service.auditHistory(sessionId, host);
 
-        assertThat(history).hasSize(1);
-        assertThat(history.get(0).auditPublicId()).isEqualTo(audit.getPublicId());
-        assertThat(history.get(0).scopeValue()).isEqualTo("SPEAKING");
-        assertThat(history.get(0).selectedSource()).isEqualTo(ScoreSource.EXAMINER);
-        assertThat(history.get(0).previousAiCount()).isEqualTo(2);
+        assertThat(history).containsExactly(recorded);
         verify(sessionService).verifyHostAccess(sessionId, tenantId);
     }
 
-    private ScoringAnswer answer(String taskType) {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(UUID.randomUUID());
-        answer.setAttemptPublicId(UUID.randomUUID());
-        answer.setPinnedItemPublicId(UUID.randomUUID());
-        answer.setSessionPublicId(sessionId);
-        answer.setTenantId(tenantId);
-        answer.setScoreTemplatePublicId(templateId);
-        answer.setTaskType(taskType);
+    /** A first-time request on an unpublished session whose review version matches. */
+    private void stubNewRequest(UUID requestId, List<AiEvaluation> answers) {
+        when(idempotencyKeyService.begin(eq(IdempotencyScope.SCORE_SELECTION), any(), eq(tenantId), any(), any()))
+                .thenReturn(new IdempotencyDecision(IdempotencyOutcome.NEW, null));
+        when(evaluationRepository.findSessionAnswersForUpdate(sessionId, tenantId)).thenReturn(answers);
+        lenient().when(readQueryService.reviewVersion(any(), any(), any())).thenReturn(REVIEW_VERSION);
+    }
+
+    private AiEvaluation answer(String taskType, ScoringMethod method, String section) {
+        AiEvaluation answer = EvaluationFixtures.ai(tenantId, sessionId, UUID.randomUUID(), UUID.randomUUID(),
+                taskType, method, section);
         answer.markAiScored(0, AiProviderCategory.REAL, "provider", "model", "v1");
+        ReflectionTestUtils.setField(answer, "publicId", UUID.randomUUID());
         return answer;
     }
 }

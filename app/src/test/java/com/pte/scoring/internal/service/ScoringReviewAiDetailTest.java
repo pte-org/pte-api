@@ -1,7 +1,11 @@
 package com.pte.scoring.internal.service;
 
 import com.pte.media.MediaService;
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
+import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.domain.enums.ScoringMethod;
+import com.pte.scoring.support.EvaluationFixtures;
+import com.pte.scoring.support.SubmittedAnswerFixtures;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.dto.response.AiScoreDetailResponse;
 import com.pte.scoring.internal.dto.response.AnswerPayloadKind;
@@ -9,7 +13,7 @@ import com.pte.scoring.internal.dto.response.AnswerReviewDetailResponse;
 import com.pte.scoring.internal.dto.response.DecodedAnswerPayload;
 import com.pte.scoring.internal.exception.AnswerNotFoundException;
 import com.pte.scoring.internal.repository.AiDetailFlags;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,7 +42,7 @@ class ScoringReviewAiDetailTest {
     private final UUID tenantId = UUID.randomUUID();
 
     @Mock
-    private ScoringAnswerRepository answerRepository;
+    private AiEvaluationRepository answerRepository;
     @Mock
     private AnswerPayloadDecoder decoder;
     @Mock
@@ -47,6 +51,8 @@ class ScoringReviewAiDetailTest {
     private AiScoreDetailQueryService aiDetails;
     @Mock
     private ScoringEligibilityQueryService eligibility;
+    @Mock
+    private AnswerContentReader contentReader;
 
     private ScoringReviewService service;
     private CurrentUser host;
@@ -54,17 +60,19 @@ class ScoringReviewAiDetailTest {
     @BeforeEach
     void setUp() {
         service = new ScoringReviewService(answerRepository, decoder, mediaService, null, null, null, aiDetails,
-                eligibility);
+                eligibility, null, contentReader);
         host = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
     }
 
     @Test
     void detailIncludesTheAiScoreAndItsBreakdown() {
-        ScoringAnswer answer = answer(tenantId);
+        AiEvaluation answer = answer(tenantId);
         AiScoreDetailResponse ai = new AiScoreDetailResponse("SCORED", 72, Map.of("CONTENT", 80), "Good.",
                 "spoken words", Map.of(), false, null);
         when(answerRepository.findByAnswerPublicId(answer.getAnswerPublicId())).thenReturn(Optional.of(answer));
-        when(decoder.decode(answer)).thenReturn(new DecodedAnswerPayload(
+        SubmittedAnswerView content = SubmittedAnswerFixtures.answer("DESCRIBE_IMAGE", null, "x");
+        when(contentReader.one(answer.getAnswerPublicId(), tenantId)).thenReturn(Optional.of(content));
+        when(decoder.decode(content)).thenReturn(new DecodedAnswerPayload(
                 AnswerPayloadKind.TEXT, "x", null, null, null, null, null));
         when(aiDetails.find(answer)).thenReturn(ai);
 
@@ -75,7 +83,7 @@ class ScoringReviewAiDetailTest {
 
     @Test
     void detailOfAnotherTenantsAnswerIsNotFoundAndNeverReadsTheAiRow() {
-        ScoringAnswer answer = answer(UUID.randomUUID());
+        AiEvaluation answer = answer(UUID.randomUUID());
         when(answerRepository.findByAnswerPublicId(answer.getAnswerPublicId())).thenReturn(Optional.of(answer));
 
         assertThatThrownBy(() -> service.getAnswerForReview(answer.getAnswerPublicId(), host))
@@ -86,9 +94,9 @@ class ScoringReviewAiDetailTest {
 
     @Test
     void listRowsFlagLowConfidenceAnswers() {
-        ScoringAnswer low = answer(tenantId);
-        ScoringAnswer normal = answer(tenantId);
-        Page<ScoringAnswer> page = new PageImpl<>(List.of(low, normal), PageRequest.of(0, 20), 2);
+        AiEvaluation low = answer(tenantId);
+        AiEvaluation normal = answer(tenantId);
+        Page<AiEvaluation> page = new PageImpl<>(List.of(low, normal), PageRequest.of(0, 20), 2);
         when(answerRepository.findForReview(tenantId, low.getSessionPublicId(), null, null, PageRequest.of(0, 20)))
                 .thenReturn(page);
         when(aiDetails.findFlags(tenantId, List.of(low.getAnswerPublicId(), normal.getAnswerPublicId())))
@@ -102,7 +110,7 @@ class ScoringReviewAiDetailTest {
 
     @Test
     void listCanBeNarrowedToOneAttempt() {
-        ScoringAnswer mine = answer(tenantId);
+        AiEvaluation mine = answer(tenantId);
         UUID attemptId = mine.getAttemptPublicId();
         when(answerRepository.findForReview(tenantId, mine.getSessionPublicId(), attemptId, null,
                 PageRequest.of(0, 20))).thenReturn(new PageImpl<>(List.of(mine), PageRequest.of(0, 20), 1));
@@ -117,9 +125,9 @@ class ScoringReviewAiDetailTest {
 
     @Test
     void listRowsSayWhichAnswersAreAiScored() {
-        ScoringAnswer spoken = answer(tenantId);
-        ScoringAnswer objective = answer(tenantId);
-        Page<ScoringAnswer> page = new PageImpl<>(List.of(spoken, objective), PageRequest.of(0, 20), 2);
+        AiEvaluation spoken = answer(tenantId);
+        AiEvaluation objective = answer(tenantId);
+        Page<AiEvaluation> page = new PageImpl<>(List.of(spoken, objective), PageRequest.of(0, 20), 2);
         when(answerRepository.findForReview(tenantId, spoken.getSessionPublicId(), null, null, PageRequest.of(0, 20)))
                 .thenReturn(page);
         when(aiDetails.findFlags(tenantId, List.of(spoken.getAnswerPublicId(), objective.getAnswerPublicId())))
@@ -133,16 +141,10 @@ class ScoringReviewAiDetailTest {
         assertThat(items.get(1).aiScored()).isFalse();
     }
 
-    private ScoringAnswer answer(UUID answerTenantId) {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(UUID.randomUUID());
-        answer.setAttemptPublicId(UUID.randomUUID());
-        answer.setSessionPublicId(UUID.randomUUID());
-        answer.setTaskType("DESCRIBE_IMAGE");
-        answer.setTenantId(answerTenantId);
-        answer.setStatus(ScoringAnswerStatus.SCORED);
-        answer.setRawScore(70);
-        answer.setCreatedAt(Instant.now());
+    private AiEvaluation answer(UUID answerTenantId) {
+        AiEvaluation answer = EvaluationFixtures.ai(answerTenantId, UUID.randomUUID(), "DESCRIBE_IMAGE",
+                ScoringMethod.AI_SPEECH);
+        answer.markScored(70);
         return answer;
     }
 }

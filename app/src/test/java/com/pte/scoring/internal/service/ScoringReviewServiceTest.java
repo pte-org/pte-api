@@ -2,13 +2,17 @@ package com.pte.scoring.internal.service;
 
 import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
+import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.domain.enums.ScoringMethod;
+import com.pte.scoring.support.EvaluationFixtures;
+import com.pte.scoring.support.SubmittedAnswerFixtures;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.internal.dto.response.AnswerPayloadKind;
 import com.pte.scoring.internal.dto.response.AnswerReviewDetailResponse;
 import com.pte.scoring.internal.dto.response.DecodedAnswerPayload;
 import com.pte.scoring.internal.exception.AnswerNotFoundException;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,11 +37,15 @@ import static org.mockito.Mockito.when;
 class ScoringReviewServiceTest {
 
     @Mock
-    private ScoringAnswerRepository scoringAnswerRepository;
+    private AiEvaluationRepository scoringAnswerRepository;
     @Mock
     private AnswerPayloadDecoder answerPayloadDecoder;
     @Mock
     private MediaService mediaService;
+    @Mock
+    private AnswerContentReader contentReader;
+    @Mock
+    private SessionGradingGateway gateway;
 
     private ScoringReviewService service;
     private CurrentUser caller;
@@ -45,7 +53,8 @@ class ScoringReviewServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ScoringReviewService(scoringAnswerRepository, answerPayloadDecoder, mediaService);
+        service = new ScoringReviewService(scoringAnswerRepository, answerPayloadDecoder, mediaService, gateway, null,
+                null, null, null, null, contentReader);
         tenantId = UUID.randomUUID();
         caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
     }
@@ -65,12 +74,7 @@ class ScoringReviewServiceTest {
         UUID answerPublicId = UUID.randomUUID();
         UUID wrongTenantId = UUID.randomUUID();
 
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(answerPublicId);
-        answer.setTenantId(wrongTenantId);
-        answer.setStatus(ScoringAnswerStatus.SCORED);
-        answer.setRawScore(85);
-        answer.setCreatedAt(Instant.now());
+        AiEvaluation answer = answer(answerPublicId, wrongTenantId, "READ_ALOUD", 85);
 
         when(scoringAnswerRepository.findByAnswerPublicId(answerPublicId))
                 .thenReturn(Optional.of(answer));
@@ -83,22 +87,15 @@ class ScoringReviewServiceTest {
     void getAnswerForReview_textPayload_returnsAnswerWithoutMediaProcessing() {
         UUID answerPublicId = UUID.randomUUID();
 
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(answerPublicId);
-        answer.setAttemptPublicId(UUID.randomUUID());
-        answer.setSessionPublicId(UUID.randomUUID());
-        answer.setTaskType("SUMMARIZE_SPOKEN_TEXT");
-        answer.setTenantId(tenantId);
-        answer.setStatus(ScoringAnswerStatus.SCORED);
-        answer.setRawScore(80);
-        answer.setCreatedAt(Instant.now());
+        AiEvaluation answer = answer(answerPublicId, tenantId, "SUMMARIZE_SPOKEN_TEXT", 80);
 
         DecodedAnswerPayload decoded = new DecodedAnswerPayload(
                 AnswerPayloadKind.TEXT, "sample text", null, null, null, null, null);
 
         when(scoringAnswerRepository.findByAnswerPublicId(answerPublicId))
                 .thenReturn(Optional.of(answer));
-        when(answerPayloadDecoder.decode(answer)).thenReturn(decoded);
+        SubmittedAnswerView content = stubContent(answer);
+        when(answerPayloadDecoder.decode(content)).thenReturn(decoded);
 
         AnswerReviewDetailResponse response = service.getAnswerForReview(answerPublicId, caller);
 
@@ -113,22 +110,15 @@ class ScoringReviewServiceTest {
         UUID mediaPublicId = UUID.randomUUID();
         String presignedUrl = "https://presigned.url";
 
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(answerPublicId);
-        answer.setAttemptPublicId(UUID.randomUUID());
-        answer.setSessionPublicId(UUID.randomUUID());
-        answer.setTaskType("READ_ALOUD");
-        answer.setTenantId(tenantId);
-        answer.setStatus(ScoringAnswerStatus.SCORED);
-        answer.setRawScore(75);
-        answer.setCreatedAt(Instant.now());
+        AiEvaluation answer = answer(answerPublicId, tenantId, "READ_ALOUD", 75);
 
         DecodedAnswerPayload decodedWithoutUrl = new DecodedAnswerPayload(
                 AnswerPayloadKind.AUDIO, null, mediaPublicId, null, null, null, null);
 
         when(scoringAnswerRepository.findByAnswerPublicId(answerPublicId))
                 .thenReturn(Optional.of(answer));
-        when(answerPayloadDecoder.decode(answer)).thenReturn(decodedWithoutUrl);
+        SubmittedAnswerView content = stubContent(answer);
+        when(answerPayloadDecoder.decode(content)).thenReturn(decodedWithoutUrl);
         when(mediaService.presignGet(mediaPublicId, 3600L, tenantId))
                 .thenReturn(new PresignedDownloadResponse(presignedUrl, 3600L, null));
 
@@ -143,22 +133,15 @@ class ScoringReviewServiceTest {
         UUID answerPublicId = UUID.randomUUID();
         UUID mediaPublicId = UUID.randomUUID();
 
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(answerPublicId);
-        answer.setAttemptPublicId(UUID.randomUUID());
-        answer.setSessionPublicId(UUID.randomUUID());
-        answer.setTaskType("READ_ALOUD");
-        answer.setTenantId(tenantId);
-        answer.setStatus(ScoringAnswerStatus.SCORED);
-        answer.setRawScore(75);
-        answer.setCreatedAt(Instant.now());
+        AiEvaluation answer = answer(answerPublicId, tenantId, "READ_ALOUD", 75);
 
         DecodedAnswerPayload decodedWithoutUrl = new DecodedAnswerPayload(
                 AnswerPayloadKind.AUDIO, null, mediaPublicId, null, null, null, null);
 
         when(scoringAnswerRepository.findByAnswerPublicId(answerPublicId))
                 .thenReturn(Optional.of(answer));
-        when(answerPayloadDecoder.decode(answer)).thenReturn(decodedWithoutUrl);
+        SubmittedAnswerView content = stubContent(answer);
+        when(answerPayloadDecoder.decode(content)).thenReturn(decodedWithoutUrl);
         when(mediaService.presignGet(mediaPublicId, 3600L, tenantId))
                 .thenThrow(new RuntimeException("Media service unavailable"));
 
@@ -174,17 +157,7 @@ class ScoringReviewServiceTest {
         UUID answerPublicId = UUID.randomUUID();
         int teacherScore = 88;
 
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(answerPublicId);
-        answer.setAttemptPublicId(UUID.randomUUID());
-        answer.setSessionPublicId(UUID.randomUUID());
-        answer.setTaskType("SUMMARIZE_WRITTEN_TEXT");
-        answer.setTenantId(tenantId);
-        answer.setStatus(ScoringAnswerStatus.SCORED);
-        answer.setRawScore(90);
-        answer.setTeacherScore(null);
-        answer.setTeacherScoredAt(null);
-        answer.setCreatedAt(Instant.now());
+        AiEvaluation answer = answer(answerPublicId, tenantId, "SUMMARIZE_WRITTEN_TEXT", 90);
 
         when(scoringAnswerRepository.findByAnswerPublicId(answerPublicId))
                 .thenReturn(Optional.of(answer));
@@ -202,15 +175,7 @@ class ScoringReviewServiceTest {
         UUID answerPublicId = UUID.randomUUID();
         int teacherScore = 50;
 
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(answerPublicId);
-        answer.setAttemptPublicId(UUID.randomUUID());
-        answer.setSessionPublicId(UUID.randomUUID());
-        answer.setTaskType("SUMMARIZE_WRITTEN_TEXT");
-        answer.setTenantId(tenantId);
-        answer.setStatus(ScoringAnswerStatus.SCORED);
-        answer.setRawScore(95);
-        answer.setCreatedAt(Instant.now());
+        AiEvaluation answer = answer(answerPublicId, tenantId, "SUMMARIZE_WRITTEN_TEXT", 95);
 
         when(scoringAnswerRepository.findByAnswerPublicId(answerPublicId))
                 .thenReturn(Optional.of(answer));
@@ -221,5 +186,18 @@ class ScoringReviewServiceTest {
         // Should not modify rawScore, only set teacherScore
         assertThat(answer.getRawScore()).isEqualTo(95);
         assertThat(answer.getTeacherScore()).isEqualTo(50);
+    }
+
+    private AiEvaluation answer(UUID answerPublicId, UUID answerTenantId, String taskType, int rawScore) {
+        AiEvaluation answer = EvaluationFixtures.ai(answerTenantId, UUID.randomUUID(), UUID.randomUUID(),
+                answerPublicId, taskType, ScoringMethod.AI_SPEECH);
+        answer.markScored(rawScore);
+        return answer;
+    }
+
+    private SubmittedAnswerView stubContent(AiEvaluation answer) {
+        SubmittedAnswerView content = SubmittedAnswerFixtures.answer(answer.getTaskType(), null, "payload");
+        when(contentReader.one(answer.getAnswerPublicId(), answer.getTenantId())).thenReturn(Optional.of(content));
+        return content;
     }
 }

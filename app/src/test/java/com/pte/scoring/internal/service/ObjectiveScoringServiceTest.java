@@ -1,6 +1,7 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
+import com.pte.scoring.support.SubmittedAnswerFixtures;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
@@ -20,19 +21,13 @@ class ObjectiveScoringServiceTest {
 
     private final ObjectiveScoringService service = new ObjectiveScoringService(JsonMapper.builder().build());
 
-    private ScoringAnswer answer(String taskType, String optionsJson, String payload) {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setTaskType(taskType);
-        answer.setOptionsJson(optionsJson);
-        answer.setPayload(payload);
-        return answer;
+    private SubmittedAnswerView answer(String taskType, String optionsJson, String payload) {
+        return SubmittedAnswerFixtures.answer(taskType, optionsJson, payload);
     }
 
     // ---- supports() ----
-    // Since Phase 4 (plans/score-template-exam-generation), which 12 task
-    // types are "objective" is the pinned ScoreTemplate's decision
-    // (ScoringMethodResolver), not a hardcoded set here — supports() is now a
-    // trivial gate on the already-resolved ScoringMethod.
+    // Which task types are "objective" is the exam version item's decision, persisted on the evaluation as its
+    // ScoringMethod — supports() is a trivial gate on that method.
 
     @Test
     void supports_objectiveScoringMethod_isTrue() {
@@ -76,8 +71,8 @@ class ObjectiveScoringServiceTest {
                 standard.contractVersion(), standard.scoringMode(), standard.minSupportedAppVersion(),
                 "PTE.MC_READING_SINGLE_PLUS_AUTHORING", 1);
 
-        int score = service.score(
-                answer("MC_READING_SINGLE_PLUS", MC_SINGLE_OPTIONS, "1"), custom);
+        int score = service.score(SubmittedAnswerFixtures.answer("MC_READING_SINGLE_PLUS", MC_SINGLE_OPTIONS, "1",
+                null, custom));
 
         assertThat(score).isEqualTo(100);
     }
@@ -297,10 +292,8 @@ class ObjectiveScoringServiceTest {
 
     // ---- Listening reference-based types ----
 
-    private ScoringAnswer referenceAnswer(String taskType, String correctAnswerText, String payload) {
-        ScoringAnswer answer = answer(taskType, null, payload);
-        answer.setCorrectAnswerText(correctAnswerText);
-        return answer;
+    private SubmittedAnswerView referenceAnswer(String taskType, String correctAnswerText, String payload) {
+        return SubmittedAnswerFixtures.answer(taskType, null, payload, correctAnswerText);
     }
 
     @Test

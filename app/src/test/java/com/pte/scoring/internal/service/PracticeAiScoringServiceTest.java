@@ -6,7 +6,6 @@ import com.pte.scoring.PracticeScoringException;
 import com.pte.scoring.PracticeScoringFailure;
 import com.pte.scoring.PracticeScoringRequest;
 import com.pte.scoring.PracticeScoringRoute;
-import com.pte.scoring.domain.ScoringAnswer;
 import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.domain.enums.AiProviderCategory;
 import com.pte.scoring.internal.config.AiProviderProperties;
@@ -268,10 +267,8 @@ class PracticeAiScoringServiceTest {
         ObjectiveScoringService exam = new ObjectiveScoringService(JsonMapper.builder().build());
 
         for (String payload : List.of("0", "1")) {
-            ScoringAnswer answer = new ScoringAnswer();
-            answer.setTaskType("MC_READING_SINGLE");
-            answer.setOptionsJson(MC_SINGLE_OPTIONS);
-            answer.setPayload(payload);
+            var answer = com.pte.scoring.support.SubmittedAnswerFixtures.answer("MC_READING_SINGLE",
+                    MC_SINGLE_OPTIONS, payload);
             PracticeAiEvaluation evaluation = service.score(new PracticeScoringRequest("MC_READING_SINGLE", payload,
                     null, null, null, null, null, null, MC_SINGLE_OPTIONS, TENANT));
             assertThat(evaluation.rawScore()).isEqualTo(exam.score(answer));

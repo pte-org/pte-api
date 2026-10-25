@@ -1,9 +1,10 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ExaminerAnswerScore;
-import com.pte.scoring.domain.ExaminerAttemptAssignment;
-import com.pte.scoring.domain.GradingCohortMember;
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.ExaminerEvaluation;
+import com.pte.scoring.domain.GradingAssignment;
+import com.pte.attempt.dto.response.AttemptGradingCandidateView;
+import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.domain.enums.AiProviderCategory;
 import com.pte.scoring.domain.enums.GradingMarkingMode;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.domain.enums.ScoringMethod;
@@ -28,9 +29,6 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class GradingCompletionEvaluatorTest {
 
-    @Mock
-    private ScoringMethodResolver methodResolver;
-
     private GradingCompletionEvaluator evaluator;
     private final UUID tenantId = UUID.randomUUID();
     private final UUID sessionId = UUID.randomUUID();
@@ -44,30 +42,29 @@ class GradingCompletionEvaluatorTest {
 
     @BeforeEach
     void setUp() {
-        evaluator = new GradingCompletionEvaluator(methodResolver);
+        evaluator = new GradingCompletionEvaluator();
     }
 
     @Test
     void manualModeRequiresCommittedAssignmentAndSubmittedExaminerScoreForEverySubjectiveItem() {
-        when(methodResolver.resolve(templateId, "WRITE_ESSAY")).thenReturn(Optional.of(ScoringMethod.AI_TEXT));
-        var member = new GradingCohortMember(cohortId, tenantId, sessionId, attemptId, studentId,
-                "SUBMITTED", false, null);
+        var member = new AttemptGradingCandidateView(attemptId, studentId,
+                "SUBMITTED", "v1", false, null);
         var coverage = new AttemptGradingCoverageView(attemptId,
                 List.of(new AttemptGradingItemView(itemId, templateId, "WRITE_ESSAY")));
-        ScoringAnswer answer = answer(ScoringAnswerStatus.SCORED, "WRITE_ESSAY");
+        AiEvaluation answer = answer(ScoringAnswerStatus.SCORED, "WRITE_ESSAY");
 
         GradingEvaluation blocked = evaluator.evaluate(GradingMarkingMode.MANUAL_EXAMINER, List.of(member),
-                Map.of(attemptId, coverage), List.of(answer), List.of(), List.of());
+                Map.of(attemptId, coverage), List.of(answer), List.of(), List.of(), Map.of());
 
         assertThat(blocked.complete()).isFalse();
         assertThat(blocked.blockingReasons()).contains(GradingConstants.EXAMINER_ASSIGNMENT_REQUIRED);
 
-        ExaminerAttemptAssignment assignment = new ExaminerAttemptAssignment(UUID.randomUUID(), tenantId, sessionId,
+        GradingAssignment assignment = new GradingAssignment(tenantId, sessionId,
                 attemptId, examinerId, 1, UUID.randomUUID(), Instant.now());
-        ExaminerAnswerScore score = new ExaminerAnswerScore(answerId, attemptId, sessionId, tenantId, examinerId,
-                82, Instant.now());
+        ExaminerEvaluation score = ExaminerEvaluation.submittedDirectly(tenantId, sessionId, attemptId, answerId,
+                examinerId, 82, Instant.now(), null, null, null, null, null, null);
         GradingEvaluation complete = evaluator.evaluate(GradingMarkingMode.MANUAL_EXAMINER, List.of(member),
-                Map.of(attemptId, coverage), List.of(answer), List.of(assignment), List.of(score));
+                Map.of(attemptId, coverage), List.of(answer), List.of(assignment), List.of(score), Map.of());
 
         assertThat(complete.complete()).isTrue();
         assertThat(complete.satisfiedItemCount()).isEqualTo(1);
@@ -75,32 +72,24 @@ class GradingCompletionEvaluatorTest {
 
     @Test
     void aiOnlyRequiresRealAiScoreAndDoesNotTreatFailedOrStubResultsAsComplete() {
-        when(methodResolver.resolve(templateId, "SUMMARIZE_WRITTEN_TEXT"))
-                .thenReturn(Optional.of(ScoringMethod.AI_TEXT));
-        var member = new GradingCohortMember(cohortId, tenantId, sessionId, attemptId, studentId,
-                "SUBMITTED", false, null);
+        var member = new AttemptGradingCandidateView(attemptId, studentId,
+                "SUBMITTED", "v1", false, null);
         var coverage = new AttemptGradingCoverageView(attemptId,
                 List.of(new AttemptGradingItemView(itemId, templateId, "SUMMARIZE_WRITTEN_TEXT")));
 
         GradingEvaluation pending = evaluator.evaluate(GradingMarkingMode.AI_ONLY, List.of(member),
                 Map.of(attemptId, coverage), List.of(answer(ScoringAnswerStatus.SCORING_FAILED,
-                        "SUMMARIZE_WRITTEN_TEXT")), List.of(), List.of());
+                        "SUMMARIZE_WRITTEN_TEXT")), List.of(), List.of(), Map.of());
 
         assertThat(pending.complete()).isFalse();
         assertThat(pending.blockingReasons()).contains(GradingConstants.AI_SCORE_REQUIRED);
     }
 
-    private ScoringAnswer answer(ScoringAnswerStatus status, String taskType) {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(answerId);
-        answer.setAttemptPublicId(attemptId);
-        answer.setPinnedItemPublicId(itemId);
-        answer.setSessionPublicId(sessionId);
-        answer.setTenantId(tenantId);
-        answer.setScoreTemplatePublicId(templateId);
-        answer.setTaskType(taskType);
+    private AiEvaluation answer(ScoringAnswerStatus status, String taskType) {
+        AiEvaluation answer = new AiEvaluation(tenantId, sessionId, attemptId, answerId, itemId, templateId,
+                taskType, "WRITING", ScoringMethod.AI_TEXT);
+        answer.markAiScored(80, AiProviderCategory.REAL, "provider", "model", "v1");
         answer.setStatus(status);
-        answer.setRawScore(80);
         return answer;
     }
 }

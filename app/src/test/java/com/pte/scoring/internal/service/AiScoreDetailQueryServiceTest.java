@@ -1,11 +1,12 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.domain.ScoringAnswerAiDetail;
+import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.domain.enums.AiProviderCategory;
+import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.dto.response.AiScoreDetailResponse;
-import com.pte.scoring.internal.repository.ScoringAnswerAiDetailRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,12 +16,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AiScoreDetailQueryServiceTest {
@@ -28,7 +26,7 @@ class AiScoreDetailQueryServiceTest {
     private final UUID tenantId = UUID.randomUUID();
 
     @Mock
-    private ScoringAnswerAiDetailRepository repository;
+    private AiEvaluationRepository repository;
 
     private AiScoreDetailQueryService service;
 
@@ -39,12 +37,9 @@ class AiScoreDetailQueryServiceTest {
 
     @Test
     void aScoredAnswerCarriesCriteriaFeedbackTranscriptDetailAndTheFallbackFlag() {
-        ScoringAnswer answer = answer(ScoringAnswerStatus.SCORED, 72);
-        ScoringAnswerAiDetail row = new ScoringAnswerAiDetail(answer.getAnswerPublicId(), tenantId);
-        row.recordResult("{\"CONTENT\":80,\"FLUENCY\":64}", "Good range.", "the transcript",
+        AiEvaluation answer = aiAnswer(ScoringAnswerStatus.SCORED, 72);
+        answer.recordDetail("{\"CONTENT\":80,\"FLUENCY\":64}", "Good range.", "the transcript",
                 "{\"confidence\":\"LOW\",\"errors\":[\"x\"]}", true);
-        when(repository.findByAnswerPublicIdAndTenantId(answer.getAnswerPublicId(), tenantId))
-                .thenReturn(Optional.of(row));
 
         AiScoreDetailResponse ai = service.find(answer);
 
@@ -60,12 +55,9 @@ class AiScoreDetailQueryServiceTest {
 
     @Test
     void aFailedAnswerShowsTheReasonCodeAndNoScoreEvenWhenAnOlderResultIsKept() {
-        ScoringAnswer answer = answer(ScoringAnswerStatus.SCORING_FAILED, 55);
-        ScoringAnswerAiDetail row = new ScoringAnswerAiDetail(answer.getAnswerPublicId(), tenantId);
-        row.recordResult("{\"CONTENT\":50}", "old", null, "{}", false);
-        row.recordFailure(AiFailureReason.PROVIDER_RATE_LIMITED);
-        when(repository.findByAnswerPublicIdAndTenantId(answer.getAnswerPublicId(), tenantId))
-                .thenReturn(Optional.of(row));
+        AiEvaluation answer = aiAnswer(ScoringAnswerStatus.SCORING_FAILED, 55);
+        answer.recordDetail("{\"CONTENT\":50}", "old", null, "{}", false);
+        answer.recordFailure(AiFailureReason.PROVIDER_RATE_LIMITED);
 
         AiScoreDetailResponse ai = service.find(answer);
 
@@ -75,10 +67,9 @@ class AiScoreDetailQueryServiceTest {
     }
 
     @Test
-    void anAnswerStillBeingScoredHasAStatusEvenBeforeAnyDetailRowExists() {
-        ScoringAnswer answer = answer(ScoringAnswerStatus.AI_SCORING, null);
-        when(repository.findByAnswerPublicIdAndTenantId(answer.getAnswerPublicId(), tenantId))
-                .thenReturn(Optional.empty());
+    void anAnswerStillBeingScoredHasAStatusEvenBeforeAnyAiOutcomeExists() {
+        AiEvaluation answer = evaluation();
+        answer.setStatus(ScoringAnswerStatus.AI_SCORING);
 
         AiScoreDetailResponse ai = service.find(answer);
 
@@ -89,32 +80,17 @@ class AiScoreDetailQueryServiceTest {
     }
 
     @Test
-    void anAnswerWithNoAiRowAndNoAiStatusHasNoAiDetailAtAll() {
-        ScoringAnswer answer = answer(ScoringAnswerStatus.SCORED, 100);
-        when(repository.findByAnswerPublicIdAndTenantId(answer.getAnswerPublicId(), tenantId))
-                .thenReturn(Optional.empty());
+    void anObjectiveAnswerHasNoAiDetailAtAll() {
+        AiEvaluation answer = evaluation();
+        answer.markScored(100);
 
         assertThat(service.find(answer)).isNull();
     }
 
     @Test
-    void lookupsAreKeyedByTheAnswersOwnTenantNeverAClientValue() {
-        ScoringAnswer answer = answer(ScoringAnswerStatus.SCORED, 70);
-        when(repository.findByAnswerPublicIdAndTenantId(answer.getAnswerPublicId(), tenantId))
-                .thenReturn(Optional.empty());
-
-        service.find(answer);
-
-        verify(repository).findByAnswerPublicIdAndTenantId(answer.getAnswerPublicId(), tenantId);
-    }
-
-    @Test
     void unreadableStoredJsonDegradesToEmptyMapsInsteadOfFailingTheScreen() {
-        ScoringAnswer answer = answer(ScoringAnswerStatus.SCORED, 60);
-        ScoringAnswerAiDetail row = new ScoringAnswerAiDetail(answer.getAnswerPublicId(), tenantId);
-        row.recordResult("not json", "ok", null, "{broken", false);
-        when(repository.findByAnswerPublicIdAndTenantId(answer.getAnswerPublicId(), tenantId))
-                .thenReturn(Optional.of(row));
+        AiEvaluation answer = aiAnswer(ScoringAnswerStatus.SCORED, 60);
+        answer.recordDetail("not json", "ok", null, "{broken", false);
 
         AiScoreDetailResponse ai = service.find(answer);
 
@@ -124,15 +100,13 @@ class AiScoreDetailQueryServiceTest {
     }
 
     @Test
-    void severalAnswersAreLoadedWithOneTenantScopedQuery() {
-        ScoringAnswer scored = answer(ScoringAnswerStatus.SCORED, 80);
-        ScoringAnswer scoring = answer(ScoringAnswerStatus.AI_SCORING, null);
-        ScoringAnswer objective = answer(ScoringAnswerStatus.SCORED, 100);
-        ScoringAnswerAiDetail row = new ScoringAnswerAiDetail(scored.getAnswerPublicId(), tenantId);
-        row.recordResult("{\"CONTENT\":80}", "fine", null, "{}", false);
-        when(repository.findByTenantIdAndAnswerPublicIdIn(tenantId,
-                List.of(scored.getAnswerPublicId(), scoring.getAnswerPublicId(), objective.getAnswerPublicId())))
-                .thenReturn(List.of(row));
+    void severalAnswersAreMappedWithoutAnyLookupAndObjectiveOnesAreSkipped() {
+        AiEvaluation scored = aiAnswer(ScoringAnswerStatus.SCORED, 80);
+        scored.recordDetail("{\"CONTENT\":80}", "fine", null, "{}", false);
+        AiEvaluation scoring = evaluation();
+        scoring.setStatus(ScoringAnswerStatus.AI_SCORING);
+        AiEvaluation objective = evaluation();
+        objective.markScored(100);
 
         Map<UUID, AiScoreDetailResponse> byAnswer = service.findAll(tenantId, List.of(scored, scoring, objective));
 
@@ -141,12 +115,16 @@ class AiScoreDetailQueryServiceTest {
         assertThat(byAnswer.get(scoring.getAnswerPublicId()).status()).isEqualTo("SCORING");
     }
 
-    private ScoringAnswer answer(ScoringAnswerStatus status, Integer rawScore) {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(UUID.randomUUID());
-        answer.setTenantId(tenantId);
+    private AiEvaluation evaluation() {
+        return new AiEvaluation(tenantId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), "READ_ALOUD", "SPEAKING", ScoringMethod.AI_SPEECH);
+    }
+
+    /** An answer an AI provider has scored, as the worker leaves it. */
+    private AiEvaluation aiAnswer(ScoringAnswerStatus status, int rawScore) {
+        AiEvaluation answer = evaluation();
+        answer.markAiScored(rawScore, AiProviderCategory.REAL, "provider", "model", "v1");
         answer.setStatus(status);
-        answer.setRawScore(rawScore);
         return answer;
     }
 }

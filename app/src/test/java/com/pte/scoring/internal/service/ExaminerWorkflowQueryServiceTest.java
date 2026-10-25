@@ -1,31 +1,30 @@
 package com.pte.scoring.internal.service;
 
 import com.pte.assessment.ExamDefinitionService;
-import com.pte.scoring.domain.ExaminerAttemptAssignment;
-import com.pte.scoring.domain.ExaminerGradingEvent;
-import com.pte.scoring.domain.ExaminerGradingWork;
+import com.pte.attempt.AttemptService;
+import com.pte.scoring.domain.GradingAssignment;
 import com.pte.scoring.domain.enums.ExaminerGradingOperation;
+import com.pte.scoring.dto.response.ExaminerGradingAuditMetadata;
 import com.pte.scoring.dto.response.ExaminerHistoryResponse;
-import com.pte.scoring.internal.repository.ExaminerAnswerDraftRepository;
-import com.pte.scoring.internal.repository.ExaminerAnswerScoreRepository;
-import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingEventRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingIssueRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingWorkRepository;
-import com.pte.scoring.internal.repository.GradingCohortMemberRepository;
-import com.pte.scoring.internal.repository.GradingCohortRepository;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
+import com.pte.scoring.internal.repository.GradingAssignmentRepository;
+import com.pte.scoring.internal.repository.GradingIssueRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
+import com.pte.shared.audit.AuditHistoryEntry;
+import com.pte.shared.audit.AuditHistoryReader;
+import com.pte.shared.audit.AuditLogChangeWriter;
+import com.pte.shared.idempotency.IdempotencyKeyService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.web.PageMeta;
+import com.pte.shared.web.PagedResult;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.web.server.ResponseStatusException;
-import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.util.List;
@@ -34,46 +33,40 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ExaminerWorkflowQueryServiceTest {
 
     @Mock
-    private ExaminerGradingWorkRepository workRepository;
+    private AuditHistoryReader auditHistoryReader;
     @Mock
-    private ExaminerAnswerDraftRepository draftRepository;
+    private GradingIssueRepository issueRepository;
     @Mock
-    private ExaminerGradingEventRepository eventRepository;
+    private GradingAssignmentRepository assignmentRepository;
     @Mock
-    private ExaminerGradingIssueRepository issueRepository;
+    private ExaminerEvaluationRepository scoreRepository;
     @Mock
-    private ExaminerAttemptAssignmentRepository assignmentRepository;
+    private SessionGradingGateway gateway;
     @Mock
-    private ExaminerAnswerScoreRepository scoreRepository;
+    private AttemptService attemptService;
     @Mock
-    private ScoringSessionStateRepository sessionStateRepository;
-    @Mock
-    private GradingCohortRepository cohortRepository;
-    @Mock
-    private GradingCohortMemberRepository memberRepository;
-    @Mock
-    private ScoringAnswerRepository answerRepository;
+    private AiEvaluationRepository answerRepository;
     @Mock
     private ExamDefinitionService examDefinitionService;
 
-    private final ObjectMapper objectMapper = tools.jackson.databind.json.JsonMapper.builder().findAndAddModules().build();
+    private final JsonMapper jsonMapper = JsonMapper.builder().findAndAddModules().build();
     private ExaminerWorkflowQueryService queryService;
 
     @BeforeEach
     void setUp() {
+        ExaminerWorkRecorder recorder = new ExaminerWorkRecorder(mock(IdempotencyKeyService.class),
+                mock(AuditLogChangeWriter.class), auditHistoryReader, jsonMapper);
         queryService = new ExaminerWorkflowQueryService(
-                workRepository, draftRepository, eventRepository, issueRepository,
-                assignmentRepository, scoreRepository, sessionStateRepository,
-                cohortRepository, memberRepository, answerRepository,
-                examDefinitionService, objectMapper
+                recorder, issueRepository,
+                assignmentRepository, scoreRepository, gateway, attemptService, answerRepository,
+                examDefinitionService
         );
     }
 
@@ -102,8 +95,7 @@ class ExaminerWorkflowQueryServiceTest {
         UUID attemptPublicId = UUID.randomUUID();
         CurrentUser examiner = new CurrentUser(examinerId, tenantId, List.of("EXAMINER"));
 
-        ExaminerAttemptAssignment assignment = new ExaminerAttemptAssignment(
-                UUID.randomUUID(), tenantId, sessionPublicId, attemptPublicId, examinerId, 5, UUID.randomUUID(), Instant.now());
+        GradingAssignment assignment = new GradingAssignment(tenantId, sessionPublicId, attemptPublicId, examinerId, 5, UUID.randomUUID(), Instant.now());
         UUID assignmentPublicId = UUID.randomUUID();
         org.springframework.test.util.ReflectionTestUtils.setField(assignment, "publicId", assignmentPublicId);
 
@@ -111,28 +103,26 @@ class ExaminerWorkflowQueryServiceTest {
                 tenantId, sessionPublicId, attemptPublicId, examinerId))
                 .thenReturn(Optional.of(assignment));
 
-        ExaminerGradingWork work = new ExaminerGradingWork(
-                tenantId, sessionPublicId, attemptPublicId, assignmentPublicId, examinerId, Instant.now());
-        org.springframework.test.util.ReflectionTestUtils.setField(work, "id", 100L);
+        assignment.start(Instant.now());
 
-        when(workRepository.findByTenantIdAndAssignmentPublicIdAndDeletedFalse(tenantId, assignmentPublicId))
-                .thenReturn(Optional.of(work));
-
-        String metadataJson = "{\"actorPublicId\":\"" + examinerId + "\",\"actorRole\":\"EXAMINER\",\"assignmentPublicId\":\""
-                + assignmentPublicId + "\",\"previousScore\":75,\"newScore\":85,\"rubricVersion\":1,\"reason\":\"Revised grammar assessment\"}";
-
-        ExaminerGradingEvent event = new ExaminerGradingEvent(
-                tenantId, 100L, UUID.randomUUID(), ExaminerGradingOperation.SCORE_CHANGE,
-                2L, 3L, metadataJson, Instant.now());
-
-        when(eventRepository.findByTenantIdAndWorkId(
-                eq(tenantId), eq(100L), any(org.springframework.data.domain.Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(event), PageRequest.of(0, 20), 1));
+        UUID answerPublicId = UUID.randomUUID();
+        ExaminerWorkRecorder.Entry entry = new ExaminerWorkRecorder.Entry(answerPublicId,
+                ExaminerGradingOperation.SCORE_CHANGE, 2L, 3L, new ExaminerGradingAuditMetadata(examinerId,
+                        "EXAMINER", assignmentPublicId, 75, 85, 1L, "Revised grammar assessment"));
+        Instant occurredAt = Instant.parse("2026-10-24T08:00:00Z");
+        AuditHistoryEntry row = new AuditHistoryEntry(UUID.randomUUID(), examinerId, "EXAMINER", UUID.randomUUID(),
+                "summary", null, jsonMapper.writeValueAsString(entry), occurredAt);
+        when(auditHistoryReader.history(tenantId, "EXAMINER_WORK", assignmentPublicId.toString(), 0, 20))
+                .thenReturn(new PagedResult<>(List.of(row), new PageMeta(0, 20, 1, 1, true, true, false, false)));
 
         ExaminerHistoryResponse history = queryService.getHistory(sessionPublicId, attemptPublicId, PageRequest.of(0, 20), examiner);
 
         assertThat(history.items()).hasSize(1);
         var item = history.items().getFirst();
+        assertThat(item.occurredAt()).isEqualTo(occurredAt);
+        assertThat(item.answerPublicId()).isEqualTo(answerPublicId);
+        assertThat(item.workVersion()).isEqualTo(2L);
+        assertThat(item.draftVersion()).isEqualTo(3L);
         assertThat(item.operation()).isEqualTo(ExaminerGradingOperation.SCORE_CHANGE);
         assertThat(item.actorRole()).isEqualTo("EXAMINER");
         assertThat(item.previousScore()).isEqualTo(75);

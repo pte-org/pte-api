@@ -1,18 +1,16 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.assessment.ExamDefinitionService;
-import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
-import com.pte.assessment.dto.response.ExamDefinitionResponse;
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.dto.response.AiEligibleAttemptView;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
+import com.pte.scoring.support.EvaluationFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,37 +22,32 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ScoringEligibilityQueryServiceTest {
 
-    private final UUID templateId = UUID.randomUUID();
     @Mock
-    private ScoringAnswerRepository answerRepository;
-    @Mock
-    private ExamDefinitionService examDefinitionService;
+    private AiEvaluationRepository answerRepository;
 
     private ScoringEligibilityQueryService service;
 
     @BeforeEach
     void setUp() {
-        service = new ScoringEligibilityQueryService(answerRepository, new ScoringMethodResolver(examDefinitionService));
+        service = new ScoringEligibilityQueryService(answerRepository);
     }
 
     @Test
-    void eligiblePoolUsesPinnedTemplateMethodAndGroupsAiAnswersByAttempt() {
+    void eligiblePoolUsesTheScoringMethodOfEachEvaluationAndGroupsAiAnswersByAttempt() {
         UUID session = UUID.randomUUID();
         UUID tenant = UUID.randomUUID();
         UUID aiAttempt = UUID.randomUUID();
         UUID objectiveAttempt = UUID.randomUUID();
         when(answerRepository.findBySessionPublicIdAndTenantId(session, tenant)).thenReturn(List.of(
-                answer("CUSTOM_SPEECH", aiAttempt), answer("CUSTOM_TEXT", aiAttempt),
-                answer("CUSTOM_OBJECTIVE", objectiveAttempt), answer("CUSTOM_UNSCORED", UUID.randomUUID())));
-        when(examDefinitionService.getByPublicId(templateId)).thenReturn(new ExamDefinitionResponse(
-                templateId, "CUSTOM", 1, "Custom", "RETIRED", List.of(
-                        item("CUSTOM_SPEECH", "AI_SPEECH"), item("CUSTOM_TEXT", "AI_TEXT"),
-                        item("CUSTOM_OBJECTIVE", "OBJECTIVE"), item("CUSTOM_UNSCORED", "UNSCORED"))));
+                answer(tenant, session, "CUSTOM_SPEECH", ScoringMethod.AI_SPEECH, aiAttempt),
+                answer(tenant, session, "CUSTOM_TEXT", ScoringMethod.AI_TEXT, aiAttempt),
+                answer(tenant, session, "CUSTOM_OBJECTIVE", ScoringMethod.OBJECTIVE, objectiveAttempt),
+                answer(tenant, session, "CUSTOM_UNSCORED", ScoringMethod.UNSCORED, UUID.randomUUID()),
+                answer(tenant, session, "CUSTOM_UNRULED", null, UUID.randomUUID())));
 
         List<AiEligibleAttemptView> result = service.findEligibleAttempts(session, tenant, null);
 
         assertThat(result).containsExactly(new AiEligibleAttemptView(aiAttempt, 2));
-        verify(examDefinitionService).getByPublicId(templateId);
     }
 
     @Test
@@ -64,16 +57,7 @@ class ScoringEligibilityQueryServiceTest {
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
-    private ScoringAnswer answer(String taskType, UUID attemptPublicId) {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setScoreTemplatePublicId(templateId);
-        answer.setTaskType(taskType);
-        answer.setAttemptPublicId(attemptPublicId);
-        return answer;
-    }
-
-    private ExamDefinitionItemResponse item(String taskType, String method) {
-        return new ExamDefinitionItemResponse(taskType, "SPEAKING", 0, 1, 1, 0, 0, method,
-                BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+    private AiEvaluation answer(UUID tenant, UUID session, String taskType, ScoringMethod method, UUID attempt) {
+        return EvaluationFixtures.ai(tenant, session, attempt, UUID.randomUUID(), taskType, method);
     }
 }

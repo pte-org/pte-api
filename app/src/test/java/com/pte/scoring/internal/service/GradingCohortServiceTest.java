@@ -5,26 +5,28 @@ import com.pte.attempt.dto.response.AttemptGradingCandidateView;
 import com.pte.attempt.dto.response.AttemptGradingCoverageView;
 import com.pte.attempt.dto.response.AttemptGradingItemView;
 import com.pte.scoring.SessionGradingCompletedEvent;
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.AiProviderCategory;
+import com.pte.scoring.domain.enums.GradingCohortStatus;
 import com.pte.scoring.domain.enums.GradingMarkingMode;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.dto.request.FinalizeGradingCohortRequest;
 import com.pte.scoring.dto.request.GradingCohortDispositionRequest;
+import com.pte.scoring.dto.response.GradingCohortAttemptResponse;
 import com.pte.scoring.dto.response.GradingCohortPreviewResponse;
 import com.pte.scoring.dto.response.GradingCohortResponse;
+import com.pte.scoring.internal.constant.GradingConstants;
 import com.pte.scoring.internal.exception.GradingCohortException;
-import com.pte.scoring.internal.repository.ExaminerAnswerScoreRepository;
-import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
-import com.pte.scoring.internal.repository.GradingCohortMemberRepository;
-import com.pte.scoring.internal.repository.GradingCohortRepository;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
+import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
+import com.pte.scoring.internal.repository.GradingAssignmentRepository;
 import com.pte.session.SessionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -37,25 +39,28 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class GradingCohortServiceTest {
 
+    private static final Instant NOW = Instant.parse("2026-10-03T10:00:00Z");
+
     @Mock private SessionService sessionService;
+    @Mock private SessionGradingGateway gateway;
     @Mock private AttemptService attemptService;
     @Mock private ScoringIngestService ingestService;
-    @Mock private ScoringAnswerRepository answerRepository;
-    @Mock private ExaminerAttemptAssignmentRepository assignmentRepository;
-    @Mock private ExaminerAnswerScoreRepository examinerScoreRepository;
-    @Mock private GradingCohortRepository cohortRepository;
-    @Mock private GradingCohortMemberRepository memberRepository;
+    @Mock private AiEvaluationRepository answerRepository;
+    @Mock private GradingAssignmentRepository assignmentRepository;
+    @Mock private ExaminerEvaluationRepository examinerScoreRepository;
     @Mock private GradingCompletionEvaluator evaluator;
-    @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
+    @Mock private ScoreSelectionReader selectionReader;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private GradingCohortService service;
     private final UUID tenantId = UUID.randomUUID();
@@ -71,79 +76,118 @@ class GradingCohortServiceTest {
     @BeforeEach
     void setUp() {
         lenient().when(sessionService.isSessionClosed(sessionId, tenantId)).thenReturn(true);
-        service =new GradingCohortService(sessionService, attemptService, ingestService, answerRepository,
-                assignmentRepository, examinerScoreRepository, cohortRepository, memberRepository, evaluator,
-                eventPublisher, Clock.fixed(Instant.parse("2026-10-03T10:00:00Z"), ZoneOffset.UTC));
+        service = new GradingCohortService(sessionService, gateway, attemptService, ingestService, answerRepository,
+                assignmentRepository, examinerScoreRepository, evaluator, selectionReader, eventPublisher,
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
-    void finalizationRequiresDispositionForEveryOutstandingAttemptAndKeepsItOutOfCohort() {
+    void finalizationRequiresDispositionForEveryOutstandingAttemptAndExcludesIt() {
         stubCandidates();
         GradingCohortPreviewResponse preview = service.preview(sessionId, tenantId);
-        when(cohortRepository.findForUpdate(tenantId, sessionId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.finalizeCohort(sessionId, tenantId, actorId,
                 new FinalizeGradingCohortRequest(preview.previewVersion(), GradingMarkingMode.AI_ONLY, List.of())))
                 .isInstanceOf(GradingCohortException.class);
+        verify(gateway, never()).freeze(any(), any(), any(), any(), any(), any());
 
         var request = new FinalizeGradingCohortRequest(preview.previewVersion(), GradingMarkingMode.AI_ONLY,
                 List.of(new GradingCohortDispositionRequest(outstandingAttemptId, "Student withdrew before exam.")));
-        var cohortId = UUID.randomUUID();
-        when(cohortRepository.saveAndFlush(any())).thenAnswer(invocation -> {
-            var cohort = invocation.getArgument(0, com.pte.scoring.domain.GradingCohort.class);
-            cohort.setPublicId(cohortId);
-            return cohort;
-        });
-        when(memberRepository.findForUpdate(cohortId)).thenReturn(List.of(
-                new com.pte.scoring.domain.GradingCohortMember(cohortId, tenantId, sessionId,
-                        submittedAttemptId, submittedStudentId, "SUBMITTED", false, null),
-                new com.pte.scoring.domain.GradingCohortMember(cohortId, tenantId, sessionId,
-                        outstandingAttemptId, outstandingStudentId, "IN_PROGRESS", true,
-                        "Student withdrew before exam.")));
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(UUID.randomUUID());
-        answer.setAttemptPublicId(submittedAttemptId);
-        answer.setPinnedItemPublicId(itemId);
-        answer.setSessionPublicId(sessionId);
-        answer.setTenantId(tenantId);
-        answer.setScoreTemplatePublicId(templateId);
-        answer.setTaskType("WRITE_ESSAY");
-        answer.markAiScored(80, AiProviderCategory.REAL, "test", "model", "v1");
-        when(answerRepository.findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(sessionId, tenantId,
-                List.of(submittedAttemptId))).thenReturn(List.of(answer));
-        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicIdIn(tenantId, sessionId,
-                List.of(submittedAttemptId))).thenReturn(List.of());
-        when(examinerScoreRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(List.of());
-        when(attemptService.getGradingCoverage(List.of(submittedAttemptId), sessionId, tenantId))
-                .thenReturn(Map.of(submittedAttemptId, new AttemptGradingCoverageView(submittedAttemptId,
-                        List.of(new AttemptGradingItemView(itemId, templateId, "WRITE_ESSAY")))));
-        when(evaluator.evaluate(any(), any(), any(), any(), any(), any()))
+        when(gateway.freeze(tenantId, sessionId, GradingMarkingMode.AI_ONLY, preview.previewVersion(), actorId, NOW))
+                .thenReturn(grading(GradingMarkingMode.AI_ONLY, GradingCohortStatus.FROZEN,
+                        preview.previewVersion()));
+        stubEvaluationInputs();
+        when(evaluator.evaluate(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new GradingEvaluation(true, 1, 1, 1, 1, List.of()));
+        when(gateway.complete(tenantId, sessionId, NOW)).thenReturn(true);
 
         GradingCohortResponse result = service.finalizeCohort(sessionId, tenantId, actorId, request);
 
         assertThat(result.complete()).isTrue();
-        verify(sessionService, times(2)).lockClosedForGradingCohort(sessionId, tenantId);
+        verify(attemptService).excludeFromGrading(sessionId, tenantId,
+                Map.of(outstandingAttemptId, "Student withdrew before exam."));
         verify(eventPublisher).publishEvent(any(SessionGradingCompletedEvent.class));
     }
 
     @Test
-    void reconcilingACompletedCohortNeitherAnnouncesCompletionAgainNorRewritesAnswers() {
-        var cohort = new com.pte.scoring.domain.GradingCohort(tenantId, sessionId, actorId, "preview-v1",
-                GradingMarkingMode.AI_ONLY, Instant.parse("2026-10-03T08:00:00Z"));
-        cohort.complete(Instant.parse("2026-10-03T09:00:00Z"));
-        when(cohortRepository.findForUpdate(tenantId, sessionId)).thenReturn(Optional.of(cohort));
-        when(evaluator.evaluate(any(), any(), any(), any(), any(), any()))
+    void finalizingAgainWithTheSameVersionAndModeIsIdempotent() {
+        stubCandidates();
+        String version = service.preview(sessionId, tenantId).previewVersion();
+        when(gateway.grading(tenantId, sessionId)).thenReturn(Optional.of(
+                grading(GradingMarkingMode.AI_ONLY, GradingCohortStatus.COMPLETED, version)));
+        stubEvaluationInputs();
+        when(evaluator.evaluate(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new GradingEvaluation(true, 1, 1, 1, 1, List.of()));
+
+        GradingCohortResponse result = service.finalizeCohort(sessionId, tenantId, actorId,
+                new FinalizeGradingCohortRequest(version, GradingMarkingMode.AI_ONLY, List.of()));
+
+        assertThat(result.complete()).isTrue();
+        verify(gateway, never()).freeze(any(), any(), any(), any(), any(), any());
+        verify(attemptService, never()).excludeFromGrading(any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void finalizingAFrozenSessionInAnotherModeIsRejected() {
+        stubCandidates();
+        String version = service.preview(sessionId, tenantId).previewVersion();
+        when(gateway.grading(tenantId, sessionId)).thenReturn(Optional.of(
+                grading(GradingMarkingMode.MANUAL_EXAMINER, GradingCohortStatus.FROZEN, version)));
+
+        assertThatThrownBy(() -> service.finalizeCohort(sessionId, tenantId, actorId,
+                new FinalizeGradingCohortRequest(version, GradingMarkingMode.AI_ONLY, List.of())))
+                .isInstanceOf(GradingCohortException.class);
+
+        verify(gateway, never()).freeze(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void aStalePreviewVersionIsRejectedBeforeFreezing() {
+        stubCandidates();
+
+        assertThatThrownBy(() -> service.finalizeCohort(sessionId, tenantId, actorId,
+                new FinalizeGradingCohortRequest("stale", GradingMarkingMode.AI_ONLY, List.of())))
+                .isInstanceOf(GradingCohortException.class);
+
+        verify(gateway, never()).freeze(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void aiOnlyIsRejectedOnceExaminersWereAssigned() {
+        stubCandidates();
+        String version = service.preview(sessionId, tenantId).previewVersion();
+        when(assignmentRepository.countByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(2L);
+
+        assertThatThrownBy(() -> service.finalizeCohort(sessionId, tenantId, actorId,
+                new FinalizeGradingCohortRequest(version, GradingMarkingMode.AI_ONLY,
+                        List.of(new GradingCohortDispositionRequest(outstandingAttemptId, "No show.")))))
+                .isInstanceOf(GradingCohortException.class);
+
+        verify(gateway, never()).freeze(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void reconcilingACompletedGradingNeitherAnnouncesCompletionAgainNorRewritesAnswers() {
+        when(gateway.grading(tenantId, sessionId)).thenReturn(Optional.of(
+                grading(GradingMarkingMode.AI_ONLY, GradingCohortStatus.COMPLETED, "preview-v1")));
+        when(evaluator.evaluate(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new GradingEvaluation(true, 1, 0, 1, 1, List.of()));
 
         service.reconcileIfPresent(sessionId, tenantId);
 
-        verify(cohortRepository, never()).saveAndFlush(any());
         verify(eventPublisher, never()).publishEvent(any());
         // Reconcile runs inside the AI worker's commit, so it only inserts new answers and never
         // updates existing rows another worker may hold locked.
         verify(ingestService).ingestForSession(sessionId, tenantId);
-        verify(ingestService, never()).ingestForScoring(any(), any());
+    }
+
+    @Test
+    void reconcilingASessionWithoutGradingDoesNothing() {
+        service.reconcileIfPresent(sessionId, tenantId);
+
+        verifyNoInteractions(ingestService, eventPublisher);
     }
 
     @Test
@@ -156,54 +200,75 @@ class GradingCohortServiceTest {
     }
 
     @Test
-    void ensuringAManualCohortFreezesItWithAnAutomaticReasonForUnsubmittedAttempts() {
+    void previewOfAFrozenSessionReportsTheExcludedAttempts() {
+        when(gateway.grading(tenantId, sessionId)).thenReturn(Optional.of(
+                grading(GradingMarkingMode.MANUAL_EXAMINER, GradingCohortStatus.FROZEN, "preview-v1")));
+        when(attemptService.getGradingCandidatesForSession(sessionId, tenantId)).thenReturn(List.of(
+                new AttemptGradingCandidateView(submittedAttemptId, submittedStudentId, "SUBMITTED", "v1",
+                        false, null),
+                new AttemptGradingCandidateView(outstandingAttemptId, outstandingStudentId, "IN_PROGRESS", "v1",
+                        true, "No show.")));
+
+        GradingCohortPreviewResponse preview = service.preview(sessionId, tenantId);
+
+        assertThat(preview.previewVersion()).isEqualTo("preview-v1");
+        assertThat(preview.attempts()).extracting(GradingCohortAttemptResponse::excluded)
+                .containsExactlyInAnyOrder(false, true);
+    }
+
+    @Test
+    void ensuringAManualGradingFreezesItWithAnAutomaticReasonForUnsubmittedAttempts() {
         stubCandidates();
-        when(cohortRepository.findForUpdate(tenantId, sessionId)).thenReturn(Optional.empty());
-        var cohortId = UUID.randomUUID();
-        when(cohortRepository.saveAndFlush(any())).thenAnswer(invocation -> {
-            var cohort = invocation.getArgument(0, com.pte.scoring.domain.GradingCohort.class);
-            cohort.setPublicId(cohortId);
-            return cohort;
-        });
-        when(memberRepository.findForUpdate(cohortId)).thenReturn(List.of());
+        when(gateway.freeze(eq(tenantId), eq(sessionId), eq(GradingMarkingMode.MANUAL_EXAMINER), any(),
+                eq(actorId), eq(NOW)))
+                .thenReturn(grading(GradingMarkingMode.MANUAL_EXAMINER, GradingCohortStatus.FROZEN, "v"));
         when(attemptService.getGradingCoverage(any(), any(), any())).thenReturn(Map.of());
-        when(evaluator.evaluate(any(), any(), any(), any(), any(), any()))
+        when(evaluator.evaluate(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new GradingEvaluation(false, 1, 1, 1, 0, List.of()));
 
         service.ensureManualCohort(sessionId, tenantId, actorId);
 
-        var cohort = org.mockito.ArgumentCaptor.forClass(com.pte.scoring.domain.GradingCohort.class);
-        verify(cohortRepository).saveAndFlush(cohort.capture());
-        assertThat(cohort.getValue().getMarkingMode()).isEqualTo(GradingMarkingMode.MANUAL_EXAMINER);
-        @SuppressWarnings("unchecked")
-        var members = org.mockito.ArgumentCaptor.forClass(List.class);
-        verify(memberRepository).saveAll(members.capture());
-        var saved = (List<com.pte.scoring.domain.GradingCohortMember>) members.getValue();
-        assertThat(saved).extracting(com.pte.scoring.domain.GradingCohortMember::getAttemptPublicId,
-                com.pte.scoring.domain.GradingCohortMember::isExcluded,
-                com.pte.scoring.domain.GradingCohortMember::getDispositionReason)
-                .containsExactlyInAnyOrder(
-                        org.assertj.core.groups.Tuple.tuple(submittedAttemptId, false, null),
-                        org.assertj.core.groups.Tuple.tuple(outstandingAttemptId, true,
-                                com.pte.scoring.internal.constant.GradingConstants.AUTO_DISPOSITION_NOT_SUBMITTED));
+        verify(attemptService).excludeFromGrading(sessionId, tenantId,
+                Map.of(outstandingAttemptId, GradingConstants.AUTO_DISPOSITION_NOT_SUBMITTED));
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
-    void ensuringAManualCohortLeavesAnExistingCohortUntouched() {
-        var existing = new com.pte.scoring.domain.GradingCohort(tenantId, sessionId, actorId, "preview-v1",
-                GradingMarkingMode.MANUAL_EXAMINER, Instant.parse("2026-10-03T08:00:00Z"));
-        when(cohortRepository.findForUpdate(tenantId, sessionId)).thenReturn(Optional.of(existing));
+    void ensuringAManualGradingLeavesAnExistingGradingUntouched() {
+        when(gateway.grading(tenantId, sessionId)).thenReturn(Optional.of(
+                grading(GradingMarkingMode.MANUAL_EXAMINER, GradingCohortStatus.FROZEN, "preview-v1")));
 
         service.ensureManualCohort(sessionId, tenantId, actorId);
 
-        verify(cohortRepository, never()).saveAndFlush(any());
-        verify(memberRepository, never()).saveAll(any());
+        verify(gateway, never()).freeze(any(), any(), any(), any(), any(), any());
+        verify(attemptService, never()).excludeFromGrading(any(), any(), any());
+    }
+
+    private SessionGradingGateway.Grading grading(GradingMarkingMode mode, GradingCohortStatus status,
+            String previewVersion) {
+        return new SessionGradingGateway.Grading(sessionId, tenantId, mode, status, previewVersion, actorId, NOW,
+                status == GradingCohortStatus.COMPLETED ? NOW : null);
+    }
+
+    private void stubEvaluationInputs() {
+        AiEvaluation answer = new AiEvaluation(tenantId, sessionId, submittedAttemptId, UUID.randomUUID(), itemId,
+                templateId, "WRITE_ESSAY", "WRITING", ScoringMethod.AI_TEXT);
+        answer.markAiScored(80, AiProviderCategory.REAL, "test", "model", "v1");
+        when(answerRepository.findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(eq(sessionId), eq(tenantId),
+                any())).thenReturn(List.of(answer));
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicIdIn(eq(tenantId), eq(sessionId),
+                any())).thenReturn(List.of());
+        when(examinerScoreRepository.findSubmittedBySession(tenantId, sessionId)).thenReturn(List.of());
+        when(attemptService.getGradingCoverage(any(), eq(sessionId), eq(tenantId)))
+                .thenReturn(Map.of(submittedAttemptId, new AttemptGradingCoverageView(submittedAttemptId,
+                        List.of(new AttemptGradingItemView(itemId, templateId, "WRITE_ESSAY")))));
     }
 
     private void stubCandidates() {
         when(attemptService.getGradingCandidatesForSession(sessionId, tenantId)).thenReturn(List.of(
-                new AttemptGradingCandidateView(submittedAttemptId, submittedStudentId, "SUBMITTED", "submitted-v1"),
+                new AttemptGradingCandidateView(submittedAttemptId, submittedStudentId, "SUBMITTED", "submitted-v1",
+                        false, null),
                 new AttemptGradingCandidateView(outstandingAttemptId, outstandingStudentId, "IN_PROGRESS",
-                        "outstanding-v1")));
+                        "outstanding-v1", false, null)));
     }
 }

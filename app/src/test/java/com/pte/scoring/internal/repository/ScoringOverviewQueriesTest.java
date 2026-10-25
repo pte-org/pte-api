@@ -2,45 +2,39 @@ package com.pte.scoring.internal.repository;
 
 import com.pte.scoring.ScoringOverviewService;
 import com.pte.scoring.ScoringOverviewService.ScoringBacklog;
-import com.pte.scoring.domain.GradingCohort;
-import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.domain.enums.GradingMarkingMode;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
+import com.pte.scoring.domain.enums.ScoringMethod;
+import com.pte.scoring.internal.service.SessionGradingGateway;
+import com.pte.scoring.support.EvaluationFixtures;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 
 /** Grading backlog counts behind {@link ScoringOverviewService}: status mapping, soft delete, tenant isolation. */
 @DataJpaTest
 @Import(ScoringOverviewService.class)
 class ScoringOverviewQueriesTest {
 
-    private static final Instant NOW = Instant.parse("2026-10-13T03:00:00Z");
-
     @Autowired
     private ScoringOverviewService service;
 
     @Autowired
-    private ScoringAnswerRepository answers;
+    private AiEvaluationRepository answers;
 
-    @Autowired
-    private GradingCohortRepository cohorts;
+    @MockitoBean
+    private SessionGradingGateway gateway;
 
     private void answer(UUID tenant, ScoringAnswerStatus status, boolean deleted) {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(UUID.randomUUID());
-        answer.setAttemptPublicId(UUID.randomUUID());
-        answer.setPinnedItemPublicId(UUID.randomUUID());
-        answer.setSessionPublicId(UUID.randomUUID());
-        answer.setTenantId(tenant);
-        answer.setScoreTemplatePublicId(UUID.randomUUID());
-        answer.setTaskType("WRITE_ESSAY");
+        AiEvaluation answer = EvaluationFixtures.ai(tenant, UUID.randomUUID(), "WRITE_ESSAY",
+                ScoringMethod.AI_TEXT);
         answer.setStatus(status);
         answer.setDeleted(deleted);
         answers.saveAndFlush(answer);
@@ -50,16 +44,6 @@ class ScoringOverviewQueriesTest {
         for (int i = 0; i < count; i++) {
             answer(tenant, status, false);
         }
-    }
-
-    private void cohort(UUID tenant, boolean completed, boolean deleted) {
-        GradingCohort cohort = new GradingCohort(tenant, UUID.randomUUID(), UUID.randomUUID(), "preview-v1",
-                GradingMarkingMode.AI_ONLY, NOW);
-        if (completed) {
-            cohort.complete(NOW.plusSeconds(60));
-        }
-        cohort.setDeleted(deleted);
-        cohorts.saveAndFlush(cohort);
     }
 
     @Test
@@ -121,27 +105,19 @@ class ScoringOverviewQueriesTest {
     }
 
     @Test
-    void closedSessionsAwaitingFinalisationCountsOnlyFrozenLiveCohortsOfTheTenant() {
+    void closedSessionsAwaitingFinalisationComesFromTheSessionGradingState() {
         UUID tenant = UUID.randomUUID();
-        UUID other = UUID.randomUUID();
-        cohort(tenant, false, false);
-        cohort(tenant, false, false);
-        cohort(tenant, true, false); // completed: finalised
-        cohort(tenant, false, true); // soft-deleted
-        cohort(other, false, false);
-        cohort(other, false, false);
-        cohort(other, false, false);
+        when(gateway.countFrozen(tenant)).thenReturn(2L);
 
         assertThat(service.backlog(tenant).closedSessionsAwaitingFinalisation()).isEqualTo(2);
-        assertThat(service.backlog(other).closedSessionsAwaitingFinalisation()).isEqualTo(3);
         assertThat(service.backlog(UUID.randomUUID()).closedSessionsAwaitingFinalisation()).isZero();
     }
 
     @Test
-    void answerAndCohortCountsAreIndependent() {
+    void answerAndFrozenSessionCountsAreIndependent() {
         UUID tenant = UUID.randomUUID();
         answers(tenant, ScoringAnswerStatus.PENDING, 2);
-        cohort(tenant, false, false);
+        when(gateway.countFrozen(tenant)).thenReturn(1L);
 
         assertThat(service.backlog(tenant)).isEqualTo(new ScoringBacklog(2, 0, 0, 1));
     }

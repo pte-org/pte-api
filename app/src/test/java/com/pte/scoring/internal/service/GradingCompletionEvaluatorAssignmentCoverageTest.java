@@ -2,10 +2,10 @@ package com.pte.scoring.internal.service;
 
 import com.pte.attempt.dto.response.AttemptGradingCoverageView;
 import com.pte.attempt.dto.response.AttemptGradingItemView;
-import com.pte.scoring.domain.ExaminerAnswerScore;
-import com.pte.scoring.domain.ExaminerAttemptAssignment;
-import com.pte.scoring.domain.GradingCohortMember;
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.ExaminerEvaluation;
+import com.pte.scoring.domain.GradingAssignment;
+import com.pte.attempt.dto.response.AttemptGradingCandidateView;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.AiProviderCategory;
 import com.pte.scoring.domain.enums.GradingMarkingMode;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
@@ -29,9 +29,6 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class GradingCompletionEvaluatorAssignmentCoverageTest {
 
-    @Mock
-    private ScoringMethodResolver methodResolver;
-
     private GradingCompletionEvaluator evaluator;
     private final UUID tenantId = UUID.randomUUID();
     private final UUID sessionId = UUID.randomUUID();
@@ -47,45 +44,36 @@ class GradingCompletionEvaluatorAssignmentCoverageTest {
 
     @BeforeEach
     void setUp() {
-        evaluator = new GradingCompletionEvaluator(methodResolver);
+        evaluator = new GradingCompletionEvaluator();
     }
 
     @Test
     void manualModeRejectsAnAssignmentThatCoversFewerSubjectiveItemsThanPinnedCoverage() {
-        when(methodResolver.resolve(templateId, "WRITE_ESSAY")).thenReturn(Optional.of(ScoringMethod.AI_TEXT));
-        when(methodResolver.resolve(templateId, "SUMMARIZE_WRITTEN_TEXT"))
-                .thenReturn(Optional.of(ScoringMethod.AI_TEXT));
-        var member = new GradingCohortMember(cohortId, tenantId, sessionId, attemptId, studentId,
-                "SUBMITTED", false, null);
+        var member = new AttemptGradingCandidateView(attemptId, studentId,
+                "SUBMITTED", "v1", false, null);
         var coverage = new AttemptGradingCoverageView(attemptId, List.of(
                 new AttemptGradingItemView(itemId, templateId, "WRITE_ESSAY"),
                 new AttemptGradingItemView(secondItemId, templateId, "SUMMARIZE_WRITTEN_TEXT")));
-        ScoringAnswer first = answer(answerId, itemId, "WRITE_ESSAY");
-        ScoringAnswer second = answer(secondAnswerId, secondItemId, "SUMMARIZE_WRITTEN_TEXT");
-        ExaminerAttemptAssignment assignment = new ExaminerAttemptAssignment(UUID.randomUUID(), tenantId, sessionId,
+        AiEvaluation first = answer(answerId, itemId, "WRITE_ESSAY");
+        AiEvaluation second = answer(secondAnswerId, secondItemId, "SUMMARIZE_WRITTEN_TEXT");
+        GradingAssignment assignment = new GradingAssignment(tenantId, sessionId,
                 attemptId, examinerId, 1, UUID.randomUUID(), Instant.now());
-        ExaminerAnswerScore firstScore = new ExaminerAnswerScore(answerId, attemptId, sessionId, tenantId, examinerId,
-                82, Instant.now());
-        ExaminerAnswerScore secondScore = new ExaminerAnswerScore(secondAnswerId, attemptId, sessionId, tenantId,
-                examinerId, 76, Instant.now());
+        ExaminerEvaluation firstScore = ExaminerEvaluation.submittedDirectly(tenantId, sessionId, attemptId,
+                answerId, examinerId, 82, Instant.now(), null, null, null, null, null, null);
+        ExaminerEvaluation secondScore = ExaminerEvaluation.submittedDirectly(tenantId, sessionId, attemptId,
+                secondAnswerId, examinerId, 76, Instant.now(), null, null, null, null, null, null);
 
         GradingEvaluation result = evaluator.evaluate(GradingMarkingMode.MANUAL_EXAMINER, List.of(member),
                 Map.of(attemptId, coverage), List.of(first, second), List.of(assignment),
-                List.of(firstScore, secondScore));
+                List.of(firstScore, secondScore), Map.of());
 
         assertThat(result.complete()).isFalse();
         assertThat(result.blockingReasons()).contains(GradingConstants.EXAMINER_ASSIGNMENT_REQUIRED);
     }
 
-    private ScoringAnswer answer(UUID answerPublicId, UUID pinnedItemPublicId, String taskType) {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(answerPublicId);
-        answer.setAttemptPublicId(attemptId);
-        answer.setPinnedItemPublicId(pinnedItemPublicId);
-        answer.setSessionPublicId(sessionId);
-        answer.setTenantId(tenantId);
-        answer.setScoreTemplatePublicId(templateId);
-        answer.setTaskType(taskType);
+    private AiEvaluation answer(UUID answerPublicId, UUID itemPublicId, String taskType) {
+        AiEvaluation answer = new AiEvaluation(tenantId, sessionId, attemptId, answerPublicId, itemPublicId,
+                templateId, taskType, "WRITING", ScoringMethod.AI_TEXT);
         answer.markAiScored(80, AiProviderCategory.REAL, "test", "model", "v1");
         answer.setStatus(ScoringAnswerStatus.SCORED);
         return answer;

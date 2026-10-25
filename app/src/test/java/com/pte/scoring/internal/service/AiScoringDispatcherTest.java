@@ -1,12 +1,12 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.config.AiProviderProperties;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,19 +35,14 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-/**
- * Since Phase 4 (plans/score-template-exam-generation): the caller
- * ({@code ScoringCommandService}) already resolved {@code scoringMethod}
- * via {@code ScoringMethodResolver} before calling {@code supports}/{@code
- * dispatch} — no more hardcoded-catalog lookup inside this class.
- */
+/** The caller ({@code ScoringCommandService}) reads the scoring method off the evaluation before dispatching. */
 @ExtendWith(MockitoExtension.class)
 class AiScoringDispatcherTest {
 
     private static final Instant NOW = Instant.parse("2026-10-11T10:00:00Z");
 
     @Mock
-    private ScoringAnswerRepository scoringAnswerRepository;
+    private AiEvaluationRepository scoringAnswerRepository;
     @Mock
     private RabbitTemplate rabbitTemplate;
 
@@ -68,7 +63,7 @@ class AiScoringDispatcherTest {
 
     @Test
     void dispatch_marksAnswerInFlightAndPublishesOnlyIdentifiersAndToken() {
-        ScoringAnswer answer = answer(ScoringConstants.TASK_TYPE_REPEAT_SENTENCE);
+        AiEvaluation answer = answer(ScoringConstants.TASK_TYPE_REPEAT_SENTENCE);
 
         dispatcher.dispatch(answer, ScoringMethod.AI_SPEECH);
 
@@ -90,7 +85,7 @@ class AiScoringDispatcherTest {
 
     @Test
     void dispatch_issuesANewTokenOnEveryDispatch() {
-        ScoringAnswer answer = answer(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = answer(ScoringConstants.TASK_TYPE_READ_ALOUD);
 
         dispatcher.dispatch(answer, ScoringMethod.AI_SPEECH);
         dispatcher.dispatch(answer, ScoringMethod.AI_SPEECH);
@@ -104,7 +99,7 @@ class AiScoringDispatcherTest {
 
     @Test
     void dispatch_aiTextScoringMethod_embedsAiTextInJob() {
-        ScoringAnswer answer = answer(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
+        AiEvaluation answer = answer(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
 
         dispatcher.dispatch(answer, ScoringMethod.AI_TEXT);
 
@@ -113,7 +108,7 @@ class AiScoringDispatcherTest {
 
     @Test
     void dispatch_insideTransaction_sendsOnlyAfterCommit() {
-        ScoringAnswer answer = answer(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = answer(ScoringConstants.TASK_TYPE_READ_ALOUD);
         TransactionSynchronizationManager.initSynchronization();
 
         dispatcher.dispatch(answer, ScoringMethod.AI_SPEECH);
@@ -125,7 +120,7 @@ class AiScoringDispatcherTest {
 
     @Test
     void dispatch_rolledBackTransaction_sendsNothing() {
-        ScoringAnswer answer = answer(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = answer(ScoringConstants.TASK_TYPE_READ_ALOUD);
         TransactionSynchronizationManager.initSynchronization();
 
         dispatcher.dispatch(answer, ScoringMethod.AI_SPEECH);
@@ -137,7 +132,7 @@ class AiScoringDispatcherTest {
 
     @Test
     void dispatch_brokerFailureLeavesTheRowForAStaleRedispatch() {
-        ScoringAnswer answer = answer(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = answer(ScoringConstants.TASK_TYPE_READ_ALOUD);
         doThrow(new AmqpException("broker unavailable")).when(rabbitTemplate)
                 .convertAndSend(eq(ScoringConstants.AI_SCORING_EXCHANGE), eq(ScoringConstants.AI_SCORING_ROUTING_KEY),
                         any(AiScoringJob.class));
@@ -149,7 +144,7 @@ class AiScoringDispatcherTest {
 
     @Test
     void dispatch_rejectsNonAiScoringMethodBeforeChangingState() {
-        ScoringAnswer answer = answer(ScoringConstants.TASK_TYPE_PERSONAL_INTRODUCTION);
+        AiEvaluation answer = answer(ScoringConstants.TASK_TYPE_PERSONAL_INTRODUCTION);
 
         assertThatThrownBy(() -> dispatcher.dispatch(answer, ScoringMethod.UNSCORED))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -183,16 +178,8 @@ class AiScoringDispatcherTest {
         return jobCaptor.getValue();
     }
 
-    private ScoringAnswer answer(String taskType) {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(UUID.randomUUID());
-        answer.setAttemptPublicId(UUID.randomUUID());
-        answer.setPinnedItemPublicId(UUID.randomUUID());
-        answer.setSessionPublicId(UUID.randomUUID());
-        answer.setTenantId(UUID.randomUUID());
-        answer.setTaskType(taskType);
-        answer.setPayload("payload");
-        answer.setCorrectAnswerText("reference");
-        return answer;
+    private AiEvaluation answer(String taskType) {
+        return new AiEvaluation(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), taskType, "SPEAKING", ScoringMethod.AI_SPEECH);
     }
 }

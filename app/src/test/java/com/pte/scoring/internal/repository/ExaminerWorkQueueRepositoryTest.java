@@ -1,7 +1,8 @@
 package com.pte.scoring.internal.repository;
 
-import com.pte.scoring.domain.ExaminerAttemptAssignment;
-import com.pte.scoring.domain.ScoringSessionState;
+import com.pte.scoring.domain.GradingAssignment;
+import com.pte.session.domain.ExamSession;
+import com.pte.session.domain.enums.SessionStatus;
 import com.pte.scoring.dto.response.ExaminerQueueItemResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,13 +34,13 @@ class ExaminerWorkQueueRepositoryTest {
         UUID sessionId = UUID.randomUUID();
         UUID examinerId = UUID.randomUUID();
         Instant base = Instant.parse("2026-10-01T00:00:00Z");
-        ExaminerAttemptAssignment first = new ExaminerAttemptAssignment(UUID.randomUUID(), tenantId, sessionId,
+        GradingAssignment first = new GradingAssignment(tenantId, sessionId,
                 UUID.randomUUID(), examinerId, 1, UUID.randomUUID(), base);
-        ExaminerAttemptAssignment second = new ExaminerAttemptAssignment(UUID.randomUUID(), tenantId, sessionId,
+        GradingAssignment second = new GradingAssignment(tenantId, sessionId,
                 UUID.randomUUID(), examinerId, 1, UUID.randomUUID(), base.plusSeconds(60));
         entityManager.persist(first);
         entityManager.persist(second);
-        entityManager.persist(new ExaminerAttemptAssignment(UUID.randomUUID(), tenantId, sessionId,
+        entityManager.persist(new GradingAssignment(tenantId, sessionId,
                 UUID.randomUUID(), UUID.randomUUID(), 1, UUID.randomUUID(), base.minusSeconds(60)));
         entityManager.flush();
 
@@ -52,9 +53,21 @@ class ExaminerWorkQueueRepositoryTest {
     @Test
     void queueHidesAssignmentsOnceTheSessionIsPublished() {
         UUID tenantId = UUID.randomUUID();
-        UUID sessionId = UUID.randomUUID();
         UUID examinerId = UUID.randomUUID();
-        entityManager.persist(new ExaminerAttemptAssignment(UUID.randomUUID(), tenantId, sessionId,
+        ExamSession session = new ExamSession();
+        session.setName("Queue session");
+        session.setSessionCode("TST-" + UUID.randomUUID().toString().substring(0, 20));
+        session.setTenantId(tenantId);
+        session.setSubscriptionId(UUID.randomUUID());
+        session.setLicenseKey("LIC-" + UUID.randomUUID());
+        session.setOpensAt(Instant.parse("2026-10-01T00:00:00Z"));
+        session.setClosesAt(Instant.parse("2026-10-01T02:00:00Z"));
+        session.setStatus(SessionStatus.CLOSED);
+        session.setCapacity(10);
+        entityManager.persist(session);
+        entityManager.flush();
+        UUID sessionId = session.getPublicId();
+        entityManager.persist(new GradingAssignment(tenantId, sessionId,
                 UUID.randomUUID(), examinerId, 2, UUID.randomUUID(), Instant.now()));
         entityManager.flush();
 
@@ -62,9 +75,7 @@ class ExaminerWorkQueueRepositoryTest {
                 sessionId, "ALL", PageRequest.of(0, 20));
         assertThat(beforePublication.getTotalElements()).isEqualTo(1);
 
-        ScoringSessionState state = new ScoringSessionState(tenantId, sessionId);
-        state.lockForPublication(UUID.randomUUID(), Instant.now());
-        entityManager.persist(state);
+        session.lockPublication(UUID.randomUUID(), Instant.now());
         entityManager.flush();
 
         Page<ExaminerQueueItemResponse> afterPublication = repository.findQueue(tenantId, examinerId,

@@ -2,22 +2,23 @@ package com.pte.scoring.internal.service;
 
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptExaminerPromptView;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.identity.IdentityService;
 import com.pte.identity.dto.response.ExaminerIdentityView;
 import com.pte.media.MediaService;
-import com.pte.scoring.domain.ExaminerAnswerScore;
-import com.pte.scoring.domain.ExaminerAttemptAssignment;
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.ExaminerEvaluation;
+import com.pte.scoring.domain.enums.ScoringMethod;
+import com.pte.scoring.domain.GradingAssignment;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.dto.response.AiScoreDetailResponse;
 import com.pte.scoring.dto.response.ExaminerAttemptDetailResponse;
 import com.pte.scoring.internal.dto.response.AnswerPayloadKind;
 import com.pte.scoring.internal.dto.response.DecodedAnswerPayload;
 import com.pte.scoring.internal.exception.ExaminerWorkNotFoundException;
-import com.pte.scoring.internal.repository.ExaminerAnswerScoreRepository;
-import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
+import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
+import com.pte.scoring.internal.repository.GradingAssignmentRepository;
 import com.pte.scoring.internal.repository.ExaminerWorkQueueRepository;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.shared.security.CurrentUser;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,17 +48,19 @@ class ExaminerScoringAiDetailTest {
     @Mock
     private ExaminerWorkQueueRepository workQueueRepository;
     @Mock
-    private ExaminerAttemptAssignmentRepository assignmentRepository;
+    private GradingAssignmentRepository assignmentRepository;
     @Mock
-    private ScoringAnswerRepository scoringAnswerRepository;
+    private AiEvaluationRepository scoringAnswerRepository;
     @Mock
-    private ExaminerAnswerScoreRepository examinerAnswerScoreRepository;
+    private ExaminerEvaluationRepository examinerAnswerScoreRepository;
     @Mock
-    private ScoringSessionStateRepository sessionStateRepository;
+    private SessionGradingGateway gateway;
     @Mock
     private ScoringEligibilityQueryService eligibilityQueryService;
     @Mock
     private AnswerPayloadDecoder answerPayloadDecoder;
+    @Mock
+    private AnswerContentReader contentReader;
     @Mock
     private IdentityService identityService;
     @Mock
@@ -75,9 +78,9 @@ class ExaminerScoringAiDetailTest {
     @BeforeEach
     void setUp() {
         service = new ExaminerScoringService(workQueueRepository, assignmentRepository, scoringAnswerRepository,
-                examinerAnswerScoreRepository, sessionStateRepository, eligibilityQueryService, answerPayloadDecoder,
-                identityService, attemptService, mediaService, entityManager, null,
-                new ExaminerReviewVersionService(), null, null, null, null, null, null, null, aiDetails);
+                examinerAnswerScoreRepository, gateway, eligibilityQueryService, answerPayloadDecoder,
+                contentReader, identityService, attemptService, mediaService, entityManager, null,
+                new ExaminerReviewVersionService(), null, null, null, null, null, aiDetails);
         examiner = new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("EXAMINER"));
         when(identityService.findActiveExaminers(examiner.tenantId(), List.of(examiner.userId())))
                 .thenReturn(List.of(new ExaminerIdentityView(examiner.userId(), "Examiner", "e@example.test")));
@@ -85,12 +88,11 @@ class ExaminerScoringAiDetailTest {
 
     @Test
     void anAssignedExaminerSeesTheAiScoreAndBreakdownBeforeScoringAnything() {
-        ScoringAnswer answer = assignedAnswer();
+        AiEvaluation answer = assignedAnswer();
         AiScoreDetailResponse ai = new AiScoreDetailResponse("SCORED", 64, Map.of("CONTENT", 70), "Fine.",
                 "what was said", Map.of(), false, null);
         when(aiDetails.findAll(examiner.tenantId(), List.of(answer))).thenReturn(Map.of(answer.getAnswerPublicId(), ai));
-        when(examinerAnswerScoreRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicId(
-                examiner.tenantId(), sessionId, attemptId)).thenReturn(List.of());
+        when(examinerAnswerScoreRepository.findSubmittedByAttempt(examiner.tenantId(), sessionId, attemptId)).thenReturn(List.of());
 
         ExaminerAttemptDetailResponse detail = service.getAttempt(sessionId, attemptId, examiner);
 
@@ -101,14 +103,14 @@ class ExaminerScoringAiDetailTest {
 
     @Test
     void theAiDetailStaysVisibleAfterTheExaminerHasScored() {
-        ScoringAnswer answer = assignedAnswer();
+        AiEvaluation answer = assignedAnswer();
         AiScoreDetailResponse ai = new AiScoreDetailResponse("SCORED", 64, Map.of(), null, null, Map.of(), false,
                 null);
         when(aiDetails.findAll(examiner.tenantId(), List.of(answer))).thenReturn(Map.of(answer.getAnswerPublicId(), ai));
-        ExaminerAnswerScore mine = new ExaminerAnswerScore(answer.getAnswerPublicId(), attemptId, sessionId,
-                examiner.tenantId(), examiner.userId(), 80, Instant.parse("2026-01-02T00:00:00Z"));
-        when(examinerAnswerScoreRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicId(
-                examiner.tenantId(), sessionId, attemptId)).thenReturn(List.of(mine));
+        ExaminerEvaluation mine = ExaminerEvaluation.submittedDirectly(examiner.tenantId(), sessionId, attemptId,
+                answer.getAnswerPublicId(), examiner.userId(), 80, Instant.parse("2026-01-02T00:00:00Z"), null, null,
+                null, null, null, null);
+        when(examinerAnswerScoreRepository.findSubmittedByAttempt(examiner.tenantId(), sessionId, attemptId)).thenReturn(List.of(mine));
 
         var shown = service.getAttempt(sessionId, attemptId, examiner).answers().getFirst();
 
@@ -118,13 +120,12 @@ class ExaminerScoringAiDetailTest {
 
     @Test
     void anAnswerWithoutAnAiScoreYetStillCarriesItsStatus() {
-        ScoringAnswer answer = assignedAnswer();
+        AiEvaluation answer = assignedAnswer();
         AiScoreDetailResponse scoring = new AiScoreDetailResponse("SCORING", null, Map.of(), null, null, Map.of(),
                 false, null);
         when(aiDetails.findAll(examiner.tenantId(), List.of(answer)))
                 .thenReturn(Map.of(answer.getAnswerPublicId(), scoring));
-        when(examinerAnswerScoreRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicId(
-                examiner.tenantId(), sessionId, attemptId)).thenReturn(List.of());
+        when(examinerAnswerScoreRepository.findSubmittedByAttempt(examiner.tenantId(), sessionId, attemptId)).thenReturn(List.of());
 
         var shown = service.getAttempt(sessionId, attemptId, examiner).answers().getFirst();
 
@@ -134,10 +135,9 @@ class ExaminerScoringAiDetailTest {
 
     @Test
     void anAnswerTheHostHasNotQueuedYetShowsAsPendingRatherThanMissing() {
-        ScoringAnswer answer = assignedAnswer();
+        AiEvaluation answer = assignedAnswer();
         when(aiDetails.findAll(examiner.tenantId(), List.of(answer))).thenReturn(Map.of());
-        when(examinerAnswerScoreRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicId(
-                examiner.tenantId(), sessionId, attemptId)).thenReturn(List.of());
+        when(examinerAnswerScoreRepository.findSubmittedByAttempt(examiner.tenantId(), sessionId, attemptId)).thenReturn(List.of());
 
         var shown = service.getAttempt(sessionId, attemptId, examiner).answers().getFirst();
 
@@ -157,27 +157,27 @@ class ExaminerScoringAiDetailTest {
         verifyNoInteractions(aiDetails, scoringAnswerRepository);
     }
 
-    private ScoringAnswer assignedAnswer() {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(UUID.randomUUID());
-        answer.setAttemptPublicId(attemptId);
-        answer.setSessionPublicId(sessionId);
-        answer.setTenantId(examiner.tenantId());
-        answer.setPinnedItemPublicId(UUID.randomUUID());
-        answer.setScoreTemplatePublicId(UUID.randomUUID());
-        answer.setTaskType("WRITE_ESSAY");
-        ExaminerAttemptAssignment assignment = new ExaminerAttemptAssignment(UUID.randomUUID(), examiner.tenantId(),
+    private AiEvaluation assignedAnswer() {
+        AiEvaluation answer = new AiEvaluation(examiner.tenantId(), sessionId, attemptId, UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), "WRITE_ESSAY", "WRITING", ScoringMethod.AI_TEXT);
+        SubmittedAnswerView content = new SubmittedAnswerView(answer.getAnswerPublicId(), attemptId,
+                answer.getItemPublicId(), sessionId, examiner.tenantId(), answer.getExamDefinitionPublicId(),
+                "WRITE_ESSAY", "essay", null, null, false, null, null, null, null, null, "WRITING", null, null, null,
+                null, null);
+        when(contentReader.forAttempt(attemptId, examiner.tenantId()))
+                .thenReturn(Map.of(answer.getAnswerPublicId(), content));
+        GradingAssignment assignment = new GradingAssignment(examiner.tenantId(),
                 sessionId, attemptId, examiner.userId(), 1, UUID.randomUUID(), Instant.parse("2026-01-01T00:00:00Z"));
         when(workQueueRepository.findOwnedAttempt(examiner.tenantId(), sessionId, attemptId, examiner.userId()))
                 .thenReturn(Optional.of(assignment));
         when(scoringAnswerRepository.findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(sessionId,
                 examiner.tenantId(), List.of(attemptId))).thenReturn(List.of(answer));
         when(eligibilityQueryService.isAiEligible(answer)).thenReturn(true);
-        AttemptExaminerPromptView prompt = new AttemptExaminerPromptView(answer.getPinnedItemPublicId(), 1,
+        AttemptExaminerPromptView prompt = new AttemptExaminerPromptView(answer.getItemPublicId(), 1,
                 "WRITING", "WRITE_ESSAY", "Prompt", "Write an essay", null, null, 200, 300, List.of());
         when(attemptService.getExaminerPrompts(attemptId, sessionId, examiner.tenantId(),
-                List.of(answer.getPinnedItemPublicId()))).thenReturn(Map.of(answer.getPinnedItemPublicId(), prompt));
-        when(answerPayloadDecoder.decode(answer)).thenReturn(
+                List.of(answer.getItemPublicId()))).thenReturn(Map.of(answer.getItemPublicId(), prompt));
+        when(answerPayloadDecoder.decode(content)).thenReturn(
                 new DecodedAnswerPayload(AnswerPayloadKind.TEXT, "essay", null, null, null, null, null));
         return answer;
     }

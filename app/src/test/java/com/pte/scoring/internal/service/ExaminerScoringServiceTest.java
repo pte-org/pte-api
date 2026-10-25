@@ -2,15 +2,15 @@ package com.pte.scoring.internal.service;
 
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptExaminerPromptView;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.identity.IdentityService;
 import com.pte.identity.dto.response.ExaminerIdentityView;
 import com.pte.media.MediaService;
-import com.pte.scoring.domain.ExaminerAnswerScore;
-import com.pte.scoring.domain.ExaminerAttemptAssignment;
-import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.domain.ScoringSessionState;
+import com.pte.scoring.domain.ExaminerEvaluation;
+import com.pte.scoring.domain.GradingAssignment;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.AiProviderCategory;
-import com.pte.scoring.domain.enums.ScoreSource;
+import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.domain.enums.ExaminerAnswerScoreStatus;
 import com.pte.scoring.dto.request.SubmitExaminerScoreRequest;
 import com.pte.scoring.dto.response.ExaminerAttemptDetailResponse;
@@ -20,11 +20,12 @@ import com.pte.scoring.internal.dto.response.DecodedAnswerPayload;
 import com.pte.scoring.internal.exception.ExaminerScoreConflictException;
 import com.pte.scoring.internal.exception.ExaminerWorkNotFoundException;
 import com.pte.scoring.internal.exception.InvalidExaminerScoreException;
-import com.pte.scoring.internal.repository.ExaminerAnswerScoreRepository;
-import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
+import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
+import com.pte.scoring.support.EvaluationFixtures;
+import com.pte.scoring.support.SubmittedAnswerFixtures;
+import com.pte.scoring.internal.repository.GradingAssignmentRepository;
 import com.pte.scoring.internal.repository.ExaminerWorkQueueRepository;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.shared.security.CurrentUser;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -68,17 +69,19 @@ class ExaminerScoringServiceTest {
     @Mock
     private ExaminerWorkQueueRepository workQueueRepository;
     @Mock
-    private ExaminerAttemptAssignmentRepository assignmentRepository;
+    private GradingAssignmentRepository assignmentRepository;
     @Mock
-    private ScoringAnswerRepository scoringAnswerRepository;
+    private AiEvaluationRepository scoringAnswerRepository;
     @Mock
-    private ExaminerAnswerScoreRepository examinerAnswerScoreRepository;
+    private ExaminerEvaluationRepository examinerAnswerScoreRepository;
     @Mock
-    private ScoringSessionStateRepository sessionStateRepository;
+    private SessionGradingGateway gateway;
     @Mock
     private ScoringEligibilityQueryService eligibilityQueryService;
     @Mock
     private AnswerPayloadDecoder answerPayloadDecoder;
+    @Mock
+    private AnswerContentReader contentReader;
     @Mock
     private IdentityService identityService;
     @Mock
@@ -93,8 +96,9 @@ class ExaminerScoringServiceTest {
     @BeforeEach
     void setUp() {
         service = new ExaminerScoringService(workQueueRepository, assignmentRepository, scoringAnswerRepository,
-                examinerAnswerScoreRepository, sessionStateRepository, eligibilityQueryService, answerPayloadDecoder,
-                identityService, attemptService, mediaService, entityManager);
+                examinerAnswerScoreRepository, gateway, eligibilityQueryService, answerPayloadDecoder,
+                contentReader, identityService, attemptService, mediaService, entityManager, null,
+                new ExaminerReviewVersionService(), null, null, null, null, null, null);
     }
 
     @Test
@@ -105,7 +109,7 @@ class ExaminerScoringServiceTest {
                 .isInstanceOf(AccessDeniedException.class);
 
         verifyNoInteractions(identityService, workQueueRepository, scoringAnswerRepository, attemptService,
-                answerPayloadDecoder, mediaService);
+                answerPayloadDecoder, mediaService, contentReader);
     }
 
     @Test
@@ -113,20 +117,16 @@ class ExaminerScoringServiceTest {
         CurrentUser examiner = examiner();
         UUID sessionPublicId = UUID.randomUUID();
         UUID attemptPublicId = UUID.randomUUID();
-        ScoringSessionState publicationLock = new ScoringSessionState(examiner.tenantId(), sessionPublicId);
-        publicationLock.lockForPublication(UUID.randomUUID(), Instant.parse("2026-01-03T00:00:00Z"));
         givenActiveExaminer(examiner);
-        ExaminerAttemptAssignment assignment = new ExaminerAttemptAssignment(
-                UUID.randomUUID(), examiner.tenantId(), sessionPublicId, attemptPublicId, examiner.userId(), 5, UUID.randomUUID(), Instant.now());
+        GradingAssignment assignment = new GradingAssignment(examiner.tenantId(), sessionPublicId, attemptPublicId, examiner.userId(), 5, UUID.randomUUID(), Instant.now());
         when(workQueueRepository.findOwnedAttempt(examiner.tenantId(), sessionPublicId, attemptPublicId, examiner.userId()))
                 .thenReturn(Optional.of(assignment));
-        when(sessionStateRepository.findByTenantIdAndSessionPublicId(examiner.tenantId(), sessionPublicId))
-                .thenReturn(Optional.of(publicationLock));
+        when(gateway.isPublished(examiner.tenantId(), sessionPublicId)).thenReturn(true);
 
         assertThatThrownBy(() -> service.getAttempt(sessionPublicId, attemptPublicId, examiner))
                 .isInstanceOf(ExaminerWorkNotFoundException.class);
 
-        verifyNoInteractions(attemptService, mediaService, answerPayloadDecoder);
+        verifyNoInteractions(attemptService, mediaService, answerPayloadDecoder, contentReader);
     }
 
     @Test
@@ -139,7 +139,7 @@ class ExaminerScoringServiceTest {
                 .isInstanceOf(ExaminerWorkNotFoundException.class);
 
         verifyNoInteractions(workQueueRepository, scoringAnswerRepository, attemptService,
-                answerPayloadDecoder, mediaService);
+                answerPayloadDecoder, mediaService, contentReader);
     }
 
     @Test
@@ -155,7 +155,7 @@ class ExaminerScoringServiceTest {
                 .isInstanceOf(ExaminerWorkNotFoundException.class);
 
         verify(workQueueRepository).findOwnedAttempt(examiner.tenantId(), sessionId, attemptId, examiner.userId());
-        verifyNoInteractions(scoringAnswerRepository, attemptService, answerPayloadDecoder, mediaService);
+        verifyNoInteractions(scoringAnswerRepository, attemptService, answerPayloadDecoder, mediaService, contentReader);
     }
 
     @Test
@@ -166,10 +166,10 @@ class ExaminerScoringServiceTest {
         UUID answerId = UUID.randomUUID();
         UUID answerMediaId = UUID.randomUUID();
         UUID promptMediaId = UUID.randomUUID();
-        ScoringAnswer answer = answer(examiner.tenantId(), sessionId, attemptId, answerId);
-        ExaminerAttemptAssignment assignment = new ExaminerAttemptAssignment(UUID.randomUUID(), examiner.tenantId(),
+        AiEvaluation answer = answer(examiner.tenantId(), sessionId, attemptId, answerId);
+        GradingAssignment assignment = new GradingAssignment(examiner.tenantId(),
                 sessionId, attemptId, examiner.userId(), 1, UUID.randomUUID(), Instant.parse("2026-01-01T00:00:00Z"));
-        AttemptExaminerPromptView prompt = new AttemptExaminerPromptView(answer.getPinnedItemPublicId(), 1, "SPEAKING", "READ_ALOUD", "Prompt",
+        AttemptExaminerPromptView prompt = new AttemptExaminerPromptView(answer.getItemPublicId(), 1, "SPEAKING", "READ_ALOUD", "Prompt",
                 "Read the passage", promptMediaId, null, null, null, List.of());
         givenActiveExaminer(examiner);
         when(workQueueRepository.findOwnedAttempt(examiner.tenantId(), sessionId, attemptId, examiner.userId()))
@@ -177,13 +177,13 @@ class ExaminerScoringServiceTest {
         when(scoringAnswerRepository.findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(sessionId,
                 examiner.tenantId(), List.of(attemptId))).thenReturn(List.of(answer));
         when(eligibilityQueryService.isAiEligible(answer)).thenReturn(true);
-        when(examinerAnswerScoreRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicId(
-                examiner.tenantId(), sessionId, attemptId))
+        when(examinerAnswerScoreRepository.findSubmittedByAttempt(examiner.tenantId(), sessionId, attemptId))
                 .thenReturn(List.of());
+        stubContent(examiner, attemptId, answer);
         when(attemptService.getExaminerPrompts(attemptId, sessionId, examiner.tenantId(),
-                List.of(answer.getPinnedItemPublicId())))
-                .thenReturn(Map.of(answer.getPinnedItemPublicId(), prompt));
-        when(answerPayloadDecoder.decode(answer)).thenReturn(new DecodedAnswerPayload(
+                List.of(answer.getItemPublicId())))
+                .thenReturn(Map.of(answer.getItemPublicId(), prompt));
+        when(answerPayloadDecoder.decode(content(answer))).thenReturn(new DecodedAnswerPayload(
                 AnswerPayloadKind.AUDIO, null, answerMediaId, null, null, null, null));
         when(mediaService.presignGetAll(any(), anyLong(), eq(examiner.tenantId())))
                 .thenReturn(Map.of(answerMediaId,
@@ -198,7 +198,7 @@ class ExaminerScoringServiceTest {
         assertThat(detail.answers()).hasSize(1);
         assertThat(detail.answers().getFirst().response().mediaUrl()).contains(answerMediaId.toString());
         InOrder authorizedReadOrder = inOrder(identityService, workQueueRepository, scoringAnswerRepository,
-                eligibilityQueryService, attemptService, answerPayloadDecoder, mediaService);
+                eligibilityQueryService, attemptService, answerPayloadDecoder, mediaService, contentReader);
         authorizedReadOrder.verify(identityService)
                 .findActiveExaminers(examiner.tenantId(), List.of(examiner.userId()));
         authorizedReadOrder.verify(workQueueRepository)
@@ -208,8 +208,8 @@ class ExaminerScoringServiceTest {
         authorizedReadOrder.verify(eligibilityQueryService).isAiEligible(answer);
         authorizedReadOrder.verify(attemptService)
                 .getExaminerPrompts(attemptId, sessionId, examiner.tenantId(),
-                        List.of(answer.getPinnedItemPublicId()));
-        authorizedReadOrder.verify(answerPayloadDecoder).decode(answer);
+                        List.of(answer.getItemPublicId()));
+        authorizedReadOrder.verify(answerPayloadDecoder).decode(content(answer));
         authorizedReadOrder.verify(mediaService).presignGetAll(eq(Set.of(answerMediaId, promptMediaId)),
                 eq(com.pte.scoring.internal.constant.ExaminerScoringConstants.MEDIA_URL_TTL_SECONDS),
                 eq(examiner.tenantId()));
@@ -222,23 +222,22 @@ class ExaminerScoringServiceTest {
         UUID attemptId = UUID.randomUUID();
         UUID firstItemId = UUID.randomUUID();
         UUID secondItemId = UUID.randomUUID();
-        ScoringAnswer firstAnswer = answer(examiner.tenantId(), sessionId, attemptId, UUID.randomUUID());
-        firstAnswer.setPinnedItemPublicId(firstItemId);
-        ScoringAnswer secondAnswer = answer(examiner.tenantId(), sessionId, attemptId, UUID.randomUUID());
-        secondAnswer.setPinnedItemPublicId(secondItemId);
-        ScoringAnswer repeatedItemAnswer = answer(examiner.tenantId(), sessionId, attemptId, UUID.randomUUID());
-        repeatedItemAnswer.setPinnedItemPublicId(firstItemId);
+        AiEvaluation firstAnswer = answer(examiner.tenantId(), sessionId, attemptId, UUID.randomUUID(), firstItemId);
+        AiEvaluation secondAnswer = answer(examiner.tenantId(), sessionId, attemptId, UUID.randomUUID(), secondItemId);
+        AiEvaluation repeatedItemAnswer = answer(examiner.tenantId(), sessionId, attemptId, UUID.randomUUID(),
+                firstItemId);
         givenActiveExaminer(examiner);
         when(workQueueRepository.findOwnedAttempt(examiner.tenantId(), sessionId, attemptId, examiner.userId()))
-                .thenReturn(Optional.of(new ExaminerAttemptAssignment(UUID.randomUUID(), examiner.tenantId(),
+                .thenReturn(Optional.of(new GradingAssignment(examiner.tenantId(),
                         sessionId, attemptId, examiner.userId(), 3, UUID.randomUUID(), Instant.now())));
         when(scoringAnswerRepository.findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(sessionId,
                 examiner.tenantId(), List.of(attemptId))).thenReturn(List.of(firstAnswer, secondAnswer, repeatedItemAnswer));
         when(eligibilityQueryService.isAiEligible(firstAnswer)).thenReturn(true);
         when(eligibilityQueryService.isAiEligible(secondAnswer)).thenReturn(true);
         when(eligibilityQueryService.isAiEligible(repeatedItemAnswer)).thenReturn(true);
-        when(examinerAnswerScoreRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicId(
-                examiner.tenantId(), sessionId, attemptId)).thenReturn(List.of());
+        when(examinerAnswerScoreRepository.findSubmittedByAttempt(examiner.tenantId(), sessionId, attemptId))
+                .thenReturn(List.of());
+        stubContent(examiner, attemptId, firstAnswer, secondAnswer, repeatedItemAnswer);
         AttemptExaminerPromptView firstPrompt = new AttemptExaminerPromptView(firstItemId, 1, "SPEAKING", "READ_ALOUD",
                 "Prompt one", "First prompt text", null, null, null, null, List.of());
         AttemptExaminerPromptView secondPrompt = new AttemptExaminerPromptView(secondItemId, 2, "WRITING", "WRITE_ESSAY",
@@ -246,9 +245,9 @@ class ExaminerScoringServiceTest {
         when(attemptService.getExaminerPrompts(attemptId, sessionId, examiner.tenantId(),
                 List.of(firstItemId, secondItemId)))
                 .thenReturn(Map.of(firstItemId, firstPrompt, secondItemId, secondPrompt));
-        when(answerPayloadDecoder.decode(firstAnswer)).thenReturn(textAnswer("first response"));
-        when(answerPayloadDecoder.decode(secondAnswer)).thenReturn(textAnswer("second response"));
-        when(answerPayloadDecoder.decode(repeatedItemAnswer)).thenReturn(textAnswer("repeated-item response"));
+        when(answerPayloadDecoder.decode(content(firstAnswer))).thenReturn(textAnswer("first response"));
+        when(answerPayloadDecoder.decode(content(secondAnswer))).thenReturn(textAnswer("second response"));
+        when(answerPayloadDecoder.decode(content(repeatedItemAnswer))).thenReturn(textAnswer("repeated-item response"));
 
         ExaminerAttemptDetailResponse detail = service.getAttempt(sessionId, attemptId, examiner);
 
@@ -266,10 +265,10 @@ class ExaminerScoringServiceTest {
         UUID attemptId = UUID.randomUUID();
         UUID answerId = UUID.randomUUID();
         UUID answerMediaId = UUID.randomUUID();
-        ScoringAnswer answer = answer(examiner.tenantId(), sessionId, attemptId, answerId);
-        ExaminerAttemptAssignment assignment = new ExaminerAttemptAssignment(UUID.randomUUID(), examiner.tenantId(),
+        AiEvaluation answer = answer(examiner.tenantId(), sessionId, attemptId, answerId);
+        GradingAssignment assignment = new GradingAssignment(examiner.tenantId(),
                 sessionId, attemptId, examiner.userId(), 1, UUID.randomUUID(), Instant.now());
-        AttemptExaminerPromptView prompt = new AttemptExaminerPromptView(answer.getPinnedItemPublicId(), 1, "SPEAKING", "READ_ALOUD", "Prompt",
+        AttemptExaminerPromptView prompt = new AttemptExaminerPromptView(answer.getItemPublicId(), 1, "SPEAKING", "READ_ALOUD", "Prompt",
                 "Read the passage", null, null, null, null, List.of());
         givenActiveExaminer(examiner);
         when(workQueueRepository.findOwnedAttempt(examiner.tenantId(), sessionId, attemptId, examiner.userId()))
@@ -277,12 +276,13 @@ class ExaminerScoringServiceTest {
         when(scoringAnswerRepository.findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(sessionId,
                 examiner.tenantId(), List.of(attemptId))).thenReturn(List.of(answer));
         when(eligibilityQueryService.isAiEligible(answer)).thenReturn(true);
-        when(examinerAnswerScoreRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicId(
-                examiner.tenantId(), sessionId, attemptId)).thenReturn(List.of());
+        when(examinerAnswerScoreRepository.findSubmittedByAttempt(examiner.tenantId(), sessionId, attemptId))
+                .thenReturn(List.of());
+        stubContent(examiner, attemptId, answer);
         when(attemptService.getExaminerPrompts(attemptId, sessionId, examiner.tenantId(),
-                List.of(answer.getPinnedItemPublicId())))
-                .thenReturn(Map.of(answer.getPinnedItemPublicId(), prompt));
-        when(answerPayloadDecoder.decode(answer)).thenReturn(new DecodedAnswerPayload(
+                List.of(answer.getItemPublicId())))
+                .thenReturn(Map.of(answer.getItemPublicId(), prompt));
+        when(answerPayloadDecoder.decode(content(answer))).thenReturn(new DecodedAnswerPayload(
                 AnswerPayloadKind.AUDIO, null, answerMediaId, null, null, null, null));
         when(mediaService.presignGetAll(eq(Set.of(answerMediaId)),
                 eq(com.pte.scoring.internal.constant.ExaminerScoringConstants.MEDIA_URL_TTL_SECONDS),
@@ -298,31 +298,25 @@ class ExaminerScoringServiceTest {
         CurrentUser examiner = examiner();
         UUID sessionId = UUID.randomUUID();
         UUID attemptId = UUID.randomUUID();
-        ScoringAnswer answer = answer(examiner.tenantId(), sessionId, attemptId, UUID.randomUUID());
+        AiEvaluation answer = answer(examiner.tenantId(), sessionId, attemptId, UUID.randomUUID());
         answer.markAiScored(94, AiProviderCategory.REAL, "private-ai-provider", "private-ai-model", "private-v1");
         answer.setTeacherScore(98);
-        ExaminerAnswerScore selectedExaminerScore = new ExaminerAnswerScore(answer.getAnswerPublicId(), attemptId,
-                sessionId, examiner.tenantId(), examiner.userId(), 87, Instant.parse("2026-01-01T00:00:00Z"));
-        selectedExaminerScore.setId(1L);
-        selectedExaminerScore.setPublicId(UUID.randomUUID());
-        answer.selectScoreSource(ScoreSource.EXAMINER, UUID.randomUUID(), Instant.parse("2026-01-02T00:00:00Z"),
-                selectedExaminerScore);
         givenActiveExaminer(examiner);
         when(workQueueRepository.findOwnedAttempt(examiner.tenantId(), sessionId, attemptId, examiner.userId()))
-                .thenReturn(Optional.of(new ExaminerAttemptAssignment(UUID.randomUUID(), examiner.tenantId(),
+                .thenReturn(Optional.of(new GradingAssignment(examiner.tenantId(),
                         sessionId, attemptId, examiner.userId(), 1, UUID.randomUUID(), Instant.now())));
         when(scoringAnswerRepository.findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(sessionId,
                 examiner.tenantId(), List.of(attemptId))).thenReturn(List.of(answer));
         when(eligibilityQueryService.isAiEligible(answer)).thenReturn(true);
-        when(examinerAnswerScoreRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicId(
-                examiner.tenantId(), sessionId, attemptId))
+        when(examinerAnswerScoreRepository.findSubmittedByAttempt(examiner.tenantId(), sessionId, attemptId))
                 .thenReturn(List.of());
+        stubContent(examiner, attemptId, answer);
         when(attemptService.getExaminerPrompts(attemptId, sessionId, examiner.tenantId(),
-                List.of(answer.getPinnedItemPublicId())))
-                .thenReturn(Map.of(answer.getPinnedItemPublicId(), new AttemptExaminerPromptView(
-                        answer.getPinnedItemPublicId(), 1, "SPEAKING",
+                List.of(answer.getItemPublicId())))
+                .thenReturn(Map.of(answer.getItemPublicId(), new AttemptExaminerPromptView(
+                        answer.getItemPublicId(), 1, "SPEAKING",
                         "READ_ALOUD", "Prompt", "Text", null, null, null, null, List.of())));
-        when(answerPayloadDecoder.decode(answer)).thenReturn(new DecodedAnswerPayload(
+        when(answerPayloadDecoder.decode(content(answer))).thenReturn(new DecodedAnswerPayload(
                 AnswerPayloadKind.TEXT, "student response", null, null, null, null, null));
         ExaminerAttemptDetailResponse detail = service.getAttempt(sessionId, attemptId, examiner);
 
@@ -349,7 +343,7 @@ class ExaminerScoringServiceTest {
         assertThatThrownBy(() -> service.submitScore(UUID.randomUUID(), new SubmitExaminerScoreRequest(null), examiner))
                 .isInstanceOf(InvalidExaminerScoreException.class);
 
-        verifyNoInteractions(scoringAnswerRepository, assignmentRepository, sessionStateRepository,
+        verifyNoInteractions(scoringAnswerRepository, assignmentRepository, gateway,
                 examinerAnswerScoreRepository, mediaService);
     }
 
@@ -362,7 +356,7 @@ class ExaminerScoringServiceTest {
         assertThatThrownBy(() -> service.submitScore(UUID.randomUUID(), new SubmitExaminerScoreRequest(score), examiner))
                 .isInstanceOf(InvalidExaminerScoreException.class);
 
-        verifyNoInteractions(scoringAnswerRepository, assignmentRepository, sessionStateRepository,
+        verifyNoInteractions(scoringAnswerRepository, assignmentRepository, gateway,
                 examinerAnswerScoreRepository, mediaService);
     }
 
@@ -378,13 +372,13 @@ class ExaminerScoringServiceTest {
         assertThat(submitted.myScore()).isEqualTo(score);
         assertThat(fixture.answer().getRawScore()).isEqualTo(92);
         assertThat(fixture.answer().getTeacherScore()).isEqualTo(85);
-        verify(examinerAnswerScoreRepository).saveAndFlush(any(ExaminerAnswerScore.class));
+        verify(examinerAnswerScoreRepository).saveAndFlush(any(ExaminerEvaluation.class));
     }
 
     @Test
     void identicalScoreRetryReturnsPersistedScoreWithoutWritingAgain() {
         CurrentUser examiner = examiner();
-        SubmissionFixture fixture = prepareSubmissionWithExistingScore(examiner, examiner.userId(), 76, null);
+        SubmissionFixture fixture = prepareSubmissionWithExistingScore(examiner, examiner.userId(), 76, false);
 
         var retried = service.submitScore(fixture.answer().getAnswerPublicId(), new SubmitExaminerScoreRequest(76),
                 examiner);
@@ -397,7 +391,7 @@ class ExaminerScoringServiceTest {
     @Test
     void conflictingScoreRetryIsRejectedWithoutChangingPersistedScore() {
         CurrentUser examiner = examiner();
-        SubmissionFixture fixture = prepareSubmissionWithExistingScore(examiner, examiner.userId(), 76, null);
+        SubmissionFixture fixture = prepareSubmissionWithExistingScore(examiner, examiner.userId(), 76, false);
 
         assertThatThrownBy(() -> service.submitScore(fixture.answer().getAnswerPublicId(),
                 new SubmitExaminerScoreRequest(77), examiner)).isInstanceOf(ExaminerScoreConflictException.class);
@@ -408,7 +402,7 @@ class ExaminerScoringServiceTest {
     @Test
     void retryByAnotherExaminerIsRejectedEvenWhenScoreMatches() {
         CurrentUser examiner = examiner();
-        SubmissionFixture fixture = prepareSubmissionWithExistingScore(examiner, UUID.randomUUID(), 76, null);
+        SubmissionFixture fixture = prepareSubmissionWithExistingScore(examiner, UUID.randomUUID(), 76, false);
 
         assertThatThrownBy(() -> service.submitScore(fixture.answer().getAnswerPublicId(),
                 new SubmitExaminerScoreRequest(76), examiner)).isInstanceOf(ExaminerScoreConflictException.class);
@@ -419,17 +413,13 @@ class ExaminerScoringServiceTest {
     @Test
     void publicationLockRejectsScoreWriteBeforeExistingScoreLookupOrSave() {
         CurrentUser examiner = examiner();
-        ScoringSessionState publicationLock = new ScoringSessionState(examiner.tenantId(), UUID.randomUUID());
-        publicationLock.lockForPublication(UUID.randomUUID(), Instant.parse("2026-01-03T00:00:00Z"));
-        SubmissionFixture fixture = prepareNewSubmission(examiner, 80, publicationLock);
+        SubmissionFixture fixture = prepareNewSubmission(examiner, 80, true);
 
         assertThatThrownBy(() -> service.submitScore(fixture.answer().getAnswerPublicId(),
                 new SubmitExaminerScoreRequest(80), examiner)).isInstanceOf(ExaminerScoreConflictException.class);
 
         verify(entityManager).lock(fixture.answer(), LockModeType.PESSIMISTIC_WRITE);
         verify(entityManager).refresh(fixture.answer(), LockModeType.PESSIMISTIC_WRITE);
-        verify(entityManager).lock(publicationLock, LockModeType.PESSIMISTIC_WRITE);
-        verify(entityManager).refresh(publicationLock, LockModeType.PESSIMISTIC_WRITE);
         verify(examinerAnswerScoreRepository, never()).findByAnswerPublicIdAndTenantId(any(), any());
         verify(examinerAnswerScoreRepository, never()).saveAndFlush(any());
     }
@@ -438,7 +428,7 @@ class ExaminerScoringServiceTest {
     void foreignTenantAnswerIsRejectedBeforeAssignmentAndPublicationLookups() {
         CurrentUser examiner = examiner();
         UUID answerId = UUID.randomUUID();
-        ScoringAnswer foreignTenantAnswer = answer(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), answerId);
+        AiEvaluation foreignTenantAnswer = answer(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), answerId);
         givenActiveExaminer(examiner);
         when(scoringAnswerRepository.findByAnswerPublicId(answerId)).thenReturn(Optional.of(foreignTenantAnswer));
 
@@ -447,16 +437,16 @@ class ExaminerScoringServiceTest {
 
         verify(assignmentRepository, never()).existsByTenantIdAndSessionPublicIdAndAttemptPublicIdAndExaminerPublicId(
                 any(), any(), any(), any());
-        verifyNoInteractions(sessionStateRepository, examinerAnswerScoreRepository, mediaService);
+        verifyNoInteractions(gateway, examinerAnswerScoreRepository, mediaService);
     }
 
     private SubmissionFixture prepareNewSubmission(CurrentUser examiner, int score) {
-        return prepareNewSubmission(examiner, score, null);
+        return prepareNewSubmission(examiner, score, false);
     }
 
     private SubmissionFixture prepareNewSubmission(CurrentUser examiner, int score,
-            ScoringSessionState publicationLock) {
-        ScoringAnswer answer = answer(examiner.tenantId(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+            boolean published) {
+        AiEvaluation answer = answer(examiner.tenantId(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
         answer.markAiScored(92, AiProviderCategory.REAL, "ai", "model", "v1");
         answer.setTeacherScore(85);
         givenActiveExaminer(examiner);
@@ -465,29 +455,31 @@ class ExaminerScoringServiceTest {
                 examiner.tenantId(), answer.getSessionPublicId(), answer.getAttemptPublicId(), examiner.userId()))
                 .thenReturn(true);
         when(eligibilityQueryService.isAiEligible(answer)).thenReturn(true);
-        when(sessionStateRepository.findByTenantIdAndSessionPublicId(examiner.tenantId(), answer.getSessionPublicId()))
-                .thenReturn(Optional.ofNullable(publicationLock));
-        if (publicationLock == null) {
-            when(examinerAnswerScoreRepository.saveAndFlush(any(ExaminerAnswerScore.class)))
+        if (published) {
+            when(gateway.isPublished(examiner.tenantId(), answer.getSessionPublicId())).thenReturn(true);
+        }
+        if (!published) {
+            when(examinerAnswerScoreRepository.saveAndFlush(any(ExaminerEvaluation.class)))
                     .thenAnswer(invocation -> invocation.getArgument(0));
         }
         return new SubmissionFixture(answer, null);
     }
 
     private SubmissionFixture prepareSubmissionWithExistingScore(CurrentUser examiner, UUID scoreOwner, int score,
-            ScoringSessionState publicationLock) {
-        ScoringAnswer answer = answer(examiner.tenantId(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
-        ExaminerAnswerScore existing = new ExaminerAnswerScore(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
-                answer.getSessionPublicId(), examiner.tenantId(), scoreOwner, score,
-                Instant.parse("2026-01-04T00:00:00Z"));
+            boolean published) {
+        AiEvaluation answer = answer(examiner.tenantId(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+        ExaminerEvaluation existing = ExaminerEvaluation.submittedDirectly(examiner.tenantId(),
+                answer.getSessionPublicId(), answer.getAttemptPublicId(), answer.getAnswerPublicId(), scoreOwner,
+                score, Instant.parse("2026-01-04T00:00:00Z"), null, null, null, null, null, null);
         givenActiveExaminer(examiner);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId())).thenReturn(Optional.of(answer));
         when(assignmentRepository.existsByTenantIdAndSessionPublicIdAndAttemptPublicIdAndExaminerPublicId(
                 examiner.tenantId(), answer.getSessionPublicId(), answer.getAttemptPublicId(), examiner.userId()))
                 .thenReturn(true);
         when(eligibilityQueryService.isAiEligible(answer)).thenReturn(true);
-        when(sessionStateRepository.findByTenantIdAndSessionPublicId(examiner.tenantId(), answer.getSessionPublicId()))
-                .thenReturn(Optional.ofNullable(publicationLock));
+        if (published) {
+            when(gateway.isPublished(examiner.tenantId(), answer.getSessionPublicId())).thenReturn(true);
+        }
         when(examinerAnswerScoreRepository.findByAnswerPublicIdAndTenantId(answer.getAnswerPublicId(),
                 examiner.tenantId())).thenReturn(Optional.of(existing));
         return new SubmissionFixture(answer, existing);
@@ -502,23 +494,35 @@ class ExaminerScoringServiceTest {
         return new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("EXAMINER"));
     }
 
-    private ScoringAnswer answer(UUID tenantId, UUID sessionId, UUID attemptId, UUID answerId) {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(answerId);
-        answer.setAttemptPublicId(attemptId);
-        answer.setSessionPublicId(sessionId);
-        answer.setTenantId(tenantId);
-        answer.setPinnedItemPublicId(UUID.randomUUID());
-        answer.setScoreTemplatePublicId(UUID.randomUUID());
-        answer.setTaskType("READ_ALOUD");
-        answer.setPayload("student answer");
-        return answer;
+    private AiEvaluation answer(UUID tenantId, UUID sessionId, UUID attemptId, UUID answerId) {
+        return answer(tenantId, sessionId, attemptId, answerId, UUID.randomUUID());
+    }
+
+    private AiEvaluation answer(UUID tenantId, UUID sessionId, UUID attemptId, UUID answerId, UUID itemId) {
+        return new AiEvaluation(tenantId, sessionId, attemptId, answerId, itemId, UUID.randomUUID(), "READ_ALOUD",
+                "SPEAKING", ScoringMethod.AI_SPEECH);
+    }
+
+    /** What the attempt holds for this evaluation's answer; equal for equal evaluations. */
+    private SubmittedAnswerView content(AiEvaluation answer) {
+        return new SubmittedAnswerView(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
+                answer.getItemPublicId(), answer.getSessionPublicId(), answer.getTenantId(),
+                answer.getExamDefinitionPublicId(), answer.getTaskType(), "student answer", null, null, false, null,
+                null, null, null, null, answer.getSection(), null, null, null, null, null);
+    }
+
+    private void stubContent(CurrentUser examiner, UUID attemptId, AiEvaluation... answers) {
+        Map<UUID, SubmittedAnswerView> byAnswer = new java.util.HashMap<>();
+        for (AiEvaluation answer : answers) {
+            byAnswer.put(answer.getAnswerPublicId(), content(answer));
+        }
+        when(contentReader.forAttempt(attemptId, examiner.tenantId())).thenReturn(byAnswer);
     }
 
     private DecodedAnswerPayload textAnswer(String text) {
         return new DecodedAnswerPayload(AnswerPayloadKind.TEXT, text, null, null, null, null, null);
     }
 
-    private record SubmissionFixture(ScoringAnswer answer, ExaminerAnswerScore existingScore) {
+    private record SubmissionFixture(AiEvaluation answer, ExaminerEvaluation existingScore) {
     }
 }

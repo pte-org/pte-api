@@ -1,9 +1,11 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.domain.enums.ScoringMethod;
+import com.pte.scoring.support.EvaluationFixtures;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.dto.response.ScoredAnswerView;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,7 +24,7 @@ import static org.mockito.Mockito.when;
 class ScoredAnswerQueryServiceTest {
 
     @Mock
-    private ScoringAnswerRepository scoringAnswerRepository;
+    private AiEvaluationRepository scoringAnswerRepository;
 
     private ScoredAnswerQueryService service;
 
@@ -51,15 +53,9 @@ class ScoredAnswerQueryServiceTest {
         UUID attemptPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
 
-        ScoringAnswer answer1 = new ScoringAnswer();
-        answer1.setTaskType("MC_READING_SINGLE");
-        answer1.setRawScore(85);
-        answer1.setStatus(ScoringAnswerStatus.SCORED);
+        AiEvaluation answer1 = scored("MC_READING_SINGLE", 85);
 
-        ScoringAnswer answer2 = new ScoringAnswer();
-        answer2.setTaskType("READ_ALOUD");
-        answer2.setRawScore(75);
-        answer2.setStatus(ScoringAnswerStatus.SCORED);
+        AiEvaluation answer2 = scored("READ_ALOUD", 75);
 
         when(scoringAnswerRepository.findByAttemptPublicIdAndTenantIdAndStatus(
                 attemptPublicId, tenantId, ScoringAnswerStatus.SCORED))
@@ -93,10 +89,7 @@ class ScoredAnswerQueryServiceTest {
         UUID attemptPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
 
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setTaskType("WRITE_ESSAY");
-        answer.setRawScore(92);
-        answer.setStatus(ScoringAnswerStatus.SCORED);
+        AiEvaluation answer = scored("WRITE_ESSAY", 92);
 
         when(scoringAnswerRepository.findByAttemptPublicIdAndTenantIdAndStatus(
                 attemptPublicId, tenantId, ScoringAnswerStatus.SCORED))
@@ -113,10 +106,7 @@ class ScoredAnswerQueryServiceTest {
         UUID attemptPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
 
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setTaskType("MC_LISTENING_SINGLE");
-        answer.setRawScore(42);
-        answer.setStatus(ScoringAnswerStatus.SCORED);
+        AiEvaluation answer = scored("MC_LISTENING_SINGLE", 42);
 
         when(scoringAnswerRepository.findByAttemptPublicIdAndTenantIdAndStatus(
                 attemptPublicId, tenantId, ScoringAnswerStatus.SCORED))
@@ -134,10 +124,7 @@ class ScoredAnswerQueryServiceTest {
         UUID tenantId = UUID.randomUUID();
 
         // Repository should only return SCORED, not PENDING
-        ScoringAnswer scoredAnswer = new ScoringAnswer();
-        scoredAnswer.setTaskType("MC_READING_SINGLE");
-        scoredAnswer.setRawScore(80);
-        scoredAnswer.setStatus(ScoringAnswerStatus.SCORED);
+        AiEvaluation scoredAnswer = scored("MC_READING_SINGLE", 80);
 
         when(scoringAnswerRepository.findByAttemptPublicIdAndTenantIdAndStatus(
                 attemptPublicId, tenantId, ScoringAnswerStatus.SCORED))
@@ -156,20 +143,11 @@ class ScoredAnswerQueryServiceTest {
         UUID attemptPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
 
-        ScoringAnswer answer1 = new ScoringAnswer();
-        answer1.setTaskType("MC_READING_SINGLE");
-        answer1.setRawScore(0);
-        answer1.setStatus(ScoringAnswerStatus.SCORED);
+        AiEvaluation answer1 = scored("MC_READING_SINGLE", 0);
 
-        ScoringAnswer answer2 = new ScoringAnswer();
-        answer2.setTaskType("MC_READING_MULTIPLE");
-        answer2.setRawScore(100);
-        answer2.setStatus(ScoringAnswerStatus.SCORED);
+        AiEvaluation answer2 = scored("MC_READING_MULTIPLE", 100);
 
-        ScoringAnswer answer3 = new ScoringAnswer();
-        answer3.setTaskType("MC_LISTENING_SINGLE");
-        answer3.setRawScore(50);
-        answer3.setStatus(ScoringAnswerStatus.SCORED);
+        AiEvaluation answer3 = scored("MC_LISTENING_SINGLE", 50);
 
         when(scoringAnswerRepository.findByAttemptPublicIdAndTenantIdAndStatus(
                 attemptPublicId, tenantId, ScoringAnswerStatus.SCORED))
@@ -181,5 +159,11 @@ class ScoredAnswerQueryServiceTest {
         assertThat(results.get(0).rawScore()).isEqualTo(0);
         assertThat(results.get(1).rawScore()).isEqualTo(100);
         assertThat(results.get(2).rawScore()).isEqualTo(50);
+    }
+
+    private static AiEvaluation scored(String taskType, int rawScore) {
+        AiEvaluation answer = EvaluationFixtures.ai(taskType, ScoringMethod.OBJECTIVE);
+        answer.markScored(rawScore);
+        return answer;
     }
 }

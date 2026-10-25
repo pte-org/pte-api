@@ -1,6 +1,7 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
+import com.pte.scoring.support.SubmittedAnswerFixtures;
 import com.pte.scoring.internal.dto.response.AnswerPayloadKind;
 import com.pte.scoring.internal.dto.response.DecodedAnswerPayload;
 import org.junit.jupiter.api.Test;
@@ -133,19 +134,15 @@ class AnswerPayloadDecoderFixtureTest {
         throw new IllegalStateException("Fixture entry is missing for taskType=" + taskType);
     }
 
-    private ScoringAnswer answerFrom(Map<String, Object> fixture) {
+    private SubmittedAnswerView answerFrom(Map<String, Object> fixture) {
         return answer(
                 (String) fixture.get("taskType"),
                 (String) fixture.get("optionsJson"),
                 (String) fixture.get("payload"));
     }
 
-    private ScoringAnswer answer(String taskType, String optionsJson, String payload) {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setTaskType(taskType);
-        answer.setOptionsJson(optionsJson);
-        answer.setPayload(payload);
-        return answer;
+    private SubmittedAnswerView answer(String taskType, String optionsJson, String payload) {
+        return SubmittedAnswerFixtures.answer(taskType, optionsJson, payload);
     }
 
     private String fixtureJson() {

@@ -1,9 +1,9 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.internal.repository.ExaminerAnswerScoreRepository;
-import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
+import com.pte.scoring.internal.repository.GradingAssignmentRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,29 +22,30 @@ import static org.mockito.Mockito.when;
 class ExaminerWorkQueryServiceTest {
 
     @Mock
-    private ExaminerAttemptAssignmentRepository assignmentRepository;
+    private GradingAssignmentRepository assignmentRepository;
     @Mock
-    private ExaminerAnswerScoreRepository examinerScoreRepository;
+    private ExaminerEvaluationRepository examinerScoreRepository;
     @Mock
-    private ScoringAnswerRepository answerRepository;
+    private AiEvaluationRepository answerRepository;
     @Mock
     private ScoringEligibilityQueryService eligibilityQueryService;
+    @Mock
+    private AnswerContentReader contentReader;
 
     private ExaminerWorkQueryService service;
 
     @BeforeEach
     void setUp() {
         service = new ExaminerWorkQueryService(assignmentRepository, examinerScoreRepository,
-                answerRepository, eligibilityQueryService);
+                answerRepository, eligibilityQueryService, contentReader);
     }
 
     @Test
     void detailDoesNotReturnAnswerWhenTenantDoesNotOwnIt() {
         UUID answerId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(answerId);
-        answer.setTenantId(UUID.randomUUID());
+        AiEvaluation answer = com.pte.scoring.support.EvaluationFixtures.ai(UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), answerId, "READ_ALOUD", com.pte.scoring.domain.enums.ScoringMethod.AI_SPEECH);
         when(answerRepository.findByAnswerPublicId(answerId)).thenReturn(Optional.of(answer));
 
         assertThat(service.findWorkItem(tenantId, UUID.randomUUID(), answerId)).isEmpty();

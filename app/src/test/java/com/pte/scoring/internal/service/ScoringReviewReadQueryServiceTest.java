@@ -1,16 +1,16 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.domain.enums.AiProviderCategory;
 import com.pte.scoring.domain.enums.ScoreSource;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.domain.enums.ScoringMethod;
+import com.pte.scoring.support.EvaluationFixtures;
 import com.pte.scoring.internal.repository.AiDetailFlags;
-import com.pte.scoring.internal.repository.ExaminerAnswerScoreRepository;
-import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
+import com.pte.scoring.internal.repository.GradingAssignmentRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,10 +19,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,18 +33,17 @@ class ScoringReviewReadQueryServiceTest {
     private final UUID tenantId = UUID.randomUUID();
     private final UUID attemptId = UUID.randomUUID();
     private final UUID sessionId = UUID.randomUUID();
-    private final UUID templateId = UUID.randomUUID();
 
     @Mock
-    private ScoringAnswerRepository answerRepository;
+    private AiEvaluationRepository answerRepository;
     @Mock
-    private ExaminerAnswerScoreRepository examinerScoreRepository;
+    private ExaminerEvaluationRepository examinerScoreRepository;
     @Mock
-    private ExaminerAttemptAssignmentRepository assignmentRepository;
+    private GradingAssignmentRepository assignmentRepository;
     @Mock
-    private ScoringSessionStateRepository sessionStateRepository;
+    private SessionGradingGateway gateway;
     @Mock
-    private ScoringMethodResolver methodResolver;
+    private ScoreSelectionReader selectionReader;
     @Mock
     private AiScoreDetailQueryService aiDetails;
     @Mock
@@ -52,19 +53,17 @@ class ScoringReviewReadQueryServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(selectionReader.forSession(sessionId, tenantId)).thenReturn(Map.of());
         service = new ScoringReviewReadQueryService(answerRepository, examinerScoreRepository,
-                assignmentRepository, sessionStateRepository, methodResolver, aiDetails, dispatcher);
+                assignmentRepository, gateway, selectionReader, aiDetails, dispatcher);
     }
 
     @Test
     void reportInputs_keepZeroObjectiveScorePublishable() {
-        ScoringAnswer answer = answer("MC_READING_SINGLE");
+        AiEvaluation answer = answer("MC_READING_SINGLE");
         answer.markScored(0);
         when(answerRepository.findByAttemptPublicIdAndTenantId(attemptId, tenantId)).thenReturn(List.of(answer));
-        when(examinerScoreRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(List.of());
-        when(methodResolver.resolve(templateId, "MC_READING_SINGLE"))
-                .thenReturn(Optional.of(ScoringMethod.OBJECTIVE));
-        when(methodResolver.resolveSection(templateId, "MC_READING_SINGLE")).thenReturn(Optional.of("READING"));
+        when(examinerScoreRepository.findSubmittedBySession(tenantId, sessionId)).thenReturn(List.of());
 
         var input = service.findReportInputsForAttempt(tenantId, attemptId).getFirst();
 
@@ -75,12 +74,9 @@ class ScoringReviewReadQueryServiceTest {
 
     @Test
     void reportInputs_excludeUnscoredObjectiveWithoutBlockingPublication() {
-        ScoringAnswer answer = answer("MC_READING_SINGLE");
+        AiEvaluation answer = answer("MC_READING_SINGLE");
         when(answerRepository.findByAttemptPublicIdAndTenantId(attemptId, tenantId)).thenReturn(List.of(answer));
-        when(examinerScoreRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(List.of());
-        when(methodResolver.resolve(templateId, "MC_READING_SINGLE"))
-                .thenReturn(Optional.of(ScoringMethod.OBJECTIVE));
-        when(methodResolver.resolveSection(templateId, "MC_READING_SINGLE")).thenReturn(Optional.of("READING"));
+        when(examinerScoreRepository.findSubmittedBySession(tenantId, sessionId)).thenReturn(List.of());
 
         var input = service.findReportInputsForAttempt(tenantId, attemptId).getFirst();
 
@@ -91,12 +87,10 @@ class ScoringReviewReadQueryServiceTest {
 
     @Test
     void reportInputs_requireSelectedSourceForAiEligibleAnswer() {
-        ScoringAnswer answer = answer("READ_ALOUD");
+        AiEvaluation answer = answer("READ_ALOUD");
         answer.markAiScored(0, AiProviderCategory.REAL, "provider", "model", "v1");
         when(answerRepository.findByAttemptPublicIdAndTenantId(attemptId, tenantId)).thenReturn(List.of(answer));
-        when(examinerScoreRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(List.of());
-        when(methodResolver.resolve(templateId, "READ_ALOUD")).thenReturn(Optional.of(ScoringMethod.AI_SPEECH));
-        when(methodResolver.resolveSection(templateId, "READ_ALOUD")).thenReturn(Optional.of("SPEAKING"));
+        when(examinerScoreRepository.findSubmittedBySession(tenantId, sessionId)).thenReturn(List.of());
 
         var input = service.findReportInputsForAttempt(tenantId, attemptId).getFirst();
 
@@ -107,7 +101,7 @@ class ScoringReviewReadQueryServiceTest {
 
     @Test
     void reportInputs_provisionalScoreFallsBackToTheAiScoreUntilASourceIsChosen() {
-        ScoringAnswer answer = answer("READ_ALOUD");
+        AiEvaluation answer = answer("READ_ALOUD");
         answer.markAiScored(88, AiProviderCategory.REAL, "provider", "model", "v1");
         stubAiAnswer(answer);
 
@@ -129,9 +123,9 @@ class ScoringReviewReadQueryServiceTest {
 
     @Test
     void reportInputs_provisionalScoreEqualsTheSelectedScoreOnceChosen() {
-        ScoringAnswer answer = answer("READ_ALOUD");
+        AiEvaluation answer = answer("READ_ALOUD");
         answer.markAiScored(88, AiProviderCategory.REAL, "provider", "model", "v1");
-        answer.selectScoreSource(ScoreSource.AI, UUID.randomUUID(), Instant.now(), null);
+        selectAi(answer);
         stubAiAnswer(answer);
 
         var input = service.findReportInputsForAttempt(tenantId, attemptId).getFirst();
@@ -139,22 +133,18 @@ class ScoringReviewReadQueryServiceTest {
         assertThat(input.provisionalScore()).isEqualTo(input.selectedScore()).isEqualTo(88);
     }
 
-    private void stubAiAnswer(ScoringAnswer answer) {
+    private void stubAiAnswer(AiEvaluation answer) {
         when(answerRepository.findByAttemptPublicIdAndTenantId(attemptId, tenantId)).thenReturn(List.of(answer));
-        when(examinerScoreRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(List.of());
-        when(methodResolver.resolve(templateId, "READ_ALOUD")).thenReturn(Optional.of(ScoringMethod.AI_SPEECH));
-        when(methodResolver.resolveSection(templateId, "READ_ALOUD")).thenReturn(Optional.of("SPEAKING"));
+        when(examinerScoreRepository.findSubmittedBySession(tenantId, sessionId)).thenReturn(List.of());
     }
 
     @Test
     void reportInputs_useOnlyTheSelectedRealAiScore() {
-        ScoringAnswer answer = answer("READ_ALOUD");
+        AiEvaluation answer = answer("READ_ALOUD");
         answer.markAiScored(88, AiProviderCategory.REAL, "provider", "model", "v1");
-        answer.selectScoreSource(ScoreSource.AI, UUID.randomUUID(), Instant.now(), null);
+        selectAi(answer);
         when(answerRepository.findByAttemptPublicIdAndTenantId(attemptId, tenantId)).thenReturn(List.of(answer));
-        when(examinerScoreRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(List.of());
-        when(methodResolver.resolve(templateId, "READ_ALOUD")).thenReturn(Optional.of(ScoringMethod.AI_SPEECH));
-        when(methodResolver.resolveSection(templateId, "READ_ALOUD")).thenReturn(Optional.of("SPEAKING"));
+        when(examinerScoreRepository.findSubmittedBySession(tenantId, sessionId)).thenReturn(List.of());
 
         var input = service.findReportInputsForAttempt(tenantId, attemptId).getFirst();
 
@@ -167,16 +157,16 @@ class ScoringReviewReadQueryServiceTest {
     @Test
     void hostReview_countsFailedAndStuckAnswersAsRescorableButNotFreshOrPendingOnes() {
         Instant staleBefore = Instant.parse("2026-10-11T10:00:00Z");
-        ScoringAnswer failed = answer("READ_ALOUD");
+        AiEvaluation failed = answer("READ_ALOUD");
         failed.markAiDispatched(staleBefore.minusSeconds(600));
         failed.setStatus(ScoringAnswerStatus.SCORING_FAILED);
-        ScoringAnswer stuck = answer("SPEAKING_STUCK");
+        AiEvaluation stuck = answer("SPEAKING_STUCK");
         stuck.markAiDispatched(staleBefore.minusSeconds(60));
-        ScoringAnswer neverDispatched = answer("SPEAKING_LOST");
+        AiEvaluation neverDispatched = answer("SPEAKING_LOST");
         neverDispatched.setStatus(ScoringAnswerStatus.AI_SCORING);
-        ScoringAnswer fresh = answer("SPEAKING_FRESH");
+        AiEvaluation fresh = answer("SPEAKING_FRESH");
         fresh.markAiDispatched(staleBefore.plusSeconds(30));
-        ScoringAnswer pending = answer("SPEAKING_PENDING");
+        AiEvaluation pending = answer("SPEAKING_PENDING");
         stubHostReview(List.of(failed, stuck, neverDispatched, fresh, pending), staleBefore);
 
         var review = service.findHostReview(tenantId, sessionId);
@@ -186,10 +176,10 @@ class ScoringReviewReadQueryServiceTest {
 
     @Test
     void hostReview_marksFallbackAndFailureReasonOnTheAnswerRows() {
-        ScoringAnswer failed = answer("DESCRIBE_IMAGE");
+        AiEvaluation failed = answer("DESCRIBE_IMAGE");
         failed.markAiDispatched(Instant.parse("2026-10-11T09:00:00Z"));
         failed.setStatus(ScoringAnswerStatus.SCORING_FAILED);
-        ScoringAnswer lowConfidence = answer("DESCRIBE_IMAGE");
+        AiEvaluation lowConfidence = answer("DESCRIBE_IMAGE");
         lowConfidence.markAiScored(61, AiProviderCategory.REAL, "gemini", "m", "v1");
         stubHostReview(List.of(failed, lowConfidence), Instant.parse("2026-10-11T10:00:00Z"));
         when(aiDetails.findFlags(tenantId, List.of(failed.getAnswerPublicId(), lowConfidence.getAnswerPublicId())))
@@ -214,7 +204,7 @@ class ScoringReviewReadQueryServiceTest {
 
     @Test
     void hostReview_dropsTheOldFailureReasonOnceTheAnswerIsQueuedAgain() {
-        ScoringAnswer requeued = answer("DESCRIBE_IMAGE");
+        AiEvaluation requeued = answer("DESCRIBE_IMAGE");
         requeued.markAiDispatched(Instant.parse("2026-10-11T10:00:00Z"));
         stubHostReview(List.of(requeued), Instant.parse("2026-10-11T09:00:00Z"));
         when(aiDetails.findFlags(tenantId, List.of(requeued.getAnswerPublicId())))
@@ -227,29 +217,23 @@ class ScoringReviewReadQueryServiceTest {
         assertThat(review.answers().getFirst().aiFailureReason()).isNull();
     }
 
-    private void stubHostReview(List<ScoringAnswer> answers, Instant staleBefore) {
+    private void stubHostReview(List<AiEvaluation> answers, Instant staleBefore) {
         when(answerRepository.findBySessionPublicIdAndTenantId(sessionId, tenantId)).thenReturn(answers);
-        when(examinerScoreRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId)).thenReturn(List.of());
+        when(examinerScoreRepository.findSubmittedBySession(tenantId, sessionId)).thenReturn(List.of());
         when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
                 .thenReturn(List.of());
-        when(sessionStateRepository.findByTenantIdAndSessionPublicId(tenantId, sessionId))
-                .thenReturn(Optional.empty());
-        when(methodResolver.resolve(org.mockito.ArgumentMatchers.eq(templateId),
-                org.mockito.ArgumentMatchers.anyString())).thenReturn(Optional.of(ScoringMethod.AI_SPEECH));
-        when(methodResolver.resolveSection(org.mockito.ArgumentMatchers.eq(templateId),
-                org.mockito.ArgumentMatchers.anyString())).thenReturn(Optional.of("SPEAKING"));
         when(dispatcher.staleBefore()).thenReturn(staleBefore);
     }
 
-    private ScoringAnswer answer(String taskType) {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(UUID.randomUUID());
-        answer.setAttemptPublicId(attemptId);
-        answer.setPinnedItemPublicId(UUID.randomUUID());
-        answer.setSessionPublicId(sessionId);
-        answer.setTenantId(tenantId);
-        answer.setScoreTemplatePublicId(templateId);
-        answer.setTaskType(taskType);
-        return answer;
+    /** The host chose the AI score of this answer. */
+    private void selectAi(AiEvaluation answer) {
+        when(selectionReader.forSession(sessionId, tenantId)).thenReturn(Map.of(answer.getAnswerPublicId(),
+                new ScoreSelectionReader.Selection(ScoreSource.AI, Instant.now(), UUID.randomUUID(), null)));
+    }
+
+    private AiEvaluation answer(String taskType) {
+        boolean objective = taskType.startsWith("MC_");
+        return EvaluationFixtures.ai(tenantId, sessionId, attemptId, UUID.randomUUID(), taskType,
+                objective ? ScoringMethod.OBJECTIVE : ScoringMethod.AI_SPEECH, objective ? "READING" : "SPEAKING");
     }
 }

@@ -1,15 +1,12 @@
 package com.pte.scoring.internal.service;
 
 import com.pte.scoring.ScoringProgressChangedEvent;
-import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.domain.ScoringAnswerAiDetail;
-import com.pte.scoring.domain.ScoringSessionState;
+import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.domain.enums.AiProviderCategory;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
-import com.pte.scoring.internal.repository.ScoringAnswerAiDetailRepository;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.scoring.internal.vendor.AiScoreResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,11 +37,9 @@ class AiScoringResultPersistenceServiceTest {
     private static final Instant DISPATCHED_AT = Instant.parse("2026-10-11T10:00:00Z");
 
     @Mock
-    private ScoringAnswerRepository answerRepository;
+    private AiEvaluationRepository answerRepository;
     @Mock
-    private ScoringSessionStateRepository sessionStateRepository;
-    @Mock
-    private ScoringAnswerAiDetailRepository detailRepository;
+    private SessionGradingGateway gateway;
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
@@ -52,17 +47,15 @@ class AiScoringResultPersistenceServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AiScoringResultPersistenceService(answerRepository, sessionStateRepository, detailRepository,
-                JsonMapper.builder().build(), eventPublisher);
+        service = new AiScoringResultPersistenceService(answerRepository, gateway,
+                JsonMapper.builder().build(), eventPublisher, null);
     }
 
     @Test
     void persistAiScore_locksAnswerBeforePublicationStateAndStoresScoreWithDetail() {
-        ScoringAnswer answer = dispatchedAnswer();
+        AiEvaluation answer = dispatchedAnswer();
         long token = answer.getDispatchToken();
         stubAnswerLock(answer);
-        when(sessionStateRepository.findForUpdate(answer.getTenantId(), answer.getSessionPublicId()))
-                .thenReturn(Optional.empty());
 
         boolean persisted = persist(answer, token, new AiScoreResult(72, Map.of("speaking", 70), "feedback",
                 AiProviderCategory.REAL, "AZURE_GEMINI", "model", "v1", "the transcript", "{\"words\":3}", true));
@@ -71,62 +64,52 @@ class AiScoringResultPersistenceServiceTest {
         assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
         assertThat(answer.getRawScore()).isEqualTo(72);
         assertThat(answer.getAiProviderCategory()).isEqualTo(AiProviderCategory.REAL);
-        ScoringAnswerAiDetail detail = savedDetail();
-        assertThat(detail.getAnswerPublicId()).isEqualTo(answer.getAnswerPublicId());
-        assertThat(detail.getTenantId()).isEqualTo(answer.getTenantId());
-        assertThat(detail.getCriteriaScoresJson()).isEqualTo("{\"speaking\":70}");
-        assertThat(detail.getFeedback()).isEqualTo("feedback");
-        assertThat(detail.getTranscript()).isEqualTo("the transcript");
-        assertThat(detail.getDetailJson()).isEqualTo("{\"words\":3}");
-        assertThat(detail.isFallback()).isTrue();
-        assertThat(detail.getFailureReason()).isNull();
-        InOrder lockOrder = inOrder(answerRepository, sessionStateRepository, detailRepository);
+        assertThat(answer.getCriteriaScoresJson()).isEqualTo("{\"speaking\":70}");
+        assertThat(answer.getFeedback()).isEqualTo("feedback");
+        assertThat(answer.getTranscript()).isEqualTo("the transcript");
+        assertThat(answer.getDetailJson()).isEqualTo("{\"words\":3}");
+        assertThat(answer.isFallback()).isTrue();
+        assertThat(answer.getFailureReason()).isNull();
+        InOrder lockOrder = inOrder(answerRepository, gateway);
         lockOrder.verify(answerRepository).findByAnswerPublicIdForUpdate(answer.getAnswerPublicId());
-        lockOrder.verify(sessionStateRepository).findForUpdate(answer.getTenantId(), answer.getSessionPublicId());
-        lockOrder.verify(detailRepository).findByAnswerPublicId(answer.getAnswerPublicId());
+        lockOrder.verify(gateway).isPublished(answer.getTenantId(), answer.getSessionPublicId());
         verify(answerRepository).save(answer);
         verify(eventPublisher).publishEvent(any(ScoringProgressChangedEvent.class));
     }
 
     @Test
-    void persistAiScore_rescoreOfAFailedAnswerReplacesTheFailureOnTheSameDetailRow() {
-        ScoringAnswer answer = dispatchedAnswer();
+    void persistAiScore_rescoreOfAFailedAnswerReplacesTheFailureOnTheSameRow() {
+        AiEvaluation answer = dispatchedAnswer();
         answer.setStatus(ScoringAnswerStatus.SCORING_FAILED);
+        answer.recordFailure(AiFailureReason.PROVIDER_TIMEOUT);
         long rescoreToken = answer.markAiDispatched(DISPATCHED_AT.plusSeconds(900));
-        ScoringAnswerAiDetail existing = new ScoringAnswerAiDetail(answer.getAnswerPublicId(), answer.getTenantId());
-        existing.recordFailure(AiFailureReason.PROVIDER_TIMEOUT);
         stubAnswerLock(answer);
-        when(sessionStateRepository.findForUpdate(answer.getTenantId(), answer.getSessionPublicId()))
-                .thenReturn(Optional.empty());
-        when(detailRepository.findByAnswerPublicId(answer.getAnswerPublicId())).thenReturn(Optional.of(existing));
 
         boolean persisted = persist(answer, rescoreToken, result());
 
         assertThat(persisted).isTrue();
         assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
-        assertThat(savedDetail()).isSameAs(existing);
-        assertThat(existing.getFailureReason()).isNull();
-        assertThat(existing.getFeedback()).isEqualTo("feedback");
+        assertThat(answer.getFailureReason()).isNull();
+        assertThat(answer.getFeedback()).isEqualTo("feedback");
     }
 
     @Test
     void persistAiScore_doesNotWriteWhenPublicationHasLockedSession() {
-        ScoringAnswer answer = dispatchedAnswer();
+        AiEvaluation answer = dispatchedAnswer();
         stubAnswerLock(answer);
-        when(sessionStateRepository.findForUpdate(answer.getTenantId(), answer.getSessionPublicId()))
-                .thenReturn(Optional.of(publishedState(answer)));
+        when(gateway.isPublished(answer.getTenantId(), answer.getSessionPublicId())).thenReturn(true);
 
         boolean persisted = persist(answer, answer.getDispatchToken(), result());
 
         assertThat(persisted).isFalse();
         assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.AI_SCORING);
         verify(answerRepository, never()).save(answer);
-        verifyNoInteractions(detailRepository, eventPublisher);
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
     void persistAiScore_supersededDispatchTokenIsIgnored() {
-        ScoringAnswer answer = dispatchedAnswer();
+        AiEvaluation answer = dispatchedAnswer();
         long oldToken = answer.getDispatchToken();
         answer.markAiDispatched(DISPATCHED_AT.plusSeconds(900));
         stubAnswerLock(answer);
@@ -135,14 +118,14 @@ class AiScoringResultPersistenceServiceTest {
 
         assertThat(persisted).isFalse();
         assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.AI_SCORING);
-        verify(sessionStateRepository, never()).findForUpdate(answer.getTenantId(), answer.getSessionPublicId());
+        verify(gateway, never()).isPublished(answer.getTenantId(), answer.getSessionPublicId());
         verify(answerRepository, never()).save(answer);
-        verifyNoInteractions(detailRepository, eventPublisher);
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
     void persistAiScore_doesNotOverwriteAnAlreadyTerminalAnswer() {
-        ScoringAnswer answer = dispatchedAnswer();
+        AiEvaluation answer = dispatchedAnswer();
         long token = answer.getDispatchToken();
         answer.markScored(30);
         stubAnswerLock(answer);
@@ -151,44 +134,40 @@ class AiScoringResultPersistenceServiceTest {
 
         assertThat(persisted).isFalse();
         assertThat(answer.getRawScore()).isEqualTo(30);
-        verify(sessionStateRepository, never()).findForUpdate(answer.getTenantId(), answer.getSessionPublicId());
+        verify(gateway, never()).isPublished(answer.getTenantId(), answer.getSessionPublicId());
         verify(answerRepository, never()).save(answer);
     }
 
     @Test
     void persistAiScore_ignoresAnswerFromAnotherTenantOrSession() {
-        ScoringAnswer answer = dispatchedAnswer();
+        AiEvaluation answer = dispatchedAnswer();
         stubAnswerLock(answer);
 
         boolean persisted = service.persistAiScore(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
                 UUID.randomUUID(), answer.getSessionPublicId(), answer.getDispatchToken(), result());
 
         assertThat(persisted).isFalse();
-        verify(sessionStateRepository, never()).findForUpdate(answer.getTenantId(), answer.getSessionPublicId());
+        verify(gateway, never()).isPublished(answer.getTenantId(), answer.getSessionPublicId());
         verify(answerRepository, never()).save(answer);
     }
 
     @Test
-    void markScoringFailed_storesTheReasonOnTheDetailRow() {
-        ScoringAnswer answer = dispatchedAnswer();
+    void markScoringFailed_storesTheReasonOnTheEvaluation() {
+        AiEvaluation answer = dispatchedAnswer();
         stubAnswerLock(answer);
-        when(sessionStateRepository.findForUpdate(answer.getTenantId(), answer.getSessionPublicId()))
-                .thenReturn(Optional.empty());
 
         boolean changed = fail(answer, answer.getDispatchToken(), AiFailureReason.PROVIDER_TIMEOUT);
 
         assertThat(changed).isTrue();
         assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.SCORING_FAILED);
         verify(answerRepository).save(answer);
-        ScoringAnswerAiDetail detail = savedDetail();
-        assertThat(detail.getAnswerPublicId()).isEqualTo(answer.getAnswerPublicId());
-        assertThat(detail.getFailureReason()).isEqualTo(AiFailureReason.PROVIDER_TIMEOUT);
+        assertThat(answer.getFailureReason()).isEqualTo(AiFailureReason.PROVIDER_TIMEOUT);
         verify(eventPublisher).publishEvent(any(ScoringProgressChangedEvent.class));
     }
 
     @Test
     void markScoringFailed_supersededDispatchTokenIsIgnored() {
-        ScoringAnswer answer = dispatchedAnswer();
+        AiEvaluation answer = dispatchedAnswer();
         long oldToken = answer.getDispatchToken();
         answer.markAiDispatched(DISPATCHED_AT.plusSeconds(900));
         stubAnswerLock(answer);
@@ -198,12 +177,11 @@ class AiScoringResultPersistenceServiceTest {
         assertThat(changed).isFalse();
         assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.AI_SCORING);
         verify(answerRepository, never()).save(answer);
-        verifyNoInteractions(detailRepository);
     }
 
     @Test
     void markScoringFailed_doesNotChangeTerminalScore() {
-        ScoringAnswer answer = dispatchedAnswer();
+        AiEvaluation answer = dispatchedAnswer();
         long token = answer.getDispatchToken();
         answer.markScored(88);
         stubAnswerLock(answer);
@@ -217,22 +195,20 @@ class AiScoringResultPersistenceServiceTest {
 
     @Test
     void markScoringFailed_doesNotChangeInFlightAnswerAfterPublication() {
-        ScoringAnswer answer = dispatchedAnswer();
+        AiEvaluation answer = dispatchedAnswer();
         stubAnswerLock(answer);
-        when(sessionStateRepository.findForUpdate(answer.getTenantId(), answer.getSessionPublicId()))
-                .thenReturn(Optional.of(publishedState(answer)));
+        when(gateway.isPublished(answer.getTenantId(), answer.getSessionPublicId())).thenReturn(true);
 
         boolean changed = fail(answer, answer.getDispatchToken(), AiFailureReason.INTERNAL_ERROR);
 
         assertThat(changed).isFalse();
         assertThat(answer.getStatus()).isEqualTo(ScoringAnswerStatus.AI_SCORING);
         verify(answerRepository, never()).save(answer);
-        verifyNoInteractions(detailRepository);
     }
 
     @Test
     void markScoringFailed_ignoresAnswerWhenDeadLetterAttemptDoesNotMatch() {
-        ScoringAnswer answer = dispatchedAnswer();
+        AiEvaluation answer = dispatchedAnswer();
         stubAnswerLock(answer);
 
         boolean changed = service.markScoringFailed(answer.getAnswerPublicId(), UUID.randomUUID(),
@@ -240,47 +216,29 @@ class AiScoringResultPersistenceServiceTest {
                 AiFailureReason.INTERNAL_ERROR);
 
         assertThat(changed).isFalse();
-        verify(sessionStateRepository, never()).findForUpdate(answer.getTenantId(), answer.getSessionPublicId());
+        verify(gateway, never()).isPublished(answer.getTenantId(), answer.getSessionPublicId());
         verify(answerRepository, never()).save(answer);
     }
 
-    private boolean persist(ScoringAnswer answer, long token, AiScoreResult result) {
+    private boolean persist(AiEvaluation answer, long token, AiScoreResult result) {
         return service.persistAiScore(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
                 answer.getTenantId(), answer.getSessionPublicId(), token, result);
     }
 
-    private boolean fail(ScoringAnswer answer, long token, AiFailureReason reason) {
+    private boolean fail(AiEvaluation answer, long token, AiFailureReason reason) {
         return service.markScoringFailed(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
                 answer.getTenantId(), answer.getSessionPublicId(), token, reason);
     }
 
-    private void stubAnswerLock(ScoringAnswer answer) {
+    private void stubAnswerLock(AiEvaluation answer) {
         when(answerRepository.findByAnswerPublicIdForUpdate(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
     }
 
-    private ScoringAnswerAiDetail savedDetail() {
-        ArgumentCaptor<ScoringAnswerAiDetail> captor = ArgumentCaptor.forClass(ScoringAnswerAiDetail.class);
-        verify(detailRepository).save(captor.capture());
-        return captor.getValue();
-    }
-
-    private static ScoringSessionState publishedState(ScoringAnswer answer) {
-        ScoringSessionState state = new ScoringSessionState(answer.getTenantId(), answer.getSessionPublicId());
-        state.lockForPublication(UUID.randomUUID(), Instant.now());
-        return state;
-    }
-
-    private ScoringAnswer dispatchedAnswer() {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(UUID.randomUUID());
-        answer.setAttemptPublicId(UUID.randomUUID());
-        answer.setPinnedItemPublicId(UUID.randomUUID());
-        answer.setSessionPublicId(UUID.randomUUID());
-        answer.setTenantId(UUID.randomUUID());
-        answer.setTaskType("READ_ALOUD");
-        answer.setPayload("payload");
-        answer.setCorrectAnswerText("reference");
+    private AiEvaluation dispatchedAnswer() {
+        AiEvaluation answer = new AiEvaluation(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "READ_ALOUD", "SPEAKING",
+                ScoringMethod.AI_SPEECH);
         answer.markAiDispatched(DISPATCHED_AT);
         return answer;
     }
