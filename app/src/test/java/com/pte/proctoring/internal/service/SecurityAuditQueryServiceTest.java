@@ -122,6 +122,7 @@ class SecurityAuditQueryServiceTest {
     private ExamIncident incident(IncidentOrigin origin, UUID studentId, String type, String clientEventId,
                                   Instant detectedAt) {
         ExamIncident incident = new ExamIncident();
+        incident.setDetectedAt(java.time.Instant.now());
         incident.setPublicId(UUID.randomUUID());
         incident.setAttemptPublicId(UUID.randomUUID());
         incident.setStudentPublicId(studentId);

@@ -17,7 +17,6 @@ import com.pte.shared.exception.DomainException;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.SecurityRoles;
 import jakarta.validation.Valid;
-import org.springframework.messaging.Message;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
@@ -27,14 +26,13 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.annotation.SendToUser;
-import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Controller;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 
 import java.security.Principal;
-import java.time.Instant;
+import java.time.Clock;
 import java.util.UUID;
 
 /**
@@ -49,15 +47,18 @@ public class ProctorStompController {
     private final ProctorCommandDispatchService proctorCommandService;
     private final ViolationService violationService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final Clock clock;
 
     public ProctorStompController(ProctorWatchService watchService,
                                   ProctorCommandDispatchService proctorCommandService,
                                   ViolationService violationService,
-                                  SimpMessagingTemplate messagingTemplate) {
+                                  SimpMessagingTemplate messagingTemplate,
+            Clock clock) {
         this.watchService = watchService;
         this.proctorCommandService = proctorCommandService;
         this.violationService = violationService;
         this.messagingTemplate = messagingTemplate;
+        this.clock = clock;
     }
 
     @MessageMapping("/sessions/{sessionPublicId}/open")
@@ -80,7 +81,7 @@ public class ProctorStompController {
                         sessionPublicId,
                         "OPENED",
                         response.publicId(),
-                        Instant.now()
+                        clock.instant()
                 );
                 sendToSocket(simpSessionId, principal.getName(), "/queue/proctor-results", result, requestId);
             }
@@ -105,7 +106,7 @@ public class ProctorStompController {
                     request.attemptPublicId(),
                     applied ? "APPLIED" : "NO_OP",
                     null,
-                    Instant.now()
+                    clock.instant()
             );
             if (TransactionSynchronizationManager.isSynchronizationActive()) {
                 TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {

@@ -7,7 +7,7 @@ import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import java.time.Clock;
 import java.util.UUID;
 
 /**
@@ -19,16 +19,18 @@ import java.util.UUID;
 public class ProctorWatchService {
 
     private final SessionService sessionService;
+    private final Clock clock;
 
-    public ProctorWatchService(SessionService sessionService) {
+    public ProctorWatchService(SessionService sessionService, Clock clock) {
         this.sessionService = sessionService;
+        this.clock = clock;
     }
 
     @Transactional
     public ProctorSessionResponse open(UUID sessionPublicId, CurrentUser caller) {
         authorizeCommand(sessionPublicId, caller);
         return new ProctorSessionResponse(sessionPublicId, sessionPublicId, caller.userId(),
-                ProctorConstants.WATCH_STATUS_ACTIVE, Instant.now());
+                ProctorConstants.WATCH_STATUS_ACTIVE, clock.instant());
     }
 
     /** Re-authorizes a command: session open within its window and caller still assigned; returns the tenant. */

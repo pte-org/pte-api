@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -43,18 +44,21 @@ public class MonitoringQueryService {
     private final AttemptService attemptService;
     private final IdentityService identityService;
     private final ExamIncidentRepository incidentRepository;
+    private final Clock clock;
 
     public MonitoringQueryService(
             ProctorAccessPolicy proctorAccessPolicy,
             SessionService sessionService,
             AttemptService attemptService,
             IdentityService identityService,
-            ExamIncidentRepository incidentRepository) {
+            ExamIncidentRepository incidentRepository,
+            Clock clock) {
         this.proctorAccessPolicy = proctorAccessPolicy;
         this.sessionService = sessionService;
         this.attemptService = attemptService;
         this.identityService = identityService;
         this.incidentRepository = incidentRepository;
+        this.clock = clock;
     }
 
     /**
@@ -122,7 +126,7 @@ public class MonitoringQueryService {
 
         MonitoringRosterAggregateView aggregate = attemptService.getRosterAggregate(sessionPublicId, tenantId,
                 sessionService.findEnrolledStudentPublicIds(sessionPublicId, tenantId));
-        Instant snapshotAt = Instant.now();
+        Instant snapshotAt = clock.instant();
 
         MonitoringSummaryResponse summary = new MonitoringSummaryResponse(
                 aggregate.registeredCount(),

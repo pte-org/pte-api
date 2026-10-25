@@ -50,7 +50,7 @@ class IncidentEvidenceServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new IncidentEvidenceService(attemptService, incidentRepository);
+        service = new IncidentEvidenceService(attemptService, incidentRepository, java.time.Clock.systemUTC());
     }
 
     private void lockdown(String mode) {
@@ -163,6 +163,7 @@ class IncidentEvidenceServiceTest {
     private ExamIncident existing(String clientEventId, LockdownViolationType type, String detail,
                                   Instant detectedAt) {
         ExamIncident incident = new ExamIncident();
+        incident.setDetectedAt(java.time.Instant.now());
         incident.setPublicId(UUID.randomUUID());
         incident.setAttemptPublicId(attemptId);
         incident.setOrigin(IncidentOrigin.AUTO);

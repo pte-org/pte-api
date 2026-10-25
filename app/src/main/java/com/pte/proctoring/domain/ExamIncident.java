@@ -93,5 +93,5 @@ public class ExamIncident extends BaseEntity {
     private Instant clientOccurredAt;
 
     @Column(name = "detected_at", nullable = false)
-    private Instant detectedAt = Instant.now();
+    private Instant detectedAt;
 }

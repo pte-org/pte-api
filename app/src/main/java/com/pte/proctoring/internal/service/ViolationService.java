@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -34,11 +35,13 @@ public class ViolationService {
     private final SimpMessagingTemplate messagingTemplate;
     private final AttemptService attemptService;
     private final ProctorAccessPolicy proctorAccessPolicy;
+    private final Clock clock;
 
     public ViolationService(ProctorWatchService watchService, ExamIncidentRepository incidentRepository,
                             ApplicationEventPublisher eventPublisher, ProctorMapper mapper,
                             SimpMessagingTemplate messagingTemplate, AttemptService attemptService,
-                            ProctorAccessPolicy proctorAccessPolicy) {
+                            ProctorAccessPolicy proctorAccessPolicy,
+            Clock clock) {
         this.watchService = watchService;
         this.incidentRepository = incidentRepository;
         this.eventPublisher = eventPublisher;
@@ -46,6 +49,7 @@ public class ViolationService {
         this.messagingTemplate = messagingTemplate;
         this.attemptService = attemptService;
         this.proctorAccessPolicy = proctorAccessPolicy;
+        this.clock = clock;
     }
 
     @Transactional
@@ -54,7 +58,7 @@ public class ViolationService {
         if (!attemptService.attemptBelongsToSession(request.attemptPublicId(), sessionPublicId, tenantId)) {
             throw new TargetAttemptInvalidException();
         }
-        Instant detectedAt = Instant.now();
+        Instant detectedAt = clock.instant();
         ExamIncident incident = new ExamIncident();
         incident.setTenantId(tenantId);
         incident.setSessionPublicId(sessionPublicId);

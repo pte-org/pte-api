@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -34,6 +35,7 @@ public class ExamIncidentCommandService {
     private final AttemptService attemptService;
     private final ExamIncidentAccessPolicy accessPolicy;
     private final ExamIncidentMapper mapper;
+    private final Clock clock;
 
     public ExamIncidentCommandService(
             ExamIncidentRepository incidentRepository,
@@ -42,7 +44,8 @@ public class ExamIncidentCommandService {
             SessionService sessionService,
             AttemptService attemptService,
             ExamIncidentAccessPolicy accessPolicy,
-            ExamIncidentMapper mapper) {
+            ExamIncidentMapper mapper,
+            Clock clock) {
         this.incidentRepository = incidentRepository;
         this.historyLog = historyLog;
         this.identityService = identityService;
@@ -50,6 +53,7 @@ public class ExamIncidentCommandService {
         this.attemptService = attemptService;
         this.accessPolicy = accessPolicy;
         this.mapper = mapper;
+        this.clock = clock;
     }
 
     @Transactional
@@ -62,6 +66,7 @@ public class ExamIncidentCommandService {
 
         ExamIncident incident = new ExamIncident();
         incident.setPublicId(UUID.randomUUID());
+        incident.setDetectedAt(clock.instant());
         incident.setTenantId(access.tenantId());
         incident.setSessionPublicId(sessionPublicId);
         incident.setStudentPublicId(request.studentPublicId());

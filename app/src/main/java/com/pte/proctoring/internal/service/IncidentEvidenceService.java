@@ -17,7 +17,7 @@ import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import java.time.Clock;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
@@ -29,10 +29,12 @@ public class IncidentEvidenceService {
 
     private final AttemptService attemptService;
     private final ExamIncidentRepository incidentRepository;
+    private final Clock clock;
 
-    public IncidentEvidenceService(AttemptService attemptService, ExamIncidentRepository incidentRepository) {
+    public IncidentEvidenceService(AttemptService attemptService, ExamIncidentRepository incidentRepository, Clock clock) {
         this.attemptService = attemptService;
         this.incidentRepository = incidentRepository;
+        this.clock = clock;
     }
 
     @Transactional
@@ -65,7 +67,7 @@ public class IncidentEvidenceService {
         incident.setSeverity(severity.name());
         incident.setClientEventId(clientEventId);
         incident.setClientOccurredAt(request.clientOccurredAt());
-        incident.setDetectedAt(Instant.now());
+        incident.setDetectedAt(clock.instant());
         return toReceipt(incidentRepository.save(incident), false);
     }
 

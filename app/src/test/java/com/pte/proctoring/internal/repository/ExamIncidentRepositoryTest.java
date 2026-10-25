@@ -28,6 +28,7 @@ class ExamIncidentRepositoryTest {
     private ExamIncident incident(UUID tenantId, UUID sessionId, UUID attemptId, IncidentOrigin origin,
                                   String clientEventId, Instant detectedAt) {
         ExamIncident incident = new ExamIncident();
+        incident.setDetectedAt(java.time.Instant.now());
         incident.setTenantId(tenantId);
         incident.setSessionPublicId(sessionId);
         incident.setAttemptPublicId(attemptId);

@@ -64,7 +64,7 @@ class ViolationServiceTest {
     @BeforeEach
     void setUp() {
         service = new ViolationService(watchService, incidentRepository, eventPublisher, mapper, messagingTemplate,
-                attemptService, proctorAccessPolicy);
+                attemptService, proctorAccessPolicy, java.time.Clock.systemUTC());
     }
 
     @Test
@@ -130,6 +130,7 @@ class ViolationServiceTest {
 
     private ExamIncident flag(ViolationType type, Instant detectedAt) {
         ExamIncident incident = new ExamIncident();
+        incident.setDetectedAt(java.time.Instant.now());
         incident.setPublicId(UUID.randomUUID());
         incident.setOrigin(IncidentOrigin.PROCTOR_FLAG);
         incident.setType(type.name());
