@@ -211,11 +211,11 @@ function Ensure-PublishedQuestion {
         return $question
     }
     if ($status -eq "ARCHIVED") {
-        $question = Invoke-SeedApi -Method POST -Path "/api/v1/questions/$($question.publicId)/unarchive" -Token $script:AdminToken
+        $question = Invoke-SeedApi -Method PATCH -Path "/api/v1/questions/$($question.publicId)/status" -Body @{ action = "UNARCHIVE" } -Token $script:AdminToken
         $status = "$($question.status)".ToUpperInvariant()
     }
     if ($status -eq "DRAFT") {
-        $question = Invoke-SeedApi -Method POST -Path "/api/v1/questions/$($question.publicId)/publish" -Token $script:AdminToken
+        $question = Invoke-SeedApi -Method PATCH -Path "/api/v1/questions/$($question.publicId)/status" -Body @{ action = "PUBLISH" } -Token $script:AdminToken
     }
     elseif ($status -ne "APPROVED" -and $status -ne "PUBLISHED") {
         throw "Seed question '$title' is in unsupported status '$($question.status)'. Resolve it before rerunning the seed."
@@ -288,7 +288,7 @@ function Get-OrCreateDraftTemplate {
         return $template
     }
     if ($status -eq "PENDING_APPROVAL") {
-        $template = Invoke-SeedApi -Method POST -Path "/api/v1/exam-definitions/$($template.publicId)/approve" -Token $script:AdminToken
+        $template = Invoke-SeedApi -Method PATCH -Path "/api/v1/exam-definitions/$($template.publicId)/status" -Body @{ action = "APPROVE" } -Token $script:AdminToken
         $status = "$($template.status)".ToUpperInvariant()
     }
     if ($status -eq "RETIRED") {
@@ -356,7 +356,7 @@ if ($QuestionPool -eq "EXAM") {
             templatePolicy = "CUSTOM"
             items          = New-DesiredTemplateItems
         }
-        $template = Invoke-SeedApi -Method POST -Path "/api/v1/exam-definitions/$($template.publicId)/activate" -Token $script:AdminToken
+        $template = Invoke-SeedApi -Method PATCH -Path "/api/v1/exam-definitions/$($template.publicId)/status" -Body @{ action = "ACTIVATE" } -Token $script:AdminToken
     }
 } else {
     Write-Host "== Skipping exam score-template seed for PRACTICE pool =="

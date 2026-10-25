@@ -44,48 +44,30 @@ curl http://localhost:8091/actuator/health
 
 ### Populating test data for end-to-end testing
 
-After bringing up the full stack (Option 2), seed test data using `scripts/seed-e2e.ps1`:
+Flyway applies one migration, `V1__baseline.sql` (the complete schema plus reference data and a demo seed), so an empty
+database comes up ready to log in:
 
-> **Local-schema profile (entity consolidation, 2026-10):** with `APP_SPRING_PROFILES=local-schema` in `.env.local` the
-> app builds the schema with Hibernate on an empty database and seeds `admin@test.local` (PLATFORM_ADMIN) from
-> `app/src/main/resources/db/dev-seed/`, so the manual bootstrap SQL below is not needed. See
-> `pte-doc/projects/plans/quang-entity-consolidation/local-dev-runbook.md`.
+- `admin@test.local` (PLATFORM_ADMIN) and `host.e2e@test.local` (HOST_ADMIN of the `e2e` organization), BCrypt hashes
+  only. The password is shared out of band; never write it into the repository.
+- Task types, the active exam definition, a service plan, an active subscription, a program, classes and four students.
 
-**Prerequisites (one-time setup, deployed-style Flyway database only):**
+The 128 earlier migrations were retired (they remain in git history). A database that was migrated with the old history
+cannot take `V1`; drop and recreate it (production included; see the deployment note in `AGENTS.md`).
 
-Before running the seed script, bootstrap a `PLATFORM_ADMIN` account directly via SQL â€” pte-api has no self-registration endpoint. This requires:
-
-1. Generate a BCrypt hash for your bootstrap password using Docker (easiest â€” `htpasswd` is not bundled with all Git Bash installs):
-
-```powershell
-docker run --rm httpd:2.4-alpine htpasswd -nbBC 10 "" 'Password123!'
-# Output: :$2a$10$... (copy the hash part after the colon)
-```
-
-2. Connect to the `iam` database and run this SQL once:
-
-```sql
--- username = email for a PLATFORM_ADMIN; the credential hash lives on the account itself.
-INSERT INTO users (public_id, username, email, full_name, credential_hash, status, deleted, must_change_password, created_at, updated_at)
-VALUES (gen_random_uuid(), 'admin@test.local', 'admin@test.local', 'Bootstrap Admin', '<BCRYPT_HASH>', 'ACTIVE', false, false, now(), now())
-RETURNING id;
--- Capture the printed id value, use it as <USER_ID> in the next statement
-
-INSERT INTO user_roles (user_id, role) VALUES (<USER_ID>, 'PLATFORM_ADMIN');
-```
-
-**Running the seed script:**
+For a full session -> attempt -> grading -> publication flow, run the scripts from the `pte-api` directory with the stack
+running (`PTE_BASE_URL` defaults to `http://localhost:8080`; use `http://localhost:8091` against the bare `app`):
 
 ```powershell
-# From the pte-api directory, with the stack running:
-.\scripts\seed-e2e.ps1
-# or with custom credentials:
-.\scripts\seed-e2e.ps1 -BootstrapAdminEmail admin@example.com -BootstrapAdminPassword YourPassword123!
+$env:PTE_ADMIN_PASSWORD = '<local-admin-password>'
+$env:PTE_SEED_PASSWORD  = '<local-seed-password>'
+.\scripts\seed-local-template-and-question-bank.ps1 -SeedKey PTE_LOCAL
+.\scripts\seed-local-exam-ready.ps1 -SeedKey PTE_LOCAL   # creates the tenant, host, student and an open exam
+.\scripts\seed-local-platform-roles.ps1                  # optional: platform manager/support accounts
 ```
 
-The script is idempotent â€” rerun it any time to recreate the test tenant, host, student, and seeded exam sessions. It talks only to the public Nginx API edge (the same path a real client uses), so it is safe to run repeatedly.
-
-It seeds two published questions, each in its own session: a `READ_ALOUD` question (text-only) and a `REPEAT_SENTENCE` question (with a real uploaded audio file as its prompt â€” see `scripts/fixtures/repeat_sentence_sample.wav`; pass `-RepeatSentenceAudioFixturePath` to use a different file). `ExamAttempt`s are one-shot per (student, session) â€” once a session's attempt is submitted/completed, that student can't restart it; re-run the script with a different `-SessionName`/`-RepeatSentenceSessionName` to seed a fresh session instead.
+The scripts are idempotent. `seed-local-exam-ready.ps1` may fail once at its attempt preflight right after the exam
+opens; run it again. For schema experiments, `APP_SPRING_PROFILES=local-schema` lets Hibernate build the schema instead
+(see `pte-doc/projects/plans/quang-entity-consolidation/local-dev-runbook.md`).
 
 ## Timezone (UTC, fleet-wide)
 
