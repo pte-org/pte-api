@@ -69,7 +69,8 @@ public class PracticeMediaBindingService implements PracticeMediaBindingPort {
                     PracticeConstants.PRACTICE_MEDIA_ITEM_NOT_RECORDABLE,
                     PracticeConstants.PRACTICE_MEDIA_ITEM_NOT_RECORDABLE_MESSAGE);
         }
-        if (item.getStatus() != PracticeSessionItemStatus.PENDING) {
+        if (item.getStatus() != PracticeSessionItemStatus.PENDING
+                && item.getStatus() != PracticeSessionItemStatus.SKIPPED) {
             throw new PracticeSessionException(HttpStatus.CONFLICT,
                     PracticeConstants.PRACTICE_SESSION_NOT_STARTABLE,
                     PracticeConstants.PRACTICE_SESSION_NOT_STARTABLE_MESSAGE);

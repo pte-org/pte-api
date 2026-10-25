@@ -311,7 +311,8 @@ public class PracticeSessionItemService {
     }
 
     public void requirePending(PracticeSessionItem item) {
-        if (item.getStatus() != PracticeSessionItemStatus.PENDING) {
+        if (item.getStatus() != PracticeSessionItemStatus.PENDING
+                && item.getStatus() != PracticeSessionItemStatus.SKIPPED) {
             throw notStartable();
         }
     }
@@ -327,6 +328,7 @@ public class PracticeSessionItemService {
         scoreOrQueue(session, item, now);
         item.setStatus(PracticeSessionItemStatus.ANSWERED);
         item.setAnsweredAt(now);
+        item.setSkippedAt(null);
         itemRepository.saveAndFlush(item);
     }
 
