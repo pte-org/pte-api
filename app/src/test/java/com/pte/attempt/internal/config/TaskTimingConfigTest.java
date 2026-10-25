@@ -1,6 +1,6 @@
 package com.pte.attempt.internal.config;
 
-import com.pte.attempt.internal.exception.TaskTimingNotConfiguredException;
+import com.pte.attempt.internal.exception.content.TaskTimingNotConfiguredException;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;

@@ -1,7 +1,7 @@
 package com.pte.attempt.internal.config;
 
 import com.pte.attempt.internal.constant.AttemptConstants;
-import com.pte.attempt.internal.exception.TaskTimingNotConfiguredException;
+import com.pte.attempt.internal.exception.content.TaskTimingNotConfiguredException;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;

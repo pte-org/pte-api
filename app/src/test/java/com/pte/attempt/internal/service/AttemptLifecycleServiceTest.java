@@ -1,5 +1,6 @@
 package com.pte.attempt.internal.service;
 
+import com.pte.attempt.internal.service.capability.CapabilityNegotiationService;
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.domain.enums.AttemptStatus;
@@ -11,7 +12,7 @@ import com.pte.attempt.internal.service.cache.ExamItemView;
 import com.pte.shared.security.CurrentUser;
 import com.pte.session.SessionService;
 import com.pte.session.dto.response.AttemptRetryPolicyResponse;
-import com.pte.session.internal.exception.NotEntitledException;
+import com.pte.session.internal.exception.enrollment.NotEntitledException;
 import com.pte.tenancy.internal.exception.TenantSuspendedException;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -96,7 +97,7 @@ class AttemptLifecycleServiceTest {
                 submissionDecryptionService,
                 heartbeatService,
                 capabilityNegotiationService,
-                sessionService);
+                sessionService, java.time.Clock.systemUTC());
 
     }
 
@@ -211,7 +212,7 @@ class AttemptLifecycleServiceTest {
                 submissionDecryptionService,
                 heartbeatService,
                 capabilityNegotiationService,
-                sessionService);
+                sessionService, java.time.Clock.systemUTC());
 
         assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> cutoffAwareService.startAttempt(
                 new StartAttemptRequest(sessionPublicId, true), new CurrentUser(studentPublicId, tenantId, List.of("STUDENT")))))

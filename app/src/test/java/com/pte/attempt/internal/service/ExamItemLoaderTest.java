@@ -4,9 +4,9 @@ import com.pte.assessment.AssessmentService;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.attempt.internal.service.cache.ExamItemView;
 import com.pte.attempt.internal.config.TaskTimingConfig;
-import com.pte.attempt.internal.exception.MissingAudioDurationException;
-import com.pte.attempt.internal.exception.MissingAudioPromptException;
-import com.pte.attempt.internal.exception.MissingImagePromptException;
+import com.pte.attempt.internal.exception.content.MissingAudioDurationException;
+import com.pte.attempt.internal.exception.content.MissingAudioPromptException;
+import com.pte.attempt.internal.exception.content.MissingImagePromptException;
 import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
@@ -24,7 +24,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -96,7 +95,7 @@ class ExamItemLoaderTest {
         // so toView always falls back to taskTimingConfig — the exact
         // pre-Phase-3 behavior these regression tests were written against.
         stubTemplateItems();
-        service = new ExamItemLoader(assessmentService, mediaService, taskTimingConfig, examDefinitionService);
+        service = new ExamItemLoader(assessmentService, mediaService, taskTimingConfig, examDefinitionService, java.time.Clock.systemUTC());
     }
 
     @Test

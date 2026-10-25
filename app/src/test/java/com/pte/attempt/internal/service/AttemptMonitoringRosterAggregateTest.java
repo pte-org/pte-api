@@ -1,5 +1,6 @@
 package com.pte.attempt.internal.service;
 
+import com.pte.attempt.internal.service.query.AttemptMonitoringQueryService;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.dto.response.MonitoringRosterAggregateView;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;

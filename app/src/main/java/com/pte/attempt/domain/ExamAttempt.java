@@ -191,14 +191,14 @@ public class ExamAttempt extends BaseEntity {
     @Setter(AccessLevel.NONE)
     private final List<Object> domainEvents = new ArrayList<>();
 
-    public void begin() {
+    public void begin(Instant now) {
         this.status = AttemptStatus.IN_PROGRESS;
-        this.startedAt = Instant.now();
+        this.startedAt = now;
     }
 
-    public void submit() {
+    public void submit(Instant now) {
         this.status = AttemptStatus.SUBMITTED;
-        this.submittedAt = Instant.now();
+        this.submittedAt = now;
         domainEvents.add(new AttemptSubmittedEvent(getPublicId(), sessionPublicId, getTenantId()));
     }
 

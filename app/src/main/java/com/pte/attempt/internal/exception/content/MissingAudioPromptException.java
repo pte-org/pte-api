@@ -1,4 +1,4 @@
-package com.pte.attempt.internal.exception;
+package com.pte.attempt.internal.exception.content;
 
 import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.shared.exception.DomainException;

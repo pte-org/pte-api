@@ -10,6 +10,7 @@ import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
@@ -33,11 +34,13 @@ public class ExamContentService {
 
     private final ExamItemLoader loader;
     private final ExamContentCache cache;
+    private final Clock clock;
     private final Map<UUID, Map<UUID, SnapshotContentResponse.Item>> contentItems = new ConcurrentHashMap<>();
 
-    public ExamContentService(ExamItemLoader loader, ExamContentCache cache) {
+    public ExamContentService(ExamItemLoader loader, ExamContentCache cache, Clock clock) {
         this.loader = loader;
         this.cache = cache;
+        this.clock = clock;
     }
 
     /** Task identity of an exam item without content or media, for coverage, counts and tested sections. */
@@ -116,7 +119,7 @@ public class ExamContentService {
 
     private List<ExamItemView> reload(ExamAttempt attempt) {
         long remainingSeconds = attempt.getExamEndTime() == null ? 0L
-                : Math.max(0L, Duration.between(Instant.now(), attempt.getExamEndTime()).getSeconds());
+                : Math.max(0L, Duration.between(clock.instant(), attempt.getExamEndTime()).getSeconds());
         return loader.load(loader.content(attempt.getExamVersionPublicId()),
                 remainingSeconds + AttemptConstants.MEDIA_URL_RELOAD_MARGIN_SECONDS, attempt.getTenantId());
     }

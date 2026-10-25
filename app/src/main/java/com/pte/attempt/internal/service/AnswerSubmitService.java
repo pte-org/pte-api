@@ -5,7 +5,7 @@ import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.internal.service.cache.ExamItemView;
 import com.pte.attempt.domain.enums.AnswerStatus;
 import com.pte.attempt.ResponseConfidence;
-import com.pte.attempt.internal.exception.AnswerAlreadySubmittedException;
+import com.pte.attempt.internal.exception.answer.AnswerAlreadySubmittedException;
 import com.pte.attempt.internal.repository.AttemptAnswerRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;

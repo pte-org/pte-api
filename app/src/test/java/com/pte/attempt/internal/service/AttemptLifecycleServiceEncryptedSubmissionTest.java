@@ -1,8 +1,9 @@
 package com.pte.attempt.internal.service;
 
+import com.pte.attempt.internal.service.capability.CapabilityNegotiationService;
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.internal.exception.AnswerIntegrityLevelMismatchException;
+import com.pte.attempt.internal.exception.answer.AnswerIntegrityLevelMismatchException;
 import com.pte.attempt.internal.dto.request.EncryptedSubmissionRequest;
 import com.pte.attempt.internal.dto.request.SubmitAnswerRequest;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
@@ -89,7 +90,7 @@ class AttemptLifecycleServiceEncryptedSubmissionTest {
                 submissionDecryptionService,
                 heartbeatService,
                 capabilityNegotiationService,
-                sessionService);
+                sessionService, java.time.Clock.systemUTC());
 
         studentPublicId = UUID.randomUUID();
         tenantId = UUID.randomUUID();
@@ -191,7 +192,7 @@ class AttemptLifecycleServiceEncryptedSubmissionTest {
         attempt.setPublicId(publicId);
         attempt.setStudentPublicId(studentPublicId);
         attempt.setTenantId(tenantId);
-        attempt.begin();
+        attempt.begin(java.time.Instant.now());
         attempt.setCurrentOrderIndex(0);
 
         attempt.setAnswerIntegrityLevel(answerIntegrityLevel);

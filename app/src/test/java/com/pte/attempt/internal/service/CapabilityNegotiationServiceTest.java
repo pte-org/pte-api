@@ -1,5 +1,6 @@
 package com.pte.attempt.internal.service;
 
+import com.pte.attempt.internal.service.capability.CapabilityNegotiationService;
 import com.pte.assessment.AssessmentService;
 import com.pte.assessment.dto.response.SnapshotResponse;
 import com.pte.attempt.domain.ExamAttempt;

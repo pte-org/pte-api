@@ -8,10 +8,10 @@ import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.attempt.internal.config.TaskTimingConfig;
 import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.attempt.internal.exception.ExamCapabilityException;
-import com.pte.attempt.internal.exception.MissingAudioDurationException;
-import com.pte.attempt.internal.exception.MissingAudioPromptException;
-import com.pte.attempt.internal.exception.MissingImagePromptException;
-import com.pte.attempt.internal.exception.TaskTimingNotConfiguredException;
+import com.pte.attempt.internal.exception.content.MissingAudioDurationException;
+import com.pte.attempt.internal.exception.content.MissingAudioPromptException;
+import com.pte.attempt.internal.exception.content.MissingImagePromptException;
+import com.pte.attempt.internal.exception.content.TaskTimingNotConfiguredException;
 import com.pte.attempt.internal.service.cache.ExamItemView;
 import com.pte.itembank.TaskRuntimeContractConstants;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
@@ -21,6 +21,7 @@ import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -45,13 +46,16 @@ class ExamItemLoader {
     private final MediaService mediaService;
     private final TaskTimingConfig taskTimingConfig;
     private final ExamDefinitionService examDefinitionService;
+    private final Clock clock;
 
     ExamItemLoader(AssessmentService assessmentService, MediaService mediaService,
-            TaskTimingConfig taskTimingConfig, ExamDefinitionService examDefinitionService) {
+            TaskTimingConfig taskTimingConfig, ExamDefinitionService examDefinitionService,
+            Clock clock) {
         this.assessmentService = assessmentService;
         this.mediaService = mediaService;
         this.taskTimingConfig = taskTimingConfig;
         this.examDefinitionService = examDefinitionService;
+        this.clock = clock;
     }
 
     /** The exam version's own header, for callers that need its definition and version before the items. */
@@ -146,7 +150,7 @@ class ExamItemLoader {
 
     private Instant expiry(PresignedDownloadResponse presigned) {
         return presigned != null && presigned.expiresInSeconds() > 0
-                ? Instant.now().plusSeconds(presigned.expiresInSeconds())
+                ? clock.instant().plusSeconds(presigned.expiresInSeconds())
                 : null;
     }
 

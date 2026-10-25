@@ -1,5 +1,6 @@
-package com.pte.attempt.internal.service;
+package com.pte.attempt.internal.service.query;
 
+import com.pte.attempt.internal.service.ExamContentService;
 import com.pte.attempt.dto.response.AttemptStaffContextView;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import org.springframework.stereotype.Service;

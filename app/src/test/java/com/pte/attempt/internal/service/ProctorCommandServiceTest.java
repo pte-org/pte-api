@@ -4,7 +4,7 @@ import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import com.pte.session.SessionService;
-import com.pte.session.internal.exception.NotEntitledException;
+import com.pte.session.internal.exception.enrollment.NotEntitledException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,7 +42,7 @@ class ProctorCommandServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ProctorCommandService(attemptRepository, sessionService);
+        service = new ProctorCommandService(attemptRepository, sessionService, java.time.Clock.systemUTC());
     }
 
     @Test
@@ -53,7 +53,7 @@ class ProctorCommandServiceTest {
         attempt.setPublicId(attemptPublicId);
         attempt.setTenantId(tenantId);
         attempt.setSessionPublicId(UUID.randomUUID());
-        attempt.begin();
+        attempt.begin(java.time.Instant.now());
         when(attemptRepository.findByPublicIdAndTenantId(attemptPublicId, tenantId)).thenReturn(Optional.of(attempt));
 
         service.forceSubmit(attemptPublicId, tenantId);
@@ -70,8 +70,8 @@ class ProctorCommandServiceTest {
         attempt.setPublicId(attemptPublicId);
         attempt.setTenantId(tenantId);
         attempt.setSessionPublicId(UUID.randomUUID());
-        attempt.begin();
-        attempt.submit();
+        attempt.begin(java.time.Instant.now());
+        attempt.submit(java.time.Instant.now());
         when(attemptRepository.findByPublicIdAndTenantId(attemptPublicId, tenantId)).thenReturn(Optional.of(attempt));
 
         service.forceSubmit(attemptPublicId, tenantId);
@@ -88,7 +88,7 @@ class ProctorCommandServiceTest {
         attempt.setPublicId(attemptPublicId);
         attempt.setTenantId(tenantId);
         attempt.setSessionPublicId(sessionId);
-        attempt.begin();
+        attempt.begin(java.time.Instant.now());
         when(attemptRepository.findByPublicIdAndTenantId(attemptPublicId, tenantId)).thenReturn(Optional.of(attempt));
         doThrow(new NotEntitledException()).when(sessionService).lockOpenWithinWindowForProctorOperation(sessionId, tenantId);
 

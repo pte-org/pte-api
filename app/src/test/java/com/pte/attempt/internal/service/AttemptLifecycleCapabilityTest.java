@@ -1,5 +1,6 @@
 package com.pte.attempt.internal.service;
 
+import com.pte.attempt.internal.service.capability.CapabilityNegotiationService;
 import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
@@ -10,8 +11,6 @@ import com.pte.attempt.internal.exception.AttemptNotFoundException;
 import com.pte.attempt.internal.exception.ExamCapabilityException;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
-import com.pte.itembank.TaskRuntimeProfileRegistry;
-import com.pte.attempt.internal.service.cache.ExamItemView;
 import com.pte.session.SessionService;
 import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.shared.security.CurrentUser;
@@ -81,7 +80,7 @@ class AttemptLifecycleCapabilityTest {
                 submissionDecryptionService,
                 heartbeatService,
                 capabilityNegotiationService,
-                sessionService);
+                sessionService, java.time.Clock.systemUTC());
         lenient().when(sessionService.getAttemptRetryPolicy(any(), any()))
                 .thenReturn(new AttemptRetryPolicyResponse(0));
     }

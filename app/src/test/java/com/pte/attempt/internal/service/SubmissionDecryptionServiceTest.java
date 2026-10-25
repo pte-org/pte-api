@@ -1,7 +1,7 @@
 package com.pte.attempt.internal.service;
 
 import com.pte.attempt.internal.dto.request.EncryptedSubmissionRequest;
-import com.pte.attempt.internal.exception.SubmissionDecryptionException;
+import com.pte.attempt.internal.exception.answer.SubmissionDecryptionException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;

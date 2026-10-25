@@ -1,5 +1,6 @@
 package com.pte.attempt.internal.service;
 
+import com.pte.attempt.internal.service.capability.CapabilityNegotiationService;
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.internal.dto.request.SubmitAnswerRequest;
@@ -81,7 +82,7 @@ class AttemptLifecycleServiceSubmitAnswerTest {
                 submissionDecryptionService,
                 heartbeatService,
                 capabilityNegotiationService,
-                sessionService);
+                sessionService, java.time.Clock.systemUTC());
 
         studentPublicId = UUID.randomUUID();
         caller = new CurrentUser(studentPublicId, UUID.randomUUID(), List.of("student"));
@@ -92,7 +93,7 @@ class AttemptLifecycleServiceSubmitAnswerTest {
         attempt.setId(1L);
         attempt.setStudentPublicId(studentPublicId);
         attempt.setTenantId(caller.tenantId());
-        attempt.begin();
+        attempt.begin(java.time.Instant.now());
         attempt.setCurrentOrderIndex(0);
 
         attempt.setAnswerIntegrityLevel("STANDARD");

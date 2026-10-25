@@ -1,12 +1,12 @@
 package com.pte.attempt.internal.service;
 
+import com.pte.attempt.internal.service.capability.CapabilityNegotiationService;
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.internal.exception.AttemptAlreadyCompleteException;
 import com.pte.attempt.internal.exception.AttemptNotFoundException;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
-import com.pte.attempt.internal.service.cache.ExamItemView;
 import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 
@@ -80,7 +80,7 @@ class AttemptLifecycleServiceHeartbeatTest {
                 submissionDecryptionService,
                 heartbeatService,
                 capabilityNegotiationService,
-                sessionService);
+                sessionService, java.time.Clock.systemUTC());
 
         studentPublicId = UUID.randomUUID();
         caller = new CurrentUser(studentPublicId, UUID.randomUUID(), List.of("student"));
@@ -94,7 +94,7 @@ class AttemptLifecycleServiceHeartbeatTest {
         attempt.setId(1L);
         attempt.setStudentPublicId(studentPublicId);
         attempt.setTenantId(caller.tenantId());
-        attempt.begin();
+        attempt.begin(java.time.Instant.now());
         when(attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
             .thenReturn(Optional.of(attempt));
 
@@ -122,8 +122,8 @@ class AttemptLifecycleServiceHeartbeatTest {
         attempt.setId(1L);
         attempt.setStudentPublicId(studentPublicId);
         attempt.setTenantId(caller.tenantId());
-        attempt.begin();
-        attempt.submit();
+        attempt.begin(java.time.Instant.now());
+        attempt.submit(java.time.Instant.now());
         when(attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
             .thenReturn(Optional.of(attempt));
 

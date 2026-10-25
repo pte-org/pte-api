@@ -4,8 +4,8 @@ import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.internal.service.cache.ExamItemView;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
@@ -30,6 +30,12 @@ public class TimerService {
 
     private static final Set<String> SECTION_SCOPED_SECTIONS = Set.of("READING");
 
+    private final Clock clock;
+
+    public TimerService(Clock clock) {
+        this.clock = clock;
+    }
+
     /**
      * Resets the per-task bookkeeping {@code startTask} owns (replay counters,
      * section-scoped tracking) — called whenever {@code attempt}'s current task
@@ -53,7 +59,7 @@ public class TimerService {
                 // Just entered this section-scoped section — the budget's clock
                 // starts now. Reuse the existing sectionStartedAt when merely
                 // moving between items already inside the same section.
-                attempt.setSectionStartedAt(Instant.now());
+                attempt.setSectionStartedAt(clock.instant());
             }
             attempt.setActiveSection(item.section());
         } else {
@@ -87,7 +93,7 @@ public class TimerService {
         if (attempt.getSectionStartedAt() == null) {
             return (int) sectionBudgetSeconds(item, allItems);
         }
-        long elapsedSeconds = Duration.between(attempt.getSectionStartedAt(), Instant.now()).getSeconds();
+        long elapsedSeconds = Duration.between(attempt.getSectionStartedAt(), clock.instant()).getSeconds();
         return (int) Math.max(0, sectionBudgetSeconds(item, allItems) - elapsedSeconds);
     }
 

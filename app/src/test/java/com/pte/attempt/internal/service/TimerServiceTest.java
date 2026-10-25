@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -19,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class TimerServiceTest {
 
-    private final TimerService timerService = new TimerService();
+    private final TimerService timerService = new TimerService(java.time.Clock.systemUTC());
     private ExamAttempt attempt;
 
     @BeforeEach

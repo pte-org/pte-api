@@ -1,8 +1,8 @@
 package com.pte.attempt.internal.service;
 
+import com.pte.attempt.internal.service.capability.CapabilityNegotiationService;
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
@@ -78,7 +78,7 @@ class AttemptLifecycleServiceGetAllTasksTest {
                 submissionDecryptionService,
                 heartbeatService,
                 capabilityNegotiationService,
-                sessionService);
+                sessionService, java.time.Clock.systemUTC());
 
         studentPublicId = UUID.randomUUID();
         caller = new CurrentUser(studentPublicId, UUID.randomUUID(), List.of("student"));
@@ -88,7 +88,7 @@ class AttemptLifecycleServiceGetAllTasksTest {
         attempt.setId(1L);
         attempt.setStudentPublicId(studentPublicId);
         attempt.setTenantId(caller.tenantId());
-        attempt.begin();
+        attempt.begin(java.time.Instant.now());
         attempt.setCurrentOrderIndex(0);
 
         attempt.setAnswerIntegrityLevel("STANDARD");
@@ -222,7 +222,7 @@ class AttemptLifecycleServiceGetAllTasksTest {
     @Test
     @DisplayName("completed attempt returns a single completed response, not a task list")
     void getAllTasks_completedAttempt_returnsCompletedResponse() {
-        attempt.submit();
+        attempt.submit(java.time.Instant.now());
 
         List<AttemptTaskResponse> result = service.getAllTasks(attemptPublicId, caller);
 

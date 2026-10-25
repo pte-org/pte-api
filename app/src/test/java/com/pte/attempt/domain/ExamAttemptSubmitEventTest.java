@@ -19,7 +19,7 @@ class ExamAttemptSubmitEventTest {
         attempt.setSessionPublicId(sessionPublicId);
         attempt.setTenantId(tenantId);
 
-        attempt.submit();
+        attempt.submit(java.time.Instant.now());
 
         Collection<?> events = domainEvents(attempt);
         assertThat(events).hasSize(1);

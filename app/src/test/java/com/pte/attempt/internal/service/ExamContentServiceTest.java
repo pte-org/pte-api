@@ -41,7 +41,7 @@ class ExamContentServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ExamContentService(loader, cache);
+        service = new ExamContentService(loader, cache, java.time.Clock.systemUTC());
     }
 
     private SnapshotContentResponse.Item contentItem(int orderIndex, String section, String taskType) {

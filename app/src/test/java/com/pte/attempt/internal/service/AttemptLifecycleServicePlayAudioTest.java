@@ -1,11 +1,12 @@
 package com.pte.attempt.internal.service;
 
+import com.pte.attempt.internal.service.capability.CapabilityNegotiationService;
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.internal.exception.AttemptAlreadyCompleteException;
-import com.pte.attempt.internal.exception.AudioUrlExpiredException;
-import com.pte.attempt.internal.exception.NotCurrentTaskException;
-import com.pte.attempt.internal.exception.ReplayLimitExceededException;
+import com.pte.attempt.internal.exception.content.AudioUrlExpiredException;
+import com.pte.attempt.internal.exception.answer.NotCurrentTaskException;
+import com.pte.attempt.internal.exception.answer.ReplayLimitExceededException;
 import com.pte.attempt.internal.dto.response.AudioPlayResponse;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
@@ -90,7 +91,7 @@ class AttemptLifecycleServicePlayAudioTest {
                 submissionDecryptionService,
                 heartbeatService,
                 capabilityNegotiationService,
-                sessionService);
+                sessionService, java.time.Clock.systemUTC());
 
         studentPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
@@ -103,7 +104,7 @@ class AttemptLifecycleServicePlayAudioTest {
         attempt.setPublicId(attemptPublicId);
         attempt.setStudentPublicId(studentPublicId);
         attempt.setTenantId(tenantId);
-        attempt.begin();
+        attempt.begin(java.time.Instant.now());
         attempt.setCurrentOrderIndex(0);
 
         attempt.setReplayPolicyType("LIMITED");
@@ -237,7 +238,7 @@ class AttemptLifecycleServicePlayAudioTest {
     @Test
     @DisplayName("an already-completed attempt throws before acquiring the lock")
     void playAudio_attemptAlreadyComplete_throwsWithoutLocking() {
-        attempt.submit();
+        attempt.submit(java.time.Instant.now());
 
         assertThatThrownBy(() -> attemptLifecycleService.playAudio(attemptPublicId, pinnedItemPublicId, "req-1", caller))
             .isInstanceOf(AttemptAlreadyCompleteException.class);
