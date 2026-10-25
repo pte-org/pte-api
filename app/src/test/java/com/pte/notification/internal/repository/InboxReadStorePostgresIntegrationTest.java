@@ -59,16 +59,7 @@ class InboxReadStorePostgresIntegrationTest {
         dataSource = new DriverManagerDataSource(url + (url.contains("?") ? "&" : "?")
                 + "currentSchema=" + schema, user, password);
         jdbc = new JdbcTemplate(dataSource);
-        jdbc.execute("CREATE TABLE users (public_id UUID PRIMARY KEY)");
-        jdbc.execute("CREATE TABLE tenants (public_id UUID PRIMARY KEY)");
-        jdbc.update("INSERT INTO users(public_id) VALUES (?)", host);
-        jdbc.update("INSERT INTO tenants(public_id) VALUES (?)", tenant);
-        try (Connection connection = dataSource.getConnection()) {
-            ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V72__notification_inbox_foundation.sql"));
-            ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V73__notification_inbox_snapshots.sql"));
-        }
+        InboxTestSchema.load(dataSource, schema, host);
         transaction = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         deliveryStore = new InboxDeliveryStore(new NamedParameterJdbcTemplate(dataSource));
         readStore = new InboxReadStore(new NamedParameterJdbcTemplate(dataSource));

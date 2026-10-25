@@ -15,9 +15,9 @@ import com.pte.notification.domain.enums.InboxTargetType;
 import java.util.UUID;
 
 /** Notification-owned persistence mapping; atomic delivery SQL stays inside its repository. */
-@Entity @Table(name = "notification_inbox_contents")
+@Entity @Table(name = "notifications")
 @Getter @NoArgsConstructor
-public class InboxContent extends BaseEntity {
+public class Notification extends BaseEntity {
     @Column(name = "event_key", nullable = false, length = 255, updatable = false)
     private String eventKey;
 

@@ -15,9 +15,9 @@ import java.util.UUID;
 import jakarta.persistence.Version;
 
 /** Notification-owned persistence mapping; atomic delivery SQL stays inside its repository. */
-@Entity @Table(name = "notification_inbox_announcements")
+@Entity @Table(name = "notification_announcements")
 @Getter @NoArgsConstructor
-public class InboxAnnouncement extends BaseEntity {
+public class Announcement extends BaseEntity {
     @Column(name = "author_user_public_id", nullable = false)
     private UUID authorUserPublicId;
 

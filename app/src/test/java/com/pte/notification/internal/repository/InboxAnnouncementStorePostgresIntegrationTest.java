@@ -54,18 +54,7 @@ class InboxAnnouncementStorePostgresIntegrationTest {
         dataSource = new DriverManagerDataSource(url + (url.contains("?") ? "&" : "?")
                 + "currentSchema=" + schema, user, password);
         jdbc = new JdbcTemplate(dataSource);
-        jdbc.execute("CREATE TABLE users (public_id UUID PRIMARY KEY)");
-        jdbc.execute("CREATE TABLE tenants (public_id UUID PRIMARY KEY)");
-        jdbc.update("INSERT INTO users(public_id) VALUES (?), (?), (?)", admin, host, UUID.randomUUID());
-        jdbc.update("INSERT INTO tenants(public_id) VALUES (?)", tenant);
-        try (Connection connection = dataSource.getConnection()) {
-            ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V72__notification_inbox_foundation.sql"));
-            ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V73__notification_inbox_snapshots.sql"));
-            ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V74__notification_announcement_query_indexes.sql"));
-        }
+        InboxTestSchema.load(dataSource, schema, admin, host, UUID.randomUUID());
         transaction = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         announcementStore = new InboxAnnouncementStore(new NamedParameterJdbcTemplate(dataSource));
         deliveryStore = new InboxDeliveryStore(new NamedParameterJdbcTemplate(dataSource));
@@ -115,7 +104,7 @@ class InboxAnnouncementStorePostgresIntegrationTest {
                 .isEqualTo(1);
 
         tx(() -> {
-            jdbc.update("UPDATE notification_inbox_items SET read_at=? WHERE content_public_id=?",
+            jdbc.update("UPDATE notification_recipients SET read_at=? WHERE content_public_id=?",
                     java.sql.Timestamp.from(NOW), content);
             return null;
         });
