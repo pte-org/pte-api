@@ -7,7 +7,7 @@ import com.pte.scoring.PracticeScoringException;
 import com.pte.scoring.PracticeScoringFailure;
 import com.pte.scoring.PracticeScoringRequest;
 import com.pte.scoring.PracticeScoringRoute;
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.config.AiProviderProperties;
@@ -104,12 +104,10 @@ public class PracticeAiScoringService {
     private PracticeAiEvaluation scoreObjective(String taskType, TaskRuntimeProfileDescriptor runtime,
             PracticeScoringRequest request) {
         try {
-            ScoringAnswer answer = new ScoringAnswer();
-            answer.setTaskType(taskType);
-            answer.setPayload(request.payload());
-            answer.setCorrectAnswerText(request.correctAnswerText());
-            answer.setOptionsJson(request.optionsJson());
-            int rawScore = objectiveScoringService.score(answer, runtime);
+            SubmittedAnswerView answer = new SubmittedAnswerView(null, null, null, null, request.tenantId(), null,
+                    taskType, request.payload(), request.correctAnswerText(), request.optionsJson(), false, null,
+                    null, null, null, null, null, runtime, null, null, null, null);
+            int rawScore = objectiveScoringService.score(answer);
             String hash = resultHash("objective-result", taskType, request, rawScore);
             return new PracticeAiEvaluation(rawScore, Map.of(), "UNVALIDATED", OBJECTIVE_PROVIDER, null,
                     OBJECTIVE_VERSION, null, null, clock.instant(), hash, "");

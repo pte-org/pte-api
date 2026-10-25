@@ -1,16 +1,12 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ExaminerAnswerDraft;
-import com.pte.scoring.domain.ExaminerAnswerScore;
-import com.pte.scoring.domain.ExaminerAttemptAssignment;
-import com.pte.scoring.domain.ExaminerGradingCommand;
-import com.pte.scoring.domain.ExaminerGradingEvent;
-import com.pte.scoring.domain.ExaminerGradingIssue;
-import com.pte.scoring.domain.ExaminerGradingWork;
-import com.pte.scoring.domain.GradingCohort;
-import com.pte.scoring.domain.GradingCohortMember;
-import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.domain.ScoringSessionState;
+import com.pte.scoring.ScoringProgressChangedEvent;
+import com.pte.scoring.domain.ExaminerEvaluation;
+import com.pte.attempt.AttemptService;
+import com.pte.attempt.dto.response.AttemptGradingCandidateView;
+import com.pte.scoring.domain.GradingAssignment;
+import com.pte.scoring.domain.GradingIssue;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ExaminerAiAvailability;
 import com.pte.scoring.domain.enums.ExaminerDecisionKind;
 import com.pte.scoring.domain.enums.ExaminerGradingIssueStatus;
@@ -25,30 +21,21 @@ import com.pte.scoring.dto.response.ExaminerCommandReceiptResponse;
 import com.pte.scoring.dto.response.ExaminerCommandResponse;
 import com.pte.scoring.dto.response.ExaminerDraftResponse;
 import com.pte.scoring.dto.response.ExaminerWorkflowView;
-import com.pte.scoring.internal.repository.ExaminerAnswerDraftRepository;
-import com.pte.scoring.internal.repository.ExaminerAnswerScoreRepository;
-import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingCommandRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingEventRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingIssueRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingWorkRepository;
-import com.pte.scoring.internal.repository.GradingCohortMemberRepository;
-import com.pte.scoring.internal.repository.GradingCohortRepository;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
+import com.pte.scoring.internal.repository.GradingAssignmentRepository;
+import com.pte.scoring.internal.repository.GradingIssueRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.scoring.dto.response.ExaminerGradingAuditMetadata;
+import com.pte.scoring.internal.constant.ExaminerScoringConstants;
 import com.pte.session.SessionService;
-import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -66,87 +53,51 @@ import java.util.stream.Collectors;
 @Service
 public class ExaminerDraftCommandService {
 
+
     private final SessionService sessionService;
-    private final ExaminerAttemptAssignmentRepository assignmentRepository;
-    private final ExaminerGradingWorkRepository workRepository;
-    private final ExaminerAnswerDraftRepository draftRepository;
-    private final ExaminerGradingEventRepository eventRepository;
-    private final ExaminerGradingCommandRepository commandRepository;
-    private final ExaminerGradingIssueRepository issueRepository;
-    private final ExaminerAnswerScoreRepository scoreRepository;
-    private final ScoringAnswerRepository answerRepository;
-    private final ScoringSessionStateRepository sessionStateRepository;
-    private final GradingCohortRepository cohortRepository;
-    private final GradingCohortMemberRepository memberRepository;
+    private final GradingAssignmentRepository assignmentRepository;
+    private final GradingIssueRepository issueRepository;
+    private final ExaminerEvaluationRepository evaluationRepository;
+    private final AiEvaluationRepository answerRepository;
+    private final SessionGradingGateway gateway;
+    private final AttemptService attemptService;
     private final ScoringEligibilityQueryService eligibilityQueryService;
     private final ExaminerWorkflowQueryService workflowQueryService;
     private final ExaminerReviewVersionService examinerReviewVersionService;
-    private final ObjectMapper objectMapper;
-    private final AuditLogService auditLogService;
+    private final ExaminerWorkRecorder recorder;
+    private final ExaminerFinalizeSubmitter finalizeSubmitter;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
-    @Autowired
     public ExaminerDraftCommandService(
             SessionService sessionService,
-            ExaminerAttemptAssignmentRepository assignmentRepository,
-            ExaminerGradingWorkRepository workRepository,
-            ExaminerAnswerDraftRepository draftRepository,
-            ExaminerGradingEventRepository eventRepository,
-            ExaminerGradingCommandRepository commandRepository,
-            ExaminerGradingIssueRepository issueRepository,
-            ExaminerAnswerScoreRepository scoreRepository,
-            ScoringAnswerRepository answerRepository,
-            ScoringSessionStateRepository sessionStateRepository,
-            GradingCohortRepository cohortRepository,
-            GradingCohortMemberRepository memberRepository,
+            GradingAssignmentRepository assignmentRepository,
+            GradingIssueRepository issueRepository,
+            ExaminerEvaluationRepository evaluationRepository,
+            AiEvaluationRepository answerRepository,
+            SessionGradingGateway gateway,
+            AttemptService attemptService,
             ScoringEligibilityQueryService eligibilityQueryService,
             ExaminerWorkflowQueryService workflowQueryService,
             ExaminerReviewVersionService examinerReviewVersionService,
-            ObjectMapper objectMapper,
-            @Autowired(required = false) AuditLogService auditLogService,
+            ExaminerWorkRecorder recorder,
+            ExaminerFinalizeSubmitter finalizeSubmitter,
+            ApplicationEventPublisher eventPublisher,
             Clock clock) {
         this.sessionService = sessionService;
         this.assignmentRepository = assignmentRepository;
-        this.workRepository = workRepository;
-        this.draftRepository = draftRepository;
-        this.eventRepository = eventRepository;
-        this.commandRepository = commandRepository;
         this.issueRepository = issueRepository;
-        this.scoreRepository = scoreRepository;
+        this.evaluationRepository = evaluationRepository;
         this.answerRepository = answerRepository;
-        this.sessionStateRepository = sessionStateRepository;
-        this.cohortRepository = cohortRepository;
-        this.memberRepository = memberRepository;
+        this.gateway = gateway;
+        this.attemptService = attemptService;
         this.eligibilityQueryService = eligibilityQueryService;
         this.workflowQueryService = workflowQueryService;
         this.examinerReviewVersionService = examinerReviewVersionService;
-        this.objectMapper = objectMapper;
-        this.auditLogService = auditLogService;
+        this.recorder = recorder;
+        this.finalizeSubmitter = finalizeSubmitter;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
-    }
-
-    public ExaminerDraftCommandService(
-            SessionService sessionService,
-            ExaminerAttemptAssignmentRepository assignmentRepository,
-            ExaminerGradingWorkRepository workRepository,
-            ExaminerAnswerDraftRepository draftRepository,
-            ExaminerGradingEventRepository eventRepository,
-            ExaminerGradingCommandRepository commandRepository,
-            ExaminerGradingIssueRepository issueRepository,
-            ExaminerAnswerScoreRepository scoreRepository,
-            ScoringAnswerRepository answerRepository,
-            ScoringSessionStateRepository sessionStateRepository,
-            GradingCohortRepository cohortRepository,
-            GradingCohortMemberRepository memberRepository,
-            ScoringEligibilityQueryService eligibilityQueryService,
-            ExaminerWorkflowQueryService workflowQueryService,
-            ExaminerReviewVersionService examinerReviewVersionService,
-            ObjectMapper objectMapper,
-            Clock clock) {
-        this(sessionService, assignmentRepository, workRepository, draftRepository, eventRepository, commandRepository,
-                issueRepository, scoreRepository, answerRepository, sessionStateRepository, cohortRepository,
-                memberRepository, eligibilityQueryService, workflowQueryService, examinerReviewVersionService,
-                objectMapper, null, clock);
     }
 
     @Transactional
@@ -155,127 +106,102 @@ public class ExaminerDraftCommandService {
             SaveExaminerDraftRequest request, CurrentUser user) {
         sessionService.lockForScoreReviewMutation(sessionPublicId, user.tenantId());
 
-        ExaminerAttemptAssignment assignment = requireAssignment(sessionPublicId, attemptPublicId, user);
+        GradingAssignment assignment = requireAssignment(sessionPublicId, attemptPublicId, user);
         assertNotPublished(user.tenantId(), sessionPublicId);
 
-        ExaminerGradingWork work = workRepository
-                .findByAssignmentWithLock(user.tenantId(), assignment.getPublicId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Work must be started before saving drafts"));
+        GradingAssignment work = lock(assignment);
+        if (!work.isStarted()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ExaminerScoringConstants.WORK_NOT_STARTED_FOR_DRAFT);
+        }
 
         if (work.getStatus() == ExaminerWorkflowStatus.COMPLETED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Cannot save drafts on finalized work");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.WORK_FINALIZED_NO_DRAFTS);
         }
-        if (request.expectedWorkVersion() != work.getVersion()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Expected work version mismatch");
+        if (request.expectedWorkVersion() != work.getWorkVersion()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.WORK_VERSION_MISMATCH);
         }
 
         boolean answerBelongs = answerRepository.existsByTenantIdAndSessionPublicIdAndAttemptPublicIdAndAnswerPublicIdAndDeletedFalse(
                 user.tenantId(), sessionPublicId, attemptPublicId, answerPublicId);
         if (!answerBelongs) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Answer not found in assigned attempt");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ExaminerScoringConstants.ANSWER_NOT_IN_ATTEMPT);
         }
 
         if (request.decisionKind() == ExaminerDecisionKind.CONFIRM_AI) {
-            ScoringAnswer scoringAnswer = answerRepository.findByAnswerPublicId(answerPublicId)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Answer not found"));
+            AiEvaluation scoringAnswer = answerRepository.findByAnswerPublicId(answerPublicId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, ExaminerScoringConstants.ANSWER_NOT_FOUND));
             ExaminerAiReferenceResponse aiRef = examinerReviewVersionService.buildAiReference(scoringAnswer);
             if (aiRef.availability() != ExaminerAiAvailability.AVAILABLE || aiRef.score() == null
                     || !Objects.equals(aiRef.version(), request.reviewedAiVersion())
                     || !Objects.equals(aiRef.score(), request.score())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CONFIRM_AI score or version does not match active AI score");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ExaminerScoringConstants.CONFIRM_AI_DRAFT_MISMATCH);
             }
         }
 
-        String fingerprint = computeFingerprint("SAVE_DRAFT:" + user.tenantId() + ":" + assignment.getPublicId()
+        String fingerprint = ExaminerWorkRecorder.fingerprint(ExaminerScoringConstants.FINGERPRINT_SAVE_DRAFT + user.tenantId() + ":" + assignment.getPublicId()
                 + ":" + answerPublicId + ":" + request.requestPublicId() + ":" + request.expectedDraftVersion()
                 + ":" + request.score() + ":" + (request.comment() != null ? request.comment().trim() : "")
                 + ":" + request.decisionKind() + ":" + request.expectedReviewVersion() + ":" + request.reviewedAiVersion());
 
-        Optional<ExaminerGradingCommand> existingCmd = commandRepository
-                .findByTenantIdAndExaminerPublicIdAndAssignmentPublicIdAndRequestPublicId(
-                        user.tenantId(), user.userId(), assignment.getPublicId(), request.requestPublicId());
-
-        if (existingCmd.isPresent()) {
-            ExaminerGradingCommand cmd = existingCmd.get();
-            if (!fingerprint.equals(cmd.getFingerprint())) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Idempotency key reused with different payload");
-            }
-            ExaminerCommandReceiptResponse receipt = deserializeReceipt(cmd.getReceiptJson());
-            ExaminerWorkflowView currentView = workflowQueryService.buildWorkflowView(assignment, user.tenantId());
-            ExaminerDraftResponse draftResponse = draftRepository
-                    .findByTenantIdAndWorkIdAndAnswerPublicIdAndDeletedFalse(user.tenantId(), work.getId(), answerPublicId)
-                    .map(d -> new ExaminerDraftResponse(d.getAnswerPublicId(), d.getVersion(), d.getScore(), d.getComment(), d.getDecisionKind(), d.getExpectedReviewVersion(), d.getReviewedAiVersion(), d.getSavedAt()))
-                    .orElse(null);
-            return new ExaminerCommandResponse(receipt, currentView, draftResponse);
-        }
-
         Instant now = clock.instant();
-        Optional<ExaminerAnswerDraft> draftOpt = draftRepository
-                .findByWorkAndAnswerWithLock(user.tenantId(), work.getId(), answerPublicId);
-
-        ExaminerAnswerDraft draft;
-        if (draftOpt.isEmpty()) {
-            if (request.expectedDraftVersion() != 0) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Expected draft version mismatch for unpersisted draft");
-            }
-            draft = new ExaminerAnswerDraft(
-                    user.tenantId(), work.getId(), answerPublicId, request.score(),
-                    request.comment() != null ? request.comment().trim() : null,
-                    request.decisionKind(), request.expectedReviewVersion(), request.reviewedAiVersion(), now);
-            draft = draftRepository.save(draft);
-        } else {
-            draft = draftOpt.get();
-            if (request.expectedDraftVersion() != draft.getVersion()) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Expected draft version mismatch: expected "
-                        + request.expectedDraftVersion() + " but was " + draft.getVersion());
-            }
-            draft.update(request.score(), request.comment() != null ? request.comment().trim() : null,
-                    request.decisionKind(), request.expectedReviewVersion(), request.reviewedAiVersion(), now);
-            draft = draftRepository.save(draft);
+        Optional<ExaminerCommandReceiptResponse> replay = recorder.replayOrBegin(user, assignment.getPublicId(),
+                request.requestPublicId(), fingerprint, now);
+        if (replay.isPresent()) {
+            ExaminerWorkflowView currentView = workflowQueryService.buildWorkflowView(assignment, user.tenantId());
+            ExaminerDraftResponse draftResponse = evaluationRepository
+                    .findByTenantIdAndAssignmentIdAndAnswerPublicIdAndDeletedFalse(user.tenantId(), work.getId(), answerPublicId)
+                    .map(ExaminerDraftCommandService::toDraftResponse)
+                    .orElse(null);
+            return new ExaminerCommandResponse(replay.get(), currentView, draftResponse);
         }
 
-        Integer previousScore = draftOpt.map(ExaminerAnswerDraft::getScore).orElse(null);
+        String comment = request.comment() != null ? request.comment().trim() : null;
+        Optional<ExaminerEvaluation> existing = evaluationRepository
+                .findByAnswerWithLock(user.tenantId(), answerPublicId);
+
+        ExaminerEvaluation draft;
+        Integer previousScore = null;
+        if (existing.isEmpty()) {
+            if (request.expectedDraftVersion() != 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.DRAFT_VERSION_MISMATCH_UNPERSISTED);
+            }
+            draft = evaluationRepository.save(ExaminerEvaluation.draft(user.tenantId(), sessionPublicId,
+                    attemptPublicId, answerPublicId, user.userId(), work.getId(), request.score(), comment,
+                    request.decisionKind(), request.expectedReviewVersion(), request.reviewedAiVersion(), now));
+        } else {
+            draft = existing.get();
+            if (draft.isSubmitted()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.ANSWER_ALREADY_SUBMITTED);
+            }
+            if (request.expectedDraftVersion() != draft.getDraftVersion()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.DRAFT_VERSION_MISMATCH_FORMAT
+                        .formatted(request.expectedDraftVersion(), draft.getDraftVersion()));
+            }
+            previousScore = draft.getScore();
+            draft.updateDraft(request.score(), comment, request.decisionKind(), request.expectedReviewVersion(),
+                    request.reviewedAiVersion(), now);
+            draft = evaluationRepository.save(draft);
+        }
+
         boolean isScoreChange = previousScore != null && !Objects.equals(previousScore, request.score());
         ExaminerGradingOperation op = isScoreChange ? ExaminerGradingOperation.SCORE_CHANGE : ExaminerGradingOperation.SAVE_DRAFT;
 
         ExaminerGradingAuditMetadata auditMetadata = new ExaminerGradingAuditMetadata(
-                user.userId(),
-                "EXAMINER",
-                assignment.getPublicId(),
-                previousScore,
-                request.score(),
-                1L,
-                request.comment() != null ? request.comment().trim() : (isScoreChange ? "Score updated" : "Draft saved")
-        );
-        String metadataJson = serializeAuditMetadata(auditMetadata);
-
-        ExaminerGradingEvent event = new ExaminerGradingEvent(
-                user.tenantId(), work.getId(), answerPublicId, op,
-                work.getVersion(), draft.getVersion(), metadataJson, now);
-        eventRepository.save(event);
-
-        if (auditLogService != null) {
-            String summary = String.format("Examiner %s %s for answer %s: score=%s (prev=%s)",
-                    user.userId(), op.name(), answerPublicId, request.score(), previousScore);
-            auditLogService.record(user, "EXAMINER_WORK", assignment.getPublicId().toString(), op.name(), summary);
-        }
+                user.userId(), ExaminerScoringConstants.EXAMINER_ROLE, assignment.getPublicId(), previousScore, request.score(), 1L,
+                comment != null ? comment : (isScoreChange ? ExaminerScoringConstants.AUDIT_SCORE_UPDATED : ExaminerScoringConstants.AUDIT_DRAFT_SAVED));
+        recorder.record(user, assignment.getPublicId(), request.requestPublicId(),
+                ExaminerScoringConstants.AUDIT_DRAFT_SUMMARY_FORMAT.formatted(
+                        user.userId(), op.name(), answerPublicId, request.score(), previousScore),
+                new ExaminerWorkRecorder.Entry(answerPublicId, op, work.getWorkVersion(), draft.getDraftVersion(),
+                        auditMetadata));
 
         ExaminerCommandReceiptResponse receipt = new ExaminerCommandReceiptResponse(
                 request.requestPublicId(), ExaminerGradingOperation.SAVE_DRAFT, now,
-                work.getVersion(), answerPublicId, draft.getVersion(), Collections.emptyList());
-
-        String receiptJson = serializeReceipt(receipt);
-        ExaminerGradingCommand cmd = new ExaminerGradingCommand(
-                user.tenantId(), user.userId(), assignment.getPublicId(), request.requestPublicId(),
-                "SAVE_DRAFT", fingerprint, receiptJson, now);
-        commandRepository.save(cmd);
+                work.getWorkVersion(), answerPublicId, draft.getDraftVersion(), Collections.emptyList());
+        recorder.complete(user, assignment.getPublicId(), request.requestPublicId(), receipt);
 
         ExaminerWorkflowView currentView = workflowQueryService.buildWorkflowView(assignment, user.tenantId());
-        ExaminerDraftResponse draftResponse = new ExaminerDraftResponse(
-                draft.getAnswerPublicId(), draft.getVersion(), draft.getScore(), draft.getComment(),
-                draft.getDecisionKind(), draft.getExpectedReviewVersion(), draft.getReviewedAiVersion(), draft.getSavedAt());
-
-        return new ExaminerCommandResponse(receipt, currentView, draftResponse);
+        return new ExaminerCommandResponse(receipt, currentView, toDraftResponse(draft));
     }
 
     @Transactional
@@ -283,238 +209,120 @@ public class ExaminerDraftCommandService {
             UUID sessionPublicId, UUID attemptPublicId, FinalizeExaminerWorkRequest request, CurrentUser user) {
         sessionService.lockForScoreReviewMutation(sessionPublicId, user.tenantId());
 
-        ExaminerAttemptAssignment assignment = requireAssignment(sessionPublicId, attemptPublicId, user);
+        GradingAssignment assignment = requireAssignment(sessionPublicId, attemptPublicId, user);
 
         String manifestString = request.answers().stream()
                 .sorted(Comparator.comparing(FinalizeExaminerWorkRequest.FinalizeAnswerItemRequest::answerPublicId))
                 .map(a -> a.answerPublicId() + ":" + a.expectedDraftVersion())
                 .collect(Collectors.joining(";"));
 
-        String fingerprint = computeFingerprint("FINALIZE:" + user.tenantId() + ":" + assignment.getPublicId()
+        String fingerprint = ExaminerWorkRecorder.fingerprint(ExaminerScoringConstants.FINGERPRINT_FINALIZE + user.tenantId() + ":" + assignment.getPublicId()
                 + ":" + request.requestPublicId() + ":" + request.expectedWorkVersion() + ":" + manifestString);
 
-        Optional<ExaminerGradingCommand> existingCmd = commandRepository
-                .findByTenantIdAndExaminerPublicIdAndAssignmentPublicIdAndRequestPublicId(
-                        user.tenantId(), user.userId(), assignment.getPublicId(), request.requestPublicId());
-
-        if (existingCmd.isPresent()) {
-            ExaminerGradingCommand cmd = existingCmd.get();
-            if (!fingerprint.equals(cmd.getFingerprint())) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Idempotency key reused with different payload");
-            }
-            ExaminerCommandReceiptResponse receipt = deserializeReceipt(cmd.getReceiptJson());
-            ExaminerWorkflowView currentView = workflowQueryService.buildWorkflowView(assignment, user.tenantId());
-            return new ExaminerCommandResponse(receipt, currentView, null);
+        Instant now = clock.instant();
+        Optional<ExaminerCommandReceiptResponse> replay = recorder.replayOrBegin(user, assignment.getPublicId(),
+                request.requestPublicId(), fingerprint, now);
+        if (replay.isPresent()) {
+            return new ExaminerCommandResponse(replay.get(),
+                    workflowQueryService.buildWorkflowView(assignment, user.tenantId()), null);
         }
 
         assertNotPublished(user.tenantId(), sessionPublicId);
 
-        GradingCohort cohort = cohortRepository
-                .findByTenantIdAndSessionPublicIdAndDeletedFalse(user.tenantId(), sessionPublicId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Cohort not found"));
+        SessionGradingGateway.Grading cohort = gateway.grading(user.tenantId(), sessionPublicId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.COHORT_NOT_FOUND));
 
-        if (cohort.getMarkingMode() != GradingMarkingMode.MANUAL_EXAMINER
-                || (cohort.getStatus() != GradingCohortStatus.FROZEN && cohort.getStatus() != GradingCohortStatus.COMPLETED)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Cohort is not in FROZEN or COMPLETED manual examiner mode");
+        if (cohort.markingMode() != GradingMarkingMode.MANUAL_EXAMINER
+                || (cohort.status() != GradingCohortStatus.FROZEN && cohort.status() != GradingCohortStatus.COMPLETED)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.COHORT_NOT_MANUAL_FROZEN);
         }
 
-        GradingCohortMember member = memberRepository
-                .findByCohortPublicIdAndAttemptPublicIdAndDeletedFalse(cohort.getPublicId(), attemptPublicId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Attempt is not in grading cohort"));
-        if (member.isExcluded()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Attempt is excluded from grading cohort");
+        AttemptGradingCandidateView member = attemptService.getGradingCandidate(attemptPublicId, user.tenantId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.ATTEMPT_NOT_IN_COHORT));
+        if (member.excluded()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.ATTEMPT_EXCLUDED_FROM_GRADING_COHORT);
         }
 
-        ExaminerGradingWork work = workRepository
-                .findByAssignmentWithLock(user.tenantId(), assignment.getPublicId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Work must be started before finalization"));
+        GradingAssignment work = lock(assignment);
+        if (!work.isStarted()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ExaminerScoringConstants.WORK_NOT_STARTED_FOR_FINALIZE);
+        }
 
         if (work.getStatus() == ExaminerWorkflowStatus.COMPLETED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Work is already finalized");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.WORK_ALREADY_FINALIZED);
         }
-        if (request.expectedWorkVersion() != work.getVersion()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Expected work version mismatch");
+        if (request.expectedWorkVersion() != work.getWorkVersion()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.WORK_VERSION_MISMATCH);
         }
 
-        List<ExaminerGradingIssue> openIssues = issueRepository
-                .findByTenantIdAndWorkIdAndDeletedFalseOrderByReportedAtAsc(user.tenantId(), work.getId())
+        List<GradingIssue> openIssues = issueRepository
+                .findByTenantIdAndAssignmentIdAndDeletedFalseOrderByReportedAtAsc(user.tenantId(), work.getId())
                 .stream()
                 .filter(i -> i.getStatus() == ExaminerGradingIssueStatus.OPEN)
                 .toList();
         if (!openIssues.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Unresolved blocking issues exist");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.BLOCKING_ISSUES_OPEN);
         }
 
-        List<ScoringAnswer> eligibleAnswers = answerRepository
+        List<AiEvaluation> eligibleAnswers = answerRepository
                 .findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(sessionPublicId, user.tenantId(), List.of(attemptPublicId))
                 .stream()
                 .filter(eligibilityQueryService::isAiEligible)
                 .toList();
 
         if (eligibleAnswers.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Eligible answer pool is empty");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.ELIGIBLE_POOL_EMPTY);
         }
 
-        Set<UUID> eligibleIds = eligibleAnswers.stream().map(ScoringAnswer::getAnswerPublicId).collect(Collectors.toSet());
+        Set<UUID> eligibleIds = eligibleAnswers.stream().map(AiEvaluation::getAnswerPublicId).collect(Collectors.toSet());
         Set<UUID> requestIds = request.answers().stream().map(FinalizeExaminerWorkRequest.FinalizeAnswerItemRequest::answerPublicId).collect(Collectors.toSet());
 
         if (!eligibleIds.equals(requestIds)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Finalize manifest does not match eligible answer pool exactly");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.MANIFEST_POOL_MISMATCH);
         }
 
-        Map<UUID, ExaminerAnswerDraft> draftsByAnswer = draftRepository
-                .findByTenantIdAndWorkIdAndDeletedFalse(user.tenantId(), work.getId())
-                .stream()
-                .collect(Collectors.toMap(ExaminerAnswerDraft::getAnswerPublicId, Function.identity()));
-
-        Map<UUID, ExaminerAnswerScore> existingScores = scoreRepository
-                .findByTenantIdAndSessionPublicIdAndAttemptPublicId(user.tenantId(), sessionPublicId, attemptPublicId)
-                .stream()
-                .collect(Collectors.toMap(ExaminerAnswerScore::getAnswerPublicId, Function.identity()));
-
-        Map<UUID, ScoringAnswer> answersById = eligibleAnswers.stream()
-                .collect(Collectors.toMap(ScoringAnswer::getAnswerPublicId, Function.identity()));
-
-        Instant now = clock.instant();
-        List<ExaminerCommandReceiptResponse.ChildRequestReceipt> childReceipts = new ArrayList<>();
-
-        for (FinalizeExaminerWorkRequest.FinalizeAnswerItemRequest item : request.answers()) {
-            if (existingScores.containsKey(item.answerPublicId())) {
-                // Preserved legacy final score
-                continue;
-            }
-
-            ExaminerAnswerDraft draft = draftsByAnswer.get(item.answerPublicId());
-            if (draft == null || draft.getScore() == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing complete draft for answer " + item.answerPublicId());
-            }
-            if (item.expectedDraftVersion() != draft.getVersion()) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Draft version mismatch for answer " + item.answerPublicId());
-            }
-
-            UUID childUUID = UUID.nameUUIDFromBytes(("examiner-finalize-v1:" + request.requestPublicId() + ":" + item.answerPublicId()).getBytes(StandardCharsets.UTF_8));
-            String childFingerprint = computeFingerprint("SCORE:" + user.tenantId() + ":" + item.answerPublicId() + ":" + childUUID + ":" + draft.getScore());
-
-            ExaminerDecisionKind decisionKind = draft.getDecisionKind() != null ? draft.getDecisionKind() : ExaminerDecisionKind.MANUAL;
-            Integer reviewedAiScore = null;
-            if (decisionKind == ExaminerDecisionKind.CONFIRM_AI) {
-                ScoringAnswer answerEntity = answersById.get(item.answerPublicId());
-                ExaminerAiReferenceResponse aiRef = examinerReviewVersionService.buildAiReference(answerEntity);
-                if (aiRef.availability() != ExaminerAiAvailability.AVAILABLE || aiRef.score() == null
-                        || !Objects.equals(aiRef.version(), draft.getReviewedAiVersion())
-                        || !Objects.equals(aiRef.score(), draft.getScore())) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT,
-                            "CONFIRM_AI score or version does not match active AI score for answer " + item.answerPublicId());
-                }
-                reviewedAiScore = aiRef.score();
-            }
-
-            ExaminerAnswerScore score = new ExaminerAnswerScore(
-                    item.answerPublicId(),
-                    attemptPublicId,
-                    sessionPublicId,
-                    user.tenantId(),
-                    user.userId(),
-                    draft.getScore(),
-                    now,
-                    decisionKind,
-                    reviewedAiScore,
-                    draft.getReviewedAiVersion(),
-                    draft.getExpectedReviewVersion(),
-                    childUUID,
-                    childFingerprint
-            );
-            scoreRepository.save(score);
-            childReceipts.add(new ExaminerCommandReceiptResponse.ChildRequestReceipt(item.answerPublicId(), childUUID));
-        }
+        List<ExaminerCommandReceiptResponse.ChildRequestReceipt> childReceipts = finalizeSubmitter.submitAll(user,
+                sessionPublicId, attemptPublicId, work, request, eligibleAnswers, now);
 
         work.finalizeGrading(now);
-        workRepository.save(work);
-
-        ExaminerGradingAuditMetadata auditMetadata = new ExaminerGradingAuditMetadata(
-                user.userId(),
-                "EXAMINER",
-                assignment.getPublicId(),
-                null,
-                null,
-                1L,
-                "Finalized grading with " + request.answers().size() + " answers"
-        );
-        String metadataJson = serializeAuditMetadata(auditMetadata);
-
-        ExaminerGradingEvent event = new ExaminerGradingEvent(
-                user.tenantId(), work.getId(), null, ExaminerGradingOperation.FINALIZE,
-                work.getVersion(), null, metadataJson, now);
-        eventRepository.save(event);
-
-        if (auditLogService != null) {
-            auditLogService.record(user, "EXAMINER_WORK", assignment.getPublicId().toString(), "FINALIZE",
-                    "Finalized grading for attempt " + attemptPublicId + " (" + request.answers().size() + " answers)");
-        }
+        assignmentRepository.save(work);
 
         ExaminerCommandReceiptResponse receipt = new ExaminerCommandReceiptResponse(
                 request.requestPublicId(), ExaminerGradingOperation.FINALIZE, now,
-                work.getVersion(), null, null, childReceipts);
-
-        String receiptJson = serializeReceipt(receipt);
-        ExaminerGradingCommand cmd = new ExaminerGradingCommand(
-                user.tenantId(), user.userId(), assignment.getPublicId(), request.requestPublicId(),
-                "FINALIZE", fingerprint, receiptJson, now);
-        commandRepository.save(cmd);
+                work.getWorkVersion(), null, null, childReceipts);
+        recorder.record(user, assignment.getPublicId(), request.requestPublicId(),
+                ExaminerScoringConstants.AUDIT_FINALIZED_SUMMARY_FORMAT.formatted(attemptPublicId, request.answers().size()),
+                new ExaminerWorkRecorder.Entry(null, ExaminerGradingOperation.FINALIZE, work.getWorkVersion(), null,
+                        new ExaminerGradingAuditMetadata(user.userId(), ExaminerScoringConstants.EXAMINER_ROLE, assignment.getPublicId(),
+                                null, null, 1L, ExaminerScoringConstants.AUDIT_FINALIZED_REASON_FORMAT.formatted(request.answers().size()))));
+        recorder.complete(user, assignment.getPublicId(), request.requestPublicId(), receipt);
+        // The last finalized attempt completes the session's grading in this same commit, not at the next sweep.
+        eventPublisher.publishEvent(new ScoringProgressChangedEvent(user.tenantId(), sessionPublicId));
 
         ExaminerWorkflowView currentView = workflowQueryService.buildWorkflowView(assignment, user.tenantId());
         return new ExaminerCommandResponse(receipt, currentView, null);
     }
 
-    private ExaminerAttemptAssignment requireAssignment(UUID sessionPublicId, UUID attemptPublicId, CurrentUser user) {
+    private GradingAssignment requireAssignment(UUID sessionPublicId, UUID attemptPublicId, CurrentUser user) {
         return assignmentRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndExaminerPublicIdAndDeletedFalse(
                 user.tenantId(), sessionPublicId, attemptPublicId, user.userId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found or unauthorized"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, ExaminerScoringConstants.ASSIGNMENT_NOT_FOUND));
+    }
+
+    private GradingAssignment lock(GradingAssignment assignment) {
+        return assignmentRepository.findForUpdate(assignment.getTenantId(), assignment.getPublicId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, ExaminerScoringConstants.ASSIGNMENT_NOT_FOUND));
     }
 
     private void assertNotPublished(UUID tenantId, UUID sessionPublicId) {
-        Optional<ScoringSessionState> sessionStateOpt = sessionStateRepository
-                .findByTenantIdAndSessionPublicId(tenantId, sessionPublicId);
-        if (sessionStateOpt.isPresent() && sessionStateOpt.get().getPublicationPublicId() != null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Session scores already published");
+        if (gateway.isPublished(tenantId, sessionPublicId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.SESSION_SCORES_PUBLISHED);
         }
     }
 
-    private String computeFingerprint(String raw) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(raw.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : digest) {
-                sb.append(String.format("%02x", b));
-            }
-            return sb.toString();
-        } catch (Exception e) {
-            throw new RuntimeException("SHA-256 calculation failed", e);
-        }
-    }
-
-    private String serializeReceipt(ExaminerCommandReceiptResponse receipt) {
-        try {
-            return objectMapper.writeValueAsString(receipt);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to serialize receipt JSON", e);
-        }
-    }
-
-    private ExaminerCommandReceiptResponse deserializeReceipt(String receiptJson) {
-        try {
-            return objectMapper.readValue(receiptJson, ExaminerCommandReceiptResponse.class);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to deserialize receipt JSON", e);
-        }
-    }
-
-    private String serializeAuditMetadata(ExaminerGradingAuditMetadata metadata) {
-        try {
-            return objectMapper.writeValueAsString(metadata);
-        } catch (Exception e) {
-            return null;
-        }
+    private static ExaminerDraftResponse toDraftResponse(ExaminerEvaluation draft) {
+        return new ExaminerDraftResponse(draft.getAnswerPublicId(), draft.getDraftVersion(), draft.getScore(),
+                draft.getComment(), draft.getDecisionKind(), draft.getExpectedReviewVersion(),
+                draft.getReviewedAiVersion(), draft.getSavedAt());
     }
 }

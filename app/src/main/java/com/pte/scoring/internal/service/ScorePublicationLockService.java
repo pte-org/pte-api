@@ -1,13 +1,11 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.domain.ScoringSessionState;
 import com.pte.scoring.dto.response.ReportPublicationScoringView;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.dto.response.ReportScoringAnswerView;
 import com.pte.scoring.internal.constant.ScoreReviewConstants;
 import com.pte.scoring.internal.exception.ScoreSourceSelectionException;
-import com.pte.scoring.dto.response.ReportScoringAnswerView;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
+import com.pte.session.SessionService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,40 +14,42 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-/** Coordinates report publication against examiner score writes using a stable answer-then-state lock order. */
+/**
+ * Coordinates report publication against score writes. Publication locks the session row first (every score
+ * mutation takes the same lock), then the answer rows, then marks the session published, so a score write either
+ * lands before the publication or is refused after it.
+ */
 @Service
 public class ScorePublicationLockService {
 
-    private final ScoringAnswerRepository answerRepository;
-    private final ScoringSessionStateRepository stateRepository;
+    private final AiEvaluationRepository answerRepository;
+    private final SessionService sessionService;
+    private final SessionGradingGateway gateway;
     private final ScoringReviewReadQueryService readQueryService;
 
-    public ScorePublicationLockService(ScoringAnswerRepository answerRepository,
-            ScoringSessionStateRepository stateRepository,
-            ScoringReviewReadQueryService readQueryService) {
+    public ScorePublicationLockService(AiEvaluationRepository answerRepository, SessionService sessionService,
+            SessionGradingGateway gateway, ScoringReviewReadQueryService readQueryService) {
         this.answerRepository = answerRepository;
-        this.stateRepository = stateRepository;
+        this.sessionService = sessionService;
+        this.gateway = gateway;
         this.readQueryService = readQueryService;
     }
 
     @Transactional
     public ReportPublicationScoringView lockForPublication(UUID tenantId, UUID sessionPublicId,
             UUID proposedPublicationPublicId) {
-        List<ScoringAnswer> lockedAnswers = answerRepository.findSessionAnswersForUpdate(sessionPublicId, tenantId);
-        ScoringSessionState state = stateRepository.findForUpdate(tenantId, sessionPublicId)
-                .orElseGet(() -> stateRepository.saveAndFlush(new ScoringSessionState(tenantId, sessionPublicId)));
-        UUID publicationPublicId = state.getPublicationPublicId() == null
-                ? proposedPublicationPublicId : state.getPublicationPublicId();
-        state.lockForPublication(publicationPublicId, Instant.now());
-        stateRepository.saveAndFlush(state);
+        sessionService.lockForScoreReviewMutation(sessionPublicId, tenantId);
+        answerRepository.findSessionAnswersForUpdate(sessionPublicId, tenantId);
+        UUID publicationPublicId = gateway.publication(tenantId, sessionPublicId)
+                .map(SessionGradingGateway.Publication::publicationPublicId).orElse(proposedPublicationPublicId);
+        gateway.lockPublication(tenantId, sessionPublicId, publicationPublicId, Instant.now());
 
         List<ReportScoringAnswerView> inputs = readQueryService.findReportInputs(tenantId, sessionPublicId);
         return new ReportPublicationScoringView(publicationPublicId, inputs);
     }
 
     public boolean isPublished(UUID tenantId, UUID sessionPublicId) {
-        return stateRepository.findByTenantIdAndSessionPublicId(tenantId, sessionPublicId)
-                .map(ScoringSessionState::getPublicationPublicId).orElse(null) != null;
+        return gateway.isPublished(tenantId, sessionPublicId);
     }
 
     public void assertNotPublished(UUID tenantId, UUID sessionPublicId) {

@@ -1,135 +1,92 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
+import com.pte.scoring.ScoringProgressChangedEvent;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ScoringMethod;
-import com.pte.itembank.TaskRuntimeProfileDescriptor;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.constant.ScoringConstants;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.session.SessionService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.util.UUID;
 
 /**
- * Executes a host's "score this session" command (ADR-002 host-gated model —
- * scoring NEVER auto-triggers on submit). Ingests whatever attempt has
- * submitted so far, then for every {@code PENDING} answer in the session:
- * resolves {@code scoringMethod} from the answer's pinned {@code
- * ScoreTemplate} (spec FR-07, via {@link ScoringMethodResolver}) — {@code
- * OBJECTIVE} scores synchronously, {@code AI_SPEECH}/{@code AI_TEXT} gets
- * queued to RabbitMQ, {@code UNSCORED} or a task type absent from the
- * template (e.g. {@code PERSONAL_INTRODUCTION}) stays {@code PENDING} —
- * honest completion, not a fake "skipped" status. Callable multiple times
- * for the same session as more answers come in: each call scores what is
- * newly PENDING and sends again the AI answers that failed or whose job was
- * lost ({@link ScoringAnswerRepository#findScoringWork}). Those rows go straight back to
- * {@code AI_SCORING} under a new dispatch token, never through PENDING.
+ * Executes a host "score this session" command (ADR-002 host-gated model — scoring NEVER auto-triggers on
+ * submit). Opens an evaluation for whatever attempt has submitted so far, then works every one that is waiting:
+ * {@code OBJECTIVE} answers are scored synchronously, {@code AI_SPEECH}/{@code AI_TEXT} answers are queued to
+ * RabbitMQ, and an answer with no scoring method (a task type the exam gives no rule, such as
+ * {@code PERSONAL_INTRODUCTION}) stays {@code PENDING} — honest completion, not a fake "skipped" status.
+ * Callable many times for the same session as more answers come in: each call scores what is newly PENDING and
+ * sends again the AI answers that failed or whose job was lost
+ * ({@link AiEvaluationRepository#findScoringWork}). Those rows go straight back to {@code AI_SCORING} under a new
+ * dispatch token, never through PENDING.
  */
 @Service
 public class ScoringCommandService {
 
     private final ScoringIngestService scoringIngestService;
-    private final ScoringAnswerRepository scoringAnswerRepository;
+    private final AiEvaluationRepository evaluationRepository;
     private final ObjectiveScoringService objectiveScoringService;
     private final AiScoringDispatcher aiScoringDispatcher;
-    private final ScoringMethodResolver scoringMethodResolver;
+    private final AnswerContentReader contentReader;
     private final SessionService sessionService;
     private final ScorePublicationLockService publicationLockService;
     private final ApplicationEventPublisher eventPublisher;
 
-    @Autowired
     public ScoringCommandService(ScoringIngestService scoringIngestService,
-                                 ScoringAnswerRepository scoringAnswerRepository,
+                                 AiEvaluationRepository evaluationRepository,
                                  ObjectiveScoringService objectiveScoringService,
                                  AiScoringDispatcher aiScoringDispatcher,
-                                 ScoringMethodResolver scoringMethodResolver,
+                                 AnswerContentReader contentReader,
                                  SessionService sessionService,
                                  ScorePublicationLockService publicationLockService,
                                  ApplicationEventPublisher eventPublisher) {
         this.scoringIngestService = scoringIngestService;
-        this.scoringAnswerRepository = scoringAnswerRepository;
+        this.evaluationRepository = evaluationRepository;
         this.objectiveScoringService = objectiveScoringService;
         this.aiScoringDispatcher = aiScoringDispatcher;
-        this.scoringMethodResolver = scoringMethodResolver;
+        this.contentReader = contentReader;
         this.sessionService = sessionService;
         this.publicationLockService = publicationLockService;
         this.eventPublisher = eventPublisher;
     }
 
-    /** Compatibility constructor for focused scoring-command tests. */
-    public ScoringCommandService(ScoringIngestService scoringIngestService,
-                                 ScoringAnswerRepository scoringAnswerRepository,
-                                 ObjectiveScoringService objectiveScoringService,
-                                 AiScoringDispatcher aiScoringDispatcher,
-                                 ScoringMethodResolver scoringMethodResolver,
-                                 SessionService sessionService,
-                                 ScorePublicationLockService publicationLockService) {
-        this(scoringIngestService, scoringAnswerRepository, objectiveScoringService, aiScoringDispatcher,
-                scoringMethodResolver, sessionService, publicationLockService, null);
-    }
-
-    /** Compatibility constructor for focused scoring-command tests. */
-    public ScoringCommandService(ScoringIngestService scoringIngestService,
-                                 ScoringAnswerRepository scoringAnswerRepository,
-                                 ObjectiveScoringService objectiveScoringService,
-                                 AiScoringDispatcher aiScoringDispatcher,
-                                 ScoringMethodResolver scoringMethodResolver) {
-        this(scoringIngestService, scoringAnswerRepository, objectiveScoringService, aiScoringDispatcher,
-                scoringMethodResolver, null, null, null);
-    }
-
     @Transactional
     public void requestScoring(UUID sessionPublicId, UUID tenantId) {
-        if (sessionService != null) {
-            sessionService.lockForScoreReviewMutation(sessionPublicId, tenantId);
-            publicationLockService.assertNotPublished(tenantId, sessionPublicId);
-        }
-        scoringIngestService.ingestForScoring(sessionPublicId, tenantId);
-
-        List<ScoringAnswer> work = scoringAnswerRepository.findScoringWork(sessionPublicId, tenantId,
+        sessionService.lockForScoreReviewMutation(sessionPublicId, tenantId);
+        publicationLockService.assertNotPublished(tenantId, sessionPublicId);
+        scoringIngestService.ingestForSession(sessionPublicId, tenantId);
+        List<AiEvaluation> work = evaluationRepository.findScoringWork(sessionPublicId, tenantId,
                 aiScoringDispatcher.staleBefore());
-        for (ScoringAnswer answer : work) {
-            Optional<TaskRuntimeProfileDescriptor> runtime = scoringMethodResolver.resolveProfile(
-                    answer.getScoreTemplatePublicId(), answer.getTaskType());
-            Optional<ScoringMethod> method = runtime.map(this::methodFor)
-                    .or(() -> scoringMethodResolver.resolve(answer.getScoreTemplatePublicId(), answer.getTaskType()));
-            if (method.isEmpty()) {
-                continue; // Task type absent from the pinned template (e.g. PERSONAL_INTRODUCTION) — stays PENDING.
+        Map<UUID, SubmittedAnswerView> content = null;
+        for (AiEvaluation evaluation : work) {
+            ScoringMethod method = evaluation.getScoringMethod();
+            if (method == null) {
+                continue; // The exam gives this task type no scoring rule — stays PENDING.
             }
-            if (objectiveScoringService.supports(method.get())) {
-                scoreObjectively(answer, runtime.orElse(null));
-            } else if (aiScoringDispatcher.supports(method.get())) {
-                aiScoringDispatcher.dispatch(answer, method.get());
+            if (objectiveScoringService.supports(method)) {
+                if (content == null) {
+                    content = contentReader.forSession(sessionPublicId, tenantId);
+                }
+                scoreObjectively(evaluation, content.get(evaluation.getAnswerPublicId()));
+            } else if (aiScoringDispatcher.supports(method)) {
+                aiScoringDispatcher.dispatch(evaluation, method);
             }
             // UNSCORED: stays PENDING (honest completion, not an error).
         }
     }
 
-    private ScoringMethod methodFor(TaskRuntimeProfileDescriptor runtime) {
-        return switch (runtime.scoringProfileKey()) {
-            case "AI_SPEECH" -> ScoringMethod.AI_SPEECH;
-            case "AI_TEXT" -> ScoringMethod.AI_TEXT;
-            case "OBJECTIVE" -> ScoringMethod.OBJECTIVE;
-            case "UNSCORED" -> ScoringMethod.UNSCORED;
-            default -> throw new IllegalStateException(String.format(ScoringConstants.UNSUPPORTED_SCORING_PROFILE,
-                    runtime.scoringProfileKey()));
-        };
-    }
-
-    private void scoreObjectively(ScoringAnswer answer, TaskRuntimeProfileDescriptor runtime) {
-        int rawScore = runtime == null
-                ? objectiveScoringService.score(answer)
-                : objectiveScoringService.score(answer, runtime);
-        answer.markScored(rawScore);
-        scoringAnswerRepository.save(answer);
-        if (eventPublisher != null) {
-            eventPublisher.publishEvent(new com.pte.scoring.ScoringProgressChangedEvent(
-                    answer.getTenantId(), answer.getSessionPublicId()));
+    private void scoreObjectively(AiEvaluation evaluation, SubmittedAnswerView answer) {
+        if (answer == null) {
+            return;
         }
+        evaluation.markScored(objectiveScoringService.score(answer));
+        evaluationRepository.save(evaluation);
+        eventPublisher.publishEvent(new ScoringProgressChangedEvent(evaluation.getTenantId(),
+                evaluation.getSessionPublicId()));
     }
 }

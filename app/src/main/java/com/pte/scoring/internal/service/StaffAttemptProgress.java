@@ -25,7 +25,7 @@ final class StaffAttemptProgress {
     StaffAttemptProgress(StaffAssignmentRow assignment, java.util.UUID templateId) {
         this.assignment = assignment;
         this.templateId = templateId;
-        if (assignment.getEligibleAnswerCount() < 0 || assignment.getBatchPublicId() == null
+        if (assignment.getEligibleAnswerCount() < 0
                 || assignment.getAssignedAt() == null || assignment.getAttemptPublicId() == null) {
             diagnostics.add(ASSIGNMENT_INVALID);
         }
@@ -36,7 +36,7 @@ final class StaffAttemptProgress {
             diagnostics.add(ASSIGNMENT_INVALID);
             return;
         }
-        if (!Objects.equals(answer.getScoreTemplatePublicId(), templateId)) {
+        if (!Objects.equals(answer.getExamDefinitionPublicId(), templateId)) {
             diagnostics.add(TEMPLATE_UNAVAILABLE);
             return;
         }

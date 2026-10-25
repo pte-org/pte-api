@@ -1,11 +1,10 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.domain.ScoringAnswerAiDetail;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.dto.response.AiScoreDetailResponse;
 import com.pte.scoring.internal.repository.AiDetailFlags;
-import com.pte.scoring.internal.repository.ScoringAnswerAiDetailRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.type.TypeReference;
@@ -22,8 +21,7 @@ import java.util.stream.Collectors;
 
 /**
  * Builds the host/examiner view of an answer's AI score. Callers hand over an
- * answer they have already authorised; the lookup is keyed by that answer's
- * own id and tenant, so a client-supplied id never reaches the detail table.
+ * evaluation they have already authorised, so a client-supplied id never reaches the detail lookup.
  */
 @Service
 public class AiScoreDetailQueryService {
@@ -36,32 +34,25 @@ public class AiScoreDetailQueryService {
     private static final TypeReference<Map<String, Integer>> CRITERIA = new TypeReference<>() { };
     private static final TypeReference<Map<String, Object>> DETAIL = new TypeReference<>() { };
 
-    private final ScoringAnswerAiDetailRepository repository;
+    private final AiEvaluationRepository repository;
     private final JsonMapper json;
 
-    public AiScoreDetailQueryService(ScoringAnswerAiDetailRepository repository, JsonMapper json) {
+    public AiScoreDetailQueryService(AiEvaluationRepository repository, JsonMapper json) {
         this.repository = repository;
         this.json = json;
     }
 
     /** Null when the answer has no AI side at all (an objective answer, or one not yet queued). */
     @Transactional(readOnly = true)
-    public AiScoreDetailResponse find(ScoringAnswer answer) {
-        return toResponse(answer, repository.findByAnswerPublicIdAndTenantId(
-                answer.getAnswerPublicId(), answer.getTenantId()));
+    public AiScoreDetailResponse find(AiEvaluation answer) {
+        return toResponse(answer);
     }
 
     @Transactional(readOnly = true)
-    public Map<UUID, AiScoreDetailResponse> findAll(UUID tenantId, Collection<ScoringAnswer> answers) {
-        if (answers.isEmpty()) {
-            return Map.of();
-        }
-        Map<UUID, ScoringAnswerAiDetail> rows = repository.findByTenantIdAndAnswerPublicIdIn(tenantId,
-                answers.stream().map(ScoringAnswer::getAnswerPublicId).toList()).stream()
-                .collect(Collectors.toMap(ScoringAnswerAiDetail::getAnswerPublicId, Function.identity()));
+    public Map<UUID, AiScoreDetailResponse> findAll(UUID tenantId, Collection<AiEvaluation> answers) {
         Map<UUID, AiScoreDetailResponse> result = new LinkedHashMap<>();
-        for (ScoringAnswer answer : answers) {
-            AiScoreDetailResponse response = toResponse(answer, Optional.ofNullable(rows.get(answer.getAnswerPublicId())));
+        for (AiEvaluation answer : answers) {
+            AiScoreDetailResponse response = toResponse(answer);
             if (response != null) {
                 result.put(answer.getAnswerPublicId(), response);
             }
@@ -79,24 +70,24 @@ public class AiScoreDetailQueryService {
                 .collect(Collectors.toMap(AiDetailFlags::answerPublicId, Function.identity()));
     }
 
-    private AiScoreDetailResponse toResponse(ScoringAnswer answer, Optional<ScoringAnswerAiDetail> row) {
-        String status = statusOf(answer.getStatus(), row.isPresent());
+    private AiScoreDetailResponse toResponse(AiEvaluation answer) {
+        boolean hasOutcome = answer.hasAiOutcome();
+        String status = statusOf(answer.getStatus(), hasOutcome);
         if (status == null) {
             return null;
         }
         Integer score = STATUS_SCORED.equals(status) ? answer.getRawScore() : null;
-        String failureReason = STATUS_FAILED.equals(status)
-                ? row.map(ScoringAnswerAiDetail::getFailureReason).map(Enum::name).orElse(null) : null;
-        if (row.isEmpty()) {
+        String failureReason = STATUS_FAILED.equals(status) && answer.getFailureReason() != null
+                ? answer.getFailureReason().name() : null;
+        if (!hasOutcome) {
             return new AiScoreDetailResponse(status, score, Map.of(), null, null, Map.of(), false, failureReason);
         }
-        ScoringAnswerAiDetail detail = row.get();
-        return new AiScoreDetailResponse(status, score, read(detail.getCriteriaScoresJson(), CRITERIA),
-                detail.getFeedback(), detail.getTranscript(), read(detail.getDetailJson(), DETAIL),
-                detail.isFallback(), failureReason);
+        return new AiScoreDetailResponse(status, score, read(answer.getCriteriaScoresJson(), CRITERIA),
+                answer.getFeedback(), answer.getTranscript(), read(answer.getDetailJson(), DETAIL),
+                answer.isFallback(), failureReason);
     }
 
-    /** SCORED with no AI row is an objective answer: it has no AI side to show. */
+    /** SCORED with no AI outcome is an objective answer: it has no AI side to show. */
     private String statusOf(ScoringAnswerStatus status, boolean hasRow) {
         return switch (status) {
             case AI_SCORING -> STATUS_SCORING;

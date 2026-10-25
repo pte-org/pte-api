@@ -2,17 +2,6 @@ package com.pte.scoring.internal.constant;
 
 /** Stable codes and bounded display copy for post-CLOSED grading completion. */
 public final class GradingConstants {
-    public static final String TENANT_REQUIRED = "tenantId is required";
-    public static final String SESSION_REQUIRED = "sessionPublicId is required";
-    public static final String ACTOR_REQUIRED = "actorPublicId is required";
-    public static final String COHORT_REQUIRED = "cohortPublicId is required";
-    public static final String ATTEMPT_REQUIRED = "attemptPublicId is required";
-    public static final String STUDENT_REQUIRED = "studentPublicId is required";
-    public static final String ATTEMPT_STATUS_REQUIRED = "attemptStatus is required";
-    public static final String PREVIEW_VERSION_REQUIRED = "previewVersion is required";
-    public static final String MARKING_MODE_REQUIRED = "markingMode is required";
-    public static final String FROZEN_AT_REQUIRED = "frozenAt is required";
-    public static final String COMPLETED_AT_REQUIRED = "completedAt is required";
 
     public static final String INVALID_REQUEST = "GRADING_COHORT_INVALID_REQUEST";
     public static final String INVALID_REQUEST_MESSAGE = "The grading cohort request is invalid.";
@@ -40,7 +29,6 @@ public final class GradingConstants {
     public static final String EXAMINER_ASSIGNMENT_REQUIRED = "GRADING_EXAMINER_ASSIGNMENT_REQUIRED";
     public static final String EXAMINER_SCORE_REQUIRED = "GRADING_EXAMINER_SCORE_REQUIRED";
     public static final String SHA256_UNAVAILABLE = "SHA-256 is required by the runtime";
-    public static final String REASON_REQUIRED = "A reason is required.";
     public static final int DISPOSITION_REASON_LIMIT = 500;
     public static final String AUTO_DISPOSITION_NOT_SUBMITTED = "Not submitted when the session closed.";
 

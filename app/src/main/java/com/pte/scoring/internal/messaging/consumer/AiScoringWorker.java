@@ -1,11 +1,13 @@
 package com.pte.scoring.internal.messaging.consumer;
 
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.AiEvaluation;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
+import com.pte.scoring.internal.service.AnswerContentReader;
 import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.internal.config.AiProviderProperties;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.scoring.internal.service.AiScoringResultPersistenceService;
 import com.pte.scoring.internal.vendor.AiAnswerScorer;
 import com.pte.scoring.internal.vendor.AiJobBudget;
@@ -47,31 +49,33 @@ public class AiScoringWorker {
 
     private static final Logger log = LoggerFactory.getLogger(AiScoringWorker.class);
 
-    private final ScoringAnswerRepository scoringAnswerRepository;
+    private final AiEvaluationRepository scoringAnswerRepository;
     private final SpeechScoringClient speechScoringClient;
     private final EssayScoringClient essayScoringClient;
     private final Map<String, AiAnswerScorer> scorersByTaskType;
     private final AiScoringResultPersistenceService resultPersistenceService;
     private final Clock clock;
     private final AiProviderProperties properties;
+    private final AnswerContentReader contentReader;
 
     @Autowired
-    public AiScoringWorker(ScoringAnswerRepository scoringAnswerRepository, SpeechScoringClient speechScoringClient,
+    public AiScoringWorker(AiEvaluationRepository scoringAnswerRepository, SpeechScoringClient speechScoringClient,
                            EssayScoringClient essayScoringClient, ObjectProvider<AiAnswerScorer> scorers,
                            AiScoringResultPersistenceService resultPersistenceService, Clock clock,
-                           AiProviderProperties properties) {
+                           AiProviderProperties properties, AnswerContentReader contentReader) {
         this(scoringAnswerRepository, speechScoringClient, essayScoringClient, scorers.orderedStream().toList(),
-                resultPersistenceService, clock, properties);
+                resultPersistenceService, clock, properties, contentReader);
     }
 
     /**
      * {@code scorers} are the task-specific scorers of the active provider; a task type none of them
      * names is scored by the generic speech or essay client.
      */
-    public AiScoringWorker(ScoringAnswerRepository scoringAnswerRepository, SpeechScoringClient speechScoringClient,
+    public AiScoringWorker(AiEvaluationRepository scoringAnswerRepository, SpeechScoringClient speechScoringClient,
                            EssayScoringClient essayScoringClient, List<AiAnswerScorer> scorers,
                            AiScoringResultPersistenceService resultPersistenceService, Clock clock,
-                           AiProviderProperties properties) {
+                           AiProviderProperties properties, AnswerContentReader contentReader) {
+        this.contentReader = contentReader;
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.speechScoringClient = speechScoringClient;
         this.essayScoringClient = essayScoringClient;
@@ -100,7 +104,7 @@ public class AiScoringWorker {
             return; // Queued before dispatch tokens; the row is re-sent as stale on the host's next request.
         }
         // A terminal row or a newer dispatch both fail this check — redelivery never re-calls the vendor.
-        ScoringAnswer answer = scoringAnswerRepository.findByAnswerPublicId(job.answerPublicId())
+        AiEvaluation answer = scoringAnswerRepository.findByAnswerPublicId(job.answerPublicId())
                 .filter(row -> row.isAwaitingAiResult(job.tenantId(), job.sessionPublicId(), job.attemptPublicId(),
                         token))
                 .orElse(null);
@@ -111,10 +115,15 @@ public class AiScoringWorker {
             return;
         }
 
+        SubmittedAnswerView content = contentReader.one(job.answerPublicId(), job.tenantId()).orElse(null);
+        if (content == null) {
+            log.warn("AI scoring skipped for answer {}: the submitted answer is gone", job.answerPublicId());
+            return;
+        }
         AiScoreResult result;
         try {
             result = AiJobBudget.run(clock, Duration.ofMillis(properties.getJobBudgetMs()),
-                    () -> callVendor(job.scoringMethod(), answer));
+                    () -> callVendor(job.scoringMethod(), content));
         } catch (AiProviderException ex) {
             log.warn("AI scoring failed for answer {}: {}", job.answerPublicId(), ex.getReason());
             resultPersistenceService.markScoringFailed(job.answerPublicId(), job.attemptPublicId(), job.tenantId(),
@@ -135,20 +144,20 @@ public class AiScoringWorker {
     }
 
     /** Switches on the {@code scoringMethod} resolved once at dispatch time from the pinned ScoreTemplate (spec FR-07), not re-derived from task type here. */
-    private AiScoreResult callVendor(String scoringMethod, ScoringAnswer answer) {
-        AiAnswerScorer scorer = scorersByTaskType.get(answer.getTaskType());
+    private AiScoreResult callVendor(String scoringMethod, SubmittedAnswerView answer) {
+        AiAnswerScorer scorer = scorersByTaskType.get(answer.taskType());
         if (scorer != null) {
-            return scorer.score(new AiScoringRequest(answer.getTaskType(), answer.getPayload(),
-                    answer.getPromptText(), answer.getReferenceAnswerText(), answer.getCorrectAnswerText(),
-                    answer.getImagePromptRef(), answer.getMinWordCount(), answer.getMaxWordCount(),
-                    answer.getTenantId()));
+            return scorer.score(new AiScoringRequest(answer.taskType(), answer.payload(),
+                    answer.promptText(), answer.referenceAnswerText(), answer.correctAnswerText(),
+                    answer.imagePromptRef(), answer.minWordCount(), answer.maxWordCount(),
+                    answer.tenantId()));
         }
         return switch (scoringMethod) {
-            case "AI_SPEECH" -> speechScoringClient.score(answer.getPayload(), answer.getCorrectAnswerText(),
-                    answer.getTenantId());
-            case "AI_TEXT" -> essayScoringClient.score(answer.getPayload(), answer.getCorrectAnswerText());
+            case "AI_SPEECH" -> speechScoringClient.score(answer.payload(), answer.correctAnswerText(),
+                    answer.tenantId());
+            case "AI_TEXT" -> essayScoringClient.score(answer.payload(), answer.correctAnswerText());
             default -> throw new IllegalArgumentException(
-                    String.format(ScoringConstants.UNSUPPORTED_AI_TASK_TYPE, answer.getTaskType()));
+                    String.format(ScoringConstants.UNSUPPORTED_AI_TASK_TYPE, answer.taskType()));
         };
     }
 }

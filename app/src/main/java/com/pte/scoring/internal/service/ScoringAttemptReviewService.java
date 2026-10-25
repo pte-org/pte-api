@@ -7,7 +7,7 @@ import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.internal.dto.response.AttemptExaminerProgress;
 import com.pte.scoring.internal.dto.response.AttemptReviewItemResponse;
 import com.pte.scoring.internal.repository.AttemptStatusCount;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,12 +26,12 @@ import java.util.stream.Stream;
 @Service
 public class ScoringAttemptReviewService {
 
-    private final ScoringAnswerRepository scoringAnswerRepository;
+    private final AiEvaluationRepository scoringAnswerRepository;
     private final AttemptService attemptService;
     private final IdentityService identityService;
     private final AttemptExaminerProgressReader examinerProgressReader;
 
-    public ScoringAttemptReviewService(ScoringAnswerRepository scoringAnswerRepository,
+    public ScoringAttemptReviewService(AiEvaluationRepository scoringAnswerRepository,
                                        AttemptService attemptService, IdentityService identityService,
                                        AttemptExaminerProgressReader examinerProgressReader) {
         this.scoringAnswerRepository = scoringAnswerRepository;

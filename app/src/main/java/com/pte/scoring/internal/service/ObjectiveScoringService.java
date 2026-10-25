@@ -1,7 +1,7 @@
 package com.pte.scoring.internal.service;
 
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.exception.UnsupportedTaskTypeException;
@@ -24,8 +24,8 @@ import java.util.TreeMap;
  * SELECT_MISSING_WORD}), plus the reference-based {@code
  * FILL_IN_THE_BLANKS_TYPE_IN}, {@code HIGHLIGHT_INCORRECT_WORDS}, and {@code
  * WRITE_FROM_DICTATION} types. Since Phase 4 (plans/score-template-exam-generation),
- * WHICH task types these are is the pinned {@code ScoreTemplate}'s decision
- * (via {@code ScoringMethodResolver}) — {@link #supports} is a trivial gate
+ * WHICH task types these are is the exam item's decision
+ * (via the runtime contract frozen on the exam item) — {@link #supports} is a trivial gate
  * on the already-resolved {@link ScoringMethod}, not a second hardcoded set;
  * {@link #score}'s per-task-type algorithm switch is unchanged.
  */
@@ -48,17 +48,9 @@ public class ObjectiveScoringService {
      * reporting's aggregation formula (percentCorrect = average of
      * contributing rawScores / 100), so every scorer must share one scale.
      */
-    public int score(ScoringAnswer answer) {
-        return score(answer, null);
-    }
-
-    /**
-     * Scores by the pinned runtime renderer when one is available. A custom
-     * task key may reuse an existing renderer, so dispatching by the logical
-     * key alone would incorrectly reject a valid custom task.
-     */
-    public int score(ScoringAnswer answer, TaskRuntimeProfileDescriptor runtime) {
-        String route = runtime == null ? answer.getTaskType() : runtime.rendererKey();
+    public int score(SubmittedAnswerView answer) {
+        TaskRuntimeProfileDescriptor runtime = answer.runtime();
+        String route = runtime == null ? answer.taskType() : runtime.rendererKey();
         return switch (route) {
             case ScoringConstants.TASK_TYPE_MC_READING_SINGLE -> scoreSingleChoice(answer);
             case ScoringConstants.TASK_TYPE_MC_READING_MULTIPLE -> scoreMultipleChoice(answer);
@@ -85,13 +77,13 @@ public class ObjectiveScoringService {
         };
     }
 
-    private int scoreSingleChoice(ScoringAnswer answer) {
-        Integer correctOrderIndex = parseOptions(answer.getOptionsJson()).stream()
+    private int scoreSingleChoice(SubmittedAnswerView answer) {
+        Integer correctOrderIndex = parseOptions(answer.optionsJson()).stream()
                 .filter(FrozenOption::correct)
                 .map(FrozenOption::orderIndex)
                 .findFirst()
                 .orElse(null);
-        Integer submittedOrderIndex = parsePayloadAsOrderIndex(answer.getPayload());
+        Integer submittedOrderIndex = parsePayloadAsOrderIndex(answer.payload());
         boolean correct = correctOrderIndex != null && correctOrderIndex.equals(submittedOrderIndex);
         return correct ? 100 : 0;
     }
@@ -102,15 +94,15 @@ public class ObjectiveScoringService {
      * Converted to the shared 0–100 scale relative to the total number of
      * correct options (the maximum a student could earn).
      */
-    private int scoreMultipleChoice(ScoringAnswer answer) {
-        Set<Integer> correctIndexes = parseOptions(answer.getOptionsJson()).stream()
+    private int scoreMultipleChoice(SubmittedAnswerView answer) {
+        Set<Integer> correctIndexes = parseOptions(answer.optionsJson()).stream()
                 .filter(FrozenOption::correct)
                 .map(FrozenOption::orderIndex)
                 .collect(java.util.stream.Collectors.toSet());
         if (correctIndexes.isEmpty()) {
             return 0;
         }
-        Set<Integer> submitted = parsePayloadAsOrderIndexSet(answer.getPayload());
+        Set<Integer> submitted = parsePayloadAsOrderIndexSet(answer.payload());
         int correctSelections = 0;
         int incorrectSelections = 0;
         for (Integer selected : submitted) {
@@ -131,16 +123,16 @@ public class ObjectiveScoringService {
      * correct-position identity, a pair at submitted positions (i, i+1) is
      * correct exactly when {@code submitted[i+1] == submitted[i] + 1}.
      */
-    private int scoreReorderParagraphs(ScoringAnswer answer) {
-        int totalParagraphs = parseOptions(answer.getOptionsJson()).size();
+    private int scoreReorderParagraphs(SubmittedAnswerView answer) {
+        int totalParagraphs = parseOptions(answer.optionsJson()).size();
         if (totalParagraphs == 0) {
             return 0;
         }
         if (totalParagraphs == 1) {
-            List<Integer> submitted = parsePayloadAsOrderIndexList(answer.getPayload());
+            List<Integer> submitted = parsePayloadAsOrderIndexList(answer.payload());
             return submitted.size() == 1 && submitted.get(0) != null ? 100 : 0;
         }
-        List<Integer> submitted = parsePayloadAsOrderIndexList(answer.getPayload());
+        List<Integer> submitted = parsePayloadAsOrderIndexList(answer.payload());
         int totalPairs = totalParagraphs - 1;
         int correctPairs = 0;
         for (int i = 0; i < submitted.size() - 1; i++) {
@@ -162,12 +154,12 @@ public class ObjectiveScoringService {
      * it). Payload parsing preserves a trailing empty entry (mirrors the
      * frontend's positional convention).
      */
-    private int scoreFillBlanks(ScoringAnswer answer) {
-        Map<Integer, Integer> correctOrderIndexByGap = correctOrderIndexByGap(parseOptions(answer.getOptionsJson()));
+    private int scoreFillBlanks(SubmittedAnswerView answer) {
+        Map<Integer, Integer> correctOrderIndexByGap = correctOrderIndexByGap(parseOptions(answer.optionsJson()));
         if (correctOrderIndexByGap.isEmpty()) {
             return 0;
         }
-        List<Integer> submitted = parsePayloadAsOrderIndexList(answer.getPayload());
+        List<Integer> submitted = parsePayloadAsOrderIndexList(answer.payload());
         int correctGaps = 0;
         for (Map.Entry<Integer, Integer> entry : correctOrderIndexByGap.entrySet()) {
             int gapIndex = entry.getKey();
@@ -185,12 +177,12 @@ public class ObjectiveScoringService {
      * joined with commas. A malformed reference is unscorable and therefore
      * fails closed at zero instead of accidentally awarding a perfect score.
      */
-    private int scoreListeningFillBlanks(ScoringAnswer answer) {
-        List<String> expected = parseListeningFillBlankReference(answer.getCorrectAnswerText());
+    private int scoreListeningFillBlanks(SubmittedAnswerView answer) {
+        List<String> expected = parseListeningFillBlankReference(answer.correctAnswerText());
         if (expected.isEmpty()) {
             return 0;
         }
-        List<String> submitted = parseListeningFillBlankPayload(answer.getPayload());
+        List<String> submitted = parseListeningFillBlankPayload(answer.payload());
         int correctGaps = 0;
         for (int i = 0; i < expected.size(); i++) {
             if (i < submitted.size() && expected.get(i).equals(submitted.get(i))) {
@@ -205,13 +197,13 @@ public class ObjectiveScoringService {
      * Pearson's rule is +1 for each expected selection and -1 for each
      * unexpected selection, floored at zero for the item.
      */
-    private int scoreHighlightIncorrectWords(ScoringAnswer answer) {
-        List<Integer> expected = parseHighlightIncorrectReference(answer.getCorrectAnswerText());
+    private int scoreHighlightIncorrectWords(SubmittedAnswerView answer) {
+        List<Integer> expected = parseHighlightIncorrectReference(answer.correctAnswerText());
         if (expected.isEmpty()) {
             return 0;
         }
         Set<Integer> expectedIndexes = new HashSet<>(expected);
-        Set<Integer> submitted = parsePayloadAsOrderIndexSet(answer.getPayload());
+        Set<Integer> submitted = parsePayloadAsOrderIndexSet(answer.payload());
         int correctSelections = 0;
         int incorrectSelections = 0;
         for (Integer selected : submitted) {
@@ -231,12 +223,12 @@ public class ObjectiveScoringService {
      * punctuation at token boundaries, while the LCS prevents reordered or duplicated words from
      * being counted as correct positions.
      */
-    private int scoreWriteFromDictation(ScoringAnswer answer) {
-        List<String> expected = tokenizeDictation(answer.getCorrectAnswerText());
+    private int scoreWriteFromDictation(SubmittedAnswerView answer) {
+        List<String> expected = tokenizeDictation(answer.correctAnswerText());
         if (expected.isEmpty()) {
             return 0;
         }
-        List<String> submitted = tokenizeDictation(answer.getPayload());
+        List<String> submitted = tokenizeDictation(answer.payload());
         int matchedWords = longestCommonSubsequenceLength(expected, submitted);
         return Math.round(100f * matchedWords / expected.size());
     }

@@ -1,15 +1,15 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ExaminerAnswerScore;
-import com.pte.scoring.domain.ExaminerAttemptAssignment;
-import com.pte.scoring.domain.GradingCohort;
-import com.pte.scoring.domain.GradingCohortMember;
-import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.domain.ScoringSessionState;
+import com.pte.attempt.dto.response.AttemptGradingCandidateView;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
+import com.pte.scoring.domain.ExaminerEvaluation;
+import com.pte.scoring.domain.GradingAssignment;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ExaminerAiAvailability;
 import com.pte.scoring.domain.enums.ExaminerDecisionKind;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.dto.response.ExaminerAiReferenceResponse;
+import com.pte.scoring.internal.constant.ExaminerScoringConstants;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -27,7 +27,7 @@ import java.util.UUID;
 @Service
 public class ExaminerReviewVersionService {
 
-    public ExaminerAiAvailability determineAiAvailability(ScoringAnswer answer) {
+    public ExaminerAiAvailability determineAiAvailability(AiEvaluation answer) {
         if (answer == null) {
             return ExaminerAiAvailability.UNAVAILABLE;
         }
@@ -44,7 +44,7 @@ public class ExaminerReviewVersionService {
         return ExaminerAiAvailability.UNAVAILABLE;
     }
 
-    public String computeAiVersion(ScoringAnswer answer) {
+    public String computeAiVersion(AiEvaluation answer) {
         if (answer == null) {
             return sha256Hex(encodeFields("UNAVAILABLE", "", "", "", "", ""));
         }
@@ -63,7 +63,7 @@ public class ExaminerReviewVersionService {
         return sha256Hex(encodeFields(availability.name(), scoreStr, provider, model, providerVersion, scoredAt));
     }
 
-    public ExaminerAiReferenceResponse buildAiReference(ScoringAnswer answer) {
+    public ExaminerAiReferenceResponse buildAiReference(AiEvaluation answer) {
         if (answer == null) {
             return new ExaminerAiReferenceResponse(ExaminerAiAvailability.UNAVAILABLE, null, null,
                     computeAiVersion(null));
@@ -75,32 +75,33 @@ public class ExaminerReviewVersionService {
         return new ExaminerAiReferenceResponse(availability, score, scoredAt, version);
     }
 
-    public String computeReviewVersion(ScoringAnswer answer, ExaminerAttemptAssignment assignment,
-            GradingCohort cohort, GradingCohortMember member, ExaminerAnswerScore savedScore,
-            ScoringSessionState sessionState) {
+    public String computeReviewVersion(AiEvaluation answer, SubmittedAnswerView content,
+            GradingAssignment assignment, SessionGradingGateway.Grading cohort, AttemptGradingCandidateView member,
+            ExaminerEvaluation savedScore,
+            SessionGradingGateway.Publication sessionState) {
         ExaminerAiReferenceResponse aiRef = buildAiReference(answer);
 
         String answerId = answer != null && answer.getAnswerPublicId() != null
                 ? answer.getAnswerPublicId().toString() : "";
-        String pinnedItemId = answer != null && answer.getPinnedItemPublicId() != null
-                ? answer.getPinnedItemPublicId().toString() : "";
+        String pinnedItemId = answer != null && answer.getItemPublicId() != null
+                ? answer.getItemPublicId().toString() : "";
         String taskType = answer != null && answer.getTaskType() != null ? answer.getTaskType() : "";
-        String payload = answer != null && answer.getPayload() != null ? answer.getPayload() : "";
-        String correctAnswer = answer != null && answer.getCorrectAnswerText() != null
-                ? answer.getCorrectAnswerText() : "";
-        String optionsJson = answer != null && answer.getOptionsJson() != null ? answer.getOptionsJson() : "";
+        String payload = content != null && content.payload() != null ? content.payload() : "";
+        String correctAnswer = content != null && content.correctAnswerText() != null
+                ? content.correctAnswerText() : "";
+        String optionsJson = content != null && content.optionsJson() != null ? content.optionsJson() : "";
 
         String examinerId = assignment != null && assignment.getExaminerPublicId() != null
                 ? assignment.getExaminerPublicId().toString() : "";
 
-        String cohortId = cohort != null && cohort.getPublicId() != null ? cohort.getPublicId().toString() : "";
-        String markingMode = cohort != null && cohort.getMarkingMode() != null ? cohort.getMarkingMode().name() : "";
-        String cohortStatus = cohort != null && cohort.getStatus() != null ? cohort.getStatus().name() : "";
-        String cohortVersion = cohort != null ? String.valueOf(cohort.getCohortVersion()) : "";
+        String cohortId = cohort != null ? cohort.sessionPublicId().toString() : "";
+        String markingMode = cohort != null && cohort.markingMode() != null ? cohort.markingMode().name() : "";
+        String cohortStatus = cohort != null && cohort.status() != null ? cohort.status().name() : "";
+        String cohortVersion = cohort != null ? "1" : "";
 
-        String memberExcluded = member != null ? String.valueOf(member.isExcluded()) : "";
-        String dispositionReason = member != null && member.getDispositionReason() != null
-                ? member.getDispositionReason() : "";
+        String memberExcluded = member != null ? String.valueOf(member.excluded()) : "";
+        String dispositionReason = member != null && member.exclusionReason() != null
+                ? member.exclusionReason() : "";
 
         String aiAvailability = aiRef.availability().name();
         String aiVersion = aiRef.version();
@@ -113,10 +114,10 @@ public class ExaminerReviewVersionService {
         String finalizedAt = savedScore != null && savedScore.getSubmittedAt() != null
                 ? savedScore.getSubmittedAt().toString() : "";
 
-        String pubId = sessionState != null && sessionState.getPublicationPublicId() != null
-                ? sessionState.getPublicationPublicId().toString() : "";
-        String pubLockedAt = sessionState != null && sessionState.getPublicationLockedAt() != null
-                ? sessionState.getPublicationLockedAt().toString() : "";
+        String pubId = sessionState != null && sessionState.publicationPublicId() != null
+                ? sessionState.publicationPublicId().toString() : "";
+        String pubLockedAt = sessionState != null && sessionState.lockedAt() != null
+                ? sessionState.lockedAt().toString() : "";
 
         return sha256Hex(encodeFields(
                 answerId, pinnedItemId, taskType, payload, correctAnswer, optionsJson,
@@ -150,13 +151,13 @@ public class ExaminerReviewVersionService {
         return sb.toString();
     }
 
-    private static String sha256Hex(String input) {
+    static String sha256Hex(String input) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 algorithm not available", e);
+            throw new IllegalStateException(ExaminerScoringConstants.SHA_256_UNAVAILABLE, e);
         }
     }
 }

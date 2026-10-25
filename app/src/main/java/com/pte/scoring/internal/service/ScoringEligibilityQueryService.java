@@ -1,9 +1,9 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.dto.response.AiEligibleAttemptView;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,17 +13,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** Resolves assignment-pool eligibility from each answer's pinned template, never task-type names. */
+/** Resolves assignment-pool eligibility from the scoring method each answer was given from its exam item. */
 @Service
 public class ScoringEligibilityQueryService {
 
-    private final ScoringAnswerRepository scoringAnswerRepository;
-    private final ScoringMethodResolver scoringMethodResolver;
+    private final AiEvaluationRepository evaluationRepository;
 
-    public ScoringEligibilityQueryService(ScoringAnswerRepository scoringAnswerRepository,
-            ScoringMethodResolver scoringMethodResolver) {
-        this.scoringAnswerRepository = scoringAnswerRepository;
-        this.scoringMethodResolver = scoringMethodResolver;
+    public ScoringEligibilityQueryService(AiEvaluationRepository evaluationRepository) {
+        this.evaluationRepository = evaluationRepository;
     }
 
     /** A null attempt filter means all submitted attempts in the session; an empty filter means an empty pool. */
@@ -33,13 +30,12 @@ public class ScoringEligibilityQueryService {
         if (attemptPublicIds != null && attemptPublicIds.isEmpty()) {
             return List.of();
         }
-        List<ScoringAnswer> answers = attemptPublicIds == null
-                ? scoringAnswerRepository.findBySessionPublicIdAndTenantId(sessionPublicId, tenantId)
-                : scoringAnswerRepository.findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(
+        List<AiEvaluation> answers = attemptPublicIds == null
+                ? evaluationRepository.findBySessionPublicIdAndTenantId(sessionPublicId, tenantId)
+                : evaluationRepository.findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(
                         sessionPublicId, tenantId, attemptPublicIds);
-
         Map<UUID, Integer> eligibleCounts = new LinkedHashMap<>();
-        for (ScoringAnswer answer : answers) {
+        for (AiEvaluation answer : answers) {
             if (isAiEligible(answer)) {
                 eligibleCounts.merge(answer.getAttemptPublicId(), 1, Integer::sum);
             }
@@ -49,14 +45,8 @@ public class ScoringEligibilityQueryService {
         return result.stream().sorted((left, right) -> left.attemptPublicId().compareTo(right.attemptPublicId())).toList();
     }
 
-    boolean isAiEligible(ScoringAnswer answer) {
-        return scoringMethodResolver.resolve(answer.getScoreTemplatePublicId(), answer.getTaskType())
-                .filter(ScoringMethod::isAiScored)
-                .isPresent();
-    }
-
-    java.util.Optional<Boolean> resolvePinnedEligibility(UUID templateId, String taskType) {
-        return scoringMethodResolver.resolve(templateId, taskType)
-                .map(ScoringMethod::isAiScored);
+    boolean isAiEligible(AiEvaluation answer) {
+        ScoringMethod method = answer.getScoringMethod();
+        return method != null && method.isAiScored();
     }
 }

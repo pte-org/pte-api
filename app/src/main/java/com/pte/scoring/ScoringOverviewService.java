@@ -1,9 +1,8 @@
 package com.pte.scoring;
 
-import com.pte.scoring.domain.enums.GradingCohortStatus;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
-import com.pte.scoring.internal.repository.GradingCohortRepository;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.service.SessionGradingGateway;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,19 +13,18 @@ import java.util.UUID;
 /**
  * Read-only grading backlog for dashboards. Grouped counts only (a tenant can hold
  * a very large number of answer rows), every query tenant-scoped and soft-delete
- * filtered, and only this module's own repositories are used, so the facade adds no
- * cross-module dependency to {@code scoring}.
+ * filtered, and only this module's own repositories and the session grading gateway are used.
  */
 @Service
 public class ScoringOverviewService {
 
-    private final ScoringAnswerRepository answerRepository;
-    private final GradingCohortRepository cohortRepository;
+    private final AiEvaluationRepository answerRepository;
+    private final SessionGradingGateway gateway;
 
-    public ScoringOverviewService(ScoringAnswerRepository answerRepository,
-            GradingCohortRepository cohortRepository) {
+    public ScoringOverviewService(AiEvaluationRepository answerRepository,
+            SessionGradingGateway gateway) {
         this.answerRepository = answerRepository;
-        this.cohortRepository = cohortRepository;
+        this.gateway = gateway;
     }
 
     /**
@@ -48,6 +46,6 @@ public class ScoringOverviewService {
                 byStatus.getOrDefault(ScoringAnswerStatus.PENDING, 0L),
                 byStatus.getOrDefault(ScoringAnswerStatus.AI_SCORING, 0L),
                 byStatus.getOrDefault(ScoringAnswerStatus.SCORING_FAILED, 0L),
-                cohortRepository.countByTenantIdAndStatusAndDeletedFalse(tenantId, GradingCohortStatus.FROZEN));
+                gateway.countFrozen(tenantId));
     }
 }

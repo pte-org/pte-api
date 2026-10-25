@@ -1,22 +1,18 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ExaminerAttemptAssignment;
-import com.pte.scoring.domain.ExaminerGradingWork;
+import com.pte.scoring.domain.GradingAssignment;
 import com.pte.scoring.domain.enums.ExaminerWorkflowStatus;
 import com.pte.scoring.internal.dto.response.AttemptExaminerProgress;
 import com.pte.scoring.internal.repository.AttemptScoreCount;
-import com.pte.scoring.internal.repository.ExaminerAnswerDraftRepository;
-import com.pte.scoring.internal.repository.ExaminerAnswerScoreRepository;
-import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingWorkRepository;
-import com.pte.scoring.internal.repository.WorkDraftCount;
+import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
+import com.pte.scoring.internal.repository.GradingAssignmentRepository;
+import com.pte.scoring.internal.repository.DraftCount;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -27,48 +23,38 @@ import java.util.stream.Collectors;
 @Component
 class AttemptExaminerProgressReader {
 
-    private final ExaminerAttemptAssignmentRepository assignmentRepository;
-    private final ExaminerGradingWorkRepository workRepository;
-    private final ExaminerAnswerDraftRepository draftRepository;
-    private final ExaminerAnswerScoreRepository scoreRepository;
+    private final GradingAssignmentRepository assignmentRepository;
+    private final ExaminerEvaluationRepository evaluationRepository;
 
-    AttemptExaminerProgressReader(ExaminerAttemptAssignmentRepository assignmentRepository,
-                                  ExaminerGradingWorkRepository workRepository,
-                                  ExaminerAnswerDraftRepository draftRepository,
-                                  ExaminerAnswerScoreRepository scoreRepository) {
+    AttemptExaminerProgressReader(GradingAssignmentRepository assignmentRepository,
+                                  ExaminerEvaluationRepository evaluationRepository) {
         this.assignmentRepository = assignmentRepository;
-        this.workRepository = workRepository;
-        this.draftRepository = draftRepository;
-        this.scoreRepository = scoreRepository;
+        this.evaluationRepository = evaluationRepository;
     }
 
     /** Progress by attempt; attempts without an examiner assignment are absent. */
     Map<UUID, AttemptExaminerProgress> read(UUID tenantId, UUID sessionPublicId) {
-        List<ExaminerAttemptAssignment> assignments = assignmentRepository
+        List<GradingAssignment> assignments = assignmentRepository
                 .findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId);
         if (assignments.isEmpty()) {
             return Map.of();
         }
-        Map<UUID, ExaminerGradingWork> worksByAssignment = workRepository
-                .findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId).stream()
-                .collect(Collectors.toMap(ExaminerGradingWork::getAssignmentPublicId, Function.identity(),
-                        (first, second) -> first));
-        Map<Long, Long> draftsByWork = worksByAssignment.isEmpty() ? Map.of()
-                : draftRepository.countByWork(tenantId,
-                                worksByAssignment.values().stream().map(ExaminerGradingWork::getId).toList())
-                        .stream().collect(Collectors.toMap(WorkDraftCount::workId, WorkDraftCount::count));
-        Map<UUID, Long> scoresByAttempt = scoreRepository.countBySessionAndAttempt(tenantId, sessionPublicId)
+        List<Long> startedIds = assignments.stream().filter(GradingAssignment::isStarted)
+                .map(GradingAssignment::getId).toList();
+        Map<Long, Long> draftsByAssignment = startedIds.isEmpty() ? Map.of()
+                : evaluationRepository.countByAssignment(tenantId, startedIds)
+                        .stream().collect(Collectors.toMap(DraftCount::assignmentId, DraftCount::count));
+        Map<UUID, Long> scoresByAttempt = evaluationRepository.countBySessionAndAttempt(tenantId, sessionPublicId)
                 .stream().collect(Collectors.toMap(AttemptScoreCount::attemptPublicId, AttemptScoreCount::count));
 
         Map<UUID, AttemptExaminerProgress> progress = new HashMap<>();
-        for (ExaminerAttemptAssignment assignment : assignments) {
-            ExaminerGradingWork work = worksByAssignment.get(assignment.getPublicId());
+        for (GradingAssignment assignment : assignments) {
             int eligible = assignment.getEligibleAnswerCount();
             ExaminerWorkflowStatus status;
             int saved;
-            if (work != null) {
-                status = work.getStatus();
-                saved = draftsByWork.getOrDefault(work.getId(), 0L).intValue();
+            if (assignment.isStarted()) {
+                status = assignment.getStatus();
+                saved = draftsByAssignment.getOrDefault(assignment.getId(), 0L).intValue();
             } else {
                 saved = scoresByAttempt.getOrDefault(assignment.getAttemptPublicId(), 0L).intValue();
                 status = saved == 0 ? ExaminerWorkflowStatus.PENDING

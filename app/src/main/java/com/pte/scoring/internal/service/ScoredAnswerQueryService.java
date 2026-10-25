@@ -2,7 +2,7 @@ package com.pte.scoring.internal.service;
 
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.dto.response.ScoredAnswerView;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,9 +13,9 @@ import java.util.UUID;
 @Service
 public class ScoredAnswerQueryService {
 
-    private final ScoringAnswerRepository scoringAnswerRepository;
+    private final AiEvaluationRepository scoringAnswerRepository;
 
-    public ScoredAnswerQueryService(ScoringAnswerRepository scoringAnswerRepository) {
+    public ScoredAnswerQueryService(AiEvaluationRepository scoringAnswerRepository) {
         this.scoringAnswerRepository = scoringAnswerRepository;
     }
 

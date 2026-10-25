@@ -1,11 +1,7 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ExaminerAttemptAssignment;
-import com.pte.scoring.domain.ExaminerGradingCommand;
-import com.pte.scoring.domain.ExaminerGradingEvent;
-import com.pte.scoring.domain.ExaminerGradingIssue;
-import com.pte.scoring.domain.ExaminerGradingWork;
-import com.pte.scoring.domain.ScoringSessionState;
+import com.pte.scoring.domain.GradingAssignment;
+import com.pte.scoring.domain.GradingIssue;
 import com.pte.scoring.domain.enums.ExaminerGradingOperation;
 import com.pte.scoring.domain.enums.ExaminerWorkflowStatus;
 import com.pte.scoring.dto.request.ReportGradingIssueRequest;
@@ -15,25 +11,17 @@ import com.pte.scoring.dto.response.ExaminerCommandReceiptResponse;
 import com.pte.scoring.dto.response.ExaminerCommandResponse;
 import com.pte.scoring.dto.response.ExaminerGradingIssueResponse;
 import com.pte.scoring.dto.response.ExaminerWorkflowView;
-import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingCommandRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingEventRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingIssueRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingWorkRepository;
-import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.internal.repository.GradingAssignmentRepository;
+import com.pte.scoring.internal.repository.GradingIssueRepository;
 import com.pte.scoring.dto.response.ExaminerGradingAuditMetadata;
+import com.pte.scoring.internal.constant.ExaminerScoringConstants;
 import com.pte.session.SessionService;
-import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import tools.jackson.databind.ObjectMapper;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Collections;
@@ -44,57 +32,30 @@ import java.util.UUID;
 @Service
 public class ExaminerWorkflowCommandService {
 
+
     private final SessionService sessionService;
-    private final ExaminerAttemptAssignmentRepository assignmentRepository;
-    private final ExaminerGradingWorkRepository workRepository;
-    private final ExaminerGradingEventRepository eventRepository;
-    private final ExaminerGradingCommandRepository commandRepository;
-    private final ExaminerGradingIssueRepository issueRepository;
-    private final ScoringSessionStateRepository sessionStateRepository;
+    private final GradingAssignmentRepository assignmentRepository;
+    private final GradingIssueRepository issueRepository;
+    private final SessionGradingGateway gateway;
     private final ExaminerWorkflowQueryService workflowQueryService;
-    private final ObjectMapper objectMapper;
-    private final AuditLogService auditLogService;
+    private final ExaminerWorkRecorder recorder;
     private final Clock clock;
 
-    @Autowired
     public ExaminerWorkflowCommandService(
             SessionService sessionService,
-            ExaminerAttemptAssignmentRepository assignmentRepository,
-            ExaminerGradingWorkRepository workRepository,
-            ExaminerGradingEventRepository eventRepository,
-            ExaminerGradingCommandRepository commandRepository,
-            ExaminerGradingIssueRepository issueRepository,
-            ScoringSessionStateRepository sessionStateRepository,
+            GradingAssignmentRepository assignmentRepository,
+            GradingIssueRepository issueRepository,
+            SessionGradingGateway gateway,
             ExaminerWorkflowQueryService workflowQueryService,
-            ObjectMapper objectMapper,
-            @Autowired(required = false) AuditLogService auditLogService,
+            ExaminerWorkRecorder recorder,
             Clock clock) {
         this.sessionService = sessionService;
         this.assignmentRepository = assignmentRepository;
-        this.workRepository = workRepository;
-        this.eventRepository = eventRepository;
-        this.commandRepository = commandRepository;
         this.issueRepository = issueRepository;
-        this.sessionStateRepository = sessionStateRepository;
+        this.gateway = gateway;
         this.workflowQueryService = workflowQueryService;
-        this.objectMapper = objectMapper;
-        this.auditLogService = auditLogService;
+        this.recorder = recorder;
         this.clock = clock;
-    }
-
-    public ExaminerWorkflowCommandService(
-            SessionService sessionService,
-            ExaminerAttemptAssignmentRepository assignmentRepository,
-            ExaminerGradingWorkRepository workRepository,
-            ExaminerGradingEventRepository eventRepository,
-            ExaminerGradingCommandRepository commandRepository,
-            ExaminerGradingIssueRepository issueRepository,
-            ScoringSessionStateRepository sessionStateRepository,
-            ExaminerWorkflowQueryService workflowQueryService,
-            ObjectMapper objectMapper,
-            Clock clock) {
-        this(sessionService, assignmentRepository, workRepository, eventRepository, commandRepository,
-                issueRepository, sessionStateRepository, workflowQueryService, objectMapper, null, clock);
     }
 
     @Transactional
@@ -102,44 +63,32 @@ public class ExaminerWorkflowCommandService {
             UUID sessionPublicId, UUID attemptPublicId, StartExaminerWorkRequest request, CurrentUser user) {
         sessionService.lockForScoreReviewMutation(sessionPublicId, user.tenantId());
 
-        ExaminerAttemptAssignment assignment = requireAssignment(sessionPublicId, attemptPublicId, user);
+        GradingAssignment assignment = requireAssignment(sessionPublicId, attemptPublicId, user);
         assertNotPublished(user.tenantId(), sessionPublicId);
 
-        String fingerprint = computeFingerprint("START:" + user.tenantId() + ":" + assignment.getPublicId()
+        String fingerprint = ExaminerWorkRecorder.fingerprint(ExaminerScoringConstants.FINGERPRINT_START + user.tenantId() + ":" + assignment.getPublicId()
                 + ":" + request.requestPublicId() + ":" + request.expectedWorkVersion());
 
-        Optional<ExaminerGradingCommand> existingCmd = commandRepository
-                .findByTenantIdAndExaminerPublicIdAndAssignmentPublicIdAndRequestPublicId(
-                        user.tenantId(), user.userId(), assignment.getPublicId(), request.requestPublicId());
-
-        if (existingCmd.isPresent()) {
-            ExaminerGradingCommand cmd = existingCmd.get();
-            if (!fingerprint.equals(cmd.getFingerprint())) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Idempotency key reused with different payload");
-            }
-            ExaminerCommandReceiptResponse receipt = deserializeReceipt(cmd.getReceiptJson());
-            ExaminerWorkflowView currentView = workflowQueryService.buildWorkflowView(assignment, user.tenantId());
-            return new ExaminerCommandResponse(receipt, currentView, null);
+        Instant now = clock.instant();
+        Optional<ExaminerCommandReceiptResponse> replay = recorder.replayOrBegin(user, assignment.getPublicId(),
+                request.requestPublicId(), fingerprint, now);
+        if (replay.isPresent()) {
+            return new ExaminerCommandResponse(replay.get(),
+                    workflowQueryService.buildWorkflowView(assignment, user.tenantId()), null);
         }
 
-        Instant now = clock.instant();
-        Optional<ExaminerGradingWork> workOpt = workRepository
-                .findByAssignmentWithLock(user.tenantId(), assignment.getPublicId());
-
-        ExaminerGradingWork work;
+        GradingAssignment work = lock(assignment);
         ExaminerGradingOperation op = ExaminerGradingOperation.START;
-        if (workOpt.isEmpty()) {
+        if (!work.isStarted()) {
             if (request.expectedWorkVersion() != 0) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Expected work version mismatch for unstarted work: expected " + request.expectedWorkVersion() + " but was 0");
+                throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.UNSTARTED_VERSION_FORMAT
+                        .formatted(request.expectedWorkVersion()));
             }
-            work = new ExaminerGradingWork(user.tenantId(), sessionPublicId, attemptPublicId,
-                    assignment.getPublicId(), user.userId(), now);
-            work = workRepository.save(work);
+            work.start(now);
         } else {
-            work = workOpt.get();
-            if (request.expectedWorkVersion() != work.getVersion()) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Expected work version mismatch: expected "
-                        + request.expectedWorkVersion() + " but was " + work.getVersion());
+            if (request.expectedWorkVersion() != work.getWorkVersion()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.WORK_VERSION_FORMAT
+                        .formatted(request.expectedWorkVersion(), work.getWorkVersion()));
             }
             if (work.getStatus() == ExaminerWorkflowStatus.COMPLETED) {
                 work.reopen(now);
@@ -147,39 +96,18 @@ public class ExaminerWorkflowCommandService {
             } else {
                 work.start(now);
             }
-            work = workRepository.save(work);
         }
-
-        ExaminerGradingAuditMetadata auditMetadata = new ExaminerGradingAuditMetadata(
-                user.userId(),
-                "EXAMINER",
-                assignment.getPublicId(),
-                null,
-                null,
-                1L,
-                op == ExaminerGradingOperation.REGRADE ? "Grading reopened for regrade" : "Grading started"
-        );
-        String metadataJson = serializeAuditMetadata(auditMetadata);
-
-        ExaminerGradingEvent event = new ExaminerGradingEvent(
-                user.tenantId(), work.getId(), null, op,
-                work.getVersion(), null, metadataJson, now);
-        eventRepository.save(event);
-
-        if (auditLogService != null) {
-            auditLogService.record(user, "EXAMINER_WORK", assignment.getPublicId().toString(), op.name(),
-                    op == ExaminerGradingOperation.REGRADE ? "Grading reopened for regrade on attempt " + attemptPublicId : "Grading started on attempt " + attemptPublicId);
-        }
+        work = assignmentRepository.save(work);
 
         ExaminerCommandReceiptResponse receipt = new ExaminerCommandReceiptResponse(
                 request.requestPublicId(), op, now,
-                work.getVersion(), null, null, Collections.emptyList());
-
-        String receiptJson = serializeReceipt(receipt);
-        ExaminerGradingCommand cmd = new ExaminerGradingCommand(
-                user.tenantId(), user.userId(), assignment.getPublicId(), request.requestPublicId(),
-                "START", fingerprint, receiptJson, now);
-        commandRepository.save(cmd);
+                work.getWorkVersion(), null, null, Collections.emptyList());
+        recorder.record(user, assignment.getPublicId(), request.requestPublicId(),
+                op == ExaminerGradingOperation.REGRADE ? ExaminerScoringConstants.AUDIT_REGRADE_PREFIX + attemptPublicId
+                        : ExaminerScoringConstants.AUDIT_START_PREFIX + attemptPublicId,
+                new ExaminerWorkRecorder.Entry(null, op, work.getWorkVersion(), null, metadata(user, assignment,
+                        op == ExaminerGradingOperation.REGRADE ? ExaminerScoringConstants.AUDIT_REGRADE : ExaminerScoringConstants.AUDIT_START)));
+        recorder.complete(user, assignment.getPublicId(), request.requestPublicId(), receipt);
 
         ExaminerWorkflowView currentView = workflowQueryService.buildWorkflowView(assignment, user.tenantId());
         return new ExaminerCommandResponse(receipt, currentView, null);
@@ -188,14 +116,11 @@ public class ExaminerWorkflowCommandService {
     @Transactional(readOnly = true)
     public ExaminerCommandResponse getCommand(
             UUID sessionPublicId, UUID attemptPublicId, UUID requestPublicId, CurrentUser user) {
-        ExaminerAttemptAssignment assignment = requireAssignment(sessionPublicId, attemptPublicId, user);
+        GradingAssignment assignment = requireAssignment(sessionPublicId, attemptPublicId, user);
 
-        ExaminerGradingCommand cmd = commandRepository
-                .findByTenantIdAndExaminerPublicIdAndAssignmentPublicIdAndRequestPublicId(
-                        user.tenantId(), user.userId(), assignment.getPublicId(), requestPublicId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Command receipt not found"));
-
-        ExaminerCommandReceiptResponse receipt = deserializeReceipt(cmd.getReceiptJson());
+        ExaminerCommandReceiptResponse receipt = recorder
+                .findReceipt(user, assignment.getPublicId(), requestPublicId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, ExaminerScoringConstants.COMMAND_RECEIPT_NOT_FOUND));
         ExaminerWorkflowView currentView = workflowQueryService.buildWorkflowView(assignment, user.tenantId());
         return new ExaminerCommandResponse(receipt, currentView, null);
     }
@@ -205,73 +130,45 @@ public class ExaminerWorkflowCommandService {
             UUID sessionPublicId, UUID attemptPublicId, ReportGradingIssueRequest request, CurrentUser user) {
         sessionService.lockForScoreReviewMutation(sessionPublicId, user.tenantId());
 
-        ExaminerAttemptAssignment assignment = requireAssignment(sessionPublicId, attemptPublicId, user);
+        GradingAssignment assignment = requireAssignment(sessionPublicId, attemptPublicId, user);
         assertNotPublished(user.tenantId(), sessionPublicId);
 
-        ExaminerGradingWork work = workRepository
-                .findByAssignmentWithLock(user.tenantId(), assignment.getPublicId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Work must be started before reporting issues"));
-
+        GradingAssignment work = lock(assignment);
+        if (!work.isStarted()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ExaminerScoringConstants.WORK_NOT_STARTED_FOR_ISSUES);
+        }
         if (work.getStatus() == ExaminerWorkflowStatus.COMPLETED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Cannot report issues on finalized work");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.WORK_FINALIZED_NO_ISSUES);
         }
-        if (request.expectedWorkVersion() != work.getVersion()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Expected work version mismatch");
+        if (request.expectedWorkVersion() != work.getWorkVersion()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.WORK_VERSION_MISMATCH);
         }
 
-        String fingerprint = computeFingerprint("REPORT_ISSUE:" + user.tenantId() + ":" + assignment.getPublicId()
+        String fingerprint = ExaminerWorkRecorder.fingerprint(ExaminerScoringConstants.FINGERPRINT_REPORT_ISSUE + user.tenantId() + ":" + assignment.getPublicId()
                 + ":" + request.requestPublicId() + ":" + request.type() + ":" + request.description().trim());
 
-        Optional<ExaminerGradingCommand> existingCmd = commandRepository
-                .findByTenantIdAndExaminerPublicIdAndAssignmentPublicIdAndRequestPublicId(
-                        user.tenantId(), user.userId(), assignment.getPublicId(), request.requestPublicId());
-
-        if (existingCmd.isPresent()) {
-            ExaminerGradingCommand cmd = existingCmd.get();
-            if (!fingerprint.equals(cmd.getFingerprint())) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Idempotency key reused with different payload");
-            }
-            ExaminerCommandReceiptResponse receipt = deserializeReceipt(cmd.getReceiptJson());
-            ExaminerWorkflowView currentView = workflowQueryService.buildWorkflowView(assignment, user.tenantId());
-            return new ExaminerCommandResponse(receipt, currentView, null);
+        Instant now = clock.instant();
+        Optional<ExaminerCommandReceiptResponse> replay = recorder.replayOrBegin(user, assignment.getPublicId(),
+                request.requestPublicId(), fingerprint, now);
+        if (replay.isPresent()) {
+            return new ExaminerCommandResponse(replay.get(),
+                    workflowQueryService.buildWorkflowView(assignment, user.tenantId()), null);
         }
 
-        Instant now = clock.instant();
-        ExaminerGradingIssue issue = new ExaminerGradingIssue(
+        GradingIssue issue = new GradingIssue(
                 user.tenantId(), work.getId(), request.answerPublicId(), request.type(),
                 request.description().trim(), user.userId(), now);
         issueRepository.save(issue);
 
-        ExaminerGradingAuditMetadata reportAuditMetadata = new ExaminerGradingAuditMetadata(
-                user.userId(),
-                "EXAMINER",
-                assignment.getPublicId(),
-                null,
-                null,
-                1L,
-                request.type() + ": " + request.description().trim()
-        );
-        String reportMetadataJson = serializeAuditMetadata(reportAuditMetadata);
-
-        ExaminerGradingEvent event = new ExaminerGradingEvent(
-                user.tenantId(), work.getId(), request.answerPublicId(), ExaminerGradingOperation.REPORT_ISSUE,
-                work.getVersion(), null, reportMetadataJson, now);
-        eventRepository.save(event);
-
-        if (auditLogService != null) {
-            auditLogService.record(user, "EXAMINER_WORK", assignment.getPublicId().toString(), "REPORT_ISSUE",
-                    "Reported issue " + request.type() + " on attempt " + attemptPublicId);
-        }
-
         ExaminerCommandReceiptResponse receipt = new ExaminerCommandReceiptResponse(
                 request.requestPublicId(), ExaminerGradingOperation.REPORT_ISSUE, now,
-                work.getVersion(), request.answerPublicId(), null, Collections.emptyList());
-
-        String receiptJson = serializeReceipt(receipt);
-        ExaminerGradingCommand cmd = new ExaminerGradingCommand(
-                user.tenantId(), user.userId(), assignment.getPublicId(), request.requestPublicId(),
-                "REPORT_ISSUE", fingerprint, receiptJson, now);
-        commandRepository.save(cmd);
+                work.getWorkVersion(), request.answerPublicId(), null, Collections.emptyList());
+        recorder.record(user, assignment.getPublicId(), request.requestPublicId(),
+                ExaminerScoringConstants.AUDIT_ISSUE_REPORTED_PREFIX + request.type() + ExaminerScoringConstants.ON_ATTEMPT + attemptPublicId,
+                new ExaminerWorkRecorder.Entry(request.answerPublicId(), ExaminerGradingOperation.REPORT_ISSUE,
+                        work.getWorkVersion(), null,
+                        metadata(user, assignment, ExaminerScoringConstants.AUDIT_ISSUE_REASON_FORMAT.formatted(request.type(), request.description().trim()))));
+        recorder.complete(user, assignment.getPublicId(), request.requestPublicId(), receipt);
 
         ExaminerWorkflowView currentView = workflowQueryService.buildWorkflowView(assignment, user.tenantId());
         return new ExaminerCommandResponse(receipt, currentView, null);
@@ -280,12 +177,13 @@ public class ExaminerWorkflowCommandService {
     @Transactional
     public ExaminerGradingIssueResponse resolveIssue(
             UUID issuePublicId, ResolveGradingIssueRequest request, CurrentUser user) {
-        ExaminerGradingIssue issue = issueRepository
+        GradingIssue issue = issueRepository
                 .findByTenantIdAndPublicIdAndDeletedFalse(user.tenantId(), issuePublicId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Grading issue not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, ExaminerScoringConstants.GRADING_ISSUE_NOT_FOUND));
 
-        ExaminerGradingWork work = workRepository.findById(issue.getWorkId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Associated work not found"));
+        GradingAssignment work = assignmentRepository.findById(issue.getAssignmentId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        ExaminerScoringConstants.ASSIGNMENT_OF_ISSUE_NOT_FOUND));
 
         sessionService.lockForScoreReviewMutation(work.getSessionPublicId(), user.tenantId());
 
@@ -293,26 +191,12 @@ public class ExaminerWorkflowCommandService {
         issue.resolve(user.userId(), request.resolution().trim(), now);
         issueRepository.save(issue);
 
-        ExaminerGradingAuditMetadata resolveAuditMetadata = new ExaminerGradingAuditMetadata(
-                user.userId(),
-                "EXAMINER",
-                work.getAssignmentPublicId(),
-                null,
-                null,
-                1L,
-                "Resolved issue: " + request.resolution().trim()
-        );
-        String resolveMetadataJson = serializeAuditMetadata(resolveAuditMetadata);
-
-        ExaminerGradingEvent event = new ExaminerGradingEvent(
-                user.tenantId(), work.getId(), issue.getAnswerPublicId(), ExaminerGradingOperation.RESOLVE_ISSUE,
-                work.getVersion(), null, resolveMetadataJson, now);
-        eventRepository.save(event);
-
-        if (auditLogService != null) {
-            auditLogService.record(user, "EXAMINER_WORK", work.getAssignmentPublicId().toString(), "RESOLVE_ISSUE",
-                    "Resolved issue " + issuePublicId + " on attempt " + work.getAttemptPublicId());
-        }
+        recorder.record(user, work.getPublicId(), null,
+                ExaminerScoringConstants.AUDIT_RESOLVED_ISSUE_FORMAT.formatted(issuePublicId, work.getAttemptPublicId()),
+                new ExaminerWorkRecorder.Entry(issue.getAnswerPublicId(), ExaminerGradingOperation.RESOLVE_ISSUE,
+                        work.getWorkVersion(), null, new ExaminerGradingAuditMetadata(user.userId(), ExaminerScoringConstants.EXAMINER_ROLE,
+                                work.getPublicId(), null, null, 1L,
+                                ExaminerScoringConstants.AUDIT_RESOLUTION_PREFIX + request.resolution().trim())));
 
         return new ExaminerGradingIssueResponse(
                 issue.getPublicId(),
@@ -328,55 +212,27 @@ public class ExaminerWorkflowCommandService {
         );
     }
 
-    private ExaminerAttemptAssignment requireAssignment(UUID sessionPublicId, UUID attemptPublicId, CurrentUser user) {
+    private GradingAssignment requireAssignment(UUID sessionPublicId, UUID attemptPublicId, CurrentUser user) {
         return assignmentRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndExaminerPublicIdAndDeletedFalse(
                 user.tenantId(), sessionPublicId, attemptPublicId, user.userId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found or unauthorized"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, ExaminerScoringConstants.ASSIGNMENT_NOT_FOUND));
+    }
+
+    private GradingAssignment lock(GradingAssignment assignment) {
+        return assignmentRepository.findForUpdate(assignment.getTenantId(), assignment.getPublicId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        ExaminerScoringConstants.ASSIGNMENT_NOT_FOUND));
     }
 
     private void assertNotPublished(UUID tenantId, UUID sessionPublicId) {
-        Optional<ScoringSessionState> sessionStateOpt = sessionStateRepository
-                .findByTenantIdAndSessionPublicId(tenantId, sessionPublicId);
-        if (sessionStateOpt.isPresent() && sessionStateOpt.get().getPublicationPublicId() != null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Session scores already published");
+        if (gateway.isPublished(tenantId, sessionPublicId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.SESSION_SCORES_PUBLISHED);
         }
     }
 
-    private String computeFingerprint(String raw) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(raw.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : digest) {
-                sb.append(String.format("%02x", b));
-            }
-            return sb.toString();
-        } catch (Exception e) {
-            throw new RuntimeException("SHA-256 calculation failed", e);
-        }
-    }
-
-    private String serializeReceipt(ExaminerCommandReceiptResponse receipt) {
-        try {
-            return objectMapper.writeValueAsString(receipt);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to serialize receipt JSON", e);
-        }
-    }
-
-    private ExaminerCommandReceiptResponse deserializeReceipt(String receiptJson) {
-        try {
-            return objectMapper.readValue(receiptJson, ExaminerCommandReceiptResponse.class);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to deserialize receipt JSON", e);
-        }
-    }
-
-    private String serializeAuditMetadata(ExaminerGradingAuditMetadata metadata) {
-        try {
-            return objectMapper.writeValueAsString(metadata);
-        } catch (Exception e) {
-            return null;
-        }
+    private ExaminerGradingAuditMetadata metadata(CurrentUser user, GradingAssignment assignment,
+            String reason) {
+        return new ExaminerGradingAuditMetadata(user.userId(), ExaminerScoringConstants.EXAMINER_ROLE, assignment.getPublicId(), null, null,
+                1L, reason);
     }
 }

@@ -1,14 +1,10 @@
 package com.pte.scoring.internal.service;
 
 import com.pte.scoring.ScoringProgressChangedEvent;
-import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.domain.ScoringAnswerAiDetail;
-import com.pte.scoring.domain.ScoringSessionState;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
-import com.pte.scoring.internal.repository.ScoringAnswerAiDetailRepository;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.session.SessionService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,36 +26,25 @@ import java.util.function.Consumer;
 @Service
 public class AiScoringResultPersistenceService {
 
-    private final ScoringAnswerRepository answerRepository;
-    private final ScoringSessionStateRepository sessionStateRepository;
-    private final ScoringAnswerAiDetailRepository detailRepository;
+    private final AiEvaluationRepository answerRepository;
+    private final SessionGradingGateway gateway;
     private final JsonMapper jsonMapper;
     private final ApplicationEventPublisher eventPublisher;
     private final SessionService sessionService;
 
-    @Autowired
-    public AiScoringResultPersistenceService(ScoringAnswerRepository answerRepository,
-            ScoringSessionStateRepository sessionStateRepository, ScoringAnswerAiDetailRepository detailRepository,
+    public AiScoringResultPersistenceService(AiEvaluationRepository answerRepository,
+            SessionGradingGateway gateway,
             JsonMapper jsonMapper, ApplicationEventPublisher eventPublisher, SessionService sessionService) {
         this.answerRepository = answerRepository;
-        this.sessionStateRepository = sessionStateRepository;
-        this.detailRepository = detailRepository;
+        this.gateway = gateway;
         this.jsonMapper = jsonMapper;
         this.eventPublisher = eventPublisher;
         this.sessionService = sessionService;
     }
 
-    /** Compatibility constructor for focused persistence tests that do not need the session lock. */
-    public AiScoringResultPersistenceService(ScoringAnswerRepository answerRepository,
-            ScoringSessionStateRepository sessionStateRepository, ScoringAnswerAiDetailRepository detailRepository,
-            JsonMapper jsonMapper, ApplicationEventPublisher eventPublisher) {
-        this(answerRepository, sessionStateRepository, detailRepository, jsonMapper, eventPublisher, null);
-    }
-
     @Transactional(readOnly = true)
     public boolean isPublicationLocked(UUID tenantId, UUID sessionPublicId) {
-        return sessionStateRepository.findByTenantIdAndSessionPublicId(tenantId, sessionPublicId)
-                .map(ScoringSessionState::getPublicationPublicId).orElse(null) != null;
+        return gateway.isPublished(tenantId, sessionPublicId);
     }
 
     @Transactional
@@ -69,26 +54,30 @@ public class AiScoringResultPersistenceService {
         String criteriaScoresJson = result.subScores() == null
                 ? null : jsonMapper.writeValueAsString(new TreeMap<>(result.subScores()));
         return applyIfAwaiting(answerPublicId, attemptPublicId, tenantId, sessionPublicId, dispatchToken,
-                answer -> answer.markAiScored(result.rawScore(), result.providerCategory(), result.provider(),
-                        result.model(), result.providerVersion()),
-                detail -> detail.recordResult(criteriaScoresJson, result.feedback(), result.transcript(),
-                        result.detailJson(), result.fallback()));
+                answer -> {
+                    answer.markAiScored(result.rawScore(), result.providerCategory(), result.provider(),
+                            result.model(), result.providerVersion());
+                    answer.recordDetail(criteriaScoresJson, result.feedback(), result.transcript(),
+                            result.detailJson(), result.fallback());
+                });
     }
 
     @Transactional
     public boolean markScoringFailed(UUID answerPublicId, UUID attemptPublicId, UUID tenantId, UUID sessionPublicId,
             long dispatchToken, AiFailureReason reason) {
         return applyIfAwaiting(answerPublicId, attemptPublicId, tenantId, sessionPublicId, dispatchToken,
-                answer -> answer.setStatus(ScoringAnswerStatus.SCORING_FAILED),
-                detail -> detail.recordFailure(reason));
+                answer -> {
+                    answer.setStatus(ScoringAnswerStatus.SCORING_FAILED);
+                    answer.recordFailure(reason);
+                });
     }
 
     private boolean applyIfAwaiting(UUID answerPublicId, UUID attemptPublicId, UUID tenantId, UUID sessionPublicId,
-            long dispatchToken, Consumer<ScoringAnswer> onAnswer, Consumer<ScoringAnswerAiDetail> onDetail) {
+            long dispatchToken, Consumer<AiEvaluation> onAnswer) {
         if (sessionService != null) {
             sessionService.lockForScoreReviewMutation(sessionPublicId, tenantId);
         }
-        ScoringAnswer answer = answerRepository.findByAnswerPublicIdForUpdate(answerPublicId)
+        AiEvaluation answer = answerRepository.findByAnswerPublicIdForUpdate(answerPublicId)
                 .filter(row -> row.isAwaitingAiResult(tenantId, sessionPublicId, attemptPublicId, dispatchToken))
                 .orElse(null);
         if (answer == null || publicationLocked(tenantId, sessionPublicId)) {
@@ -96,17 +85,11 @@ public class AiScoringResultPersistenceService {
         }
         onAnswer.accept(answer);
         answerRepository.save(answer);
-        // A rescore reuses the answer's detail row, so a success replaces the earlier failure reason.
-        ScoringAnswerAiDetail detail = detailRepository.findByAnswerPublicId(answerPublicId)
-                .orElseGet(() -> new ScoringAnswerAiDetail(answerPublicId, answer.getTenantId()));
-        onDetail.accept(detail);
-        detailRepository.save(detail);
         eventPublisher.publishEvent(new ScoringProgressChangedEvent(answer.getTenantId(), answer.getSessionPublicId()));
         return true;
     }
 
     private boolean publicationLocked(UUID tenantId, UUID sessionPublicId) {
-        return sessionStateRepository.findForUpdate(tenantId, sessionPublicId)
-                .map(ScoringSessionState::getPublicationPublicId).orElse(null) != null;
+        return gateway.isPublished(tenantId, sessionPublicId);
     }
 }

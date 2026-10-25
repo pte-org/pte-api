@@ -25,9 +25,7 @@ public class GradingReconciliationWorker {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void reconcileSession(UUID sessionPublicId, UUID tenantId) {
-        if (sessionService != null) {
-            sessionService.lockForScoreReviewMutation(sessionPublicId, tenantId);
-        }
+        sessionService.lockForScoreReviewMutation(sessionPublicId, tenantId);
         cohortService.reconcileIfPresent(sessionPublicId, tenantId);
     }
 }

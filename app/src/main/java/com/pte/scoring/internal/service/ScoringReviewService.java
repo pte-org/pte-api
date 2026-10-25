@@ -4,7 +4,7 @@ import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptOwnerView;
 import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.internal.dto.response.AnswerListItemResponse;
 import com.pte.scoring.internal.dto.response.AnswerListResponse;
@@ -18,12 +18,10 @@ import com.pte.scoring.internal.exception.ScoreSourceSelectionException;
 import com.pte.scoring.internal.constant.ScoreReviewConstants;
 import com.pte.scoring.internal.mapper.ScoringAnswerMapper;
 import com.pte.scoring.internal.repository.AiDetailFlags;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.shared.security.CurrentUser;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,63 +53,33 @@ public class ScoringReviewService {
     /** Fixed TTL for a review-screen playback link — no exam session window to derive it from here, just a human clicking play. */
     private static final long MEDIA_URL_TTL_SECONDS = 3600;
 
-    private final ScoringAnswerRepository scoringAnswerRepository;
+    private final AiEvaluationRepository evaluationRepository;
     private final AnswerPayloadDecoder answerPayloadDecoder;
     private final MediaService mediaService;
-    private final ScoringSessionStateRepository sessionStateRepository;
+    private final SessionGradingGateway gateway;
     private final EntityManager entityManager;
     private final AttemptService attemptService;
     private final AiScoreDetailQueryService aiDetails;
     private final ScoringEligibilityQueryService eligibility;
     private final com.pte.session.SessionService sessionService;
-    private final com.pte.scoring.internal.repository.GradingCohortRepository cohortRepository;
+    private final AnswerContentReader contentReader;
 
-    @Autowired
-    public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
+    public ScoringReviewService(AiEvaluationRepository evaluationRepository,
             AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService,
-            ScoringSessionStateRepository sessionStateRepository, EntityManager entityManager,
+            SessionGradingGateway gateway, EntityManager entityManager,
             AttemptService attemptService, AiScoreDetailQueryService aiDetails,
             ScoringEligibilityQueryService eligibility, com.pte.session.SessionService sessionService,
-            com.pte.scoring.internal.repository.GradingCohortRepository cohortRepository) {
-        this.scoringAnswerRepository = scoringAnswerRepository;
+            AnswerContentReader contentReader) {
+        this.contentReader = contentReader;
+        this.evaluationRepository = evaluationRepository;
         this.answerPayloadDecoder = answerPayloadDecoder;
         this.mediaService = mediaService;
-        this.sessionStateRepository = sessionStateRepository;
+        this.gateway = gateway;
         this.entityManager = entityManager;
         this.attemptService = attemptService;
         this.aiDetails = aiDetails;
         this.eligibility = eligibility;
         this.sessionService = sessionService;
-        this.cohortRepository = cohortRepository;
-    }
-
-    public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
-            AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService,
-            ScoringSessionStateRepository sessionStateRepository, EntityManager entityManager,
-            AttemptService attemptService, AiScoreDetailQueryService aiDetails,
-            ScoringEligibilityQueryService eligibility) {
-        this(scoringAnswerRepository, answerPayloadDecoder, mediaService, sessionStateRepository, entityManager,
-                attemptService, aiDetails, eligibility, null, null);
-    }
-
-    public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
-            AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService,
-            ScoringSessionStateRepository sessionStateRepository, EntityManager entityManager,
-            AttemptService attemptService) {
-        this(scoringAnswerRepository, answerPayloadDecoder, mediaService, sessionStateRepository, entityManager,
-                attemptService, null, null);
-    }
-
-    public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
-            AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService,
-            ScoringSessionStateRepository sessionStateRepository, EntityManager entityManager) {
-        this(scoringAnswerRepository, answerPayloadDecoder, mediaService, sessionStateRepository, entityManager,
-                null, null, null);
-    }
-
-    public ScoringReviewService(ScoringAnswerRepository scoringAnswerRepository,
-            AnswerPayloadDecoder answerPayloadDecoder, MediaService mediaService) {
-        this(scoringAnswerRepository, answerPayloadDecoder, mediaService, null, null, null, null, null);
     }
 
     /**
@@ -134,20 +102,20 @@ public class ScoringReviewService {
         if (normalizedSearch != null && normalizedSearch.isBlank()) {
             normalizedSearch = null;
         }
-        Page<ScoringAnswer> page = normalizedSearch == null
-                ? scoringAnswerRepository.findForReview(caller.tenantId(), sessionPublicId, attemptPublicId, status,
+        Page<AiEvaluation> page = normalizedSearch == null
+                ? evaluationRepository.findForReview(caller.tenantId(), sessionPublicId, attemptPublicId, status,
                         pageable)
-                : scoringAnswerRepository.findForReviewWithSearch(caller.tenantId(), sessionPublicId,
+                : evaluationRepository.findForReviewWithSearch(caller.tenantId(), sessionPublicId,
                         attemptPublicId, status, normalizedSearch, parseSearchStatus(normalizedSearch),
                         parseUuid(normalizedSearch), pageable);
         log.debug("Host {} listed answers (tenantId={}, sessionPublicId={}, status={}) -> {} results",
                 caller.userId(), caller.tenantId(), sessionPublicId, status, page.getNumberOfElements());
         Map<UUID, AttemptOwnerView> attemptOwners = attemptService == null ? Map.of()
                 : attemptService.getAttemptOwners(sessionPublicId, caller.tenantId(), page.getContent().stream()
-                        .map(ScoringAnswer::getAttemptPublicId).distinct().toList());
+                        .map(AiEvaluation::getAttemptPublicId).distinct().toList());
         Map<UUID, AiDetailFlags> aiFlags = aiDetails == null ? Map.of()
                 : aiDetails.findFlags(caller.tenantId(), page.getContent().stream()
-                        .map(ScoringAnswer::getAnswerPublicId).toList());
+                        .map(AiEvaluation::getAnswerPublicId).toList());
         List<AnswerListItemResponse> items = page.getContent().stream()
                 .map(answer -> new AnswerListItemResponse(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
                         answer.getSessionPublicId(), answer.getTaskType(), answer.getStatus().name(),
@@ -167,8 +135,9 @@ public class ScoringReviewService {
      */
     @Transactional(readOnly = true)
     public AnswerReviewDetailResponse getAnswerForReview(UUID answerPublicId, CurrentUser caller) {
-        ScoringAnswer answer = findOwned(answerPublicId, caller);
-        DecodedAnswerPayload decoded = answerPayloadDecoder.decode(answer);
+        AiEvaluation answer = findOwned(answerPublicId, caller);
+        DecodedAnswerPayload decoded = answerPayloadDecoder.decode(contentReader.one(answerPublicId, answer.getTenantId())
+                .orElseThrow(AnswerNotFoundException::new));
         if (decoded.kind() == AnswerPayloadKind.AUDIO && decoded.mediaPublicId() != null) {
             decoded = withPresignedUrl(decoded, answer.getTenantId());
         }
@@ -186,37 +155,28 @@ public class ScoringReviewService {
      */
     @Transactional
     public ScoringAnswerResponse submitTeacherScore(UUID answerPublicId, int score, CurrentUser caller) {
-        ScoringAnswer answer = findOwned(answerPublicId, caller);
+        AiEvaluation answer = findOwned(answerPublicId, caller);
         if (sessionService != null) {
             sessionService.lockForScoreReviewMutation(answer.getSessionPublicId(), caller.tenantId());
         }
-        if (cohortRepository != null) {
-            cohortRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(caller.tenantId(), answer.getSessionPublicId())
-                    .ifPresent(cohort -> {
-                        if (cohort.getMarkingMode() == com.pte.scoring.domain.enums.GradingMarkingMode.MANUAL_EXAMINER) {
-                            throw new ScoreSourceSelectionException(HttpStatus.CONFLICT,
-                                    ScoreReviewConstants.MANUAL_EXAMINER_SELECTION_PROHIBITED, null,
-                                    ScoreReviewConstants.MANUAL_EXAMINER_SELECTION_PROHIBITED_MESSAGE);
-                        }
-                    });
-        }
+        gateway.grading(caller.tenantId(), answer.getSessionPublicId())
+                .filter(grading -> grading.markingMode() == com.pte.scoring.domain.enums.GradingMarkingMode.MANUAL_EXAMINER)
+                .ifPresent(grading -> {
+                    throw new ScoreSourceSelectionException(HttpStatus.CONFLICT,
+                            ScoreReviewConstants.MANUAL_EXAMINER_SELECTION_PROHIBITED, null,
+                            ScoreReviewConstants.MANUAL_EXAMINER_SELECTION_PROHIBITED_MESSAGE);
+                });
         if (entityManager != null) {
             entityManager.lock(answer, LockModeType.PESSIMISTIC_WRITE);
             entityManager.refresh(answer, LockModeType.PESSIMISTIC_WRITE);
-            sessionStateRepository.findByTenantIdAndSessionPublicId(caller.tenantId(), answer.getSessionPublicId())
-                    .ifPresent(state -> {
-                        entityManager.lock(state, LockModeType.PESSIMISTIC_WRITE);
-                        entityManager.refresh(state, LockModeType.PESSIMISTIC_WRITE);
-                        if (state.getPublicationPublicId() != null) {
-                            throw new ScoreSourceSelectionException(HttpStatus.CONFLICT,
-                                    ScoreReviewConstants.PUBLISHED_LOCK, null,
-                                    ScoreReviewConstants.PUBLISHED_LOCK_MESSAGE);
-                        }
-                    });
+        }
+        if (gateway.isPublished(caller.tenantId(), answer.getSessionPublicId())) {
+            throw new ScoreSourceSelectionException(HttpStatus.CONFLICT, ScoreReviewConstants.PUBLISHED_LOCK, null,
+                    ScoreReviewConstants.PUBLISHED_LOCK_MESSAGE);
         }
         answer.setTeacherScore(score);
         answer.setTeacherScoredAt(Instant.now());
-        scoringAnswerRepository.save(answer);
+        evaluationRepository.save(answer);
         log.debug("Host {} recorded teacherScore={} for answer {} (tenantId={})", caller.userId(), score,
                 answerPublicId, caller.tenantId());
         return ScoringAnswerMapper.toResponse(answer);
@@ -276,8 +236,8 @@ public class ScoringReviewService {
         }
     }
 
-    private ScoringAnswer findOwned(UUID answerPublicId, CurrentUser caller) {
-        ScoringAnswer answer = scoringAnswerRepository.findByAnswerPublicId(answerPublicId)
+    private AiEvaluation findOwned(UUID answerPublicId, CurrentUser caller) {
+        AiEvaluation answer = evaluationRepository.findByAnswerPublicId(answerPublicId)
                 .orElseThrow(AnswerNotFoundException::new);
         if (!caller.isPlatformUser() && !answer.getTenantId().equals(caller.tenantId())) {
             throw new AnswerNotFoundException();

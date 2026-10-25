@@ -15,8 +15,6 @@ final class StaffSessionProgress {
     long inProgress;
     long completed;
     long unavailable;
-    long batches;
-    UUID lastBatchId;
     boolean invalidFrozen;
     final Set<String> diagnostics = new LinkedHashSet<>();
 
@@ -24,9 +22,6 @@ final class StaffSessionProgress {
 
     void accept(StaffAttemptProgress attempt, long scoreRows) {
         assigned++;
-        // Assignments are scanned in batch-id order; one last key per session bounds memory.
-        UUID batchId = attempt.assignment.getBatchPublicId();
-        if (batchId != null && !batchId.equals(lastBatchId)) { batches++; lastBatchId = batchId; }
         int denominator = attempt.assignment.getEligibleAnswerCount();
         invalidFrozen |= denominator < 0;
         frozen += Math.max(0, denominator);
@@ -44,7 +39,7 @@ final class StaffSessionProgress {
     ExaminerProgressView view(boolean published) {
         String status = unavailable > 0 ? "UNAVAILABLE" : completed == assigned ? "COMPLETED"
                 : pending == assigned ? "PENDING" : "IN_PROGRESS";
-        return new ExaminerProgressView(sessionId, assigned, batches, invalidFrozen ? null : frozen,
+        return new ExaminerProgressView(sessionId, assigned, assigned > 0 ? 1 : 0, invalidFrozen ? null : frozen,
                 unavailable > 0 ? null : eligible, unavailable > 0 ? null : submitted, pending,
                 inProgress, completed, unavailable, status, published ? "PUBLISHED" : "UNPUBLISHED",
                 unavailable > 0 ? null : eligible == 0 ? 100 : (int) (100L * submitted / eligible),

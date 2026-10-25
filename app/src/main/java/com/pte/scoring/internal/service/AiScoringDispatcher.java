@@ -1,11 +1,11 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.config.AiProviderProperties;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.AmqpException;
@@ -35,12 +35,12 @@ public class AiScoringDispatcher {
 
     private static final Logger log = LoggerFactory.getLogger(AiScoringDispatcher.class);
 
-    private final ScoringAnswerRepository scoringAnswerRepository;
+    private final AiEvaluationRepository scoringAnswerRepository;
     private final RabbitTemplate rabbitTemplate;
     private final Clock clock;
     private final AiProviderProperties properties;
 
-    public AiScoringDispatcher(ScoringAnswerRepository scoringAnswerRepository, RabbitTemplate rabbitTemplate,
+    public AiScoringDispatcher(AiEvaluationRepository scoringAnswerRepository, RabbitTemplate rabbitTemplate,
                                Clock clock, AiProviderProperties properties) {
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.rabbitTemplate = rabbitTemplate;
@@ -53,7 +53,7 @@ public class AiScoringDispatcher {
     }
 
     /** {@code scoringMethod} is the caller's ({@code ScoringCommandService}) already-resolved value — this class never re-resolves it. */
-    public void dispatch(ScoringAnswer answer, ScoringMethod scoringMethod) {
+    public void dispatch(AiEvaluation answer, ScoringMethod scoringMethod) {
         if (!supports(scoringMethod)) {
             throw new IllegalArgumentException(
                     String.format(ScoringConstants.UNSUPPORTED_AI_TASK_TYPE, answer.getTaskType()));

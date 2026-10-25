@@ -2,39 +2,29 @@ package com.pte.scoring.internal.service;
 
 import com.pte.assessment.ExamDefinitionService;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
-import com.pte.scoring.domain.ExaminerAnswerDraft;
-import com.pte.scoring.domain.ExaminerAttemptAssignment;
-import com.pte.scoring.domain.ExaminerGradingEvent;
-import com.pte.scoring.domain.ExaminerGradingIssue;
-import com.pte.scoring.domain.ExaminerGradingWork;
-import com.pte.scoring.domain.GradingCohort;
-import com.pte.scoring.domain.GradingCohortMember;
-import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.domain.ScoringSessionState;
+import com.pte.scoring.domain.GradingAssignment;
+import com.pte.scoring.domain.GradingIssue;
+import com.pte.attempt.AttemptService;
+import com.pte.attempt.dto.response.AttemptGradingCandidateView;
+import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.domain.ExaminerEvaluation;
+import com.pte.shared.audit.AuditHistoryEntry;
+import com.pte.shared.web.PagedResult;
 import com.pte.scoring.domain.enums.ExaminerWorkflowStatus;
 import com.pte.scoring.domain.enums.GradingCohortStatus;
 import com.pte.scoring.domain.enums.GradingMarkingMode;
 import com.pte.scoring.dto.response.ExaminerDraftResponse;
-import com.pte.scoring.dto.response.ExaminerGradingAuditMetadata;
 import com.pte.scoring.dto.response.ExaminerGradingIssueResponse;
 import com.pte.scoring.dto.response.ExaminerGuidelinesResponse;
 import com.pte.scoring.dto.response.ExaminerHistoryItemResponse;
 import com.pte.scoring.dto.response.ExaminerHistoryResponse;
-import tools.jackson.databind.ObjectMapper;
 import com.pte.scoring.dto.response.ExaminerWorkflowView;
-import com.pte.scoring.internal.repository.ExaminerAnswerDraftRepository;
-import com.pte.scoring.internal.repository.ExaminerAnswerScoreRepository;
-import com.pte.scoring.internal.repository.ExaminerAttemptAssignmentRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingEventRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingIssueRepository;
-import com.pte.scoring.internal.repository.ExaminerGradingWorkRepository;
-import com.pte.scoring.internal.repository.GradingCohortMemberRepository;
-import com.pte.scoring.internal.repository.GradingCohortRepository;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
+import com.pte.scoring.internal.repository.GradingAssignmentRepository;
+import com.pte.scoring.internal.repository.GradingIssueRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
+import com.pte.scoring.internal.constant.ExaminerScoringConstants;
 import com.pte.shared.security.CurrentUser;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -52,87 +42,47 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class ExaminerWorkflowQueryService {
 
-    private final ExaminerGradingWorkRepository workRepository;
-    private final ExaminerAnswerDraftRepository draftRepository;
-    private final ExaminerGradingEventRepository eventRepository;
-    private final ExaminerGradingIssueRepository issueRepository;
-    private final ExaminerAttemptAssignmentRepository assignmentRepository;
-    private final ExaminerAnswerScoreRepository scoreRepository;
-    private final ScoringSessionStateRepository sessionStateRepository;
-    private final GradingCohortRepository cohortRepository;
-    private final GradingCohortMemberRepository memberRepository;
-    private final ScoringAnswerRepository answerRepository;
+    private final ExaminerWorkRecorder recorder;
+    private final GradingIssueRepository issueRepository;
+    private final GradingAssignmentRepository assignmentRepository;
+    private final ExaminerEvaluationRepository evaluationRepository;
+    private final SessionGradingGateway gateway;
+    private final AttemptService attemptService;
+    private final AiEvaluationRepository answerRepository;
     private final ExamDefinitionService examDefinitionService;
-    private final ObjectMapper objectMapper;
 
-    @Autowired
     public ExaminerWorkflowQueryService(
-            ExaminerGradingWorkRepository workRepository,
-            ExaminerAnswerDraftRepository draftRepository,
-            ExaminerGradingEventRepository eventRepository,
-            ExaminerGradingIssueRepository issueRepository,
-            ExaminerAttemptAssignmentRepository assignmentRepository,
-            ExaminerAnswerScoreRepository scoreRepository,
-            ScoringSessionStateRepository sessionStateRepository,
-            GradingCohortRepository cohortRepository,
-            GradingCohortMemberRepository memberRepository,
-            ScoringAnswerRepository answerRepository,
-            ExamDefinitionService examDefinitionService,
-            @Autowired(required = false) ObjectMapper objectMapper) {
-        this.workRepository = workRepository;
-        this.draftRepository = draftRepository;
-        this.eventRepository = eventRepository;
+            ExaminerWorkRecorder recorder,
+            GradingIssueRepository issueRepository,
+            GradingAssignmentRepository assignmentRepository,
+            ExaminerEvaluationRepository evaluationRepository,
+            SessionGradingGateway gateway,
+            AttemptService attemptService,
+            AiEvaluationRepository answerRepository,
+            ExamDefinitionService examDefinitionService) {
+        this.recorder = recorder;
         this.issueRepository = issueRepository;
         this.assignmentRepository = assignmentRepository;
-        this.scoreRepository = scoreRepository;
-        this.sessionStateRepository = sessionStateRepository;
-        this.cohortRepository = cohortRepository;
-        this.memberRepository = memberRepository;
+        this.evaluationRepository = evaluationRepository;
+        this.gateway = gateway;
+        this.attemptService = attemptService;
         this.answerRepository = answerRepository;
         this.examDefinitionService = examDefinitionService;
-        this.objectMapper = objectMapper != null
-                ? objectMapper
-                : tools.jackson.databind.json.JsonMapper.builder().findAndAddModules().build();
     }
 
-    public ExaminerWorkflowQueryService(
-            ExaminerGradingWorkRepository workRepository,
-            ExaminerAnswerDraftRepository draftRepository,
-            ExaminerGradingEventRepository eventRepository,
-            ExaminerGradingIssueRepository issueRepository,
-            ExaminerAttemptAssignmentRepository assignmentRepository,
-            ExaminerAnswerScoreRepository scoreRepository,
-            ScoringSessionStateRepository sessionStateRepository,
-            GradingCohortRepository cohortRepository,
-            GradingCohortMemberRepository memberRepository,
-            ScoringAnswerRepository answerRepository,
-            ExamDefinitionService examDefinitionService) {
-        this(workRepository, draftRepository, eventRepository, issueRepository, assignmentRepository,
-                scoreRepository, sessionStateRepository, cohortRepository, memberRepository, answerRepository,
-                examDefinitionService, null);
-    }
+    public ExaminerWorkflowView buildWorkflowView(GradingAssignment assignment, UUID tenantId) {
+        boolean isPublished = gateway.isPublished(tenantId, assignment.getSessionPublicId());
 
-    public ExaminerWorkflowView buildWorkflowView(ExaminerAttemptAssignment assignment, UUID tenantId) {
-        Optional<ExaminerGradingWork> workOpt = workRepository
-                .findByTenantIdAndAssignmentPublicIdAndDeletedFalse(tenantId, assignment.getPublicId());
-
-        Optional<ScoringSessionState> sessionStateOpt = sessionStateRepository
-                .findByTenantIdAndSessionPublicId(tenantId, assignment.getSessionPublicId());
-        boolean isPublished = sessionStateOpt.map(s -> s.getPublicationPublicId() != null).orElse(false);
-
-        Optional<GradingCohort> cohortOpt = cohortRepository
-                .findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, assignment.getSessionPublicId());
-        boolean isCohortFrozenOrCompleted = cohortOpt.map(c ->
-                (c.getStatus() == GradingCohortStatus.FROZEN || c.getStatus() == GradingCohortStatus.COMPLETED)
-                        && c.getMarkingMode() == GradingMarkingMode.MANUAL_EXAMINER
+        Optional<SessionGradingGateway.Grading> gradingOpt = gateway.grading(tenantId, assignment.getSessionPublicId());
+        boolean isCohortFrozenOrCompleted = gradingOpt.map(g ->
+                (g.status() == GradingCohortStatus.FROZEN || g.status() == GradingCohortStatus.COMPLETED)
+                        && g.markingMode() == GradingMarkingMode.MANUAL_EXAMINER
         ).orElse(false);
 
         boolean isMemberActive = true;
-        if (cohortOpt.isPresent()) {
-            Optional<GradingCohortMember> memberOpt = memberRepository
-                    .findByCohortPublicIdAndAttemptPublicIdAndDeletedFalse(
-                            cohortOpt.get().getPublicId(), assignment.getAttemptPublicId());
-            isMemberActive = memberOpt.isPresent() && !memberOpt.get().isExcluded();
+        if (gradingOpt.isPresent()) {
+            isMemberActive = attemptService.getGradingCandidate(assignment.getAttemptPublicId(), tenantId)
+                    .map(candidate -> !candidate.excluded()).orElse(false);
         }
 
         String blockingReason = null;
@@ -150,19 +100,19 @@ public class ExaminerWorkflowQueryService {
         Instant finalizedAt = null;
         List<ExaminerDraftResponse> drafts = Collections.emptyList();
 
-        if (workOpt.isPresent()) {
-            ExaminerGradingWork work = workOpt.get();
+        if (assignment.isStarted()) {
+            GradingAssignment work = assignment;
             status = work.getStatus();
-            workVersion = work.getVersion();
+            workVersion = work.getWorkVersion();
             startedAt = work.getStartedAt();
             finalizedAt = work.getFinalizedAt();
 
-            List<ExaminerAnswerDraft> draftEntities = draftRepository
-                    .findByTenantIdAndWorkIdAndDeletedFalse(tenantId, work.getId());
+            List<ExaminerEvaluation> draftEntities = evaluationRepository
+                    .findByTenantIdAndAssignmentIdAndDeletedFalse(tenantId, work.getId());
             drafts = draftEntities.stream()
                     .map(d -> new ExaminerDraftResponse(
                             d.getAnswerPublicId(),
-                            d.getVersion(),
+                            d.getDraftVersion(),
                             d.getScore(),
                             d.getComment(),
                             d.getDecisionKind(),
@@ -172,7 +122,7 @@ public class ExaminerWorkflowQueryService {
                     .toList();
         } else {
             // Derived legacy state
-            long submittedFinals = scoreRepository.countByTenantIdAndSessionPublicIdAndAttemptPublicIdAndExaminerPublicIdAndDeletedFalse(
+            long submittedFinals = evaluationRepository.countSubmitted(
                     tenantId, assignment.getSessionPublicId(), assignment.getAttemptPublicId(), assignment.getExaminerPublicId());
             if (submittedFinals == 0) {
                 status = ExaminerWorkflowStatus.PENDING;
@@ -204,29 +154,27 @@ public class ExaminerWorkflowQueryService {
     }
 
     public ExaminerHistoryResponse getHistory(UUID sessionPublicId, UUID attemptPublicId, Pageable pageable, CurrentUser user) {
-        ExaminerAttemptAssignment assignment = requireAssignment(sessionPublicId, attemptPublicId, user);
-        Optional<ExaminerGradingWork> workOpt = workRepository
-                .findByTenantIdAndAssignmentPublicIdAndDeletedFalse(user.tenantId(), assignment.getPublicId());
-
-        if (workOpt.isEmpty()) {
+        GradingAssignment assignment = requireAssignment(sessionPublicId, attemptPublicId, user);
+        if (!assignment.isStarted()) {
             return new ExaminerHistoryResponse(Collections.emptyList(), pageable.getPageNumber(), pageable.getPageSize(), 0, 0);
         }
 
-        Page<ExaminerGradingEvent> eventPage = eventRepository
-                .findByTenantIdAndWorkId(user.tenantId(), workOpt.get().getId(), pageable);
+        PagedResult<AuditHistoryEntry> trail = recorder.history(user.tenantId(), assignment.getPublicId(),
+                pageable.getPageNumber(), pageable.getPageSize());
 
-        List<ExaminerHistoryItemResponse> items = eventPage.getContent().stream()
-                .map(e -> {
-                    ExaminerGradingAuditMetadata meta = parseAuditMetadata(e.getMetadata());
+        List<ExaminerHistoryItemResponse> items = trail.data().stream()
+                .map(row -> {
+                    ExaminerWorkRecorder.Entry entry = recorder.readEntry(row);
+                    var meta = entry == null ? null : entry.metadata();
                     return new ExaminerHistoryItemResponse(
-                            e.getPublicId(),
+                            row.publicId(),
                             assignment.getSessionPublicId(),
                             assignment.getAttemptPublicId(),
-                            e.getAnswerPublicId(),
-                            e.getOperation(),
-                            e.getOccurredAt(),
-                            e.getWorkVersion(),
-                            e.getDraftVersion(),
+                            entry == null ? null : entry.answerPublicId(),
+                            entry == null ? null : entry.operation(),
+                            row.createdAt(),
+                            entry == null ? 0L : entry.workVersion(),
+                            entry == null ? null : entry.draftVersion(),
                             meta != null ? meta.actorPublicId() : null,
                             meta != null ? meta.actorRole() : null,
                             meta != null ? meta.assignmentPublicId() : assignment.getPublicId(),
@@ -237,26 +185,18 @@ public class ExaminerWorkflowQueryService {
                 })
                 .toList();
 
-        return new ExaminerHistoryResponse(
-                items,
-                eventPage.getNumber(),
-                eventPage.getSize(),
-                eventPage.getTotalElements(),
-                eventPage.getTotalPages()
-        );
+        return new ExaminerHistoryResponse(items, trail.meta().page(), trail.meta().size(),
+                trail.meta().totalElements(), trail.meta().totalPages());
     }
 
     public List<ExaminerGradingIssueResponse> getIssues(UUID sessionPublicId, UUID attemptPublicId, CurrentUser user) {
-        ExaminerAttemptAssignment assignment = requireAssignment(sessionPublicId, attemptPublicId, user);
-        Optional<ExaminerGradingWork> workOpt = workRepository
-                .findByTenantIdAndAssignmentPublicIdAndDeletedFalse(user.tenantId(), assignment.getPublicId());
-
-        if (workOpt.isEmpty()) {
+        GradingAssignment assignment = requireAssignment(sessionPublicId, attemptPublicId, user);
+        if (!assignment.isStarted()) {
             return Collections.emptyList();
         }
 
-        List<ExaminerGradingIssue> issues = issueRepository
-                .findByTenantIdAndWorkIdAndDeletedFalseOrderByReportedAtAsc(user.tenantId(), workOpt.get().getId());
+        List<GradingIssue> issues = issueRepository
+                .findByTenantIdAndAssignmentIdAndDeletedFalseOrderByReportedAtAsc(user.tenantId(), assignment.getId());
 
         return issues.stream()
                 .map(i -> new ExaminerGradingIssueResponse(
@@ -275,12 +215,12 @@ public class ExaminerWorkflowQueryService {
 
     public ExaminerGuidelinesResponse getGuidelines(UUID sessionPublicId, UUID attemptPublicId, CurrentUser user) {
         requireAssignment(sessionPublicId, attemptPublicId, user);
-        List<ScoringAnswer> answers = answerRepository
+        List<AiEvaluation> answers = answerRepository
                 .findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndDeletedFalse(user.tenantId(), sessionPublicId, attemptPublicId);
 
         List<ExaminerGuidelinesResponse.ExaminerTemplateGuidelineItem> templates = new ArrayList<>();
         List<UUID> templateIds = answers.stream()
-                .map(ScoringAnswer::getScoreTemplatePublicId)
+                .map(AiEvaluation::getExamDefinitionPublicId)
                 .filter(id -> id != null)
                 .distinct()
                 .toList();
@@ -304,20 +244,9 @@ public class ExaminerWorkflowQueryService {
         );
     }
 
-    public ExaminerAttemptAssignment requireAssignment(UUID sessionPublicId, UUID attemptPublicId, CurrentUser user) {
+    public GradingAssignment requireAssignment(UUID sessionPublicId, UUID attemptPublicId, CurrentUser user) {
         return assignmentRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndExaminerPublicIdAndDeletedFalse(
                 user.tenantId(), sessionPublicId, attemptPublicId, user.userId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found or unauthorized"));
-    }
-
-    private ExaminerGradingAuditMetadata parseAuditMetadata(String json) {
-        if (json == null || json.isBlank() || objectMapper == null) {
-            return null;
-        }
-        try {
-            return objectMapper.readValue(json, ExaminerGradingAuditMetadata.class);
-        } catch (Exception e) {
-            return null;
-        }
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, ExaminerScoringConstants.ASSIGNMENT_NOT_FOUND));
     }
 }

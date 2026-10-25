@@ -1,14 +1,12 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.itembank.TaskRuntimeProfileDescriptor;
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.dto.response.AnswerOptionView;
 import com.pte.scoring.internal.dto.response.AnswerPayloadKind;
 import com.pte.scoring.internal.dto.response.DecodedAnswerPayload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
@@ -21,11 +19,11 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Turns {@code ScoringAnswer.payload} (opaque, per-task-type-encoded) into a
+ * Turns {@code SubmittedAnswerView.payload} (opaque, per-task-type-encoded) into a
  * human-readable {@link DecodedAnswerPayload} for host review.
  *
  * <p>Deliberately NOT a 23-way switch over every PTE task type: decoding is
- * driven by two signals already present on {@code ScoringAnswer} — whether
+ * driven by two signals already present on the submitted answer — whether
  * the task type is one of the 8 Speaking types (answer is always a
  * recorded-audio media publicId), and whether {@code optionsJson} is
  * populated (answer is one or more option picks). The two structured
@@ -64,19 +62,12 @@ public class AnswerPayloadDecoder {
     private static final String EMPTY_OPTIONS = "[]";
 
     private final JsonMapper jsonMapper;
-    private final ScoringMethodResolver scoringMethodResolver;
 
     public AnswerPayloadDecoder(JsonMapper jsonMapper) {
-        this(jsonMapper, null);
-    }
-
-    @Autowired
-    public AnswerPayloadDecoder(JsonMapper jsonMapper, ScoringMethodResolver scoringMethodResolver) {
         this.jsonMapper = jsonMapper;
-        this.scoringMethodResolver = scoringMethodResolver;
     }
 
-    public DecodedAnswerPayload decode(ScoringAnswer answer) {
+    public DecodedAnswerPayload decode(SubmittedAnswerView answer) {
         String route = runtimeRoute(answer);
         if (route != null && (AUDIO_ANSWER_TASK_TYPES.contains(route) || route.endsWith("_V1")
                 && Set.of("PERSONAL_INTRODUCTION_V1", "READ_ALOUD_V1", "REPEAT_SENTENCE_V1",
@@ -99,35 +90,24 @@ public class AnswerPayloadDecoder {
                 && !hasOptions(answer)) {
             return decodeWordIndices(answer);
         }
-        return new DecodedAnswerPayload(AnswerPayloadKind.TEXT, answer.getPayload(), null, null, null, null, null);
+        return new DecodedAnswerPayload(AnswerPayloadKind.TEXT, answer.payload(), null, null, null, null, null);
     }
 
     /**
      * Snapshots store {@code "[]"} for questions without options (essay,
      * speaking, ...), so an empty array means "no options", not "unparsable".
      */
-    private boolean hasOptions(ScoringAnswer answer) {
-        String optionsJson = answer.getOptionsJson();
+    private boolean hasOptions(SubmittedAnswerView answer) {
+        String optionsJson = answer.optionsJson();
         return optionsJson != null && !optionsJson.isBlank() && !EMPTY_OPTIONS.equals(optionsJson.replaceAll("\\s", ""));
     }
 
-    private String runtimeRoute(ScoringAnswer answer) {
-        if (scoringMethodResolver != null && answer.getScoreTemplatePublicId() != null
-                && answer.getTaskType() != null) {
-            try {
-                return scoringMethodResolver.resolveProfile(answer.getScoreTemplatePublicId(), answer.getTaskType())
-                        .map(TaskRuntimeProfileDescriptor::rendererKey)
-                        .orElse(answer.getTaskType());
-            } catch (RuntimeException ignored) {
-                // Keep legacy review decoding available if a historical
-                // template cannot be resolved; the scoring path remains strict.
-            }
-        }
-        return answer.getTaskType();
+    private String runtimeRoute(SubmittedAnswerView answer) {
+        return answer.runtime() != null ? answer.runtime().rendererKey() : answer.taskType();
     }
 
-    private DecodedAnswerPayload decodeAudio(ScoringAnswer answer) {
-        String payload = answer.getPayload();
+    private DecodedAnswerPayload decodeAudio(SubmittedAnswerView answer) {
+        String payload = answer.payload();
         if (payload == null || payload.isBlank()) {
             return unrecognized(answer, "empty audio answer payload");
         }
@@ -139,12 +119,12 @@ public class AnswerPayloadDecoder {
         }
     }
 
-    private DecodedAnswerPayload decodeSelection(ScoringAnswer answer) {
-        List<FrozenOption> allOptions = parseOptions(answer.getOptionsJson());
+    private DecodedAnswerPayload decodeSelection(SubmittedAnswerView answer) {
+        List<FrozenOption> allOptions = parseOptions(answer.optionsJson());
         if (allOptions.isEmpty()) {
             return unrecognized(answer, "optionsJson present but unparsable/empty");
         }
-        Set<Integer> selectedOrderIndexes = parsePositionalOrderIndexes(answer.getPayload()).stream()
+        Set<Integer> selectedOrderIndexes = parsePositionalOrderIndexes(answer.payload()).stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
         List<AnswerOptionView> options = allOptions.stream()
@@ -154,8 +134,8 @@ public class AnswerPayloadDecoder {
         return new DecodedAnswerPayload(AnswerPayloadKind.SELECTION, null, null, options, null, null, null);
     }
 
-    private DecodedAnswerPayload decodePositionalSelection(ScoringAnswer answer) {
-        String payload = answer.getPayload();
+    private DecodedAnswerPayload decodePositionalSelection(SubmittedAnswerView answer) {
+        String payload = answer.payload();
         if (payload == null) {
             return unrecognized(answer, "positional selection payload is null");
         }
@@ -167,8 +147,8 @@ public class AnswerPayloadDecoder {
                 AnswerPayloadKind.POSITIONAL_SELECTION, null, null, null, null, gapValues, null);
     }
 
-    private DecodedAnswerPayload decodeWordIndices(ScoringAnswer answer) {
-        String payload = answer.getPayload();
+    private DecodedAnswerPayload decodeWordIndices(SubmittedAnswerView answer) {
+        String payload = answer.payload();
         if (payload == null) {
             return unrecognized(answer, "word-index payload is null");
         }
@@ -197,10 +177,10 @@ public class AnswerPayloadDecoder {
                 null, wordIndices);
     }
 
-    private DecodedAnswerPayload unrecognized(ScoringAnswer answer, String reason) {
+    private DecodedAnswerPayload unrecognized(SubmittedAnswerView answer, String reason) {
         log.warn("Could not decode answer payload for review (answerPublicId={}, taskType={}): {}",
-                answer.getAnswerPublicId(), answer.getTaskType(), reason);
-        return new DecodedAnswerPayload(AnswerPayloadKind.UNRECOGNIZED, answer.getPayload(), null, null, null, null, null);
+                answer.answerPublicId(), answer.taskType(), reason);
+        return new DecodedAnswerPayload(AnswerPayloadKind.UNRECOGNIZED, answer.payload(), null, null, null, null, null);
     }
 
     private List<FrozenOption> parseOptions(String optionsJson) {
