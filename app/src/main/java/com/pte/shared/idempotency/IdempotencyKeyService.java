@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Dedupe + receipt store shared by every command family that must tolerate client retries. */
@@ -43,6 +44,14 @@ public class IdempotencyKeyService {
                         IdempotencyConstants.IDEMPOTENCY_KEY_NOT_FOUND.formatted(key)));
         existing.setResult(resultJson);
         existing.setCompleted(true);
+    }
+
+    /** The stored receipt of a completed command, or empty when the key is unknown, in flight or expired. */
+    @Transactional(readOnly = true)
+    public Optional<String> findResult(IdempotencyScope scope, String key, UUID organizationId) {
+        return repository.findByScopeAndKey(scope, key, ownerOf(organizationId))
+                .filter(IdempotencyKey::isCompleted)
+                .map(IdempotencyKey::getResult);
     }
 
     @Transactional

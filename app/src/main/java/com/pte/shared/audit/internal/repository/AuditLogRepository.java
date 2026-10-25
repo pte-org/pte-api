@@ -13,6 +13,14 @@ import java.util.UUID;
 
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
 
+    /** One aggregate's trail for a single action, newest first; the id breaks ties for equal timestamps. */
+    Page<AuditLog> findByTenantIdAndAggregateTypeAndAggregateIdAndActionOrderByCreatedAtDescIdDesc(
+            UUID tenantId, String aggregateType, String aggregateId, String action, Pageable pageable);
+
+    /** One aggregate's whole trail across actions, newest first. */
+    Page<AuditLog> findByTenantIdAndAggregateTypeAndAggregateIdOrderByCreatedAtDescIdDesc(
+            UUID tenantId, String aggregateType, String aggregateId, Pageable pageable);
+
     Page<AuditLog> findByTenantIdOrderByCreatedAtDesc(UUID tenantId, Pageable pageable);
 
     /** Newest rows of the tenant without a count query (the page size bounds the result). */

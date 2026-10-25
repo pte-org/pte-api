@@ -12,6 +12,7 @@ import java.time.Instant;
 public enum IdempotencyScope {
     ATTENDANCE(IdempotencyConstants.RETENTION_SESSION_BOUND),
     EXAMINER_COMMAND(IdempotencyConstants.RETENTION_SESSION_BOUND),
+    SCORE_SELECTION(IdempotencyConstants.RETENTION_SESSION_BOUND),
     LICENSE_ISSUE(IdempotencyConstants.RETENTION_LICENSE_ISSUE),
     PRACTICE_SESSION_OP(IdempotencyConstants.RETENTION_PRACTICE_OP);
 
