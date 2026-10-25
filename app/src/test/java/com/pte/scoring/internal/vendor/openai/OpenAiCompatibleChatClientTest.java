@@ -12,7 +12,6 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 
@@ -34,7 +33,7 @@ class OpenAiCompatibleChatClientTest {
     private final RestClient.Builder builder = RestClient.builder().baseUrl("http://openai.test/v1");
     private final MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
     private final OpenAiCompatibleChatClient client = new OpenAiCompatibleChatClient(builder.build(),
-            new AiProviderProperties(), JsonMapper.builder().build(), Clock.systemUTC());
+            new AiProviderProperties(), JsonMapper.builder().build(), com.pte.TestClocks.fixed());
 
     @Test
     void transientProviderErrorIsRetried() {

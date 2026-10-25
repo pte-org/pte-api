@@ -63,7 +63,7 @@ class ExaminerAssignmentServiceTest {
     @BeforeEach
     void setUp() {
         service = new ExaminerAssignmentService(sessionService, attemptService, eligibilityService, identityService,
-                assignmentRepository, publicationLockService, gateway, cohortService, java.time.Clock.systemUTC());
+                assignmentRepository, publicationLockService, gateway, cohortService, com.pte.TestClocks.fixed());
     }
 
     @Test

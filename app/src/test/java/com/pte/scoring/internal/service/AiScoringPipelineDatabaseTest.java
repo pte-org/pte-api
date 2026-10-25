@@ -99,7 +99,7 @@ class AiScoringPipelineDatabaseTest {
                         ScoringConstants.TASK_TYPE_READ_ALOUD, "audio-ref", "reference", null, false, null, null,
                         null, null, null, "SPEAKING", null, null, null, null, null)));
         persistence = new AiScoringResultPersistenceService(answerRepository, gateway,
-                JsonMapper.builder().build(), mock(ApplicationEventPublisher.class), null, java.time.Clock.systemUTC());
+                JsonMapper.builder().build(), mock(ApplicationEventPublisher.class), null, com.pte.TestClocks.fixed());
         worker = new AiScoringWorker(answerRepository, new StubSpeechScoringClient(), mock(EssayScoringClient.class),
                 java.util.List.of(), persistence, Clock.fixed(T0, ZoneOffset.UTC), new AiProviderProperties(), contentReader);
     }
@@ -293,7 +293,7 @@ class AiScoringPipelineDatabaseTest {
         return new ScoringCommandService(mock(ScoringIngestService.class), answerRepository,
                 mock(ObjectiveScoringService.class), dispatcher, contentReader,
                 mock(com.pte.session.SessionService.class), mock(ScorePublicationLockService.class),
-                mock(ApplicationEventPublisher.class), java.time.Clock.systemUTC());
+                mock(ApplicationEventPublisher.class), com.pte.TestClocks.fixed());
     }
 
     private List<AiScoringJob> sentJobs(int expected) {

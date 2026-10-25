@@ -46,7 +46,7 @@ class ScorePublicationLockServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ScorePublicationLockService(answerRepository, sessionService, gateway, readQueryService, java.time.Clock.systemUTC());
+        service = new ScorePublicationLockService(answerRepository, sessionService, gateway, readQueryService, com.pte.TestClocks.fixed());
         lenient().when(readQueryService.findReportInputs(tenantId, sessionId)).thenReturn(List.of());
     }
 

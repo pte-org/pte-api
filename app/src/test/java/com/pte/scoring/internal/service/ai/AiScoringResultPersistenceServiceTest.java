@@ -48,7 +48,7 @@ class AiScoringResultPersistenceServiceTest {
     @BeforeEach
     void setUp() {
         service = new AiScoringResultPersistenceService(answerRepository, gateway,
-                JsonMapper.builder().build(), eventPublisher, null, java.time.Clock.systemUTC());
+                JsonMapper.builder().build(), eventPublisher, null, com.pte.TestClocks.fixed());
     }
 
     @Test

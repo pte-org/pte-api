@@ -214,7 +214,7 @@ class ExaminerAssignmentDatabaseIntegrationTest {
     private ExaminerAssignmentService newService(Dependencies dependencies) {
         return new ExaminerAssignmentService(dependencies.sessionService(), dependencies.attemptService(),
                 dependencies.eligibilityService(), dependencies.identityService(), assignmentRepository,
-                mock(ScorePublicationLockService.class), dependencies.gateway(), dependencies.cohortService(), java.time.Clock.systemUTC());
+                mock(ScorePublicationLockService.class), dependencies.gateway(), dependencies.cohortService(), com.pte.TestClocks.fixed());
     }
 
     private <T> T inTransaction(Supplier<T> callback) {

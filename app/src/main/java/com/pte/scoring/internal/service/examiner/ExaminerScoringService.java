@@ -78,7 +78,7 @@ public class ExaminerScoringService {
         this.identityService = identityService;
         this.readRepository = readRepository;
         this.examinerWorkspaceQueryService = examinerWorkspaceQueryService;
-        this.clock = clock != null ? clock : java.time.Clock.systemUTC();
+        this.clock = clock;
         this.sessionNames = new ExaminerSessionNames(sessionService);
         this.attemptDetailReader = new ExaminerAttemptDetailReader(workQueueRepository, scoringAnswerRepository,
                 examinerEvaluationRepository, gateway, eligibilityQueryService, answerPayloadDecoder,

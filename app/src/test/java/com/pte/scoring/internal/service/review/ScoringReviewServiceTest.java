@@ -30,7 +30,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -56,7 +55,7 @@ class ScoringReviewServiceTest {
     @BeforeEach
     void setUp() {
         service = new ScoringReviewService(scoringAnswerRepository, answerPayloadDecoder, mediaService, gateway, null,
-                null, null, null, null, contentReader, java.time.Clock.systemUTC());
+                null, null, null, null, contentReader, com.pte.TestClocks.fixed());
         tenantId = UUID.randomUUID();
         caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
     }

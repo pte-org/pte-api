@@ -29,12 +29,6 @@ public class ExaminerWorkspaceQueryService {
     private final IdentityService identityService;
     private final Clock clock;
 
-    public ExaminerWorkspaceQueryService(
-            ExaminerWorkspaceReadRepository readRepository,
-            IdentityService identityService) {
-        this(readRepository, identityService, Clock.systemUTC());
-    }
-
     @Autowired
     public ExaminerWorkspaceQueryService(
             ExaminerWorkspaceReadRepository readRepository,
@@ -42,7 +36,7 @@ public class ExaminerWorkspaceQueryService {
             Clock clock) {
         this.readRepository = readRepository;
         this.identityService = identityService;
-        this.clock = clock != null ? clock : Clock.systemUTC();
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)

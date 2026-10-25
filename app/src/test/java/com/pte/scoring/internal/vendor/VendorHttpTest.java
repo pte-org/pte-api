@@ -10,7 +10,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
-import java.time.Clock;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,7 +58,7 @@ class VendorHttpTest {
             HttpRequest request = HttpRequest.newBuilder(server.uri("/stall"))
                     .timeout(Duration.ofSeconds(30)).GET().build();
 
-            assertThatThrownBy(() -> AiJobBudget.run(Clock.systemUTC(), Duration.ofMillis(300),
+            assertThatThrownBy(() -> AiJobBudget.run(com.pte.TestClocks.fixed(), Duration.ofMillis(300),
                     () -> VendorHttp.send(httpClient, request, "Vendor")))
                     .isInstanceOfSatisfying(AiProviderException.class,
                             ex -> assertThat(ex.getReason()).isEqualTo(AiFailureReason.PROVIDER_TIMEOUT));
@@ -72,7 +71,7 @@ class VendorHttpTest {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost/never"))
                 .timeout(Duration.ofSeconds(30)).GET().build();
 
-        assertThatThrownBy(() -> AiJobBudget.run(Clock.systemUTC(), Duration.ZERO,
+        assertThatThrownBy(() -> AiJobBudget.run(com.pte.TestClocks.fixed(), Duration.ZERO,
                 () -> VendorHttp.send(httpClient, request, "Vendor")))
                 .isInstanceOfSatisfying(AiProviderException.class,
                         ex -> assertThat(ex.getReason()).isEqualTo(AiFailureReason.PROVIDER_TIMEOUT));

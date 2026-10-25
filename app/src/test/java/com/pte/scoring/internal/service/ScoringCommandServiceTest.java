@@ -67,7 +67,7 @@ class ScoringCommandServiceTest {
     @BeforeEach
     void setUp() {
         service = new ScoringCommandService(scoringIngestService, evaluationRepository, objectiveScoringService,
-                aiScoringDispatcher, contentReader, sessionService, publicationLockService, eventPublisher, java.time.Clock.systemUTC());
+                aiScoringDispatcher, contentReader, sessionService, publicationLockService, eventPublisher, com.pte.TestClocks.fixed());
     }
 
     @Test

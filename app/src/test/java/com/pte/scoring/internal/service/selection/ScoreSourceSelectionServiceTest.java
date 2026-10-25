@@ -93,7 +93,7 @@ class ScoreSourceSelectionServiceTest {
     void setUp() {
         service = new ScoreSourceSelectionService(sessionService, evaluationRepository, examinerRepository,
                 gateway, readQueryService, selectionReader, attemptService,
-                idempotencyKeyService, auditWriter, auditReader, jsonMapper, java.time.Clock.systemUTC());
+                idempotencyKeyService, auditWriter, auditReader, jsonMapper, com.pte.TestClocks.fixed());
         host = new CurrentUser(actorId, tenantId, List.of("HOST_ADMIN"));
         lenient().when(selectionReader.forSession(sessionId, tenantId)).thenReturn(Map.of());
     }

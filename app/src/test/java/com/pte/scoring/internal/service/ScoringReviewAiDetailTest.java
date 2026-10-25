@@ -64,7 +64,7 @@ class ScoringReviewAiDetailTest {
     @BeforeEach
     void setUp() {
         service = new ScoringReviewService(answerRepository, decoder, mediaService, null, null, null, aiDetails,
-                eligibility, null, contentReader, java.time.Clock.systemUTC());
+                eligibility, null, contentReader, com.pte.TestClocks.fixed());
         host = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
     }
 

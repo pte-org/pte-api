@@ -51,9 +51,7 @@ class ScoringServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ScoringService(scoredAnswerQueryService, scoringEligibilityQueryService,
-                examinerWorkQueryService, scoringReviewReadQueryService,
-                scoreSourceSelectionService, scorePublicationLockService);
+        service = new ScoringService(scoredAnswerQueryService, scoringEligibilityQueryService, examinerWorkQueryService, scoringReviewReadQueryService, scoreSourceSelectionService, scorePublicationLockService, null, null);
     }
 
     @Test

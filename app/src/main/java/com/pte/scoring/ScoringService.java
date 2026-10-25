@@ -69,17 +69,6 @@ public class ScoringService {
         this.practiceAiScoringService = practiceAiScoringService;
     }
 
-    /** Compatibility constructor for focused facade tests. */
-    public ScoringService(ScoredAnswerQueryService scoredAnswerQueryService,
-            ScoringEligibilityQueryService scoringEligibilityQueryService,
-            ExaminerWorkQueryService examinerWorkQueryService,
-            ScoringReviewReadQueryService scoringReviewReadQueryService,
-            ScoreSourceSelectionService scoreSourceSelectionService,
-            ScorePublicationLockService scorePublicationLockService) {
-        this(scoredAnswerQueryService, scoringEligibilityQueryService, examinerWorkQueryService,
-                scoringReviewReadQueryService, scoreSourceSelectionService, scorePublicationLockService, null, null);
-    }
-
     /**
      * Scores one practice answer on the exam's 0-100 scale through the same scorers
      * the exam uses. Creates no exam attempt and writes no scoring rows.
