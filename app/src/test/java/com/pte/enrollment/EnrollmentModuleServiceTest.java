@@ -45,7 +45,7 @@ class EnrollmentModuleServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new EnrollmentModuleService(trainingClassRepository, classStudentRepository, programRepository);
+        service = new EnrollmentModuleService(trainingClassRepository, classStudentRepository, programRepository, null, com.pte.TestClocks.fixed());
     }
 
     private TrainingClass classForTenant(UUID tenantPublicId) {
@@ -106,7 +106,7 @@ class EnrollmentModuleServiceTest {
                 .thenReturn(java.util.Set.of(activeStudentId));
 
         EnrollmentModuleService filteredService = new EnrollmentModuleService(
-                trainingClassRepository, classStudentRepository, programRepository, identityService, java.time.Clock.systemUTC());
+                trainingClassRepository, classStudentRepository, programRepository, identityService, com.pte.TestClocks.fixed());
 
         assertThat(filteredService.findActiveStudentPublicIds(tenantId, classPublicId))
                 .containsExactly(activeStudentId);

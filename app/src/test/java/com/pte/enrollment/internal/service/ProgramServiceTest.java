@@ -50,7 +50,6 @@ class ProgramServiceTest {
     @Mock
     private TrainingClassRepository trainingClassRepository;
 
-
     @Mock
     private AuditLogService auditLogService;
 

@@ -91,7 +91,6 @@ public class ClassLifecycleService {
         return TrainingClassMapper.toResponse(trainingClass, programPublicId);
     }
 
-
     private ClassResponse changeStatus(UUID organizationPublicId, UUID programPublicId, UUID classPublicId,
             CurrentUser caller, ClassStatus target) {
         TrainingClass trainingClass = classService.findOwned(organizationPublicId, programPublicId, classPublicId, caller);

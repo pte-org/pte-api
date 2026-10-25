@@ -4,7 +4,6 @@ import com.pte.enrollment.internal.constant.EnrollmentConstants;
 import com.pte.tenancy.domain.Organization;
 import com.pte.enrollment.domain.Program;
 import com.pte.enrollment.domain.enums.ProgramStatus;
-import com.pte.enrollment.internal.exception.OrganizationNotFoundException;
 import com.pte.enrollment.internal.exception.ProgramHasActiveClassesException;
 import com.pte.enrollment.internal.exception.ProgramNameAlreadyUsedException;
 import com.pte.enrollment.internal.exception.ProgramNotFoundException;

@@ -169,7 +169,6 @@ public class ClassStudentService {
         return ClassStudentMapper.toResponse(saved);
     }
 
-
     /**
      * Tenant-wide roster, optionally filtered by Program â€” the shared data
      * source Phase 7/10/13 reuse. {@code caller.tenantId()} is always forwarded
@@ -186,7 +185,6 @@ public class ClassStudentService {
                 : classStudentRepository.findByTrainingClass_Program_Organization_PublicId(caller.tenantId());
         return memberships.stream().map(ClassStudentMapper::toResponse).toList();
     }
-
 
     /**
      * Loads a Class by (classPublicId, tenant) only â€” used to validate a transfer

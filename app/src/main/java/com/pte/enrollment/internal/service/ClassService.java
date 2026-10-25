@@ -88,7 +88,6 @@ public class ClassService {
         return TrainingClassMapper.toResponse(trainingClass, programPublicId);
     }
 
-
     /**
      * Loads a Program strictly by (organizationPublicId, programPublicId,
      * caller's tenant) â€” same "wrong scope looks like not-found" pattern as

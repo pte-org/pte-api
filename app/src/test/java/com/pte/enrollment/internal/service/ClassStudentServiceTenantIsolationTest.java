@@ -1,6 +1,5 @@
 package com.pte.enrollment.internal.service;
 
-import com.pte.enrollment.domain.ClassStudent;
 import com.pte.enrollment.domain.Program;
 import com.pte.enrollment.domain.TrainingClass;
 import com.pte.enrollment.internal.dto.request.BulkAssignStudentsRequest;

@@ -45,18 +45,6 @@ public class EnrollmentModuleService {
         this.identityService = identityService;
     }
 
-    public EnrollmentModuleService(TrainingClassRepository trainingClassRepository,
-                                   ClassStudentRepository classStudentRepository,
-                                   ProgramRepository programRepository) {
-        this(trainingClassRepository, classStudentRepository, programRepository, null, Clock.systemUTC());
-    }
-
-    /** Compatibility constructor for focused enrollment facade unit tests. */
-    public EnrollmentModuleService(TrainingClassRepository trainingClassRepository,
-                                   ClassStudentRepository classStudentRepository) {
-        this(trainingClassRepository, classStudentRepository, null);
-    }
-
     /** Returns only the student's current membership; it is not used for attempt history. */
     @Transactional(readOnly = true)
     public StudentAssignmentView findCurrentStudentAssignment(UUID tenantId, UUID studentPublicId) {
