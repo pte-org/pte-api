@@ -1,10 +1,9 @@
 package com.pte.proctoring.internal.dto.response;
 
-import com.pte.proctoring.domain.enums.ProctorSessionStatus;
-
 import java.time.Instant;
 import java.util.UUID;
 
-public record ProctorSessionResponse(UUID publicId, UUID sessionPublicId, UUID proctorPublicId,
-                                      ProctorSessionStatus status, Instant openedAt) {
+/** Reply to opening a live monitoring; {@code publicId} is the exam session id and {@code status} is always ACTIVE. */
+public record ProctorSessionResponse(UUID publicId, UUID sessionPublicId, UUID proctorPublicId, String status,
+                                      Instant openedAt) {
 }

@@ -9,6 +9,7 @@ import com.pte.session.dto.response.AttendancePageView;
 import com.pte.session.dto.response.AttendanceRowView;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
+import com.pte.shared.security.SecurityRoles;
 import com.pte.shared.web.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -24,16 +25,21 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/exam-sessions")
-@PreAuthorize("hasRole('PROCTOR')")
-public class ProctorAttendanceController {
+@PreAuthorize("hasAnyRole('HOST_ADMIN','PROCTOR')")
+public class AttendanceController {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
 
     private final AttendanceCoordinatorService attendanceCoordinatorService;
 
-    public ProctorAttendanceController(AttendanceCoordinatorService attendanceCoordinatorService) {
+    public AttendanceController(AttendanceCoordinatorService attendanceCoordinatorService) {
         this.attendanceCoordinatorService = attendanceCoordinatorService;
+    }
+
+    /** Host admins see the whole roster; proctors only the sessions they are assigned to (checked in the service). */
+    private static boolean isHost(CurrentUser caller) {
+        return caller.hasRole(SecurityRoles.HOST_ADMIN);
     }
 
     @GetMapping("/{sessionPublicId}/attendance")
@@ -47,7 +53,7 @@ public class ProctorAttendanceController {
         int safePage = Math.max(0, page);
         int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
         return ApiResponse.success(attendanceCoordinatorService.getAttendanceRoster(
-                sessionPublicId, status, search, safePage, safeSize, caller, false));
+                sessionPublicId, status, search, safePage, safeSize, caller, isHost(caller)));
     }
 
     @PatchMapping("/{sessionPublicId}/attendance/students/{studentPublicId}")
@@ -57,7 +63,7 @@ public class ProctorAttendanceController {
             @Valid @RequestBody RecordAttendanceRequest request) {
         CurrentUser caller = CurrentUserContext.required();
         return ApiResponse.success(attendanceCoordinatorService.recordAttendance(
-                sessionPublicId, studentPublicId, request, caller, false));
+                sessionPublicId, studentPublicId, request, caller, isHost(caller)));
     }
 
     @GetMapping("/{sessionPublicId}/attendance/receipts/{requestPublicId}")
@@ -66,7 +72,7 @@ public class ProctorAttendanceController {
             @PathVariable UUID requestPublicId) {
         CurrentUser caller = CurrentUserContext.required();
         return ApiResponse.success(attendanceCoordinatorService.getReceipt(
-                sessionPublicId, requestPublicId, caller, false));
+                sessionPublicId, requestPublicId, caller, isHost(caller)));
     }
 
     @GetMapping("/{sessionPublicId}/attendance/students/{studentPublicId}/history")
@@ -79,7 +85,7 @@ public class ProctorAttendanceController {
         int safePage = Math.max(0, page);
         int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
         return ApiResponse.success(attendanceCoordinatorService.getHistory(
-                sessionPublicId, studentPublicId, safePage, safeSize, caller, false));
+                sessionPublicId, studentPublicId, safePage, safeSize, caller, isHost(caller)));
     }
 
     @PatchMapping("/{sessionPublicId}/attendance/students/{studentPublicId}/identity")
@@ -89,6 +95,6 @@ public class ProctorAttendanceController {
             @Valid @RequestBody RecordIdentityVerificationRequest request) {
         CurrentUser caller = CurrentUserContext.required();
         return ApiResponse.success(attendanceCoordinatorService.recordIdentityVerification(
-                sessionPublicId, studentPublicId, request, caller, false));
+                sessionPublicId, studentPublicId, request, caller, isHost(caller)));
     }
 }

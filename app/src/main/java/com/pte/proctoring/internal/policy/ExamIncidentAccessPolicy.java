@@ -1,6 +1,6 @@
 package com.pte.proctoring.internal.policy;
 
-import com.pte.proctoring.internal.constant.ExamSessionIncidentConstants;
+import com.pte.proctoring.internal.constant.ExamIncidentConstants;
 import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.SecurityRoles;
@@ -11,34 +11,34 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.UUID;
 
 @Component
-public class ExamSessionIncidentAccessPolicy {
+public class ExamIncidentAccessPolicy {
 
     private final SessionService sessionService;
 
-    public ExamSessionIncidentAccessPolicy(SessionService sessionService) {
+    public ExamIncidentAccessPolicy(SessionService sessionService) {
         this.sessionService = sessionService;
     }
 
     public IncidentAccessContext authorize(UUID sessionPublicId, CurrentUser caller) {
         if (caller == null || caller.userId() == null) {
-            throw forbidden(ExamSessionIncidentConstants.AUTHENTICATED_CALLER_REQUIRED);
+            throw forbidden(ExamIncidentConstants.AUTHENTICATED_CALLER_REQUIRED);
         }
 
         if (caller.hasRole(SecurityRoles.PROCTOR)) {
             if (caller.tenantId() == null) {
-                throw forbidden(ExamSessionIncidentConstants.PROCTOR_TENANT_CONTEXT_REQUIRED);
+                throw forbidden(ExamIncidentConstants.PROCTOR_TENANT_CONTEXT_REQUIRED);
             }
             boolean assigned = sessionService.isProctorAssignedToSession(
                     sessionPublicId, caller.userId(), caller.tenantId());
             if (!assigned) {
-                throw forbidden(ExamSessionIncidentConstants.PROCTOR_NOT_ASSIGNED);
+                throw forbidden(ExamIncidentConstants.PROCTOR_NOT_ASSIGNED);
             }
             return context(caller, caller.tenantId(), SecurityRoles.PROCTOR, true);
         }
 
         if (caller.hasRole(SecurityRoles.HOST_ADMIN)) {
             if (caller.tenantId() == null) {
-                throw forbidden(ExamSessionIncidentConstants.HOST_TENANT_CONTEXT_REQUIRED);
+                throw forbidden(ExamIncidentConstants.HOST_TENANT_CONTEXT_REQUIRED);
             }
             sessionService.verifyHostAccess(sessionPublicId, caller.tenantId());
             return context(caller, caller.tenantId(), SecurityRoles.HOST_ADMIN, false);
@@ -50,7 +50,7 @@ public class ExamSessionIncidentAccessPolicy {
             return context(caller, tenantId, resolveActorRole(caller), false);
         }
 
-        throw forbidden(ExamSessionIncidentConstants.INCIDENT_ACCESS_DENIED);
+        throw forbidden(ExamIncidentConstants.INCIDENT_ACCESS_DENIED);
     }
 
     private IncidentAccessContext context(
@@ -68,7 +68,7 @@ public class ExamSessionIncidentAccessPolicy {
 
     private String resolveActorRole(CurrentUser caller) {
         if (caller == null) {
-            return ExamSessionIncidentConstants.UNKNOWN_ACTOR_ROLE;
+            return ExamIncidentConstants.UNKNOWN_ACTOR_ROLE;
         }
         if (caller.hasRole(SecurityRoles.PROCTOR)) {
             return SecurityRoles.PROCTOR;
@@ -78,12 +78,12 @@ public class ExamSessionIncidentAccessPolicy {
         }
         return caller.roles() != null && !caller.roles().isEmpty()
                 ? caller.roles().get(0)
-                : ExamSessionIncidentConstants.UNKNOWN_ACTOR_ROLE;
+                : ExamIncidentConstants.UNKNOWN_ACTOR_ROLE;
     }
 
     private String resolveActorName(CurrentUser caller) {
         if (caller == null || caller.userId() == null) {
-            return ExamSessionIncidentConstants.SYSTEM_ACTOR_NAME;
+            return ExamIncidentConstants.SYSTEM_ACTOR_NAME;
         }
         return caller.userId().toString();
     }

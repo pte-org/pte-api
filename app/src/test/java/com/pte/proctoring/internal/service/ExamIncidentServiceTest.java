@@ -1,11 +1,11 @@
 package com.pte.proctoring.internal.service;
 
 import com.pte.attempt.AttemptService;
+import com.pte.proctoring.domain.enums.IncidentOrigin;
 import com.pte.identity.IdentityService;
-import com.pte.proctoring.internal.mapper.ExamSessionIncidentMapper;
-import com.pte.proctoring.internal.policy.ExamSessionIncidentAccessPolicy;
-import com.pte.proctoring.internal.repository.ExamSessionIncidentHistoryRepository;
-import com.pte.proctoring.internal.repository.ExamSessionIncidentRepository;
+import com.pte.proctoring.internal.mapper.ExamIncidentMapper;
+import com.pte.proctoring.internal.policy.ExamIncidentAccessPolicy;
+import com.pte.proctoring.internal.repository.ExamIncidentRepository;
 import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,13 +31,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class ExamSessionIncidentServiceTest {
+class ExamIncidentServiceTest {
 
     @Mock
-    private ExamSessionIncidentRepository incidentRepository;
+    private ExamIncidentRepository incidentRepository;
 
     @Mock
-    private ExamSessionIncidentHistoryRepository historyRepository;
+    private IncidentHistoryLog historyLog;
 
     @Mock
     private IdentityService identityService;
@@ -49,32 +49,32 @@ class ExamSessionIncidentServiceTest {
     private AttemptService attemptService;
 
     @Mock
-    private ExamSessionIncidentCommandService commandService;
+    private ExamIncidentCommandService commandService;
 
     @Mock
-    private ExamSessionIncidentMapper mapper;
+    private ExamIncidentMapper mapper;
 
-    private ExamSessionIncidentQueryService queryService;
-    private ExamSessionIncidentService service;
+    private ExamIncidentQueryService queryService;
+    private ExamIncidentService service;
     private final UUID sessionId = UUID.randomUUID();
     private final UUID tenantId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
-        queryService = new ExamSessionIncidentQueryService(
+        queryService = new ExamIncidentQueryService(
                 incidentRepository,
-                historyRepository,
+                historyLog,
                 identityService,
-                new ExamSessionIncidentAccessPolicy(sessionService),
+                new ExamIncidentAccessPolicy(sessionService),
                 mapper);
-        service = new ExamSessionIncidentService(queryService, commandService);
+        service = new ExamIncidentService(queryService, commandService);
     }
 
     @Test
     void hostAdminMustOwnSessionBeforeListingIncidents() {
         CurrentUser host = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
-        when(incidentRepository.findBySessionPublicIdAndTenantIdAndDeletedFalse(
-                eq(sessionId), eq(tenantId), any(PageRequest.class))).thenReturn(Page.empty());
+        when(incidentRepository.findBySessionPublicIdAndTenantIdAndOriginAndDeletedFalse(
+                eq(sessionId), eq(tenantId), eq(IncidentOrigin.REPORTED), any(PageRequest.class))).thenReturn(Page.empty());
 
         var result = service.listIncidents(sessionId, null, 0, 20, host);
 
@@ -92,8 +92,8 @@ class ExamSessionIncidentServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(exception -> ((ResponseStatusException) exception).getStatusCode().value())
                 .isEqualTo(403);
-        verify(incidentRepository, never()).findBySessionPublicIdAndTenantIdAndDeletedFalse(
-                any(), any(), any(PageRequest.class));
+        verify(incidentRepository, never()).findBySessionPublicIdAndTenantIdAndOriginAndDeletedFalse(
+                any(), any(), any(), any(PageRequest.class));
     }
 
     @ParameterizedTest
@@ -101,8 +101,8 @@ class ExamSessionIncidentServiceTest {
     void platformRolesResolveSessionTenantBeforeListingIncidents(String role) {
         CurrentUser platformUser = new CurrentUser(UUID.randomUUID(), null, List.of(role));
         when(sessionService.resolveTenantId(sessionId)).thenReturn(tenantId);
-        when(incidentRepository.findBySessionPublicIdAndTenantIdAndDeletedFalse(
-                eq(sessionId), eq(tenantId), any(PageRequest.class))).thenReturn(Page.empty());
+        when(incidentRepository.findBySessionPublicIdAndTenantIdAndOriginAndDeletedFalse(
+                eq(sessionId), eq(tenantId), eq(IncidentOrigin.REPORTED), any(PageRequest.class))).thenReturn(Page.empty());
 
         var result = service.listIncidents(sessionId, null, 0, 20, platformUser);
 

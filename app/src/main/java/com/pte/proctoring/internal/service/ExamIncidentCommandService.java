@@ -3,17 +3,16 @@ package com.pte.proctoring.internal.service;
 import com.pte.attempt.AttemptService;
 import com.pte.identity.IdentityService;
 import com.pte.identity.dto.response.StudentDisplayNameView;
-import com.pte.proctoring.domain.ExamSessionIncident;
-import com.pte.proctoring.domain.ExamSessionIncidentHistory;
+import com.pte.proctoring.domain.ExamIncident;
+import com.pte.proctoring.domain.enums.IncidentOrigin;
 import com.pte.proctoring.dto.incident.CreateIncidentRequest;
 import com.pte.proctoring.dto.incident.IncidentView;
 import com.pte.proctoring.dto.incident.UpdateIncidentStatusRequest;
-import com.pte.proctoring.internal.constant.ExamSessionIncidentConstants;
-import com.pte.proctoring.internal.mapper.ExamSessionIncidentMapper;
-import com.pte.proctoring.internal.policy.ExamSessionIncidentAccessPolicy;
+import com.pte.proctoring.internal.constant.ExamIncidentConstants;
+import com.pte.proctoring.internal.mapper.ExamIncidentMapper;
+import com.pte.proctoring.internal.policy.ExamIncidentAccessPolicy;
 import com.pte.proctoring.internal.policy.IncidentAccessContext;
-import com.pte.proctoring.internal.repository.ExamSessionIncidentHistoryRepository;
-import com.pte.proctoring.internal.repository.ExamSessionIncidentRepository;
+import com.pte.proctoring.internal.repository.ExamIncidentRepository;
 import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.http.HttpStatus;
@@ -26,26 +25,26 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
-public class ExamSessionIncidentCommandService {
+public class ExamIncidentCommandService {
 
-    private final ExamSessionIncidentRepository incidentRepository;
-    private final ExamSessionIncidentHistoryRepository historyRepository;
+    private final ExamIncidentRepository incidentRepository;
+    private final IncidentHistoryLog historyLog;
     private final IdentityService identityService;
     private final SessionService sessionService;
     private final AttemptService attemptService;
-    private final ExamSessionIncidentAccessPolicy accessPolicy;
-    private final ExamSessionIncidentMapper mapper;
+    private final ExamIncidentAccessPolicy accessPolicy;
+    private final ExamIncidentMapper mapper;
 
-    public ExamSessionIncidentCommandService(
-            ExamSessionIncidentRepository incidentRepository,
-            ExamSessionIncidentHistoryRepository historyRepository,
+    public ExamIncidentCommandService(
+            ExamIncidentRepository incidentRepository,
+            IncidentHistoryLog historyLog,
             IdentityService identityService,
             SessionService sessionService,
             AttemptService attemptService,
-            ExamSessionIncidentAccessPolicy accessPolicy,
-            ExamSessionIncidentMapper mapper) {
+            ExamIncidentAccessPolicy accessPolicy,
+            ExamIncidentMapper mapper) {
         this.incidentRepository = incidentRepository;
-        this.historyRepository = historyRepository;
+        this.historyLog = historyLog;
         this.identityService = identityService;
         this.sessionService = sessionService;
         this.attemptService = attemptService;
@@ -61,31 +60,33 @@ public class ExamSessionIncidentCommandService {
         IncidentAccessContext access = accessPolicy.authorize(sessionPublicId, caller);
         validateCreateTarget(sessionPublicId, request, access.tenantId());
 
-        ExamSessionIncident incident = new ExamSessionIncident();
+        ExamIncident incident = new ExamIncident();
         incident.setPublicId(UUID.randomUUID());
         incident.setTenantId(access.tenantId());
         incident.setSessionPublicId(sessionPublicId);
         incident.setStudentPublicId(request.studentPublicId());
         incident.setAttemptPublicId(request.attemptPublicId());
+        incident.setOrigin(IncidentOrigin.REPORTED);
         incident.setTitle(request.title().trim());
         incident.setDescription(request.description().trim());
-        incident.setCategory(request.category().trim().toUpperCase());
+        incident.setType(request.category().trim().toUpperCase());
         incident.setSeverity(request.severity().trim().toUpperCase());
-        incident.setStatus(ExamSessionIncidentConstants.STATUS_NEW);
+        incident.setStatus(ExamIncidentConstants.STATUS_NEW);
         incident.setReporterRole(access.actorRole());
         incident.setReporterName(access.actorName());
         incident.setReporterPublicId(access.actorPublicId());
-        incident.setCurrentOwnerRole(ExamSessionIncidentConstants.OWNER_HOST_ADMIN);
+        incident.setCurrentOwnerRole(ExamIncidentConstants.OWNER_HOST_ADMIN);
         incident.setCurrentOwnerName(null);
         incident.setResolutionSummary(null);
 
-        ExamSessionIncident saved = incidentRepository.save(incident);
-        saveHistory(
-                saved,
+        ExamIncident saved = incidentRepository.save(incident);
+        historyLog.record(
+                caller,
+                saved.getPublicId(),
                 access,
-                ExamSessionIncidentConstants.ACTION_CREATE,
+                ExamIncidentConstants.ACTION_CREATE,
                 null,
-                ExamSessionIncidentConstants.STATUS_NEW,
+                ExamIncidentConstants.STATUS_NEW,
                 request.description());
 
         return mapper.toView(saved, resolveStudentName(access.tenantId(), saved.getStudentPublicId()));
@@ -98,7 +99,7 @@ public class ExamSessionIncidentCommandService {
             UpdateIncidentStatusRequest request,
             CurrentUser caller) {
         IncidentAccessContext access = accessPolicy.authorize(sessionPublicId, caller);
-        ExamSessionIncident incident = findIncident(sessionPublicId, incidentPublicId, access.tenantId());
+        ExamIncident incident = findIncident(sessionPublicId, incidentPublicId, access.tenantId());
 
         String previousStatus = incident.getStatus();
         String newStatus = request.status().trim().toUpperCase();
@@ -115,11 +116,12 @@ public class ExamSessionIncidentCommandService {
             incident.setResolutionSummary(request.resolutionSummary().trim());
         }
 
-        ExamSessionIncident saved = incidentRepository.save(incident);
-        saveHistory(
-                saved,
+        ExamIncident saved = incidentRepository.save(incident);
+        historyLog.record(
+                caller,
+                saved.getPublicId(),
                 access,
-                ExamSessionIncidentConstants.ACTION_UPDATE_STATUS,
+                ExamIncidentConstants.ACTION_UPDATE_STATUS,
                 previousStatus,
                 newStatus,
                 request.notes());
@@ -134,102 +136,81 @@ public class ExamSessionIncidentCommandService {
         if (request.studentPublicId() != null
                 && !sessionService.isStudentEnrolledInSession(sessionPublicId, request.studentPublicId(), tenantId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    ExamSessionIncidentConstants.STUDENT_NOT_ENROLLED);
+                    ExamIncidentConstants.STUDENT_NOT_ENROLLED);
         }
 
         if (request.attemptPublicId() != null
                 && !attemptService.attemptBelongsToSessionAndStudent(
                 request.attemptPublicId(), sessionPublicId, request.studentPublicId(), tenantId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    ExamSessionIncidentConstants.ATTEMPT_NOT_IN_SESSION);
+                    ExamIncidentConstants.ATTEMPT_NOT_IN_SESSION);
         }
     }
 
     private void validateStatus(String previousStatus, String newStatus) {
-        if (!ExamSessionIncidentConstants.VALID_STATUSES.contains(newStatus)) {
+        if (!ExamIncidentConstants.VALID_STATUSES.contains(newStatus)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    ExamSessionIncidentConstants.INVALID_STATUS);
+                    ExamIncidentConstants.INVALID_STATUS);
         }
-        if (ExamSessionIncidentConstants.STATUS_CLOSED.equalsIgnoreCase(previousStatus)) {
+        if (ExamIncidentConstants.STATUS_CLOSED.equalsIgnoreCase(previousStatus)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    ExamSessionIncidentConstants.CLOSED_INCIDENT_IMMUTABLE);
+                    ExamIncidentConstants.CLOSED_INCIDENT_IMMUTABLE);
         }
     }
 
     private void applyProctorTransition(
-            ExamSessionIncident incident,
+            ExamIncident incident,
             String previousStatus,
             String newStatus,
             UpdateIncidentStatusRequest request) {
-        if (ExamSessionIncidentConstants.STATUS_RESOLVED.equalsIgnoreCase(previousStatus)
-                || ExamSessionIncidentConstants.STATUS_ESCALATED.equalsIgnoreCase(previousStatus)) {
+        if (ExamIncidentConstants.STATUS_RESOLVED.equalsIgnoreCase(previousStatus)
+                || ExamIncidentConstants.STATUS_ESCALATED.equalsIgnoreCase(previousStatus)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    String.format(ExamSessionIncidentConstants.PROCTOR_CANNOT_MODIFY_STATUS, previousStatus));
+                    String.format(ExamIncidentConstants.PROCTOR_CANNOT_MODIFY_STATUS, previousStatus));
         }
-        if (!ExamSessionIncidentConstants.STATUS_NEW.equalsIgnoreCase(newStatus)
-                && !ExamSessionIncidentConstants.STATUS_IN_PROGRESS.equalsIgnoreCase(newStatus)) {
+        if (!ExamIncidentConstants.STATUS_NEW.equalsIgnoreCase(newStatus)
+                && !ExamIncidentConstants.STATUS_IN_PROGRESS.equalsIgnoreCase(newStatus)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    ExamSessionIncidentConstants.PROCTOR_STATUS_TRANSITION_FORBIDDEN);
+                    ExamIncidentConstants.PROCTOR_STATUS_TRANSITION_FORBIDDEN);
         }
-        if (ExamSessionIncidentConstants.STATUS_IN_PROGRESS.equalsIgnoreCase(previousStatus)
-                && ExamSessionIncidentConstants.STATUS_NEW.equalsIgnoreCase(newStatus)) {
+        if (ExamIncidentConstants.STATUS_IN_PROGRESS.equalsIgnoreCase(previousStatus)
+                && ExamIncidentConstants.STATUS_NEW.equalsIgnoreCase(newStatus)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    ExamSessionIncidentConstants.PROCTOR_CANNOT_REOPEN);
+                    ExamIncidentConstants.PROCTOR_CANNOT_REOPEN);
         }
         if (request.receiverRole() != null && !request.receiverRole().isBlank()
-                && !ExamSessionIncidentConstants.OWNER_HOST_ADMIN.equals(request.receiverRole().trim().toUpperCase())) {
+                && !ExamIncidentConstants.OWNER_HOST_ADMIN.equals(request.receiverRole().trim().toUpperCase())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    ExamSessionIncidentConstants.PROCTOR_ROUTE_ONLY_HOST);
+                    ExamIncidentConstants.PROCTOR_ROUTE_ONLY_HOST);
         }
-        incident.setCurrentOwnerRole(ExamSessionIncidentConstants.OWNER_HOST_ADMIN);
+        incident.setCurrentOwnerRole(ExamIncidentConstants.OWNER_HOST_ADMIN);
     }
 
     private void applyHostOrPlatformTransition(
-            ExamSessionIncident incident,
+            ExamIncident incident,
             String newStatus,
             UpdateIncidentStatusRequest request) {
-        if (ExamSessionIncidentConstants.STATUS_ESCALATED.equalsIgnoreCase(newStatus)) {
-            incident.setCurrentOwnerRole(ExamSessionIncidentConstants.OWNER_PLATFORM_ADMIN);
+        if (ExamIncidentConstants.STATUS_ESCALATED.equalsIgnoreCase(newStatus)) {
+            incident.setCurrentOwnerRole(ExamIncidentConstants.OWNER_PLATFORM_ADMIN);
         } else if (request.receiverRole() != null && !request.receiverRole().isBlank()) {
             String receiverRole = request.receiverRole().trim().toUpperCase();
-            if (!ExamSessionIncidentConstants.ALLOWED_RECEIVER_ROLES.contains(receiverRole)) {
+            if (!ExamIncidentConstants.ALLOWED_RECEIVER_ROLES.contains(receiverRole)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        ExamSessionIncidentConstants.INVALID_RECEIVER_ROLE);
+                        ExamIncidentConstants.INVALID_RECEIVER_ROLE);
             }
             incident.setCurrentOwnerRole(receiverRole);
-        } else if (ExamSessionIncidentConstants.STATUS_RESOLVED.equalsIgnoreCase(newStatus)
-                || ExamSessionIncidentConstants.STATUS_CLOSED.equalsIgnoreCase(newStatus)) {
-            incident.setCurrentOwnerRole(ExamSessionIncidentConstants.OWNER_HOST_ADMIN);
+        } else if (ExamIncidentConstants.STATUS_RESOLVED.equalsIgnoreCase(newStatus)
+                || ExamIncidentConstants.STATUS_CLOSED.equalsIgnoreCase(newStatus)) {
+            incident.setCurrentOwnerRole(ExamIncidentConstants.OWNER_HOST_ADMIN);
         }
     }
 
-    private ExamSessionIncident findIncident(UUID sessionPublicId, UUID incidentPublicId, UUID tenantId) {
-        return incidentRepository.findByPublicIdAndSessionPublicIdAndTenantIdAndDeletedFalse(
-                        incidentPublicId, sessionPublicId, tenantId)
+    private ExamIncident findIncident(UUID sessionPublicId, UUID incidentPublicId, UUID tenantId) {
+        return incidentRepository.findByPublicIdAndSessionPublicIdAndTenantIdAndOriginAndDeletedFalse(
+                        incidentPublicId, sessionPublicId, tenantId, IncidentOrigin.REPORTED)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
-                        ExamSessionIncidentConstants.INCIDENT_NOT_FOUND));
-    }
-
-    private void saveHistory(
-            ExamSessionIncident incident,
-            IncidentAccessContext access,
-            String action,
-            String fromStatus,
-            String toStatus,
-            String notes) {
-        ExamSessionIncidentHistory history = new ExamSessionIncidentHistory();
-        history.setPublicId(UUID.randomUUID());
-        history.setIncidentId(incident.getId());
-        history.setIncidentPublicId(incident.getPublicId());
-        history.setActorPublicId(access.actorPublicId());
-        history.setActorName(access.actorName());
-        history.setActorRole(access.actorRole());
-        history.setAction(action);
-        history.setFromStatus(fromStatus);
-        history.setToStatus(toStatus);
-        history.setNotes(notes);
-        historyRepository.save(history);
+                        ExamIncidentConstants.INCIDENT_NOT_FOUND));
     }
 
     private StudentDisplayNameView resolveStudentName(UUID tenantId, UUID studentId) {

@@ -4,7 +4,7 @@ import com.pte.proctoring.dto.incident.CreateIncidentRequest;
 import com.pte.proctoring.dto.incident.IncidentHistoryItemView;
 import com.pte.proctoring.dto.incident.IncidentView;
 import com.pte.proctoring.dto.incident.UpdateIncidentStatusRequest;
-import com.pte.proctoring.internal.service.ExamSessionIncidentService;
+import com.pte.proctoring.internal.service.ExamIncidentService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -26,14 +26,14 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/exam-sessions")
 @PreAuthorize("hasAnyRole('PROCTOR', 'HOST_ADMIN', 'PLATFORM_ADMIN', 'PLATFORM_MANAGER')")
-public class ExamSessionIncidentController {
+public class ExamIncidentController {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
 
-    private final ExamSessionIncidentService incidentService;
+    private final ExamIncidentService incidentService;
 
-    public ExamSessionIncidentController(ExamSessionIncidentService incidentService) {
+    public ExamIncidentController(ExamIncidentService incidentService) {
         this.incidentService = incidentService;
     }
 

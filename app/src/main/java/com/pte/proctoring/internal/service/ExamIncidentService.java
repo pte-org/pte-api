@@ -12,14 +12,14 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-public class ExamSessionIncidentService {
+public class ExamIncidentService {
 
-    private final ExamSessionIncidentQueryService queryService;
-    private final ExamSessionIncidentCommandService commandService;
+    private final ExamIncidentQueryService queryService;
+    private final ExamIncidentCommandService commandService;
 
-    public ExamSessionIncidentService(
-            ExamSessionIncidentQueryService queryService,
-            ExamSessionIncidentCommandService commandService) {
+    public ExamIncidentService(
+            ExamIncidentQueryService queryService,
+            ExamIncidentCommandService commandService) {
         this.queryService = queryService;
         this.commandService = commandService;
     }

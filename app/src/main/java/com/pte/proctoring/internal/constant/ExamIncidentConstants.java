@@ -3,7 +3,7 @@ package com.pte.proctoring.internal.constant;
 import java.util.Set;
 
 /** Error messages and workflow values owned by exam-session incidents. */
-public final class ExamSessionIncidentConstants {
+public final class ExamIncidentConstants {
 
     public static final String AUTHENTICATED_CALLER_REQUIRED = "Authenticated caller is required";
     public static final String PROCTOR_TENANT_CONTEXT_REQUIRED = "Proctor tenant context is required";
@@ -31,6 +31,10 @@ public final class ExamSessionIncidentConstants {
     public static final String STATUS_ESCALATED = "ESCALATED";
     public static final String STATUS_RESOLVED = "RESOLVED";
     public static final String STATUS_CLOSED = "CLOSED";
+    public static final String AUDIT_AGGREGATE_TYPE = "EXAM_INCIDENT";
+    public static final String AUDIT_ACTION = "INCIDENT_CHANGED";
+    public static final String AUDIT_SUMMARY_SEPARATOR = " -> ";
+    public static final String HISTORY_SERIALIZATION_FAILED = "Failed to serialize or read an incident history entry";
     public static final String ACTION_CREATE = "CREATE";
     public static final String ACTION_UPDATE_STATUS = "UPDATE_STATUS";
     public static final String OWNER_HOST_ADMIN = "HOST_ADMIN";
@@ -42,6 +46,6 @@ public final class ExamSessionIncidentConstants {
     public static final Set<String> ALLOWED_RECEIVER_ROLES = Set.of(
             OWNER_HOST_ADMIN, OWNER_PLATFORM_ADMIN, OWNER_PROCTOR);
 
-    private ExamSessionIncidentConstants() {
+    private ExamIncidentConstants() {
     }
 }

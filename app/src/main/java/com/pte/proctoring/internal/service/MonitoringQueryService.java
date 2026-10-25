@@ -1,6 +1,7 @@
 package com.pte.proctoring.internal.service;
 
 import com.pte.attempt.AttemptService;
+import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.dto.response.MonitoringAttemptSummaryView;
 import com.pte.attempt.dto.response.MonitoringAttemptView;
 import com.pte.attempt.dto.response.MonitoringRosterAggregateView;
@@ -9,8 +10,9 @@ import com.pte.identity.dto.response.StudentDisplayNameView;
 import com.pte.proctoring.internal.dto.response.MonitoringSnapshotResponse;
 import com.pte.proctoring.internal.dto.response.MonitoringStudentResponse;
 import com.pte.proctoring.internal.dto.response.MonitoringSummaryResponse;
+import com.pte.proctoring.internal.constant.ProctorConstants;
 import com.pte.proctoring.internal.policy.ProctorAccessPolicy;
-import com.pte.proctoring.internal.repository.ViolationEventRepository;
+import com.pte.proctoring.internal.repository.ExamIncidentRepository;
 import com.pte.session.SessionService;
 import com.pte.session.dto.response.MonitoringEnrollmentView;
 import com.pte.session.dto.response.ProctorMonitoringSessionView;
@@ -40,19 +42,19 @@ public class MonitoringQueryService {
     private final SessionService sessionService;
     private final AttemptService attemptService;
     private final IdentityService identityService;
-    private final ViolationEventRepository violationEventRepository;
+    private final ExamIncidentRepository incidentRepository;
 
     public MonitoringQueryService(
             ProctorAccessPolicy proctorAccessPolicy,
             SessionService sessionService,
             AttemptService attemptService,
             IdentityService identityService,
-            ViolationEventRepository violationEventRepository) {
+            ExamIncidentRepository incidentRepository) {
         this.proctorAccessPolicy = proctorAccessPolicy;
         this.sessionService = sessionService;
         this.attemptService = attemptService;
         this.identityService = identityService;
-        this.violationEventRepository = violationEventRepository;
+        this.incidentRepository = incidentRepository;
     }
 
     /**
@@ -65,7 +67,7 @@ public class MonitoringQueryService {
 
         ProctorMonitoringSessionView sessionView = sessionService
                 .getMonitoringSession(sessionPublicId, caller.userId(), tenantId)
-                .orElseThrow(() -> new AccessDeniedException("Session access denied"));
+                .orElseThrow(() -> new AccessDeniedException(ProctorConstants.SESSION_ACCESS_DENIED));
 
         PagedResult<MonitoringEnrollmentView> enrollments = sessionService
                 .getMonitoringEnrollments(sessionPublicId, tenantId, requestedPage, requestedSize);
@@ -90,7 +92,7 @@ public class MonitoringQueryService {
 
         Map<UUID, Long> violationCounts = attemptIds.isEmpty()
                 ? Collections.emptyMap()
-                : violationEventRepository.countViolationsByAttemptPublicIdIn(sessionPublicId, tenantId, attemptIds).stream()
+                : incidentRepository.countFlagsByAttemptPublicIdIn(sessionPublicId, tenantId, attemptIds).stream()
                 .collect(Collectors.toMap(
                         row -> (UUID) row[0],
                         row -> (Long) row[1],
@@ -100,13 +102,13 @@ public class MonitoringQueryService {
                 .map(enrollment -> {
                     UUID studentId = enrollment.studentPublicId();
                     StudentDisplayNameView nameView = displayNames.get(studentId);
-                    String name = nameView != null ? nameView.displayName() : "Thí sinh";
+                    String name = nameView != null ? nameView.displayName() : ProctorConstants.DEFAULT_STUDENT_NAME;
                     String email = nameView != null ? nameView.email() : null;
 
                     MonitoringAttemptView att = attempts.get(studentId);
                     UUID attId = att != null ? att.attemptPublicId() : null;
                     Integer attNum = att != null ? att.attemptNumber() : null;
-                    com.pte.attempt.domain.enums.AttemptStatus status = att != null ? att.status() : null;
+                    AttemptStatus status = att != null ? att.status() : null;
                     Instant startedAt = att != null ? att.startedAt() : null;
                     Instant submittedAt = att != null ? att.submittedAt() : null;
                     Instant lastSeenAt = att != null ? att.lastSeenAt() : null;
@@ -118,7 +120,8 @@ public class MonitoringQueryService {
                 })
                 .toList();
 
-        MonitoringRosterAggregateView aggregate = attemptService.getRosterAggregate(sessionPublicId, tenantId);
+        MonitoringRosterAggregateView aggregate = attemptService.getRosterAggregate(sessionPublicId, tenantId,
+                sessionService.findEnrolledStudentPublicIds(sessionPublicId, tenantId));
         Instant snapshotAt = Instant.now();
 
         MonitoringSummaryResponse summary = new MonitoringSummaryResponse(
@@ -141,7 +144,7 @@ public class MonitoringQueryService {
             UUID sessionPublicId, UUID studentPublicId, int page, int size, CurrentUser caller) {
         UUID tenantId = proctorAccessPolicy.authorizeProctorAssigned(sessionPublicId, caller);
         if (!sessionService.isStudentEnrolledInSession(sessionPublicId, studentPublicId, tenantId)) {
-            throw new AccessDeniedException("Student is not enrolled in this session");
+            throw new AccessDeniedException(ProctorConstants.STUDENT_NOT_ENROLLED_DENIED);
         }
         return attemptService.getAttemptHistoryForStudent(sessionPublicId, studentPublicId, tenantId, page, size);
     }

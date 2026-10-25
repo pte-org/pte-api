@@ -2,15 +2,15 @@ package com.pte.proctoring.internal.service;
 
 import com.pte.identity.IdentityService;
 import com.pte.identity.dto.response.StudentDisplayNameView;
-import com.pte.proctoring.domain.ExamSessionIncident;
+import com.pte.proctoring.domain.ExamIncident;
+import com.pte.proctoring.domain.enums.IncidentOrigin;
 import com.pte.proctoring.dto.incident.IncidentHistoryItemView;
 import com.pte.proctoring.dto.incident.IncidentView;
-import com.pte.proctoring.internal.constant.ExamSessionIncidentConstants;
-import com.pte.proctoring.internal.mapper.ExamSessionIncidentMapper;
-import com.pte.proctoring.internal.policy.ExamSessionIncidentAccessPolicy;
+import com.pte.proctoring.internal.constant.ExamIncidentConstants;
+import com.pte.proctoring.internal.mapper.ExamIncidentMapper;
+import com.pte.proctoring.internal.policy.ExamIncidentAccessPolicy;
 import com.pte.proctoring.internal.policy.IncidentAccessContext;
-import com.pte.proctoring.internal.repository.ExamSessionIncidentHistoryRepository;
-import com.pte.proctoring.internal.repository.ExamSessionIncidentRepository;
+import com.pte.proctoring.internal.repository.ExamIncidentRepository;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.web.PageMeta;
 import com.pte.shared.web.PagedResult;
@@ -29,22 +29,22 @@ import java.util.Objects;
 import java.util.UUID;
 
 @Service
-public class ExamSessionIncidentQueryService {
+public class ExamIncidentQueryService {
 
-    private final ExamSessionIncidentRepository incidentRepository;
-    private final ExamSessionIncidentHistoryRepository historyRepository;
+    private final ExamIncidentRepository incidentRepository;
+    private final IncidentHistoryLog historyLog;
     private final IdentityService identityService;
-    private final ExamSessionIncidentAccessPolicy accessPolicy;
-    private final ExamSessionIncidentMapper mapper;
+    private final ExamIncidentAccessPolicy accessPolicy;
+    private final ExamIncidentMapper mapper;
 
-    public ExamSessionIncidentQueryService(
-            ExamSessionIncidentRepository incidentRepository,
-            ExamSessionIncidentHistoryRepository historyRepository,
+    public ExamIncidentQueryService(
+            ExamIncidentRepository incidentRepository,
+            IncidentHistoryLog historyLog,
             IdentityService identityService,
-            ExamSessionIncidentAccessPolicy accessPolicy,
-            ExamSessionIncidentMapper mapper) {
+            ExamIncidentAccessPolicy accessPolicy,
+            ExamIncidentMapper mapper) {
         this.incidentRepository = incidentRepository;
-        this.historyRepository = historyRepository;
+        this.historyLog = historyLog;
         this.identityService = identityService;
         this.accessPolicy = accessPolicy;
         this.mapper = mapper;
@@ -59,18 +59,19 @@ public class ExamSessionIncidentQueryService {
             CurrentUser caller) {
         IncidentAccessContext access = accessPolicy.authorize(sessionPublicId, caller);
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<ExamSessionIncident> incidentPage;
+        Page<ExamIncident> incidentPage;
 
         if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
-            incidentPage = incidentRepository.findBySessionPublicIdAndTenantIdAndStatusAndDeletedFalse(
-                    sessionPublicId, access.tenantId(), status.trim().toUpperCase(), pageRequest);
+            incidentPage = incidentRepository.findBySessionPublicIdAndTenantIdAndOriginAndStatusAndDeletedFalse(
+                    sessionPublicId, access.tenantId(), IncidentOrigin.REPORTED, status.trim().toUpperCase(),
+                    pageRequest);
         } else {
-            incidentPage = incidentRepository.findBySessionPublicIdAndTenantIdAndDeletedFalse(
-                    sessionPublicId, access.tenantId(), pageRequest);
+            incidentPage = incidentRepository.findBySessionPublicIdAndTenantIdAndOriginAndDeletedFalse(
+                    sessionPublicId, access.tenantId(), IncidentOrigin.REPORTED, pageRequest);
         }
 
         List<UUID> studentIds = incidentPage.getContent().stream()
-                .map(ExamSessionIncident::getStudentPublicId)
+                .map(ExamIncident::getStudentPublicId)
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
@@ -97,7 +98,7 @@ public class ExamSessionIncidentQueryService {
             UUID incidentPublicId,
             CurrentUser caller) {
         IncidentAccessContext access = accessPolicy.authorize(sessionPublicId, caller);
-        ExamSessionIncident incident = findIncident(sessionPublicId, incidentPublicId, access.tenantId());
+        ExamIncident incident = findIncident(sessionPublicId, incidentPublicId, access.tenantId());
         StudentDisplayNameView student = resolveStudentName(access.tenantId(), incident.getStudentPublicId());
         return mapper.toView(incident, student);
     }
@@ -109,18 +110,15 @@ public class ExamSessionIncidentQueryService {
             CurrentUser caller) {
         IncidentAccessContext access = accessPolicy.authorize(sessionPublicId, caller);
         findIncident(sessionPublicId, incidentPublicId, access.tenantId());
-        return historyRepository.findByIncidentPublicIdAndDeletedFalseOrderByCreatedAtAsc(incidentPublicId)
-                .stream()
-                .map(mapper::toHistoryView)
-                .toList();
+        return historyLog.read(access.tenantId(), incidentPublicId);
     }
 
-    private ExamSessionIncident findIncident(UUID sessionPublicId, UUID incidentPublicId, UUID tenantId) {
-        return incidentRepository.findByPublicIdAndSessionPublicIdAndTenantIdAndDeletedFalse(
-                        incidentPublicId, sessionPublicId, tenantId)
+    private ExamIncident findIncident(UUID sessionPublicId, UUID incidentPublicId, UUID tenantId) {
+        return incidentRepository.findByPublicIdAndSessionPublicIdAndTenantIdAndOriginAndDeletedFalse(
+                        incidentPublicId, sessionPublicId, tenantId, IncidentOrigin.REPORTED)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
-                        ExamSessionIncidentConstants.INCIDENT_NOT_FOUND));
+                        ExamIncidentConstants.INCIDENT_NOT_FOUND));
     }
 
     private Map<UUID, StudentDisplayNameView> resolveStudentNames(UUID tenantId, List<UUID> studentIds) {

@@ -11,7 +11,7 @@ import com.pte.proctoring.internal.dto.response.ProctorSessionResponse;
 import com.pte.proctoring.internal.dto.response.ViolationEventResponse;
 import com.pte.proctoring.internal.security.StompPrincipal;
 import com.pte.proctoring.internal.service.ProctorCommandDispatchService;
-import com.pte.proctoring.internal.service.ProctorSessionService;
+import com.pte.proctoring.internal.service.ProctorWatchService;
 import com.pte.proctoring.internal.service.ViolationService;
 import com.pte.shared.exception.DomainException;
 import com.pte.shared.security.CurrentUser;
@@ -38,24 +38,23 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * The primary command surface. {@code sessions/{sessionPublicId}/open}
- * addresses session's exam session (all a client knows before opening);
- * every later frame addresses the resulting {@code ProctorSession}'s own
- * publicId.
+ * The primary command surface. Every frame addresses the exam session: the
+ * "proctor session" a client gets back from {@code open} carries the exam
+ * session id, so the {@code /proctor-sessions/{id}/...} paths are unchanged.
  */
 @Controller
 public class ProctorStompController {
 
-    private final ProctorSessionService proctorSessionService;
+    private final ProctorWatchService watchService;
     private final ProctorCommandDispatchService proctorCommandService;
     private final ViolationService violationService;
     private final SimpMessagingTemplate messagingTemplate;
 
-    public ProctorStompController(ProctorSessionService proctorSessionService,
+    public ProctorStompController(ProctorWatchService watchService,
                                   ProctorCommandDispatchService proctorCommandService,
                                   ViolationService violationService,
                                   SimpMessagingTemplate messagingTemplate) {
-        this.proctorSessionService = proctorSessionService;
+        this.watchService = watchService;
         this.proctorCommandService = proctorCommandService;
         this.violationService = violationService;
         this.messagingTemplate = messagingTemplate;
@@ -68,7 +67,7 @@ public class ProctorStompController {
             @Header(name = "requestId", required = false) String requestId,
             SimpMessageHeaderAccessor headerAccessor) {
         CurrentUser caller = currentUser(principal);
-        ProctorSessionResponse response = proctorSessionService.open(sessionPublicId, caller);
+        ProctorSessionResponse response = watchService.open(sessionPublicId, caller);
 
         String simpSessionId = headerAccessor != null ? headerAccessor.getSessionId() : null;
         if (simpSessionId != null && principal != null) {
@@ -88,15 +87,15 @@ public class ProctorStompController {
         }
     }
 
-    @MessageMapping("/proctor-sessions/{proctorSessionPublicId}/commands")
+    @MessageMapping("/proctor-sessions/{sessionPublicId}/commands")
     public void issueCommand(
-            @DestinationVariable UUID proctorSessionPublicId,
+            @DestinationVariable UUID sessionPublicId,
             @Valid @Payload IssueCommandRequest request,
             Principal principal,
             @Header(name = "requestId", required = false) String requestId,
             SimpMessageHeaderAccessor headerAccessor) {
         CurrentUser caller = currentUser(principal);
-        boolean applied = proctorCommandService.issueCommand(proctorSessionPublicId, request, caller);
+        boolean applied = proctorCommandService.issueCommand(sessionPublicId, request, caller);
 
         String simpSessionId = headerAccessor != null ? headerAccessor.getSessionId() : null;
         if (requestId != null && simpSessionId != null) {
@@ -121,15 +120,15 @@ public class ProctorStompController {
         }
     }
 
-    @MessageMapping("/proctor-sessions/{proctorSessionPublicId}/violations")
+    @MessageMapping("/proctor-sessions/{sessionPublicId}/violations")
     public void flagViolation(
-            @DestinationVariable UUID proctorSessionPublicId,
+            @DestinationVariable UUID sessionPublicId,
             @Valid @Payload FlagViolationRequest request,
             Principal principal,
             @Header(name = "requestId", required = false) String requestId,
             SimpMessageHeaderAccessor headerAccessor) {
         CurrentUser caller = currentUser(principal);
-        ViolationEventResponse response = violationService.flag(proctorSessionPublicId, request, caller);
+        ViolationEventResponse response = violationService.flag(sessionPublicId, request, caller);
 
         String simpSessionId = headerAccessor != null ? headerAccessor.getSessionId() : null;
         if (requestId != null && simpSessionId != null) {
