@@ -64,7 +64,7 @@ class ViolationServiceTest {
     @BeforeEach
     void setUp() {
         service = new ViolationService(watchService, incidentRepository, eventPublisher, mapper, messagingTemplate,
-                attemptService, proctorAccessPolicy, java.time.Clock.systemUTC());
+                attemptService, proctorAccessPolicy, com.pte.TestClocks.fixed());
     }
 
     @Test

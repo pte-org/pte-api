@@ -57,7 +57,7 @@ class ExamIncidentCommandServiceTest {
     @BeforeEach
     void setUp() {
         service = new ExamIncidentCommandService(incidentRepository, historyLog, identityService, sessionService,
-                attemptService, new ExamIncidentAccessPolicy(sessionService), new ExamIncidentMapper(), java.time.Clock.systemUTC());
+                attemptService, new ExamIncidentAccessPolicy(sessionService), new ExamIncidentMapper(), com.pte.TestClocks.fixed());
         lenient().when(incidentRepository.save(any(ExamIncident.class))).thenAnswer(invocation -> {
             ExamIncident saved = invocation.getArgument(0);
             if (saved.getPublicId() == null) {

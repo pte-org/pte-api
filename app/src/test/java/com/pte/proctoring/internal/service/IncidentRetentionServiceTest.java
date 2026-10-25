@@ -24,7 +24,7 @@ class IncidentRetentionServiceTest {
     void marksEvidenceOlderThanConfiguredRetentionWithoutHardDelete() {
         Instant now = Instant.parse("2026-09-28T04:00:00Z");
         when(incidentRepository.markExpiredEvidenceBefore(now.minus(180, ChronoUnit.DAYS))).thenReturn(3);
-        IncidentRetentionService service = new IncidentRetentionService(incidentRepository, 180, java.time.Clock.systemUTC());
+        IncidentRetentionService service = new IncidentRetentionService(incidentRepository, 180, com.pte.TestClocks.fixed());
 
         int marked = service.markExpired(now);
 
@@ -34,7 +34,7 @@ class IncidentRetentionServiceTest {
 
     @Test
     void rejectsANonPositiveRetention() {
-        assertThatThrownBy(() -> new IncidentRetentionService(incidentRepository, 0, java.time.Clock.systemUTC()))
+        assertThatThrownBy(() -> new IncidentRetentionService(incidentRepository, 0, com.pte.TestClocks.fixed()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

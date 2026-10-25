@@ -35,7 +35,7 @@ class ProctorWatchServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ProctorWatchService(sessionService, java.time.Clock.systemUTC());
+        service = new ProctorWatchService(sessionService, com.pte.TestClocks.fixed());
     }
 
     @Test

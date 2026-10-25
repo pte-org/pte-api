@@ -50,7 +50,7 @@ class IncidentEvidenceServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new IncidentEvidenceService(attemptService, incidentRepository, java.time.Clock.systemUTC());
+        service = new IncidentEvidenceService(attemptService, incidentRepository, com.pte.TestClocks.fixed());
     }
 
     private void lockdown(String mode) {
