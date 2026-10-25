@@ -4,13 +4,13 @@ import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
-import com.pte.practice.internal.domain.PracticeSessionItem;
-import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
+import com.pte.practice.internal.domain.PracticeResponse;
+import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.response.PracticeCatalogResponse;
 import com.pte.practice.internal.dto.response.PracticeSessionResponse;
 import com.pte.practice.internal.service.PracticeCatalogService;
-import com.pte.practice.internal.service.PracticeSessionItemService;
+import com.pte.practice.internal.service.PracticeResponseService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,7 +41,7 @@ class PracticeSessionResponseMapperTest {
     @Mock
     private PracticeCatalogService catalogService;
     @Mock
-    private PracticeSessionItemService itemService;
+    private PracticeResponseService itemService;
     @Mock
     private MediaService mediaService;
 
@@ -67,7 +67,7 @@ class PracticeSessionResponseMapperTest {
     void promptAudioAndImageAreExposedAsPresignedUrlsThatOutliveTheSessionTimer() {
         UUID audio = UUID.randomUUID();
         UUID image = UUID.randomUUID();
-        PracticeSessionItem item = pendingItem();
+        PracticeResponse item = pendingItem();
         item.setAudioPromptRef(audio);
         item.setImagePromptRef(image);
         when(itemService.itemsFor(session)).thenReturn(List.of(item));
@@ -89,7 +89,7 @@ class PracticeSessionResponseMapperTest {
 
     @Test
     void referenceAnswersCorrectAnswersAndAnswerKeyOptionsNeverReachTheStudentResponse() throws Exception {
-        PracticeSessionItem item = pendingItem();
+        PracticeResponse item = pendingItem();
         item.setReferenceAnswerText(SECRET_REFERENCE);
         item.setCorrectAnswerText(SECRET_CORRECT);
         item.setObjectiveOptionsJson("[{\"publicId\":\"" + UUID.randomUUID() + "\",\"text\":\"" + SECRET_OPTION_KEY
@@ -111,7 +111,7 @@ class PracticeSessionResponseMapperTest {
 
     @Test
     void anItemWithoutPromptMediaNeverCallsTheMediaFacade() {
-        PracticeSessionItem item = pendingItem();
+        PracticeResponse item = pendingItem();
         when(itemService.itemsFor(session)).thenReturn(List.of(item));
 
         PracticeSessionResponse response = mapper.toResponse(session);
@@ -123,7 +123,7 @@ class PracticeSessionResponseMapperTest {
 
     @Test
     void aPresignFailureLeavesTheUrlEmptyInsteadOfFailingTheSessionRead() {
-        PracticeSessionItem item = pendingItem();
+        PracticeResponse item = pendingItem();
         item.setAudioPromptRef(UUID.randomUUID());
         when(itemService.itemsFor(session)).thenReturn(List.of(item));
         when(mediaService.presignGetAll(any(), anyLong(), any())).thenThrow(new IllegalStateException("cdn down"));
@@ -134,15 +134,15 @@ class PracticeSessionResponseMapperTest {
         assertThat(response.currentTask().content().audioUrl()).isNull();
     }
 
-    private PracticeSessionItem pendingItem() {
-        PracticeSessionItem item = new PracticeSessionItem();
+    private PracticeResponse pendingItem() {
+        PracticeResponse item = new PracticeResponse();
         item.setPublicId(UUID.randomUUID());
         item.setOrderIndex(0);
         item.setTaskCode("READ_ALOUD");
         item.setDisplayName("Read Aloud");
         item.setSection("SPEAKING");
         item.setRendererKey("READ_ALOUD_V1");
-        item.setStatus(PracticeSessionItemStatus.PENDING);
+        item.setStatus(PracticeResponseStatus.PENDING);
         item.setPromptText("Read this text aloud.");
         return item;
     }

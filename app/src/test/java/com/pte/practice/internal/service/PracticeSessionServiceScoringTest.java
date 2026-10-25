@@ -2,11 +2,11 @@ package com.pte.practice.internal.service;
 
 import com.pte.identity.PracticeIdentityService;
 import com.pte.practice.internal.domain.PracticeSession;
-import com.pte.practice.internal.domain.PracticeSessionItem;
+import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.dto.response.PracticeItemResultResponse;
 import com.pte.practice.internal.exception.PracticeSessionNotFoundException;
 import com.pte.practice.internal.mapper.PracticeSessionResponseMapper;
-import com.pte.practice.internal.repository.PracticeSessionOperationRepository;
+import com.pte.shared.idempotency.IdempotencyKeyService;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +35,7 @@ class PracticeSessionServiceScoringTest {
     private static final Instant NOW = Instant.parse("2026-10-24T02:00:00Z");
 
     private final PracticeSessionRepository sessionRepository = mock(PracticeSessionRepository.class);
-    private final PracticeSessionItemService itemService = mock(PracticeSessionItemService.class);
+    private final PracticeResponseService itemService = mock(PracticeResponseService.class);
     private final PracticeEntitlementService entitlementService = mock(PracticeEntitlementService.class);
     private final CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("STUDENT"));
     private final UUID sessionId = UUID.randomUUID();
@@ -44,17 +44,17 @@ class PracticeSessionServiceScoringTest {
 
     private PracticeSessionService service;
     private PracticeSession session;
-    private PracticeSessionItem item;
+    private PracticeResponse item;
 
     @BeforeEach
     void setUp() {
-        service = new PracticeSessionService(sessionRepository, null, mock(PracticeSessionOperationRepository.class),
+        service = new PracticeSessionService(sessionRepository, null, mock(IdempotencyKeyService.class),
                 null, entitlementService, itemService, mock(PracticeSessionResponseMapper.class),
                 mock(PracticeIdentityService.class), Clock.fixed(NOW, ZoneOffset.UTC));
         session = new PracticeSession();
         session.setId(42L);
         session.setTenantId(UUID.randomUUID());
-        item = new PracticeSessionItem();
+        item = new PracticeResponse();
         when(itemService.resultOf(item)).thenReturn(result);
     }
 

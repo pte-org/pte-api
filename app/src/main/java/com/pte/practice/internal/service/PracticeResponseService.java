@@ -6,9 +6,9 @@ import com.pte.itembank.dto.response.PracticeQuestionContent;
 import com.pte.itembank.dto.response.PracticeQuestionEvaluationContent;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
-import com.pte.practice.internal.domain.PracticeSessionItem;
+import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.domain.enums.PracticeScoringStatus;
-import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
+import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.request.PracticeAnswerRequest;
 import com.pte.practice.internal.dto.request.PracticeCapabilityManifest;
@@ -16,7 +16,7 @@ import com.pte.practice.internal.dto.response.PracticeCatalogTaskResponse;
 import com.pte.practice.internal.dto.response.PracticeItemResultResponse;
 import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.exception.PracticeSessionNotFoundException;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.practice.PracticeResponseMediaValidator;
 import com.pte.scoring.PracticeAiEvaluation;
@@ -42,9 +42,9 @@ import java.util.UUID;
  * state transitions together.
  */
 @Service
-public class PracticeSessionItemService {
+public class PracticeResponseService {
 
-    private final PracticeSessionItemRepository itemRepository;
+    private final PracticeResponseRepository itemRepository;
     private final PracticeCatalogService catalogService;
     private final PracticeAnswerValidationService answerValidationService;
     private final PracticeResponseMediaValidator mediaValidator;
@@ -54,20 +54,20 @@ public class PracticeSessionItemService {
     private final PracticeScoringStateService scoringStateService;
     private final PracticeScoringRequestFactory scoringRequestFactory;
 
-    public PracticeSessionItemService(PracticeSessionItemRepository itemRepository,
+    public PracticeResponseService(PracticeResponseRepository itemRepository,
             PracticeCatalogService catalogService, PracticeAnswerValidationService answerValidationService) {
         this(itemRepository, catalogService, answerValidationService, null, null, null, null, null, null);
     }
 
     /** Compatibility constructor for tests that exercise recording validation without media wiring. */
-    public PracticeSessionItemService(PracticeSessionItemRepository itemRepository,
+    public PracticeResponseService(PracticeResponseRepository itemRepository,
             PracticeCatalogService catalogService, PracticeAnswerValidationService answerValidationService,
             PracticeResponseMediaValidator mediaValidator) {
         this(itemRepository, catalogService, answerValidationService, mediaValidator, null, null, null, null, null);
     }
 
     @Autowired
-    public PracticeSessionItemService(PracticeSessionItemRepository itemRepository,
+    public PracticeResponseService(PracticeResponseRepository itemRepository,
             PracticeCatalogService catalogService, PracticeAnswerValidationService answerValidationService,
             PracticeResponseMediaValidator mediaValidator, PracticeQuestionService practiceQuestionService,
             JsonMapper jsonMapper, ScoringService scoringService, PracticeScoringStateService scoringStateService,
@@ -91,10 +91,10 @@ public class PracticeSessionItemService {
         List<PracticeCatalogTaskResponse> tasks = catalogService.resolveStartableTasks(
                 session.getProductCode(), splitCsv(session.getSelectedTaskTypes()),
                 new PracticeCapabilityManifest(splitCsv(session.getClientCapabilities()), null));
-        List<PracticeSessionItem> items = new ArrayList<>();
+        List<PracticeResponse> items = new ArrayList<>();
         for (int index = 0; index < tasks.size(); index++) {
             PracticeCatalogTaskResponse task = tasks.get(index);
-            PracticeSessionItem item = new PracticeSessionItem();
+            PracticeResponse item = new PracticeResponse();
             item.setPracticeSessionId(session.getId());
             item.setOrderIndex(index);
             item.setTaskCode(task.code());
@@ -104,7 +104,7 @@ public class PracticeSessionItemService {
             item.setContractVersion(task.contractVersion());
             item.setAnswerSchemaVersion(task.answerSchemaVersion());
             pinQuestionContent(item, task.code());
-            item.setStatus(PracticeSessionItemStatus.PENDING);
+            item.setStatus(PracticeResponseStatus.PENDING);
             items.add(item);
         }
         if (!items.isEmpty()) {
@@ -112,27 +112,27 @@ public class PracticeSessionItemService {
         }
     }
 
-    public List<PracticeSessionItem> itemsFor(PracticeSession session) {
+    public List<PracticeResponse> itemsFor(PracticeSession session) {
         if (session.getId() == null) {
             return List.of();
         }
-        List<PracticeSessionItem> items = itemRepository
+        List<PracticeResponse> items = itemRepository
                 .findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(session.getId());
         return items == null ? List.of() : items;
     }
 
-    public PracticeSessionItem findForUpdate(PracticeSession session, UUID itemPublicId) {
+    public PracticeResponse findForUpdate(PracticeSession session, UUID itemPublicId) {
         return itemRepository.findWithLockByPublicIdAndPracticeSessionId(itemPublicId, session.getId())
                 .orElseThrow(PracticeSessionNotFoundException::new);
     }
 
-    public void requirePending(PracticeSessionItem item) {
-        if (item.getStatus() != PracticeSessionItemStatus.PENDING) {
+    public void requirePending(PracticeResponse item) {
+        if (item.getStatus() != PracticeResponseStatus.PENDING) {
             throw notStartable();
         }
     }
 
-    public void answer(PracticeSession session, PracticeSessionItem item, PracticeAnswerRequest request,
+    public void answer(PracticeSession session, PracticeResponse item, PracticeAnswerRequest request,
             CurrentUser caller, Instant now) {
         requirePending(item);
         answerValidationService.validate(item.getRendererKey(), item.getAnswerSchemaVersion(),
@@ -141,12 +141,12 @@ public class PracticeSessionItemService {
         item.setSavedPayload(request.payload());
         item.setConfidence(request.confidence());
         scoreOrQueue(session, item, now);
-        item.setStatus(PracticeSessionItemStatus.ANSWERED);
+        item.setStatus(PracticeResponseStatus.ANSWERED);
         item.setAnsweredAt(now);
         itemRepository.saveAndFlush(item);
     }
 
-    public void saveDraft(PracticeSession session, PracticeSessionItem item, String payload,
+    public void saveDraft(PracticeSession session, PracticeResponse item, String payload,
             ResponseConfidence confidence, CurrentUser caller) {
         requirePending(item);
         answerValidationService.validateDraft(item.getRendererKey(), item.getAnswerSchemaVersion(), payload, confidence);
@@ -156,23 +156,23 @@ public class PracticeSessionItemService {
         itemRepository.saveAndFlush(item);
     }
 
-    public void skip(PracticeSessionItem item, Instant now) {
+    public void skip(PracticeResponse item, Instant now) {
         requirePending(item);
-        item.setStatus(PracticeSessionItemStatus.SKIPPED);
+        item.setStatus(PracticeResponseStatus.SKIPPED);
         item.setSkippedAt(now);
         itemRepository.saveAndFlush(item);
     }
 
     public void completeIfFinished(PracticeSession session, Instant now) {
-        List<PracticeSessionItem> items = itemsFor(session);
-        if (!items.isEmpty() && items.stream().noneMatch(item -> item.getStatus() == PracticeSessionItemStatus.PENDING)) {
+        List<PracticeResponse> items = itemsFor(session);
+        if (!items.isEmpty() && items.stream().noneMatch(item -> item.getStatus() == PracticeResponseStatus.PENDING)) {
             session.setStatus(PracticeSessionStatus.COMPLETED);
             session.setCompletedAt(now);
         }
     }
 
     public boolean hasProgress(PracticeSession session) {
-        return itemsFor(session).stream().anyMatch(item -> item.getStatus() == PracticeSessionItemStatus.ANSWERED
+        return itemsFor(session).stream().anyMatch(item -> item.getStatus() == PracticeResponseStatus.ANSWERED
                 || (item.getSavedPayload() != null && !item.getSavedPayload().isBlank()));
     }
 
@@ -182,7 +182,7 @@ public class PracticeSessionItemService {
                 PracticeConstants.PRACTICE_SESSION_NOT_STARTABLE_MESSAGE);
     }
 
-    private void validateRecordedMedia(PracticeSession session, PracticeSessionItem item,
+    private void validateRecordedMedia(PracticeSession session, PracticeResponse item,
             String payload, CurrentUser caller) {
         if (!PracticeConstants.PRACTICE_RECORDING_RENDERER_KEYS.contains(item.getRendererKey())) {
             return;
@@ -197,7 +197,7 @@ public class PracticeSessionItemService {
     }
 
     /** Result of this item's scoring for the answer/poll response; null when scoring is not wired (unit tests). */
-    public PracticeItemResultResponse resultOf(PracticeSessionItem item) {
+    public PracticeItemResultResponse resultOf(PracticeResponse item) {
         return scoringStateService == null ? null : scoringStateService.resultOf(item);
     }
 
@@ -207,20 +207,20 @@ public class PracticeSessionItemService {
             return;
         }
         // Loaded under a lock so the recovery write sees the worker's latest state instead of a stale snapshot.
-        List<PracticeSessionItem> scoring = itemRepository.findScoringForUpdate(session.getId());
+        List<PracticeResponse> scoring = itemRepository.findScoringForUpdate(session.getId());
         if (scoring != null) {
             scoring.forEach(item -> scoringStateService.recover(session, item, now));
         }
     }
 
-    public void recoverScoring(PracticeSession session, PracticeSessionItem item, Instant now) {
+    public void recoverScoring(PracticeSession session, PracticeResponse item, Instant now) {
         if (scoringStateService != null && item.getScoringStatus() == PracticeScoringStatus.SCORING) {
             scoringStateService.recover(session, item, now);
         }
     }
 
     /** Re-submits a FAILED item to the scorer; the caller holds the item lock. */
-    public PracticeItemResultResponse retryScoring(PracticeSession session, PracticeSessionItem item, Instant now) {
+    public PracticeItemResultResponse retryScoring(PracticeSession session, PracticeResponse item, Instant now) {
         return scoringStateService.retry(session, item, now);
     }
 
@@ -228,7 +228,7 @@ public class PracticeSessionItemService {
      * Same split as the exam: objective types are scored inside the call, speech and writing are queued for the
      * worker, tasks with no score (Personal Introduction) are only recorded.
      */
-    private void scoreOrQueue(PracticeSession session, PracticeSessionItem item, Instant now) {
+    private void scoreOrQueue(PracticeSession session, PracticeResponse item, Instant now) {
         if (scoringService == null || scoringStateService == null) {
             return;
         }
@@ -242,7 +242,7 @@ public class PracticeSessionItemService {
         }
     }
 
-    private void scoreObjective(PracticeSession session, PracticeSessionItem item, Instant now) {
+    private void scoreObjective(PracticeSession session, PracticeResponse item, Instant now) {
         // Items created before the answer-key snapshot migration cannot be scored
         // safely. Fail closed instead of persisting an incorrect zero.
         if (item.getObjectiveOptionsJson() == null || item.getObjectiveOptionsJson().isBlank()) {
@@ -276,7 +276,7 @@ public class PracticeSessionItemService {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
-    private void pinQuestionContent(PracticeSessionItem item, String taskCode) {
+    private void pinQuestionContent(PracticeResponse item, String taskCode) {
         if (practiceQuestionService == null) {
             return;
         }

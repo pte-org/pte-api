@@ -2,7 +2,7 @@ package com.pte.practice.internal.domain;
 
 import com.pte.attempt.ResponseConfidence;
 import com.pte.practice.internal.domain.enums.PracticeScoringStatus;
-import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
+import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -26,18 +26,18 @@ import java.util.UUID;
  * evaluation and is never mapped into the student delivery response.
  */
 @Entity
-@Table(name = "practice_session_items", uniqueConstraints = {
+@Table(name = "practice_responses", uniqueConstraints = {
         @UniqueConstraint(name = "uk_practice_session_item_order", columnNames = {
                 "practice_session_id", "order_index"
         })
 }, indexes = {
-        @Index(name = "idx_practice_session_items_session", columnList = "practice_session_id"),
-        @Index(name = "idx_practice_session_items_status", columnList = "practice_session_id,status")
+        @Index(name = "idx_practice_responses_session", columnList = "practice_session_id"),
+        @Index(name = "idx_practice_responses_status", columnList = "practice_session_id,status")
 })
 @Getter
 @Setter
 @NoArgsConstructor
-public class PracticeSessionItem extends BaseEntity {
+public class PracticeResponse extends BaseEntity {
 
     @Column(name = "practice_session_id", nullable = false)
     private Long practiceSessionId;
@@ -165,7 +165,7 @@ public class PracticeSessionItem extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
-    private PracticeSessionItemStatus status = PracticeSessionItemStatus.PENDING;
+    private PracticeResponseStatus status = PracticeResponseStatus.PENDING;
 
     @Column(name = "saved_payload", columnDefinition = "text")
     private String savedPayload;

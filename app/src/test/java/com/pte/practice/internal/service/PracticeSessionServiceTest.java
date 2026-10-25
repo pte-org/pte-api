@@ -7,9 +7,8 @@ import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.attempt.ResponseConfidence;
 import com.pte.practice.internal.domain.PracticeSession;
-import com.pte.practice.internal.domain.PracticeSessionItem;
-import com.pte.practice.internal.domain.PracticeSessionOperation;
-import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
+import com.pte.practice.internal.domain.PracticeResponse;
+import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionOperationType;
 import com.pte.practice.internal.dto.request.PracticeAnswerRequest;
@@ -24,8 +23,11 @@ import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.exception.PracticeSessionNotFoundException;
 import com.pte.practice.internal.mapper.PracticeSessionResponseMapper;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
-import com.pte.practice.internal.repository.PracticeSessionOperationRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
+import com.pte.shared.idempotency.IdempotencyDecision;
+import com.pte.shared.idempotency.IdempotencyKeyService;
+import com.pte.shared.idempotency.IdempotencyOutcome;
+import com.pte.shared.idempotency.domain.IdempotencyScope;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,6 +46,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
@@ -56,9 +59,9 @@ class PracticeSessionServiceTest {
     @Mock
     private PracticeSessionPersistenceService sessionPersistenceService;
     @Mock
-    private PracticeSessionItemRepository itemRepository;
+    private PracticeResponseRepository itemRepository;
     @Mock
-    private PracticeSessionOperationRepository operationRepository;
+    private IdempotencyKeyService idempotencyKeyService;
     @Mock
     private QuestionTypeService questionTypeService;
     @Mock
@@ -89,10 +92,12 @@ class PracticeSessionServiceTest {
                         TaskRuntimeProfileRegistry.descriptorFor("MC_READING_SINGLE"), "MC_READING_SINGLE",
                         "MC_READING_SINGLE", "MC_READING_SINGLE_V1", 1, null, null)));
         catalogService = new PracticeCatalogService(questionTypeService);
-        PracticeSessionItemService itemService = new PracticeSessionItemService(itemRepository, catalogService,
+        PracticeResponseService itemService = new PracticeResponseService(itemRepository, catalogService,
                 answerValidationService);
         PracticeSessionResponseMapper responseMapper = new PracticeSessionResponseMapper(catalogService, itemService);
-        service = new PracticeSessionService(sessionRepository, sessionPersistenceService, operationRepository,
+        lenient().when(idempotencyKeyService.begin(any(), any(), any(), any(), any()))
+                .thenReturn(new IdempotencyDecision(IdempotencyOutcome.NEW, null));
+        service = new PracticeSessionService(sessionRepository, sessionPersistenceService, idempotencyKeyService,
                 catalogService, entitlementService, itemService, responseMapper, identityService,
                 Clock.fixed(now, ZoneOffset.UTC));
     }
@@ -169,16 +174,18 @@ class PracticeSessionServiceTest {
                 .thenReturn(Optional.of(session));
         when(sessionRepository.saveAndFlush(any(PracticeSession.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        java.util.concurrent.atomic.AtomicReference<PracticeSessionOperation> persisted =
-                new java.util.concurrent.atomic.AtomicReference<>();
-        when(operationRepository.findByPracticeSessionIdAndOperationTypeAndIdempotencyKeyAndDeletedFalse(
-                42L, PracticeSessionOperationType.BEGIN, "begin-1"))
-                .thenAnswer(invocation -> Optional.ofNullable(persisted.get()));
-        when(operationRepository.save(any(PracticeSessionOperation.class))).thenAnswer(invocation -> {
-            PracticeSessionOperation operation = invocation.getArgument(0);
-            persisted.set(operation);
-            return operation;
-        });
+        java.util.Map<String, String> claimed = new java.util.HashMap<>();
+        when(idempotencyKeyService.begin(eq(IdempotencyScope.PRACTICE_SESSION_OP), any(), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    String key = invocation.getArgument(1);
+                    String hash = invocation.getArgument(3);
+                    String stored = claimed.putIfAbsent(key, hash);
+                    if (stored == null) {
+                        return new IdempotencyDecision(IdempotencyOutcome.NEW, null);
+                    }
+                    return stored.equals(hash) ? new IdempotencyDecision(IdempotencyOutcome.REPLAY, "{}")
+                            : new IdempotencyDecision(IdempotencyOutcome.CONFLICT, null);
+                });
 
         PracticeSessionResponse first = service.begin(sessionId,
                 new PracticeSessionActionRequest(0L), "begin-1", caller);
@@ -191,6 +198,26 @@ class PracticeSessionServiceTest {
                 new PracticeSessionActionRequest(1L), "begin-1", caller))
                 .isInstanceOf(PracticeIdempotencyException.class)
                 .hasFieldOrPropertyWithValue("code", "PRACTICE_IDEMPOTENCY_KEY_REUSED");
+    }
+
+    @Test
+    void theStoredOperationKeyStaysWithinTheSharedColumnForAMaximumLengthClientKey() {
+        PracticeSession session = savedSession();
+        session.setId(42L);
+        session.setVersion(0L);
+        session.setSelectedTaskTypes("MC_READING_SINGLE");
+        session.setClientCapabilities("OPTION_SELECTION");
+        when(sessionRepository.findWithLockByPublicIdAndStudentPublicId(sessionId, caller.userId()))
+                .thenReturn(Optional.of(session));
+        when(sessionRepository.saveAndFlush(any(PracticeSession.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.begin(sessionId, new PracticeSessionActionRequest(0L), "k".repeat(128), caller);
+
+        org.mockito.ArgumentCaptor<String> key = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(idempotencyKeyService).begin(eq(IdempotencyScope.PRACTICE_SESSION_OP),
+                key.capture(), any(), any(), any());
+        assertThat(key.getValue()).hasSizeLessThanOrEqualTo(128);
     }
 
     @Test
@@ -240,7 +267,7 @@ class PracticeSessionServiceTest {
         session.setId(42L);
         session.setStatus(PracticeSessionStatus.IN_PROGRESS);
         session.setVersion(0L);
-        PracticeSessionItem item = pendingItem(session);
+        PracticeResponse item = pendingItem(session);
         when(sessionRepository.findWithLockByPublicIdAndStudentPublicId(sessionId, caller.userId()))
                 .thenReturn(Optional.of(session));
         when(itemRepository.findWithLockByPublicIdAndPracticeSessionId(item.getPublicId(), 42L))
@@ -254,7 +281,7 @@ class PracticeSessionServiceTest {
                 new PracticeAnswerRequest(0L, "{\"selectedOption\":\"a\"}", ResponseConfidence.HIGH),
                 "answer-1", caller);
 
-        assertThat(item.getStatus()).isEqualTo(PracticeSessionItemStatus.ANSWERED);
+        assertThat(item.getStatus()).isEqualTo(PracticeResponseStatus.ANSWERED);
         assertThat(item.getSavedPayload()).isEqualTo("{\"selectedOption\":\"a\"}");
         assertThat(response.status()).isEqualTo(PracticeSessionStatus.COMPLETED);
         assertThat(response.answeredItemCount()).isEqualTo(1);
@@ -266,7 +293,7 @@ class PracticeSessionServiceTest {
         session.setId(42L);
         session.setStatus(PracticeSessionStatus.IN_PROGRESS);
         session.setVersion(0L);
-        PracticeSessionItem item = pendingItem(session);
+        PracticeResponse item = pendingItem(session);
         when(sessionRepository.findWithLockByPublicIdAndStudentPublicId(sessionId, caller.userId()))
                 .thenReturn(Optional.of(session));
         when(itemRepository.findWithLockByPublicIdAndPracticeSessionId(item.getPublicId(), 42L))
@@ -279,7 +306,7 @@ class PracticeSessionServiceTest {
         PracticeSessionResponse response = service.skip(sessionId, item.getPublicId(),
                 new PracticeSessionActionRequest(0L), "skip-1", caller);
 
-        assertThat(item.getStatus()).isEqualTo(PracticeSessionItemStatus.SKIPPED);
+        assertThat(item.getStatus()).isEqualTo(PracticeResponseStatus.SKIPPED);
         assertThat(response.status()).isEqualTo(PracticeSessionStatus.COMPLETED);
         assertThat(response.answeredItemCount()).isZero();
     }
@@ -290,7 +317,7 @@ class PracticeSessionServiceTest {
         session.setId(42L);
         session.setStatus(PracticeSessionStatus.IN_PROGRESS);
         session.setVersion(0L);
-        PracticeSessionItem item = pendingItem(session);
+        PracticeResponse item = pendingItem(session);
         when(sessionRepository.findWithLockByPublicIdAndStudentPublicId(sessionId, caller.userId()))
                 .thenReturn(Optional.of(session));
         when(itemRepository.findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(42L))
@@ -311,7 +338,7 @@ class PracticeSessionServiceTest {
         session.setId(42L);
         session.setStatus(PracticeSessionStatus.IN_PROGRESS);
         session.setVersion(0L);
-        PracticeSessionItem item = pendingItem(session);
+        PracticeResponse item = pendingItem(session);
         when(sessionRepository.findWithLockByPublicIdAndStudentPublicId(sessionId, caller.userId()))
                 .thenReturn(Optional.of(session));
         when(itemRepository.findWithLockByPublicIdAndPracticeSessionId(item.getPublicId(), 42L))
@@ -326,7 +353,7 @@ class PracticeSessionServiceTest {
                         ResponseConfidence.HIGH), "exit-draft-1", caller);
 
         assertThat(response.status()).isEqualTo(PracticeSessionStatus.IN_PROGRESS);
-        assertThat(item.getStatus()).isEqualTo(PracticeSessionItemStatus.PENDING);
+        assertThat(item.getStatus()).isEqualTo(PracticeResponseStatus.PENDING);
         assertThat(item.getSavedPayload()).isEqualTo("{\"selectedOption\":\"a\"}");
         assertThat(item.getConfidence()).isEqualTo(ResponseConfidence.HIGH);
     }
@@ -356,8 +383,8 @@ class PracticeSessionServiceTest {
         return session;
     }
 
-    private PracticeSessionItem pendingItem(PracticeSession session) {
-        PracticeSessionItem item = new PracticeSessionItem();
+    private PracticeResponse pendingItem(PracticeSession session) {
+        PracticeResponse item = new PracticeResponse();
         item.setPublicId(UUID.randomUUID());
         item.setPracticeSessionId(session.getId());
         item.setOrderIndex(0);
@@ -367,7 +394,7 @@ class PracticeSessionServiceTest {
         item.setRendererKey("MC_READING_SINGLE_V1");
         item.setContractVersion(1);
         item.setAnswerSchemaVersion(1);
-        item.setStatus(PracticeSessionItemStatus.PENDING);
+        item.setStatus(PracticeResponseStatus.PENDING);
         return item;
     }
 }

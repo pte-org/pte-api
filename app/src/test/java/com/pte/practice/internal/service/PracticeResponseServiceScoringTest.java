@@ -2,12 +2,12 @@ package com.pte.practice.internal.service;
 
 import com.pte.attempt.ResponseConfidence;
 import com.pte.practice.internal.domain.PracticeSession;
-import com.pte.practice.internal.domain.PracticeSessionItem;
+import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.domain.enums.PracticeScoringStatus;
-import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
+import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 import com.pte.practice.internal.dto.request.PracticeAnswerRequest;
 import com.pte.practice.internal.exception.PracticeSessionException;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.scoring.PracticeAiEvaluation;
 import com.pte.scoring.PracticeScoringException;
 import com.pte.scoring.PracticeScoringFailure;
@@ -35,11 +35,11 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /** How a submitted answer reaches a scorer: inline for objective types, queued for AI types. */
-class PracticeSessionItemServiceScoringTest {
+class PracticeResponseServiceScoringTest {
 
     private static final Instant NOW = Instant.parse("2026-10-24T02:00:00Z");
 
-    private final PracticeSessionItemRepository itemRepository = mock(PracticeSessionItemRepository.class);
+    private final PracticeResponseRepository itemRepository = mock(PracticeResponseRepository.class);
     private final PracticeAnswerValidationService validation = mock(PracticeAnswerValidationService.class);
     private final ScoringService scoringService = mock(ScoringService.class);
     private final PracticeScoringStateService stateService = mock(PracticeScoringStateService.class);
@@ -48,23 +48,23 @@ class PracticeSessionItemServiceScoringTest {
     private final PracticeAiEvaluation evaluation = mock(PracticeAiEvaluation.class);
     private final CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("STUDENT"));
 
-    private PracticeSessionItemService service;
+    private PracticeResponseService service;
     private PracticeSession session;
-    private PracticeSessionItem item;
+    private PracticeResponse item;
 
     @BeforeEach
     void setUp() {
-        service = new PracticeSessionItemService(itemRepository, null, validation,
+        service = new PracticeResponseService(itemRepository, null, validation,
                 mock(PracticeResponseMediaValidator.class), null, null, scoringService, stateService,
                 requestFactory);
         session = new PracticeSession();
         session.setTenantId(UUID.randomUUID());
-        item = new PracticeSessionItem();
+        item = new PracticeResponse();
         item.setTaskCode("MC_SINGLE_ANSWER_READING");
         item.setRendererKey("MC_READING_SINGLE_V1");
         item.setAnswerSchemaVersion(1);
         item.setObjectiveOptionsJson("[{\"text\":\"a\",\"correct\":true,\"orderIndex\":0}]");
-        item.setStatus(PracticeSessionItemStatus.PENDING);
+        item.setStatus(PracticeResponseStatus.PENDING);
         when(requestFactory.build(item, session.getTenantId())).thenReturn(request);
     }
 
@@ -125,7 +125,7 @@ class PracticeSessionItemServiceScoringTest {
                 .isInstanceOfSatisfying(PracticeSessionException.class,
                         ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY));
 
-        assertThat(item.getStatus()).isEqualTo(PracticeSessionItemStatus.PENDING);
+        assertThat(item.getStatus()).isEqualTo(PracticeResponseStatus.PENDING);
     }
 
     @Test
@@ -137,7 +137,7 @@ class PracticeSessionItemServiceScoringTest {
                 .isInstanceOfSatisfying(PracticeSessionException.class,
                         ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
 
-        assertThat(item.getStatus()).isEqualTo(PracticeSessionItemStatus.PENDING);
+        assertThat(item.getStatus()).isEqualTo(PracticeResponseStatus.PENDING);
         verifyNoInteractions(stateService);
     }
 
@@ -151,7 +151,7 @@ class PracticeSessionItemServiceScoringTest {
                 .isInstanceOfSatisfying(PracticeSessionException.class,
                         ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
 
-        assertThat(item.getStatus()).isEqualTo(PracticeSessionItemStatus.PENDING);
+        assertThat(item.getStatus()).isEqualTo(PracticeResponseStatus.PENDING);
     }
 
     @Test
@@ -176,13 +176,13 @@ class PracticeSessionItemServiceScoringTest {
                 .isInstanceOfSatisfying(PracticeSessionException.class,
                         ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
 
-        assertThat(item.getStatus()).isEqualTo(PracticeSessionItemStatus.PENDING);
+        assertThat(item.getStatus()).isEqualTo(PracticeResponseStatus.PENDING);
         verify(itemRepository, never()).saveAndFlush(any());
     }
 
     @Test
     void anAnsweredItemCannotBeSubmittedAgain() {
-        item.setStatus(PracticeSessionItemStatus.ANSWERED);
+        item.setStatus(PracticeResponseStatus.ANSWERED);
         item.setScoringStatus(PracticeScoringStatus.SCORED);
 
         assertThatThrownBy(() -> answer("{\"selectedOption\":\"a\"}"))
@@ -194,7 +194,7 @@ class PracticeSessionItemServiceScoringTest {
 
     @Test
     void recoverScoringRecoversTheLockedScoringItemsOnly() {
-        PracticeSessionItem scoring = new PracticeSessionItem();
+        PracticeResponse scoring = new PracticeResponse();
         scoring.setScoringStatus(PracticeScoringStatus.SCORING);
         session.setId(7L);
         when(itemRepository.findScoringForUpdate(7L)).thenReturn(List.of(scoring));
@@ -214,7 +214,7 @@ class PracticeSessionItemServiceScoringTest {
     }
 
     private void assertAnswered() {
-        assertThat(item.getStatus()).isEqualTo(PracticeSessionItemStatus.ANSWERED);
+        assertThat(item.getStatus()).isEqualTo(PracticeResponseStatus.ANSWERED);
         assertThat(item.getAnsweredAt()).isEqualTo(NOW);
         verify(itemRepository).saveAndFlush(item);
     }

@@ -2,13 +2,13 @@ package com.pte.practice.internal.service;
 
 import com.pte.attempt.ResponseConfidence;
 import com.pte.practice.internal.domain.PracticeSession;
-import com.pte.practice.internal.domain.PracticeSessionItem;
+import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.domain.enums.PracticeProgressStatus;
-import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
+import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.response.PracticeProgressEntry;
 import com.pte.practice.internal.dto.response.PracticeProgressResponse;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,11 +32,11 @@ import java.util.stream.Collectors;
 public class PracticeProgressService {
 
     private final PracticeSessionRepository sessionRepository;
-    private final PracticeSessionItemRepository itemRepository;
+    private final PracticeResponseRepository itemRepository;
     private final Clock clock;
 
     public PracticeProgressService(PracticeSessionRepository sessionRepository,
-            PracticeSessionItemRepository itemRepository, Clock clock) {
+            PracticeResponseRepository itemRepository, Clock clock) {
         this.sessionRepository = sessionRepository;
         this.itemRepository = itemRepository;
         this.clock = clock;
@@ -51,7 +51,7 @@ public class PracticeProgressService {
         List<PracticeSession> sessions = sessionRepository
                 .findTop100ByStudentPublicIdAndDeletedFalseOrderByCreatedAtDesc(studentPublicId);
         long totalSessionCount = sessionRepository.countByStudentPublicIdAndDeletedFalse(studentPublicId);
-        Map<Long, List<PracticeSessionItem>> itemsBySessionId = itemsBySession(sessions);
+        Map<Long, List<PracticeResponse>> itemsBySessionId = itemsBySession(sessions);
         for (PracticeSession session : sessions) {
             if (session.getId() == null) {
                 continue;
@@ -72,7 +72,7 @@ public class PracticeProgressService {
                 answeredItems, totalItems, clock.instant(), totalSessionCount > sessions.size());
     }
 
-    private Map<Long, List<PracticeSessionItem>> itemsBySession(Collection<PracticeSession> sessions) {
+    private Map<Long, List<PracticeResponse>> itemsBySession(Collection<PracticeSession> sessions) {
         List<Long> sessionIds = sessions.stream()
                 .map(PracticeSession::getId)
                 .filter(java.util.Objects::nonNull)
@@ -84,7 +84,7 @@ public class PracticeProgressService {
                 .findByPracticeSessionIdInAndDeletedFalseOrderByPracticeSessionIdAscOrderIndexAsc(sessionIds)
                 .stream()
                 .filter(item -> item.getPracticeSessionId() != null)
-                .collect(Collectors.groupingBy(PracticeSessionItem::getPracticeSessionId,
+                .collect(Collectors.groupingBy(PracticeResponse::getPracticeSessionId,
                         HashMap::new, Collectors.toList()));
     }
 
@@ -92,7 +92,7 @@ public class PracticeProgressService {
         return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) value;
     }
 
-    private PracticeProgressEntry toEntry(PracticeSession session, List<PracticeSessionItem> items) {
+    private PracticeProgressEntry toEntry(PracticeSession session, List<PracticeResponse> items) {
         boolean hasResponse = items.stream().anyMatch(this::hasResponse);
         PracticeProgressStatus progressStatus = switch (session.getStatus()) {
             case COMPLETED -> hasResponse ? PracticeProgressStatus.COMPLETED_PENDING_SCORE : null;
@@ -112,10 +112,10 @@ public class PracticeProgressService {
                 session.getStartedAt(),
                 session.getCompletedAt(),
                 session.getLastActivityAt(),
-                count(items, PracticeSessionItemStatus.ANSWERED),
-                (int) items.stream().filter(item -> item.getStatus() == PracticeSessionItemStatus.PENDING
+                count(items, PracticeResponseStatus.ANSWERED),
+                (int) items.stream().filter(item -> item.getStatus() == PracticeResponseStatus.PENDING
                         && item.getSavedPayload() != null && !item.getSavedPayload().isBlank()).count(),
-                count(items, PracticeSessionItemStatus.SKIPPED),
+                count(items, PracticeResponseStatus.SKIPPED),
                 items.size(),
                 countConfidence(items, ResponseConfidence.LOW),
                 countConfidence(items, ResponseConfidence.MEDIUM),
@@ -123,16 +123,16 @@ public class PracticeProgressService {
                 null);
     }
 
-    private boolean hasResponse(PracticeSessionItem item) {
-        return item.getStatus() == PracticeSessionItemStatus.ANSWERED
+    private boolean hasResponse(PracticeResponse item) {
+        return item.getStatus() == PracticeResponseStatus.ANSWERED
                 || (item.getSavedPayload() != null && !item.getSavedPayload().isBlank());
     }
 
-    private int count(List<PracticeSessionItem> items, PracticeSessionItemStatus status) {
+    private int count(List<PracticeResponse> items, PracticeResponseStatus status) {
         return (int) items.stream().filter(item -> item.getStatus() == status).count();
     }
 
-    private int countConfidence(List<PracticeSessionItem> items, ResponseConfidence confidence) {
+    private int countConfidence(List<PracticeResponse> items, ResponseConfidence confidence) {
         return (int) items.stream().filter(item -> item.getConfidence() == confidence).count();
     }
 }

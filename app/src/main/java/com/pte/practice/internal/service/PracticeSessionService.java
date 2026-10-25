@@ -3,8 +3,7 @@ package com.pte.practice.internal.service;
 import com.pte.identity.PracticeIdentityService;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
-import com.pte.practice.internal.domain.PracticeSessionItem;
-import com.pte.practice.internal.domain.PracticeSessionOperation;
+import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.domain.enums.PracticeSessionOperationType;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.request.PracticeCapabilityManifest;
@@ -20,7 +19,10 @@ import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.exception.PracticeSessionNotFoundException;
 import com.pte.practice.internal.mapper.PracticeSessionResponseMapper;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
-import com.pte.practice.internal.repository.PracticeSessionOperationRepository;
+import com.pte.shared.idempotency.IdempotencyDecision;
+import com.pte.shared.idempotency.IdempotencyKeyService;
+import com.pte.shared.idempotency.IdempotencyOutcome;
+import com.pte.shared.idempotency.domain.IdempotencyScope;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -51,9 +53,9 @@ public class PracticeSessionService {
 
     private final PracticeSessionRepository sessionRepository;
     private final PracticeSessionPersistenceService sessionPersistenceService;
-    private final PracticeSessionOperationRepository operationRepository;
+    private final IdempotencyKeyService idempotencyKeyService;
     private final PracticeCatalogService catalogService;
-    private final PracticeSessionItemService itemService;
+    private final PracticeResponseService itemService;
     private final PracticeSessionResponseMapper responseMapper;
     private final PracticeEntitlementService entitlementService;
     private final PracticeIdentityService identityService;
@@ -61,13 +63,13 @@ public class PracticeSessionService {
 
     public PracticeSessionService(PracticeSessionRepository sessionRepository,
             PracticeSessionPersistenceService sessionPersistenceService,
-            PracticeSessionOperationRepository operationRepository,
+            IdempotencyKeyService idempotencyKeyService,
             PracticeCatalogService catalogService, PracticeEntitlementService entitlementService,
-            PracticeSessionItemService itemService, PracticeSessionResponseMapper responseMapper,
+            PracticeResponseService itemService, PracticeSessionResponseMapper responseMapper,
             PracticeIdentityService identityService, Clock clock) {
         this.sessionRepository = sessionRepository;
         this.sessionPersistenceService = sessionPersistenceService;
-        this.operationRepository = operationRepository;
+        this.idempotencyKeyService = idempotencyKeyService;
         this.catalogService = catalogService;
         this.itemService = itemService;
         this.responseMapper = responseMapper;
@@ -139,11 +141,7 @@ public class PracticeSessionService {
         PracticeSession session = findOwnedForUpdate(publicId, caller.userId());
         String requestHash = actionRequestHash(request);
         entitlementService.assertUnlocked(caller, session.getTenantId());
-        var existingOperation = operationRepository
-                .findByPracticeSessionIdAndOperationTypeAndIdempotencyKeyAndDeletedFalse(
-                        session.getId(), PracticeSessionOperationType.BEGIN, idempotencyKey);
-        if (existingOperation.isPresent()) {
-            assertSameHash(existingOperation.get().getRequestHash(), requestHash);
+        if (alreadyApplied(session, PracticeSessionOperationType.BEGIN, idempotencyKey, requestHash)) {
             return responseMapper.toResponse(session);
         }
         requireVersion(session, request.clientVersion());
@@ -159,7 +157,7 @@ public class PracticeSessionService {
         session.setStartedAt(now);
         session.setDeadlineAt(now.plusSeconds(session.getTimeLimitSeconds()));
         session.setLastActivityAt(now);
-        saveOperation(session, PracticeSessionOperationType.BEGIN, idempotencyKey, requestHash);
+        recordOperation(session, PracticeSessionOperationType.BEGIN, idempotencyKey);
         return saveAndMap(session);
     }
 
@@ -170,11 +168,7 @@ public class PracticeSessionService {
         PracticeSession session = findOwnedForUpdate(publicId, caller.userId());
         String requestHash = actionRequestHash(request);
         entitlementService.assertUnlocked(caller, session.getTenantId());
-        var existingOperation = operationRepository
-                .findByPracticeSessionIdAndOperationTypeAndIdempotencyKeyAndDeletedFalse(
-                        session.getId(), PracticeSessionOperationType.HEARTBEAT, idempotencyKey);
-        if (existingOperation.isPresent()) {
-            assertSameHash(existingOperation.get().getRequestHash(), requestHash);
+        if (alreadyApplied(session, PracticeSessionOperationType.HEARTBEAT, idempotencyKey, requestHash)) {
             return responseMapper.toResponse(session);
         }
         if (session.getStatus() == PracticeSessionStatus.EXPIRED
@@ -189,7 +183,7 @@ public class PracticeSessionService {
             throw notStartable();
         }
         session.setLastActivityAt(clock.instant());
-        saveOperation(session, PracticeSessionOperationType.HEARTBEAT, idempotencyKey, requestHash);
+        recordOperation(session, PracticeSessionOperationType.HEARTBEAT, idempotencyKey);
         return saveAndMap(session);
     }
 
@@ -200,22 +194,18 @@ public class PracticeSessionService {
         PracticeSession session = findOwnedForUpdate(publicId, caller.userId());
         String requestHash = answerRequestHash(itemPublicId, request);
         entitlementService.assertUnlocked(caller, session.getTenantId());
-        var existingOperation = operationRepository
-                .findByPracticeSessionIdAndOperationTypeAndIdempotencyKeyAndDeletedFalse(
-                        session.getId(), PracticeSessionOperationType.ANSWER, idempotencyKey);
-        if (existingOperation.isPresent()) {
-            assertSameHash(existingOperation.get().getRequestHash(), requestHash);
-            PracticeSessionItem answered = itemService.findForUpdate(session, itemPublicId);
+        if (alreadyApplied(session, PracticeSessionOperationType.ANSWER, idempotencyKey, requestHash)) {
+            PracticeResponse answered = itemService.findForUpdate(session, itemPublicId);
             itemService.recoverScoring(session, clock.instant());
             return responseMapper.toResponse(session).withItemResult(itemService.resultOf(answered));
         }
         requireLiveInProgress(session, request.clientVersion());
         Instant now = clock.instant();
-        PracticeSessionItem item = itemService.findForUpdate(session, itemPublicId);
+        PracticeResponse item = itemService.findForUpdate(session, itemPublicId);
         itemService.answer(session, item, request, caller, now);
         itemService.completeIfFinished(session, now);
         session.setLastActivityAt(now);
-        saveOperation(session, PracticeSessionOperationType.ANSWER, idempotencyKey, requestHash);
+        recordOperation(session, PracticeSessionOperationType.ANSWER, idempotencyKey);
         return saveAndMap(session).withItemResult(itemService.resultOf(item));
     }
 
@@ -226,7 +216,7 @@ public class PracticeSessionService {
     @Transactional
     public PracticeItemResultResponse itemResult(UUID publicId, UUID itemPublicId, CurrentUser caller) {
         PracticeSession session = findOwned(publicId, caller.userId());
-        PracticeSessionItem item = itemService.findForUpdate(session, itemPublicId);
+        PracticeResponse item = itemService.findForUpdate(session, itemPublicId);
         itemService.recoverScoring(session, item, clock.instant());
         return itemService.resultOf(item);
     }
@@ -236,7 +226,7 @@ public class PracticeSessionService {
     public PracticeItemResultResponse retryScoring(UUID publicId, UUID itemPublicId, CurrentUser caller) {
         PracticeSession session = findOwnedForUpdate(publicId, caller.userId());
         entitlementService.assertUnlocked(caller, session.getTenantId());
-        PracticeSessionItem item = itemService.findForUpdate(session, itemPublicId);
+        PracticeResponse item = itemService.findForUpdate(session, itemPublicId);
         return itemService.retryScoring(session, item, clock.instant());
     }
 
@@ -247,20 +237,16 @@ public class PracticeSessionService {
         PracticeSession session = findOwnedForUpdate(publicId, caller.userId());
         String requestHash = itemActionRequestHash(itemPublicId, request);
         entitlementService.assertUnlocked(caller, session.getTenantId());
-        var existingOperation = operationRepository
-                .findByPracticeSessionIdAndOperationTypeAndIdempotencyKeyAndDeletedFalse(
-                        session.getId(), PracticeSessionOperationType.SKIP, idempotencyKey);
-        if (existingOperation.isPresent()) {
-            assertSameHash(existingOperation.get().getRequestHash(), requestHash);
+        if (alreadyApplied(session, PracticeSessionOperationType.SKIP, idempotencyKey, requestHash)) {
             return responseMapper.toResponse(session);
         }
         requireLiveInProgress(session, request.clientVersion());
         Instant now = clock.instant();
-        PracticeSessionItem item = itemService.findForUpdate(session, itemPublicId);
+        PracticeResponse item = itemService.findForUpdate(session, itemPublicId);
         itemService.skip(item, now);
         itemService.completeIfFinished(session, now);
         session.setLastActivityAt(now);
-        saveOperation(session, PracticeSessionOperationType.SKIP, idempotencyKey, requestHash);
+        recordOperation(session, PracticeSessionOperationType.SKIP, idempotencyKey);
         return saveAndMap(session);
     }
 
@@ -271,11 +257,7 @@ public class PracticeSessionService {
         PracticeSession session = findOwnedForUpdate(publicId, caller.userId());
         String requestHash = saveAndExitRequestHash(request);
         entitlementService.assertUnlocked(caller, session.getTenantId());
-        var existingOperation = operationRepository
-                .findByPracticeSessionIdAndOperationTypeAndIdempotencyKeyAndDeletedFalse(
-                        session.getId(), PracticeSessionOperationType.SAVE_AND_EXIT, idempotencyKey);
-        if (existingOperation.isPresent()) {
-            assertSameHash(existingOperation.get().getRequestHash(), requestHash);
+        if (alreadyApplied(session, PracticeSessionOperationType.SAVE_AND_EXIT, idempotencyKey, requestHash)) {
             return responseMapper.toResponse(session);
         }
         requireVersion(session, request.clientVersion());
@@ -295,7 +277,7 @@ public class PracticeSessionService {
             throw invalidAnswerRequest();
         }
         if (request.itemPublicId() != null && request.payload() != null && !request.payload().isBlank()) {
-            PracticeSessionItem item = itemService.findForUpdate(session, request.itemPublicId());
+            PracticeResponse item = itemService.findForUpdate(session, request.itemPublicId());
             itemService.saveDraft(session, item, request.payload(), request.confidence(), caller);
         }
 
@@ -306,7 +288,7 @@ public class PracticeSessionService {
             session.setDiscardedAt(now);
         }
         session.setLastActivityAt(now);
-        saveOperation(session, PracticeSessionOperationType.SAVE_AND_EXIT, idempotencyKey, requestHash);
+        recordOperation(session, PracticeSessionOperationType.SAVE_AND_EXIT, idempotencyKey);
         return saveAndMap(session);
     }
 
@@ -324,14 +306,30 @@ public class PracticeSessionService {
         }
     }
 
-    private void saveOperation(PracticeSession session, PracticeSessionOperationType operationType,
+    /** Claims the operation key; true when the same request was already applied and its result can be replayed. */
+    private boolean alreadyApplied(PracticeSession session, PracticeSessionOperationType operationType,
             String idempotencyKey, String requestHash) {
-        PracticeSessionOperation operation = new PracticeSessionOperation();
-        operation.setPracticeSessionId(session.getId());
-        operation.setOperationType(operationType);
-        operation.setIdempotencyKey(idempotencyKey);
-        operation.setRequestHash(requestHash);
-        operationRepository.save(operation);
+        IdempotencyDecision decision = idempotencyKeyService.begin(IdempotencyScope.PRACTICE_SESSION_OP,
+                operationKey(session, operationType, idempotencyKey), session.getTenantId(), requestHash,
+                clock.instant());
+        if (decision.outcome() == IdempotencyOutcome.CONFLICT) {
+            throw PracticeIdempotencyException.reused();
+        }
+        return decision.outcome() == IdempotencyOutcome.REPLAY;
+    }
+
+    private void recordOperation(PracticeSession session, PracticeSessionOperationType operationType,
+            String idempotencyKey) {
+        idempotencyKeyService.complete(IdempotencyScope.PRACTICE_SESSION_OP,
+                operationKey(session, operationType, idempotencyKey), session.getTenantId(),
+                PracticeConstants.OPERATION_RECEIPT);
+    }
+
+    /** The client key is hashed so the stored key stays within the shared column whatever length the client sent. */
+    private String operationKey(PracticeSession session, PracticeSessionOperationType operationType,
+            String idempotencyKey) {
+        return PracticeConstants.OPERATION_KEY_FORMAT.formatted(session.getPublicId(), operationType.name(),
+                sha256(idempotencyKey));
     }
 
     private PracticeSessionResponse saveAndMap(PracticeSession session) {

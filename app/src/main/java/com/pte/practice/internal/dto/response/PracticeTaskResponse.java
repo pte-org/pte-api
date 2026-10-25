@@ -1,7 +1,7 @@
 package com.pte.practice.internal.dto.response;
 
 import com.pte.attempt.ResponseConfidence;
-import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
+import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 
 import java.util.UUID;
 
@@ -15,7 +15,7 @@ public record PracticeTaskResponse(
         String rendererKey,
         Integer contractVersion,
         Integer answerSchemaVersion,
-        PracticeSessionItemStatus status,
+        PracticeResponseStatus status,
         String savedPayload,
         ResponseConfidence confidence,
         PracticeTaskContentResponse content) {
@@ -23,7 +23,7 @@ public record PracticeTaskResponse(
     /** Compatibility constructor for callers that only need task metadata. */
     public PracticeTaskResponse(UUID publicId, int orderIndex, String taskCode, String displayName,
             String section, String rendererKey, Integer contractVersion, Integer answerSchemaVersion,
-            PracticeSessionItemStatus status, String savedPayload, ResponseConfidence confidence) {
+            PracticeResponseStatus status, String savedPayload, ResponseConfidence confidence) {
         this(publicId, orderIndex, taskCode, displayName, section, rendererKey, contractVersion,
                 answerSchemaVersion, status, savedPayload, confidence, null);
     }

@@ -3,7 +3,7 @@ package com.pte.practice.internal.service;
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.dto.response.PracticeReviewResponse;
 import com.pte.practice.internal.dto.response.PracticeTaskContentResponse;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
@@ -21,14 +21,14 @@ import java.util.UUID;
 public class PracticeReviewService {
 
     private final PracticeSessionRepository sessionRepository;
-    private final PracticeSessionItemRepository itemRepository;
+    private final PracticeResponseRepository itemRepository;
     private final JsonMapper jsonMapper;
-    private final PracticeSessionItemService itemService;
+    private final PracticeResponseService itemService;
     private final Clock clock;
 
     public PracticeReviewService(PracticeSessionRepository sessionRepository,
-            PracticeSessionItemRepository itemRepository, JsonMapper jsonMapper,
-            PracticeSessionItemService itemService, Clock clock) {
+            PracticeResponseRepository itemRepository, JsonMapper jsonMapper,
+            PracticeResponseService itemService, Clock clock) {
         this.sessionRepository = sessionRepository;
         this.itemRepository = itemRepository;
         this.jsonMapper = jsonMapper;
