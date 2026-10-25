@@ -23,7 +23,9 @@ public record PracticeCatalogTaskResponse(
         String contentStatus,
         String provenance,
         boolean timedAvailable,
-        String timedUnavailableReason) {
+        String timedUnavailableReason,
+        long answeredQuestionCount,
+        Integer averageScore) {
 
     public PracticeCatalogTaskResponse {
         requiredClientCapabilities = requiredClientCapabilities == null
@@ -40,9 +42,32 @@ public record PracticeCatalogTaskResponse(
                 provenance, false, null);
     }
 
+    /** Compatibility constructor for callers that predate the per-student task statistics. */
+    public PracticeCatalogTaskResponse(String code, String displayName, String section, boolean scored,
+            PracticeCatalogAvailability availability, String unavailableReason, String profileKey,
+            Integer profileVersion, String rendererKey, Integer contractVersion, Integer answerSchemaVersion,
+            List<String> requiredClientCapabilities, String contentStatus, String provenance,
+            boolean timedAvailable, String timedUnavailableReason) {
+        this(code, displayName, section, scored, availability, unavailableReason, profileKey, profileVersion,
+                rendererKey, contractVersion, answerSchemaVersion, requiredClientCapabilities, contentStatus,
+                provenance, timedAvailable, timedUnavailableReason, 0, null);
+    }
+
     public PracticeCatalogTaskResponse withTimedAvailability(boolean available, String reason) {
         return new PracticeCatalogTaskResponse(code, displayName, section, scored, availability, unavailableReason,
                 profileKey, profileVersion, rendererKey, contractVersion, answerSchemaVersion,
-                requiredClientCapabilities, contentStatus, provenance, available, reason);
+                requiredClientCapabilities, contentStatus, provenance, available, reason, answeredQuestionCount,
+                averageScore);
+    }
+
+    /**
+     * The requesting student's numbers for this task type: distinct questions answered, and the mean score (0-100)
+     * of their scored answers, or null while none is scored.
+     */
+    public PracticeCatalogTaskResponse withStats(long answered, Integer average) {
+        return new PracticeCatalogTaskResponse(code, displayName, section, scored, availability, unavailableReason,
+                profileKey, profileVersion, rendererKey, contractVersion, answerSchemaVersion,
+                requiredClientCapabilities, contentStatus, provenance, timedAvailable, timedUnavailableReason,
+                answered, average);
     }
 }

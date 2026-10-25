@@ -120,7 +120,28 @@ public class PracticeProgressService {
                 countConfidence(items, ResponseConfidence.LOW),
                 countConfidence(items, ResponseConfidence.MEDIUM),
                 countConfidence(items, ResponseConfidence.HIGH),
-                null);
+                averageScore(items),
+                session.effectiveKind().name(),
+                session.getSkillCode(),
+                singleTaskCode(session.getSelectedTaskTypes()));
+    }
+
+    private Double averageScore(List<PracticeSessionItem> items) {
+        var scores = items.stream()
+                .filter(item -> item.getStatus() == PracticeSessionItemStatus.ANSWERED)
+                .map(item -> item.getAiScore() != null ? item.getAiScore() : item.getObjectiveScore())
+                .filter(java.util.Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .summaryStatistics();
+        return scores.getCount() == 0 ? null : Math.round(scores.getAverage() * 10) / 10.0;
+    }
+
+    private String singleTaskCode(String selectedTaskTypes) {
+        if (selectedTaskTypes == null || selectedTaskTypes.isBlank()) {
+            return null;
+        }
+        String[] codes = selectedTaskTypes.split(",");
+        return codes.length == 1 ? codes[0].trim() : null;
     }
 
     private boolean hasResponse(PracticeSessionItem item) {

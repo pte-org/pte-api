@@ -105,7 +105,10 @@ public class PracticeSessionResponseMapper {
                 currentItem == null ? null : toTaskResponse(currentItem, session.getTenantId()),
                 null,
                 session.effectiveTimingMode(),
-                session.getQuestionCount());
+                session.getQuestionCount(),
+                session.effectiveKind().name(),
+                session.getSkillCode(),
+                selected.size() == 1 ? selected.iterator().next() : null);
     }
 
     private PracticeTaskResponse toTaskResponse(PracticeSessionItem item, UUID tenantId) {

@@ -97,6 +97,40 @@ class PracticeProgressServiceTest {
     }
 
     @Test
+    void progressEntryCarriesTheSessionKindAndAverageScore() {
+        PracticeSession skill = session(PracticeSessionStatus.COMPLETED);
+        skill.setKind(com.pte.practice.internal.domain.enums.PracticeSessionKind.SKILL);
+        skill.setSkillCode("READING");
+        skill.setSelectedTaskTypes("MC_READING_SINGLE,RE_ORDER_PARAGRAPHS");
+        PracticeSession legacy = session(PracticeSessionStatus.COMPLETED);
+        legacy.setSelectedTaskTypes("READ_ALOUD");
+        PracticeSessionItem scored = item(PracticeSessionItemStatus.ANSWERED, "a", null);
+        scored.setPracticeSessionId(skill.getId());
+        scored.setObjectiveScore(80);
+        PracticeSessionItem aiScored = item(PracticeSessionItemStatus.ANSWERED, "b", null);
+        aiScored.setPracticeSessionId(skill.getId());
+        aiScored.setAiScore(65);
+        PracticeSessionItem unscored = item(PracticeSessionItemStatus.ANSWERED, "c", null);
+        unscored.setPracticeSessionId(legacy.getId());
+        when(sessionRepository.findTop100ByStudentPublicIdAndDeletedFalseOrderByCreatedAtDesc(studentId))
+                .thenReturn(List.of(skill, legacy));
+        when(sessionRepository.countByStudentPublicIdAndDeletedFalse(studentId)).thenReturn(2L);
+        when(itemRepository.findByPracticeSessionIdInAndDeletedFalseOrderByPracticeSessionIdAscOrderIndexAsc(
+                List.of(skill.getId(), legacy.getId()))).thenReturn(List.of(scored, aiScored, unscored));
+
+        var entries = service.getProgress(studentId).entries();
+
+        assertThat(entries.get(0).kind()).isEqualTo("SKILL");
+        assertThat(entries.get(0).skillCode()).isEqualTo("READING");
+        assertThat(entries.get(0).taskCode()).isNull();
+        assertThat(entries.get(0).score()).isEqualTo(72.5);
+        // A session from before V134 has no kind: it reads as a single-task session.
+        assertThat(entries.get(1).kind()).isEqualTo("TASK");
+        assertThat(entries.get(1).taskCode()).isEqualTo("READ_ALOUD");
+        assertThat(entries.get(1).score()).isNull();
+    }
+
+    @Test
     void nullStudentProducesAnEmptyProjection() {
         assertThat(service.getProgress(null).entries()).isEmpty();
     }

@@ -185,8 +185,8 @@ class PracticeSessionServiceTest {
                 .thenReturn(Optional.empty());
         when(sessionRepository.findFirstByStudentPublicIdAndMockTestIdAndStatusInAndDeletedFalseOrderByCreatedAtDesc(
                 any(), org.mockito.ArgumentMatchers.eq(7L), any())).thenReturn(Optional.of(unfinished));
-        when(sessionPersistenceService.saveStart(any(PracticeSession.class))).thenAnswer(invocation -> {
-            PracticeSession session = invocation.getArgument(0);
+        when(sessionPersistenceService.replaceStart(any(), any(), any(PracticeSession.class))).thenAnswer(invocation -> {
+            PracticeSession session = invocation.getArgument(2);
             session.setPublicId(UUID.randomUUID());
             session.setVersion(0L);
             return session;
@@ -194,9 +194,13 @@ class PracticeSessionServiceTest {
 
         service.start(mockTestRequest(mockTest, true), "mock-2", caller);
 
-        assertThat(unfinished.getStatus()).isEqualTo(PracticeSessionStatus.DISCARDED);
+        // The discard and the insert share one transaction (replaceStart); doing the discard here deadlocked on the
+        // one-active-attempt unique index.
+        assertThat(unfinished.getStatus()).isEqualTo(PracticeSessionStatus.IN_PROGRESS);
         org.mockito.ArgumentCaptor<PracticeSession> saved = org.mockito.ArgumentCaptor.forClass(PracticeSession.class);
-        org.mockito.Mockito.verify(sessionPersistenceService).saveStart(saved.capture());
+        org.mockito.Mockito.verify(sessionPersistenceService).replaceStart(
+                org.mockito.ArgumentMatchers.eq(unfinished.getId()), any(), saved.capture());
+        org.mockito.Mockito.verify(sessionPersistenceService, org.mockito.Mockito.never()).saveStart(any());
         assertThat(saved.getValue().effectiveKind()).isEqualTo(
                 com.pte.practice.internal.domain.enums.PracticeSessionKind.MOCK_TEST);
         assertThat(saved.getValue().effectiveTimingMode()).isEqualTo(
@@ -379,7 +383,7 @@ class PracticeSessionServiceTest {
     }
 
     @Test
-    void saveAndExitDiscardsAnUnansweredSession() {
+    void pausingAStartedSessionKeepsItResumableEvenWithoutAnswers() {
         PracticeSession session = savedSession();
         session.setId(42L);
         session.setStatus(PracticeSessionStatus.IN_PROGRESS);
@@ -395,8 +399,26 @@ class PracticeSessionServiceTest {
         PracticeSessionResponse response = service.saveAndExit(sessionId,
                 new PracticeSaveAndExitRequest(0L, null, null, null), "exit-1", caller);
 
+        assertThat(response.status()).isEqualTo(PracticeSessionStatus.IN_PROGRESS);
+        assertThat(response.discardedAt()).isNull();
+    }
+
+    @Test
+    void saveAndExitDiscardsASessionThatNeverBegan() {
+        PracticeSession session = savedSession();
+        session.setId(43L);
+        session.setStatus(PracticeSessionStatus.OVERVIEW);
+        session.setVersion(0L);
+        when(sessionRepository.findWithLockByPublicIdAndStudentPublicId(sessionId, caller.userId()))
+                .thenReturn(Optional.of(session));
+        when(itemRepository.findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(43L)).thenReturn(List.of());
+        when(sessionRepository.saveAndFlush(any(PracticeSession.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        PracticeSessionResponse response = service.saveAndExit(sessionId,
+                new PracticeSaveAndExitRequest(0L, null, null, null), "exit-2", caller);
+
         assertThat(response.status()).isEqualTo(PracticeSessionStatus.DISCARDED);
-        assertThat(response.discardedAt()).isEqualTo(now);
     }
 
     @Test

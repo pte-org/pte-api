@@ -359,9 +359,11 @@ public class PracticeSessionService {
             itemService.saveDraft(session, item, request.payload(), request.confidence(), caller);
         }
 
+        // Pausing a started session keeps it resumable even before the first answer (the student chose its mode and
+        // questions); only a session that never began is thrown away.
         boolean hasProgress = itemService.hasProgress(session);
         Instant now = clock.instant();
-        if (!hasProgress) {
+        if (!hasProgress && session.getStatus() == PracticeSessionStatus.OVERVIEW) {
             session.setStatus(PracticeSessionStatus.DISCARDED);
             session.setDiscardedAt(now);
         }
@@ -432,12 +434,6 @@ public class PracticeSessionService {
         if (unfinished.isPresent() && !request.effectiveRestart()) {
             return responseMapper.toResponse(unfinished.get());
         }
-        unfinished.ifPresent(previous -> {
-            previous.setStatus(PracticeSessionStatus.DISCARDED);
-            previous.setDiscardedAt(clock.instant());
-            sessionRepository.saveAndFlush(previous);
-        });
-
         Set<String> taskCodes = new LinkedHashSet<>();
         mockTestService.itemsOf(mockTest.getId()).forEach(item -> taskCodes.add(item.getTaskCode()));
         PracticeSession session = new PracticeSession();
@@ -457,7 +453,11 @@ public class PracticeSessionService {
         session.setStartIdempotencyKey(idempotencyKey);
         session.setStartRequestHash(requestHash);
         session.setStatus(PracticeSessionStatus.OVERVIEW);
-        return responseMapper.toResponse(sessionPersistenceService.saveStart(session));
+        // Restarting discards the old attempt and inserts the new one together; see replaceStart for why.
+        PracticeSession saved = unfinished.isPresent()
+                ? sessionPersistenceService.replaceStart(unfinished.get().getId(), clock.instant(), session)
+                : sessionPersistenceService.saveStart(session);
+        return responseMapper.toResponse(saved);
     }
 
     /**

@@ -8,6 +8,8 @@ import com.pte.practice.internal.repository.PracticeSessionItemRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,8 +37,19 @@ public class PracticeSkillStatsService {
         for (Object[] row : itemRepository.countAnsweredSourceQuestionsByTaskCode(studentPublicId)) {
             answered.put(PracticeTimingService.normalize((String) row[0]), ((Number) row[1]).longValue());
         }
+        Map<String, Integer> averages = new HashMap<>();
+        for (Object[] row : itemRepository.averageScoreByTaskCode(studentPublicId)) {
+            if (row[1] != null) {
+                averages.put(PracticeTimingService.normalize((String) row[0]),
+                        BigDecimal.valueOf(((Number) row[1]).doubleValue()).setScale(0, RoundingMode.HALF_UP).intValue());
+            }
+        }
         List<PracticeCatalogSectionResponse> sections = catalog.sections().stream()
-                .map(section -> section.withQuestionCounts(
+                .map(section -> new PracticeCatalogSectionResponse(section.code(), section.displayName(),
+                        section.taskTypes().stream().map(task -> {
+                            String code = PracticeTimingService.normalize(task.code());
+                            return task.withStats(answered.getOrDefault(code, 0L), averages.get(code));
+                        }).toList(),
                         sum(section, available), sum(section, answered)))
                 .toList();
         return new PracticeCatalogResponse(catalog.productCode(), catalog.title(), catalog.catalogVersion(),

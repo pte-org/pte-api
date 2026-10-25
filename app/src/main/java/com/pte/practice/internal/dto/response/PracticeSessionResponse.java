@@ -35,7 +35,12 @@ public record PracticeSessionResponse(
         PracticeTaskResponse currentTask,
         PracticeItemResultResponse itemResult,
         PracticeTimingMode timingMode,
-        Integer questionCount) {
+        Integer questionCount,
+        /** TASK, SKILL or MOCK_TEST; sessions before V134 read as TASK. */
+        String kind,
+        String skillCode,
+        /** The task type when the session covers exactly one; null otherwise. */
+        String taskCode) {
 
     public PracticeSessionResponse {
         sections = sections == null ? List.of() : List.copyOf(sections);
@@ -45,6 +50,6 @@ public record PracticeSessionResponse(
         return new PracticeSessionResponse(publicId, sourceType, productCode, title, organizationId, catalogVersion,
                 timeLimitSeconds, status, version, startedAt, deadlineAt, completedAt, discardedAt,
                 saveAndExitAvailable, canAdvance, nextAction, answeredItemCount, totalItemCount, sections,
-                currentTask, result, timingMode, questionCount);
+                currentTask, result, timingMode, questionCount, kind, skillCode, taskCode);
     }
 }

@@ -62,6 +62,18 @@ public interface PracticeSessionItemRepository extends JpaRepository<PracticeSes
             """)
     List<Object[]> countAnsweredSourceQuestionsByTaskCode(@Param("studentPublicId") UUID studentPublicId);
 
+    /** Mean score (0-100) of the student's scored answers per task code: {@code [taskCode, average]} rows. */
+    @Query("""
+            select item.taskCode, avg(coalesce(item.aiScore, item.objectiveScore)) from PracticeSessionItem item, PracticeSession owner
+             where item.practiceSessionId = owner.id
+               and owner.studentPublicId = :studentPublicId
+               and item.status = com.pte.practice.internal.domain.enums.PracticeSessionItemStatus.ANSWERED
+               and coalesce(item.aiScore, item.objectiveScore) is not null
+               and item.deleted = false
+             group by item.taskCode
+            """)
+    List<Object[]> averageScoreByTaskCode(@Param("studentPublicId") UUID studentPublicId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select item from PracticeSessionItem item
