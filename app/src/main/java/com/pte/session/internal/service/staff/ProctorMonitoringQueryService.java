@@ -49,13 +49,6 @@ public class ProctorMonitoringQueryService {
     private final ExamSessionRepository examSessionRepository;
     private final Clock clock;
 
-    public ProctorMonitoringQueryService(
-            ExamSessionProctorRepository proctorRepository,
-            ExamRegistrationRepository registrationRepository,
-            ExamSessionRepository examSessionRepository) {
-        this(proctorRepository, registrationRepository, examSessionRepository, Clock.systemUTC());
-    }
-
     @Autowired
     public ProctorMonitoringQueryService(
             ExamSessionProctorRepository proctorRepository,
@@ -65,7 +58,7 @@ public class ProctorMonitoringQueryService {
         this.proctorRepository = proctorRepository;
         this.registrationRepository = registrationRepository;
         this.examSessionRepository = examSessionRepository;
-        this.clock = clock != null ? clock : Clock.systemUTC();
+        this.clock = clock;
     }
 
     /**

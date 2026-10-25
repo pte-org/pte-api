@@ -41,14 +41,7 @@ public class AttendanceQueryService {
         this.jdbcTemplate = jdbcTemplate;
         this.examSessionRepository = examSessionRepository;
         this.proctorRepository = proctorRepository;
-        this.clock = clock != null ? clock : Clock.systemUTC();
-    }
-
-    public AttendanceQueryService(
-            JdbcTemplate jdbcTemplate,
-            ExamSessionRepository examSessionRepository,
-            ExamSessionProctorRepository proctorRepository) {
-        this(jdbcTemplate, examSessionRepository, proctorRepository, Clock.systemUTC());
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)

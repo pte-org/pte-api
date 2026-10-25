@@ -61,7 +61,7 @@ class EntitlementServiceTest {
     @BeforeEach
     void setUp() {
         entitlementService = new EntitlementService(sessionRepository, registrationRepository, proctorRepository,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), null);
     }
 
     private ExamSession openSession(UUID publicId, UUID tenantId) {

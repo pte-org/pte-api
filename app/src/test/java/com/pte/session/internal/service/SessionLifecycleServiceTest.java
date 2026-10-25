@@ -57,7 +57,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Instant;
-import java.time.Clock;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -113,20 +112,20 @@ class SessionLifecycleServiceTest {
     @BeforeEach
     void setUp() {
         SessionAccess access = new SessionAccess(sessionRepository);
-        SessionSubscriptionRules subscriptions = new SessionSubscriptionRules(sessionRepository, billingService, java.time.Clock.systemUTC());
+        SessionSubscriptionRules subscriptions = new SessionSubscriptionRules(sessionRepository, billingService, com.pte.TestClocks.fixed());
         service = new SessionLifecycleService(access,
                 new SessionCreationService(sessionRepository, assessmentService, sessionCodeGenerator,
                         access, subscriptions),
                 new SessionSubscriptionService(sessionRepository, registrationRepository, billingService,
                         access, subscriptions),
                 new SessionStateService(sessionRepository, access, subscriptions, auditLogService),
-                new SessionPolicyService(sessionRepository, access, Clock.systemUTC()),
+                new SessionPolicyService(sessionRepository, access, com.pte.TestClocks.fixed()),
                 new SessionScheduleService(sessionRepository, access, subscriptions, auditLogService,
-                        Clock.systemUTC()),
+                        com.pte.TestClocks.fixed()),
                 new SessionReadService(sessionRepository, access),
                 new SessionReminderService(sessionRepository),
-                new SessionRevocationService(sessionRepository, eventPublisher, java.time.Clock.systemUTC()),
-                new SessionOperationGuardService(sessionRepository));
+                new SessionRevocationService(sessionRepository, eventPublisher, com.pte.TestClocks.fixed()),
+                new SessionOperationGuardService(sessionRepository, com.pte.TestClocks.fixed(), null));
         tenantId = UUID.randomUUID();
         subscriptionId = UUID.randomUUID();
         licenseKeyId = UUID.randomUUID();

@@ -125,12 +125,12 @@ class ExamWorkflowServicesTest {
         AudienceResolver resolver = new AudienceResolver(sourceRepository, registrationRepository,
                 enrollmentModuleService, identityService, startedAttemptLookup);
         draftService = new ExamDraftService(sessionRepository, access, new ExamSkillSelection(), sessionLifecycleService,
-                examDefinitionService, billingService, sessionCodeGenerator, java.time.Clock.systemUTC());
+                examDefinitionService, billingService, sessionCodeGenerator, com.pte.TestClocks.fixed());
         audienceService = new ExamAudienceService(sourceRepository, registrationRepository, access, resolver,
                 enrollmentModuleService);
         publishService = new ExamPublishService(sessionRepository, access, sessionLifecycleService,
                 enrollmentService, assessmentService, billingService, resolver, registrationRepository,
-                eventPublisher, java.time.Clock.systemUTC());
+                eventPublisher, com.pte.TestClocks.fixed());
         tenantId = UUID.randomUUID();
         templateId = UUID.randomUUID();
         subscriptionId = UUID.randomUUID();

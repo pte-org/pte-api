@@ -25,20 +25,12 @@ public class SessionOperationGuardService {
     private final Clock clock;
     private final TenancyService tenancyService;
 
-    public SessionOperationGuardService(ExamSessionRepository sessionRepository) {
-        this(sessionRepository, Clock.systemUTC(), null);
-    }
-
     @Autowired
     public SessionOperationGuardService(ExamSessionRepository sessionRepository, Clock clock,
             TenancyService tenancyService) {
         this.sessionRepository = sessionRepository;
-        this.clock = clock != null ? clock : Clock.systemUTC();
+        this.clock = clock;
         this.tenancyService = tenancyService;
-    }
-
-    public SessionOperationGuardService(ExamSessionRepository sessionRepository, Clock clock) {
-        this(sessionRepository, clock, null);
     }
 
     @Transactional

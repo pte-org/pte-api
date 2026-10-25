@@ -80,7 +80,7 @@ class EnrollmentServiceTest {
     @BeforeEach
     void setUp() {
         enrollmentService = new EnrollmentService(sessionLifecycleService, registrationRepository,
-                eventPublisher, tenancyService, identityService, startedAttemptLookup, java.time.Clock.systemUTC());
+                eventPublisher, tenancyService, identityService, startedAttemptLookup, com.pte.TestClocks.fixed());
     }
 
     private ExamSession session(Long id, UUID publicId, UUID tenantId) {

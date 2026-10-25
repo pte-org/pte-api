@@ -51,12 +51,6 @@ public class EntitlementService {
         this.tenancyService = tenancyService;
     }
 
-    /** Compatibility constructor for focused session unit tests. */
-    public EntitlementService(ExamSessionRepository sessionRepository, ExamRegistrationRepository registrationRepository,
-                              ExamSessionProctorRepository proctorRepository, Clock clock) {
-        this(sessionRepository, registrationRepository, proctorRepository, clock, null);
-    }
-
     /**
      * Gates every new attempt (preflight and start). Enrollment is checked
      * before status and time so a non-enrolled caller always gets the same
