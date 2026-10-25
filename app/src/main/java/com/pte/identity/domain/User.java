@@ -19,7 +19,6 @@ import lombok.Setter;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * A person's account. One account can belong to several organizations: tenant-scoped roles live on
