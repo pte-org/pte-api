@@ -28,7 +28,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -72,7 +71,7 @@ class AttemptLifecycleServiceNavigateTaskTest {
                 attemptRepository, exam.contentService,
                 timerService, answerSubmitService, new AttemptMapper(JsonMapper.builder().build()),
                 encryptionKeyProvider, submissionDecryptionService, heartbeatService,
-                capabilityNegotiationService, sessionService, java.time.Clock.systemUTC());
+                capabilityNegotiationService, sessionService, com.pte.TestClocks.fixed());
 
         UUID studentPublicId = UUID.randomUUID();
         caller = new CurrentUser(studentPublicId, UUID.randomUUID(), List.of("student"));

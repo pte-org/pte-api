@@ -95,7 +95,7 @@ class ExamItemLoaderTest {
         // so toView always falls back to taskTimingConfig — the exact
         // pre-Phase-3 behavior these regression tests were written against.
         stubTemplateItems();
-        service = new ExamItemLoader(assessmentService, mediaService, taskTimingConfig, examDefinitionService, java.time.Clock.systemUTC());
+        service = new ExamItemLoader(assessmentService, mediaService, taskTimingConfig, examDefinitionService, com.pte.TestClocks.fixed());
     }
 
     @Test

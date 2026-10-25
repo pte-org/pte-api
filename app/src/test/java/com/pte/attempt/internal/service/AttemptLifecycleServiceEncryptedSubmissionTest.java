@@ -90,7 +90,7 @@ class AttemptLifecycleServiceEncryptedSubmissionTest {
                 submissionDecryptionService,
                 heartbeatService,
                 capabilityNegotiationService,
-                sessionService, java.time.Clock.systemUTC());
+                sessionService, com.pte.TestClocks.fixed());
 
         studentPublicId = UUID.randomUUID();
         tenantId = UUID.randomUUID();

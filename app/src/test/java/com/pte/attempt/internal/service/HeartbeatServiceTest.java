@@ -29,7 +29,7 @@ class HeartbeatServiceTest {
 
     @BeforeEach
     void setUp() {
-        heartbeatService = new HeartbeatService(attemptRepository, java.time.Clock.systemUTC());
+        heartbeatService = new HeartbeatService(attemptRepository, com.pte.TestClocks.fixed());
         attempt = new ExamAttempt();
         attempt.setId(1L);
     }

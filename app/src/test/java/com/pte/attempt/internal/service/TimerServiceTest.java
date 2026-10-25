@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class TimerServiceTest {
 
-    private final TimerService timerService = new TimerService(java.time.Clock.systemUTC());
+    private final TimerService timerService = new TimerService(com.pte.TestClocks.fixed());
     private ExamAttempt attempt;
 
     @BeforeEach

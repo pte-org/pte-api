@@ -80,7 +80,7 @@ class AttemptLifecycleCapabilityTest {
                 submissionDecryptionService,
                 heartbeatService,
                 capabilityNegotiationService,
-                sessionService, java.time.Clock.systemUTC());
+                sessionService, com.pte.TestClocks.fixed());
         lenient().when(sessionService.getAttemptRetryPolicy(any(), any()))
                 .thenReturn(new AttemptRetryPolicyResponse(0));
     }

@@ -80,7 +80,7 @@ class AttemptLifecycleServiceHeartbeatTest {
                 submissionDecryptionService,
                 heartbeatService,
                 capabilityNegotiationService,
-                sessionService, java.time.Clock.systemUTC());
+                sessionService, com.pte.TestClocks.fixed());
 
         studentPublicId = UUID.randomUUID();
         caller = new CurrentUser(studentPublicId, UUID.randomUUID(), List.of("student"));

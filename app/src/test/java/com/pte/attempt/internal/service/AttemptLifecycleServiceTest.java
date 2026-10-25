@@ -97,7 +97,7 @@ class AttemptLifecycleServiceTest {
                 submissionDecryptionService,
                 heartbeatService,
                 capabilityNegotiationService,
-                sessionService, java.time.Clock.systemUTC());
+                sessionService, com.pte.TestClocks.fixed());
 
     }
 
@@ -212,7 +212,7 @@ class AttemptLifecycleServiceTest {
                 submissionDecryptionService,
                 heartbeatService,
                 capabilityNegotiationService,
-                sessionService, java.time.Clock.systemUTC());
+                sessionService, com.pte.TestClocks.fixed());
 
         assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> cutoffAwareService.startAttempt(
                 new StartAttemptRequest(sessionPublicId, true), new CurrentUser(studentPublicId, tenantId, List.of("STUDENT")))))

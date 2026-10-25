@@ -42,7 +42,7 @@ class ProctorCommandServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ProctorCommandService(attemptRepository, sessionService, java.time.Clock.systemUTC());
+        service = new ProctorCommandService(attemptRepository, sessionService, com.pte.TestClocks.fixed());
     }
 
     @Test

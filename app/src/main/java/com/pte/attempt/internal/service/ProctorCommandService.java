@@ -37,12 +37,6 @@ public class ProctorCommandService {
         this.clock = clock;
     }
 
-    public ProctorCommandService(ExamAttemptRepository attemptRepository) {
-        this.attemptRepository = attemptRepository;
-        this.sessionService = null;
-        this.clock = Clock.systemUTC();
-    }
-
     @Transactional
     public void forceSubmit(UUID attemptPublicId, UUID tenantId) {
         inProgressAttempt(attemptPublicId, tenantId).ifPresent(attempt -> {
