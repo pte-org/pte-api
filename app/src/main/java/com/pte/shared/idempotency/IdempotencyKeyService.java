@@ -10,6 +10,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,9 +20,11 @@ import java.util.UUID;
 public class IdempotencyKeyService {
 
     private final IdempotencyKeyRepository repository;
+    private final Clock clock;
 
-    public IdempotencyKeyService(IdempotencyKeyRepository repository) {
+    public IdempotencyKeyService(IdempotencyKeyRepository repository, Clock clock) {
         this.repository = repository;
+        this.clock = clock;
     }
 
     /**
@@ -61,7 +64,7 @@ public class IdempotencyKeyService {
 
     @Scheduled(cron = IdempotencyConstants.PURGE_CRON)
     void purgeExpiredOnSchedule() {
-        purgeExpired(Instant.now());
+        purgeExpired(clock.instant());
     }
 
     private IdempotencyDecision decide(IdempotencyKey existing, String requestHash) {

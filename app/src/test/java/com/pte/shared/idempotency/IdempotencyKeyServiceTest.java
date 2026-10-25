@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Phase 1: one generic dedupe + receipt table replaces every *Command/*Operation/*Intent entity. */
 @DataJpaTest
-@Import(IdempotencyKeyService.class)
+@Import({IdempotencyKeyService.class, com.pte.shared.config.ClockConfig.class})
 class IdempotencyKeyServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-10-24T00:00:00Z");
