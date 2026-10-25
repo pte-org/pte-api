@@ -43,7 +43,7 @@ class EmailWorkerTest {
     void setUp() {
         notificationProperties = new NotificationProperties();
         notificationProperties.setMailFrom("no-reply@pteprep.test");
-        service = new EmailWorker(notificationLogRepository, mailSender, notificationProperties);
+        service = new EmailWorker(notificationLogRepository, mailSender, notificationProperties, java.time.Clock.systemUTC());
     }
 
     @Test

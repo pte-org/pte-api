@@ -1,4 +1,4 @@
-package com.pte.overview.internal.service;
+package com.pte.overview.internal.service.admin;
 
 import com.pte.overview.internal.constant.OverviewConstants;
 import com.pte.shared.security.CurrentUser;

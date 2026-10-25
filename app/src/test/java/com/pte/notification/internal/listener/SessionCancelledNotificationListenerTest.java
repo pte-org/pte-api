@@ -60,7 +60,7 @@ class SessionCancelledNotificationListenerTest {
         when(identityService.findActiveStaffInTenant(firstId, tenantId)).thenReturn(Optional.of(first));
         when(identityService.findActiveStaffInTenant(secondId, tenantId)).thenReturn(Optional.of(second));
 
-        new SessionCancelledNotificationListener(sessionService, scoringService, identityService, dispatchService)
+        new SessionCancelledNotificationListener(sessionService, scoringService, identityService, dispatchService, java.time.Clock.systemUTC())
                 .onSessionCancelled(new SessionCancelledEvent(sessionId, tenantId, "Exam A", Instant.now()));
 
         ArgumentCaptor<NotificationType> types = ArgumentCaptor.forClass(NotificationType.class);

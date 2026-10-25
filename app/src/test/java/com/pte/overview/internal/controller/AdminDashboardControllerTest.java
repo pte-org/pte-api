@@ -5,7 +5,7 @@ import com.pte.overview.internal.AdminDashboardFixtures.FakeRedis;
 import com.pte.overview.internal.HostDashboardFixtures;
 import com.pte.overview.internal.cache.DashboardCache;
 import com.pte.overview.internal.dto.response.AdminSectionData;
-import com.pte.overview.internal.service.AdminDashboardService;
+import com.pte.overview.internal.service.admin.AdminDashboardService;
 import com.pte.shared.exception.GlobalExceptionHandler;
 import com.pte.shared.security.ResourceServerJwt;
 import com.pte.shared.security.SecurityClaims;
@@ -358,7 +358,6 @@ class AdminDashboardControllerTest {
         assertThat(body).doesNotContain("\"tenants\"").doesNotContain("Alpha School");
         assertNoFacadeWasTouched();
     }
-
 
     @Test
     void forbiddenWinsOverAnInvalidWindowSoValidationDoesNotLeakToUnauthorisedCallers() throws Exception {

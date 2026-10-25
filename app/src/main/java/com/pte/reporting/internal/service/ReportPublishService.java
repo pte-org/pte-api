@@ -20,6 +20,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -42,11 +43,13 @@ public class ReportPublishService {
     private final ReportSnapshotCodec snapshotCodec;
     private final ExamResultRepository examResultRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
     public ReportPublishService(SessionService sessionService, AttemptService attemptService,
             ScoringService scoringService, ScoreAggregationService aggregationService,
             ReportSnapshotCodec snapshotCodec, ExamResultRepository examResultRepository,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            Clock clock) {
         this.sessionService = sessionService;
         this.attemptService = attemptService;
         this.scoringService = scoringService;
@@ -54,6 +57,7 @@ public class ReportPublishService {
         this.snapshotCodec = snapshotCodec;
         this.examResultRepository = examResultRepository;
         this.eventPublisher = eventPublisher;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
@@ -107,7 +111,7 @@ public class ReportPublishService {
                 .collect(Collectors.groupingBy(ReportScoringAnswerView::attemptPublicId));
         Map<UUID, ReportScoreAggregation> scoreAggregations =
                 aggregationService.aggregateBatchFromInputs(attemptIds, inputsByAttempt);
-        Instant publishedAt = Instant.now();
+        Instant publishedAt = clock.instant();
         int cohortSize = attempts.size();
         for (AttemptSummaryView summary : attempts) {
             List<ReportScoringAnswerView> attemptInputs =

@@ -1,5 +1,8 @@
-package com.pte.overview.internal.service;
+package com.pte.overview.internal.service.admin;
 
+import com.pte.overview.internal.service.DashboardSectionRunner;
+import com.pte.overview.internal.service.DashboardWindow;
+import com.pte.overview.internal.service.Memo;
 import com.pte.identity.IdentityOverviewService;
 import com.pte.overview.internal.cache.DashboardCache;
 import com.pte.overview.internal.cache.DashboardCacheKeys;

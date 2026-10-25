@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.*;
 import java.util.function.Consumer;
@@ -24,12 +25,15 @@ public class StaffWorkspaceService {
     private final ExamStaffIdentityService identity;
     private final StaffScheduleService schedules;
     private final StaffScoringService scoring;
+    private final Clock clock;
 
     public StaffWorkspaceService(ExamStaffIdentityService identity, StaffScheduleService schedules,
-            StaffScoringService scoring) {
+            StaffScoringService scoring,
+            Clock clock) {
         this.identity = identity;
         this.schedules = schedules;
         this.scoring = scoring;
+        this.clock = clock;
     }
 
     public ExamStaffAccountView detail(UUID id, CurrentUser caller) { return identity.get(id, caller); }
@@ -100,7 +104,7 @@ public class StaffWorkspaceService {
         long total = 0;
         int page = 0;
         boolean more;
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         do {
             var sessions = schedules.page(caller.tenantId(), id, filter, page++, StaffWorkspaceConstants.SCAN_SIZE);
             for (var session : sessions) { counts.merge(proctorBucket(session, now), 1L, Long::sum); total++; }

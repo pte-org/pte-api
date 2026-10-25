@@ -1,5 +1,7 @@
-package com.pte.overview.internal.service;
+package com.pte.overview.internal.service.admin;
 
+import com.pte.overview.internal.service.DashboardWindow;
+import com.pte.overview.internal.service.TrendCalculator;
 import com.pte.itembank.ItembankOverviewService;
 import com.pte.itembank.ItembankOverviewService.QuestionBankCounts;
 import com.pte.overview.internal.dto.response.AdminSectionData.QuestionBank;

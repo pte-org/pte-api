@@ -1,5 +1,9 @@
-package com.pte.overview.internal.service;
+package com.pte.overview.internal.service.admin;
 
+import com.pte.overview.internal.service.DashboardWindow;
+import com.pte.overview.internal.service.MonthBuckets;
+import com.pte.overview.internal.service.SeatUtilisationRanking;
+import com.pte.overview.internal.service.TrendCalculator;
 import com.pte.attempt.AttemptOverviewService;
 import com.pte.billing.BillingOverviewService;
 import com.pte.billing.BillingOverviewService.TenantPlanBrief;

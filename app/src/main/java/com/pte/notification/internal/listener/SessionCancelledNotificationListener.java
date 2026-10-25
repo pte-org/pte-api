@@ -1,9 +1,6 @@
 package com.pte.notification.internal.listener;
 
 import com.pte.identity.IdentityService;
-import com.pte.identity.domain.Role;
-import com.pte.identity.domain.User;
-import com.pte.identity.domain.UserStatus;
 import com.pte.notification.domain.enums.NotificationType;
 import com.pte.notification.internal.constant.NotificationConstants;
 import com.pte.notification.internal.service.NotificationDispatchService;
@@ -13,7 +10,7 @@ import com.pte.session.dto.event.SessionCancelledEvent;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.time.Instant;
+import java.time.Clock;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -26,13 +23,16 @@ public class SessionCancelledNotificationListener {
     private final ScoringService scoringService;
     private final IdentityService identityService;
     private final NotificationDispatchService dispatchService;
+    private final Clock clock;
 
     public SessionCancelledNotificationListener(SessionService sessionService, ScoringService scoringService,
-            IdentityService identityService, NotificationDispatchService dispatchService) {
+            IdentityService identityService, NotificationDispatchService dispatchService,
+            Clock clock) {
         this.sessionService = sessionService;
         this.scoringService = scoringService;
         this.identityService = identityService;
         this.dispatchService = dispatchService;
+        this.clock = clock;
     }
 
     @TransactionalEventListener
@@ -45,7 +45,7 @@ public class SessionCancelledNotificationListener {
 
         String sessionLabel = event.sessionName() == null || event.sessionName().isBlank()
                 ? event.sessionPublicId().toString() : event.sessionName();
-        String cancelledAt = event.cancelledAt() == null ? Instant.now().toString() : event.cancelledAt().toString();
+        String cancelledAt = event.cancelledAt() == null ? clock.instant().toString() : event.cancelledAt().toString();
         String body = NotificationConstants.SESSION_CANCELLED_BODY.formatted(sessionLabel, cancelledAt);
         for (UUID staffPublicId : staffPublicIds) {
             identityService.findActiveStaffInTenant(staffPublicId, event.tenantId())
