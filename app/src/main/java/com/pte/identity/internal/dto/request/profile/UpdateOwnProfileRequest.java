@@ -1,4 +1,4 @@
-package com.pte.identity.internal.dto.request;
+package com.pte.identity.internal.dto.request.profile;
 
 import com.pte.identity.internal.constant.IdentityConstants;
 import jakarta.validation.constraints.NotBlank;
@@ -7,8 +7,8 @@ import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 
-/** Profile fields that a platform administrator may change for a managed platform user. */
-public record UpdatePlatformUserProfileRequest(
+/** Fields a tenant administrator may update on their own account. */
+public record UpdateOwnProfileRequest(
         @NotBlank(message = IdentityConstants.FULL_NAME_REQUIRED)
         @Size(max = 255, message = IdentityConstants.FULL_NAME_TOO_LONG)
         String fullName,

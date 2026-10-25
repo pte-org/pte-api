@@ -1,4 +1,4 @@
-package com.pte.identity.internal.dto.request;
+package com.pte.identity.internal.dto.request.user;
 
 import com.pte.identity.internal.constant.IdentityConstants;
 import jakarta.validation.constraints.Email;

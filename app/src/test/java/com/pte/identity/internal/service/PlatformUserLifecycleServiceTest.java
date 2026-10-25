@@ -2,7 +2,7 @@ package com.pte.identity.internal.service;
 
 import com.pte.identity.UserCredentialsEmailRequestedEvent;
 import com.pte.identity.domain.Role;
-import com.pte.identity.internal.dto.request.UpdatePlatformUserProfileRequest;
+import com.pte.identity.internal.dto.request.profile.UpdatePlatformUserProfileRequest;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.domain.User;

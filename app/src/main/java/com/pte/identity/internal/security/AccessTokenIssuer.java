@@ -13,6 +13,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -28,14 +29,16 @@ import java.util.Set;
 public class AccessTokenIssuer {
 
     private final JwtEncoder jwtEncoder;
+    private final Clock clock;
 
-    public AccessTokenIssuer(JwtEncoder jwtEncoder) {
+    public AccessTokenIssuer(JwtEncoder jwtEncoder, Clock clock) {
         this.jwtEncoder = jwtEncoder;
+        this.clock = clock;
     }
 
     /** @param member the membership chosen at login, or null for a platform or practice-only account */
     public String issue(User user, OrganizationMember member) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
                 .issuer(IdentityConstants.TOKEN_ISSUER)
                 .issuedAt(now)

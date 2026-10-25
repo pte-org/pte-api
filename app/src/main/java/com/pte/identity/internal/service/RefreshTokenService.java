@@ -9,7 +9,7 @@ import com.pte.identity.internal.security.TokenHasher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import java.time.Clock;
 import java.util.UUID;
 
 /**
@@ -22,10 +22,12 @@ public class RefreshTokenService {
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final TokenHasher tokenHasher;
+    private final Clock clock;
 
-    public RefreshTokenService(RefreshTokenRepository refreshTokenRepository, TokenHasher tokenHasher) {
+    public RefreshTokenService(RefreshTokenRepository refreshTokenRepository, TokenHasher tokenHasher, Clock clock) {
         this.refreshTokenRepository = refreshTokenRepository;
         this.tokenHasher = tokenHasher;
+        this.clock = clock;
     }
 
     @Transactional
@@ -35,7 +37,7 @@ public class RefreshTokenService {
         token.setUserId(user.getId());
         token.setOrganizationId(organizationId);
         token.setTokenHash(tokenHasher.hash(raw));
-        token.setExpiresAt(Instant.now().plusSeconds(IdentityConstants.REFRESH_TOKEN_TTL_SECONDS));
+        token.setExpiresAt(clock.instant().plusSeconds(IdentityConstants.REFRESH_TOKEN_TTL_SECONDS));
         token.setRevoked(false);
         refreshTokenRepository.save(token);
         return raw;
@@ -45,7 +47,7 @@ public class RefreshTokenService {
     public RefreshSession consume(String rawToken) {
         RefreshToken token = refreshTokenRepository.findByTokenHash(tokenHasher.hash(rawToken))
                 .orElseThrow(InvalidRefreshTokenException::new);
-        if (!token.isActive(Instant.now())) {
+        if (!token.isActive(clock.instant())) {
             throw new InvalidRefreshTokenException();
         }
         token.setRevoked(true);

@@ -1,35 +1,27 @@
 package com.pte.identity.internal.service;
 
-import com.pte.identity.UserCredentialsEmailRequestedEvent;
 import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
-import com.pte.identity.internal.constant.IdentityConstants;
-import com.pte.identity.internal.dto.request.BulkCreateUserRow;
-import com.pte.identity.internal.dto.request.BulkCreateUsersRequest;
-import com.pte.identity.internal.dto.request.ChangePasswordRequest;
-import com.pte.identity.internal.dto.request.CreateUserRequest;
-import com.pte.identity.internal.dto.request.ResetPasswordRequest;
-import com.pte.identity.internal.dto.request.UpdateStudentProfileRequest;
+import com.pte.identity.internal.dto.request.user.BulkCreateUsersRequest;
+import com.pte.identity.internal.dto.request.auth.ChangePasswordRequest;
+import com.pte.identity.internal.dto.request.user.CreateUserRequest;
+import com.pte.identity.internal.dto.request.auth.ResetPasswordRequest;
+import com.pte.identity.internal.dto.request.profile.UpdateStudentProfileRequest;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
-import com.pte.identity.internal.dto.response.BulkCreateUsersResponse.CreatedUser;
-import com.pte.identity.internal.dto.response.BulkCreateUsersResponse.RowError;
 import com.pte.identity.internal.dto.response.GeneratedCredentialsResponse;
 import com.pte.identity.internal.dto.response.UserDirectoryEntryResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
-import com.pte.identity.internal.exception.DuplicateEmailInBatchException;
 import com.pte.identity.internal.exception.EmailAlreadyUsedException;
-import com.pte.identity.internal.exception.ForbiddenPasswordResetException;
 import com.pte.identity.internal.exception.ForbiddenUserManagementException;
-import com.pte.identity.internal.exception.InvalidLoginException;
-import com.pte.identity.internal.exception.StudentCredentialEmailNotAllowedException;
-import com.pte.identity.internal.exception.UserEmailRequiredException;
 import com.pte.identity.internal.exception.UserNotFoundException;
 import com.pte.identity.internal.mapper.UserMapper;
 import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
-import com.pte.identity.internal.util.PasswordGenerator;
-import com.pte.identity.internal.util.UsernameGenerator;
+import com.pte.identity.internal.service.user.ManagedUserResolver;
+import com.pte.identity.internal.service.user.ManagedUserResolver.Target;
+import com.pte.identity.internal.service.user.UserAccountProvisioner;
+import com.pte.identity.internal.service.user.UserCredentialRotation;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
@@ -38,12 +30,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -57,13 +45,12 @@ public class UserService {
     private final UserRepository userRepository;
     private final OrganizationMemberRepository memberRepository;
     private final OrganizationMemberDirectory memberDirectory;
-    private final PasswordEncoder passwordEncoder;
     private final UserProvisioningHelper provisioningHelper;
-    private final UserBulkCreateWriter bulkCreateWriter;
     private final TenancyService tenancyService;
-    private final ApplicationEventPublisher eventPublisher;
-    private final AuditLogService auditLogService;
     private final RefreshTokenService refreshTokenService;
+    private final ManagedUserResolver targetResolver;
+    private final UserAccountProvisioner accountProvisioner;
+    private final UserCredentialRotation credentialRotation;
 
     public UserService(UserRepository userRepository, OrganizationMemberRepository memberRepository,
                        OrganizationMemberDirectory memberDirectory, PasswordEncoder passwordEncoder,
@@ -73,55 +60,20 @@ public class UserService {
         this.userRepository = userRepository;
         this.memberRepository = memberRepository;
         this.memberDirectory = memberDirectory;
-        this.passwordEncoder = passwordEncoder;
         this.provisioningHelper = provisioningHelper;
-        this.bulkCreateWriter = bulkCreateWriter;
         this.tenancyService = tenancyService;
-        this.eventPublisher = eventPublisher;
-        this.auditLogService = auditLogService;
         this.refreshTokenService = refreshTokenService;
+        this.targetResolver = new ManagedUserResolver(userRepository, memberRepository, memberDirectory,
+                provisioningHelper);
+        this.accountProvisioner = new UserAccountProvisioner(userRepository, memberRepository, passwordEncoder,
+                provisioningHelper, bulkCreateWriter, tenancyService);
+        this.credentialRotation = new UserCredentialRotation(userRepository, memberDirectory, passwordEncoder,
+                provisioningHelper, targetResolver, eventPublisher, auditLogService);
     }
 
     @Transactional
     public UserResponse create(CreateUserRequest request, CurrentUser caller) {
-        UUID tenantId = provisioningHelper.resolveTargetTenant(caller, request.tenantId());
-        Set<Role> roles = provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles());
-        provisioningHelper.validateTenantScope(caller, tenantId, roles);
-        // username = email for every role created through this single-user endpoint; per-organization student
-        // username generation only applies to the bulk roster-import path.
-        Optional<User> existing = userRepository.findByUsername(request.email());
-        // A platform account never joins an organization, and an e-mail held by another live account under a
-        // different username would make e-mail based identity resolution ambiguous.
-        if (existing.isPresent() && (existing.get().isDeleted() || existing.get().hasPlatformRole()
-                || memberRepository.findByUser_IdAndOrganizationIdAndDeletedFalse(
-                        existing.get().getId(), tenantId).isPresent())
-                || existing.isEmpty() && userRepository.existsByEmailIgnoreCaseAndDeletedFalse(request.email())) {
-            throw new EmailAlreadyUsedException();
-        }
-        if (roles.contains(Role.STUDENT)) {
-            tenancyService.assertCanAddStudents(tenantId, 1L);
-        }
-        User account = existing.orElseGet(() -> newAccount(request));
-        OrganizationMember member = new OrganizationMember();
-        member.setUser(account);
-        member.setOrganizationId(tenantId);
-        member.setRoles(new HashSet<>(roles));
-        // saveAndFlush: callers of IdentityService reads right after create() need the generated createdAt, e.g.
-        // enrollment's roster sort key.
-        return UserMapper.toResponse(memberRepository.saveAndFlush(member));
-    }
-
-    private User newAccount(CreateUserRequest request) {
-        User user = new User();
-        user.setUsername(request.email());
-        user.setEmail(request.email());
-        user.setFullName(request.fullName());
-        user.setStudentCode(request.studentCode());
-        user.setClassName(request.className());
-        user.setPhone(request.phone());
-        user.setDateOfBirth(request.dateOfBirth());
-        user.setCredentialHash(passwordEncoder.encode(request.password()));
-        return userRepository.saveAndFlush(user);
+        return accountProvisioner.create(request, caller);
     }
 
     /**
@@ -131,95 +83,12 @@ public class UserService {
      */
     @Transactional
     public BulkCreateUsersResponse createBulk(BulkCreateUsersRequest request, CurrentUser caller) {
-        provisioningHelper.authorizeBulkStudentCreation(caller);
-        UUID tenantId = provisioningHelper.resolveTargetTenant(caller, request.tenantId());
-        Set<String> seenInBatch = new HashSet<>();
-        for (BulkCreateUserRow row : request.rows()) {
-            String email = normalizeOptional(row.email());
-            if (email != null && !seenInBatch.add(email)) {
-                throw new DuplicateEmailInBatchException();
-            }
-        }
-        List<BulkCreateUserRow> rows = request.rows();
-        List<String> emails = rows.stream()
-                .map(BulkCreateUserRow::email)
-                .map(UserService::normalizeOptional)
-                .filter(email -> email != null)
-                .map(email -> email.toLowerCase(Locale.ROOT))
-                .toList();
-        Set<String> existingEmails = emails.isEmpty()
-                ? Set.of()
-                : new HashSet<>(memberRepository.findActiveByOrganizationAndEmails(tenantId, emails)
-                        .stream().map(member -> member.getUser().getEmail()).map(UserService::normalizeOptional)
-                        .filter(email -> email != null).map(email -> email.toLowerCase(Locale.ROOT)).toList());
-        long adding = rows.stream()
-                .filter(row -> {
-                    String email = normalizeOptional(row.email());
-                    return email == null || !existingEmails.contains(email.toLowerCase(Locale.ROOT));
-                })
-                .count();
-        if (adding > 0L) {
-            tenancyService.assertCanAddStudents(tenantId, adding);
-        }
-        List<CreatedUser> created = new ArrayList<>();
-        List<RowError> skipped = new ArrayList<>();
-        String tenantCode = null;
-        for (int i = 0; i < rows.size(); i++) {
-            BulkCreateUserRow row = rows.get(i);
-            int rowIndex = i;
-            String email = normalizeOptional(row.email());
-            String fullName = normalizeOptional(row.fullName());
-            UserBulkCreateWriter.Row writerRow = new UserBulkCreateWriter.Row(
-                    email, fullName, row.studentCode(), row.className(), row.phone(), row.dateOfBirth());
-            if (email != null && existingEmails.contains(email.toLowerCase(Locale.ROOT))) {
-                skipped.add(new RowError(rowIndex, email, IdentityConstants.EMAIL_ALREADY_USED));
-                continue;
-            }
-            Optional<UserBulkCreateWriter.Result> result;
-            if (email == null) {
-                if (tenantCode == null) {
-                    tenantCode = tenancyService.getTenantCode(tenantId);
-                }
-                result = createGeneratedStudentWithRetry(writerRow, tenantId, tenantCode);
-            } else {
-                result = bulkCreateWriter.createOne(writerRow, tenantId);
-            }
-            result
-                    .ifPresentOrElse(
-                            createdResult -> created.add(new CreatedUser(createdResult.user().getPublicId(),
-                                    createdResult.user().getUsername(), createdResult.user().getEmail(),
-                                    createdResult.user().getFullName(),
-                                    createdResult.generatedPassword())),
-                            () -> skipped.add(new RowError(rowIndex, email,
-                                    email == null ? IdentityConstants.ROSTER_IMPORT_FAILED
-                                            : IdentityConstants.EMAIL_ALREADY_USED)));
-        }
-        return new BulkCreateUsersResponse(created, skipped);
-    }
-
-    private Optional<UserBulkCreateWriter.Result> createGeneratedStudentWithRetry(
-            UserBulkCreateWriter.Row row, UUID tenantId, String tenantCode) {
-        for (int attempt = 0; attempt < IdentityConstants.ROSTER_USERNAME_COLLISION_RETRIES; attempt++) {
-            Optional<UserBulkCreateWriter.Result> result = bulkCreateWriter.createGeneratedStudent(
-                    UsernameGenerator.generate(tenantCode), row, tenantId);
-            if (result.isPresent()) {
-                return result;
-            }
-        }
-        return Optional.empty();
-    }
-
-    private static String normalizeOptional(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalized = value.trim();
-        return normalized.isEmpty() ? null : normalized;
+        return accountProvisioner.createBulk(request, caller);
     }
 
     @Transactional(readOnly = true)
     public UserResponse get(UUID publicId, CurrentUser caller) {
-        return findScoped(publicId, caller, false).toResponse();
+        return targetResolver.findScoped(publicId, caller, false).toResponse();
     }
 
     /** Updates only the profile fields allowed by the tenant student workspace. */
@@ -234,7 +103,7 @@ public class UserService {
             throw new ForbiddenUserManagementException();
         }
         User user = member.getUser();
-        String email = normalizeOptional(request.email());
+        String email = UserAccountProvisioner.normalizeOptional(request.email());
         if (email != null && (memberRepository.existsCanonicalEmail(caller.tenantId(),
                 email.toLowerCase(Locale.ROOT), publicId)
                 || userRepository.existsByEmailIgnoreCaseAndDeletedFalseAndIdNot(email, user.getId()))) {
@@ -242,7 +111,7 @@ public class UserService {
         }
         user.setFullName(request.fullName().trim());
         user.setEmail(email);
-        user.setPhone(normalizeOptional(request.phone()));
+        user.setPhone(UserAccountProvisioner.normalizeOptional(request.phone()));
         user.setDateOfBirth(request.dateOfBirth());
         return UserMapper.toResponse(member);
     }
@@ -289,7 +158,7 @@ public class UserService {
 
     @Transactional
     public UserResponse suspend(UUID publicId, CurrentUser caller) {
-        Target target = findScoped(publicId, caller, true);
+        Target target = targetResolver.findScoped(publicId, caller, true);
         target.suspend();
         if (target.member() != null) {
             refreshTokenService.revokeForMembership(target.user().getId(), target.organizationId());
@@ -302,22 +171,14 @@ public class UserService {
     /** Reactivation is idempotent. */
     @Transactional
     public UserResponse reactivate(UUID publicId, CurrentUser caller) {
-        Target target = findScoped(publicId, caller, true);
+        Target target = targetResolver.findScoped(publicId, caller, true);
         target.reactivate();
         return target.toResponse();
     }
 
     @Transactional
     public UserResponse resetPassword(UUID publicId, ResetPasswordRequest request, CurrentUser caller) {
-        Target target = findScoped(publicId, caller, false);
-        if (!provisioningHelper.canManageTarget(caller, target.roles()) || !mayChangeCredential(caller, target)) {
-            throw new ForbiddenPasswordResetException();
-        }
-        target.user().setCredentialHash(passwordEncoder.encode(request.newPassword()));
-        userRepository.save(target.user());
-        auditLogService.record(caller, IdentityConstants.USER_AGGREGATE, publicId.toString(),
-                IdentityConstants.USER_PASSWORD_RESET, IdentityConstants.USER_PASSWORD_RESET_SUMMARY);
-        return target.toResponse();
+        return credentialRotation.resetPassword(publicId, request, caller);
     }
 
     /**
@@ -327,23 +188,7 @@ public class UserService {
      */
     @Transactional
     public GeneratedCredentialsResponse sendGeneratedCredentials(UUID publicId, CurrentUser caller) {
-        Target target = findScoped(publicId, caller, false);
-        if (!provisioningHelper.canManageTarget(caller, target.roles()) || !mayChangeCredential(caller, target)) {
-            throw new ForbiddenPasswordResetException();
-        }
-        if (target.roles().contains(Role.STUDENT)) {
-            throw new StudentCredentialEmailNotAllowedException();
-        }
-        User user = target.user();
-        if (user.getEmail() == null || user.getEmail().isBlank()) {
-            throw new UserEmailRequiredException();
-        }
-        String temporaryPassword = rotateTemporaryPassword(user);
-        eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(
-                UUID.randomUUID(), user.getPublicId(), target.organizationId(), user.getUsername(), user.getEmail(),
-                user.getFullName(), temporaryPassword));
-        return new GeneratedCredentialsResponse(user.getPublicId(), user.getUsername(), user.getEmail(),
-                user.getFullName(), temporaryPassword, true);
+        return credentialRotation.sendGeneratedCredentials(publicId, caller);
     }
 
     /**
@@ -352,48 +197,13 @@ public class UserService {
      */
     @Transactional
     public GeneratedCredentialsResponse generateStudentCredentials(UUID publicId, CurrentUser caller) {
-        Target target = findScoped(publicId, caller, false);
-        if (!provisioningHelper.canManageTarget(caller, target.roles())
-                || !target.roles().contains(Role.STUDENT) || !mayChangeCredential(caller, target)) {
-            throw new ForbiddenPasswordResetException();
-        }
-        User user = target.user();
-        String temporaryPassword = rotateTemporaryPassword(user);
-        return new GeneratedCredentialsResponse(user.getPublicId(), user.getUsername(), user.getEmail(),
-                user.getFullName(), temporaryPassword, false);
-    }
-
-    /**
-     * The credential is global to the account. A Host may change it only for an account the organization alone
-     * owns; platform operators are judged by the union of the account's roles instead.
-     */
-    private boolean mayChangeCredential(CurrentUser caller, Target target) {
-        return caller.isPlatformUser() || target.member() != null && memberDirectory.isExclusivelyOwned(target.member());
-    }
-
-    private String rotateTemporaryPassword(User user) {
-        String temporaryPassword = PasswordGenerator.generateReadable();
-        user.setCredentialHash(passwordEncoder.encode(temporaryPassword));
-        user.setMustChangePassword(true);
-        userRepository.save(user);
-        return temporaryPassword;
+        return credentialRotation.generateStudentCredentials(publicId, caller);
     }
 
     /** Changes the authenticated user's password and clears the first-login flag. */
     @Transactional
     public void changeOwnPassword(ChangePasswordRequest request, CurrentUser caller) {
-        if (caller == null || caller.userId() == null) {
-            throw new UserNotFoundException();
-        }
-        User user = userRepository.findByPublicId(caller.userId())
-                .orElseThrow(UserNotFoundException::new);
-        if (user.getCredentialHash() == null
-                || !passwordEncoder.matches(request.currentPassword(), user.getCredentialHash())) {
-            throw new InvalidLoginException();
-        }
-        user.setCredentialHash(passwordEncoder.encode(request.newPassword()));
-        user.setMustChangePassword(false);
-        userRepository.save(user);
+        credentialRotation.changeOwnPassword(request, caller);
     }
 
     @Transactional(readOnly = true)
@@ -403,66 +213,5 @@ public class UserService {
                 .filter(member -> provisioningHelper.canManageTarget(caller, member.getRoles()))
                 .map(UserMapper::toResponse)
                 .toList();
-    }
-
-    /**
-     * Resolves the target of a management call. A tenant caller reaches only members of its own organization; a
-     * platform caller reaches any account and is judged by every role the account holds.
-     */
-    private Target findScoped(UUID publicId, CurrentUser caller, boolean lock) {
-        Target target;
-        if (caller.isPlatformUser()) {
-            User user = (lock ? userRepository.findWithLockByPublicId(publicId)
-                    : userRepository.findByPublicIdAndDeletedFalse(publicId))
-                    .orElseThrow(UserNotFoundException::new);
-            target = Target.ofAccount(user, memberRepository.findByUser_IdAndDeletedFalse(user.getId()));
-        } else {
-            OrganizationMember member = lock ? memberDirectory.requireMemberForUpdate(caller.tenantId(), publicId)
-                    : memberDirectory.requireMember(caller.tenantId(), publicId);
-            target = Target.ofMember(member);
-        }
-        provisioningHelper.authorizeTarget(caller, target.roles());
-        return target;
-    }
-
-    /** The account a call acts on, with the roles it is judged by and the membership (if one organization). */
-    private record Target(User user, OrganizationMember member, Set<Role> roles) {
-
-        static Target ofMember(OrganizationMember member) {
-            return new Target(member.getUser(), member, Set.copyOf(member.getRoles()));
-        }
-
-        static Target ofAccount(User user, List<OrganizationMember> members) {
-            Set<Role> roles = new HashSet<>(user.getRoles());
-            members.forEach(member -> roles.addAll(member.getRoles()));
-            return new Target(user, members.size() == 1 ? members.get(0) : null, Set.copyOf(roles));
-        }
-
-        UUID organizationId() {
-            return member == null ? null : member.getOrganizationId();
-        }
-
-        UserResponse toResponse() {
-            return UserMapper.toResponse(user, member, null);
-        }
-
-        /** Suspension is per organization for a Host, and account-wide for a platform operator. */
-        void suspend() {
-            if (member != null) {
-                member.suspend();
-            } else {
-                user.suspend();
-            }
-        }
-
-        void reactivate() {
-            if (member != null) {
-                if (member.getStatus() == com.pte.identity.domain.UserStatus.SUSPENDED) {
-                    member.reactivate();
-                }
-            } else if (user.isSuspended()) {
-                user.reactivate();
-            }
-        }
     }
 }

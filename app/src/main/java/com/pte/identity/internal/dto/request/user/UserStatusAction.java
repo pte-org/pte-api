@@ -1,4 +1,4 @@
-package com.pte.identity.internal.dto.request;
+package com.pte.identity.internal.dto.request.user;
 
 /** Account lifecycle transitions of a user. */
 public enum UserStatusAction {

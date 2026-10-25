@@ -1,9 +1,9 @@
 package com.pte.identity.internal.controller;
 
-import com.pte.identity.internal.dto.request.BulkCreateUsersRequest;
-import com.pte.identity.internal.dto.request.CreateUserRequest;
-import com.pte.identity.internal.dto.request.ResetPasswordRequest;
-import com.pte.identity.internal.dto.request.UpdateStudentProfileRequest;
+import com.pte.identity.internal.dto.request.user.BulkCreateUsersRequest;
+import com.pte.identity.internal.dto.request.user.CreateUserRequest;
+import com.pte.identity.internal.dto.request.auth.ResetPasswordRequest;
+import com.pte.identity.internal.dto.request.profile.UpdateStudentProfileRequest;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
 import com.pte.identity.internal.dto.response.GeneratedCredentialsResponse;
 import com.pte.identity.internal.dto.response.UserDirectoryEntryResponse;
@@ -17,7 +17,7 @@ import com.pte.shared.web.PagedResult;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
-import com.pte.identity.internal.dto.request.UserStatusRequest;
+import com.pte.identity.internal.dto.request.user.UserStatusRequest;
 import com.pte.identity.internal.exception.UnsupportedUserStatusActionException;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;

@@ -4,7 +4,7 @@ import com.pte.identity.domain.Role;
 import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.constant.IdentityConstants;
-import com.pte.identity.internal.dto.request.UpdateOwnProfileRequest;
+import com.pte.identity.internal.dto.request.profile.UpdateOwnProfileRequest;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.ForbiddenUserManagementException;
 import com.pte.identity.internal.mapper.UserMapper;

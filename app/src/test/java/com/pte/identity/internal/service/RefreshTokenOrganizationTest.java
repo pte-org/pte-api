@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Phase 2: a refresh token is bound to the organization chosen at login and never crosses organizations. */
 @DataJpaTest
-@Import({RefreshTokenService.class, TokenHasher.class})
+@Import({RefreshTokenService.class, TokenHasher.class, com.pte.shared.config.ClockConfig.class})
 class RefreshTokenOrganizationTest {
 
     @Autowired

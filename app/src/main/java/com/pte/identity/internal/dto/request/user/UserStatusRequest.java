@@ -1,4 +1,4 @@
-package com.pte.identity.internal.dto.request;
+package com.pte.identity.internal.dto.request.user;
 
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
