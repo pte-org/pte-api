@@ -17,6 +17,8 @@ public interface PracticeMockTestRepository extends JpaRepository<PracticeMockTe
 
     Optional<PracticeMockTest> findByPublicIdAndDeletedFalse(UUID publicId);
 
+    long countByDeletedFalse();
+
     @Query("select coalesce(max(test.sequenceNo), 0) from PracticeMockTest test")
     int findMaxSequenceNo();
 }

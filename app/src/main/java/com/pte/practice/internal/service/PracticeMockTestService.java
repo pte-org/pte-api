@@ -116,6 +116,43 @@ public class PracticeMockTestService {
         return created;
     }
 
+    /**
+     * Keeps the number of tests in step with the bank: there should be as many tests as the practice pool can fill
+     * without repeating a question (capped), and any missing ones are built now. Nothing is ever removed, so a test a
+     * student has taken stays. No active template, or a bank too small for one test, simply means no new tests.
+     */
+    @Transactional
+    public void ensureCapacity() {
+        ScoreTemplateResponse template = scoreTemplateService.findActive().orElse(null);
+        if (template == null) {
+            return;
+        }
+        List<ScoreTemplateItemResponse> plan = orderedTemplateItems(template);
+        int target = capacity(plan);
+        if (plan.isEmpty() || mockTestRepository.countByDeletedFalse() >= target) {
+            return;
+        }
+        lockSequence();
+        // Re-read under the lock: another request may have built the missing tests meanwhile.
+        int missing = target - (int) mockTestRepository.countByDeletedFalse();
+        if (missing > 0) {
+            generate(missing);
+        }
+    }
+
+    /** How many tests the practice pool can fill with no question used twice, at most the auto-build cap. */
+    int capacity(List<ScoreTemplateItemResponse> plan) {
+        if (plan.isEmpty()) {
+            return 0;
+        }
+        Map<String, Long> available = questionService.countPublishedByTaskTypeKeys(
+                plan.stream().map(PracticeMockTestService::typeCode).toList());
+        long fit = plan.stream()
+                .mapToLong(item -> available.getOrDefault(typeCode(item), 0L) / item.minCount())
+                .min().orElse(0);
+        return (int) Math.min(fit, PracticeConstants.PRACTICE_MOCK_TEST_AUTO_LIMIT);
+    }
+
     private PracticeMockTestResponse createTest(int sequenceNo, ScoreTemplateResponse template,
             List<ScoreTemplateItemResponse> plan, Map<String, List<UUID>> candidates, Set<UUID> alreadyPinned,
             Map<String, PracticeTimingService.Timing> timings) {

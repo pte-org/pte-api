@@ -145,6 +145,8 @@ public final class PracticeConstants {
             "There is no active Score Template to build mock tests from";
     public static final String PRACTICE_MOCK_TEST_BANK_INSUFFICIENT = "PRACTICE_MOCK_TEST_BANK_INSUFFICIENT";
     public static final String PRACTICE_MOCK_TEST_TITLE_PREFIX = "PTE Academic Full Mock Test ";
+    /** Most tests built automatically from the bank; more questions beyond this only reduce repeats. */
+    public static final int PRACTICE_MOCK_TEST_AUTO_LIMIT = 20;
     public static final long PRACTICE_MOCK_TEST_ADVISORY_LOCK = 261025_01L;
     public static final String PRACTICE_SESSION_REQUEST_INVALID = "PRACTICE_SESSION_REQUEST_INVALID";
     public static final String PRACTICE_SESSION_REQUEST_INVALID_MESSAGE =

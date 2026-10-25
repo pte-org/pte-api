@@ -28,6 +28,8 @@ public class PracticeMockTestController {
 
     @GetMapping
     public ApiResponse<List<PracticeMockTestResponse>> list() {
+        // Tests are built from the practice bank on demand; opening the list is what keeps them in step with it.
+        mockTestService.ensureCapacity();
         return ApiResponse.success(mockTestService.listForStudent(CurrentUserContext.required().userId()));
     }
 }

@@ -4,9 +4,7 @@ param(
     [string]$AdminUsername = $(if ([string]::IsNullOrWhiteSpace($env:PTE_ADMIN_USERNAME)) { "admin@test.local" } else { $env:PTE_ADMIN_USERNAME }),
     [string]$AdminPassword = $env:PTE_ADMIN_PASSWORD,
     [string]$SeedKey = "PTE_PRACTICE",
-    [ValidateRange(1, 12)][int]$PerTask = 3,
-    # Full mock tests that should exist afterwards; only the missing ones are generated (needs PLATFORM_ADMIN).
-    [ValidateRange(0, 20)][int]$MockTests = 0
+    [ValidateRange(1, 12)][int]$PerTask = 3
 )
 
 # Seeds published practice questions for all 22 scored PTE task types so pte-practice has content to test.
@@ -18,6 +16,7 @@ param(
 # Audio/image tasks reuse the sample files in scripts/fixtures, so the recording does not match the prompt text.
 # This is local test content only; it is not official PTE material.
 # Re-runnable: questions are matched by title and only missing ones are created and published.
+# Full mock tests need no seeding: the practice app builds as many as the bank can fill when the list is opened.
 #
 # Example:
 #   $env:PTE_ADMIN_PASSWORD = '<local-admin-password>'
@@ -222,16 +221,3 @@ foreach ($taskKey in $tasks.Keys) {
 
 Write-Host ""
 Write-Host "== Practice question bank seed complete: $($tasks.Count) task types x $PerTask =="
-
-if ($MockTests -gt 0) {
-    $existing = @(Invoke-SeedApi -Method GET -Path "/api/v1/admin/practice/mock-tests" -Token $script:Token)
-    $missing = $MockTests - $existing.Count
-    Write-Host ""
-    if ($missing -le 0) {
-        Write-Host "== $($existing.Count) mock test(s) already exist; nothing to generate =="
-    } else {
-        Write-Host "== Generating $missing mock test(s) =="
-        $created = @(Invoke-SeedApi -Method POST -Path "/api/v1/admin/practice/mock-tests:generate" -Token $script:Token -Body @{ count = $missing })
-        $created | ForEach-Object { Write-Host "  created $($_.title): $($_.itemCount) questions, about $($_.estimatedMinutes) min" }
-    }
-}

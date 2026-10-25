@@ -182,4 +182,44 @@ class PracticeMockTestServiceTest {
 
         assertThat(service.generate(1).get(0).estimatedMinutes()).isEqualTo(5);
     }
+
+    @Test
+    void capacityIsHowManyTestsTheBankFillsWithoutRepeatingAQuestion() {
+        List<ScoreTemplateItemResponse> plan = List.of(templateItem("READ_ALOUD", "SPEAKING", 1, 6),
+                templateItem("REPEAT_SENTENCE", "SPEAKING", 2, 10));
+        when(questionService.countPublishedByTaskTypeKeys(any())).thenReturn(Map.of(
+                "READ_ALOUD", 24L, "REPEAT_SENTENCE", 25L));
+        assertThat(service.capacity(plan)).isEqualTo(2); // 24/6 = 4, 25/10 = 2
+
+        when(questionService.countPublishedByTaskTypeKeys(any())).thenReturn(Map.of("READ_ALOUD", 24L));
+        assertThat(service.capacity(plan)).isZero();
+    }
+
+    @Test
+    void ensureCapacityBuildsOnlyTheMissingTests() {
+        activeTemplate(templateItem("READ_ALOUD", "SPEAKING", 1, 2));
+        when(questionService.countPublishedByTaskTypeKeys(any())).thenReturn(Map.of("READ_ALOUD", 6L));
+        when(mockTestRepository.countByDeletedFalse()).thenReturn(1L);
+        when(questionService.findPublishedCandidateIds("READ_ALOUD")).thenReturn(ids(6));
+        when(mockTestRepository.findMaxSequenceNo()).thenReturn(1);
+        when(mockTestItemRepository.findAll()).thenReturn(List.of());
+        when(timingService.activeTimings()).thenReturn(Map.of());
+
+        service.ensureCapacity();
+
+        // capacity 3, one exists -> two new tests of two questions each
+        assertThat(savedItems()).hasSize(4);
+    }
+
+    @Test
+    void ensureCapacityDoesNothingWhenTheBankIsTooSmallOrThereIsNoTemplate() {
+        when(scoreTemplateService.findActive()).thenReturn(Optional.empty());
+        service.ensureCapacity();
+
+        activeTemplate(templateItem("READ_ALOUD", "SPEAKING", 1, 2));
+        when(questionService.countPublishedByTaskTypeKeys(any())).thenReturn(Map.of("READ_ALOUD", 1L));
+        service.ensureCapacity();
+
+        verify(mockTestRepository, never()).saveAndFlush(any());
+    }
 }
