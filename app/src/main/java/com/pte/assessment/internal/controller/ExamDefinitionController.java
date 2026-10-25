@@ -5,7 +5,7 @@ import com.pte.assessment.dto.request.RejectExamDefinitionRequest;
 import com.pte.assessment.dto.request.ReplaceExamDefinitionItemsRequest;
 import com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
-import com.pte.assessment.internal.service.ExamDefinitionAdminService;
+import com.pte.assessment.internal.service.definition.ExamDefinitionAdminService;
 import com.pte.assessment.internal.constant.ExamDefinitionConstants;
 import com.pte.assessment.ExamDefinitionService;
 import com.pte.itembank.TaskTypeRolloutProperties;

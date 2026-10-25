@@ -14,7 +14,7 @@ import java.util.Map;
  * a second task-type map, so adding a task that uses an existing scoring
  * strategy cannot silently drift from the canonical itembank registry.
  */
-final class TaskTypeScoringMethods {
+public final class TaskTypeScoringMethods {
 
     private static final Map<String, ScoringMethod> BY_PROFILE_KEY = Map.of(
             "AI_SPEECH", ScoringMethod.AI_SPEECH,
@@ -25,7 +25,7 @@ final class TaskTypeScoringMethods {
     private TaskTypeScoringMethods() {
     }
 
-    static ScoringMethod resolve(String taskType) {
+    public static ScoringMethod resolve(String taskType) {
         final TaskRuntimeProfileDescriptor profile;
         try {
             String canonicalTaskType = TaskTypeCodeCompatibility.canonicalize(taskType);
@@ -36,7 +36,7 @@ final class TaskTypeScoringMethods {
         return resolve(profile);
     }
 
-    static ScoringMethod resolve(TaskRuntimeProfileDescriptor profile) {
+    public static ScoringMethod resolve(TaskRuntimeProfileDescriptor profile) {
         if (profile == null || profile.profileKey() == null || profile.scoringProfileKey() == null
                 || profile.scoringProfileVersion() < 1
                 || !("ACTIVE".equals(profile.status()) || "RETIRED".equals(profile.status()))) {

@@ -1,5 +1,6 @@
 package com.pte.assessment.internal.service;
 
+import com.pte.assessment.internal.service.definition.ExamDefinitionActivationValidator;
 import com.pte.assessment.domain.ExamDefinition;
 import com.pte.assessment.domain.ExamDefinitionItem;
 import com.pte.assessment.domain.enums.ScoringMethod;

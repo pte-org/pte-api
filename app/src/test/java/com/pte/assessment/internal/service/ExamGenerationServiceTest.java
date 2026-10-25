@@ -418,4 +418,29 @@ class ExamGenerationServiceTest {
         verify(itembankService, org.mockito.Mockito.never())
                 .publishedQuestionIds(PteTaskType.PERSONAL_INTRODUCTION);
     }
+
+    @Test
+    void templateFeasibilityReportsEverySlotAndWhetherThePoolCoversIt() {
+        ExamDefinitionResponse template = v5Template();
+        when(examDefinitionService.getByPublicId(template.publicId())).thenReturn(template);
+        when(itembankService.countPublishedByTaskTypes(anySet())).thenAnswer(inv -> {
+            Set<PteTaskType> requested = inv.getArgument(0);
+            Map<PteTaskType, Long> counts = new EnumMap<>(PteTaskType.class);
+            requested.forEach(type -> counts.put(type, type == PteTaskType.WRITE_ESSAY ? 0L : 100L));
+            return counts;
+        });
+
+        var feasibility = service.getTemplateFeasibility(template.publicId(), Set.of("WRITING"));
+
+        assertThat(feasibility.examDefinitionPublicId()).isEqualTo(template.publicId());
+        assertThat(feasibility.slots()).extracting(slot -> slot.taskType())
+                .containsExactlyInAnyOrder("SUMMARIZE_WRITTEN_TEXT", "WRITE_ESSAY");
+        assertThat(feasibility.ready()).isFalse();
+        assertThat(feasibility.slots()).filteredOn(slot -> slot.taskType().equals("WRITE_ESSAY"))
+                .singleElement().satisfies(slot -> {
+                    assertThat(slot.ready()).isFalse();
+                    assertThat(slot.available()).isZero();
+                    assertThat(slot.reason()).isEqualTo("INSUFFICIENT_POOL");
+                });
+    }
 }

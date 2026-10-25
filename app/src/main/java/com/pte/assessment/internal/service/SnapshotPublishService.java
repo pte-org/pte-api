@@ -2,7 +2,6 @@ package com.pte.assessment.internal.service;
 
 import com.pte.assessment.domain.ExamBlueprint;
 import com.pte.assessment.domain.ExamVersion;
-import com.pte.assessment.domain.ExamVersionItem;
 import com.pte.assessment.domain.enums.BlueprintStatus;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.dto.response.SnapshotResponse;
@@ -14,14 +13,9 @@ import com.pte.assessment.internal.mapper.SnapshotMapper;
 import com.pte.assessment.internal.repository.ExamBlueprintRepository;
 import com.pte.assessment.internal.repository.ExamVersionRepository;
 import com.pte.itembank.ItembankService;
-import com.pte.itembank.TaskRuntimeContractConstants;
-import com.pte.itembank.TaskRuntimeProfileDescriptor;
-import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.TaskRuntimeProfileService;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.itembank.TaskTypeObservability;
-import com.pte.itembank.domain.enums.PteSection;
-import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.assessment.ExamDefinitionService;
 import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
@@ -31,10 +25,10 @@ import com.pte.shared.security.CurrentUser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -55,11 +49,11 @@ public class SnapshotPublishService {
     private final ExamVersionRepository snapshotRepository;
     private final ItembankService itembankService;
     private final AssessmentAccessPolicy accessPolicy;
-    private final JsonMapper jsonMapper;
     private final ExamDefinitionService examDefinitionService;
-    private final TaskRuntimeProfileService runtimeProfileService;
     private final AuditLogService auditLogService;
     private final TaskTypeObservability observability;
+    private final SnapshotItemFactory itemFactory;
+    private final SnapshotRuntimeProfileResolver profileResolver;
 
     @Autowired
     public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, ExamVersionRepository snapshotRepository,
@@ -72,11 +66,11 @@ public class SnapshotPublishService {
         this.snapshotRepository = snapshotRepository;
         this.itembankService = itembankService;
         this.accessPolicy = accessPolicy;
-        this.jsonMapper = jsonMapper;
         this.examDefinitionService = examDefinitionService;
-        this.runtimeProfileService = runtimeProfileService;
         this.auditLogService = auditLogService;
         this.observability = observability;
+        this.profileResolver = new SnapshotRuntimeProfileResolver(runtimeProfileService);
+        this.itemFactory = new SnapshotItemFactory(jsonMapper, profileResolver);
     }
 
     /** Compatibility constructor for focused tests predating runtime provenance. */
@@ -140,10 +134,10 @@ public class SnapshotPublishService {
                 .map(item -> itembankService.freeze(item.getQuestionPublicId()))
                 .toList();
         try {
-            validateRuntimeProfiles(frozenQuestions, templateItemsByTaskType);
+            profileResolver.validateRuntimeProfiles(frozenQuestions, templateItemsByTaskType);
             for (int index = 0; index < blueprint.getItems().size(); index++) {
                 var blueprintItem = blueprint.getItems().get(index);
-                snapshot.addItem(toSnapshotItem(frozenQuestions.get(index), blueprintItem.getSection(),
+                snapshot.addItem(itemFactory.toSnapshotItem(frozenQuestions.get(index), blueprintItem.getSection(),
                         blueprintItem.getOrderIndex(), templateItemsByTaskType));
             }
         } catch (SnapshotRuntimeContractException ex) {
@@ -200,112 +194,4 @@ public class SnapshotPublishService {
         return SnapshotMapper.toResponse(snapshot);
     }
 
-    private ExamVersionItem toSnapshotItem(QuestionFreezeView question, PteSection section, int orderIndex,
-            java.util.Map<String, ExamDefinitionItemResponse> templateItemsByTaskType) {
-        ExamVersionItem item = new ExamVersionItem();
-        item.setSourceQuestionPublicId(question.sourceQuestionPublicId());
-        item.setPteTaskType(question.pteTaskType());
-        String taskTypeKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
-                question.taskTypeKey() == null && question.pteTaskType() != null
-                        ? question.pteTaskType().name() : question.taskTypeKey());
-        item.setTaskTypeKey(taskTypeKey);
-        item.setTaskTypeDisplayName(question.taskTypeDisplayName() == null
-                ? taskTypeKey : question.taskTypeDisplayName());
-        TaskRuntimeProfileDescriptor runtime = resolveRuntimeProfile(taskTypeKey, question.pteTaskType(),
-                templateItemsByTaskType);
-        item.pinRuntimeProfile(runtime, TaskRuntimeContractConstants.MAPPING_VERSION_CANONICAL,
-                TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_CANONICAL);
-        item.setSection(section);
-        item.setOrderIndex(orderIndex);
-        item.setTitle(question.title());
-        item.setPromptText(question.promptText());
-        item.setAudioPromptRef(question.audioPromptRef());
-        item.setImagePromptRef(question.imagePromptRef());
-        item.setReferenceAnswerText(question.referenceAnswerText());
-        item.setCorrectAnswerText(question.correctAnswerText());
-        item.setMinWordCount(question.minWordCount());
-        item.setMaxWordCount(question.maxWordCount());
-        item.setOptionsJson(serializeOptions(question.options()));
-        return item;
-    }
-
-    private TaskRuntimeProfileDescriptor resolveRuntimeProfile(String taskTypeKey, PteTaskType legacyTaskType,
-            java.util.Map<String, ExamDefinitionItemResponse> templateItemsByTaskType) {
-        ExamDefinitionItemResponse templateItem = templateItemsByTaskType.get(taskTypeKey);
-        TaskRuntimeProfileDescriptor runtime = templateItem == null && legacyTaskType != null && !legacyTaskType.isScored()
-                ? TaskRuntimeProfileRegistry.descriptorFor(legacyTaskType.name())
-                : templateItem == null && runtimeProfileService == null
-                        && legacyTaskType != null ? TaskRuntimeProfileRegistry.descriptorFor(legacyTaskType.name())
-                        : templateItem == null ? null : templateItem.runtime();
-        if (runtime == null) {
-            throw new SnapshotRuntimeContractException(
-                    "Missing runtime profile for task type " + taskTypeKey + " in the active score template");
-        }
-        if (!taskTypeKey.equals(runtime.taskTypeCode())) {
-            throw new SnapshotRuntimeContractException(
-                    "Runtime profile task type " + runtime.taskTypeCode() + " does not match " + taskTypeKey);
-        }
-        if (TaskTypeCodeCompatibility.isStandard(taskTypeKey)
-                && !TaskRuntimeProfileRegistry.isAllowlistedContract(runtime)) {
-            throw new SnapshotRuntimeContractException(
-                    "Runtime profile contract differs from the allowlisted profile for " + taskTypeKey);
-        }
-        if (!TaskTypeCodeCompatibility.isStandard(taskTypeKey)
-                && (!("ACTIVE".equals(runtime.status()) || "RETIRED".equals(runtime.status()))
-                || runtime.screenKey() == null || runtime.contractVersion() < 1
-                || runtime.answerSchemaVersion() < 1 || runtime.scoringProfileKey() == null
-                || runtime.scoringMode() == null)) {
-            throw new SnapshotRuntimeContractException(
-                    "Custom runtime profile is incomplete for " + taskTypeKey);
-        }
-        return runtime;
-    }
-
-    private void validateRuntimeProfiles(List<QuestionFreezeView> frozenQuestions,
-            java.util.Map<String, ExamDefinitionItemResponse> templateItemsByTaskType) {
-        if (runtimeProfileService == null) {
-            return;
-        }
-        java.util.List<TaskRuntimeProfileDescriptor> profiles = frozenQuestions.stream()
-                .map(question -> resolveRuntimeProfile(
-                        question.taskTypeKey() == null && question.pteTaskType() != null
-                                ? question.pteTaskType().name() : question.taskTypeKey(),
-                        question.pteTaskType(), templateItemsByTaskType))
-                .distinct()
-                .toList();
-        java.util.Set<TaskRuntimeProfileDescriptor> invalidStandardProfiles = profiles.stream()
-                .filter(profile -> TaskTypeCodeCompatibility.isStandard(profile.taskTypeCode()))
-                .filter(profile -> !TaskRuntimeProfileRegistry.isAllowlistedContract(profile))
-                .collect(java.util.stream.Collectors.toSet());
-        if (!invalidStandardProfiles.isEmpty()) {
-            throw new SnapshotRuntimeContractException(
-                    "One or more runtime profiles are not allowlisted or persisted consistently");
-        }
-    }
-
-    private String serializeOptions(List<QuestionFreezeView.Option> options) {
-        List<FrozenOption> frozen = options.stream()
-                .map(o -> new FrozenOption(o.text(), o.correct(), o.orderIndex(), o.blankIndex(), o.correctGapIndex()))
-                .toList();
-        try {
-            return jsonMapper.writeValueAsString(frozen);
-        } catch (JacksonException ex) {
-            throw new IllegalStateException(AssessmentConstants.SNAPSHOT_OPTIONS_SERIALIZATION_FAILED, ex);
-        }
-    }
-
-    /**
-     * Frozen option shape stored in {@code SnapshotItem.optionsJson}.
-     * {@code blankIndex} is null except for {@code FILL_IN_THE_BLANKS_DROPDOWN}
-     * options, where it groups options under their owning blank; {@code
-     * correctGapIndex} is scoring-only, set only for {@code
-     * FILL_IN_THE_BLANKS_DRAG_AND_DROP} correct options. {@code attempt}'s own frozen-option
-     * reader only needs {@code text}/{@code orderIndex}/{@code blankIndex}
-     * (unknown fields deserialize as ignored by default), so the two shapes are
-     * not required to stay field-for-field identical — only {@code scoring}'s
-     * own local reader (which needs {@code correct}/{@code correctGapIndex} for
-     * grading) must match this shape exactly.
-     */
-    private record FrozenOption(String text, boolean correct, int orderIndex, Integer blankIndex, Integer correctGapIndex) {
-    }
 }

@@ -6,7 +6,7 @@ import com.pte.assessment.dto.request.RejectExamDefinitionRequest;
 import com.pte.assessment.internal.dto.response.BlueprintResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.internal.service.BlueprintService;
-import com.pte.assessment.internal.service.ExamDefinitionAdminService;
+import com.pte.assessment.internal.service.definition.ExamDefinitionAdminService;
 import com.pte.itembank.TaskTypeRolloutProperties;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.web.StatusEndpointHarness;

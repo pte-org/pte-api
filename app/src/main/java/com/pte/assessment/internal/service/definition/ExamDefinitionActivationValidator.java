@@ -1,4 +1,4 @@
-package com.pte.assessment.internal.service;
+package com.pte.assessment.internal.service.definition;
 
 import com.pte.assessment.domain.ExamDefinition;
 import com.pte.assessment.domain.ExamDefinitionItem;
