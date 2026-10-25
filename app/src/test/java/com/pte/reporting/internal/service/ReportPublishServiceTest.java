@@ -58,7 +58,7 @@ class ReportPublishServiceTest {
     @BeforeEach
     void setUp() {
         service = new ReportPublishService(sessionService, attemptService, scoringService, aggregationService,
-                snapshotCodec, examResultRepository, eventPublisher, java.time.Clock.systemUTC());
+                snapshotCodec, examResultRepository, eventPublisher, com.pte.TestClocks.fixed());
     }
 
     @Test
