@@ -9,6 +9,12 @@ import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.PatchMapping;
+import com.pte.assessment.dto.request.BlueprintStatusAction;
+import com.pte.assessment.dto.request.BlueprintStatusRequest;
+import com.pte.assessment.internal.constant.AssessmentConstants;
+import com.pte.shared.exception.StatusReasonRequiredException;
+import com.pte.shared.security.SecurityRoles;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,22 +49,20 @@ public class BlueprintController {
         return ApiResponse.success(blueprintService.update(publicId, request, currentUser()));
     }
 
-    @PostMapping("/{publicId}/submit-approval")
-    public ApiResponse<BlueprintResponse> submitApproval(@PathVariable UUID publicId) {
-        return ApiResponse.success(blueprintService.submitApproval(publicId, currentUser()));
-    }
-
-    @PostMapping({"/{publicId}/approval", "/{publicId}/approve"})
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
-    public ApiResponse<SnapshotResponse> approve(@PathVariable UUID publicId) {
-        return ApiResponse.success(blueprintService.approve(publicId, currentUser()));
-    }
-
-    @PostMapping({"/{publicId}/rejection", "/{publicId}/reject"})
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
-    public ApiResponse<BlueprintResponse> reject(@PathVariable UUID publicId,
-            @Valid @RequestBody RejectBlueprintRequest request) {
-        return ApiResponse.success(blueprintService.reject(publicId, request, currentUser()));
+    @PatchMapping("/{publicId}/status")
+    public ApiResponse<?> changeStatus(@PathVariable UUID publicId,
+            @Valid @RequestBody BlueprintStatusRequest request) {
+        CurrentUser caller = currentUser();
+        if (request.action() != BlueprintStatusAction.SUBMIT_APPROVAL) {
+            caller.requireAnyRole(SecurityRoles.PLATFORM_ADMIN, SecurityRoles.ACADEMIC_MANAGER);
+        }
+        return switch (request.action()) {
+            case SUBMIT_APPROVAL -> ApiResponse.success(blueprintService.submitApproval(publicId, caller));
+            case APPROVE -> ApiResponse.success(blueprintService.approve(publicId, caller));
+            case REJECT -> ApiResponse.success(blueprintService.reject(publicId, new RejectBlueprintRequest(
+                    StatusReasonRequiredException.requireReason(request.reason(),
+                            AssessmentConstants.BLUEPRINT_REJECTION_REASON_REQUIRED)), caller));
+        };
     }
 
     @GetMapping("/{publicId}")

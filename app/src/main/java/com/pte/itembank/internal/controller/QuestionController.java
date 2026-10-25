@@ -12,6 +12,11 @@ import com.pte.shared.web.ApiResponse;
 import com.pte.shared.web.PagedResult;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.PatchMapping;
+import com.pte.itembank.dto.request.QuestionStatusRequest;
+import com.pte.itembank.internal.constant.ItembankConstants;
+import com.pte.shared.exception.StatusReasonRequiredException;
+import com.pte.shared.security.SecurityRoles;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.http.ResponseEntity;
@@ -84,38 +89,25 @@ public class QuestionController {
         return ApiResponse.success(itembankService.createRevision(publicId, currentUser()));
     }
 
-    @PostMapping("/{publicId}/submit-approval")
-    public ApiResponse<QuestionResponse> submitApproval(@PathVariable UUID publicId) {
-        return ApiResponse.success(itembankService.submitApproval(publicId, currentUser()));
-    }
-
-    @PostMapping({"/{publicId}/approval", "/{publicId}/approve"})
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
-    public ApiResponse<QuestionResponse> approve(@PathVariable UUID publicId) {
-        return ApiResponse.success(itembankService.approve(publicId, currentUser()));
-    }
-
-    @PostMapping({"/{publicId}/rejection", "/{publicId}/reject"})
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
-    public ApiResponse<QuestionResponse> reject(@PathVariable UUID publicId,
-            @Valid @RequestBody RejectQuestionRequest request) {
-        return ApiResponse.success(itembankService.reject(publicId, request, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/publish")
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
-    public ApiResponse<QuestionResponse> publish(@PathVariable UUID publicId) {
-        return ApiResponse.success(itembankService.publish(publicId, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/archive")
-    public ApiResponse<QuestionResponse> archive(@PathVariable UUID publicId) {
-        return ApiResponse.success(itembankService.archive(publicId, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/unarchive")
-    public ApiResponse<QuestionResponse> unarchive(@PathVariable UUID publicId) {
-        return ApiResponse.success(itembankService.unarchive(publicId, currentUser()));
+    @PatchMapping("/{publicId}/status")
+    public ApiResponse<QuestionResponse> changeStatus(@PathVariable UUID publicId,
+            @Valid @RequestBody QuestionStatusRequest request) {
+        CurrentUser caller = currentUser();
+        switch (request.action()) {
+            case APPROVE, REJECT, PUBLISH ->
+                    caller.requireAnyRole(SecurityRoles.PLATFORM_ADMIN, SecurityRoles.ACADEMIC_MANAGER);
+            default -> { }
+        }
+        return ApiResponse.success(switch (request.action()) {
+            case SUBMIT_APPROVAL -> itembankService.submitApproval(publicId, caller);
+            case APPROVE -> itembankService.approve(publicId, caller);
+            case REJECT -> itembankService.reject(publicId, new RejectQuestionRequest(
+                    StatusReasonRequiredException.requireReason(request.reason(),
+                            ItembankConstants.QUESTION_REJECTION_REASON_REQUIRED)), caller);
+            case PUBLISH -> itembankService.publish(publicId, caller);
+            case ARCHIVE -> itembankService.archive(publicId, caller);
+            case UNARCHIVE -> itembankService.unarchive(publicId, caller);
+        });
     }
 
     private CurrentUser currentUser() {

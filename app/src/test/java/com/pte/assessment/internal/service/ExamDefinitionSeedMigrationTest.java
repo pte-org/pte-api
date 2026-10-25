@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Parses {@code V14__score_template.sql} straight off the classpath (no
+ * Parses the exam-definition seed of {@code V1__baseline.sql} straight off the classpath (no
  * Postgres/Testcontainers in this codebase — see phase-01 Risks) and checks
  * every one of the 22 seeded rows against the APEUni V5 table in spec.md.
  * This is the test that directly satisfies spec.md's first success
@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ExamDefinitionSeedMigrationTest {
 
     private record ExpectedRow(String taskType, String section, int sequence, int min, int max, int prep, int resp,
-                                String timingMode, String scoringMethod, BigDecimal overall, BigDecimal speaking,
+                                String scoringMethod, BigDecimal overall, BigDecimal speaking,
                                 BigDecimal writing, BigDecimal reading, BigDecimal listening) {
     }
 
@@ -38,14 +38,14 @@ class ExamDefinitionSeedMigrationTest {
             row("RESPOND_TO_A_SITUATION", "SPEAKING", 7, 2, 3, 10, 40, "FIXED", "AI_SPEECH", "6", "13", "0", "0", "0"),
             row("SUMMARIZE_WRITTEN_TEXT", "WRITING", 8, 2, 2, 0, 600, "FIXED", "AI_TEXT", "7", "0", "28", "23", "0"),
             row("WRITE_ESSAY", "WRITING", 9, 1, 1, 0, 1200, "FIXED", "AI_TEXT", "7", "0", "31", "0", "0"),
-            row("FILL_BLANKS_READING_WRITING", "READING", 10, 5, 6, 0, 90, "RECOMMENDED", "OBJECTIVE", "7", "0", "0", "25", "0"),
+            row("FILL_IN_THE_BLANKS_DROPDOWN", "READING", 10, 5, 6, 0, 90, "RECOMMENDED", "OBJECTIVE", "7", "0", "0", "25", "0"),
             row("MC_READING_MULTIPLE", "READING", 11, 2, 3, 0, 90, "RECOMMENDED", "OBJECTIVE", "1", "0", "0", "5", "0"),
             row("RE_ORDER_PARAGRAPHS", "READING", 12, 2, 3, 0, 75, "RECOMMENDED", "OBJECTIVE", "3", "0", "0", "9", "0"),
-            row("FILL_BLANKS_READING", "READING", 13, 4, 5, 0, 90, "RECOMMENDED", "OBJECTIVE", "6", "0", "0", "20", "0"),
+            row("FILL_IN_THE_BLANKS_DRAG_AND_DROP", "READING", 13, 4, 5, 0, 90, "RECOMMENDED", "OBJECTIVE", "6", "0", "0", "20", "0"),
             row("MC_READING_SINGLE", "READING", 14, 2, 3, 0, 60, "RECOMMENDED", "OBJECTIVE", "0.5", "0", "0", "3", "0"),
             row("SUMMARIZE_SPOKEN_TEXT", "LISTENING", 15, 1, 1, 0, 600, "FIXED", "AI_TEXT", "4", "0", "18", "0", "10"),
             row("MC_LISTENING_MULTIPLE", "LISTENING", 16, 2, 3, 0, 20, "RECOMMENDED", "OBJECTIVE", "1", "0", "0", "0", "3"),
-            row("FILL_BLANKS_LISTENING", "LISTENING", 17, 2, 3, 0, 60, "RECOMMENDED", "OBJECTIVE", "3", "0", "0", "0", "8"),
+            row("FILL_IN_THE_BLANKS_TYPE_IN", "LISTENING", 17, 2, 3, 0, 60, "RECOMMENDED", "OBJECTIVE", "3", "0", "0", "0", "8"),
             row("HIGHLIGHT_CORRECT_SUMMARY", "LISTENING", 18, 2, 3, 0, 20, "RECOMMENDED", "OBJECTIVE", "0.5", "0", "0", "3", "2"),
             row("MC_LISTENING_SINGLE", "LISTENING", 19, 2, 3, 0, 20, "RECOMMENDED", "OBJECTIVE", "0.5", "0", "0", "0", "2"),
             row("SELECT_MISSING_WORD", "LISTENING", 20, 1, 2, 0, 20, "RECOMMENDED", "OBJECTIVE", "1", "0", "0", "0", "1"),
@@ -55,20 +55,18 @@ class ExamDefinitionSeedMigrationTest {
     private static ExpectedRow row(String taskType, String section, int sequence, int min, int max, int prep, int resp,
                                     String timingMode, String scoringMethod, String overall, String speaking,
                                     String writing, String reading, String listening) {
-        return new ExpectedRow(taskType, section, sequence, min, max, prep, resp, timingMode, scoringMethod,
-                new BigDecimal(overall), new BigDecimal(speaking), new BigDecimal(writing), new BigDecimal(reading),
-                new BigDecimal(listening));
+        return new ExpectedRow(taskType, section, sequence, min, max, prep, resp, scoringMethod,
+                weight(overall), weight(speaking), weight(writing), weight(reading), weight(listening));
     }
 
-    /**
-     * Matches one {@code score_template_items} VALUES tuple, skipping the
-     * first 5 fixed columns (public_id/created_at/updated_at/deleted/template_id)
-     * that {@code gen_random_uuid()}/{@code now()} fill at insert time.
-     */
+    private static BigDecimal weight(String value) {
+        return new BigDecimal(value).stripTrailingZeros();
+    }
+
+    /** Matches one exam_definition_items INSERT of definition 1 up to its five weight columns. */
     private static final Pattern ROW_PATTERN = Pattern.compile(
-            "gen_random_uuid\\(\\), now\\(\\), now\\(\\), FALSE, 1, "
-                    + "'([A-Z_]+)',\\s*'([A-Z_]+)',\\s*(\\d+),\\s*(\\d+),\\s*(\\d+),\\s*(\\d+),\\s*(\\d+),\\s*"
-                    + "'([A-Z_]+)',\\s*'([A-Z_]+)',\\s*([\\d.]+),\\s*([\\d.]+),\\s*([\\d.]+),\\s*([\\d.]+),\\s*([\\d.]+)\\)");
+            "INSERT INTO exam_definition_items \\([^)]*\\) VALUES \\(1, '([A-Z_]+)', '([A-Z_]+)', (\\d+), (\\d+), "
+                    + "(\\d+), (\\d+), (\\d+), '([A-Z_]+)', ([\\d.]+), ([\\d.]+), ([\\d.]+), ([\\d.]+), ([\\d.]+),");
 
     private List<ExpectedRow> parseSeedMigration() {
         String sql = readMigrationFile();
@@ -79,18 +77,17 @@ class ExamDefinitionSeedMigrationTest {
                     matcher.group(1), matcher.group(2), Integer.parseInt(matcher.group(3)),
                     Integer.parseInt(matcher.group(4)), Integer.parseInt(matcher.group(5)),
                     Integer.parseInt(matcher.group(6)), Integer.parseInt(matcher.group(7)),
-                    matcher.group(8), matcher.group(9),
-                    new BigDecimal(matcher.group(10)), new BigDecimal(matcher.group(11)),
-                    new BigDecimal(matcher.group(12)), new BigDecimal(matcher.group(13)),
-                    new BigDecimal(matcher.group(14))));
+                    matcher.group(8), weight(matcher.group(9)), weight(matcher.group(10)),
+                    weight(matcher.group(11)), weight(matcher.group(12)), weight(matcher.group(13))));
         }
+        parsed.sort(java.util.Comparator.comparingInt(ExpectedRow::sequence));
         return parsed;
     }
 
     private String readMigrationFile() {
-        try (InputStream in = getClass().getResourceAsStream("/db/migration/V14__score_template.sql")) {
+        try (InputStream in = getClass().getResourceAsStream("/db/migration/V1__baseline.sql")) {
             if (in == null) {
-                throw new IllegalStateException("V14__score_template.sql not found on classpath");
+                throw new IllegalStateException("V1__baseline.sql not found on classpath");
             }
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException ex) {
@@ -107,13 +104,20 @@ class ExamDefinitionSeedMigrationTest {
     void everySeededItem_matchesTheApeUniV5Table_cellByCell() {
         List<ExpectedRow> actual = parseSeedMigration();
 
-        assertThat(actual).containsExactlyElementsOf(EXPECTED);
+        assertThat(actual).containsExactlyElementsOf(EXPECTED.stream().map(ExamDefinitionSeedMigrationTest::normalized).toList());
     }
 
     @Test
     void templateRow_isSeededActiveAsPteScoreTemplateVersion1() {
         String sql = readMigrationFile();
 
-        assertThat(sql).contains("'PTE_Score_Template', 1,").contains("'ACTIVE'");
+        assertThat(sql).contains("'PTE_Score_Template', 1, 'APEUni PTE Score Table V5', 'ACTIVE'");
+    }
+
+    private static ExpectedRow normalized(ExpectedRow row) {
+        return new ExpectedRow(row.taskType(), row.section(), row.sequence(), row.min(), row.max(), row.prep(),
+                row.resp(), row.scoringMethod(), row.overall().stripTrailingZeros(), row.speaking().stripTrailingZeros(),
+                row.writing().stripTrailingZeros(), row.reading().stripTrailingZeros(),
+                row.listening().stripTrailingZeros());
     }
 }

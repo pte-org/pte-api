@@ -15,6 +15,10 @@ import com.pte.shared.security.CurrentUserContext;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import com.pte.itembank.dto.request.TaskTypeStatusAction;
+import com.pte.itembank.dto.request.TaskTypeStatusRequest;
+import com.pte.shared.security.SecurityRoles;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -83,21 +87,20 @@ public class TaskTypeController {
         return ApiResponse.success(service.updateTaskType(publicId, request, currentUser()));
     }
 
-    @PostMapping("/{publicId}/submit-approval")
-    public ApiResponse<QuestionTypeResponse> submitApproval(@PathVariable UUID publicId) {
-        return ApiResponse.success(service.submitTaskType(publicId, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/approve")
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
-    public ApiResponse<QuestionTypeResponse> approve(@PathVariable UUID publicId) {
-        return ApiResponse.success(service.approveTaskType(publicId, currentUser()));
-    }
-
-    @DeleteMapping("/{publicId}")
-    public ApiResponse<Void> retire(@PathVariable UUID publicId) {
-        service.retireTaskType(publicId, currentUser());
-        return ApiResponse.success(null);
+    @PatchMapping("/{publicId}/status")
+    public ApiResponse<QuestionTypeResponse> changeStatus(@PathVariable UUID publicId,
+            @Valid @RequestBody TaskTypeStatusRequest request) {
+        CurrentUser caller = currentUser();
+        if (request.action() == TaskTypeStatusAction.APPROVE) {
+            caller.requireAnyRole(SecurityRoles.PLATFORM_ADMIN, SecurityRoles.ACADEMIC_MANAGER);
+        }
+        if (request.action() == TaskTypeStatusAction.RETIRE) {
+            service.retireTaskType(publicId, caller);
+            return ApiResponse.success(null);
+        }
+        return ApiResponse.success(request.action() == TaskTypeStatusAction.APPROVE
+                ? service.approveTaskType(publicId, caller)
+                : service.submitTaskType(publicId, caller));
     }
 
     private CurrentUser currentUser() {

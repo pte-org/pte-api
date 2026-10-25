@@ -104,4 +104,5 @@ public final class IdentityConstants {
 
     private IdentityConstants() {
     }
+    public static final String USER_STATUS_ACTION_UNSUPPORTED = "USER_STATUS_ACTION_UNSUPPORTED";
 }

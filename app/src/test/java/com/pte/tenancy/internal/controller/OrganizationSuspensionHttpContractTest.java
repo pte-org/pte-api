@@ -24,6 +24,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -62,9 +63,9 @@ class TenantSuspensionHttpContractTest {
                 tenantId, "TENANT", "Tenant", "SCHOOL", "TAX", "SUSPENDED", suspendedUntil,
                 "starter", 100, null, null, null, null, null, null, null, "MAIN"));
 
-        mvc.perform(post("/api/v1/organizations/{publicId}/suspend", tenantId)
+        mvc.perform(patch("/api/v1/organizations/{publicId}/status", tenantId)
                         .contentType(APPLICATION_JSON)
-                        .content("{\"days\":7,\"impactDigest\":\"impact-digest\"}"))
+                        .content("{\"action\":\"SUSPEND\",\"days\":7,\"impactDigest\":\"impact-digest\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("SUSPENDED"))
                 .andExpect(jsonPath("$.data.suspendedUntil").value("2026-10-24T00:00:00Z"));

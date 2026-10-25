@@ -17,6 +17,8 @@ import com.pte.shared.web.PagedResult;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import com.pte.identity.internal.dto.request.UserStatusRequest;
+import com.pte.identity.internal.exception.UnsupportedUserStatusActionException;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -97,14 +99,15 @@ public class UserController {
                 currentUser()));
     }
 
-    @PostMapping("/{publicId}/suspend")
-    public ApiResponse<UserResponse> suspend(@PathVariable UUID publicId) {
-        return ApiResponse.success(userService.suspend(publicId, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/reactivate")
-    public ApiResponse<UserResponse> reactivate(@PathVariable UUID publicId) {
-        return ApiResponse.success(userService.reactivate(publicId, currentUser()));
+    @PatchMapping("/{publicId}/status")
+    public ApiResponse<UserResponse> changeStatus(@PathVariable UUID publicId,
+            @Valid @RequestBody UserStatusRequest request) {
+        CurrentUser caller = currentUser();
+        return ApiResponse.success(switch (request.action()) {
+            case SUSPEND -> userService.suspend(publicId, caller);
+            case REACTIVATE -> userService.reactivate(publicId, caller);
+            case ARCHIVE, RESTORE -> throw new UnsupportedUserStatusActionException();
+        });
     }
 
     // No method-level @PreAuthorize override needed: tenant scope and the

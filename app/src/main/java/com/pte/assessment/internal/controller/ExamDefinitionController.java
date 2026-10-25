@@ -17,6 +17,11 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import com.pte.assessment.dto.request.ExamDefinitionStatusAction;
+import com.pte.assessment.dto.request.ExamDefinitionStatusRequest;
+import com.pte.shared.exception.StatusReasonRequiredException;
+import com.pte.shared.security.SecurityRoles;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -88,16 +93,6 @@ public class ExamDefinitionController {
         return ApiResponse.success(null);
     }
 
-    @PostMapping("/{publicId}/activate")
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
-    public ApiResponse<ExamDefinitionResponse> activate(@PathVariable UUID publicId) {
-        if (!rolloutProperties.isCustomTemplateActivationEnabled()
-                && adminService.isCustomTemplate(publicId)) {
-            throw new CustomTemplateActivationDisabledException();
-        }
-        return ApiResponse.success(adminService.activate(publicId, currentUser()));
-    }
-
     @GetMapping("/active")
     @PreAuthorize("hasRole('HOST_ADMIN')")
     public ApiResponse<ExamDefinitionResponse> activeForHost() {
@@ -107,29 +102,35 @@ public class ExamDefinitionController {
         return ApiResponse.success(examDefinitionService.getActive());
     }
 
-    @PostMapping("/{publicId}/submit-approval")
+    @PatchMapping("/{publicId}/status")
     @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
-    public ApiResponse<ExamDefinitionResponse> submitApproval(@PathVariable UUID publicId) {
-        return ApiResponse.success(adminService.submitApproval(publicId, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/approve")
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
-    public ApiResponse<ExamDefinitionResponse> approve(@PathVariable UUID publicId) {
-        return ApiResponse.success(adminService.approve(publicId, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/reject")
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')")
-    public ApiResponse<ExamDefinitionResponse> reject(@PathVariable UUID publicId,
-            @Valid @RequestBody RejectExamDefinitionRequest request) {
-        return ApiResponse.success(adminService.reject(publicId, request, currentUser()));
+    public ApiResponse<ExamDefinitionResponse> changeStatus(@PathVariable UUID publicId,
+            @Valid @RequestBody ExamDefinitionStatusRequest request) {
+        CurrentUser caller = currentUser();
+        if (request.action() != ExamDefinitionStatusAction.SUBMIT_APPROVAL) {
+            caller.requireAnyRole(SecurityRoles.PLATFORM_ADMIN, SecurityRoles.ACADEMIC_MANAGER);
+        }
+        return ApiResponse.success(switch (request.action()) {
+            case SUBMIT_APPROVAL -> adminService.submitApproval(publicId, caller);
+            case APPROVE -> adminService.approve(publicId, caller);
+            case REJECT -> adminService.reject(publicId, new RejectExamDefinitionRequest(
+                    StatusReasonRequiredException.requireReason(request.reason(),
+                            ExamDefinitionConstants.TEMPLATE_APPROVAL_REASON_REQUIRED)), caller);
+            case ACTIVATE -> activate(publicId, caller);
+        });
     }
 
     @GetMapping("/{publicId}/feasibility")
     @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
     public ApiResponse<ExamDefinitionFeasibilityResponse> feasibility(@PathVariable UUID publicId) {
         return ApiResponse.success(examDefinitionService.getTemplateFeasibility(publicId));
+    }
+
+    private ExamDefinitionResponse activate(UUID publicId, CurrentUser caller) {
+        if (!rolloutProperties.isCustomTemplateActivationEnabled() && adminService.isCustomTemplate(publicId)) {
+            throw new CustomTemplateActivationDisabledException();
+        }
+        return adminService.activate(publicId, caller);
     }
 
     private CurrentUser currentUser() {

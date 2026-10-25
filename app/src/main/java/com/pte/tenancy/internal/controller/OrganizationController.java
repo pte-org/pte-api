@@ -18,6 +18,10 @@ import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import com.pte.tenancy.internal.dto.request.OrganizationStatusAction;
+import com.pte.tenancy.internal.dto.request.OrganizationStatusRequest;
+import com.pte.tenancy.internal.constant.TenancyConstants;
+import com.pte.shared.exception.StatusReasonRequiredException;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -77,11 +81,17 @@ public class OrganizationController {
         return ApiResponse.success(organizationService.updateProfile(publicId, request, currentUser()));
     }
 
-    @PostMapping("/{publicId}/suspend")
+    @PatchMapping("/{publicId}/status")
     @PreAuthorize(PLATFORM_OPERATORS)
-    public ApiResponse<OrganizationResponse> suspend(@PathVariable UUID publicId,
-            @Valid @RequestBody SuspendTenantRequest request) {
-        return ApiResponse.success(lifecycleService.suspendWithConfirmation(publicId, request, currentUser()));
+    public ApiResponse<OrganizationResponse> changeStatus(@PathVariable UUID publicId,
+            @Valid @RequestBody OrganizationStatusRequest request) {
+        CurrentUser caller = currentUser();
+        if (request.action() == OrganizationStatusAction.REACTIVATE) {
+            return ApiResponse.success(lifecycleService.reactivate(publicId, caller));
+        }
+        StatusReasonRequiredException.requireReason(request.impactDigest(),
+                TenancyConstants.TENANT_SUSPENSION_IMPACT_DIGEST_REQUIRED);
+        return ApiResponse.success(lifecycleService.suspendWithConfirmation(publicId, request.asSuspension(), caller));
     }
 
     @GetMapping("/{publicId}/suspension-impact")
@@ -89,12 +99,6 @@ public class OrganizationController {
     public ApiResponse<TenantSuspensionImpact> suspensionImpact(@PathVariable UUID publicId,
             @RequestParam(required = false) Integer days) {
         return ApiResponse.success(lifecycleService.suspensionImpact(publicId, days));
-    }
-
-    @PostMapping("/{publicId}/reactivate")
-    @PreAuthorize(PLATFORM_OPERATORS)
-    public ApiResponse<OrganizationResponse> reactivate(@PathVariable UUID publicId) {
-        return ApiResponse.success(lifecycleService.reactivate(publicId, currentUser()));
     }
 
     @PostMapping("/{publicId}/branding")

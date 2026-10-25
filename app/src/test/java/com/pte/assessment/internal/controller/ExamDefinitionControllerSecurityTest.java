@@ -14,15 +14,12 @@ class ExamDefinitionControllerSecurityTest {
     }
 
     @Test
-    void draftAndFeasibilityEndpointsAllowAuthors_butActivationRequiresAdmin() {
+    void draftAndFeasibilityEndpointsAllowAuthors() {
         String authorOrAdmin =
                 "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')";
         for (String method : new String[] {"list", "create", "get", "clone", "replaceItems", "delete",
-                "submitApproval", "feasibility"}) {
+                "changeStatus", "feasibility"}) {
             assertRole(method, authorOrAdmin);
-        }
-        for (String method : new String[] {"activate", "approve", "reject"}) {
-            assertRole(method, "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')");
         }
         assertRole("activeForHost", "hasRole('HOST_ADMIN')");
     }

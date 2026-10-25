@@ -22,7 +22,7 @@ import java.util.List;
  * task types). {@code taskType}/{@code section} are plain {@code String}
  * (not {@code itembank.PteTaskType}/{@code PteSection}) on purpose — this
  * module stays independent of {@code itembank} (Spring Modulith boundary),
- * mirroring how {@code attempt.PinnedItem}/{@code scoring.ScoringAnswer}
+ * mirroring how {@code attempt.PinnedItem}/{@code scoring.AiEvaluation}
  * already carry task type as a String across module lines. Values must match
  * {@code PteTaskType}/{@code PteSection} enum names; callers that need the
  * real enum parse it themselves (e.g. {@code PteTaskType.valueOf(...)}).
