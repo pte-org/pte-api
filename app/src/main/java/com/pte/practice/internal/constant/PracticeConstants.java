@@ -9,6 +9,7 @@ public final class PracticeConstants {
     public static final String PRACTICE_CATALOG_PATH = "/api/v1/student/practice/catalog";
     public static final String PRACTICE_PROGRESS_PATH = "/api/v1/student/practice/progress";
     public static final String PRACTICE_SESSION_PATH = "/api/v1/student/practice/sessions";
+    public static final String PRACTICE_PROFILE_PATH = "/api/v1/student/practice/profile";
     public static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
     public static final String PRACTICE_WEB_ENABLED_PROPERTY = "practice.web.enabled";
     public static final String PRACTICE_STRICT_ENTITLEMENT_ENABLED_PROPERTY =
@@ -33,6 +34,7 @@ public final class PracticeConstants {
             "PRACTICE_DETERMINISTIC_SCORING_UNAVAILABLE";
     public static final String PRACTICE_PRODUCT_NOT_FOUND = "PRACTICE_PRODUCT_NOT_FOUND";
     public static final String PRACTICE_QUESTION_COUNT_INVALID = "Question count must be between 1 and 50";
+    public static final String PRACTICE_EXAM_DATE_INVALID = "PRACTICE_EXAM_DATE_INVALID";
     public static final String PRACTICE_SCORING_RATE_LIMITED = "PRACTICE_SCORING_RATE_LIMITED";
     public static final String PRACTICE_SCORING_RETRY_NOT_ALLOWED = "PRACTICE_SCORING_RETRY_NOT_ALLOWED";
     public static final String PRACTICE_SCORING_EXCHANGE = "pte.practice.scoring";
@@ -84,6 +86,8 @@ public final class PracticeConstants {
             "The practice session is no longer accepting recordings.";
     public static final String PRACTICE_MEDIA_ITEM_NOT_RECORDABLE_MESSAGE =
             "This practice task does not accept a recording.";
+    public static final String PRACTICE_EXAM_DATE_INVALID_MESSAGE =
+            "Exam date must be today or within the next 2 years";
 
     public static final String PRACTICE_PRODUCT_CODE = "PTE_CORE_PRACTICE";
     public static final String PRACTICE_PRODUCT_TITLE = "PTE Core Practice";
