@@ -353,6 +353,34 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
         requirePracticeBinding(media, caller);
     }
 
+    /**
+     * Playback link for a student's own saved practice recording, so a resumed or reloaded session can replay it
+     * and draw its waveform. Unlike {@link #validatePracticeResponseAudio} this deliberately does not go through the
+     * practice binding port: that port only accepts an {@code IN_PROGRESS} session and a {@code PENDING} item,
+     * which would block replaying an answered item or a finished session. The caller (practice) has already proved
+     * the session and item belong to the student; this checks the media itself — owner, purpose, binding to that
+     * exact session and item, and a completed upload. Anything else is reported as not found.
+     */
+    @Transactional(readOnly = true)
+    public PresignedDownloadResponse presignOwnedPracticeResponseAudio(UUID mediaPublicId, UUID sessionPublicId,
+            UUID itemPublicId, CurrentUser owner, long ttlSeconds) {
+        if (mediaPublicId == null || sessionPublicId == null || itemPublicId == null || owner == null
+                || owner.userId() == null) {
+            throw new MediaNotFoundException();
+        }
+        MediaObject media = repository.findByPublicId(mediaPublicId)
+                .filter(candidate -> owner.userId().equals(candidate.getOwnerPublicId()))
+                .orElseThrow(MediaNotFoundException::new);
+        if (!isPracticeResponseAudio(media)
+                || media.getStatus() != MediaStatus.UPLOADED
+                || !sessionPublicId.equals(media.getPracticeSessionPublicId())
+                || !itemPublicId.equals(media.getPracticeItemPublicId())
+                || !MediaConstants.AUDIO_WAV.equals(media.getContentType())) {
+            throw new MediaNotFoundException();
+        }
+        return toTrustedDownloadResponse(media, ttlSeconds, owner.tenantId());
+    }
+
     private void validateContentType(String contentType, String assetKind) {
         boolean allowed = MediaConstants.IMAGE_PROMPT.equals(assetKind) ? IMAGE_TYPES.contains(contentType)
                 : (MediaConstants.AUDIO_PROMPT.equals(assetKind)
