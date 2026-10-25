@@ -4,14 +4,14 @@ import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.dto.request.PlanRequest;
-import com.pte.billing.internal.dto.request.PlanTransitionRequest;
-import com.pte.billing.internal.dto.request.PlanUpdateRequest;
+import com.pte.billing.internal.dto.request.plan.PlanRequest;
+import com.pte.billing.internal.dto.request.plan.PlanTransitionRequest;
+import com.pte.billing.internal.dto.request.plan.PlanUpdateRequest;
 import com.pte.billing.internal.dto.response.PlanResponse;
-import com.pte.billing.internal.exception.PlanLifecycleException;
-import com.pte.billing.internal.exception.PlanNotFoundException;
-import com.pte.billing.internal.exception.PlanStateException;
-import com.pte.billing.internal.exception.PlanValidationException;
+import com.pte.billing.internal.exception.plan.PlanLifecycleException;
+import com.pte.billing.internal.exception.plan.PlanNotFoundException;
+import com.pte.billing.internal.exception.plan.PlanStateException;
+import com.pte.billing.internal.exception.plan.PlanValidationException;
 import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
@@ -50,7 +50,7 @@ class PlanServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PlanService(planRepository, auditLogService);
+        service = new PlanService(planRepository, auditLogService, java.time.Clock.systemUTC());
         lenient().when(planRepository.findReferencedPlanIds(any())).thenReturn(Set.of());
         lenient().when(planRepository.findOutstandingCodePlanIds(any(), any())).thenReturn(Set.of());
         lenient().doAnswer(invocation -> {

@@ -1,12 +1,12 @@
 package com.pte.billing.internal.controller;
 
-import com.pte.billing.internal.service.LicenseCodeService;
+import com.pte.billing.internal.service.license.LicenseCodeService;
 import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
 import com.pte.billing.internal.dto.response.AdminLicenseCodeSummary;
 import com.pte.billing.internal.dto.response.LicenseCodeRevealResponse;
 import com.pte.billing.internal.dto.response.LicenseRevokePreviewResponse;
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.exception.LicenseCodeException;
+import com.pte.billing.internal.exception.license.LicenseCodeException;
 import com.pte.billing.internal.web.LicenseCodeRevealNoStoreFilter;
 import com.pte.shared.exception.GlobalExceptionHandler;
 import com.pte.shared.security.CurrentUser;

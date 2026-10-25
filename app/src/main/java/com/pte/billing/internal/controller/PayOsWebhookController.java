@@ -1,6 +1,6 @@
 package com.pte.billing.internal.controller;
 
-import com.pte.billing.internal.service.PayOsWebhookService;
+import com.pte.billing.internal.service.order.PayOsWebhookService;
 import com.pte.shared.web.ApiResponse;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;

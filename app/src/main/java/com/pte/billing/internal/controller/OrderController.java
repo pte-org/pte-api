@@ -3,7 +3,7 @@ package com.pte.billing.internal.controller;
 import com.pte.billing.domain.enums.OrderStatus;
 import com.pte.billing.internal.dto.request.CreateOrderRequest;
 import com.pte.billing.internal.dto.response.OrderResponse;
-import com.pte.billing.internal.service.OrderService;
+import com.pte.billing.internal.service.order.OrderService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;

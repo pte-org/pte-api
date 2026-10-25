@@ -1,17 +1,18 @@
 package com.pte.billing.internal.service;
 
+import com.pte.billing.internal.service.license.LicenseCodePersistenceService;
 import com.pte.billing.domain.*;
 import com.pte.billing.domain.enums.*;
-import com.pte.billing.internal.exception.PlanLifecycleException;
-import com.pte.billing.internal.exception.PlanNotFoundException;
+import com.pte.billing.internal.exception.plan.PlanLifecycleException;
+import com.pte.billing.internal.exception.plan.PlanNotFoundException;
 import com.pte.billing.internal.repository.*;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.enums.*;
 import com.pte.itembank.internal.repository.QuestionRepository;
 import com.pte.itembank.internal.service.*;
-import com.pte.billing.internal.dto.request.PlanTransitionRequest;
-import com.pte.billing.internal.dto.request.PlanUpdateRequest;
+import com.pte.billing.internal.dto.request.plan.PlanTransitionRequest;
+import com.pte.billing.internal.dto.request.plan.PlanUpdateRequest;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.idempotency.IdempotencyKeyService;
 import com.pte.shared.security.CurrentUser;
@@ -134,7 +135,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
         ServicePlan plan = plan(PlanStatus.DRAFT);
         AuditLogService audit = mock(AuditLogService.class);
         doThrow(new IllegalStateException("Injected audit failure")).when(audit).record(any(), anyString(), anyString(), anyString(), anyString());
-        PlanService failingService = new PlanService(plans, audit);
+        PlanService failingService = new PlanService(plans, audit, java.time.Clock.systemUTC());
         assertThatThrownBy(() -> runTx(() -> failingService.deleteDraft(plan.getPublicId(), admin))).isInstanceOf(IllegalStateException.class);
         assertThat(tx(() -> plans.findByPublicId(plan.getPublicId()).orElseThrow().isDeleted())).isFalse();
         assertThat(auditCount(plan.getPublicId())).isZero();

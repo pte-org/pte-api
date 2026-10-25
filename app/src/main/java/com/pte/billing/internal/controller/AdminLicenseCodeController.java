@@ -1,14 +1,14 @@
 package com.pte.billing.internal.controller;
 
-import com.pte.billing.internal.dto.request.IssueLicenseCodeRequest;
-import com.pte.billing.internal.dto.request.ConfirmLicenseRevokeRequest;
-import com.pte.billing.internal.dto.request.LookupLicenseCodeRequest;
+import com.pte.billing.internal.dto.request.license.IssueLicenseCodeRequest;
+import com.pte.billing.internal.dto.request.license.ConfirmLicenseRevokeRequest;
+import com.pte.billing.internal.dto.request.license.LookupLicenseCodeRequest;
 import com.pte.billing.internal.dto.response.AdminLicenseCodeSummary;
 import com.pte.billing.internal.dto.response.LicenseCodeRevealResponse;
 import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
 import com.pte.billing.internal.dto.response.LicenseRevokePreviewResponse;
 import com.pte.billing.internal.dto.response.LicenseRevokeResponse;
-import com.pte.billing.internal.service.LicenseCodeService;
+import com.pte.billing.internal.service.license.LicenseCodeService;
 import com.pte.shared.web.PagedResult;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;

@@ -1,7 +1,7 @@
 package com.pte.billing.internal.controller;
 
-import com.pte.billing.internal.dto.request.RejectApplicationRequest;
-import com.pte.billing.internal.dto.request.SubmitApplicationRequest;
+import com.pte.billing.internal.dto.request.application.RejectApplicationRequest;
+import com.pte.billing.internal.dto.request.application.SubmitApplicationRequest;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.service.TenantApplicationService;
 import com.pte.shared.security.CurrentUser;
@@ -11,8 +11,8 @@ import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
-import com.pte.billing.internal.dto.request.ApplicationStatusAction;
-import com.pte.billing.internal.dto.request.ApplicationStatusRequest;
+import com.pte.billing.internal.dto.request.application.ApplicationStatusAction;
+import com.pte.billing.internal.dto.request.application.ApplicationStatusRequest;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.shared.exception.StatusReasonRequiredException;
 import org.springframework.web.bind.annotation.PathVariable;

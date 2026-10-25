@@ -122,7 +122,7 @@ class TenantApplicationReviewPostgresIntegrationTest {
             List<Throwable> outcomes = race(
                     () -> service.approve(application.getPublicId(), approver),
                     () -> service.reject(application.getPublicId(),
-                            new com.pte.billing.internal.dto.request.RejectApplicationRequest("duplicate review"),
+                            new com.pte.billing.internal.dto.request.application.RejectApplicationRequest("duplicate review"),
                             rejector));
 
             assertThat(outcomes.stream().filter(value -> value == null).count()).isEqualTo(1);

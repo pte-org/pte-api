@@ -1,7 +1,7 @@
 package com.pte.billing.internal.controller;
 
-import com.pte.billing.internal.dto.request.PlanTransitionRequest;
-import com.pte.billing.internal.dto.request.RejectApplicationRequest;
+import com.pte.billing.internal.dto.request.plan.PlanTransitionRequest;
+import com.pte.billing.internal.dto.request.application.RejectApplicationRequest;
 import com.pte.billing.internal.dto.response.PlanResponse;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.service.PlanService;

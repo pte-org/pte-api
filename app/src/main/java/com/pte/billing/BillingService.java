@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -34,18 +35,20 @@ public class BillingService {
     private final SubscriptionRepository subscriptionRepository;
     private final ServicePlanRepository planRepository;
     private final AuditLogService auditLogService;
+    private final Clock clock;
 
     @Autowired
     public BillingService(SubscriptionRepository subscriptionRepository, ServicePlanRepository planRepository,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService, Clock clock) {
         this.subscriptionRepository = subscriptionRepository;
         this.planRepository = planRepository;
         this.auditLogService = auditLogService;
+        this.clock = clock;
     }
 
     /** Compatibility constructor for focused billing tests. */
     public BillingService(SubscriptionRepository subscriptionRepository, ServicePlanRepository planRepository) {
-        this(subscriptionRepository, planRepository, null);
+        this(subscriptionRepository, planRepository, null, Clock.systemUTC());
     }
 
     /** Returns empty when the key is unknown, tenant-owned elsewhere, expired, or cancelled. */
@@ -54,7 +57,7 @@ public class BillingService {
         if (licenseKey == null || tenantId == null) {
             return Optional.empty();
         }
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         return subscriptionRepository
                 .findByLicenseKeyAndTenantIdAndStatusAndStartsAtLessThanEqualAndExpiresAtGreaterThan(
                         licenseKey, tenantId, SubscriptionStatus.ACTIVE, now, now)
@@ -68,7 +71,7 @@ public class BillingService {
         if (subscriptionPublicId == null || tenantId == null) {
             return Optional.empty();
         }
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         return subscriptionRepository.findByPublicIdAndTenantId(subscriptionPublicId, tenantId)
                 .filter(subscription -> !subscription.isDeleted() && subscription.isUsableAt(now))
                 .map(SubscriptionView::from);
@@ -112,7 +115,7 @@ public class BillingService {
         if (tenantId == null) {
             return List.of();
         }
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         return subscriptionRepository
                 .findByTenantIdAndStatusAndStartsAtLessThanEqualAndExpiresAtGreaterThanOrderByCreatedAtDesc(
                         tenantId, SubscriptionStatus.ACTIVE, now, now).stream()

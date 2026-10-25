@@ -1,5 +1,9 @@
 package com.pte.billing.internal.service;
 
+import com.pte.billing.internal.service.license.LicenseCodeGenerator;
+import com.pte.billing.internal.service.license.LicenseCodePersistenceService;
+import com.pte.billing.internal.service.license.LicenseCodeService;
+import com.pte.billing.internal.service.subscription.SubscriptionActivationService;
 import com.pte.billing.SubscriptionRevocationImpactQuery;
 import com.pte.billing.domain.LicenseCode;
 import com.pte.billing.domain.ServicePlan;
@@ -9,10 +13,10 @@ import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.domain.enums.SubscriptionStatus;
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.dto.request.ConfirmLicenseRevokeRequest;
+import com.pte.billing.internal.dto.request.license.ConfirmLicenseRevokeRequest;
 import com.pte.billing.internal.dto.response.LicenseRevokePreviewResponse;
 import com.pte.billing.internal.dto.response.LicenseRevokeResponse;
-import com.pte.billing.internal.exception.LicenseCodeException;
+import com.pte.billing.internal.exception.license.LicenseCodeException;
 import com.pte.billing.internal.repository.LicenseCodeRepository;
 import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.billing.internal.repository.SubscriptionRepository;

@@ -1,12 +1,13 @@
 package com.pte.billing.internal.service;
 
+import com.pte.billing.internal.service.license.LicenseCodePersistenceService;
 import com.pte.billing.domain.LicenseCode;
 import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
-import com.pte.billing.internal.exception.LicenseCodeException;
+import com.pte.billing.internal.exception.license.LicenseCodeException;
 import com.pte.billing.internal.repository.LicenseCodeRepository;
 import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.shared.idempotency.IdempotencyDecision;

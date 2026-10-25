@@ -1,5 +1,11 @@
 package com.pte.billing.internal.service;
 
+import com.pte.billing.internal.service.license.LicenseCodeGenerator;
+import com.pte.billing.internal.service.license.LicenseCodePersistenceService;
+import com.pte.billing.internal.service.license.LicenseCodeService;
+import com.pte.billing.internal.service.license.LicenseKeyGenerator;
+import com.pte.billing.internal.service.subscription.SubscriptionActivationService;
+import com.pte.billing.internal.service.subscription.SubscriptionPersistenceService;
 import com.pte.shared.idempotency.IdempotencyKeyService;
 import com.pte.shared.idempotency.domain.IdempotencyKey;
 import com.pte.shared.idempotency.domain.IdempotencyScope;
@@ -9,9 +15,9 @@ import com.pte.billing.domain.enums.*;
 import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.repository.*;
-import com.pte.billing.internal.exception.LicenseCodeException;
+import com.pte.billing.internal.exception.license.LicenseCodeException;
 import com.pte.billing.internal.exception.SubscriptionActivationException;
-import com.pte.billing.internal.dto.request.PlanTransitionRequest;
+import com.pte.billing.internal.dto.request.plan.PlanTransitionRequest;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.config.ClockConfig;
 import com.pte.shared.security.CurrentUser;

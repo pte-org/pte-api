@@ -21,7 +21,7 @@ class PayOsClientTest {
         properties.setBaseUrl("https://api-merchant.payos.vn");
         properties.setReturnUrl("https://tenant.example/payment/success");
         properties.setCancelUrl("https://tenant.example/payment/cancel");
-        client = new PayOsClient(org.springframework.web.client.RestClient.create(), properties, jsonMapper);
+        client = new PayOsClient(org.springframework.web.client.RestClient.create(), properties, jsonMapper, java.time.Clock.systemUTC());
     }
 
     @Test

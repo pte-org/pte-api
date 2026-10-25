@@ -2,16 +2,16 @@ package com.pte.billing.internal.service;
 
 import com.pte.billing.domain.enums.TenantApplicationStatus;
 import com.pte.billing.TenantApplicationApprovedEvent;
-import com.pte.billing.internal.dto.request.RejectApplicationRequest;
-import com.pte.billing.internal.dto.request.SubmitApplicationRequest;
+import com.pte.billing.internal.dto.request.application.RejectApplicationRequest;
+import com.pte.billing.internal.dto.request.application.SubmitApplicationRequest;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.exception.ApplicationNotPendingException;
-import com.pte.billing.internal.exception.RequestedCodeAlreadyUsedException;
-import com.pte.billing.internal.exception.RequestedNameAlreadyUsedException;
-import com.pte.billing.internal.exception.RequestedTaxCodeAlreadyUsedException;
-import com.pte.billing.internal.exception.TenantApplicationNotFoundException;
-import com.pte.billing.internal.exception.TenantApplicationValidationException;
+import com.pte.billing.internal.exception.application.ApplicationNotPendingException;
+import com.pte.billing.internal.exception.license.RequestedCodeAlreadyUsedException;
+import com.pte.billing.internal.exception.application.RequestedNameAlreadyUsedException;
+import com.pte.billing.internal.exception.application.RequestedTaxCodeAlreadyUsedException;
+import com.pte.billing.internal.exception.application.TenantApplicationNotFoundException;
+import com.pte.billing.internal.exception.application.TenantApplicationValidationException;
 import com.pte.billing.internal.mapper.TenantApplicationMapper;
 import com.pte.identity.domain.HostAdminCreated;
 import com.pte.identity.domain.Role;
@@ -72,7 +72,6 @@ class TenantApplicationServiceTest {
         return new SubmitApplicationRequest("Acme School", "SCHOOL", code, "contact@acme.example", null,
                 "0123456789");
     }
-
 
     @Test
     void submit_savesApplicationAsPending() {
