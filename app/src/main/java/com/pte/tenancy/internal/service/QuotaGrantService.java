@@ -14,6 +14,7 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,9 +26,11 @@ import java.util.UUID;
 public class QuotaGrantService {
 
     private final OrganizationRepository organizationRepository;
+    private final Clock clock;
 
-    public QuotaGrantService(OrganizationRepository organizationRepository) {
+    public QuotaGrantService(OrganizationRepository organizationRepository, Clock clock) {
         this.organizationRepository = organizationRepository;
+        this.clock = clock;
     }
 
     @Transactional
@@ -35,7 +38,7 @@ public class QuotaGrantService {
         Organization organization = organizationRepository.findByPublicId(organizationPublicId)
                 .orElseThrow(TenantNotFoundException::new);
         QuotaGrant grant = organization.grantQuota(
-                request.packageName(), request.amount(), caller.userId(), request.note());
+                request.packageName(), request.amount(), caller.userId(), request.note(), clock.instant());
         try {
             // Flush now so a lost update from a concurrent grant on the same organization throws here,
             // inside this method, where it can still be translated into a clean 409.

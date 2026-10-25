@@ -122,10 +122,10 @@ public class Organization extends BaseEntity {
     private List<QuotaGrant> quotaGrants = new ArrayList<>();
 
     /** Raises the student limit by {@code amount}, switches the package label and records the grant. */
-    public QuotaGrant grantQuota(String packageName, int amount, UUID actorUserId, String note) {
+    public QuotaGrant grantQuota(String packageName, int amount, UUID actorUserId, String note, Instant now) {
         this.packageName = packageName;
         this.studentLimit += amount;
-        QuotaGrant grant = new QuotaGrant(packageName, amount, actorUserId, note, Instant.now());
+        QuotaGrant grant = new QuotaGrant(packageName, amount, actorUserId, note, now);
         quotaGrants.add(grant);
         return grant;
     }

@@ -1,10 +1,8 @@
 package com.pte.tenancy.internal.service;
 
 import com.pte.shared.audit.AuditLogService;
-import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.PlatformOperation;
-import com.pte.shared.security.PlatformOperationPolicy;
 import com.pte.tenancy.TenantSuspensionDurationProvider;
 import com.pte.tenancy.TenantSuspensionImpact;
 import com.pte.tenancy.TenantSuspensionImpactProvider;
@@ -19,7 +17,6 @@ import com.pte.tenancy.internal.dto.response.OrganizationResponse;
 import com.pte.tenancy.internal.exception.TenantCodeAlreadyUsedException;
 import com.pte.tenancy.internal.exception.TenantNameAlreadyUsedException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
-import com.pte.tenancy.internal.exception.TenantSuspensionImpactStaleException;
 import com.pte.tenancy.internal.exception.TenantTaxCodeAlreadyUsedException;
 import com.pte.tenancy.internal.mapper.OrganizationMapper;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
@@ -27,11 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -44,9 +37,8 @@ import java.util.UUID;
 public class OrganizationLifecycleService {
 
     private final OrganizationRepository organizationRepository;
-    private final AuditLogService auditLogService;
-    private final TenantSuspensionDurationProvider suspensionDurationProvider;
-    private final TenantSuspensionImpactProvider suspensionImpactProvider;
+    private final OrganizationOperationAudit operationAudit;
+    private final OrganizationSuspension suspension;
     private final Clock clock;
 
     public OrganizationLifecycleService(OrganizationRepository organizationRepository) {
@@ -63,10 +55,10 @@ public class OrganizationLifecycleService {
             AuditLogService auditLogService, TenantSuspensionDurationProvider suspensionDurationProvider,
             TenantSuspensionImpactProvider suspensionImpactProvider, Clock clock) {
         this.organizationRepository = organizationRepository;
-        this.auditLogService = auditLogService;
-        this.suspensionDurationProvider = suspensionDurationProvider;
-        this.suspensionImpactProvider = suspensionImpactProvider;
+        this.operationAudit = new OrganizationOperationAudit(auditLogService);
         this.clock = clock != null ? clock : Clock.systemUTC();
+        this.suspension = new OrganizationSuspension(organizationRepository, operationAudit,
+                suspensionDurationProvider, suspensionImpactProvider, this.clock);
     }
 
     @Transactional
@@ -163,17 +155,7 @@ public class OrganizationLifecycleService {
     @Transactional
     public OrganizationResponse suspend(UUID publicId, Integer requestedDays, CurrentUser caller) {
         require(caller, PlatformOperation.TENANT_LIFECYCLE, TenancyConstants.OPERATION_TENANT_SUSPEND);
-        Organization organization = organizationRepository.findByPublicId(publicId)
-                .orElseThrow(TenantNotFoundException::new);
-        int days = resolveSuspensionDays(requestedDays);
-        if (organization.getStatus() == OrganizationStatus.SUSPENDED) {
-            return OrganizationMapper.toResponse(organization);
-        }
-        Instant now = clock.instant();
-        organization.suspendUntil(days == 0 ? null : now.plus(Duration.ofDays(days)));
-        audit(caller, TenancyConstants.EVENT_TENANT_SUSPENDED, publicId,
-                TenancyConstants.AUDIT_TENANT_SUSPENDED_SUMMARY);
-        return OrganizationMapper.toResponse(organization);
+        return suspension.suspend(publicId, requestedDays, caller);
     }
 
     /**
@@ -184,27 +166,7 @@ public class OrganizationLifecycleService {
     public OrganizationResponse suspendWithConfirmation(UUID publicId, SuspendTenantRequest request,
             CurrentUser caller) {
         require(caller, PlatformOperation.TENANT_LIFECYCLE, TenancyConstants.OPERATION_TENANT_SUSPEND);
-        Organization organization = organizationRepository.findWithLockByPublicId(publicId)
-                .orElseThrow(TenantNotFoundException::new);
-        if (organization.getStatus() == OrganizationStatus.SUSPENDED) {
-            return OrganizationMapper.toResponse(organization);
-        }
-        int days = resolveSuspensionDays(request.days());
-        Instant now = clock.instant();
-        Instant suspendedUntil = days == 0 ? null : now.plus(Duration.ofDays(days));
-        if (suspensionImpactProvider == null) {
-            throw new TenantSuspensionImpactStaleException();
-        }
-        TenantSuspensionImpact liveImpact = suspensionImpactProvider.preview(publicId, now, suspendedUntil);
-        if (liveImpact.impactDigest() == null || request.impactDigest() == null
-                || !MessageDigest.isEqual(request.impactDigest().getBytes(StandardCharsets.UTF_8),
-                        liveImpact.impactDigest().getBytes(StandardCharsets.UTF_8))) {
-            throw new TenantSuspensionImpactStaleException();
-        }
-        organization.suspendUntil(suspendedUntil);
-        audit(caller, TenancyConstants.EVENT_TENANT_SUSPENDED, publicId,
-                TenancyConstants.AUDIT_TENANT_SUSPENDED_SUMMARY);
-        return OrganizationMapper.toResponse(organization);
+        return suspension.suspendWithConfirmation(publicId, request, caller);
     }
 
     @Transactional
@@ -228,14 +190,7 @@ public class OrganizationLifecycleService {
 
     @Transactional(readOnly = true)
     public TenantSuspensionImpact suspensionImpact(UUID publicId, Integer requestedDays) {
-        organizationRepository.findByPublicId(publicId).orElseThrow(TenantNotFoundException::new);
-        int days = resolveSuspensionDays(requestedDays);
-        Instant now = clock.instant();
-        Instant suspendedUntil = days == 0 ? null : now.plus(Duration.ofDays(days));
-        if (suspensionImpactProvider == null) {
-            return new TenantSuspensionImpact(publicId, days, suspendedUntil, 0, 0, List.of());
-        }
-        return suspensionImpactProvider.preview(publicId, now, suspendedUntil);
+        return suspension.suspensionImpact(publicId, requestedDays);
     }
 
     @Transactional
@@ -279,32 +234,10 @@ public class OrganizationLifecycleService {
     }
 
     private void require(CurrentUser caller, PlatformOperation operation, String action) {
-        if (caller == null) {
-            return;
-        }
-        if (PlatformOperationPolicy.can(caller, operation)) {
-            return;
-        }
-        if (auditLogService != null) {
-            auditLogService.recordFailure(caller, TenancyConstants.AGGREGATE_TENANT, "unknown",
-                    SharedConstants.AUDIT_AUTHORIZATION_DENIED, action);
-        }
-        throw new org.springframework.security.access.AccessDeniedException(SharedConstants.ACCESS_DENIED);
+        operationAudit.require(caller, operation, action);
     }
 
     private void audit(CurrentUser caller, String action, UUID publicId, String summary) {
-        if (auditLogService != null && caller != null && publicId != null) {
-            auditLogService.record(caller, TenancyConstants.AGGREGATE_TENANT, publicId.toString(), action, summary);
-        }
-    }
-
-    private int resolveSuspensionDays(Integer requestedDays) {
-        int days = requestedDays == null
-                ? (suspensionDurationProvider == null ? 0 : suspensionDurationProvider.defaultSuspensionDays())
-                : requestedDays;
-        if (days < 0) {
-            throw new com.pte.tenancy.internal.exception.TenantSuspensionDaysInvalidException();
-        }
-        return days;
+        operationAudit.audit(caller, action, publicId, summary);
     }
 }

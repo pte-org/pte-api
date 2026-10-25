@@ -38,7 +38,7 @@ class QuotaGrantServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new QuotaGrantService(organizationRepository);
+        service = new QuotaGrantService(organizationRepository, java.time.Clock.systemUTC());
     }
 
     private Organization organization(UUID publicId) {
@@ -111,8 +111,8 @@ class QuotaGrantServiceTest {
     void history_returnsGrantsNewestFirstMappedWithTheOrganizationId() {
         UUID organizationId = UUID.randomUUID();
         Organization organization = organization(organizationId);
-        organization.grantQuota("professional", 100, caller.userId(), "first");
-        organization.grantQuota("professional", 50, caller.userId(), "second");
+        organization.grantQuota("professional", 100, caller.userId(), "first", java.time.Instant.now());
+        organization.grantQuota("professional", 50, caller.userId(), "second", java.time.Instant.now());
         when(organizationRepository.findByPublicId(organizationId)).thenReturn(Optional.of(organization));
 
         List<QuotaGrantResponse> history = service.history(organizationId);
