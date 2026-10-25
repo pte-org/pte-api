@@ -49,7 +49,6 @@ public class TenantApplicationNotificationListener {
             PTE Prep Platform Team
             """;
 
-
     private final NotificationDispatchService dispatchService;
     private final BillingSettingsService billingSettingsService;
 
