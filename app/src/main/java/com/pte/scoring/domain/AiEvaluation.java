@@ -148,20 +148,20 @@ public class AiEvaluation extends AnswerEvaluation {
                 && isAwaitingAiResult(token);
     }
 
-    public void markScored(int rawScore) {
+    public void markScored(int rawScore, Instant now) {
         if (rawScore < 0 || rawScore > 100) {
             throw new IllegalArgumentException(ScoringDomainConstants.RAW_SCORE_RANGE_INVALID);
         }
         this.status = ScoringAnswerStatus.SCORED;
-        recordScore(rawScore, Instant.now());
+        recordScore(rawScore, now);
     }
 
     public void markAiScored(int rawScore, AiProviderCategory providerCategory, String provider,
-            String model, String providerVersion) {
+            String model, String providerVersion, Instant now) {
         if (providerCategory == null || provider == null || provider.isBlank()) {
             throw new IllegalArgumentException(ScoringDomainConstants.AI_SCORE_PROVENANCE_REQUIRED);
         }
-        markScored(rawScore);
+        markScored(rawScore, now);
         this.aiProviderCategory = providerCategory;
         this.aiProvider = provider;
         this.aiModel = model;

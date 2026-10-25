@@ -3,7 +3,7 @@ package com.pte.scoring.internal.controller;
 import com.pte.scoring.dto.request.CommitExaminerAssignmentRequest;
 import com.pte.scoring.dto.response.ExaminerAssignmentOverviewResponse;
 import com.pte.scoring.dto.response.ExaminerAssignmentRosterResponse;
-import com.pte.scoring.internal.service.ExaminerAssignmentService;
+import com.pte.scoring.internal.service.examiner.ExaminerAssignmentService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;

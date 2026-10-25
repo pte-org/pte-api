@@ -1,5 +1,10 @@
 package com.pte.scoring.internal.service;
 
+import com.pte.scoring.internal.service.examiner.ExaminerAssignmentService;
+import com.pte.scoring.internal.service.grading.GradingCohortService;
+import com.pte.scoring.internal.service.grading.SessionGradingGateway;
+import com.pte.scoring.internal.service.selection.ScorePublicationLockService;
+import com.pte.scoring.internal.service.staff.ScoringEligibilityQueryService;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.identity.IdentityService;
@@ -174,7 +179,7 @@ class ExaminerAssignmentDatabaseIntegrationTest {
 
         org.assertj.core.api.Assertions.assertThatThrownBy(
                 () -> inTransaction(() -> service.commit(sessionId, request, host)))
-                .isInstanceOf(com.pte.scoring.internal.exception.InvalidExaminerAssignmentException.class);
+                .isInstanceOf(com.pte.scoring.internal.exception.examiner.InvalidExaminerAssignmentException.class);
         assertThat(inTransaction(() -> assignmentRepository
                 .countByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))).isEqualTo(1);
         verify(dependencies.cohortService()).ensureManualCohort(sessionId, tenantId, host.userId());
@@ -209,7 +214,7 @@ class ExaminerAssignmentDatabaseIntegrationTest {
     private ExaminerAssignmentService newService(Dependencies dependencies) {
         return new ExaminerAssignmentService(dependencies.sessionService(), dependencies.attemptService(),
                 dependencies.eligibilityService(), dependencies.identityService(), assignmentRepository,
-                mock(ScorePublicationLockService.class), dependencies.gateway(), dependencies.cohortService());
+                mock(ScorePublicationLockService.class), dependencies.gateway(), dependencies.cohortService(), java.time.Clock.systemUTC());
     }
 
     private <T> T inTransaction(Supplier<T> callback) {

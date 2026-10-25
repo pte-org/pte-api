@@ -1,5 +1,9 @@
 package com.pte.scoring.internal.service;
 
+import com.pte.scoring.internal.service.ai.AiScoringDispatcher;
+import com.pte.scoring.internal.service.objective.AnswerContentReader;
+import com.pte.scoring.internal.service.objective.ObjectiveScoringService;
+import com.pte.scoring.internal.service.selection.ScorePublicationLockService;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
@@ -63,7 +67,7 @@ class ScoringCommandServiceTest {
     @BeforeEach
     void setUp() {
         service = new ScoringCommandService(scoringIngestService, evaluationRepository, objectiveScoringService,
-                aiScoringDispatcher, contentReader, sessionService, publicationLockService, eventPublisher);
+                aiScoringDispatcher, contentReader, sessionService, publicationLockService, eventPublisher, java.time.Clock.systemUTC());
     }
 
     @Test

@@ -1,5 +1,12 @@
 package com.pte.scoring.internal.service;
 
+import com.pte.scoring.internal.service.ai.AiScoreDetailQueryService;
+import com.pte.scoring.internal.service.examiner.ExaminerReviewVersionService;
+import com.pte.scoring.internal.service.examiner.ExaminerScoringService;
+import com.pte.scoring.internal.service.grading.SessionGradingGateway;
+import com.pte.scoring.internal.service.objective.AnswerContentReader;
+import com.pte.scoring.internal.service.objective.AnswerPayloadDecoder;
+import com.pte.scoring.internal.service.staff.ScoringEligibilityQueryService;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptExaminerPromptView;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
@@ -14,7 +21,7 @@ import com.pte.scoring.dto.response.AiScoreDetailResponse;
 import com.pte.scoring.dto.response.ExaminerAttemptDetailResponse;
 import com.pte.scoring.internal.dto.response.AnswerPayloadKind;
 import com.pte.scoring.internal.dto.response.DecodedAnswerPayload;
-import com.pte.scoring.internal.exception.ExaminerWorkNotFoundException;
+import com.pte.scoring.internal.exception.examiner.ExaminerWorkNotFoundException;
 import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
 import com.pte.scoring.internal.repository.GradingAssignmentRepository;
 import com.pte.scoring.internal.repository.ExaminerWorkQueueRepository;

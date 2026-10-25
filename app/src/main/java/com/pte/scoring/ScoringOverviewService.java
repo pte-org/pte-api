@@ -1,7 +1,7 @@
 package com.pte.scoring;
 
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
-import com.pte.scoring.internal.service.SessionGradingGateway;
+import com.pte.scoring.internal.service.grading.SessionGradingGateway;
 import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

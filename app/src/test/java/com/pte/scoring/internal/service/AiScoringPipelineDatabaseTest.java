@@ -1,5 +1,11 @@
 package com.pte.scoring.internal.service;
 
+import com.pte.scoring.internal.service.ai.AiScoringDispatcher;
+import com.pte.scoring.internal.service.ai.AiScoringResultPersistenceService;
+import com.pte.scoring.internal.service.grading.SessionGradingGateway;
+import com.pte.scoring.internal.service.objective.AnswerContentReader;
+import com.pte.scoring.internal.service.objective.ObjectiveScoringService;
+import com.pte.scoring.internal.service.selection.ScorePublicationLockService;
 import com.pte.scoring.domain.AiEvaluation;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.scoring.domain.enums.AiFailureReason;
@@ -93,7 +99,7 @@ class AiScoringPipelineDatabaseTest {
                         ScoringConstants.TASK_TYPE_READ_ALOUD, "audio-ref", "reference", null, false, null, null,
                         null, null, null, "SPEAKING", null, null, null, null, null)));
         persistence = new AiScoringResultPersistenceService(answerRepository, gateway,
-                JsonMapper.builder().build(), mock(ApplicationEventPublisher.class), null);
+                JsonMapper.builder().build(), mock(ApplicationEventPublisher.class), null, java.time.Clock.systemUTC());
         worker = new AiScoringWorker(answerRepository, new StubSpeechScoringClient(), mock(EssayScoringClient.class),
                 java.util.List.of(), persistence, Clock.fixed(T0, ZoneOffset.UTC), new AiProviderProperties(), contentReader);
     }
@@ -269,7 +275,7 @@ class AiScoringPipelineDatabaseTest {
         AiEvaluation inFlight = newAnswer(tenantId, sessionPublicId);
         inFlight.markAiDispatched(staleBefore.plusSeconds(1));
         AiEvaluation scored = newAnswer(tenantId, sessionPublicId);
-        scored.markScored(70);
+        scored.markScored(70, java.time.Instant.now());
         AiEvaluation otherSession = newAnswer(tenantId, UUID.randomUUID());
         Stream.of(pending, failed, lost, queuedBeforeDispatchTimes, inFlight, scored, otherSession)
                 .forEach(this::persist);
@@ -287,7 +293,7 @@ class AiScoringPipelineDatabaseTest {
         return new ScoringCommandService(mock(ScoringIngestService.class), answerRepository,
                 mock(ObjectiveScoringService.class), dispatcher, contentReader,
                 mock(com.pte.session.SessionService.class), mock(ScorePublicationLockService.class),
-                mock(ApplicationEventPublisher.class));
+                mock(ApplicationEventPublisher.class), java.time.Clock.systemUTC());
     }
 
     private List<AiScoringJob> sentJobs(int expected) {

@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.service;
 
+import com.pte.scoring.internal.service.objective.ScoringMethods;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.scoring.domain.AiEvaluation;

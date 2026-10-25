@@ -1,5 +1,9 @@
 package com.pte.scoring.internal.service;
 
+import com.pte.scoring.internal.service.ai.AiScoringDispatcher;
+import com.pte.scoring.internal.service.objective.AnswerContentReader;
+import com.pte.scoring.internal.service.objective.ObjectiveScoringService;
+import com.pte.scoring.internal.service.selection.ScorePublicationLockService;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.scoring.ScoringProgressChangedEvent;
 import com.pte.scoring.domain.AiEvaluation;
@@ -10,6 +14,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,6 +41,7 @@ public class ScoringCommandService {
     private final SessionService sessionService;
     private final ScorePublicationLockService publicationLockService;
     private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
     public ScoringCommandService(ScoringIngestService scoringIngestService,
                                  AiEvaluationRepository evaluationRepository,
@@ -44,7 +50,8 @@ public class ScoringCommandService {
                                  AnswerContentReader contentReader,
                                  SessionService sessionService,
                                  ScorePublicationLockService publicationLockService,
-                                 ApplicationEventPublisher eventPublisher) {
+                                 ApplicationEventPublisher eventPublisher,
+            Clock clock) {
         this.scoringIngestService = scoringIngestService;
         this.evaluationRepository = evaluationRepository;
         this.objectiveScoringService = objectiveScoringService;
@@ -53,6 +60,7 @@ public class ScoringCommandService {
         this.sessionService = sessionService;
         this.publicationLockService = publicationLockService;
         this.eventPublisher = eventPublisher;
+        this.clock = clock;
     }
 
     @Transactional
@@ -84,7 +92,7 @@ public class ScoringCommandService {
         if (answer == null) {
             return;
         }
-        evaluation.markScored(objectiveScoringService.score(answer));
+        evaluation.markScored(objectiveScoringService.score(answer), clock.instant());
         evaluationRepository.save(evaluation);
         eventPublisher.publishEvent(new ScoringProgressChangedEvent(evaluation.getTenantId(),
                 evaluation.getSessionPublicId()));

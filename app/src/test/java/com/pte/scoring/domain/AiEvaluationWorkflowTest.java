@@ -1,14 +1,12 @@
 package com.pte.scoring.domain;
 
 import com.pte.scoring.domain.enums.AiProviderCategory;
-import com.pte.scoring.domain.enums.GradingMarkingMode;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.support.EvaluationFixtures;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -18,19 +16,19 @@ class AiEvaluationWorkflowTest {
     @Test
     void legacyOrStubRawScoreIsNeverAPublishableAiScore() {
         AiEvaluation legacy = evaluation();
-        assertThatThrownBy(() -> legacy.markScored(101)).isInstanceOf(IllegalArgumentException.class);
-        legacy.markScored(70);
+        assertThatThrownBy(() -> legacy.markScored(101, java.time.Instant.now())).isInstanceOf(IllegalArgumentException.class);
+        legacy.markScored(70, java.time.Instant.now());
         assertThat(legacy.hasPublishableAiScore()).isFalse();
 
         AiEvaluation stub = evaluation();
-        stub.markAiScored(65, AiProviderCategory.STUB, "STUB", null, null);
+        stub.markAiScored(65, AiProviderCategory.STUB, "STUB", null, null, java.time.Instant.now());
         assertThat(stub.hasPublishableAiScore()).isFalse();
     }
 
     @Test
     void realAiProvenanceIsStoredWithTheRawScore() {
         AiEvaluation answer = evaluation();
-        answer.markAiScored(82, AiProviderCategory.REAL, "OPENAI_COMPATIBLE", "model-v2", null);
+        answer.markAiScored(82, AiProviderCategory.REAL, "OPENAI_COMPATIBLE", "model-v2", null, java.time.Instant.now());
 
         assertThat(answer.getRawScore()).isEqualTo(82);
         assertThat(answer.getAiProviderCategory()).isEqualTo(AiProviderCategory.REAL);
@@ -59,14 +57,14 @@ class AiEvaluationWorkflowTest {
         assertThat(answer.isAwaitingAiResult(first)).isFalse();
         assertThat(answer.isAwaitingAiResult(second)).isTrue();
 
-        answer.markAiScored(70, AiProviderCategory.REAL, "AZURE_GEMINI", "model", null);
+        answer.markAiScored(70, AiProviderCategory.REAL, "AZURE_GEMINI", "model", null, java.time.Instant.now());
         assertThat(answer.isAwaitingAiResult(second)).isFalse();
     }
 
     @Test
     void aFailedDispatchKeepsTheLastResultButReportsTheFailure() {
         AiEvaluation answer = evaluation();
-        answer.markAiScored(70, AiProviderCategory.REAL, "AZURE_GEMINI", "model", null);
+        answer.markAiScored(70, AiProviderCategory.REAL, "AZURE_GEMINI", "model", null, java.time.Instant.now());
         answer.recordDetail("{\"CONTENT\":70}", "ok", null, "{}", false);
 
         answer.recordFailure(com.pte.scoring.domain.enums.AiFailureReason.PROVIDER_TIMEOUT);

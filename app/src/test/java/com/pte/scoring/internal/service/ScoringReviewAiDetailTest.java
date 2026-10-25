@@ -1,12 +1,16 @@
 package com.pte.scoring.internal.service;
 
+import com.pte.scoring.internal.service.ai.AiScoreDetailQueryService;
+import com.pte.scoring.internal.service.objective.AnswerContentReader;
+import com.pte.scoring.internal.service.objective.AnswerPayloadDecoder;
+import com.pte.scoring.internal.service.review.ScoringReviewService;
+import com.pte.scoring.internal.service.staff.ScoringEligibilityQueryService;
 import com.pte.media.MediaService;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.support.EvaluationFixtures;
 import com.pte.scoring.support.SubmittedAnswerFixtures;
-import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.dto.response.AiScoreDetailResponse;
 import com.pte.scoring.internal.dto.response.AnswerPayloadKind;
 import com.pte.scoring.internal.dto.response.AnswerReviewDetailResponse;
@@ -60,7 +64,7 @@ class ScoringReviewAiDetailTest {
     @BeforeEach
     void setUp() {
         service = new ScoringReviewService(answerRepository, decoder, mediaService, null, null, null, aiDetails,
-                eligibility, null, contentReader);
+                eligibility, null, contentReader, java.time.Clock.systemUTC());
         host = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
     }
 
@@ -144,7 +148,7 @@ class ScoringReviewAiDetailTest {
     private AiEvaluation answer(UUID answerTenantId) {
         AiEvaluation answer = EvaluationFixtures.ai(answerTenantId, UUID.randomUUID(), "DESCRIBE_IMAGE",
                 ScoringMethod.AI_SPEECH);
-        answer.markScored(70);
+        answer.markScored(70, java.time.Instant.now());
         return answer;
     }
 }

@@ -6,7 +6,7 @@ import ch.qos.logback.core.read.ListAppender;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ScoringMethod;
-import com.pte.scoring.internal.service.AnswerContentReader;
+import com.pte.scoring.internal.service.objective.AnswerContentReader;
 import com.pte.scoring.support.EvaluationFixtures;
 import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.domain.enums.AiProviderCategory;
@@ -15,7 +15,7 @@ import com.pte.scoring.internal.config.AiProviderProperties;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
 import com.pte.scoring.internal.repository.AiEvaluationRepository;
-import com.pte.scoring.internal.service.AiScoringResultPersistenceService;
+import com.pte.scoring.internal.service.ai.AiScoringResultPersistenceService;
 import com.pte.scoring.internal.vendor.AiAnswerScorer;
 import com.pte.scoring.internal.vendor.AiJobBudget;
 import com.pte.scoring.internal.vendor.AiProviderException;
@@ -277,7 +277,7 @@ class AiScoringWorkerTest {
     void worker_redeliveredTerminalAnswer_doesNotCallVendorAgain() {
         AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
         AiScoringJob job = job(answer, "AI_SPEECH");
-        answer.markScored(80);
+        answer.markScored(80, java.time.Instant.now());
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
 

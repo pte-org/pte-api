@@ -2,13 +2,13 @@ package com.pte.scoring.internal.messaging.consumer;
 
 import com.pte.scoring.domain.AiEvaluation;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
-import com.pte.scoring.internal.service.AnswerContentReader;
+import com.pte.scoring.internal.service.objective.AnswerContentReader;
 import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.internal.config.AiProviderProperties;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
 import com.pte.scoring.internal.repository.AiEvaluationRepository;
-import com.pte.scoring.internal.service.AiScoringResultPersistenceService;
+import com.pte.scoring.internal.service.ai.AiScoringResultPersistenceService;
 import com.pte.scoring.internal.vendor.AiAnswerScorer;
 import com.pte.scoring.internal.vendor.AiJobBudget;
 import com.pte.scoring.internal.vendor.AiProviderException;

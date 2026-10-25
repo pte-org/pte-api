@@ -5,7 +5,7 @@ import com.pte.scoring.ScoringOverviewService.ScoringBacklog;
 import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.domain.enums.ScoringMethod;
-import com.pte.scoring.internal.service.SessionGradingGateway;
+import com.pte.scoring.internal.service.grading.SessionGradingGateway;
 import com.pte.scoring.support.EvaluationFixtures;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

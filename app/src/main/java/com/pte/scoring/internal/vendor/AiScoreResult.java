@@ -9,7 +9,7 @@ import java.util.Objects;
 
 /**
  * A vendor's scoring result. {@code rawScore} is 0–100 (same scale as {@link
- * com.pte.scoring.internal.service.ObjectiveScoringService} — required so
+ * com.pte.scoring.internal.service.objective.ObjectiveScoringService} — required so
  * reporting's aggregation can average objective and AI scores uniformly).
  * {@code subScores} (criterion → 0–100), {@code feedback}, {@code transcript}
  * and {@code detailJson} are stored on the answer's AI detail row; {@code
