@@ -43,29 +43,6 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
             @Value("${cloudinary.authoring-folder:pte/authoring}") String authoringFolder,
             @Value("${cloudinary.submission-folder:pte/submissions}") String submissionFolder,
             PracticeMediaBindingPort practiceMediaBindingService, AuditLogService auditLogService, Clock clock) {
-        this(repository, cloudName, apiKey, apiSecret, authoringFolder, submissionFolder,
-                practiceMediaBindingService, auditLogService, true, clock);
-    }
-
-    /** Kept for focused media tests and legacy callers that do not exercise practice binding. */
-    public CloudinaryMediaService(MediaAssetRepository repository, String cloudName, String apiKey,
-            String apiSecret, String authoringFolder, String submissionFolder) {
-        this(repository, cloudName, apiKey, apiSecret, authoringFolder, submissionFolder, null, null, false,
-                Clock.systemUTC());
-    }
-
-    /** Compatibility constructor for tests/callers that provide practice binding only. */
-    public CloudinaryMediaService(MediaAssetRepository repository, String cloudName, String apiKey,
-            String apiSecret, String authoringFolder, String submissionFolder,
-            PracticeMediaBindingPort practiceMediaBindingService) {
-        this(repository, cloudName, apiKey, apiSecret, authoringFolder, submissionFolder,
-                practiceMediaBindingService, null, false, Clock.systemUTC());
-    }
-
-    private CloudinaryMediaService(MediaAssetRepository repository, String cloudName, String apiKey,
-            String apiSecret, String authoringFolder, String submissionFolder,
-            PracticeMediaBindingPort practiceMediaBindingService, AuditLogService auditLogService, boolean ignored,
-            Clock clock) {
         CloudinaryRequestSigner signer = new CloudinaryRequestSigner(cloudName, apiKey, apiSecret, clock);
         MediaAccessGuard accessGuard = new MediaAccessGuard(practiceMediaBindingService, auditLogService);
         this.uploadRequester = new CloudinaryUploadRequester(repository, signer, accessGuard,
