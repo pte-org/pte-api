@@ -1,4 +1,4 @@
-package com.pte.itembank.internal.exception;
+package com.pte.itembank.internal.exception.tasktype;
 
 import com.pte.shared.exception.DomainException;
 import org.springframework.http.HttpStatus;

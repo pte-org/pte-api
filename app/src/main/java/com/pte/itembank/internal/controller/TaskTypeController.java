@@ -14,7 +14,6 @@ import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import com.pte.itembank.dto.request.TaskTypeStatusAction;
 import com.pte.itembank.dto.request.TaskTypeStatusRequest;
@@ -76,7 +75,7 @@ public class TaskTypeController {
     public ApiResponse<QuestionTypeResponse> create(@Valid @RequestBody CreateTaskTypeRequest request) {
         if (!rolloutProperties.isCustomCreationEnabled()
                 && !TaskTypeCodeCompatibility.isStandard(request.taskTypeKey())) {
-            throw new com.pte.itembank.internal.exception.TaskTypeCustomCreationDisabledException();
+            throw new com.pte.itembank.internal.exception.tasktype.TaskTypeCustomCreationDisabledException();
         }
         return ApiResponse.success(service.createTaskType(request, currentUser()));
     }

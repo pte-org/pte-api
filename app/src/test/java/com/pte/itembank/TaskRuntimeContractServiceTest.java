@@ -1,6 +1,6 @@
 package com.pte.itembank;
 
-import com.pte.itembank.internal.exception.TaskRuntimeProfileException;
+import com.pte.itembank.internal.exception.tasktype.TaskRuntimeProfileException;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
