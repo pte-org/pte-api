@@ -63,6 +63,15 @@ public class ScoreTemplateService {
         this(repository, null, null);
     }
 
+    /**
+     * Non-throwing variant of {@link #getActive()} for callers outside this module, which cannot catch the
+     * internal not-found exception (practice decides whether timed mode is available from it).
+     */
+    @Transactional(readOnly = true)
+    public Optional<ScoreTemplateResponse> findActive() {
+        return repository.findWithItemsByStatus(ScoreTemplateStatus.ACTIVE).map(ScoreTemplateMapper::toResponse);
+    }
+
     /** Used by {@code assessment.SnapshotPublishService} to pin the scoring scheme at exam-publish time. */
     @Transactional(readOnly = true)
     public ScoreTemplateResponse getActive() {
