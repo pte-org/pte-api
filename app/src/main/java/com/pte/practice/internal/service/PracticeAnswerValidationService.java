@@ -52,7 +52,8 @@ public class PracticeAnswerValidationService {
 
     public void validate(String rendererKey, Integer answerSchemaVersion, String payload,
             ResponseConfidence confidence) {
-        validatePayload(rendererKey, answerSchemaVersion, payload, confidence, true);
+        // Practice no longer asks how confident the student is, so an answer never needs a confidence.
+        validatePayload(rendererKey, answerSchemaVersion, payload, confidence, false);
     }
 
     /** Validates a non-empty draft while allowing confidence to be selected later. */

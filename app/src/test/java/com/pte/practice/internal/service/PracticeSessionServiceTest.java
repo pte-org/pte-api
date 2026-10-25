@@ -452,7 +452,7 @@ class PracticeSessionServiceTest {
     private PracticeSessionStartRequest mockTestRequest(com.pte.practice.internal.domain.PracticeMockTest test,
             boolean restart) {
         return new PracticeSessionStartRequest("PTE_CORE_PRACTICE", tenantId, Set.of(),
-                new PracticeCapabilityManifest(Set.of("OPTION_SELECTION"), "1.0.0"), null, null, null,
+                new PracticeCapabilityManifest(Set.of("OPTION_SELECTION"), "1.0.0"), com.pte.practice.internal.domain.enums.PracticeTimingMode.TIMED, null, null,
                 test.getPublicId(), restart);
     }
 

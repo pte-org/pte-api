@@ -416,7 +416,8 @@ public class PracticeSessionService {
 
     /**
      * Starts (or resumes) a full mock test. One unfinished attempt per student and test: a second start returns it,
-     * and {@code restart} discards it first. The test is always TIMED when the template can pace it.
+     * and {@code restart} discards it first. The student picks timed or untimed; timed falls back to untimed
+     * per item where the template has no timing.
      */
     private PracticeSessionResponse startMockTest(PracticeSessionStartRequest request, String idempotencyKey,
             String requestHash, CurrentUser caller) {
@@ -447,7 +448,7 @@ public class PracticeSessionService {
         session.setTimeLimitSeconds(PracticeConstants.PRACTICE_NO_SESSION_TIME_LIMIT_SECONDS);
         session.setKind(PracticeSessionKind.MOCK_TEST);
         session.setMockTestId(mockTest.getId());
-        session.setTimingMode(PracticeTimingMode.TIMED);
+        session.setTimingMode(request.effectiveTimingMode());
         session.setQuestionCount(mockTest.getItemCount());
         session.setCatalogVersion(PracticeConstants.PRACTICE_CATALOG_VERSION);
         session.setSelectedTaskTypes(joinSorted(taskCodes));
