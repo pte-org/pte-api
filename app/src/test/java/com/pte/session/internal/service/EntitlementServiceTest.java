@@ -2,7 +2,6 @@ package com.pte.session.internal.service;
 
 import com.pte.session.domain.ExamPolicy;
 import com.pte.session.domain.ExamSession;
-import com.pte.session.domain.enums.ExamMode;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
@@ -12,9 +11,10 @@ import com.pte.session.internal.exception.ProctorNotAssignedException;
 import com.pte.session.internal.exception.SessionClosedException;
 import com.pte.session.internal.exception.SessionNotStartedException;
 import com.pte.session.internal.exception.SessionNotFoundException;
-import com.pte.session.internal.repository.EnrollmentRepository;
+import com.pte.session.domain.enums.AudienceMemberStatus;
+import com.pte.session.internal.repository.ExamRegistrationRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
-import com.pte.session.internal.repository.ProctorAssignmentRepository;
+import com.pte.session.internal.repository.ExamSessionProctorRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,9 +47,9 @@ class EntitlementServiceTest {
     @Mock
     private ExamSessionRepository sessionRepository;
     @Mock
-    private EnrollmentRepository enrollmentRepository;
+    private ExamRegistrationRepository registrationRepository;
     @Mock
-    private ProctorAssignmentRepository proctorAssignmentRepository;
+    private ExamSessionProctorRepository proctorRepository;
 
     private static final String CODE = "FPT-261010-K7QM";
     private static final UUID TENANT_ID = UUID.randomUUID();
@@ -60,7 +60,7 @@ class EntitlementServiceTest {
 
     @BeforeEach
     void setUp() {
-        entitlementService = new EntitlementService(sessionRepository, enrollmentRepository, proctorAssignmentRepository,
+        entitlementService = new EntitlementService(sessionRepository, registrationRepository, proctorRepository,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -70,7 +70,7 @@ class EntitlementServiceTest {
         session.setPublicId(publicId);
         session.setTenantId(tenantId);
         session.setStatus(SessionStatus.OPEN);
-        session.setSnapshotPublicId(UUID.randomUUID());
+        session.setExamVersionPublicId(UUID.randomUUID());
         session.setPolicy(ExamPolicy.realExamDefault());
         session.setOpensAt(NOW.minus(Duration.ofHours(1)));
         session.setClosesAt(NOW.plus(Duration.ofHours(2)));
@@ -83,12 +83,12 @@ class EntitlementServiceTest {
         UUID studentPublicId = UUID.randomUUID();
         ExamSession session = openSession(sessionPublicId, UUID.randomUUID());
         when(sessionRepository.findByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
-        when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, studentPublicId)).thenReturn(true);
+        when(registrationRepository.existsBySessionIdAndStudentPublicIdAndStatus(1L, studentPublicId, AudienceMemberStatus.ENROLLED)).thenReturn(true);
 
         EntitlementResponse response = entitlementService.checkEntitlement(sessionPublicId, studentPublicId);
 
         assertThat(response.sessionPublicId()).isEqualTo(sessionPublicId);
-        assertThat(response.snapshotPublicId()).isEqualTo(session.getSnapshotPublicId());
+        assertThat(response.snapshotPublicId()).isEqualTo(session.getExamVersionPublicId());
     }
 
     @Test
@@ -101,7 +101,7 @@ class EntitlementServiceTest {
         legacyPolicy.setLockdownMode(null);
         session.setPolicy(legacyPolicy);
         when(sessionRepository.findByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
-        when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, studentPublicId)).thenReturn(true);
+        when(registrationRepository.existsBySessionIdAndStudentPublicIdAndStatus(1L, studentPublicId, AudienceMemberStatus.ENROLLED)).thenReturn(true);
 
         EntitlementResponse response = entitlementService.checkEntitlement(sessionPublicId, studentPublicId);
 
@@ -109,7 +109,7 @@ class EntitlementServiceTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = SessionStatus.class, names = {"DRAFT", "PREPARING", "READY", "SCHEDULED"})
+    @EnumSource(value = SessionStatus.class, names = {"DRAFT", "READY", "SCHEDULED"})
     void checkEntitlement_sessionNotOpenedByHost_throwsSessionNotStarted(SessionStatus status) {
         ExamSession session = enrolledSession();
         session.setStatus(status);
@@ -169,7 +169,7 @@ class EntitlementServiceTest {
         ExamSession session = openSession(UUID.randomUUID(), TENANT_ID);
         session.setOpensAt(NOW.plus(Duration.ofHours(1)));
         when(sessionRepository.findByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
-        when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, STUDENT_ID)).thenReturn(false);
+        when(registrationRepository.existsBySessionIdAndStudentPublicIdAndStatus(1L, STUDENT_ID, AudienceMemberStatus.ENROLLED)).thenReturn(false);
 
         assertThatThrownBy(() -> entitlementService.checkEntitlement(session.getPublicId(), STUDENT_ID))
                 .isInstanceOf(NotEntitledException.class);
@@ -178,7 +178,7 @@ class EntitlementServiceTest {
     private ExamSession enrolledSession() {
         ExamSession session = openSession(UUID.randomUUID(), TENANT_ID);
         when(sessionRepository.findByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
-        when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, STUDENT_ID)).thenReturn(true);
+        when(registrationRepository.existsBySessionIdAndStudentPublicIdAndStatus(1L, STUDENT_ID, AudienceMemberStatus.ENROLLED)).thenReturn(true);
         return session;
     }
 
@@ -188,7 +188,7 @@ class EntitlementServiceTest {
         UUID studentPublicId = UUID.randomUUID();
         ExamSession session = openSession(sessionPublicId, UUID.randomUUID());
         when(sessionRepository.findByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
-        when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, studentPublicId)).thenReturn(false);
+        when(registrationRepository.existsBySessionIdAndStudentPublicIdAndStatus(1L, studentPublicId, AudienceMemberStatus.ENROLLED)).thenReturn(false);
 
         assertThatThrownBy(() -> entitlementService.checkEntitlement(sessionPublicId, studentPublicId))
                 .isInstanceOf(NotEntitledException.class);
@@ -210,7 +210,7 @@ class EntitlementServiceTest {
         UUID tenantId = UUID.randomUUID();
         ExamSession session = openSession(sessionPublicId, tenantId);
         when(sessionRepository.findByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
-        when(proctorAssignmentRepository.existsBySessionIdAndProctorPublicId(1L, proctorPublicId)).thenReturn(true);
+        when(proctorRepository.existsBySessionIdAndProctorPublicId(1L, proctorPublicId)).thenReturn(true);
 
         ProctorAssignmentCheckResponse response = entitlementService.checkProctorAssignment(sessionPublicId, proctorPublicId);
 
@@ -223,7 +223,7 @@ class EntitlementServiceTest {
         UUID proctorPublicId = UUID.randomUUID();
         ExamSession session = openSession(sessionPublicId, UUID.randomUUID());
         when(sessionRepository.findByPublicId(sessionPublicId)).thenReturn(Optional.of(session));
-        when(proctorAssignmentRepository.existsBySessionIdAndProctorPublicId(1L, proctorPublicId)).thenReturn(false);
+        when(proctorRepository.existsBySessionIdAndProctorPublicId(1L, proctorPublicId)).thenReturn(false);
 
         assertThatThrownBy(() -> entitlementService.checkProctorAssignment(sessionPublicId, proctorPublicId))
                 .isInstanceOf(ProctorNotAssignedException.class);
@@ -266,7 +266,7 @@ class EntitlementServiceTest {
         ExamSession session = openSession(UUID.randomUUID(), TENANT_ID);
         when(sessionRepository.findBySessionCodeAndTenantIdAndDeletedFalse(CODE, TENANT_ID))
                 .thenReturn(Optional.of(session));
-        when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, STUDENT_ID)).thenReturn(true);
+        when(registrationRepository.existsBySessionIdAndStudentPublicIdAndStatus(1L, STUDENT_ID, AudienceMemberStatus.ENROLLED)).thenReturn(true);
 
         UUID resolved = entitlementService.resolveSessionCode(CODE, TENANT_ID, STUDENT_ID);
 
@@ -278,7 +278,7 @@ class EntitlementServiceTest {
         ExamSession session = openSession(UUID.randomUUID(), TENANT_ID);
         when(sessionRepository.findBySessionCodeAndTenantIdAndDeletedFalse(CODE, TENANT_ID))
                 .thenReturn(Optional.of(session));
-        when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, STUDENT_ID)).thenReturn(true);
+        when(registrationRepository.existsBySessionIdAndStudentPublicIdAndStatus(1L, STUDENT_ID, AudienceMemberStatus.ENROLLED)).thenReturn(true);
 
         UUID resolved = entitlementService.resolveSessionCode("  fpt-261010-k7qm \t", TENANT_ID, STUDENT_ID);
 
@@ -291,7 +291,7 @@ class EntitlementServiceTest {
         session.setStatus(SessionStatus.SCHEDULED);
         when(sessionRepository.findBySessionCodeAndTenantIdAndDeletedFalse(CODE, TENANT_ID))
                 .thenReturn(Optional.of(session));
-        when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, STUDENT_ID)).thenReturn(true);
+        when(registrationRepository.existsBySessionIdAndStudentPublicIdAndStatus(1L, STUDENT_ID, AudienceMemberStatus.ENROLLED)).thenReturn(true);
 
         assertThat(entitlementService.resolveSessionCode(CODE, TENANT_ID, STUDENT_ID))
                 .isEqualTo(session.getPublicId());
@@ -326,7 +326,7 @@ class EntitlementServiceTest {
 
         assertThatThrownBy(() -> entitlementService.resolveSessionCode(CODE, TENANT_ID, STUDENT_ID))
                 .isInstanceOf(SessionNotFoundException.class);
-        verify(enrollmentRepository, never()).existsBySessionIdAndStudentPublicId(any(), any());
+        verify(registrationRepository, never()).existsBySessionIdAndStudentPublicIdAndStatus(any(), any(), any());
     }
 
     @Test
@@ -340,7 +340,7 @@ class EntitlementServiceTest {
     void resolveSessionCode_studentNotEnrolled_throwsSameSessionNotFound() {
         when(sessionRepository.findBySessionCodeAndTenantIdAndDeletedFalse(CODE, TENANT_ID))
                 .thenReturn(Optional.of(openSession(UUID.randomUUID(), TENANT_ID)));
-        when(enrollmentRepository.existsBySessionIdAndStudentPublicId(1L, STUDENT_ID)).thenReturn(false);
+        when(registrationRepository.existsBySessionIdAndStudentPublicIdAndStatus(1L, STUDENT_ID, AudienceMemberStatus.ENROLLED)).thenReturn(false);
 
         assertThatThrownBy(() -> entitlementService.resolveSessionCode(CODE, TENANT_ID, STUDENT_ID))
                 .isInstanceOf(SessionNotFoundException.class);

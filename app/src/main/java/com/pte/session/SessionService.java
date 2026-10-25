@@ -46,6 +46,9 @@ public class SessionService {
     private final ProctorMonitoringQueryService proctorMonitoringQueryService;
     private final com.pte.session.internal.service.AttendanceQueryService attendanceQueryService;
     private final com.pte.session.internal.service.AttendanceCommandService attendanceCommandService;
+    private final com.pte.session.internal.service.IdentityVerificationService identityVerificationService;
+    private final com.pte.session.internal.service.AttendanceReceiptService attendanceReceiptService;
+    private final com.pte.session.internal.service.SessionGradingService gradingService;
 
     public SessionService(
             EntitlementService entitlementService,
@@ -53,13 +56,19 @@ public class SessionService {
             SessionStaffAssignmentQueryService staffAssignmentQueryService,
             ProctorMonitoringQueryService proctorMonitoringQueryService,
             com.pte.session.internal.service.AttendanceQueryService attendanceQueryService,
-            com.pte.session.internal.service.AttendanceCommandService attendanceCommandService) {
+            com.pte.session.internal.service.AttendanceCommandService attendanceCommandService,
+            com.pte.session.internal.service.IdentityVerificationService identityVerificationService,
+            com.pte.session.internal.service.AttendanceReceiptService attendanceReceiptService,
+            com.pte.session.internal.service.SessionGradingService gradingService) {
         this.entitlementService = entitlementService;
         this.sessionLifecycleService = sessionLifecycleService;
         this.staffAssignmentQueryService = staffAssignmentQueryService;
         this.proctorMonitoringQueryService = proctorMonitoringQueryService;
         this.attendanceQueryService = attendanceQueryService;
         this.attendanceCommandService = attendanceCommandService;
+        this.identityVerificationService = identityVerificationService;
+        this.attendanceReceiptService = attendanceReceiptService;
+        this.gradingService = gradingService;
     }
 
     /** Throws if the student isn't enrolled, or the session isn't OPEN or is outside its opensAt/closesAt window — never returns a false/empty result for "not entitled". */
@@ -204,6 +213,11 @@ public class SessionService {
         return proctorMonitoringQueryService.getEnrollments(sessionPublicId, tenantId, page, size);
     }
 
+    /** Every student actively enrolled in an exam session, for whole-session status aggregates. */
+    public List<UUID> findEnrolledStudentPublicIds(UUID sessionPublicId, UUID tenantId) {
+        return proctorMonitoringQueryService.findEnrolledStudentIds(sessionPublicId, tenantId);
+    }
+
     /** Total count of active student enrollments for an exam session. */
     public long countMonitoringEnrollments(UUID sessionPublicId, UUID tenantId) {
         return proctorMonitoringQueryService.countEnrollments(sessionPublicId, tenantId);
@@ -238,14 +252,14 @@ public class SessionService {
     public com.pte.session.dto.response.AttendanceCommandReceiptView getAttendanceReceipt(
             UUID sessionPublicId, UUID requestPublicId,
             com.pte.shared.security.CurrentUser caller, boolean isHost) {
-        return attendanceCommandService.getReceipt(sessionPublicId, requestPublicId, caller, isHost);
+        return attendanceReceiptService.getReceipt(sessionPublicId, requestPublicId, caller, isHost);
     }
 
     /** Returns paginated immutable attendance transition history for a student on an exam session. */
     public com.pte.session.dto.response.AttendanceHistoryView getAttendanceHistory(
             UUID sessionPublicId, UUID studentPublicId, int page, int size,
             com.pte.shared.security.CurrentUser caller, boolean isHost) {
-        return attendanceCommandService.getHistory(sessionPublicId, studentPublicId, page, size, caller, isHost);
+        return attendanceReceiptService.getHistory(sessionPublicId, studentPublicId, page, size, caller, isHost);
     }
 
     /** Records or updates student identity verification. */
@@ -253,12 +267,53 @@ public class SessionService {
             UUID sessionPublicId, UUID studentPublicId,
             com.pte.session.dto.request.RecordIdentityVerificationRequest request,
             com.pte.shared.security.CurrentUser caller, boolean isHost) {
-        return attendanceCommandService.recordIdentityVerification(sessionPublicId, studentPublicId, request, caller, isHost);
+        return identityVerificationService.recordIdentityVerification(sessionPublicId, studentPublicId, request, caller, isHost);
     }
 
     /** Returns active assignment rows; identity validates the user's live staff role before dispatch. */
     @Transactional(readOnly = true)
     public List<UUID> findAssignedProctorPublicIds(UUID sessionPublicId, UUID tenantId) {
         return staffAssignmentQueryService.findAssignedProctorPublicIds(sessionPublicId, tenantId);
+    }
+
+    // ---- grading and publication state of the session (written by scoring and reporting) ----
+
+    public Optional<com.pte.session.dto.response.SessionGradingView> findGrading(UUID sessionPublicId, UUID tenantId) {
+        return gradingService.findGrading(sessionPublicId, tenantId);
+    }
+
+    /** Frozen, not yet completed sessions of every tenant, for the reconciliation sweep. */
+    public List<com.pte.session.dto.response.SessionGradingView> findFrozenGrading() {
+        return gradingService.findFrozen();
+    }
+
+    /** Closed sessions of the tenant whose grading is frozen and not yet completed. */
+    public long countFrozenGrading(UUID tenantId) {
+        return gradingService.countFrozen(tenantId);
+    }
+
+    public com.pte.session.dto.response.SessionGradingView freezeGrading(UUID sessionPublicId, UUID tenantId,
+            String markingMode, String previewVersion, UUID frozenByPublicId, Instant frozenAt) {
+        return gradingService.freezeGrading(sessionPublicId, tenantId, markingMode, previewVersion, frozenByPublicId,
+                frozenAt);
+    }
+
+    public boolean completeGrading(UUID sessionPublicId, UUID tenantId, Instant completedAt) {
+        return gradingService.completeGrading(sessionPublicId, tenantId, completedAt);
+    }
+
+    public Optional<com.pte.session.dto.response.SessionPublicationView> findPublication(UUID sessionPublicId,
+            UUID tenantId) {
+        return gradingService.findPublication(sessionPublicId, tenantId);
+    }
+
+    public List<com.pte.session.dto.response.SessionPublicationView> findPublications(UUID tenantId,
+            Collection<UUID> sessionPublicIds) {
+        return gradingService.findPublications(tenantId, sessionPublicIds);
+    }
+
+    public com.pte.session.dto.response.SessionPublicationView lockPublication(UUID sessionPublicId, UUID tenantId,
+            UUID publicationPublicId, Instant lockedAt) {
+        return gradingService.lockPublication(sessionPublicId, tenantId, publicationPublicId, lockedAt);
     }
 }

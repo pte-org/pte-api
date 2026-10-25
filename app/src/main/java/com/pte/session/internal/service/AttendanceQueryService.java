@@ -8,12 +8,10 @@ import com.pte.session.dto.response.AttendanceRowView;
 import com.pte.session.dto.response.AttendanceSummaryView;
 import com.pte.session.internal.exception.SessionNotFoundException;
 import com.pte.session.internal.repository.ExamSessionRepository;
-import com.pte.session.internal.repository.ProctorAssignmentRepository;
-import com.pte.shared.exception.DomainException;
+import com.pte.session.internal.repository.ExamSessionProctorRepository;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.web.PageMeta;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,26 +29,26 @@ public class AttendanceQueryService {
 
     private final JdbcTemplate jdbcTemplate;
     private final ExamSessionRepository examSessionRepository;
-    private final ProctorAssignmentRepository proctorAssignmentRepository;
+    private final ExamSessionProctorRepository proctorRepository;
     private final Clock clock;
 
     @Autowired
     public AttendanceQueryService(
             JdbcTemplate jdbcTemplate,
             ExamSessionRepository examSessionRepository,
-            ProctorAssignmentRepository proctorAssignmentRepository,
+            ExamSessionProctorRepository proctorRepository,
             Clock clock) {
         this.jdbcTemplate = jdbcTemplate;
         this.examSessionRepository = examSessionRepository;
-        this.proctorAssignmentRepository = proctorAssignmentRepository;
+        this.proctorRepository = proctorRepository;
         this.clock = clock != null ? clock : Clock.systemUTC();
     }
 
     public AttendanceQueryService(
             JdbcTemplate jdbcTemplate,
             ExamSessionRepository examSessionRepository,
-            ProctorAssignmentRepository proctorAssignmentRepository) {
-        this(jdbcTemplate, examSessionRepository, proctorAssignmentRepository, Clock.systemUTC());
+            ExamSessionProctorRepository proctorRepository) {
+        this(jdbcTemplate, examSessionRepository, proctorRepository, Clock.systemUTC());
     }
 
     @Transactional(readOnly = true)
@@ -68,7 +66,7 @@ public class AttendanceQueryService {
                 .orElseThrow(SessionNotFoundException::new);
 
         if (!isHost) {
-            boolean assigned = proctorAssignmentRepository.isProctorAssigned(sessionPublicId, caller.userId(), tenantId);
+            boolean assigned = proctorRepository.isProctorAssigned(sessionPublicId, caller.userId(), tenantId);
             if (!assigned) {
                 throw new com.pte.session.internal.exception.ProctorNotAssignedException();
             }
@@ -123,17 +121,17 @@ public class AttendanceQueryService {
         countParams.add(session.getId());
         countParams.add(tenantId);
 
-        StringBuilder whereClause = new StringBuilder(" WHERE e.session_id = ? AND e.tenant_id = ? AND e.deleted = FALSE ");
+        StringBuilder whereClause = new StringBuilder(" WHERE e.session_id = ? AND e.tenant_id = ? AND e.deleted = FALSE AND e.status = 'ENROLLED' ");
 
         String normalizedStatus = statusFilter != null ? statusFilter.trim().toUpperCase() : null;
         if ("PRESENT".equals(normalizedStatus)) {
-            whereClause.append(" AND (sa.id IS NOT NULL AND sa.enrollment_public_id = e.public_id AND sa.status = 'PRESENT') ");
+            whereClause.append(" AND e.attendance_status = 'PRESENT' ");
         } else if ("LATE".equals(normalizedStatus)) {
-            whereClause.append(" AND (sa.id IS NOT NULL AND sa.enrollment_public_id = e.public_id AND sa.status = 'LATE') ");
+            whereClause.append(" AND e.attendance_status = 'LATE' ");
         } else if ("ABSENT".equals(normalizedStatus)) {
-            whereClause.append(" AND (sa.id IS NOT NULL AND sa.enrollment_public_id = e.public_id AND sa.status = 'ABSENT') ");
+            whereClause.append(" AND e.attendance_status = 'ABSENT' ");
         } else if ("UNMARKED".equals(normalizedStatus)) {
-            whereClause.append(" AND (sa.id IS NULL OR sa.enrollment_public_id != e.public_id OR sa.status = 'UNMARKED') ");
+            whereClause.append(" AND e.attendance_status = 'UNMARKED' ");
         }
 
         if (search != null && !search.isBlank()) {
@@ -148,8 +146,7 @@ public class AttendanceQueryService {
             countParams.add(trimmedSearch);
         }
 
-        String countSql = "SELECT COUNT(e.id) FROM enrollments e "
-                + "LEFT JOIN session_attendances sa ON sa.session_id = e.session_id AND sa.student_public_id = e.student_public_id AND sa.deleted = FALSE "
+        String countSql = "SELECT COUNT(e.id) FROM exam_registrations e "
                 + "LEFT JOIN identity_staff_student_search_view u ON u.tenant_id = e.tenant_id AND u.student_public_id = e.student_public_id "
                 + whereClause;
 
@@ -166,18 +163,15 @@ public class AttendanceQueryService {
                 + "  e.public_id AS enrollment_public_id, "
                 + "  u.display_name, "
                 + "  u.email, "
-                + "  sa.id AS sa_id, "
-                + "  sa.enrollment_public_id AS sa_enrollment_public_id, "
-                + "  sa.status AS sa_status, "
-                + "  sa.version AS sa_version, "
-                + "  sa.last_actor_public_id, "
-                + "  sa.last_actor_role, "
-                + "  sa.last_action_at, "
-                + "  sa.last_reason_or_note, "
-                + "  sa.identity_status AS sa_identity_status, "
-                + "  sa.identity_note AS sa_identity_note "
-                + "FROM enrollments e "
-                + "LEFT JOIN session_attendances sa ON sa.session_id = e.session_id AND sa.student_public_id = e.student_public_id AND sa.deleted = FALSE "
+                + "  e.attendance_status, "
+                + "  e.attendance_version, "
+                + "  e.last_actor_public_id, "
+                + "  e.last_actor_role, "
+                + "  e.last_action_at, "
+                + "  e.last_reason_or_note, "
+                + "  e.identity_status, "
+                + "  e.identity_note "
+                + "FROM exam_registrations e "
                 + "LEFT JOIN identity_staff_student_search_view u ON u.tenant_id = e.tenant_id AND u.student_public_id = e.student_public_id "
                 + whereClause
                 + "ORDER BY u.display_name ASC NULLS LAST, e.student_public_id ASC "
@@ -191,43 +185,24 @@ public class AttendanceQueryService {
             UUID enrollmentId = (UUID) rs.getObject("enrollment_public_id");
             String displayName = rs.getString("display_name");
             String email = rs.getString("email");
-            Long saId = (Long) rs.getObject("sa_id");
-            UUID saEnrollmentId = (UUID) rs.getObject("sa_enrollment_public_id");
-
-            boolean isCurrentGen = saId != null && enrollmentId != null && enrollmentId.equals(saEnrollmentId);
-            AttendanceStatus status = isCurrentGen && rs.getString("sa_status") != null
-                    ? AttendanceStatus.valueOf(rs.getString("sa_status"))
-                    : AttendanceStatus.UNMARKED;
-            Long version = rs.getObject("sa_version") != null
-                    ? rs.getLong("sa_version")
-                    : 0L;
-            UUID lastActorId = isCurrentGen ? (UUID) rs.getObject("last_actor_public_id") : null;
-            String lastActorRole = isCurrentGen ? rs.getString("last_actor_role") : null;
-            Timestamp actionTs = isCurrentGen ? rs.getTimestamp("last_action_at") : null;
-            Instant lastActionAt = actionTs != null ? actionTs.toInstant() : null;
-            String lastReasonOrNote = isCurrentGen ? rs.getString("last_reason_or_note") : null;
-            String identityStatus = isCurrentGen && rs.getString("sa_identity_status") != null
-                    ? rs.getString("sa_identity_status")
-                    : "UNVERIFIED";
-            String identityNote = isCurrentGen ? rs.getString("sa_identity_note") : null;
-
+            Timestamp actionTs = rs.getTimestamp("last_action_at");
             return new AttendanceRowView(
                     studentId,
                     enrollmentId,
                     displayName,
                     email,
-                    status,
-                    version,
-                    lastActorId,
-                    lastActorRole,
-                    lastActionAt,
-                    lastReasonOrNote,
+                    AttendanceStatus.valueOf(rs.getString("attendance_status")),
+                    rs.getLong("attendance_version"),
+                    (UUID) rs.getObject("last_actor_public_id"),
+                    rs.getString("last_actor_role"),
+                    actionTs != null ? actionTs.toInstant() : null,
+                    rs.getString("last_reason_or_note"),
                     finalCanEditSession,
                     finalSessionBlockingReason,
                     null,
                     null,
-                    identityStatus,
-                    identityNote
+                    rs.getString("identity_status"),
+                    rs.getString("identity_note")
             );
         }, dataParams.toArray());
 
@@ -255,13 +230,12 @@ public class AttendanceQueryService {
     public AttendanceSummaryView getSummary(Long sessionId, UUID tenantId) {
         String sql = "SELECT "
                 + "  COUNT(e.id) AS total_enrollments, "
-                + "  COUNT(CASE WHEN sa.id IS NOT NULL AND sa.enrollment_public_id = e.public_id AND sa.status = 'PRESENT' THEN 1 END) AS present_count, "
-                + "  COUNT(CASE WHEN sa.id IS NOT NULL AND sa.enrollment_public_id = e.public_id AND sa.status = 'ABSENT' THEN 1 END) AS absent_count, "
-                + "  COUNT(CASE WHEN sa.id IS NOT NULL AND sa.enrollment_public_id = e.public_id AND sa.status = 'LATE' THEN 1 END) AS late_count, "
-                + "  COUNT(CASE WHEN sa.id IS NULL OR sa.enrollment_public_id != e.public_id OR sa.status = 'UNMARKED' THEN 1 END) AS unmarked_count "
-                + "FROM enrollments e "
-                + "LEFT JOIN session_attendances sa ON sa.session_id = e.session_id AND sa.student_public_id = e.student_public_id AND sa.deleted = FALSE "
-                + "WHERE e.session_id = ? AND e.tenant_id = ? AND e.deleted = FALSE";
+                + "  COUNT(CASE WHEN e.attendance_status = 'PRESENT' THEN 1 END) AS present_count, "
+                + "  COUNT(CASE WHEN e.attendance_status = 'ABSENT' THEN 1 END) AS absent_count, "
+                + "  COUNT(CASE WHEN e.attendance_status = 'LATE' THEN 1 END) AS late_count, "
+                + "  COUNT(CASE WHEN e.attendance_status = 'UNMARKED' THEN 1 END) AS unmarked_count "
+                + "FROM exam_registrations e "
+                + "WHERE e.session_id = ? AND e.tenant_id = ? AND e.deleted = FALSE AND e.status = 'ENROLLED'";
 
         return jdbcTemplate.query(sql, rs -> {
             if (rs.next()) {

@@ -6,11 +6,12 @@ import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
-import com.pte.session.domain.Enrollment;
+import com.pte.session.domain.ExamRegistration;
+import com.pte.session.domain.enums.AudienceMemberStatus;
 import com.pte.session.domain.ExamPolicy;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.enums.SessionStatus;
-import com.pte.session.internal.repository.EnrollmentRepository;
+import com.pte.session.internal.repository.ExamRegistrationRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
@@ -94,7 +95,7 @@ class EnrollmentConcurrencyPostgresIntegrationTest {
     private ExamSessionRepository sessionRepository;
 
     @Autowired
-    private EnrollmentRepository enrollmentRepository;
+    private ExamRegistrationRepository registrationRepository;
 
     @Autowired
     private PlatformTransactionManager transactions;
@@ -131,7 +132,7 @@ class EnrollmentConcurrencyPostgresIntegrationTest {
             assertThat(second.get(30, TimeUnit.SECONDS)).isFalse();
         }
 
-        assertThat(tx(() -> enrollmentRepository.findAll().stream()
+        assertThat(tx(() -> registrationRepository.findAll().stream()
                 .filter(enrollment -> enrollment.getStudentPublicId().equals(studentId))
                 .count())).isEqualTo(1);
     }
@@ -173,7 +174,7 @@ class EnrollmentConcurrencyPostgresIntegrationTest {
             assertThat(second.get(30, TimeUnit.SECONDS)).isTrue();
         }
 
-        assertThat(tx(() -> enrollmentRepository.findAll().stream()
+        assertThat(tx(() -> registrationRepository.findAll().stream()
                 .filter(enrollment -> Set.of(firstStudentId, secondStudentId)
                         .contains(enrollment.getStudentPublicId()))
                 .count())).isEqualTo(2);
@@ -200,7 +201,7 @@ class EnrollmentConcurrencyPostgresIntegrationTest {
         });
 
         assertThat(secondCreated).isTrue();
-        assertThat(tx(() -> enrollmentRepository.findAll().stream()
+        assertThat(tx(() -> registrationRepository.findAll().stream()
                 .filter(enrollment -> enrollment.getStudentPublicId().equals(studentId))
                 .count())).isEqualTo(2);
     }
@@ -223,25 +224,26 @@ class EnrollmentConcurrencyPostgresIntegrationTest {
             identityService.lockActiveStudentsInTenant(List.of(studentId), tenantId);
             return enrollIfNoConflict(session, tenantId, studentId);
         })).isFalse();
-        assertThat(tx(() -> enrollmentRepository.findBySessionIdAndStudentPublicIdIn(
+        assertThat(tx(() -> registrationRepository.findBySessionIdAndStudentPublicIdIn(
                 sessions.firstId(), List.of(studentId)))).hasSize(1);
     }
 
     private boolean enrollIfNoConflict(ExamSession session, UUID tenantId, UUID studentId) {
-        if (!enrollmentRepository.findBySessionIdAndStudentPublicIdIn(session.getId(), List.of(studentId))
+        if (!registrationRepository.findBySessionIdAndStudentPublicIdIn(session.getId(), List.of(studentId))
                 .isEmpty()) {
             return false;
         }
-        if (!enrollmentRepository.findConflictingEnrollments(tenantId, List.of(studentId),
+        if (!registrationRepository.findConflictingEnrollments(tenantId, List.of(studentId),
                 session.getOpensAt(), session.getClosesAt()).isEmpty()) {
             return false;
         }
-        Enrollment enrollment = new Enrollment();
+        ExamRegistration enrollment = new ExamRegistration();
+        enrollment.setStatus(AudienceMemberStatus.ENROLLED);
         enrollment.setSession(session);
         enrollment.setStudentPublicId(studentId);
         enrollment.setTenantId(tenantId);
         enrollment.setLicenseKey(session.getLicenseKey());
-        enrollmentRepository.saveAndFlush(enrollment);
+        registrationRepository.saveAndFlush(enrollment);
         return true;
     }
 
@@ -278,9 +280,9 @@ class EnrollmentConcurrencyPostgresIntegrationTest {
         session.setTenantId(tenantId);
         session.setSubscriptionId(UUID.randomUUID());
         session.setLicenseKey("P15-TEST-LICENSE");
-        session.setSnapshotPublicId(UUID.randomUUID());
-        session.setTemplatePublicId(UUID.randomUUID());
-        session.setTemplateVersion(1);
+        session.setExamVersionPublicId(UUID.randomUUID());
+        session.setExamDefinitionPublicId(UUID.randomUUID());
+        session.setExamDefinitionVersion(1);
         session.setOpensAt(opensAt);
         session.setClosesAt(closesAt);
         session.setStatus(SessionStatus.SCHEDULED);

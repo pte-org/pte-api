@@ -11,7 +11,8 @@ import com.pte.session.internal.exception.SessionNotFoundException;
 import com.pte.session.internal.exception.SessionSubscriptionConflictException;
 import com.pte.session.internal.exception.SessionSubscriptionNotFoundException;
 import com.pte.session.internal.mapper.SessionMapper;
-import com.pte.session.internal.repository.EnrollmentRepository;
+import com.pte.session.domain.enums.AudienceMemberStatus;
+import com.pte.session.internal.repository.ExamRegistrationRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
@@ -28,29 +29,29 @@ import java.util.UUID;
 public class SessionSubscriptionService {
 
     private final ExamSessionRepository sessionRepository;
-    private final EnrollmentRepository enrollmentRepository;
+    private final ExamRegistrationRepository registrationRepository;
     private final BillingService billingService;
     private final SessionAccess access;
     private final SessionSubscriptionRules subscriptions;
     private final TenancyService tenancyService;
 
     public SessionSubscriptionService(ExamSessionRepository sessionRepository,
-            EnrollmentRepository enrollmentRepository,
+            ExamRegistrationRepository registrationRepository,
             BillingService billingService,
             SessionAccess access,
             SessionSubscriptionRules subscriptions) {
-        this(sessionRepository, enrollmentRepository, billingService, access, subscriptions, null);
+        this(sessionRepository, registrationRepository, billingService, access, subscriptions, null);
     }
 
     @Autowired
     public SessionSubscriptionService(ExamSessionRepository sessionRepository,
-            EnrollmentRepository enrollmentRepository,
+            ExamRegistrationRepository registrationRepository,
             BillingService billingService,
             SessionAccess access,
             SessionSubscriptionRules subscriptions,
             TenancyService tenancyService) {
         this.sessionRepository = sessionRepository;
-        this.enrollmentRepository = enrollmentRepository;
+        this.registrationRepository = registrationRepository;
         this.billingService = billingService;
         this.access = access;
         this.subscriptions = subscriptions;
@@ -90,7 +91,7 @@ public class SessionSubscriptionService {
             throw new SessionSubscriptionConflictException();
         }
 
-        long enrollmentCount = enrollmentRepository.countBySessionId(session.getId());
+        long enrollmentCount = registrationRepository.countBySessionIdAndStatus(session.getId(), AudienceMemberStatus.ENROLLED);
         subscriptions.validateSubscriptionWindowAndCapacity(target, session.getOpensAt(), session.getClosesAt(),
                 enrollmentCount, true);
         subscriptions.rejectOverlap(target.publicId(), session.getOpensAt(), session.getClosesAt(), session.getPublicId());
@@ -98,7 +99,7 @@ public class SessionSubscriptionService {
         session.setSubscriptionId(target.publicId());
         session.setLicenseKey(target.licenseKey());
         session.setCapacity(Math.min(session.getCapacity(), target.maxStudentsPerSession()));
-        enrollmentRepository.findBySessionId(session.getId())
+        registrationRepository.findBySessionIdAndStatus(session.getId(), AudienceMemberStatus.ENROLLED)
                 .forEach(enrollment -> enrollment.setLicenseKey(target.licenseKey()));
 
         try {

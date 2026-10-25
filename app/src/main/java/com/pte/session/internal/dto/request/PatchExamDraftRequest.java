@@ -1,7 +1,6 @@
 package com.pte.session.internal.dto.request;
 
 import com.pte.session.domain.enums.ExamMode;
-import com.pte.session.domain.enums.FormMode;
 import com.pte.session.domain.enums.LockdownMode;
 import com.pte.session.domain.enums.ReusePolicy;
 import com.pte.session.internal.constant.SessionConstants;
@@ -20,7 +19,6 @@ public record PatchExamDraftRequest(
         Instant opensAt,
         Instant closesAt,
         ExamMode examMode,
-        FormMode formMode,
         ReusePolicy reusePolicy,
         String seriesKey,
         Integer capacity,
@@ -32,18 +30,18 @@ public record PatchExamDraftRequest(
 
     /** Source-compatible constructor for callers predating explicit skill/retry configuration. */
     public PatchExamDraftRequest(String name, UUID examDefinitionPublicId, UUID subscriptionPublicId,
-            Instant opensAt, Instant closesAt, ExamMode examMode, FormMode formMode,
+            Instant opensAt, Instant closesAt, ExamMode examMode,
             ReusePolicy reusePolicy, String seriesKey, Integer capacity, Long expectedVersion) {
-        this(name, examDefinitionPublicId, subscriptionPublicId, opensAt, closesAt, examMode, formMode, reusePolicy,
+        this(name, examDefinitionPublicId, subscriptionPublicId, opensAt, closesAt, examMode, reusePolicy,
                 seriesKey, capacity, expectedVersion, null, null, null);
     }
 
     /** Source-compatible constructor for callers using the previous full request shape. */
     public PatchExamDraftRequest(String name, UUID examDefinitionPublicId, UUID subscriptionPublicId,
-            Instant opensAt, Instant closesAt, ExamMode examMode, FormMode formMode,
+            Instant opensAt, Instant closesAt, ExamMode examMode,
             ReusePolicy reusePolicy, String seriesKey, Integer capacity, Long expectedVersion,
             List<String> selectedSkills, Integer maxRetriesPerStudent) {
-        this(name, examDefinitionPublicId, subscriptionPublicId, opensAt, closesAt, examMode, formMode, reusePolicy,
+        this(name, examDefinitionPublicId, subscriptionPublicId, opensAt, closesAt, examMode, reusePolicy,
                 seriesKey, capacity, expectedVersion, selectedSkills, maxRetriesPerStudent, null);
     }
 }

@@ -1,7 +1,7 @@
 package com.pte.session.internal.service;
 
 import com.pte.session.domain.ExamSession;
-import com.pte.session.domain.ProctorAssignment;
+import com.pte.session.domain.ExamSessionProctor;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.response.MonitoringEnrollmentView;
 import com.pte.session.dto.response.ProctorAssignedSessionsPageView;
@@ -11,9 +11,9 @@ import com.pte.session.dto.response.ProctorWorkspaceSessionView;
 import com.pte.session.internal.dto.response.ProctorOverviewCountsResponse;
 import com.pte.session.internal.exception.InvalidProctorScopeException;
 import com.pte.session.internal.exception.InvalidTimezoneException;
-import com.pte.session.internal.repository.EnrollmentRepository;
+import com.pte.session.internal.repository.ExamRegistrationRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
-import com.pte.session.internal.repository.ProctorAssignmentRepository;
+import com.pte.session.internal.repository.ExamSessionProctorRepository;
 import com.pte.session.internal.repository.ProctorOverviewCountsProjection;
 import com.pte.shared.web.PageMeta;
 import com.pte.shared.web.PagedResult;
@@ -45,26 +45,26 @@ public class ProctorMonitoringQueryService {
     private static final int DEFAULT_SIZE = 25;
     private static final int MAX_SIZE = 100;
 
-    private final ProctorAssignmentRepository proctorAssignmentRepository;
-    private final EnrollmentRepository enrollmentRepository;
+    private final ExamSessionProctorRepository proctorRepository;
+    private final ExamRegistrationRepository registrationRepository;
     private final ExamSessionRepository examSessionRepository;
     private final Clock clock;
 
     public ProctorMonitoringQueryService(
-            ProctorAssignmentRepository proctorAssignmentRepository,
-            EnrollmentRepository enrollmentRepository,
+            ExamSessionProctorRepository proctorRepository,
+            ExamRegistrationRepository registrationRepository,
             ExamSessionRepository examSessionRepository) {
-        this(proctorAssignmentRepository, enrollmentRepository, examSessionRepository, Clock.systemUTC());
+        this(proctorRepository, registrationRepository, examSessionRepository, Clock.systemUTC());
     }
 
     @Autowired
     public ProctorMonitoringQueryService(
-            ProctorAssignmentRepository proctorAssignmentRepository,
-            EnrollmentRepository enrollmentRepository,
+            ExamSessionProctorRepository proctorRepository,
+            ExamRegistrationRepository registrationRepository,
             ExamSessionRepository examSessionRepository,
             Clock clock) {
-        this.proctorAssignmentRepository = proctorAssignmentRepository;
-        this.enrollmentRepository = enrollmentRepository;
+        this.proctorRepository = proctorRepository;
+        this.registrationRepository = registrationRepository;
         this.examSessionRepository = examSessionRepository;
         this.clock = clock != null ? clock : Clock.systemUTC();
     }
@@ -78,7 +78,7 @@ public class ProctorMonitoringQueryService {
         if (sessionPublicId == null || proctorPublicId == null || tenantId == null) {
             return Optional.empty();
         }
-        return proctorAssignmentRepository.findAssignment(sessionPublicId, proctorPublicId, tenantId)
+        return proctorRepository.findAssignment(sessionPublicId, proctorPublicId, tenantId)
                 .map(this::toSessionView);
     }
 
@@ -94,7 +94,7 @@ public class ProctorMonitoringQueryService {
                 Sort.by(Sort.Order.asc("session.opensAt").nullsLast())
                         .and(Sort.by("session.publicId").ascending()));
 
-        Page<ProctorAssignment> assignmentPage = proctorAssignmentRepository.findAssignedSessions(
+        Page<ExamSessionProctor> assignmentPage = proctorRepository.findAssignedSessions(
                 proctorPublicId, tenantId, pageable);
 
         List<ProctorMonitoringSessionView> items = assignmentPage.getContent().stream()
@@ -124,8 +124,8 @@ public class ProctorMonitoringQueryService {
         int size = requestedSize <= 0 ? DEFAULT_SIZE : Math.min(MAX_SIZE, requestedSize);
         Pageable pageable = PageRequest.of(page, size, Sort.by("publicId").ascending());
 
-        Page<com.pte.session.domain.Enrollment> enrollmentPage = enrollmentRepository
-                .findBySessionPublicIdAndTenantIdAndDeletedFalse(sessionPublicId, tenantId, pageable);
+        Page<com.pte.session.domain.ExamRegistration> enrollmentPage = registrationRepository
+                .findEnrolledBySessionPublicId(sessionPublicId, tenantId, pageable);
 
         List<MonitoringEnrollmentView> items = enrollmentPage.getContent().stream()
                 .map(e -> new MonitoringEnrollmentView(e.getPublicId(), e.getStudentPublicId()))
@@ -149,11 +149,19 @@ public class ProctorMonitoringQueryService {
     }
 
     @Transactional(readOnly = true)
+    public List<UUID> findEnrolledStudentIds(UUID sessionPublicId, UUID tenantId) {
+        if (sessionPublicId == null || tenantId == null) {
+            return List.of();
+        }
+        return registrationRepository.findEnrolledStudentPublicIds(sessionPublicId, tenantId);
+    }
+
+    @Transactional(readOnly = true)
     public long countEnrollments(UUID sessionPublicId, UUID tenantId) {
         if (sessionPublicId == null || tenantId == null) {
             return 0L;
         }
-        return enrollmentRepository.countBySessionPublicIdAndTenantIdAndDeletedFalse(sessionPublicId, tenantId);
+        return registrationRepository.countEnrolledBySessionPublicId(sessionPublicId, tenantId);
     }
 
     @Transactional(readOnly = true)
@@ -161,7 +169,7 @@ public class ProctorMonitoringQueryService {
         if (sessionPublicId == null || studentPublicId == null || tenantId == null) {
             return false;
         }
-        return enrollmentRepository.isStudentEnrolled(sessionPublicId, studentPublicId, tenantId);
+        return registrationRepository.isStudentEnrolled(sessionPublicId, studentPublicId, tenantId);
     }
 
     @Transactional(readOnly = true)
@@ -169,7 +177,7 @@ public class ProctorMonitoringQueryService {
         if (sessionPublicId == null || proctorPublicId == null || tenantId == null) {
             return false;
         }
-        return proctorAssignmentRepository.isProctorAssigned(sessionPublicId, proctorPublicId, tenantId);
+        return proctorRepository.isProctorAssigned(sessionPublicId, proctorPublicId, tenantId);
     }
 
     @Transactional(readOnly = true)
@@ -190,12 +198,12 @@ public class ProctorMonitoringQueryService {
         Instant dayStart = zdt.toLocalDate().atStartOfDay(zoneId).toInstant();
         Instant dayEnd = zdt.toLocalDate().plusDays(1).atStartOfDay(zoneId).toInstant();
 
-        ProctorOverviewCountsProjection projection = proctorAssignmentRepository
+        ProctorOverviewCountsProjection projection = proctorRepository
                 .countWorkspaceOverview(proctorPublicId, tenantId, asOf, dayStart, dayEnd);
         ProctorOverviewCountsResponse counts = new ProctorOverviewCountsResponse(
                 projection.getAccessible(), projection.getUpcoming(), projection.getToday());
 
-        List<ProctorAssignment> priorityAssignments = proctorAssignmentRepository
+        List<ExamSessionProctor> priorityAssignments = proctorRepository
                 .findPrioritySessions(proctorPublicId, tenantId, asOf, PageRequest.of(0, 5));
         List<ProctorWorkspaceSessionView> prioritySessions = priorityAssignments.stream()
                 .map(pa -> toWorkspaceSessionView(pa, asOf))
@@ -239,7 +247,7 @@ public class ProctorMonitoringQueryService {
         int size = requestedSize <= 0 ? DEFAULT_SIZE : Math.min(MAX_SIZE, requestedSize);
         Pageable pageable = PageRequest.of(page, size);
 
-        Page<ProctorAssignment> assignmentPage = proctorAssignmentRepository.findScopedAssignedSessions(
+        Page<ExamSessionProctor> assignmentPage = proctorRepository.findScopedAssignedSessions(
                 proctorPublicId, tenantId, scope, asOf,
                 dayStart != null ? dayStart : Instant.EPOCH,
                 dayEnd != null ? dayEnd : Instant.EPOCH,
@@ -301,7 +309,7 @@ public class ProctorMonitoringQueryService {
         return "SESSION_NOT_OPEN";
     }
 
-    private ProctorWorkspaceSessionView toWorkspaceSessionView(ProctorAssignment pa, Instant asOf) {
+    private ProctorWorkspaceSessionView toWorkspaceSessionView(ExamSessionProctor pa, Instant asOf) {
         ExamSession s = pa.getSession();
         String roleStr = pa.getRole() != null ? pa.getRole().name() : null;
         boolean canMon = canMonitor(s, asOf);
@@ -319,7 +327,7 @@ public class ProctorMonitoringQueryService {
                 reason);
     }
 
-    private ProctorMonitoringSessionView toSessionView(ProctorAssignment pa) {
+    private ProctorMonitoringSessionView toSessionView(ExamSessionProctor pa) {
         ExamSession s = pa.getSession();
         String roleStr = pa.getRole() != null ? pa.getRole().name() : null;
         return new ProctorMonitoringSessionView(

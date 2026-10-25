@@ -83,15 +83,14 @@ public class SessionCreationService {
         session.setTenantId(tenantId);
         session.setSubscriptionId(subscription.publicId());
         session.setLicenseKey(subscription.licenseKey());
-        session.setSnapshotPublicId(snapshot.publicId());
-        session.setTemplatePublicId(snapshot.examDefinitionPublicId());
-        session.setTemplateVersion(snapshot.examDefinitionVersion());
+        session.setExamVersionPublicId(snapshot.publicId());
+        session.setExamDefinitionPublicId(snapshot.examDefinitionPublicId());
+        session.setExamDefinitionVersion(snapshot.examDefinitionVersion());
         session.setOpensAt(request.opensAt());
         session.setClosesAt(request.closesAt());
         session.setCapacity(request.capacity());
         ExamMode mode = request.examMode() != null ? request.examMode() : ExamMode.OFFICIAL_EXAM;
         session.setExamMode(mode);
-        session.setFormMode(com.pte.session.domain.enums.FormMode.SHARED_FORM);
         session.setReusePolicy(com.pte.session.domain.enums.ReusePolicy.ALLOW);
         ExamPolicy policy = ExamPolicy.realExamDefault();
         policy.setLockdownMode(SessionPolicyResolver.resolveForCreate(request.lockdownMode()));

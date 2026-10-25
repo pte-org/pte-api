@@ -1,7 +1,6 @@
 package com.pte.session.internal.dto.response;
 
 import com.pte.session.dto.response.ExamPolicyResponse;
-import com.pte.session.domain.enums.FormMode;
 import com.pte.session.domain.enums.ReusePolicy;
 import com.pte.session.domain.enums.ExamMode;
 
@@ -15,28 +14,26 @@ public record SessionResponse(
         String name,
         UUID tenantId,
         UUID subscriptionPublicId,
-        UUID snapshotPublicId,
+        UUID examVersionPublicId,
         Instant opensAt,
         Instant closesAt,
         String status,
         ExamPolicyResponse policy,
         Integer capacity,
         UUID examDefinitionPublicId,
-        Integer templateVersion,
+        Integer examDefinitionVersion,
         ExamMode examMode,
-        FormMode formMode,
         ReusePolicy reusePolicy,
         String seriesKey,
-        UUID generationJobPublicId,
         long draftVersion,
         Set<String> selectedSkills,
         int maxRetriesPerStudent) {
 
     /** Source-compatible shape for callers that only need legacy sessions. */
     public SessionResponse(UUID publicId, String name, UUID tenantId, UUID subscriptionPublicId,
-            UUID snapshotPublicId, Instant opensAt, Instant closesAt, String status,
+            UUID examVersionPublicId, Instant opensAt, Instant closesAt, String status,
             ExamPolicyResponse policy, Integer capacity) {
-        this(publicId, null, name, tenantId, subscriptionPublicId, snapshotPublicId, opensAt, closesAt, status, policy,
-                capacity, null, null, null, null, null, null, null, 0L, Set.of(), 0);
+        this(publicId, null, name, tenantId, subscriptionPublicId, examVersionPublicId, opensAt, closesAt, status, policy,
+                capacity, null, null, null, null, null, 0L, Set.of(), 0);
     }
 }

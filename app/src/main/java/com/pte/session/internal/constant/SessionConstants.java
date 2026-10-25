@@ -205,4 +205,10 @@ public final class SessionConstants {
 
     private SessionConstants() {
     }
+
+    /** Version tag of the seeded random exam generator, reported by the generation endpoint. */
+    public static final String EXAM_GENERATION_ALGORITHM = "PTE_SEEDED_V1";
+
+    public static final String GRADING_ALREADY_FROZEN = "Grading of this session is already frozen";
+    public static final String PUBLICATION_ALREADY_LOCKED = "Another publication already locked this session";
 }

@@ -2,7 +2,7 @@ package com.pte.session.internal.service;
 
 import com.pte.session.StaffSessionFilter;
 import com.pte.session.domain.ExamSession;
-import com.pte.session.domain.ProctorAssignment;
+import com.pte.session.domain.ExamSessionProctor;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.response.StaffSessionView;
 import jakarta.persistence.EntityManager;
@@ -71,7 +71,7 @@ public class StaffScheduleQueryService {
             if (filter.to() != null) { predicates.add(builder.lessThan(root.get("opensAt"), filter.to())); }
             if (proctorId != null) {
                 var assigned = query.subquery(Long.class);
-                var assignment = assigned.from(ProctorAssignment.class);
+                var assignment = assigned.from(ExamSessionProctor.class);
                 assigned.select(assignment.get("id")).where(
                         builder.equal(assignment.get("session"), root),
                         builder.equal(assignment.get("tenantId"), tenantId),

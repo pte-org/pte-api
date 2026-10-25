@@ -150,7 +150,7 @@ class SessionExamPreviewServiceTest {
     private ExamSession sessionWithSnapshot(UUID snapshotPublicId) {
         ExamSession session = new ExamSession();
         session.setTenantId(TENANT_ID);
-        session.setSnapshotPublicId(snapshotPublicId);
+        session.setExamVersionPublicId(snapshotPublicId);
         return session;
     }
 
@@ -180,6 +180,7 @@ class SessionExamPreviewServiceTest {
                 null,   // runtime
                 null,   // runtimeMappingVersion
                 null,   // runtimeMappingStatus
-                sourceQuestionPublicId);
+                sourceQuestionPublicId,
+                UUID.randomUUID()); // itemPublicId
     }
 }

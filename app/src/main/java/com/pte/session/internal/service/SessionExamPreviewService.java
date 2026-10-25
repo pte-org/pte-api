@@ -42,11 +42,11 @@ public class SessionExamPreviewService {
     @Transactional(readOnly = true)
     public ExamPreviewResponse preview(UUID sessionPublicId, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwned(sessionPublicId, caller);
-        if (session.getSnapshotPublicId() == null) {
+        if (session.getExamVersionPublicId() == null) {
             throw new GenerationNotReadyException();
         }
 
-        SnapshotContentResponse snapshot = assessmentService.getFullContent(session.getSnapshotPublicId());
+        SnapshotContentResponse snapshot = assessmentService.getFullContent(session.getExamVersionPublicId());
         Map<UUID, String> mediaUrls = new HashMap<>();
         List<ExamPreviewResponse.Item> items = snapshot.items().stream()
                 .map(item -> toPreviewItem(item, session.getTenantId(), mediaUrls))

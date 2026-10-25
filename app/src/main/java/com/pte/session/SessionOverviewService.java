@@ -1,7 +1,7 @@
 package com.pte.session;
 
 import com.pte.session.domain.enums.SessionStatus;
-import com.pte.session.internal.repository.EnrollmentRepository;
+import com.pte.session.internal.repository.ExamRegistrationRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.session.internal.repository.ExamSessionRepository.UpcomingSessionRow;
 import org.springframework.data.domain.PageRequest;
@@ -27,12 +27,12 @@ public class SessionOverviewService {
     private static final List<SessionStatus> JOINABLE = List.of(SessionStatus.SCHEDULED, SessionStatus.OPEN);
 
     private final ExamSessionRepository sessionRepository;
-    private final EnrollmentRepository enrollmentRepository;
+    private final ExamRegistrationRepository registrationRepository;
 
     public SessionOverviewService(ExamSessionRepository sessionRepository,
-            EnrollmentRepository enrollmentRepository) {
+            ExamRegistrationRepository registrationRepository) {
         this.sessionRepository = sessionRepository;
-        this.enrollmentRepository = enrollmentRepository;
+        this.registrationRepository = registrationRepository;
     }
 
     /** Session count per lifecycle status; every status is present (0 when none), in enum order. */
@@ -66,8 +66,8 @@ public class SessionOverviewService {
         if (rows.isEmpty()) {
             return List.of();
         }
-        Map<Long, Long> enrolledBySession = enrollmentRepository
-                .countGroupedBySessionIds(rows.stream().map(UpcomingSessionRow::getId).toList()).stream()
+        Map<Long, Long> enrolledBySession = registrationRepository
+                .countEnrolledGroupedBySessionIds(rows.stream().map(UpcomingSessionRow::getId).toList()).stream()
                 .collect(Collectors.toMap(row -> (Long) row[0], row -> ((Number) row[1]).longValue()));
         return rows.stream()
                 .map(row -> new UpcomingSessionView(row.getPublicId(), row.getName(), row.getStatus().name(),

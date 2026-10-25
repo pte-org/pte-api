@@ -6,7 +6,7 @@ import com.pte.billing.BillingService;
 import com.pte.billing.SubscriptionView;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.SubscriptionStatus;
-import com.pte.session.domain.Enrollment;
+import com.pte.session.domain.ExamRegistration;
 import com.pte.session.domain.ExamPolicy;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.enums.ExamMode;
@@ -31,7 +31,8 @@ import com.pte.session.internal.exception.SessionNotClosedForReportPublicationEx
 import com.pte.session.internal.exception.SessionNotOpenToCloseException;
 import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionException;
 import com.pte.session.internal.mapper.SessionMapper;
-import com.pte.session.internal.repository.EnrollmentRepository;
+import com.pte.session.domain.enums.AudienceMemberStatus;
+import com.pte.session.internal.repository.ExamRegistrationRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.session.internal.service.lifecycle.SessionAccess;
 import com.pte.session.internal.service.lifecycle.SessionCreationService;
@@ -85,7 +86,7 @@ class SessionLifecycleServiceTest {
     private ExamSessionRepository sessionRepository;
 
     @Mock
-    private EnrollmentRepository enrollmentRepository;
+    private ExamRegistrationRepository registrationRepository;
 
     @Mock
     private AssessmentService assessmentService;
@@ -115,7 +116,7 @@ class SessionLifecycleServiceTest {
         service = new SessionLifecycleService(access,
                 new SessionCreationService(sessionRepository, assessmentService, sessionCodeGenerator,
                         access, subscriptions),
-                new SessionSubscriptionService(sessionRepository, enrollmentRepository, billingService,
+                new SessionSubscriptionService(sessionRepository, registrationRepository, billingService,
                         access, subscriptions),
                 new SessionStateService(sessionRepository, access, subscriptions, auditLogService),
                 new SessionPolicyService(sessionRepository, access, Clock.systemUTC()),
@@ -201,7 +202,7 @@ class SessionLifecycleServiceTest {
 
         SessionResponse response = service.create(request(100, futureWindow()), hostAdmin);
 
-        assertThat(response.snapshotPublicId()).isEqualTo(snapshotId);
+        assertThat(response.examVersionPublicId()).isEqualTo(snapshotId);
         assertThat(response.subscriptionPublicId()).isEqualTo(subscriptionId);
         var captor = ArgumentCaptor.forClass(ExamSession.class);
         verify(sessionRepository).save(captor.capture());
@@ -331,7 +332,7 @@ class SessionLifecycleServiceTest {
                         ExamMode.OFFICIAL_EXAM, null, 100),
                 hostAdmin);
 
-        assertThat(response.snapshotPublicId()).isEqualTo(canonicalSnapshotId);
+        assertThat(response.examVersionPublicId()).isEqualTo(canonicalSnapshotId);
     }
 
     @Test
@@ -389,7 +390,7 @@ class SessionLifecycleServiceTest {
                 .thenReturn(Optional.of(session));
         when(billingService.lockSubscriptions(any(), eq(tenantId)))
                 .thenReturn(List.of(subscription(subscriptionId, 500), replacement));
-        when(enrollmentRepository.countBySessionId(session.getId())).thenReturn(300L);
+        when(registrationRepository.countBySessionIdAndStatus(session.getId(), AudienceMemberStatus.ENROLLED)).thenReturn(300L);
 
         assertThatThrownBy(() -> service.changeSubscription(session.getPublicId(),
                 new ChangeSubscriptionRequest(newSubscriptionId), hostAdmin))
@@ -403,14 +404,14 @@ class SessionLifecycleServiceTest {
         UUID newSubscriptionId = UUID.randomUUID();
         ExamSession session = existingSession(SessionStatus.SCHEDULED, 500);
         SubscriptionView replacement = subscription(newSubscriptionId, 500);
-        Enrollment first = enrollment(session, "old-license");
-        Enrollment second = enrollment(session, "old-license");
+        ExamRegistration first = enrollment(session, "old-license");
+        ExamRegistration second = enrollment(session, "old-license");
         when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
                 .thenReturn(Optional.of(session));
         when(billingService.lockSubscriptions(any(), eq(tenantId)))
                 .thenReturn(List.of(subscription(subscriptionId, 500), replacement));
-        when(enrollmentRepository.countBySessionId(session.getId())).thenReturn(2L);
-        when(enrollmentRepository.findBySessionId(session.getId())).thenReturn(List.of(first, second));
+        when(registrationRepository.countBySessionIdAndStatus(session.getId(), AudienceMemberStatus.ENROLLED)).thenReturn(2L);
+        when(registrationRepository.findBySessionIdAndStatus(session.getId(), AudienceMemberStatus.ENROLLED)).thenReturn(List.of(first, second));
 
         SessionResponse response = service.changeSubscription(session.getPublicId(),
                 new ChangeSubscriptionRequest(newSubscriptionId), hostAdmin);
@@ -432,7 +433,7 @@ class SessionLifecycleServiceTest {
                 .thenReturn(Optional.of(session));
         when(billingService.lockSubscriptions(any(), eq(tenantId)))
                 .thenReturn(List.of(subscription(subscriptionId, 200), replacement));
-        when(enrollmentRepository.countBySessionId(session.getId())).thenReturn(0L);
+        when(registrationRepository.countBySessionIdAndStatus(session.getId(), AudienceMemberStatus.ENROLLED)).thenReturn(0L);
         when(sessionRepository.findFirstOverlapping(any(), any(), any(), any())).thenReturn(Optional.empty());
 
         service.changeSubscription(session.getPublicId(), new ChangeSubscriptionRequest(newSubscriptionId), hostAdmin);
@@ -448,7 +449,7 @@ class SessionLifecycleServiceTest {
     void cancelScheduledSessionsBySubscription_cancelsOnlyScheduledAndPublishesNeutralEvent() {
         ExamSession scheduled = existingSession(SessionStatus.SCHEDULED, 100);
         ExamSession open = existingSession(SessionStatus.OPEN, 100);
-        Enrollment enrollment = enrollment(scheduled, scheduled.getLicenseKey());
+        ExamRegistration enrollment = enrollment(scheduled, scheduled.getLicenseKey());
         when(sessionRepository.findBySubscriptionIdAndStatus(subscriptionId, SessionStatus.SCHEDULED))
                 .thenReturn(List.of(scheduled));
 
@@ -580,7 +581,7 @@ class SessionLifecycleServiceTest {
         when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
                 .thenReturn(Optional.of(session));
 
-        for (SessionStatus status : List.of(SessionStatus.DRAFT, SessionStatus.PREPARING, SessionStatus.READY,
+        for (SessionStatus status : List.of(SessionStatus.DRAFT, SessionStatus.READY,
                 SessionStatus.SCHEDULED, SessionStatus.CLOSED, SessionStatus.CANCELLED)) {
             session.setStatus(status);
             assertThatThrownBy(() -> service.close(session.getPublicId(), hostAdmin))
@@ -633,7 +634,7 @@ class SessionLifecycleServiceTest {
         when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
                 .thenReturn(Optional.of(session));
 
-        for (SessionStatus status : List.of(SessionStatus.DRAFT, SessionStatus.PREPARING, SessionStatus.READY,
+        for (SessionStatus status : List.of(SessionStatus.DRAFT, SessionStatus.READY,
                 SessionStatus.SCHEDULED, SessionStatus.OPEN, SessionStatus.CANCELLED)) {
             session.setStatus(status);
             assertThatThrownBy(() -> service.lockForExaminerAssignment(session.getPublicId(), tenantId))
@@ -698,7 +699,7 @@ class SessionLifecycleServiceTest {
         session.setSubscriptionId(subscriptionId);
         session.setLicenseKey("LIC-" + licenseKeyId);
         session.setName("Test Session");
-        session.setSnapshotPublicId(UUID.randomUUID());
+        session.setExamVersionPublicId(UUID.randomUUID());
         session.setOpensAt(Instant.now().plusSeconds(3600));
         session.setClosesAt(Instant.now().plusSeconds(7200));
         session.setCapacity(capacity);
@@ -707,8 +708,9 @@ class SessionLifecycleServiceTest {
         return session;
     }
 
-    private Enrollment enrollment(ExamSession session, String licenseKey) {
-        Enrollment enrollment = new Enrollment();
+    private ExamRegistration enrollment(ExamSession session, String licenseKey) {
+        ExamRegistration enrollment = new ExamRegistration();
+        enrollment.setStatus(AudienceMemberStatus.ENROLLED);
         enrollment.setSession(session);
         enrollment.setStudentPublicId(UUID.randomUUID());
         enrollment.setTenantId(tenantId);

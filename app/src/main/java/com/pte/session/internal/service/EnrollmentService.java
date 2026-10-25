@@ -1,348 +1,240 @@
 package com.pte.session.internal.service;
 
-import com.pte.session.domain.Enrollment;
+import com.pte.identity.IdentityService;
+import com.pte.session.domain.ExamRegistration;
 import com.pte.session.domain.ExamSession;
-import com.pte.session.domain.ProctorAssignment;
-import com.pte.session.domain.enums.ProctorRole;
+import com.pte.session.domain.enums.AudienceMemberStatus;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.event.StudentEnrolledEvent;
 import com.pte.session.dto.event.StudentEnrollmentConflictEvent;
 import com.pte.session.dto.response.SlotConflict;
-import com.pte.session.internal.dto.request.AssignProctorRequest;
 import com.pte.session.internal.dto.request.BulkEnrollRequest;
 import com.pte.session.internal.dto.request.EnrollStudentRequest;
-import com.pte.session.internal.dto.request.UpdateProctorRoleRequest;
 import com.pte.session.internal.dto.response.BulkEnrollResponse;
 import com.pte.session.internal.dto.response.EnrollmentResponse;
-import com.pte.session.internal.dto.response.ProctorAssignmentResponse;
 import com.pte.session.internal.dto.response.StudentEnrollmentResponse;
-import com.pte.session.internal.exception.AlreadyAssignedException;
 import com.pte.session.internal.exception.AlreadyEnrolledException;
 import com.pte.session.internal.exception.EnrolledStudentAlreadyStartedException;
 import com.pte.session.internal.exception.EnrollmentNotFoundException;
 import com.pte.session.internal.exception.ExamAudienceLockedException;
-import com.pte.session.internal.exception.ProctorAssignmentNotFoundException;
 import com.pte.session.internal.exception.SessionCapacityExceededException;
 import com.pte.session.internal.exception.SessionTimeConflictException;
-import com.pte.session.internal.repository.EnrollmentRepository;
-import com.pte.session.internal.repository.ProctorAssignmentRepository;
-import com.pte.identity.IdentityService;
+import com.pte.session.internal.repository.ExamRegistrationRepository;
 import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
- * Manual student enrollment + proctor assignment (Milestone 1 scope — no file
- * import). Double-enroll/assign is guarded by a DB unique constraint, not a
- * check-then-act race.
+ * Manual enrollment: moves a student's {@link ExamRegistration} to {@code ENROLLED}, creating the row when the
+ * student was never part of the audience. A double enrollment is rejected by the DB unique constraint on
+ * (session, student), not by a check-then-act race.
  */
 @Service
 public class EnrollmentService {
 
     private final SessionLifecycleService sessionLifecycleService;
-    private final EnrollmentRepository enrollmentRepository;
-    private final ProctorAssignmentRepository proctorAssignmentRepository;
+    private final ExamRegistrationRepository registrationRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final TenancyService tenancyService;
     private final IdentityService identityService;
-    private final ExamFormProvisioningService formProvisioningService;
     private final StartedAttemptLookup startedAttemptLookup;
 
-    public EnrollmentService(SessionLifecycleService sessionLifecycleService, EnrollmentRepository enrollmentRepository,
-                             ProctorAssignmentRepository proctorAssignmentRepository,
-                             ApplicationEventPublisher eventPublisher) {
-        this(sessionLifecycleService, enrollmentRepository, proctorAssignmentRepository, eventPublisher, null, null);
-    }
-
-    public EnrollmentService(SessionLifecycleService sessionLifecycleService, EnrollmentRepository enrollmentRepository,
-                             ProctorAssignmentRepository proctorAssignmentRepository,
-                             ApplicationEventPublisher eventPublisher, TenancyService tenancyService) {
-        this(sessionLifecycleService, enrollmentRepository, proctorAssignmentRepository, eventPublisher,
-                tenancyService, null);
-    }
-
     public EnrollmentService(SessionLifecycleService sessionLifecycleService,
-                             EnrollmentRepository enrollmentRepository,
-                             ProctorAssignmentRepository proctorAssignmentRepository,
-                             ApplicationEventPublisher eventPublisher, TenancyService tenancyService,
-                             IdentityService identityService) {
-        this(sessionLifecycleService, enrollmentRepository, proctorAssignmentRepository, eventPublisher,
-                tenancyService, identityService, null, null);
-    }
-
-    @Autowired
-    public EnrollmentService(SessionLifecycleService sessionLifecycleService, EnrollmentRepository enrollmentRepository,
-                             ProctorAssignmentRepository proctorAssignmentRepository,
-                             ApplicationEventPublisher eventPublisher, TenancyService tenancyService,
-                             IdentityService identityService, ExamFormProvisioningService formProvisioningService,
-                             StartedAttemptLookup startedAttemptLookup) {
+            ExamRegistrationRepository registrationRepository, ApplicationEventPublisher eventPublisher,
+            TenancyService tenancyService, IdentityService identityService,
+            StartedAttemptLookup startedAttemptLookup) {
         this.sessionLifecycleService = sessionLifecycleService;
-        this.enrollmentRepository = enrollmentRepository;
-        this.proctorAssignmentRepository = proctorAssignmentRepository;
+        this.registrationRepository = registrationRepository;
         this.eventPublisher = eventPublisher;
         this.tenancyService = tenancyService;
         this.identityService = identityService;
-        this.formProvisioningService = formProvisioningService;
         this.startedAttemptLookup = startedAttemptLookup;
     }
 
     @Transactional
     public EnrollmentResponse enrollStudent(UUID sessionPublicId, EnrollStudentRequest request, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
-        assertTenantActive(session);
+        tenancyService.assertTenantActive(session.getTenantId());
         requireManualAudienceMutationAllowed(session);
-        requireActiveStudent(request.studentPublicId(), session.getTenantId());
-        lockActiveStudents(List.of(request.studentPublicId()), session.getTenantId());
-        if (enrollmentRepository.existsBySessionIdAndStudentPublicId(session.getId(), request.studentPublicId())) {
+        UUID studentPublicId = request.studentPublicId();
+        identityService.requireActiveStudentInTenant(studentPublicId, session.getTenantId());
+        identityService.lockActiveStudentsInTenant(List.of(studentPublicId), session.getTenantId());
+        ExamRegistration existing = registrationRepository
+                .findBySessionIdAndStudentPublicIdIn(session.getId(), List.of(studentPublicId)).stream()
+                .findFirst().orElse(null);
+        if (existing != null && existing.isEnrolled()) {
             throw new AlreadyEnrolledException();
         }
-        List<SlotConflict> conflicts = findConflicts(session, List.of(request.studentPublicId()));
+        List<SlotConflict> conflicts = findConflicts(session, List.of(studentPublicId));
         if (!conflicts.isEmpty()) {
             throw new SessionTimeConflictException(conflicts.get(0).conflictingSessionPublicId());
         }
-        if (session.getCapacity() != null && enrollmentRepository.countBySessionId(session.getId()) >= session.getCapacity()) {
+        if (session.getCapacity() != null && enrolledCount(session) >= session.getCapacity()) {
             throw new SessionCapacityExceededException();
         }
-        Enrollment enrollment = new Enrollment();
-        enrollment.setSession(session);
-        enrollment.setStudentPublicId(request.studentPublicId());
-        enrollment.setTenantId(session.getTenantId());
-        enrollment.setLicenseKey(session.getLicenseKey());
-
-        Enrollment saved = save(enrollment);
-        formProvisioningService.provision(session, List.of(saved.getStudentPublicId()), caller);
-        publishEnrolled(session, saved.getStudentPublicId());
-        return new EnrollmentResponse(saved.getPublicId(), session.getPublicId(), saved.getStudentPublicId());
+        ExamRegistration saved = save(enroll(session, existing, studentPublicId, Instant.now()));
+        publishEnrolled(session, studentPublicId);
+        return new EnrollmentResponse(saved.getPublicId(), session.getPublicId(), studentPublicId);
     }
 
     /**
-     * Bulk-enrolls students not already on the roster (already-enrolled ids
-     * are reported, not errors); intra-request duplicate ids are also
-     * deduped. The {@code saveAll} catch guards the rare true concurrent-
-     * double-enroll race, same rationale as {@link #enrollStudent}. It
-     * depends on {@code Enrollment} using {@code GenerationType.IDENTITY}
-     * (forces a synchronous flush inside {@code saveAll}) — re-verify this
-     * guard if that id strategy ever changes.
-     * <p>
-     * Fetches the session under a pessimistic write lock — held for this
-     * whole method — so the capacity check-then-insert below can't race a
-     * concurrent {@code bulkEnroll} call against the same session (both would
-     * otherwise read the same pre-write count and both commit, overshooting
-     * {@code capacity}).
+     * Bulk-enrolls students not already enrolled (already-enrolled ids are reported, not errors); duplicate
+     * ids in the request are deduped. The session is fetched under a pessimistic write lock, held for the
+     * whole method, so the capacity check-then-insert cannot race a concurrent call against the same session.
      */
     @Transactional
     public BulkEnrollResponse bulkEnroll(UUID sessionPublicId, BulkEnrollRequest request, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
-        assertTenantActive(session);
+        tenancyService.assertTenantActive(session.getTenantId());
         requireManualAudienceMutationAllowed(session);
-        requireActiveStudents(request.studentPublicIds(), session.getTenantId());
-        BulkEnrollResponse response = bulkEnrollLocked(session, request, caller);
-        formProvisioningService.provision(session, response.enrolled(), caller);
-        return response;
+        identityService.requireActiveStudentsInTenant(request.studentPublicIds(), session.getTenantId());
+        return bulkEnrollLocked(session, request);
     }
 
     /** Canonical publish path: materializes the already generated audience before scheduling. */
     @Transactional
-    BulkEnrollResponse bulkEnrollPublishedExam(ExamSession session, BulkEnrollRequest request, CurrentUser caller) {
-        assertTenantActive(session);
-        requireActiveStudents(request.studentPublicIds(), session.getTenantId());
-        if (session.getStatus() != com.pte.session.domain.enums.SessionStatus.READY
-                || session.getGenerationJobPublicId() == null) {
+    BulkEnrollResponse bulkEnrollPublishedExam(ExamSession session, BulkEnrollRequest request) {
+        tenancyService.assertTenantActive(session.getTenantId());
+        identityService.requireActiveStudentsInTenant(request.studentPublicIds(), session.getTenantId());
+        if (session.getStatus() != SessionStatus.READY || session.getExamVersionPublicId() == null) {
             throw new ExamAudienceLockedException();
         }
-        return bulkEnrollLocked(session, request, caller);
+        return bulkEnrollLocked(session, request);
     }
 
-    private BulkEnrollResponse bulkEnrollLocked(ExamSession session, BulkEnrollRequest request, CurrentUser caller) {
-        lockActiveStudents(request.studentPublicIds(), session.getTenantId());
+    private BulkEnrollResponse bulkEnrollLocked(ExamSession session, BulkEnrollRequest request) {
+        identityService.lockActiveStudentsInTenant(request.studentPublicIds(), session.getTenantId());
+        Map<UUID, ExamRegistration> existingByStudent = registrationRepository
+                .findBySessionIdAndStudentPublicIdIn(session.getId(), request.studentPublicIds()).stream()
+                .collect(Collectors.toMap(ExamRegistration::getStudentPublicId, Function.identity()));
+        Set<UUID> alreadyEnrolled = existingByStudent.values().stream().filter(ExamRegistration::isEnrolled)
+                .map(ExamRegistration::getStudentPublicId).collect(Collectors.toCollection(LinkedHashSet::new));
 
-        List<UUID> existing = enrollmentRepository
-                .findBySessionIdAndStudentPublicIdIn(session.getId(), request.studentPublicIds())
-                .stream().map(Enrollment::getStudentPublicId).toList();
-        Set<UUID> alreadyEnrolled = new LinkedHashSet<>(existing);
-
-        List<Enrollment> toCreate = new ArrayList<>();
+        List<UUID> candidates = new ArrayList<>();
         Set<UUID> seenInBatch = new HashSet<>();
-        List<UUID> candidateStudentIds = new ArrayList<>();
         for (UUID studentPublicId : request.studentPublicIds()) {
-            if (alreadyEnrolled.contains(studentPublicId) || !seenInBatch.add(studentPublicId)) {
-                continue;
-            }
-            candidateStudentIds.add(studentPublicId);
-        }
-
-        List<SlotConflict> skippedByConflict = findConflicts(session, candidateStudentIds);
-        Set<UUID> conflictStudentIds = skippedByConflict.stream()
-                .map(SlotConflict::studentPublicId)
-                .collect(java.util.stream.Collectors.toSet());
-        for (UUID studentPublicId : candidateStudentIds) {
-            if (conflictStudentIds.contains(studentPublicId)) {
-                continue;
-            }
-            Enrollment enrollment = new Enrollment();
-            enrollment.setSession(session);
-            enrollment.setStudentPublicId(studentPublicId);
-            enrollment.setTenantId(session.getTenantId());
-            enrollment.setLicenseKey(session.getLicenseKey());
-            toCreate.add(enrollment);
-        }
-
-        // Fail closed, before any write — a partial silent enroll would be
-        // worse than a clear rejection the FE can react to with another
-        // batch/session.
-        if (session.getCapacity() != null) {
-            long existingCount = enrollmentRepository.countBySessionId(session.getId());
-            if (existingCount + toCreate.size() > session.getCapacity()) {
-                throw new SessionCapacityExceededException();
+            if (!alreadyEnrolled.contains(studentPublicId) && seenInBatch.add(studentPublicId)) {
+                candidates.add(studentPublicId);
             }
         }
+        List<SlotConflict> skippedByConflict = findConflicts(session, candidates);
+        Set<UUID> conflicted = skippedByConflict.stream().map(SlotConflict::studentPublicId)
+                .collect(Collectors.toSet());
+        // Counted before the registrations below are promoted, so the pending changes cannot inflate it.
+        long enrolledBefore = session.getCapacity() == null ? 0L : enrolledCount(session);
+        Instant now = Instant.now();
+        List<ExamRegistration> toEnroll = candidates.stream().filter(student -> !conflicted.contains(student))
+                .map(student -> enroll(session, existingByStudent.get(student), student, now)).toList();
 
-        List<Enrollment> saved;
+        // Fail closed, before any write: a partial silent enroll would be worse than a clear rejection.
+        if (session.getCapacity() != null && enrolledBefore + toEnroll.size() > session.getCapacity()) {
+            throw new SessionCapacityExceededException();
+        }
+        List<ExamRegistration> saved;
         try {
-            saved = enrollmentRepository.saveAll(toCreate);
+            saved = registrationRepository.saveAll(toEnroll);
         } catch (DataIntegrityViolationException ex) {
             throw new AlreadyEnrolledException();
         }
-
-        for (Enrollment enrollment : saved) {
-            publishEnrolled(session, enrollment.getStudentPublicId());
-        }
+        saved.forEach(registration -> publishEnrolled(session, registration.getStudentPublicId()));
         if (!skippedByConflict.isEmpty()) {
             eventPublisher.publishEvent(new StudentEnrollmentConflictEvent(session.getPublicId(),
                     session.getTenantId(), session.getName(), skippedByConflict));
         }
-
-        List<UUID> enrolled = saved.stream().map(Enrollment::getStudentPublicId).toList();
-        return new BulkEnrollResponse(enrolled, List.copyOf(alreadyEnrolled), skippedByConflict);
+        return new BulkEnrollResponse(saved.stream().map(ExamRegistration::getStudentPublicId).toList(),
+                List.copyOf(alreadyEnrolled), skippedByConflict);
     }
 
     @Transactional(readOnly = true)
     public List<EnrollmentResponse> list(UUID sessionPublicId, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwned(sessionPublicId, caller);
-        return enrollmentRepository.findBySessionId(session.getId()).stream()
-                .map(enrollment -> new EnrollmentResponse(enrollment.getPublicId(), session.getPublicId(),
-                        enrollment.getStudentPublicId()))
+        return registrationRepository.findBySessionIdAndStatus(session.getId(), AudienceMemberStatus.ENROLLED)
+                .stream()
+                .map(registration -> new EnrollmentResponse(registration.getPublicId(), session.getPublicId(),
+                        registration.getStudentPublicId()))
                 .toList();
     }
 
+    /** Removes the student from the roster; the attendance history stays in the audit trail. */
     @Transactional
     public void unenroll(UUID sessionPublicId, UUID enrollmentPublicId, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
         requireManualAudienceMutationAllowed(session);
-        Enrollment enrollment = enrollmentRepository.findByPublicId(enrollmentPublicId)
+        ExamRegistration registration = registrationRepository.findByPublicId(enrollmentPublicId)
+                .filter(ExamRegistration::isEnrolled)
                 .orElseThrow(EnrollmentNotFoundException::new);
-        if (!enrollment.getSession().getId().equals(session.getId())) {
+        if (!registration.getSession().getId().equals(session.getId())) {
             throw new EnrollmentNotFoundException();
         }
-        UUID studentPublicId = enrollment.getStudentPublicId();
         if (!startedAttemptLookup.findStartedStudentPublicIds(session.getTenantId(), List.of(session.getPublicId()),
-                List.of(studentPublicId)).isEmpty()) {
+                List.of(registration.getStudentPublicId())).isEmpty()) {
             throw new EnrolledStudentAlreadyStartedException();
         }
-        formProvisioningService.release(session, studentPublicId);
-        enrollmentRepository.delete(enrollment);
+        registrationRepository.delete(registration);
     }
 
-    /** Backs enrollment's pending-exam-request transfer warning — one join-fetch query, no per-enrollment session lookup. */
+    /** Backs the enrollment pending-exam-request transfer warning: one join-fetch query, no per-row session lookup. */
     @Transactional(readOnly = true)
     public List<StudentEnrollmentResponse> listForStudent(UUID studentPublicId, CurrentUser caller) {
-        return enrollmentRepository.findByStudentPublicIdAndTenantId(studentPublicId, caller.tenantId()).stream()
-                .map(enrollment -> new StudentEnrollmentResponse(
-                        enrollment.getPublicId(),
-                        enrollment.getSession().getPublicId(),
-                        enrollment.getSession().getName(),
-                        enrollment.getSession().getStatus().name(),
-                        enrollment.getSession().getOpensAt(),
-                        enrollment.getSession().getClosesAt()))
+        return registrationRepository.findEnrollmentsOfStudent(studentPublicId, caller.tenantId()).stream()
+                .map(registration -> new StudentEnrollmentResponse(
+                        registration.getPublicId(),
+                        registration.getSession().getPublicId(),
+                        registration.getSession().getName(),
+                        registration.getSession().getStatus().name(),
+                        registration.getSession().getOpensAt(),
+                        registration.getSession().getClosesAt()))
                 .toList();
     }
 
-    @Transactional
-    public ProctorAssignmentResponse assignProctor(UUID sessionPublicId, AssignProctorRequest request, CurrentUser caller) {
-        ExamSession session = sessionLifecycleService.findOwned(sessionPublicId, caller);
-        assertTenantActive(session);
-        if (identityService != null) {
-            identityService.requireActiveProctorInTenant(request.proctorPublicId(), session.getTenantId());
-        }
-        ProctorAssignment assignment = new ProctorAssignment();
-        assignment.setSession(session);
-        assignment.setProctorPublicId(request.proctorPublicId());
-        assignment.setTenantId(session.getTenantId());
-        assignment.setRole(request.role() != null ? request.role() : ProctorRole.ASSISTANT_PROCTOR);
+    private ExamRegistration enroll(ExamSession session, ExamRegistration existing, UUID studentPublicId,
+            Instant now) {
+        ExamRegistration registration = existing != null ? existing : new ExamRegistration();
+        registration.setSession(session);
+        registration.setStudentPublicId(studentPublicId);
+        registration.setTenantId(session.getTenantId());
+        registration.setLicenseKey(session.getLicenseKey());
+        registration.setStatus(AudienceMemberStatus.ENROLLED);
+        registration.setReason(null);
+        registration.setPriorSessionPublicId(null);
+        registration.setPriorSessionName(null);
+        registration.setPriorStatus(null);
+        registration.setPublishedAt(now);
+        return registration;
+    }
 
-        ProctorAssignment saved;
+    private ExamRegistration save(ExamRegistration registration) {
         try {
-            saved = proctorAssignmentRepository.save(assignment);
-        } catch (DataIntegrityViolationException ex) {
-            throw new AlreadyAssignedException();
-        }
-        return toResponse(saved, session.getPublicId());
-    }
-
-    @Transactional(readOnly = true)
-    public List<ProctorAssignmentResponse> listProctors(UUID sessionPublicId, CurrentUser caller) {
-        ExamSession session = sessionLifecycleService.findOwned(sessionPublicId, caller);
-        return proctorAssignmentRepository.findBySessionId(session.getId()).stream()
-                .map(assignment -> toResponse(assignment, session.getPublicId()))
-                .toList();
-    }
-
-    @Transactional
-    public ProctorAssignmentResponse updateProctorRole(UUID sessionPublicId, UUID assignmentPublicId,
-                                                         UpdateProctorRoleRequest request, CurrentUser caller) {
-        ExamSession session = sessionLifecycleService.findOwned(sessionPublicId, caller);
-        ProctorAssignment assignment = proctorAssignmentRepository.findByPublicId(assignmentPublicId)
-                .orElseThrow(ProctorAssignmentNotFoundException::new);
-        if (!assignment.getSession().getId().equals(session.getId())) {
-            throw new ProctorAssignmentNotFoundException();
-        }
-        assignment.setRole(request.role());
-        ProctorAssignment saved = proctorAssignmentRepository.save(assignment);
-        return toResponse(saved, session.getPublicId());
-    }
-
-    private ProctorAssignmentResponse toResponse(ProctorAssignment assignment, UUID sessionPublicId) {
-        ProctorRole role = assignment.getRole() != null ? assignment.getRole() : ProctorRole.ASSISTANT_PROCTOR;
-        return new ProctorAssignmentResponse(assignment.getPublicId(), sessionPublicId,
-                assignment.getProctorPublicId(), role);
-    }
-
-    @Transactional
-    public void unassignProctor(UUID sessionPublicId, UUID assignmentPublicId, CurrentUser caller) {
-        ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
-        ProctorAssignment assignment = proctorAssignmentRepository.findByPublicId(assignmentPublicId)
-                .orElseThrow(ProctorAssignmentNotFoundException::new);
-        if (!assignment.getSession().getId().equals(session.getId())) {
-            throw new ProctorAssignmentNotFoundException();
-        }
-        proctorAssignmentRepository.delete(assignment);
-    }
-
-    private Enrollment save(Enrollment enrollment) {
-        try {
-            return enrollmentRepository.save(enrollment);
+            return registrationRepository.save(registration);
         } catch (DataIntegrityViolationException ex) {
             throw new AlreadyEnrolledException();
         }
+    }
+
+    private long enrolledCount(ExamSession session) {
+        return registrationRepository.countBySessionIdAndStatus(session.getId(), AudienceMemberStatus.ENROLLED);
     }
 
     private List<SlotConflict> findConflicts(ExamSession session, List<UUID> studentPublicIds) {
         if (studentPublicIds.isEmpty()) {
             return List.of();
         }
-        return enrollmentRepository.findConflictingEnrollments(session.getTenantId(), studentPublicIds,
+        return registrationRepository.findConflictingEnrollments(session.getTenantId(), studentPublicIds,
                         session.getOpensAt(), session.getClosesAt()).stream()
                 .map(conflict -> new SlotConflict(conflict.getStudentPublicId(),
                         conflict.getConflictingSessionPublicId(), conflict.getConflictingSessionName()))
@@ -357,30 +249,6 @@ public class EnrollmentService {
     private void requireManualAudienceMutationAllowed(ExamSession session) {
         if (session.getStatus() != SessionStatus.SCHEDULED && session.getStatus() != SessionStatus.CLOSED) {
             throw new ExamAudienceLockedException();
-        }
-    }
-
-    private void assertTenantActive(ExamSession session) {
-        if (tenancyService != null) {
-            tenancyService.assertTenantActive(session.getTenantId());
-        }
-    }
-
-    private void requireActiveStudent(UUID studentPublicId, UUID tenantId) {
-        if (identityService != null) {
-            identityService.requireActiveStudentInTenant(studentPublicId, tenantId);
-        }
-    }
-
-    private void requireActiveStudents(List<UUID> studentPublicIds, UUID tenantId) {
-        if (identityService != null) {
-            identityService.requireActiveStudentsInTenant(studentPublicIds, tenantId);
-        }
-    }
-
-    private void lockActiveStudents(List<UUID> studentPublicIds, UUID tenantId) {
-        if (identityService != null) {
-            identityService.lockActiveStudentsInTenant(studentPublicIds, tenantId);
         }
     }
 

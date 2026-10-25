@@ -1,6 +1,8 @@
 package com.pte.session.internal.controller;
 
-import com.pte.session.internal.service.ExamOrchestrationService;
+import com.pte.session.internal.service.ExamAudienceService;
+import com.pte.session.internal.service.ExamDraftService;
+import com.pte.session.internal.service.ExamPublishService;
 import com.pte.session.internal.service.SessionExamPreviewService;
 import com.pte.session.internal.service.SessionLifecycleService;
 import com.pte.shared.constant.SharedConstants;
@@ -30,7 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /** HTTP mapping only: the removed PRACTICE exam mode must be a client error, never a 500. */
 class SessionControllerExamModeContractTest {
-    private final ExamOrchestrationService orchestration = mock(ExamOrchestrationService.class);
+    private final ExamDraftService orchestration = mock(ExamDraftService.class);
     private final CurrentUser caller = new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("HOST_ADMIN"));
     private MockedStatic<CurrentUserContext> context;
     private MockMvc mvc;
@@ -39,7 +41,8 @@ class SessionControllerExamModeContractTest {
         context = mockStatic(CurrentUserContext.class);
         context.when(CurrentUserContext::required).thenReturn(caller);
         mvc = MockMvcBuilders.standaloneSetup(new SessionController(mock(SessionLifecycleService.class),
-                        orchestration, mock(SessionExamPreviewService.class)))
+                        orchestration, mock(ExamAudienceService.class), mock(ExamPublishService.class),
+                        mock(SessionExamPreviewService.class)))
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
     }
 
@@ -48,7 +51,7 @@ class SessionControllerExamModeContractTest {
     @Test void createDraftWithPracticeModeReturns400MalformedRequest() throws Exception {
         Instant opensAt = Instant.now().plusSeconds(3600);
         mvc.perform(post("/api/v1/sessions/drafts").contentType("application/json")
-                        .content("{\"name\":\"Mock\",\"templatePublicId\":\"" + UUID.randomUUID()
+                        .content("{\"name\":\"Mock\",\"examDefinitionPublicId\":\"" + UUID.randomUUID()
                                 + "\",\"subscriptionPublicId\":\"" + UUID.randomUUID()
                                 + "\",\"opensAt\":\"" + opensAt + "\",\"closesAt\":\"" + opensAt.plusSeconds(3600)
                                 + "\",\"examMode\":\"PRACTICE\",\"capacity\":10}"))

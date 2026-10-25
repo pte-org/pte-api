@@ -2,7 +2,9 @@ package com.pte.session.internal.repository;
 
 import com.pte.session.SessionOverviewService;
 import com.pte.session.UpcomingSessionView;
-import com.pte.session.domain.Enrollment;
+import com.pte.session.domain.ExamRegistration;
+import com.pte.session.internal.repository.ExamRegistrationRepository;
+import com.pte.session.domain.enums.AudienceMemberStatus;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.enums.SessionStatus;
 import jakarta.persistence.EntityManager;
@@ -36,7 +38,7 @@ class SessionOverviewQueriesTest {
     private ExamSessionRepository sessions;
 
     @Autowired
-    private EnrollmentRepository enrollments;
+    private ExamRegistrationRepository enrollments;
 
     @Autowired
     private EntityManager em;
@@ -70,11 +72,12 @@ class SessionOverviewQueriesTest {
     }
 
     private void enroll(ExamSession session, UUID tenant, boolean deleted) {
-        Enrollment enrollment = new Enrollment();
+        ExamRegistration enrollment = new ExamRegistration();
         enrollment.setSession(sessions.getReferenceById(session.getId()));
         enrollment.setStudentPublicId(UUID.randomUUID());
         enrollment.setTenantId(tenant);
         enrollment.setLicenseKey("LIC");
+        enrollment.setStatus(AudienceMemberStatus.ENROLLED);
         enrollment.setDeleted(deleted);
         enrollments.saveAndFlush(enrollment);
         em.clear();
@@ -95,7 +98,7 @@ class SessionOverviewQueriesTest {
         assertThat(byStatus.keySet()).containsExactly(
                 Arrays.stream(SessionStatus.values()).map(Enum::name).toArray(String[]::new));
         assertThat(byStatus).containsEntry("DRAFT", 1L).containsEntry("SCHEDULED", 2L).containsEntry("OPEN", 1L)
-                .containsEntry("PREPARING", 0L).containsEntry("READY", 0L).containsEntry("CLOSED", 0L)
+                .containsEntry("READY", 0L).containsEntry("CLOSED", 0L)
                 .containsEntry("CANCELLED", 0L);
     }
 

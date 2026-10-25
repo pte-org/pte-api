@@ -1,32 +1,27 @@
 package com.pte.session.internal.service;
 
-import com.pte.session.domain.Enrollment;
+import com.pte.session.domain.ExamRegistration;
+import com.pte.session.domain.enums.AudienceMemberStatus;
 import com.pte.session.domain.ExamSession;
-import com.pte.session.domain.ProctorAssignment;
-import com.pte.session.domain.enums.ProctorRole;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.event.StudentEnrollmentConflictEvent;
 import com.pte.session.dto.response.SlotConflict;
-import com.pte.session.internal.dto.request.AssignProctorRequest;
 import com.pte.session.internal.dto.request.BulkEnrollRequest;
 import com.pte.session.internal.dto.request.EnrollStudentRequest;
-import com.pte.session.internal.dto.request.UpdateProctorRoleRequest;
 import com.pte.session.internal.dto.response.BulkEnrollResponse;
 import com.pte.session.internal.dto.response.EnrollmentResponse;
-import com.pte.session.internal.dto.response.ProctorAssignmentResponse;
 import com.pte.session.internal.dto.response.StudentEnrollmentResponse;
 import com.pte.session.internal.exception.AlreadyEnrolledException;
 import com.pte.session.internal.exception.EnrolledStudentAlreadyStartedException;
 import com.pte.session.internal.exception.EnrollmentNotFoundException;
 import com.pte.session.internal.exception.ExamAudienceLockedException;
-import com.pte.session.internal.exception.ProctorAssignmentNotFoundException;
 import com.pte.session.internal.exception.SessionCapacityExceededException;
 import com.pte.session.internal.exception.SessionTimeConflictException;
-import com.pte.session.internal.repository.EnrollmentRepository;
-import com.pte.session.internal.repository.ProctorAssignmentRepository;
+import com.pte.session.internal.repository.ExamRegistrationRepository;
 import com.pte.identity.IdentityService;
 import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.security.CurrentUser;
+import com.pte.tenancy.TenancyService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -65,10 +60,7 @@ class EnrollmentServiceTest {
     private SessionLifecycleService sessionLifecycleService;
 
     @Mock
-    private EnrollmentRepository enrollmentRepository;
-
-    @Mock
-    private ProctorAssignmentRepository proctorAssignmentRepository;
+    private ExamRegistrationRepository registrationRepository;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
@@ -77,7 +69,7 @@ class EnrollmentServiceTest {
     private IdentityService identityService;
 
     @Mock
-    private ExamFormProvisioningService formProvisioningService;
+    private TenancyService tenancyService;
 
     @Mock
     private StartedAttemptLookup startedAttemptLookup;
@@ -86,9 +78,8 @@ class EnrollmentServiceTest {
 
     @BeforeEach
     void setUp() {
-        enrollmentService = new EnrollmentService(sessionLifecycleService, enrollmentRepository,
-                proctorAssignmentRepository, eventPublisher, null, identityService,
-                formProvisioningService, startedAttemptLookup);
+        enrollmentService = new EnrollmentService(sessionLifecycleService, registrationRepository,
+                eventPublisher, tenancyService, identityService, startedAttemptLookup);
     }
 
     private ExamSession session(Long id, UUID publicId, UUID tenantId) {
@@ -112,8 +103,8 @@ class EnrollmentServiceTest {
         CurrentUser caller = hostAdmin(tenantId);
 
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.save(any(Enrollment.class))).thenAnswer(invocation -> {
-            Enrollment enrollment = invocation.getArgument(0);
+        when(registrationRepository.save(any(ExamRegistration.class))).thenAnswer(invocation -> {
+            ExamRegistration enrollment = invocation.getArgument(0);
             enrollment.setPublicId(UUID.randomUUID());
             return enrollment;
         });
@@ -140,8 +131,8 @@ class EnrollmentServiceTest {
                 new EnrollStudentRequest(studentPublicId), caller))
                 .isInstanceOf(IdentityService.IdentityNotEligibleException.class);
 
-        verify(enrollmentRepository, never()).existsBySessionIdAndStudentPublicId(anyLong(), eq(studentPublicId));
-        verify(enrollmentRepository, never()).save(any());
+        verify(registrationRepository, never()).findBySessionIdAndStudentPublicIdIn(anyLong(), any());
+        verify(registrationRepository, never()).save(any());
     }
 
     @Test
@@ -152,12 +143,12 @@ class EnrollmentServiceTest {
         session.setCapacity(1);
         CurrentUser caller = hostAdmin(tenantId);
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.countBySessionId(1L)).thenReturn(1L);
+        when(registrationRepository.countBySessionIdAndStatus(eq(1L), eq(AudienceMemberStatus.ENROLLED))).thenReturn(1L);
 
         assertThatThrownBy(() -> enrollmentService.enrollStudent(sessionPublicId,
                 new EnrollStudentRequest(UUID.randomUUID()), caller))
                 .isInstanceOf(SessionCapacityExceededException.class);
-        verify(enrollmentRepository, never()).save(any());
+        verify(registrationRepository, never()).save(any());
     }
 
     @Test
@@ -170,11 +161,11 @@ class EnrollmentServiceTest {
         session.setOpensAt(Instant.parse("2026-10-17T08:00:00Z"));
         session.setClosesAt(Instant.parse("2026-10-17T10:00:00Z"));
         CurrentUser caller = hostAdmin(tenantId);
-        EnrollmentRepository.SlotConflictProjection conflict = org.mockito.Mockito.mock(
-                EnrollmentRepository.SlotConflictProjection.class);
+        ExamRegistrationRepository.SlotConflictProjection conflict = org.mockito.Mockito.mock(
+                ExamRegistrationRepository.SlotConflictProjection.class);
 
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.findConflictingEnrollments(eq(tenantId), eq(List.of(studentPublicId)),
+        when(registrationRepository.findConflictingEnrollments(eq(tenantId), eq(List.of(studentPublicId)),
                 eq(session.getOpensAt()), eq(session.getClosesAt()))).thenReturn(List.of(conflict));
         when(conflict.getStudentPublicId()).thenReturn(studentPublicId);
         when(conflict.getConflictingSessionPublicId()).thenReturn(conflictingSessionPublicId);
@@ -182,7 +173,7 @@ class EnrollmentServiceTest {
         assertThatThrownBy(() -> enrollmentService.enrollStudent(sessionPublicId,
                 new EnrollStudentRequest(studentPublicId), caller))
                 .isInstanceOf(SessionTimeConflictException.class);
-        verify(enrollmentRepository, never()).save(any());
+        verify(registrationRepository, never()).save(any());
     }
 
     @Test
@@ -196,14 +187,15 @@ class EnrollmentServiceTest {
         UUID newId1 = UUID.randomUUID();
         UUID newId2 = UUID.randomUUID();
 
-        Enrollment existingEnrollment = new Enrollment();
+        ExamRegistration existingEnrollment = new ExamRegistration();
+        existingEnrollment.setStatus(AudienceMemberStatus.ENROLLED);
         existingEnrollment.setStudentPublicId(alreadyEnrolledId);
 
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any()))
+        when(registrationRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any()))
                 .thenReturn(List.of(existingEnrollment));
-        when(enrollmentRepository.saveAll(any())).thenAnswer(invocation -> {
-            List<Enrollment> toSave = invocation.getArgument(0);
+        when(registrationRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<ExamRegistration> toSave = invocation.getArgument(0);
             toSave.forEach(e -> e.setPublicId(UUID.randomUUID()));
             return toSave;
         });
@@ -217,7 +209,7 @@ class EnrollmentServiceTest {
                 List.of(alreadyEnrolledId, newId1, newId2), tenantId);
         // Regression: capacity == null (unset here) must skip the capacity
         // check entirely, not just "pass" with a 0/default count.
-        verify(enrollmentRepository, never()).countBySessionId(anyLong());
+        verify(registrationRepository, never()).countBySessionIdAndStatus(anyLong(), any());
     }
 
     @Test
@@ -233,21 +225,21 @@ class EnrollmentServiceTest {
         session.setClosesAt(Instant.parse("2026-10-17T10:00:00Z"));
         session.setCapacity(2);
         CurrentUser caller = hostAdmin(tenantId);
-        EnrollmentRepository.SlotConflictProjection conflict = org.mockito.Mockito.mock(
-                EnrollmentRepository.SlotConflictProjection.class);
+        ExamRegistrationRepository.SlotConflictProjection conflict = org.mockito.Mockito.mock(
+                ExamRegistrationRepository.SlotConflictProjection.class);
 
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any()))
+        when(registrationRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any()))
                 .thenReturn(List.of());
-        when(enrollmentRepository.findConflictingEnrollments(eq(tenantId),
+        when(registrationRepository.findConflictingEnrollments(eq(tenantId),
                 eq(List.of(conflictingStudentId, eligibleStudentId)), eq(session.getOpensAt()),
                 eq(session.getClosesAt()))).thenReturn(List.of(conflict));
         when(conflict.getStudentPublicId()).thenReturn(conflictingStudentId);
         when(conflict.getConflictingSessionPublicId()).thenReturn(conflictingSessionPublicId);
         when(conflict.getConflictingSessionName()).thenReturn("Earlier exam");
-        when(enrollmentRepository.countBySessionId(1L)).thenReturn(1L);
-        when(enrollmentRepository.saveAll(any())).thenAnswer(invocation -> {
-            List<Enrollment> toSave = invocation.getArgument(0);
+        when(registrationRepository.countBySessionIdAndStatus(eq(1L), eq(AudienceMemberStatus.ENROLLED))).thenReturn(1L);
+        when(registrationRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<ExamRegistration> toSave = invocation.getArgument(0);
             toSave.forEach(e -> e.setPublicId(UUID.randomUUID()));
             return toSave;
         });
@@ -272,8 +264,8 @@ class EnrollmentServiceTest {
         UUID studentPublicId = UUID.randomUUID();
 
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
-        when(enrollmentRepository.saveAll(any()))
+        when(registrationRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
+        when(registrationRepository.saveAll(any()))
                 .thenThrow(new DataIntegrityViolationException("unique violation"));
 
         assertThatThrownBy(() -> enrollmentService.bulkEnroll(sessionPublicId,
@@ -292,10 +284,10 @@ class EnrollmentServiceTest {
         UUID newId2 = UUID.randomUUID();
 
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
-        when(enrollmentRepository.countBySessionId(1L)).thenReturn(3L);
-        when(enrollmentRepository.saveAll(any())).thenAnswer(invocation -> {
-            List<Enrollment> toSave = invocation.getArgument(0);
+        when(registrationRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
+        when(registrationRepository.countBySessionIdAndStatus(eq(1L), eq(AudienceMemberStatus.ENROLLED))).thenReturn(3L);
+        when(registrationRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<ExamRegistration> toSave = invocation.getArgument(0);
             toSave.forEach(e -> e.setPublicId(UUID.randomUUID()));
             return toSave;
         });
@@ -317,15 +309,15 @@ class EnrollmentServiceTest {
         UUID newId2 = UUID.randomUUID();
 
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
+        when(registrationRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
         // 4 already enrolled + 2 new = 6 > capacity 5.
-        when(enrollmentRepository.countBySessionId(1L)).thenReturn(4L);
+        when(registrationRepository.countBySessionIdAndStatus(eq(1L), eq(AudienceMemberStatus.ENROLLED))).thenReturn(4L);
 
         assertThatThrownBy(() -> enrollmentService.bulkEnroll(sessionPublicId,
                 new BulkEnrollRequest(List.of(newId1, newId2)), caller))
                 .isInstanceOf(SessionCapacityExceededException.class);
 
-        verify(enrollmentRepository, never()).saveAll(any());
+        verify(registrationRepository, never()).saveAll(any());
     }
 
     @Test
@@ -335,12 +327,13 @@ class EnrollmentServiceTest {
         ExamSession session = session(1L, sessionPublicId, tenantId);
         CurrentUser caller = hostAdmin(tenantId);
 
-        Enrollment enrollment = new Enrollment();
+        ExamRegistration enrollment = new ExamRegistration();
+        enrollment.setStatus(AudienceMemberStatus.ENROLLED);
         enrollment.setPublicId(UUID.randomUUID());
         enrollment.setStudentPublicId(UUID.randomUUID());
 
         when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.findBySessionId(1L)).thenReturn(List.of(enrollment));
+        when(registrationRepository.findBySessionIdAndStatus(1L, AudienceMemberStatus.ENROLLED)).thenReturn(List.of(enrollment));
 
         List<EnrollmentResponse> result = enrollmentService.list(sessionPublicId, caller);
 
@@ -356,17 +349,18 @@ class EnrollmentServiceTest {
         ExamSession session = session(1L, sessionPublicId, tenantId);
         CurrentUser caller = hostAdmin(tenantId);
 
-        Enrollment enrollment = new Enrollment();
+        ExamRegistration enrollment = new ExamRegistration();
+        enrollment.setStatus(AudienceMemberStatus.ENROLLED);
         enrollment.setPublicId(enrollmentPublicId);
         enrollment.setSession(session);
         enrollment.setStudentPublicId(UUID.randomUUID());
 
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.findByPublicId(enrollmentPublicId)).thenReturn(Optional.of(enrollment));
+        when(registrationRepository.findByPublicId(enrollmentPublicId)).thenReturn(Optional.of(enrollment));
 
         enrollmentService.unenroll(sessionPublicId, enrollmentPublicId, caller);
 
-        verify(enrollmentRepository).delete(enrollment);
+        verify(registrationRepository).delete(enrollment);
     }
 
     @Test
@@ -378,82 +372,19 @@ class EnrollmentServiceTest {
         ExamSession otherSession = session(2L, UUID.randomUUID(), tenantId);
         CurrentUser caller = hostAdmin(tenantId);
 
-        Enrollment enrollment = new Enrollment();
+        ExamRegistration enrollment = new ExamRegistration();
+        enrollment.setStatus(AudienceMemberStatus.ENROLLED);
         enrollment.setPublicId(enrollmentPublicId);
         enrollment.setSession(otherSession);
         enrollment.setStudentPublicId(UUID.randomUUID());
 
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.findByPublicId(enrollmentPublicId)).thenReturn(Optional.of(enrollment));
+        when(registrationRepository.findByPublicId(enrollmentPublicId)).thenReturn(Optional.of(enrollment));
 
         assertThatThrownBy(() -> enrollmentService.unenroll(sessionPublicId, enrollmentPublicId, caller))
                 .isInstanceOf(EnrollmentNotFoundException.class);
 
-        verify(enrollmentRepository, never()).delete(any());
-    }
-
-    @Test
-    void assignProctor_saves() {
-        UUID tenantId = UUID.randomUUID();
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID proctorPublicId = UUID.randomUUID();
-        ExamSession session = session(1L, sessionPublicId, tenantId);
-        CurrentUser caller = hostAdmin(tenantId);
-
-        when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
-        when(proctorAssignmentRepository.save(any(ProctorAssignment.class))).thenAnswer(invocation -> {
-            ProctorAssignment assignment = invocation.getArgument(0);
-            assignment.setPublicId(UUID.randomUUID());
-            return assignment;
-        });
-
-        ProctorAssignmentResponse response = enrollmentService.assignProctor(sessionPublicId,
-                new AssignProctorRequest(proctorPublicId, null), caller);
-
-        assertThat(response.proctorPublicId()).isEqualTo(proctorPublicId);
-        assertThat(response.role()).isEqualTo(ProctorRole.ASSISTANT_PROCTOR);
-    }
-
-    @Test
-    void assignProctor_rejectsIneligibleIdentityBeforeSaving() {
-        UUID tenantId = UUID.randomUUID();
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID proctorPublicId = UUID.randomUUID();
-        ExamSession session = session(1L, sessionPublicId, tenantId);
-        CurrentUser caller = hostAdmin(tenantId);
-        when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
-        doThrow(new IdentityService.IdentityNotEligibleException()).when(identityService)
-                .requireActiveProctorInTenant(proctorPublicId, tenantId);
-
-        assertThatThrownBy(() -> enrollmentService.assignProctor(sessionPublicId,
-                new AssignProctorRequest(proctorPublicId, null), caller))
-                .isInstanceOf(IdentityService.IdentityNotEligibleException.class);
-
-        verify(proctorAssignmentRepository, never()).save(any());
-    }
-
-    @Test
-    void updateProctorRole_updates() {
-        UUID tenantId = UUID.randomUUID();
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID assignmentPublicId = UUID.randomUUID();
-        ExamSession session = session(1L, sessionPublicId, tenantId);
-        CurrentUser caller = hostAdmin(tenantId);
-
-        ProctorAssignment assignment = new ProctorAssignment();
-        assignment.setPublicId(assignmentPublicId);
-        assignment.setSession(session);
-        assignment.setProctorPublicId(UUID.randomUUID());
-
-        when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
-        when(proctorAssignmentRepository.findByPublicId(assignmentPublicId)).thenReturn(Optional.of(assignment));
-        when(proctorAssignmentRepository.save(assignment)).thenReturn(assignment);
-
-        ProctorAssignmentResponse response = enrollmentService.updateProctorRole(sessionPublicId, assignmentPublicId,
-                new UpdateProctorRoleRequest(ProctorRole.LEAD_PROCTOR), caller);
-
-        assertThat(response.role()).isEqualTo(ProctorRole.LEAD_PROCTOR);
-        assertThat(assignment.getRole()).isEqualTo(ProctorRole.LEAD_PROCTOR);
+        verify(registrationRepository, never()).delete(any());
     }
 
     @Test
@@ -472,13 +403,14 @@ class EnrollmentServiceTest {
         session.setOpensAt(opensAt);
         session.setClosesAt(closesAt);
 
-        Enrollment enrollment = new Enrollment();
+        ExamRegistration enrollment = new ExamRegistration();
+        enrollment.setStatus(AudienceMemberStatus.ENROLLED);
         enrollment.setPublicId(enrollmentPublicId);
         enrollment.setSession(session);
         enrollment.setStudentPublicId(studentPublicId);
         enrollment.setTenantId(tenantId);
 
-        when(enrollmentRepository.findByStudentPublicIdAndTenantId(studentPublicId, tenantId))
+        when(registrationRepository.findEnrollmentsOfStudent(studentPublicId, tenantId))
                 .thenReturn(List.of(enrollment));
 
         List<StudentEnrollmentResponse> result = enrollmentService.listForStudent(studentPublicId, caller);
@@ -490,30 +422,6 @@ class EnrollmentServiceTest {
     }
 
     @Test
-    void updateProctorRole_fromDifferentSession_throwsNotFound_doesNotSave() {
-        UUID tenantId = UUID.randomUUID();
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID assignmentPublicId = UUID.randomUUID();
-        ExamSession session = session(1L, sessionPublicId, tenantId);
-        ExamSession otherSession = session(2L, UUID.randomUUID(), tenantId);
-        CurrentUser caller = hostAdmin(tenantId);
-
-        ProctorAssignment assignment = new ProctorAssignment();
-        assignment.setPublicId(assignmentPublicId);
-        assignment.setSession(otherSession);
-        assignment.setProctorPublicId(UUID.randomUUID());
-
-        when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
-        when(proctorAssignmentRepository.findByPublicId(assignmentPublicId)).thenReturn(Optional.of(assignment));
-
-        assertThatThrownBy(() -> enrollmentService.updateProctorRole(sessionPublicId, assignmentPublicId,
-                new UpdateProctorRoleRequest(ProctorRole.LEAD_PROCTOR), caller))
-                .isInstanceOf(ProctorAssignmentNotFoundException.class);
-
-        verify(proctorAssignmentRepository, never()).save(any());
-    }
-
-    @Test
     void enrollStudent_publishesStudentEnrolledEvent() {
         UUID tenantId = UUID.randomUUID();
         UUID sessionPublicId = UUID.randomUUID();
@@ -522,8 +430,8 @@ class EnrollmentServiceTest {
         CurrentUser caller = hostAdmin(tenantId);
 
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.save(any(Enrollment.class))).thenAnswer(invocation -> {
-            Enrollment enrollment = invocation.getArgument(0);
+        when(registrationRepository.save(any(ExamRegistration.class))).thenAnswer(invocation -> {
+            ExamRegistration enrollment = invocation.getArgument(0);
             enrollment.setPublicId(UUID.randomUUID());
             return enrollment;
         });
@@ -543,24 +451,6 @@ class EnrollmentServiceTest {
     }
 
     @Test
-    void bulkEnroll_onWizardExam_provisionsFormsForNewStudents() {
-        UUID tenantId = UUID.randomUUID();
-        UUID sessionPublicId = UUID.randomUUID();
-        ExamSession session = session(1L, sessionPublicId, tenantId);
-        session.setGenerationJobPublicId(UUID.randomUUID());
-        CurrentUser caller = hostAdmin(tenantId);
-        UUID newId = UUID.randomUUID();
-
-        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
-        when(enrollmentRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
-
-        enrollmentService.bulkEnroll(sessionPublicId, new BulkEnrollRequest(List.of(newId)), caller);
-
-        verify(formProvisioningService).provision(session, List.of(newId), caller);
-    }
-
-    @Test
     void bulkEnroll_afterExamClosed_enrollsWithoutNotifying() {
         UUID tenantId = UUID.randomUUID();
         UUID sessionPublicId = UUID.randomUUID();
@@ -570,8 +460,8 @@ class EnrollmentServiceTest {
         UUID newId = UUID.randomUUID();
 
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
-        when(enrollmentRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(registrationRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
+        when(registrationRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         BulkEnrollResponse response = enrollmentService.bulkEnroll(sessionPublicId,
                 new BulkEnrollRequest(List.of(newId)), caller);
@@ -582,7 +472,7 @@ class EnrollmentServiceTest {
 
     @Test
     void bulkEnroll_whileExamIsNotScheduledOrClosed_isLocked() {
-        for (SessionStatus status : List.of(SessionStatus.DRAFT, SessionStatus.PREPARING, SessionStatus.READY,
+        for (SessionStatus status : List.of(SessionStatus.DRAFT, SessionStatus.READY,
                 SessionStatus.OPEN, SessionStatus.CANCELLED)) {
             UUID tenantId = UUID.randomUUID();
             UUID sessionPublicId = UUID.randomUUID();
@@ -596,7 +486,7 @@ class EnrollmentServiceTest {
                     .as(status.name())
                     .isInstanceOf(ExamAudienceLockedException.class);
         }
-        verify(enrollmentRepository, never()).saveAll(any());
+        verify(registrationRepository, never()).saveAll(any());
     }
 
     @Test
@@ -611,30 +501,7 @@ class EnrollmentServiceTest {
         assertThatThrownBy(() -> enrollmentService.unenroll(sessionPublicId, UUID.randomUUID(), caller))
                 .isInstanceOf(ExamAudienceLockedException.class);
 
-        verify(enrollmentRepository, never()).delete(any());
-    }
-
-    @Test
-    void unenroll_releasesTheStudentsForm() {
-        UUID tenantId = UUID.randomUUID();
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID enrollmentPublicId = UUID.randomUUID();
-        UUID studentPublicId = UUID.randomUUID();
-        ExamSession session = session(1L, sessionPublicId, tenantId);
-        CurrentUser caller = hostAdmin(tenantId);
-
-        Enrollment enrollment = new Enrollment();
-        enrollment.setPublicId(enrollmentPublicId);
-        enrollment.setSession(session);
-        enrollment.setStudentPublicId(studentPublicId);
-
-        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.findByPublicId(enrollmentPublicId)).thenReturn(Optional.of(enrollment));
-
-        enrollmentService.unenroll(sessionPublicId, enrollmentPublicId, caller);
-
-        verify(formProvisioningService).release(session, studentPublicId);
-        verify(enrollmentRepository).delete(enrollment);
+        verify(registrationRepository, never()).delete(any());
     }
 
     @Test
@@ -647,21 +514,21 @@ class EnrollmentServiceTest {
         session.setStatus(SessionStatus.CLOSED);
         CurrentUser caller = hostAdmin(tenantId);
 
-        Enrollment enrollment = new Enrollment();
+        ExamRegistration enrollment = new ExamRegistration();
+        enrollment.setStatus(AudienceMemberStatus.ENROLLED);
         enrollment.setPublicId(enrollmentPublicId);
         enrollment.setSession(session);
         enrollment.setStudentPublicId(studentPublicId);
 
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.findByPublicId(enrollmentPublicId)).thenReturn(Optional.of(enrollment));
+        when(registrationRepository.findByPublicId(enrollmentPublicId)).thenReturn(Optional.of(enrollment));
         when(startedAttemptLookup.findStartedStudentPublicIds(tenantId, List.of(sessionPublicId),
                 List.of(studentPublicId))).thenReturn(Set.of(studentPublicId));
 
         assertThatThrownBy(() -> enrollmentService.unenroll(sessionPublicId, enrollmentPublicId, caller))
                 .isInstanceOf(EnrolledStudentAlreadyStartedException.class);
 
-        verify(enrollmentRepository, never()).delete(any());
-        verify(formProvisioningService, never()).release(any(), any());
+        verify(registrationRepository, never()).delete(any());
     }
 
     @Test
@@ -675,14 +542,15 @@ class EnrollmentServiceTest {
         UUID newId1 = UUID.randomUUID();
         UUID newId2 = UUID.randomUUID();
 
-        Enrollment existingEnrollment = new Enrollment();
+        ExamRegistration existingEnrollment = new ExamRegistration();
+        existingEnrollment.setStatus(AudienceMemberStatus.ENROLLED);
         existingEnrollment.setStudentPublicId(alreadyEnrolledId);
 
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(enrollmentRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any()))
+        when(registrationRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any()))
                 .thenReturn(List.of(existingEnrollment));
-        when(enrollmentRepository.saveAll(any())).thenAnswer(invocation -> {
-            List<Enrollment> toSave = invocation.getArgument(0);
+        when(registrationRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<ExamRegistration> toSave = invocation.getArgument(0);
             toSave.forEach(e -> e.setPublicId(UUID.randomUUID()));
             return toSave;
         });

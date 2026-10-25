@@ -1,7 +1,6 @@
 package com.pte.session.internal.service;
 
 import com.pte.session.domain.ExamSession;
-import com.pte.session.domain.enums.FormMode;
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
 import com.pte.session.internal.exception.InvalidSessionCodeException;
@@ -9,10 +8,10 @@ import com.pte.session.internal.exception.NotEntitledException;
 import com.pte.session.internal.exception.ProctorNotAssignedException;
 import com.pte.session.internal.exception.SessionNotFoundException;
 import com.pte.session.internal.mapper.SessionMapper;
-import com.pte.session.internal.repository.EnrollmentRepository;
+import com.pte.session.domain.enums.AudienceMemberStatus;
+import com.pte.session.internal.repository.ExamRegistrationRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
-import com.pte.session.internal.repository.ProctorAssignmentRepository;
-import com.pte.session.internal.repository.FormAssignmentRepository;
+import com.pte.session.internal.repository.ExamSessionProctorRepository;
 import com.pte.tenancy.TenancyService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -36,36 +35,26 @@ public class EntitlementService {
     private static final int MAX_SESSION_CODE_LENGTH = 24;
 
     private final ExamSessionRepository sessionRepository;
-    private final EnrollmentRepository enrollmentRepository;
-    private final ProctorAssignmentRepository proctorAssignmentRepository;
-    private final FormAssignmentRepository formAssignmentRepository;
+    private final ExamRegistrationRepository registrationRepository;
+    private final ExamSessionProctorRepository proctorRepository;
     private final Clock clock;
     private final TenancyService tenancyService;
 
     @Autowired
-    public EntitlementService(ExamSessionRepository sessionRepository, EnrollmentRepository enrollmentRepository,
-                              ProctorAssignmentRepository proctorAssignmentRepository,
-                              FormAssignmentRepository formAssignmentRepository, Clock clock,
+    public EntitlementService(ExamSessionRepository sessionRepository, ExamRegistrationRepository registrationRepository,
+                              ExamSessionProctorRepository proctorRepository, Clock clock,
                               TenancyService tenancyService) {
         this.sessionRepository = sessionRepository;
-        this.enrollmentRepository = enrollmentRepository;
-        this.proctorAssignmentRepository = proctorAssignmentRepository;
-        this.formAssignmentRepository = formAssignmentRepository;
+        this.registrationRepository = registrationRepository;
+        this.proctorRepository = proctorRepository;
         this.clock = clock;
         this.tenancyService = tenancyService;
     }
 
-    public EntitlementService(ExamSessionRepository sessionRepository, EnrollmentRepository enrollmentRepository,
-                              ProctorAssignmentRepository proctorAssignmentRepository,
-                              FormAssignmentRepository formAssignmentRepository, Clock clock) {
-        this(sessionRepository, enrollmentRepository, proctorAssignmentRepository, formAssignmentRepository, clock,
-                null);
-    }
-
     /** Compatibility constructor for focused session unit tests. */
-    public EntitlementService(ExamSessionRepository sessionRepository, EnrollmentRepository enrollmentRepository,
-                              ProctorAssignmentRepository proctorAssignmentRepository, Clock clock) {
-        this(sessionRepository, enrollmentRepository, proctorAssignmentRepository, null, clock);
+    public EntitlementService(ExamSessionRepository sessionRepository, ExamRegistrationRepository registrationRepository,
+                              ExamSessionProctorRepository proctorRepository, Clock clock) {
+        this(sessionRepository, registrationRepository, proctorRepository, clock, null);
     }
 
     /**
@@ -85,13 +74,7 @@ public class EntitlementService {
         }
         SessionEntryGate.requireOpen(session);
         SessionEntryGate.requireWithinWindow(session, clock.instant());
-        UUID snapshotPublicId = session.getSnapshotPublicId();
-        if (session.getFormMode() == FormMode.UNIQUE_FORM_PER_STUDENT && formAssignmentRepository != null) {
-            snapshotPublicId = formAssignmentRepository.findBySessionIdAndStudentPublicId(session.getId(), studentPublicId)
-                    .map(assignment -> assignment.getForm().getSnapshotPublicId())
-                    .orElseThrow(NotEntitledException::new);
-        }
-        return new EntitlementResponse(session.getPublicId(), snapshotPublicId, session.getTenantId(),
+        return new EntitlementResponse(session.getPublicId(), session.getExamVersionPublicId(), session.getTenantId(),
                 session.getOpensAt(), session.getClosesAt(), SessionMapper.toPolicy(session.getPolicy(),
                         session.getExamMode(), session.getExamMode() == null),
                 session.getExamMode() == null ? "OFFICIAL_EXAM" : session.getExamMode().name());
@@ -101,7 +84,7 @@ public class EntitlementService {
     public ProctorAssignmentCheckResponse checkProctorAssignment(UUID sessionPublicId, UUID proctorPublicId) {
         ExamSession session = sessionRepository.findByPublicId(sessionPublicId)
                 .orElseThrow(ProctorNotAssignedException::new);
-        if (!proctorAssignmentRepository.existsBySessionIdAndProctorPublicId(session.getId(), proctorPublicId)) {
+        if (!proctorRepository.existsBySessionIdAndProctorPublicId(session.getId(), proctorPublicId)) {
             throw new ProctorNotAssignedException();
         }
         return new ProctorAssignmentCheckResponse(session.getPublicId(), session.getTenantId());
@@ -147,7 +130,7 @@ public class EntitlementService {
     }
 
     private boolean isEnrolled(ExamSession session, UUID studentPublicId) {
-        return enrollmentRepository.existsBySessionIdAndStudentPublicId(session.getId(), studentPublicId);
+        return registrationRepository.existsBySessionIdAndStudentPublicIdAndStatus(session.getId(), studentPublicId, AudienceMemberStatus.ENROLLED);
     }
 
     /** Checks the input's shape only, before any lookup, so a 400 never depends on stored data. */

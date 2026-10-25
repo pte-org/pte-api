@@ -1,6 +1,6 @@
 package com.pte.session.internal.service;
 
-import com.pte.session.internal.repository.ProctorAssignmentRepository;
+import com.pte.session.internal.repository.ExamSessionProctorRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,10 +11,10 @@ import java.util.UUID;
 @Service
 public class SessionStaffAssignmentQueryService {
 
-    private final ProctorAssignmentRepository proctorAssignmentRepository;
+    private final ExamSessionProctorRepository proctorRepository;
 
-    public SessionStaffAssignmentQueryService(ProctorAssignmentRepository proctorAssignmentRepository) {
-        this.proctorAssignmentRepository = proctorAssignmentRepository;
+    public SessionStaffAssignmentQueryService(ExamSessionProctorRepository proctorRepository) {
+        this.proctorRepository = proctorRepository;
     }
 
     @Transactional(readOnly = true)
@@ -22,7 +22,7 @@ public class SessionStaffAssignmentQueryService {
         if (sessionPublicId == null || tenantId == null) {
             return List.of();
         }
-        return proctorAssignmentRepository.findAssignedProctorPublicIds(sessionPublicId, tenantId)
+        return proctorRepository.findAssignedProctorPublicIds(sessionPublicId, tenantId)
                 .stream().distinct().toList();
     }
 }
