@@ -25,12 +25,14 @@ public final class PracticeConstants {
     public static final String PRACTICE_UNSUPPORTED_RUNTIME = "PRACTICE_UNSUPPORTED_RUNTIME";
     public static final String PRACTICE_CAPABILITY_MISMATCH = "PRACTICE_CAPABILITY_MISMATCH";
     public static final String PRACTICE_CONTENT_NOT_READY = "PRACTICE_CONTENT_NOT_READY";
+    public static final String PRACTICE_TIMED_MODE_UNAVAILABLE = "PRACTICE_TIMED_MODE_UNAVAILABLE";
     public static final String PRACTICE_CONFIDENCE_REQUIRED = "PRACTICE_CONFIDENCE_REQUIRED";
     public static final String PRACTICE_ANSWER_INVALID = "PRACTICE_ANSWER_INVALID";
     public static final String PRACTICE_ANSWER_PAYLOAD_REQUIRED = "PRACTICE_ANSWER_PAYLOAD_REQUIRED";
     public static final String PRACTICE_DETERMINISTIC_SCORING_UNAVAILABLE =
             "PRACTICE_DETERMINISTIC_SCORING_UNAVAILABLE";
     public static final String PRACTICE_PRODUCT_NOT_FOUND = "PRACTICE_PRODUCT_NOT_FOUND";
+    public static final String PRACTICE_QUESTION_COUNT_INVALID = "Question count must be between 1 and 50";
     public static final String PRACTICE_SCORING_RATE_LIMITED = "PRACTICE_SCORING_RATE_LIMITED";
     public static final String PRACTICE_SCORING_RETRY_NOT_ALLOWED = "PRACTICE_SCORING_RETRY_NOT_ALLOWED";
     public static final String PRACTICE_SCORING_EXCHANGE = "pte.practice.scoring";
@@ -60,6 +62,8 @@ public final class PracticeConstants {
             "This device does not support all capabilities required by the selected practice.";
     public static final String PRACTICE_CONTENT_NOT_READY_MESSAGE =
             "This practice content is not ready yet.";
+    public static final String PRACTICE_TIMED_MODE_UNAVAILABLE_MESSAGE =
+            "Timed practice is not available for this task right now. Practice without a timer instead.";
     public static final String PRACTICE_CONFIDENCE_REQUIRED_MESSAGE =
             "Choose a confidence level before submitting an answered practice item.";
     public static final String PRACTICE_ANSWER_INVALID_MESSAGE =
@@ -128,9 +132,32 @@ public final class PracticeConstants {
             "ANSWER_SHORT_QUESTION_V1",
             "RESPOND_TO_A_SITUATION_V1",
             "SUMMARIZE_GROUP_DISCUSSION_V1");
-    public static final int PRACTICE_TIME_LIMIT_SECONDS = 3_600;
-    /** Prompt audio/image links must stay valid for the whole session timer, so the expiry exceeds it. */
-    public static final long PRACTICE_PROMPT_MEDIA_TTL_SECONDS = PRACTICE_TIME_LIMIT_SECONDS * 2L;
+    /** Sessions have no session-wide limit since V133; the field stays on the wire as 0 for older clients. */
+    public static final int PRACTICE_NO_SESSION_TIME_LIMIT_SECONDS = 0;
+    public static final int PRACTICE_DEFAULT_QUESTION_COUNT = 10;
+    public static final int PRACTICE_MAX_QUESTION_COUNT = 50;
+    public static final String PRACTICE_MOCK_TEST_PATH = "/api/v1/student/practice/mock-tests";
+    public static final String PRACTICE_ADMIN_PATH = "/api/v1/admin/practice";
+    public static final String PRACTICE_MOCK_TEST_NOT_FOUND = "PRACTICE_MOCK_TEST_NOT_FOUND";
+    public static final String PRACTICE_MOCK_TEST_NOT_FOUND_MESSAGE = "This mock test is not available";
+    public static final String PRACTICE_MOCK_TEST_TEMPLATE_MISSING = "PRACTICE_MOCK_TEST_TEMPLATE_MISSING";
+    public static final String PRACTICE_MOCK_TEST_TEMPLATE_MISSING_MESSAGE =
+            "There is no active Score Template to build mock tests from";
+    public static final String PRACTICE_MOCK_TEST_BANK_INSUFFICIENT = "PRACTICE_MOCK_TEST_BANK_INSUFFICIENT";
+    public static final String PRACTICE_MOCK_TEST_TITLE_PREFIX = "PTE Academic Full Mock Test ";
+    public static final long PRACTICE_MOCK_TEST_ADVISORY_LOCK = 261025_01L;
+    public static final String PRACTICE_SESSION_REQUEST_INVALID = "PRACTICE_SESSION_REQUEST_INVALID";
+    public static final String PRACTICE_SESSION_REQUEST_INVALID_MESSAGE =
+            "Choose either task types, a skill or a mock test, not a mix";
+    /** Sessions started before V133 carry no question count and keep the old one-item-per-task behaviour. */
+    public static final int PRACTICE_LEGACY_QUESTION_COUNT = 1;
+    /**
+     * Prompt audio/image link lifetime. Equal to the media module's signing cap (longer requests are clamped to
+     * it anyway); the client reloads the session when a link has expired.
+     */
+    public static final long PRACTICE_PROMPT_MEDIA_TTL_SECONDS = 900L;
+    /** Playback link for the student's own recording; equal to the media module's signing cap. */
+    public static final long PRACTICE_RECORDING_PLAYBACK_TTL_SECONDS = 900L;
     public static final int PRACTICE_PROGRESS_MAX_SESSIONS = 100;
     public static final int MAX_IDEMPOTENCY_KEY_LENGTH = 128;
     public static final int MAX_ANSWER_PAYLOAD_LENGTH = 16_384;

@@ -2,6 +2,7 @@ package com.pte.practice.internal.dto.response;
 
 import com.pte.practice.internal.domain.enums.PracticeSessionSourceType;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
+import com.pte.practice.internal.domain.enums.PracticeTimingMode;
 
 import java.time.Instant;
 import java.util.List;
@@ -32,7 +33,9 @@ public record PracticeSessionResponse(
         int totalItemCount,
         List<PracticeCatalogSectionResponse> sections,
         PracticeTaskResponse currentTask,
-        PracticeItemResultResponse itemResult) {
+        PracticeItemResultResponse itemResult,
+        PracticeTimingMode timingMode,
+        Integer questionCount) {
 
     public PracticeSessionResponse {
         sections = sections == null ? List.of() : List.copyOf(sections);
@@ -42,6 +45,6 @@ public record PracticeSessionResponse(
         return new PracticeSessionResponse(publicId, sourceType, productCode, title, organizationId, catalogVersion,
                 timeLimitSeconds, status, version, startedAt, deadlineAt, completedAt, discardedAt,
                 saveAndExitAvailable, canAdvance, nextAction, answeredItemCount, totalItemCount, sections,
-                currentTask, result);
+                currentTask, result, timingMode, questionCount);
     }
 }

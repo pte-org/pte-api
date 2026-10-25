@@ -2,6 +2,7 @@ package com.pte.practice.internal.controller;
 
 import com.pte.practice.internal.dto.response.PracticeReviewResponse;
 import com.pte.practice.internal.dto.response.PracticeTaskContentResponse;
+import com.pte.practice.internal.service.PracticeRecordingPlaybackService;
 import com.pte.practice.internal.service.PracticeReviewService;
 import com.pte.practice.internal.service.PracticeSessionService;
 import com.pte.shared.security.CurrentUser;
@@ -38,7 +39,8 @@ class PracticeSessionControllerReviewTest {
         context = mockStatic(CurrentUserContext.class);
         context.when(CurrentUserContext::required).thenReturn(caller);
         mvc = MockMvcBuilders.standaloneSetup(
-                new PracticeSessionController(mock(PracticeSessionService.class), reviewService)).build();
+                new PracticeSessionController(mock(PracticeSessionService.class), reviewService,
+                        mock(PracticeRecordingPlaybackService.class))).build();
     }
 
     @AfterEach

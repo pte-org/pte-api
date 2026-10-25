@@ -5,7 +5,12 @@ import java.time.Instant;
 import java.util.UUID;
 import java.util.Map;
 
-public record PracticeReviewResponse(UUID sessionPublicId, List<Item> items) {
+public record PracticeReviewResponse(UUID sessionPublicId, List<Item> items,
+        PracticeEstimatedScoresResponse estimatedScores) {
+
+    public PracticeReviewResponse(UUID sessionPublicId, List<Item> items) {
+        this(sessionPublicId, items, null);
+    }
 
     public PracticeReviewResponse {
         items = items == null ? List.of() : List.copyOf(items);

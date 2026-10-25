@@ -4,10 +4,13 @@ import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeSessionItem;
 import com.pte.practice.internal.domain.PracticeSessionOperation;
+import com.pte.practice.internal.domain.enums.PracticeSessionKind;
 import com.pte.practice.internal.domain.enums.PracticeSessionOperationType;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
+import com.pte.practice.internal.domain.enums.PracticeTimingMode;
 import com.pte.practice.internal.dto.request.PracticeCapabilityManifest;
 import com.pte.practice.internal.dto.request.PracticeAnswerRequest;
+import com.pte.practice.internal.dto.request.PracticeDraftRequest;
 import com.pte.practice.internal.dto.request.PracticeSaveAndExitRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionActionRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionStartRequest;
@@ -20,6 +23,7 @@ import com.pte.practice.internal.mapper.PracticeSessionResponseMapper;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
 import com.pte.practice.internal.repository.PracticeSessionOperationRepository;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
@@ -34,6 +38,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.HexFormat;
@@ -54,7 +59,16 @@ public class PracticeSessionService {
     private final PracticeSessionItemService itemService;
     private final PracticeSessionResponseMapper responseMapper;
     private final PracticeEntitlementService entitlementService;
+    /** Null in focused tests: a TIMED start is then rejected as unavailable. */
+    private final PracticeTimingService timingService;
     private final Clock clock;
+    /** Set by Spring; null in focused tests that do not start mock tests. */
+    private PracticeMockTestService mockTestService;
+
+    @Autowired(required = false)
+    void setMockTestService(PracticeMockTestService mockTestService) {
+        this.mockTestService = mockTestService;
+    }
 
     public PracticeSessionService(PracticeSessionRepository sessionRepository,
             PracticeSessionPersistenceService sessionPersistenceService,
@@ -62,6 +76,18 @@ public class PracticeSessionService {
             PracticeCatalogService catalogService, PracticeEntitlementService entitlementService,
             PracticeSessionItemService itemService, PracticeSessionResponseMapper responseMapper,
             Clock clock) {
+        this(sessionRepository, sessionPersistenceService, operationRepository, catalogService, entitlementService,
+                itemService, responseMapper, null, clock);
+    }
+
+    @Autowired
+    public PracticeSessionService(PracticeSessionRepository sessionRepository,
+            PracticeSessionPersistenceService sessionPersistenceService,
+            PracticeSessionOperationRepository operationRepository,
+            PracticeCatalogService catalogService, PracticeEntitlementService entitlementService,
+            PracticeSessionItemService itemService, PracticeSessionResponseMapper responseMapper,
+            PracticeTimingService timingService, Clock clock) {
+        this.timingService = timingService;
         this.sessionRepository = sessionRepository;
         this.sessionPersistenceService = sessionPersistenceService;
         this.operationRepository = operationRepository;
@@ -86,7 +112,14 @@ public class PracticeSessionService {
             return responseMapper.toResponse(existing.get());
         }
 
-        catalogService.requireStartable(request.productCode(), request.safeTaskTypeCodes(), request.capabilities());
+        if (request.hasMockTest()) {
+            return startMockTest(request, idempotencyKey, requestHash, caller);
+        }
+        Set<String> taskCodes = resolveTaskCodes(request);
+        catalogService.requireStartable(request.productCode(), taskCodes, request.capabilities());
+        if (request.effectiveTimingMode() == PracticeTimingMode.TIMED) {
+            requireTimedAvailable(taskCodes);
+        }
 
         PracticeSession session = new PracticeSession();
         session.setStudentPublicId(caller.userId());
@@ -94,9 +127,13 @@ public class PracticeSessionService {
         session.setTenantId(caller.tenantId());
         session.setProductCode(request.productCode());
         session.setTitle(PracticeConstants.PRACTICE_PRODUCT_TITLE);
-        session.setTimeLimitSeconds(PracticeConstants.PRACTICE_TIME_LIMIT_SECONDS);
+        session.setTimeLimitSeconds(PracticeConstants.PRACTICE_NO_SESSION_TIME_LIMIT_SECONDS);
+        session.setTimingMode(request.effectiveTimingMode());
+        session.setQuestionCount(request.effectiveQuestionCount());
         session.setCatalogVersion(PracticeConstants.PRACTICE_CATALOG_VERSION);
-        session.setSelectedTaskTypes(joinSorted(request.safeTaskTypeCodes()));
+        session.setSelectedTaskTypes(joinSorted(taskCodes));
+        session.setKind(request.hasSkill() ? PracticeSessionKind.SKILL : PracticeSessionKind.TASK);
+        session.setSkillCode(request.hasSkill() ? request.skillCode() : null);
         session.setClientCapabilities(joinSorted(request.capabilities() == null
                 ? Set.of() : request.capabilities().safeCapabilities()));
         session.setStartIdempotencyKey(idempotencyKey);
@@ -143,14 +180,17 @@ public class PracticeSessionService {
         if (session.getStatus() != PracticeSessionStatus.OVERVIEW) {
             throw notStartable();
         }
-        catalogService.requireStartable(session.getProductCode(), splitCsv(session.getSelectedTaskTypes()),
-                new PracticeCapabilityManifest(splitCsv(session.getClientCapabilities()), null));
+        // A mock test is tolerant of task types that lost their content; its items are checked one by one.
+        if (session.effectiveKind() != PracticeSessionKind.MOCK_TEST) {
+            catalogService.requireStartable(session.getProductCode(), splitCsv(session.getSelectedTaskTypes()),
+                    new PracticeCapabilityManifest(splitCsv(session.getClientCapabilities()), null));
+        }
 
         Instant now = clock.instant();
         itemService.createItemsIfNeeded(session);
         session.setStatus(PracticeSessionStatus.IN_PROGRESS);
         session.setStartedAt(now);
-        session.setDeadlineAt(now.plusSeconds(session.getTimeLimitSeconds()));
+        // No session-wide deadline since V133: a null deadline never expires; TIMED pacing is per item.
         session.setLastActivityAt(now);
         saveOperation(session, PracticeSessionOperationType.BEGIN, idempotencyKey, requestHash);
         return saveAndMap(session);
@@ -257,6 +297,33 @@ public class PracticeSessionService {
         return saveAndMap(session);
     }
 
+    /**
+     * Saves the current item's work (a finished recording, or a re-recording that replaces it) while the session
+     * stays {@code IN_PROGRESS}. Guarded like an answer: live entitlement, the current optimistic version and an
+     * idempotent retry key — the client takes the new version from this response before its next command.
+     */
+    @Transactional
+    public PracticeSessionResponse saveDraft(UUID publicId, UUID itemPublicId, PracticeDraftRequest request,
+            String rawIdempotencyKey, CurrentUser caller) {
+        String idempotencyKey = requireIdempotencyKey(rawIdempotencyKey);
+        PracticeSession session = findOwnedForUpdate(publicId, caller.userId());
+        String requestHash = draftRequestHash(itemPublicId, request);
+        entitlementService.assertUnlocked(caller, session.getTenantId());
+        var existingOperation = operationRepository
+                .findByPracticeSessionIdAndOperationTypeAndIdempotencyKeyAndDeletedFalse(
+                        session.getId(), PracticeSessionOperationType.SAVE_DRAFT, idempotencyKey);
+        if (existingOperation.isPresent()) {
+            assertSameHash(existingOperation.get().getRequestHash(), requestHash);
+            return responseMapper.toResponse(session);
+        }
+        requireLiveInProgress(session, request.clientVersion());
+        PracticeSessionItem item = itemService.findForUpdate(session, itemPublicId);
+        itemService.saveDraft(session, item, request.payload(), request.confidence(), caller);
+        session.setLastActivityAt(clock.instant());
+        saveOperation(session, PracticeSessionOperationType.SAVE_DRAFT, idempotencyKey, requestHash);
+        return saveAndMap(session);
+    }
+
     @Transactional
     public PracticeSessionResponse saveAndExit(UUID publicId, PracticeSaveAndExitRequest request,
             String rawIdempotencyKey, CurrentUser caller) {
@@ -347,6 +414,87 @@ public class PracticeSessionService {
                 .orElseThrow(PracticeSessionNotFoundException::new);
     }
 
+    /**
+     * Starts (or resumes) a full mock test. One unfinished attempt per student and test: a second start returns it,
+     * and {@code restart} discards it first. The test is always TIMED when the template can pace it.
+     */
+    private PracticeSessionResponse startMockTest(PracticeSessionStartRequest request, String idempotencyKey,
+            String requestHash, CurrentUser caller) {
+        if (request.hasSkill() || !request.safeTaskTypeCodes().isEmpty() || mockTestService == null) {
+            throw invalidStartRequest();
+        }
+        var mockTest = mockTestService.requirePublished(request.mockTestId());
+        var unfinished = sessionRepository
+                .findFirstByStudentPublicIdAndMockTestIdAndStatusInAndDeletedFalseOrderByCreatedAtDesc(
+                        caller.userId(), mockTest.getId(),
+                        List.of(PracticeSessionStatus.OVERVIEW, PracticeSessionStatus.IN_PROGRESS));
+        if (unfinished.isPresent() && !request.effectiveRestart()) {
+            return responseMapper.toResponse(unfinished.get());
+        }
+        unfinished.ifPresent(previous -> {
+            previous.setStatus(PracticeSessionStatus.DISCARDED);
+            previous.setDiscardedAt(clock.instant());
+            sessionRepository.saveAndFlush(previous);
+        });
+
+        Set<String> taskCodes = new LinkedHashSet<>();
+        mockTestService.itemsOf(mockTest.getId()).forEach(item -> taskCodes.add(item.getTaskCode()));
+        PracticeSession session = new PracticeSession();
+        session.setStudentPublicId(caller.userId());
+        session.setTenantId(caller.tenantId());
+        session.setProductCode(request.productCode());
+        session.setTitle(mockTest.getTitle());
+        session.setTimeLimitSeconds(PracticeConstants.PRACTICE_NO_SESSION_TIME_LIMIT_SECONDS);
+        session.setKind(PracticeSessionKind.MOCK_TEST);
+        session.setMockTestId(mockTest.getId());
+        session.setTimingMode(PracticeTimingMode.TIMED);
+        session.setQuestionCount(mockTest.getItemCount());
+        session.setCatalogVersion(PracticeConstants.PRACTICE_CATALOG_VERSION);
+        session.setSelectedTaskTypes(joinSorted(taskCodes));
+        session.setClientCapabilities(joinSorted(request.capabilities() == null
+                ? Set.of() : request.capabilities().safeCapabilities()));
+        session.setStartIdempotencyKey(idempotencyKey);
+        session.setStartRequestHash(requestHash);
+        session.setStatus(PracticeSessionStatus.OVERVIEW);
+        return responseMapper.toResponse(sessionPersistenceService.saveStart(session));
+    }
+
+    /**
+     * The task types a start request covers: the listed ones, or every runnable task type of the chosen skill.
+     * A skill cannot be combined with task types or a mock test (they pick the content in different ways).
+     */
+    private Set<String> resolveTaskCodes(PracticeSessionStartRequest request) {
+        if (!request.hasSkill()) {
+            if (request.hasMockTest()) {
+                throw invalidStartRequest();
+            }
+            return request.safeTaskTypeCodes();
+        }
+        if (!request.safeTaskTypeCodes().isEmpty() || request.hasMockTest()) {
+            throw invalidStartRequest();
+        }
+        List<String> codes = catalogService.runnableTaskCodesForSkill(request.skillCode());
+        if (codes.isEmpty()) {
+            throw new PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    PracticeConstants.PRACTICE_CONTENT_NOT_READY, PracticeConstants.PRACTICE_CONTENT_NOT_READY_MESSAGE);
+        }
+        return new LinkedHashSet<>(codes);
+    }
+
+    private PracticeSessionException invalidStartRequest() {
+        return new PracticeSessionException(HttpStatus.BAD_REQUEST, PracticeConstants.PRACTICE_SESSION_REQUEST_INVALID,
+                PracticeConstants.PRACTICE_SESSION_REQUEST_INVALID_MESSAGE);
+    }
+
+    private void requireTimedAvailable(Collection<String> taskCodes) {
+        if (timingService == null) {
+            throw new PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    PracticeConstants.PRACTICE_TIMED_MODE_UNAVAILABLE,
+                    PracticeConstants.PRACTICE_TIMED_MODE_UNAVAILABLE_MESSAGE);
+        }
+        timingService.requireTimedAvailable(taskCodes);
+    }
+
     private void requireVersion(PracticeSession session, long expectedVersion) {
         long actual = versionOf(session);
         if (actual != expectedVersion) {
@@ -416,7 +564,13 @@ public class PracticeSessionService {
                 safe(request.productCode()),
                 String.valueOf(request.organizationId()),
                 joinSorted(request.safeTaskTypeCodes()),
-                joinSorted(request.capabilities() == null ? Set.of() : request.capabilities().safeCapabilities())));
+                safe(request.skillCode()),
+                String.valueOf(request.mockTestId()),
+                String.valueOf(request.effectiveRestart()),
+                joinSorted(request.capabilities() == null ? Set.of() : request.capabilities().safeCapabilities()),
+                // Defaults applied first, so omitting the fields and sending the defaults hash the same.
+                request.effectiveTimingMode().name(),
+                String.valueOf(request.effectiveQuestionCount())));
     }
 
     private String actionRequestHash(PracticeSessionActionRequest request) {
@@ -429,6 +583,12 @@ public class PracticeSessionService {
     }
 
     private String answerRequestHash(UUID itemPublicId, PracticeAnswerRequest request) {
+        return sha256(String.join("\n", String.valueOf(itemPublicId),
+                String.valueOf(request.clientVersion()), safe(request.payload()),
+                request.confidence() == null ? "" : request.confidence().name()));
+    }
+
+    private String draftRequestHash(UUID itemPublicId, PracticeDraftRequest request) {
         return sha256(String.join("\n", String.valueOf(itemPublicId),
                 String.valueOf(request.clientVersion()), safe(request.payload()),
                 request.confidence() == null ? "" : request.confidence().name()));

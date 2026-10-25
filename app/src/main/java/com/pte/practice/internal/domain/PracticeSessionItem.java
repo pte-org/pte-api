@@ -90,6 +90,20 @@ public class PracticeSessionItem extends BaseEntity {
     @Column(name = "image_prompt_ref")
     private UUID imagePromptRef;
 
+    /**
+     * Timing pinned from the active Score Template when a TIMED session begins (null for UNTIMED and legacy
+     * sessions). {@code preRecordSeconds} is the template's gap before recording only — unlike the exam's
+     * {@code PinnedItem.prepSeconds}, it does not include preListen or the prompt audio length.
+     */
+    @Column(name = "pre_listen_seconds")
+    private Integer preListenSeconds;
+
+    @Column(name = "pre_record_seconds")
+    private Integer preRecordSeconds;
+
+    @Column(name = "response_seconds")
+    private Integer responseSeconds;
+
     /** Restricted answer material pinned for post-submit evaluation only. */
     @Column(name = "reference_answer_text", columnDefinition = "text")
     private String referenceAnswerText;

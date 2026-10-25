@@ -4,7 +4,9 @@ param(
     [string]$AdminUsername = $(if ([string]::IsNullOrWhiteSpace($env:PTE_ADMIN_USERNAME)) { "admin@test.local" } else { $env:PTE_ADMIN_USERNAME }),
     [string]$AdminPassword = $env:PTE_ADMIN_PASSWORD,
     [string]$SeedKey = "PTE_PRACTICE",
-    [ValidateRange(1, 3)][int]$PerTask = 3
+    [ValidateRange(1, 12)][int]$PerTask = 3,
+    # Full mock tests that should exist afterwards; only the missing ones are generated (needs PLATFORM_ADMIN).
+    [ValidateRange(0, 20)][int]$MockTests = 0
 )
 
 # Seeds published practice questions for all 22 scored PTE task types so pte-practice has content to test.
@@ -115,7 +117,8 @@ function Ensure-Question {
         $body = @{ pteTaskType = $TaskKey; taskTypeKey = $TaskKey; title = $title; pool = "PRACTICE"
                    availableForPractice = $true; availableForExam = $false }
         # Built only when the question is missing, so a rerun does not upload media again.
-        $fields = & $BuildFields ($Number - 1)
+        # The sample texts have three variants; later numbers reuse them under a new title so a bank can hold more questions.
+        $fields = & $BuildFields (($Number - 1) % 3)
         foreach ($key in $fields.Keys) { $body[$key] = $fields[$key] }
         $question = Invoke-SeedApi -Method POST -Path "/api/v1/questions" -Token $script:Token -Body $body
         Write-Host "  created $title"
@@ -219,3 +222,16 @@ foreach ($taskKey in $tasks.Keys) {
 
 Write-Host ""
 Write-Host "== Practice question bank seed complete: $($tasks.Count) task types x $PerTask =="
+
+if ($MockTests -gt 0) {
+    $existing = @(Invoke-SeedApi -Method GET -Path "/api/v1/admin/practice/mock-tests" -Token $script:Token)
+    $missing = $MockTests - $existing.Count
+    Write-Host ""
+    if ($missing -le 0) {
+        Write-Host "== $($existing.Count) mock test(s) already exist; nothing to generate =="
+    } else {
+        Write-Host "== Generating $missing mock test(s) =="
+        $created = @(Invoke-SeedApi -Method POST -Path "/api/v1/admin/practice/mock-tests:generate" -Token $script:Token -Body @{ count = $missing })
+        $created | ForEach-Object { Write-Host "  created $($_.title): $($_.itemCount) questions, about $($_.estimatedMinutes) min" }
+    }
+}

@@ -25,6 +25,13 @@ public class PracticeReviewService {
     private final JsonMapper jsonMapper;
     private final PracticeSessionItemService itemService;
     private final Clock clock;
+    /** Set by Spring; null in focused tests, where a mock test review simply has no estimate. */
+    private PracticeMockTestService mockTestService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setMockTestService(PracticeMockTestService mockTestService) {
+        this.mockTestService = mockTestService;
+    }
 
     public PracticeReviewService(PracticeSessionRepository sessionRepository,
             PracticeSessionItemRepository itemRepository, JsonMapper jsonMapper,
@@ -43,8 +50,9 @@ public class PracticeReviewService {
                 .findByPublicIdAndStudentPublicIdAndDeletedFalse(sessionPublicId, caller.userId())
                 .orElseThrow(com.pte.practice.internal.exception.PracticeSessionNotFoundException::new);
         itemService.recoverScoring(session, clock.instant());
-        return new PracticeReviewResponse(session.getPublicId(), itemRepository
-                .findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(session.getId()).stream()
+        List<com.pte.practice.internal.domain.PracticeSessionItem> sessionItems = itemRepository
+                .findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(session.getId());
+        return new PracticeReviewResponse(session.getPublicId(), sessionItems.stream()
                 .map(item -> new PracticeReviewResponse.Item(item.getPublicId(), item.getOrderIndex(), item.getTaskCode(),
                         item.getDisplayName(), item.getSection(), item.getStatus().name(), item.getPromptText(),
                         item.getSavedPayload(), item.getRendererKey(), item.getObjectiveScore(),
@@ -52,7 +60,19 @@ public class PracticeReviewService {
                         PracticeScoringStateService.readSubScores(jsonMapper, item.getAiSubScoresJson()),
                         item.getAiProvider(), item.getAiModel(), item.getAiScoredAt(),
                         readOptions(item.getOptionsJson())))
-                .toList());
+                .toList(), estimatedScoresOf(session, sessionItems));
+    }
+
+    /** Reference estimate for a finished mock test; null for other sessions or while the test is unfinished. */
+    private com.pte.practice.internal.dto.response.PracticeEstimatedScoresResponse estimatedScoresOf(
+            PracticeSession session, List<com.pte.practice.internal.domain.PracticeSessionItem> items) {
+        if (mockTestService == null || session.effectiveKind() != com.pte.practice.internal.domain.enums.PracticeSessionKind.MOCK_TEST
+                || session.getStatus() != com.pte.practice.internal.domain.enums.PracticeSessionStatus.COMPLETED
+                || session.getMockTestId() == null) {
+            return null;
+        }
+        var template = mockTestService.templateForSession(session.getMockTestId());
+        return template == null ? null : mockTestService.estimateFor(items, template);
     }
 
     /** The pinned option texts let the review show what was picked; a damaged snapshot only hides them. */

@@ -5,9 +5,11 @@ import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeSessionItem;
 import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
+import com.pte.practice.internal.domain.enums.PracticeSessionKind;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.response.PracticeCatalogResponse;
 import com.pte.practice.internal.dto.response.PracticeCatalogSectionResponse;
+import com.pte.practice.internal.dto.response.PracticeItemTimingResponse;
 import com.pte.practice.internal.dto.response.PracticeSessionResponse;
 import com.pte.practice.internal.dto.response.PracticeTaskContentResponse;
 import com.pte.practice.internal.dto.response.PracticeTaskResponse;
@@ -70,7 +72,9 @@ public class PracticeSessionResponseMapper {
         int totalItemCount = items.isEmpty()
                 ? (selected.isEmpty()
                         ? catalog.sections().stream().mapToInt(section -> section.taskTypes().size()).sum()
-                        : selected.size())
+                        : session.effectiveKind() != PracticeSessionKind.TASK && session.getQuestionCount() != null
+                                ? session.getQuestionCount()
+                                : selected.size() * plannedQuestionsPerTask(session))
                 : items.size();
         PracticeSessionItem currentItem = items.stream()
                 .filter(item -> item.getStatus() == PracticeSessionItemStatus.PENDING)
@@ -99,7 +103,9 @@ public class PracticeSessionResponseMapper {
                 totalItemCount,
                 sections,
                 currentItem == null ? null : toTaskResponse(currentItem, session.getTenantId()),
-                null);
+                null,
+                session.effectiveTimingMode(),
+                session.getQuestionCount());
     }
 
     private PracticeTaskResponse toTaskResponse(PracticeSessionItem item, UUID tenantId) {
@@ -115,7 +121,17 @@ public class PracticeSessionResponseMapper {
                 item.getStatus(),
                 item.getSavedPayload(),
                 item.getConfidence(),
-                toContent(item, tenantId));
+                toContent(item, tenantId),
+                toTiming(item));
+    }
+
+    /** Timing exists only on items of TIMED sessions; UNTIMED and legacy items carry none. */
+    private PracticeItemTimingResponse toTiming(PracticeSessionItem item) {
+        if (item.getResponseSeconds() == null) {
+            return null;
+        }
+        return new PracticeItemTimingResponse(item.getPreListenSeconds(),
+                item.getPreRecordSeconds() == null ? 0 : item.getPreRecordSeconds(), item.getResponseSeconds());
     }
 
     private PracticeTaskContentResponse toContent(PracticeSessionItem item, UUID tenantId) {
@@ -168,6 +184,12 @@ public class PracticeSessionResponseMapper {
             log.warn("Practice prompt media could not be presigned for item {}", item.getPublicId(), ex);
             return Map.of();
         }
+    }
+
+    /** Upper bound shown before items exist; the real total may be lower when a pool has fewer questions. */
+    private int plannedQuestionsPerTask(PracticeSession session) {
+        return session.getQuestionCount() == null
+                ? PracticeConstants.PRACTICE_LEGACY_QUESTION_COUNT : session.getQuestionCount();
     }
 
     private long versionOf(PracticeSession session) {

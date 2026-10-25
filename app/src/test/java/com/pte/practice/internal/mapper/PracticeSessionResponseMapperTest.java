@@ -58,13 +58,13 @@ class PracticeSessionResponseMapperTest {
         session.setPublicId(UUID.randomUUID());
         session.setTenantId(tenantId);
         session.setStatus(PracticeSessionStatus.IN_PROGRESS);
-        session.setTimeLimitSeconds(PracticeConstants.PRACTICE_TIME_LIMIT_SECONDS);
+        session.setTimeLimitSeconds(PracticeConstants.PRACTICE_NO_SESSION_TIME_LIMIT_SECONDS);
         when(catalogService.getCatalog()).thenReturn(new PracticeCatalogResponse(
                 PracticeConstants.PRACTICE_PRODUCT_CODE, "t", "v", 3600, List.of()));
     }
 
     @Test
-    void promptAudioAndImageAreExposedAsPresignedUrlsThatOutliveTheSessionTimer() {
+    void promptAudioAndImageAreExposedAsPresignedUrlsWithTheStandaloneTtl() {
         UUID audio = UUID.randomUUID();
         UUID image = UUID.randomUUID();
         PracticeSessionItem item = pendingItem();
@@ -84,7 +84,7 @@ class PracticeSessionResponseMapperTest {
         ArgumentCaptor<Long> ttl = ArgumentCaptor.forClass(Long.class);
         verify(mediaService).presignGetAll(ids.capture(), ttl.capture(), org.mockito.ArgumentMatchers.eq(tenantId));
         assertThat(ids.getValue()).containsExactlyInAnyOrder(audio, image);
-        assertThat(ttl.getValue()).isGreaterThan((long) PracticeConstants.PRACTICE_TIME_LIMIT_SECONDS);
+        assertThat(ttl.getValue()).isEqualTo(PracticeConstants.PRACTICE_PROMPT_MEDIA_TTL_SECONDS);
     }
 
     @Test

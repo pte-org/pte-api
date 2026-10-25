@@ -118,6 +118,106 @@ class PracticeSessionServiceTest {
     }
 
     @Test
+    void skillStartCoversTheRunnableTaskTypesOfThatSkill() {
+        when(sessionRepository.findByStudentPublicIdAndStartIdempotencyKeyAndDeletedFalse(
+                caller.userId(), "skill-1")).thenReturn(Optional.empty());
+        when(sessionPersistenceService.saveStart(any(PracticeSession.class))).thenAnswer(invocation -> {
+            PracticeSession session = invocation.getArgument(0);
+            session.setPublicId(sessionId);
+            session.setVersion(0L);
+            return session;
+        });
+
+        useQuestionBankWith(Set.of("MC_READING_SINGLE"));
+
+        service.start(skillRequest("READING", Set.of()), "skill-1", caller);
+
+        org.mockito.ArgumentCaptor<PracticeSession> saved = org.mockito.ArgumentCaptor.forClass(PracticeSession.class);
+        org.mockito.Mockito.verify(sessionPersistenceService).saveStart(saved.capture());
+        assertThat(saved.getValue().effectiveKind()).isEqualTo(
+                com.pte.practice.internal.domain.enums.PracticeSessionKind.SKILL);
+        assertThat(saved.getValue().getSkillCode()).isEqualTo("READING");
+        assertThat(saved.getValue().getSelectedTaskTypes()).isEqualTo("MC_READING_SINGLE");
+    }
+
+    @Test
+    void skillCannotBeCombinedWithTaskTypesOrMockTest() {
+        assertThatThrownBy(() -> service.start(skillRequest("READING", Set.of("MC_READING_SINGLE")), "skill-2", caller))
+                .hasFieldOrPropertyWithValue("code", "PRACTICE_SESSION_REQUEST_INVALID");
+    }
+
+    @Test
+    void skillWithNoRunnableTaskTypeIsNotReady() {
+        useQuestionBankWith(Set.of("MC_READING_SINGLE"));
+        assertThatThrownBy(() -> service.start(skillRequest("SPEAKING", Set.of()), "skill-3", caller))
+                .hasFieldOrPropertyWithValue("code", "PRACTICE_CONTENT_NOT_READY");
+    }
+
+    @Test
+    void startingAMockTestAgainResumesTheUnfinishedAttempt() {
+        PracticeMockTestService mockTests = org.mockito.Mockito.mock(PracticeMockTestService.class);
+        service.setMockTestService(mockTests);
+        var mockTest = mockTest(7L);
+        when(mockTests.requirePublished(mockTest.getPublicId())).thenReturn(mockTest);
+        PracticeSession unfinished = savedSession();
+        unfinished.setStatus(PracticeSessionStatus.IN_PROGRESS);
+        when(sessionRepository.findByStudentPublicIdAndStartIdempotencyKeyAndDeletedFalse(caller.userId(), "mock-1"))
+                .thenReturn(Optional.empty());
+        when(sessionRepository.findFirstByStudentPublicIdAndMockTestIdAndStatusInAndDeletedFalseOrderByCreatedAtDesc(
+                any(), org.mockito.ArgumentMatchers.eq(7L), any())).thenReturn(Optional.of(unfinished));
+
+        PracticeSessionResponse response = service.start(mockTestRequest(mockTest, false), "mock-1", caller);
+
+        assertThat(response.publicId()).isEqualTo(sessionId);
+        org.mockito.Mockito.verify(sessionPersistenceService, org.mockito.Mockito.never()).saveStart(any());
+    }
+
+    @Test
+    void restartingAMockTestDiscardsTheUnfinishedAttemptAndBuildsATimedSession() {
+        PracticeMockTestService mockTests = org.mockito.Mockito.mock(PracticeMockTestService.class);
+        service.setMockTestService(mockTests);
+        var mockTest = mockTest(7L);
+        when(mockTests.requirePublished(mockTest.getPublicId())).thenReturn(mockTest);
+        when(mockTests.itemsOf(7L)).thenReturn(List.of());
+        PracticeSession unfinished = savedSession();
+        unfinished.setStatus(PracticeSessionStatus.IN_PROGRESS);
+        when(sessionRepository.findByStudentPublicIdAndStartIdempotencyKeyAndDeletedFalse(caller.userId(), "mock-2"))
+                .thenReturn(Optional.empty());
+        when(sessionRepository.findFirstByStudentPublicIdAndMockTestIdAndStatusInAndDeletedFalseOrderByCreatedAtDesc(
+                any(), org.mockito.ArgumentMatchers.eq(7L), any())).thenReturn(Optional.of(unfinished));
+        when(sessionPersistenceService.saveStart(any(PracticeSession.class))).thenAnswer(invocation -> {
+            PracticeSession session = invocation.getArgument(0);
+            session.setPublicId(UUID.randomUUID());
+            session.setVersion(0L);
+            return session;
+        });
+
+        service.start(mockTestRequest(mockTest, true), "mock-2", caller);
+
+        assertThat(unfinished.getStatus()).isEqualTo(PracticeSessionStatus.DISCARDED);
+        org.mockito.ArgumentCaptor<PracticeSession> saved = org.mockito.ArgumentCaptor.forClass(PracticeSession.class);
+        org.mockito.Mockito.verify(sessionPersistenceService).saveStart(saved.capture());
+        assertThat(saved.getValue().effectiveKind()).isEqualTo(
+                com.pte.practice.internal.domain.enums.PracticeSessionKind.MOCK_TEST);
+        assertThat(saved.getValue().effectiveTimingMode()).isEqualTo(
+                com.pte.practice.internal.domain.enums.PracticeTimingMode.TIMED);
+        assertThat(saved.getValue().getQuestionCount()).isEqualTo(65);
+        assertThat(saved.getValue().getTitle()).isEqualTo("PTE Academic Full Mock Test 7");
+    }
+
+    @Test
+    void aMockTestCannotBeCombinedWithTaskTypes() {
+        PracticeMockTestService mockTests = org.mockito.Mockito.mock(PracticeMockTestService.class);
+        service.setMockTestService(mockTests);
+        var request = new PracticeSessionStartRequest("PTE_CORE_PRACTICE", tenantId, Set.of("MC_READING_SINGLE"),
+                new PracticeCapabilityManifest(Set.of("OPTION_SELECTION"), "1.0.0"), null, null, null,
+                UUID.randomUUID(), null);
+
+        assertThatThrownBy(() -> service.start(request, "mock-3", caller))
+                .hasFieldOrPropertyWithValue("code", "PRACTICE_SESSION_REQUEST_INVALID");
+    }
+
+    @Test
     void sameStartKeyWithDifferentRequestIsRejected() {
         PracticeSession existing = savedSession();
         existing.setStartRequestHash("different");
@@ -130,7 +230,7 @@ class PracticeSessionServiceTest {
     }
 
     @Test
-    void beginRequiresTheCurrentOptimisticVersionAndStartsTheDeadline() {
+    void beginRequiresTheCurrentOptimisticVersionAndLeavesNoSessionDeadline() {
         PracticeSession session = savedSession();
         session.setVersion(2L);
         session.setSelectedTaskTypes("MC_READING_SINGLE");
@@ -148,7 +248,8 @@ class PracticeSessionServiceTest {
 
         assertThat(response.status()).isEqualTo(PracticeSessionStatus.IN_PROGRESS);
         assertThat(response.startedAt()).isEqualTo(now);
-        assertThat(response.deadlineAt()).isEqualTo(now.plusSeconds(3_600));
+        // V133: no session-wide limit; a null deadline never expires.
+        assertThat(response.deadlineAt()).isNull();
     }
 
     @Test
@@ -322,6 +423,43 @@ class PracticeSessionServiceTest {
         assertThat(item.getStatus()).isEqualTo(PracticeSessionItemStatus.PENDING);
         assertThat(item.getSavedPayload()).isEqualTo("{\"selectedOption\":\"a\"}");
         assertThat(item.getConfidence()).isEqualTo(ResponseConfidence.HIGH);
+    }
+
+    /** Rebuilds the service so only these task types have published questions (others are not runnable). */
+    private void useQuestionBankWith(Set<String> taskTypesWithQuestions) {
+        com.pte.itembank.PracticeQuestionService questionService = org.mockito.Mockito.mock(
+                com.pte.itembank.PracticeQuestionService.class);
+        lenient().when(questionService.hasPublishedQuestion(any())).thenAnswer(invocation ->
+                taskTypesWithQuestions.contains(invocation.<String>getArgument(0)));
+        catalogService = new PracticeCatalogService(questionTypeService, questionService);
+        PracticeSessionItemService itemService = new PracticeSessionItemService(itemRepository, catalogService,
+                answerValidationService);
+        service = new PracticeSessionService(sessionRepository, sessionPersistenceService, operationRepository,
+                catalogService, entitlementService, itemService,
+                new PracticeSessionResponseMapper(catalogService, itemService), Clock.fixed(now, ZoneOffset.UTC));
+    }
+
+    private com.pte.practice.internal.domain.PracticeMockTest mockTest(Long id) {
+        var test = new com.pte.practice.internal.domain.PracticeMockTest();
+        test.setId(id);
+        test.setPublicId(UUID.randomUUID());
+        test.setSequenceNo(7);
+        test.setTitle("PTE Academic Full Mock Test 7");
+        test.setItemCount(65);
+        return test;
+    }
+
+    private PracticeSessionStartRequest mockTestRequest(com.pte.practice.internal.domain.PracticeMockTest test,
+            boolean restart) {
+        return new PracticeSessionStartRequest("PTE_CORE_PRACTICE", tenantId, Set.of(),
+                new PracticeCapabilityManifest(Set.of("OPTION_SELECTION"), "1.0.0"), null, null, null,
+                test.getPublicId(), restart);
+    }
+
+    private PracticeSessionStartRequest skillRequest(String skill, Set<String> taskTypes) {
+        return new PracticeSessionStartRequest("PTE_CORE_PRACTICE", tenantId, taskTypes,
+                new PracticeCapabilityManifest(Set.of("OPTION_SELECTION"), "1.0.0"),
+                null, 10, skill, null, null);
     }
 
     private PracticeSessionStartRequest startRequest() {

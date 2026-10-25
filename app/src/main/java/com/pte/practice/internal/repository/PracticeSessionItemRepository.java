@@ -36,6 +36,32 @@ public interface PracticeSessionItemRepository extends JpaRepository<PracticeSes
             """)
     long countScoringRequestsSince(@Param("studentPublicId") UUID studentPublicId, @Param("since") Instant since);
 
+    /** Questions this student has already had in any practice session, so new sessions can prefer unseen ones. */
+    @Query("""
+            select distinct item.sourceQuestionPublicId from PracticeSessionItem item, PracticeSession owner
+             where item.practiceSessionId = owner.id
+               and owner.studentPublicId = :studentPublicId
+               and item.taskCode in :taskCodes
+               and item.sourceQuestionPublicId is not null
+               and item.deleted = false
+            """)
+    List<UUID> findSeenSourceQuestionIds(@Param("studentPublicId") UUID studentPublicId,
+            @Param("taskCodes") Collection<String> taskCodes);
+
+    List<PracticeSessionItem> findByPracticeSessionIdInAndDeletedFalse(Collection<Long> practiceSessionIds);
+
+    /** Distinct questions the student has answered, per task code: {@code [taskCode, count]} rows. */
+    @Query("""
+            select item.taskCode, count(distinct item.sourceQuestionPublicId) from PracticeSessionItem item, PracticeSession owner
+             where item.practiceSessionId = owner.id
+               and owner.studentPublicId = :studentPublicId
+               and item.status = com.pte.practice.internal.domain.enums.PracticeSessionItemStatus.ANSWERED
+               and item.sourceQuestionPublicId is not null
+               and item.deleted = false
+             group by item.taskCode
+            """)
+    List<Object[]> countAnsweredSourceQuestionsByTaskCode(@Param("studentPublicId") UUID studentPublicId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select item from PracticeSessionItem item
