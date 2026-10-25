@@ -24,11 +24,6 @@ public class PracticeAnswerValidationService {
 
     private final ObjectMapper objectMapper;
 
-    /** Kept for focused unit tests that exercise the validation boundary alone. */
-    public PracticeAnswerValidationService() {
-        this(JsonMapper.builder().build());
-    }
-
     @Autowired
     public PracticeAnswerValidationService(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;

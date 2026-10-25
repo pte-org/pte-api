@@ -5,7 +5,6 @@ import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.domain.enums.PracticeProgressStatus;
 import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
-import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.response.PracticeProgressEntry;
 import com.pte.practice.internal.dto.response.PracticeProgressResponse;
 import com.pte.practice.internal.repository.PracticeResponseRepository;
@@ -14,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;

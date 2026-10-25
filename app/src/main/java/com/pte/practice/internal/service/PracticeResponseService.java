@@ -50,18 +50,6 @@ public class PracticeResponseService {
     private final PracticeScoringStateService scoringStateService;
     private final PracticeAnswerScoringRouter scoringRouter;
 
-    public PracticeResponseService(PracticeResponseRepository itemRepository,
-            PracticeCatalogService catalogService, PracticeAnswerValidationService answerValidationService) {
-        this(itemRepository, catalogService, answerValidationService, null, null, null, null, null, null);
-    }
-
-    /** Compatibility constructor for tests that exercise recording validation without media wiring. */
-    public PracticeResponseService(PracticeResponseRepository itemRepository,
-            PracticeCatalogService catalogService, PracticeAnswerValidationService answerValidationService,
-            PracticeResponseMediaValidator mediaValidator) {
-        this(itemRepository, catalogService, answerValidationService, mediaValidator, null, null, null, null, null);
-    }
-
     @Autowired
     public PracticeResponseService(PracticeResponseRepository itemRepository,
             PracticeCatalogService catalogService, PracticeAnswerValidationService answerValidationService,

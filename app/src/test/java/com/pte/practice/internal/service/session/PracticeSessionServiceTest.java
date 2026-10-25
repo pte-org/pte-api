@@ -95,8 +95,7 @@ class PracticeSessionServiceTest {
                         TaskRuntimeProfileRegistry.descriptorFor("MC_READING_SINGLE"), "MC_READING_SINGLE",
                         "MC_READING_SINGLE", "MC_READING_SINGLE_V1", 1, null, null)));
         catalogService = new PracticeCatalogService(questionTypeService);
-        PracticeResponseService itemService = new PracticeResponseService(itemRepository, catalogService,
-                answerValidationService);
+        PracticeResponseService itemService = new PracticeResponseService(itemRepository, catalogService, answerValidationService, null, null, null, null, null, null);
         PracticeSessionResponseMapper responseMapper = new PracticeSessionResponseMapper(catalogService, itemService);
         lenient().when(idempotencyKeyService.begin(any(), any(), any(), any(), any()))
                 .thenReturn(new IdempotencyDecision(IdempotencyOutcome.NEW, null));
