@@ -11,7 +11,7 @@ public record ExaminerGuidelinesResponse(
         List<ExaminerTemplateGuidelineItem> templates
 ) {
     public record ExaminerTemplateGuidelineItem(
-            UUID scoreTemplatePublicId,
+            UUID examDefinitionPublicId,
             List<ExamDefinitionItemResponse> items
     ) {}
 }

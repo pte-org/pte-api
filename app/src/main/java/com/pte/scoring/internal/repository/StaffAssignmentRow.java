@@ -8,7 +8,6 @@ public interface StaffAssignmentRow {
     UUID getAttemptPublicId();
     UUID getSessionPublicId();
     UUID getExaminerPublicId();
-    UUID getBatchPublicId();
     int getEligibleAnswerCount();
     Instant getAssignedAt();
 }

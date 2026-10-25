@@ -39,11 +39,11 @@ public class ExaminerWorkspaceReadRepository {
                     assignment.assigned_at,
                     assignment.eligible_answer_count,
                     COALESCE(sc.score_count, 0) AS submitted_answer_count,
-                    work.started_at,
-                    work.finalized_at,
-                    COALESCE(work.version, 0) AS work_version,
+                    assignment.started_at,
+                    assignment.finalized_at,
+                    assignment.work_version AS work_version,
                     CASE
-                        WHEN work.status IS NOT NULL THEN work.status
+                        WHEN assignment.work_version > 0 THEN assignment.status
                         WHEN assignment.eligible_answer_count = 0 THEN 'PENDING'
                         WHEN COALESCE(sc.score_count, 0) = 0 THEN 'PENDING'
                         WHEN COALESCE(sc.score_count, 0) < assignment.eligible_answer_count THEN 'IN_PROGRESS'
@@ -51,19 +51,19 @@ public class ExaminerWorkspaceReadRepository {
                     END AS status,
                     CASE
                         WHEN state.publication_public_id IS NOT NULL THEN false
-                        WHEN cohort.id IS NOT NULL
-                             AND cohort.marking_mode = 'MANUAL_EXAMINER'
-                             AND cohort.status IN ('FROZEN', 'COMPLETED')
+                        WHEN state.grading_status IS NOT NULL
+                             AND state.grading_marking_mode = 'MANUAL_EXAMINER'
+                             AND state.grading_status IN ('FROZEN', 'COMPLETED')
                              AND member.id IS NOT NULL
-                             AND NOT member.excluded THEN true
+                             AND NOT member.grading_excluded THEN true
                         ELSE false
                     END AS can_finalize,
                     CASE
                         WHEN state.publication_public_id IS NOT NULL THEN 'ALREADY_PUBLISHED'
-                        WHEN cohort.id IS NULL THEN 'WAITING_FOR_HOST_FREEZE'
-                        WHEN cohort.marking_mode <> 'MANUAL_EXAMINER' THEN 'COHORT_NOT_MANUAL_EXAMINER'
-                        WHEN cohort.status NOT IN ('FROZEN', 'COMPLETED') THEN 'WAITING_FOR_HOST_FREEZE'
-                        WHEN member.id IS NULL OR member.excluded THEN 'EXCLUDED_FROM_COHORT'
+                        WHEN state.grading_status IS NULL THEN 'WAITING_FOR_HOST_FREEZE'
+                        WHEN state.grading_marking_mode <> 'MANUAL_EXAMINER' THEN 'COHORT_NOT_MANUAL_EXAMINER'
+                        WHEN state.grading_status NOT IN ('FROZEN', 'COMPLETED') THEN 'WAITING_FOR_HOST_FREEZE'
+                        WHEN member.id IS NULL OR member.grading_excluded THEN 'EXCLUDED_FROM_COHORT'
                         ELSE NULL
                     END AS blocking_reason,
                     CASE
@@ -71,7 +71,7 @@ public class ExaminerWorkspaceReadRepository {
                              AND COALESCE(sc.score_count, 0) < assignment.eligible_answer_count THEN true
                         ELSE false
                     END AS has_outstanding_answers,
-                    (SELECT COUNT(*) FROM examiner_attempt_assignments a2
+                    (SELECT COUNT(*) FROM grading_assignments a2
                         WHERE a2.tenant_id = assignment.tenant_id
                           AND a2.examiner_public_id = assignment.examiner_public_id
                           AND a2.session_public_id = assignment.session_public_id
@@ -79,34 +79,30 @@ public class ExaminerWorkspaceReadRepository {
                           AND (a2.assigned_at < assignment.assigned_at
                                OR (a2.assigned_at = assignment.assigned_at AND a2.id <= assignment.id))
                     ) AS attempt_ordinal
-                FROM examiner_attempt_assignments assignment
+                FROM grading_assignments assignment
                 LEFT JOIN (
                     SELECT
                         score.tenant_id,
                         score.session_public_id,
                         score.attempt_public_id,
                         COUNT(score.id) AS score_count
-                    FROM examiner_answer_scores score
-                    WHERE score.tenant_id = :tenantId
+                    FROM answer_evaluations score
+                    WHERE score.source = 'EXAMINER' AND score.examiner_status = 'SUBMITTED' AND NOT score.deleted
+                    AND score.tenant_id = :tenantId
                     GROUP BY score.tenant_id, score.session_public_id, score.attempt_public_id
                 ) sc ON sc.tenant_id = assignment.tenant_id
                     AND sc.session_public_id = assignment.session_public_id
                     AND sc.attempt_public_id = assignment.attempt_public_id
-                LEFT JOIN examiner_grading_work work ON work.tenant_id = assignment.tenant_id
-                    AND work.assignment_public_id = assignment.public_id
-                    AND NOT work.deleted
-                LEFT JOIN scoring_session_states state ON state.tenant_id = assignment.tenant_id
-                    AND state.session_public_id = assignment.session_public_id
-                LEFT JOIN session_grading_cohorts cohort ON cohort.tenant_id = assignment.tenant_id
-                    AND cohort.session_public_id = assignment.session_public_id
-                    AND NOT cohort.deleted
-                LEFT JOIN session_grading_cohort_members member ON member.cohort_public_id = cohort.public_id
-                    AND member.attempt_public_id = assignment.attempt_public_id
+                LEFT JOIN exam_sessions state ON state.tenant_id = assignment.tenant_id
+                    AND state.public_id = assignment.session_public_id
+                    AND NOT state.deleted
+                LEFT JOIN exam_attempts member ON member.tenant_id = assignment.tenant_id
+                    AND member.public_id = assignment.attempt_public_id
                     AND NOT member.deleted
                 WHERE assignment.tenant_id = :tenantId
                   AND assignment.examiner_public_id = :examinerPublicId
                   AND NOT assignment.deleted
-                  AND (state.publication_public_id IS NULL OR work.status = 'COMPLETED' OR (work.status IS NULL AND COALESCE(sc.score_count, 0) >= assignment.eligible_answer_count AND assignment.eligible_answer_count > 0))
+                  AND (state.publication_public_id IS NULL OR (assignment.work_version > 0 AND assignment.status = 'COMPLETED') OR (assignment.work_version = 0 AND COALESCE(sc.score_count, 0) >= assignment.eligible_answer_count AND assignment.eligible_answer_count > 0))
             )
             """;
 
@@ -337,7 +333,7 @@ public class ExaminerWorkspaceReadRepository {
             whereClause.append(" AND (finalized_at <= :toDate OR (finalized_at IS NULL AND assigned_at <= :toDate))");
         }
         if (taskType != null && !taskType.isBlank()) {
-            whereClause.append(" AND EXISTS (SELECT 1 FROM scoring_answers sa WHERE sa.tenant_id = assignment_scores.tenant_id AND sa.session_public_id = assignment_scores.session_public_id AND sa.attempt_public_id = assignment_scores.attempt_public_id AND sa.task_type = :taskType AND NOT sa.deleted)");
+            whereClause.append(" AND EXISTS (SELECT 1 FROM answer_evaluations sa WHERE sa.source = 'AI' AND sa.tenant_id = assignment_scores.tenant_id AND sa.session_public_id = assignment_scores.session_public_id AND sa.attempt_public_id = assignment_scores.attempt_public_id AND sa.task_type = :taskType AND NOT sa.deleted)");
         }
 
         String filterCte = CTE_SQL + ",\nfiltered_assignments AS (\n    SELECT * FROM assignment_scores" + whereClause + "\n)\n";
@@ -377,11 +373,12 @@ public class ExaminerWorkspaceReadRepository {
                     COUNT(DISTINCT sc.id) AS scored_questions,
                     AVG(sc.score) AS average_score
                 FROM filtered_assignments a
-                JOIN scoring_answers sa ON sa.tenant_id = a.tenant_id
+                JOIN answer_evaluations sa ON sa.source = 'AI' AND sa.tenant_id = a.tenant_id
                     AND sa.session_public_id = a.session_public_id
                     AND sa.attempt_public_id = a.attempt_public_id
                     AND NOT sa.deleted
-                LEFT JOIN examiner_answer_scores sc ON sc.tenant_id = a.tenant_id
+                LEFT JOIN answer_evaluations sc ON sc.source = 'EXAMINER' AND sc.examiner_status = 'SUBMITTED'
+                    AND sc.tenant_id = a.tenant_id
                     AND sc.session_public_id = a.session_public_id
                     AND sc.attempt_public_id = a.attempt_public_id
                     AND sc.answer_public_id = sa.answer_public_id
@@ -416,7 +413,8 @@ public class ExaminerWorkspaceReadRepository {
                     a.work_version,
                     a.attempt_ordinal
                 FROM filtered_assignments a
-                LEFT JOIN examiner_answer_scores sc ON sc.tenant_id = a.tenant_id
+                LEFT JOIN answer_evaluations sc ON sc.source = 'EXAMINER' AND sc.examiner_status = 'SUBMITTED'
+                    AND sc.tenant_id = a.tenant_id
                     AND sc.session_public_id = a.session_public_id
                     AND sc.attempt_public_id = a.attempt_public_id
                     AND sc.examiner_public_id = a.examiner_public_id

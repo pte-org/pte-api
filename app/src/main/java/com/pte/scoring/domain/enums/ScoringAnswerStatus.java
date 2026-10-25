@@ -3,11 +3,11 @@ package com.pte.scoring.domain.enums;
 /**
  * PENDING = ingested, not yet gradeable-or-graded. AI_SCORING = enqueued to
  * the vendor work queue, in flight. SCORING_FAILED = the latest AI dispatch
- * failed (host-visible, reason on {@code ScoringAnswerAiDetail}); the host's
+ * failed (host-visible, reason on the evaluation); the host's
  * next scoring request dispatches it again. SCORED = final — every
  * AI-scorable task type (including Write Essay) finalizes straight to SCORED
  * with no host approval gate; a host's own independent score, if any, lives
- * separately on {@code ScoringAnswer.teacherScore} and never blocks this
+ * separately on {@code AiEvaluation.teacherScore} and never blocks this
  * status. There is deliberately no status that fakes completion for a task
  * type with no scorer at all — those simply stay PENDING (honest completion
  * semantics).

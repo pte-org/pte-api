@@ -15,21 +15,21 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Assignment-scoped grading issue (reported by Examiner, resolved by Host). */
+/** A problem the examiner reports on a grading assignment; the host resolves it, and an open one blocks finalizing. */
 @Entity
-@Table(name = "examiner_grading_issues",
+@Table(name = "grading_issues",
         indexes = {
-                @Index(name = "idx_examiner_grading_issues_work", columnList = "tenant_id, work_id, status")
+                @Index(name = "idx_grading_issues_assignment", columnList = "tenant_id, assignment_id, status")
         })
 @Getter
 @NoArgsConstructor
-public class ExaminerGradingIssue extends BaseEntity {
+public class GradingIssue extends BaseEntity {
 
     @Column(nullable = false)
     private UUID tenantId;
 
-    @Column(name = "work_id", nullable = false)
-    private Long workId;
+    @Column(name = "assignment_id", nullable = false)
+    private Long assignmentId;
 
     private UUID answerPublicId;
 
@@ -57,10 +57,10 @@ public class ExaminerGradingIssue extends BaseEntity {
     @Column(length = 2000)
     private String resolution;
 
-    public ExaminerGradingIssue(UUID tenantId, Long workId, UUID answerPublicId,
+    public GradingIssue(UUID tenantId, Long assignmentId, UUID answerPublicId,
             ExaminerGradingIssueType type, String description, UUID reportedBy, Instant reportedAt) {
         this.tenantId = tenantId;
-        this.workId = workId;
+        this.assignmentId = assignmentId;
         this.answerPublicId = answerPublicId;
         this.type = type;
         this.description = description;
