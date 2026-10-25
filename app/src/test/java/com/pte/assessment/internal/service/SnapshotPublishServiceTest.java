@@ -65,8 +65,7 @@ class SnapshotPublishServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new SnapshotPublishService(blueprintRepository, snapshotRepository, itembankService,
-                new AssessmentAccessPolicy(), JsonMapper.builder().build(), examDefinitionService);
+        service = new SnapshotPublishService(blueprintRepository, snapshotRepository, itembankService, new AssessmentAccessPolicy(), JsonMapper.builder().build(), examDefinitionService, null, null, null);
         caller = new CurrentUser(UUID.randomUUID(), TENANT_ID, List.of("HOST_ADMIN"));
     }
 

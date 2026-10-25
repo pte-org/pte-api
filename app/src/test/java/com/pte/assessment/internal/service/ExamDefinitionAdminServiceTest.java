@@ -55,7 +55,7 @@ class ExamDefinitionAdminServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ExamDefinitionAdminService(repository);
+        service = new ExamDefinitionAdminService(repository, null, null, null, null, null, null, com.pte.TestClocks.fixed());
     }
 
     /** 22 items covering every required task type + every skill weight, valid per FR-05. */
@@ -346,7 +346,7 @@ class ExamDefinitionAdminServiceTest {
         when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(template));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        service = new ExamDefinitionAdminService(repository, questionTypeService);
+        service = new ExamDefinitionAdminService(repository, questionTypeService, null, null, null, null, null, com.pte.TestClocks.fixed());
 
         ExamDefinitionResponse pending = service.submitApproval(publicId);
         assertThat(pending.status()).isEqualTo("PENDING_APPROVAL");
@@ -368,7 +368,7 @@ class ExamDefinitionAdminServiceTest {
         invalid.setName("Broken");
         invalid.setStatus(ExamDefinitionStatus.DRAFT);
         when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(invalid));
-        service = new ExamDefinitionAdminService(repository, questionTypeService, null, auditLogService);
+        service = new ExamDefinitionAdminService(repository, questionTypeService, null, auditLogService, null, null, null, com.pte.TestClocks.fixed());
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
 
         assertThatThrownBy(() -> service.activate(publicId, caller))
@@ -393,7 +393,7 @@ class ExamDefinitionAdminServiceTest {
             }
             return saved;
         });
-        service = new ExamDefinitionAdminService(repository, null, null, auditLogService);
+        service = new ExamDefinitionAdminService(repository, null, null, auditLogService, null, null, null, com.pte.TestClocks.fixed());
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"));
 
         ExamDefinitionResponse response = service.cloneToDraft(sourceId, caller);

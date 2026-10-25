@@ -6,7 +6,6 @@ import com.pte.itembank.ItembankService;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.itembank.TaskRuntimeProfileService;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
-import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse;
 import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
@@ -51,16 +50,6 @@ public class ExamDefinitionService {
         this.repository = repository;
         this.itembankService = itembankService;
         this.runtimeProfileService = runtimeProfileService;
-    }
-
-    /** Compatibility constructor for focused readiness tests. */
-    public ExamDefinitionService(ExamDefinitionRepository repository, ItembankService itembankService) {
-        this(repository, itembankService, null);
-    }
-
-    /** Compatibility constructor for focused read-service tests. */
-    public ExamDefinitionService(ExamDefinitionRepository repository) {
-        this(repository, null, null);
     }
 
     /** Used by {@code assessment.SnapshotPublishService} to pin the scoring scheme at exam-publish time. */

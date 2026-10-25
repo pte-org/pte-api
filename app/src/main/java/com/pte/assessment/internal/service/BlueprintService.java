@@ -65,11 +65,6 @@ public class BlueprintService {
         this.auditLogService = auditLogService;
     }
 
-    /** Compatibility constructor for read-only unit tests and audit callers. */
-    public BlueprintService(ExamBlueprintRepository blueprintRepository, AssessmentAccessPolicy accessPolicy) {
-        this(blueprintRepository, accessPolicy, null, null, null, null);
-    }
-
     @Transactional
     public BlueprintResponse create(CreateBlueprintRequest request, CurrentUser caller) {
         requireAuthor(caller);

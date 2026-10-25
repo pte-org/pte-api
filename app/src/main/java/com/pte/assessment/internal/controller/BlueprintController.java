@@ -3,7 +3,6 @@ package com.pte.assessment.internal.controller;
 import com.pte.assessment.dto.request.CreateBlueprintRequest;
 import com.pte.assessment.dto.request.RejectBlueprintRequest;
 import com.pte.assessment.internal.dto.response.BlueprintResponse;
-import com.pte.assessment.dto.response.SnapshotResponse;
 import com.pte.assessment.internal.service.BlueprintService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;

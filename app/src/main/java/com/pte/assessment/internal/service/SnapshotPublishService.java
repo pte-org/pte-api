@@ -73,23 +73,6 @@ public class SnapshotPublishService {
         this.itemFactory = new SnapshotItemFactory(jsonMapper, profileResolver);
     }
 
-    /** Compatibility constructor for focused tests predating runtime provenance. */
-    public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, ExamVersionRepository snapshotRepository,
-                                  ItembankService itembankService, AssessmentAccessPolicy accessPolicy,
-                                  JsonMapper jsonMapper, ExamDefinitionService examDefinitionService) {
-        this(blueprintRepository, snapshotRepository, itembankService, accessPolicy, jsonMapper,
-                examDefinitionService, null, null, null);
-    }
-
-    /** Compatibility constructor for tests that provide the runtime service but not audit infrastructure. */
-    public SnapshotPublishService(ExamBlueprintRepository blueprintRepository, ExamVersionRepository snapshotRepository,
-                                  ItembankService itembankService, AssessmentAccessPolicy accessPolicy,
-                                  JsonMapper jsonMapper, ExamDefinitionService examDefinitionService,
-                                  TaskRuntimeProfileService runtimeProfileService) {
-        this(blueprintRepository, snapshotRepository, itembankService, accessPolicy, jsonMapper,
-                examDefinitionService, runtimeProfileService, null, null);
-    }
-
     @Transactional
     public SnapshotResponse publish(UUID blueprintPublicId, CurrentUser caller) {
         return publish(blueprintPublicId, caller, null, null, null, null);

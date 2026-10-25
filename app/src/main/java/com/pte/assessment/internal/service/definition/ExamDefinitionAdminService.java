@@ -46,10 +46,6 @@ public class ExamDefinitionAdminService {
     private final ExamDefinitionCommandService commandService;
     private final ExamDefinitionApprovalWorkflow approvalWorkflow;
 
-    public ExamDefinitionAdminService(ExamDefinitionRepository repository, QuestionTypeService questionTypeService) {
-        this(repository, questionTypeService, null, null, null, null, null, Clock.systemUTC());
-    }
-
     @Autowired
     public ExamDefinitionAdminService(ExamDefinitionRepository repository, QuestionTypeService questionTypeService,
             TaskRuntimeProfileService runtimeProfileService, AuditLogService auditLogService,
@@ -70,24 +66,6 @@ public class ExamDefinitionAdminService {
                 observability);
         this.approvalWorkflow = new ExamDefinitionApprovalWorkflow(repository, validator, auditLogService,
                 observability, questionTypeService, clock);
-    }
-
-    /** Compatibility constructor for existing focused tests/callers. */
-    public ExamDefinitionAdminService(ExamDefinitionRepository repository, QuestionTypeService questionTypeService,
-            TaskRuntimeProfileService runtimeProfileService, AuditLogService auditLogService) {
-        this(repository, questionTypeService, runtimeProfileService, auditLogService, null, null, null,
-                Clock.systemUTC());
-    }
-
-    /** Compatibility constructor used by focused tests and legacy in-process callers. */
-    public ExamDefinitionAdminService(ExamDefinitionRepository repository, QuestionTypeService questionTypeService,
-            TaskRuntimeProfileService runtimeProfileService) {
-        this(repository, questionTypeService, runtimeProfileService, null, null, null, null, Clock.systemUTC());
-    }
-
-    /** Compatibility constructor used by focused unit tests. */
-    public ExamDefinitionAdminService(ExamDefinitionRepository repository) {
-        this(repository, null, null, null, null, null, null, Clock.systemUTC());
     }
 
     @Transactional(readOnly = true)

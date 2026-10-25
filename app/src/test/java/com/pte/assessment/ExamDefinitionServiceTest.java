@@ -34,7 +34,7 @@ class ExamDefinitionServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ExamDefinitionService(repository);
+        service = new ExamDefinitionService(repository, null, null);
     }
 
     @Test

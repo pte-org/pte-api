@@ -16,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -47,17 +46,6 @@ public class AssessmentService {
         this.examGenerationService = examGenerationService;
         this.examDefinitionService = examDefinitionService;
         this.snapshotPromptQueryService = snapshotPromptQueryService;
-    }
-
-    /** Compatibility constructor for callers/tests that do not use Examiner prompt retrieval. */
-    public AssessmentService(SnapshotPublishService snapshotPublishService, ExamGenerationService examGenerationService,
-            ExamDefinitionService examDefinitionService) {
-        this(snapshotPublishService, examGenerationService, examDefinitionService, null);
-    }
-
-    /** Compatibility constructor for focused assessment unit tests. */
-    public AssessmentService(SnapshotPublishService snapshotPublishService, ExamGenerationService examGenerationService) {
-        this(snapshotPublishService, examGenerationService, null, null);
     }
 
     /** Answer-stripped summary - safe for {@code session} to validate composition against. */
