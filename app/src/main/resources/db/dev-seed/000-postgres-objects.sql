@@ -50,15 +50,6 @@ CREATE OR REPLACE VIEW public.identity_student_directory AS
      JOIN public.organization_members om ON ((om.user_id = u.id) AND (om.deleted = false)))
      JOIN public.organization_member_roles omr ON ((omr.member_id = om.id) AND ((omr.role)::text = 'STUDENT'::text)))
 @@
-CREATE OR REPLACE VIEW public.session_monitoring_enrollment_membership AS
- SELECT e.tenant_id,
-    s.public_id AS exam_session_public_id,
-    e.student_public_id,
-    e.public_id AS enrollment_public_id
-   FROM (public.enrollments e
-     JOIN public.exam_sessions s ON ((s.id = e.session_id)))
-  WHERE ((e.deleted = false) AND (s.deleted = false) AND (e.tenant_id = s.tenant_id))
-@@
 DROP TRIGGER IF EXISTS question_publication_history ON public.questions
 @@
 CREATE TRIGGER question_publication_history BEFORE INSERT OR UPDATE ON public.questions FOR EACH ROW EXECUTE FUNCTION public.retain_question_publication_history()
@@ -71,7 +62,7 @@ ALTER TABLE public.exam_sessions DROP CONSTRAINT IF EXISTS no_overlap_per_subscr
 @@
 ALTER TABLE public.exam_sessions ADD CONSTRAINT no_overlap_per_subscription EXCLUDE USING gist (subscription_id WITH =, tstzrange(opens_at, closes_at) WITH &&) WHERE (((status)::text = ANY ((ARRAY['SCHEDULED'::character varying, 'OPEN'::character varying])::text[])))
 @@
-CREATE UNIQUE INDEX IF NOT EXISTS uq_examiner_score_receipt ON public.examiner_answer_scores USING btree (tenant_id, examiner_public_id, request_public_id) WHERE (request_public_id IS NOT NULL)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_examiner_score_receipt ON public.answer_evaluations USING btree (tenant_id, examiner_public_id, request_public_id) WHERE (request_public_id IS NOT NULL)
 @@
 CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_logs_dedupe_key ON public.notification_logs USING btree (dedupe_key) WHERE (dedupe_key IS NOT NULL)
 @@
@@ -90,31 +81,34 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_org_name_live ON public.organizations (name
 CREATE UNIQUE INDEX IF NOT EXISTS uq_org_tax_code_approved ON public.organizations (tax_code) WHERE status IN ('ACTIVE', 'SUSPENDED')
 @@
 @@
-CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_inbox_contents_event_key ON public.notification_inbox_contents (event_key)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_notifications_event_key ON public.notifications (event_key)
 @@
-CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_inbox_deliveries_content_recipient ON public.notification_inbox_deliveries (content_public_id, recipient_user_public_id)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_recipient_streams_recipient ON public.notification_recipient_streams (recipient_user_public_id)
 @@
-CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_inbox_streams_recipient ON public.notification_inbox_streams (recipient_user_public_id)
+ALTER TABLE public.notifications ALTER COLUMN public_id SET DEFAULT gen_random_uuid(), ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN deleted SET DEFAULT FALSE
 @@
-CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_inbox_items_delivery ON public.notification_inbox_items (delivery_public_id)
+ALTER TABLE public.notification_announcements ALTER COLUMN public_id SET DEFAULT gen_random_uuid(), ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN deleted SET DEFAULT FALSE
 @@
-CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_inbox_items_content_recipient ON public.notification_inbox_items (content_public_id, recipient_user_public_id)
+ALTER TABLE public.notification_recipients ALTER COLUMN public_id SET DEFAULT gen_random_uuid(), ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN deleted SET DEFAULT FALSE
 @@
-CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_inbox_items_recipient_sequence ON public.notification_inbox_items (recipient_user_public_id, sequence_no)
+ALTER TABLE public.notification_recipient_streams ALTER COLUMN public_id SET DEFAULT gen_random_uuid(), ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN deleted SET DEFAULT FALSE
 @@
-ALTER TABLE public.notification_inbox_contents ALTER COLUMN public_id SET DEFAULT gen_random_uuid(), ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN deleted SET DEFAULT FALSE
+ALTER TABLE public.notification_announcements ALTER COLUMN version SET DEFAULT 0
 @@
-ALTER TABLE public.notification_inbox_announcements ALTER COLUMN public_id SET DEFAULT gen_random_uuid(), ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN deleted SET DEFAULT FALSE
+ALTER TABLE public.notification_recipients ALTER COLUMN status SET DEFAULT 'PENDING', ALTER COLUMN attempts SET DEFAULT 0
 @@
-ALTER TABLE public.notification_inbox_deliveries ALTER COLUMN public_id SET DEFAULT gen_random_uuid(), ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN deleted SET DEFAULT FALSE
+ALTER TABLE public.notification_recipient_streams ALTER COLUMN last_sequence SET DEFAULT 0, ALTER COLUMN read_revision SET DEFAULT 0
 @@
-ALTER TABLE public.notification_inbox_streams ALTER COLUMN public_id SET DEFAULT gen_random_uuid(), ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN deleted SET DEFAULT FALSE
+CREATE TABLE IF NOT EXISTS public.notification_inbox_snapshots (
+    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    public_id UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+    recipient_user_public_id UUID NOT NULL REFERENCES public.users(public_id),
+    tenant_id UUID,
+    upper_sequence BIGINT NOT NULL CHECK (upper_sequence >= 0),
+    read_revision BIGINT NOT NULL CHECK (read_revision >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMPTZ NOT NULL CHECK (expires_at > created_at)
+)
 @@
-ALTER TABLE public.notification_inbox_items ALTER COLUMN public_id SET DEFAULT gen_random_uuid(), ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP, ALTER COLUMN deleted SET DEFAULT FALSE
-@@
-ALTER TABLE public.notification_inbox_announcements ALTER COLUMN version SET DEFAULT 0
-@@
-ALTER TABLE public.notification_inbox_deliveries ALTER COLUMN status SET DEFAULT 'PENDING', ALTER COLUMN attempts SET DEFAULT 0
-@@
-ALTER TABLE public.notification_inbox_streams ALTER COLUMN last_sequence SET DEFAULT 0, ALTER COLUMN read_revision SET DEFAULT 0
+CREATE INDEX IF NOT EXISTS idx_inbox_snapshot_owner ON public.notification_inbox_snapshots (recipient_user_public_id, tenant_id, expires_at)
 @@

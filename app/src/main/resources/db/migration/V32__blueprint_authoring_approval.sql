@@ -1,2 +1,0 @@
-ALTER TABLE exam_blueprints ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
-ALTER TABLE exam_blueprints ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
