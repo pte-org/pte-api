@@ -1,6 +1,6 @@
 package com.pte.reporting.internal.mapper;
 
-import com.pte.reporting.domain.AttemptReport;
+import com.pte.reporting.domain.ExamResult;
 import com.pte.reporting.domain.enums.Skill;
 import com.pte.reporting.internal.dto.response.ReportResponse;
 import com.pte.reporting.internal.dto.response.SkillScoreResponse;
@@ -15,11 +15,11 @@ public final class ReportMapper {
     private ReportMapper() {
     }
 
-    public static ReportResponse toResponse(AttemptReport report, AttemptScoreSummary summary) {
+    public static ReportResponse toResponse(ExamResult report, AttemptScoreSummary summary) {
         return toResponse(report, summary, false);
     }
 
-    public static ReportResponse toResponse(AttemptReport report, AttemptScoreSummary summary,
+    public static ReportResponse toResponse(ExamResult report, AttemptScoreSummary summary,
             boolean includesUnselectedAiScores) {
         List<SkillScoreResponse> communicative = toSkillList(summary.skillScores());
         SkillScoreResponse overall = summary.overall() == null ? null : toResponse("OVERALL", summary.overall());

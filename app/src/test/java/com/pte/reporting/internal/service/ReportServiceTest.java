@@ -2,11 +2,11 @@ package com.pte.reporting.internal.service;
 
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptSummaryView;
-import com.pte.reporting.domain.AttemptReport;
+import com.pte.reporting.domain.ExamResult;
 import com.pte.reporting.domain.enums.Skill;
 import com.pte.reporting.internal.dto.response.ReportResponse;
 import com.pte.reporting.internal.exception.ReportNotFoundException;
-import com.pte.reporting.internal.repository.AttemptReportRepository;
+import com.pte.reporting.internal.repository.ExamResultRepository;
 import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,7 +33,7 @@ import static org.mockito.Mockito.when;
 class ReportServiceTest {
 
     @Mock
-    private AttemptReportRepository attemptReportRepository;
+    private ExamResultRepository examResultRepository;
 
     @Mock
     private ScoreAggregationService scoreAggregationService;
@@ -52,7 +52,7 @@ class ReportServiceTest {
     @BeforeEach
     void setUp() {
         snapshotCodec = new ReportSnapshotCodec(JsonMapper.builder().build());
-        service = new ReportService(attemptReportRepository, scoreAggregationService, attemptService, snapshotCodec,
+        service = new ReportService(examResultRepository, scoreAggregationService, attemptService, snapshotCodec,
                 sessionService);
         tenantId = UUID.randomUUID();
         studentPublicId = UUID.randomUUID();
@@ -63,7 +63,7 @@ class ReportServiceTest {
         UUID attemptPublicId = UUID.randomUUID();
         UUID sessionPublicId = UUID.randomUUID();
 
-        AttemptReport existingReport = new AttemptReport();
+        ExamResult existingReport = new ExamResult();
         existingReport.setAttemptPublicId(attemptPublicId);
         existingReport.setSessionPublicId(sessionPublicId);
         existingReport.setStudentPublicId(studentPublicId);
@@ -78,7 +78,7 @@ class ReportServiceTest {
         existingReport.setReportSnapshotJson(snapshotJson(summary));
         CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
 
-        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
+        when(examResultRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.of(existingReport));
         ReportResponse response = service.getReport(attemptPublicId, caller);
 
@@ -99,13 +99,13 @@ class ReportServiceTest {
         AttemptScoreSummary scoreSummary = new AttemptScoreSummary(SkillScore.of(50), scoreSummarySkills);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
 
-        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
+        when(examResultRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.empty());
         when(attemptService.getSubmittedAttempt(attemptPublicId))
                 .thenReturn(attemptSummary);
-        when(attemptReportRepository.save(any(AttemptReport.class)))
+        when(examResultRepository.save(any(ExamResult.class)))
                 .thenAnswer(inv -> {
-                    AttemptReport report = inv.getArgument(0);
+                    ExamResult report = inv.getArgument(0);
                     report.setId(1L);
                     return report;
                 });
@@ -117,7 +117,7 @@ class ReportServiceTest {
         assertThat(response.attemptPublicId()).isEqualTo(attemptPublicId);
         assertThat(response.sessionPublicId()).isEqualTo(sessionPublicId);
         verify(attemptService).getSubmittedAttempt(attemptPublicId);
-        verify(attemptReportRepository).save(any(AttemptReport.class));
+        verify(examResultRepository).save(any(ExamResult.class));
         verify(sessionService).lockForScoreReviewMutation(sessionPublicId, tenantId);
     }
 
@@ -134,13 +134,13 @@ class ReportServiceTest {
         AttemptScoreSummary scoreSummary = new AttemptScoreSummary(SkillScore.of(50), scoreSummarySkills);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
 
-        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
+        when(examResultRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.empty());
         when(attemptService.getSubmittedAttempt(attemptPublicId))
                 .thenReturn(attemptSummary);
-        when(attemptReportRepository.save(any(AttemptReport.class)))
+        when(examResultRepository.save(any(ExamResult.class)))
                 .thenAnswer(inv -> {
-                    AttemptReport report = inv.getArgument(0);
+                    ExamResult report = inv.getArgument(0);
                     report.setId(1L);
                     return report;
                 });
@@ -149,7 +149,7 @@ class ReportServiceTest {
 
         service.getReport(attemptPublicId, caller);
 
-        verify(attemptReportRepository).save(any(AttemptReport.class));
+        verify(examResultRepository).save(any(ExamResult.class));
     }
 
     @Test
@@ -157,7 +157,7 @@ class ReportServiceTest {
         UUID attemptPublicId = UUID.randomUUID();
         UUID sessionPublicId = UUID.randomUUID();
 
-        AttemptReport report = new AttemptReport();
+        ExamResult report = new ExamResult();
         report.setAttemptPublicId(attemptPublicId);
         report.setSessionPublicId(sessionPublicId);
         report.setStudentPublicId(studentPublicId);
@@ -172,7 +172,7 @@ class ReportServiceTest {
         report.setReportSnapshotJson(snapshotJson(summary));
         CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
 
-        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
+        when(examResultRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.of(report));
         ReportResponse response = service.getReport(attemptPublicId, caller);
 
@@ -186,7 +186,7 @@ class ReportServiceTest {
         UUID attemptPublicId = UUID.randomUUID();
         UUID sessionPublicId = UUID.randomUUID();
 
-        AttemptReport report = new AttemptReport();
+        ExamResult report = new ExamResult();
         report.setAttemptPublicId(attemptPublicId);
         report.setSessionPublicId(sessionPublicId);
         report.setStudentPublicId(studentPublicId);
@@ -195,7 +195,7 @@ class ReportServiceTest {
 
         CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
 
-        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
+        when(examResultRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.of(report));
 
         assertThatThrownBy(() -> service.getReport(attemptPublicId, caller))
@@ -205,14 +205,14 @@ class ReportServiceTest {
     @Test
     void getReport_studentCanStillSeeLegacyPublishedReportWithoutSnapshot() {
         UUID attemptPublicId = UUID.randomUUID();
-        AttemptReport report = new AttemptReport();
+        ExamResult report = new ExamResult();
         report.setAttemptPublicId(attemptPublicId);
         report.setSessionPublicId(UUID.randomUUID());
         report.setStudentPublicId(studentPublicId);
         report.setTenantId(tenantId);
         report.setPublished(true);
         AttemptScoreSummary legacySummary = new AttemptScoreSummary(SkillScore.of(64), Map.of());
-        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId)).thenReturn(Optional.of(report));
+        when(examResultRepository.findByAttemptPublicId(attemptPublicId)).thenReturn(Optional.of(report));
         when(scoreAggregationService.aggregateLegacyPublished(attemptPublicId, tenantId)).thenReturn(legacySummary);
 
         ReportResponse response = service.getReport(attemptPublicId,
@@ -226,7 +226,7 @@ class ReportServiceTest {
     @Test
     void getMyPublishedReports_readsSnapshotsAndPreservesLegacyPublishedReports() {
         UUID attemptPublicId = UUID.randomUUID();
-        AttemptReport report = new AttemptReport();
+        ExamResult report = new ExamResult();
         report.setAttemptPublicId(attemptPublicId);
         report.setSessionPublicId(UUID.randomUUID());
         report.setStudentPublicId(studentPublicId);
@@ -234,14 +234,14 @@ class ReportServiceTest {
         report.setPublished(true);
         report.setReportSnapshotJson(snapshotJson(new AttemptScoreSummary(SkillScore.of(72), Map.of())));
         UUID legacyAttemptPublicId = UUID.randomUUID();
-        AttemptReport legacyReport = new AttemptReport();
+        ExamResult legacyReport = new ExamResult();
         legacyReport.setAttemptPublicId(legacyAttemptPublicId);
         legacyReport.setSessionPublicId(UUID.randomUUID());
         legacyReport.setStudentPublicId(studentPublicId);
         legacyReport.setTenantId(tenantId);
         legacyReport.setPublished(true);
         CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
-        when(attemptReportRepository.findByStudentPublicIdAndTenantIdAndPublishedTrueAndDeletedFalseOrderByPublishedAtDesc(
+        when(examResultRepository.findByStudentPublicIdAndTenantIdAndPublishedTrueAndDeletedFalseOrderByPublishedAtDesc(
                 studentPublicId, tenantId)).thenReturn(List.of(report, legacyReport));
         when(scoreAggregationService.aggregateLegacyPublished(legacyAttemptPublicId, tenantId))
                 .thenReturn(new AttemptScoreSummary(SkillScore.of(64), Map.of()));
@@ -261,7 +261,7 @@ class ReportServiceTest {
         UUID sessionPublicId = UUID.randomUUID();
         UUID otherStudentId = UUID.randomUUID();
 
-        AttemptReport report = new AttemptReport();
+        ExamResult report = new ExamResult();
         report.setAttemptPublicId(attemptPublicId);
         report.setSessionPublicId(sessionPublicId);
         report.setStudentPublicId(otherStudentId);
@@ -270,7 +270,7 @@ class ReportServiceTest {
 
         CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
 
-        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
+        when(examResultRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.of(report));
 
         assertThatThrownBy(() -> service.getReport(attemptPublicId, caller))
@@ -282,7 +282,7 @@ class ReportServiceTest {
         UUID attemptPublicId = UUID.randomUUID();
         UUID sessionPublicId = UUID.randomUUID();
 
-        AttemptReport report = new AttemptReport();
+        ExamResult report = new ExamResult();
         report.setAttemptPublicId(attemptPublicId);
         report.setSessionPublicId(sessionPublicId);
         report.setStudentPublicId(studentPublicId);
@@ -296,7 +296,7 @@ class ReportServiceTest {
         AttemptScoreSummary summary = new AttemptScoreSummary(SkillScore.of(50), skillScores);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
 
-        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
+        when(examResultRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.of(report));
         when(scoreAggregationService.aggregateProvisional(attemptPublicId, tenantId))
                 .thenReturn(new ProvisionalScoreSummary(summary, false));
@@ -312,7 +312,7 @@ class ReportServiceTest {
         UUID sessionPublicId = UUID.randomUUID();
         UUID otherTenantId = UUID.randomUUID();
 
-        AttemptReport report = new AttemptReport();
+        ExamResult report = new ExamResult();
         report.setAttemptPublicId(attemptPublicId);
         report.setSessionPublicId(sessionPublicId);
         report.setStudentPublicId(studentPublicId);
@@ -321,7 +321,7 @@ class ReportServiceTest {
 
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
 
-        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
+        when(examResultRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.of(report));
 
         assertThatThrownBy(() -> service.getReport(attemptPublicId, caller))
@@ -334,7 +334,7 @@ class ReportServiceTest {
         UUID sessionPublicId = UUID.randomUUID();
         UUID otherTenantId = UUID.randomUUID();
 
-        AttemptReport report = new AttemptReport();
+        ExamResult report = new ExamResult();
         report.setAttemptPublicId(attemptPublicId);
         report.setSessionPublicId(sessionPublicId);
         report.setStudentPublicId(studentPublicId);
@@ -349,7 +349,7 @@ class ReportServiceTest {
         UUID platformUserId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(platformUserId, null, List.of("PLATFORM_ADMIN"));
 
-        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
+        when(examResultRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.of(report));
         when(scoreAggregationService.aggregateProvisional(attemptPublicId, otherTenantId))
                 .thenReturn(new ProvisionalScoreSummary(summary, false));
@@ -362,13 +362,13 @@ class ReportServiceTest {
     @Test
     void getReport_platformAuthorCannotSeeCrossTenantReport() {
         UUID attemptPublicId = UUID.randomUUID();
-        AttemptReport report = new AttemptReport();
+        ExamResult report = new ExamResult();
         report.setAttemptPublicId(attemptPublicId);
         report.setSessionPublicId(UUID.randomUUID());
         report.setStudentPublicId(studentPublicId);
         report.setTenantId(UUID.randomUUID());
         report.setPublished(true);
-        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId)).thenReturn(Optional.of(report));
+        when(examResultRepository.findByAttemptPublicId(attemptPublicId)).thenReturn(Optional.of(report));
 
         assertThatThrownBy(() -> service.getReport(attemptPublicId,
                 new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"))))
@@ -379,7 +379,7 @@ class ReportServiceTest {
     @Test
     void getReport_platformAuthorCannotCreateCrossTenantReportFromAttempt() {
         UUID attemptPublicId = UUID.randomUUID();
-        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId)).thenReturn(Optional.empty());
+        when(examResultRepository.findByAttemptPublicId(attemptPublicId)).thenReturn(Optional.empty());
         when(attemptService.getSubmittedAttempt(attemptPublicId)).thenReturn(new AttemptSummaryView(
                 attemptPublicId, UUID.randomUUID(), studentPublicId, UUID.randomUUID()));
 
@@ -387,7 +387,7 @@ class ReportServiceTest {
                 new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"))))
                 .isInstanceOf(ReportNotFoundException.class);
         verify(sessionService, never()).lockForScoreReviewMutation(any(), any());
-        verify(attemptReportRepository, never()).save(any());
+        verify(examResultRepository, never()).save(any());
     }
 
     @Test
@@ -403,14 +403,14 @@ class ReportServiceTest {
         AttemptScoreSummary scoreSummary = new AttemptScoreSummary(SkillScore.of(50), scoreSummarySkills);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
 
-        AttemptReport savedReport = new AttemptReport();
+        ExamResult savedReport = new ExamResult();
         savedReport.setAttemptPublicId(attemptPublicId);
         savedReport.setSessionPublicId(sessionPublicId);
         savedReport.setStudentPublicId(studentPublicId);
         savedReport.setTenantId(tenantId);
         savedReport.setPublished(false);
 
-        when(attemptReportRepository.findByAttemptPublicId(attemptPublicId))
+        when(examResultRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(savedReport));
         when(attemptService.getSubmittedAttempt(attemptPublicId))
@@ -421,7 +421,7 @@ class ReportServiceTest {
         ReportResponse response = service.getReport(attemptPublicId, caller);
 
         assertThat(response.attemptPublicId()).isEqualTo(attemptPublicId);
-        verify(attemptReportRepository, never()).save(any(AttemptReport.class));
+        verify(examResultRepository, never()).save(any(ExamResult.class));
         verify(sessionService).lockForScoreReviewMutation(sessionPublicId, tenantId);
     }
 

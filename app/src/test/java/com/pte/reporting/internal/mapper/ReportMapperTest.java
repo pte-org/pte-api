@@ -1,6 +1,6 @@
 package com.pte.reporting.internal.mapper;
 
-import com.pte.reporting.domain.AttemptReport;
+import com.pte.reporting.domain.ExamResult;
 import com.pte.reporting.domain.enums.Skill;
 import com.pte.reporting.internal.dto.response.ReportResponse;
 import com.pte.reporting.internal.dto.response.SkillScoreResponse;
@@ -27,8 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ReportMapperTest {
 
-    private AttemptReport report(UUID attemptPublicId, UUID sessionPublicId, boolean published, Instant publishedAt) {
-        AttemptReport report = new AttemptReport();
+    private ExamResult report(UUID attemptPublicId, UUID sessionPublicId, boolean published, Instant publishedAt) {
+        ExamResult report = new ExamResult();
         report.setAttemptPublicId(attemptPublicId);
         report.setSessionPublicId(sessionPublicId);
         report.setPublished(published);
@@ -38,7 +38,7 @@ class ReportMapperTest {
 
     @Test
     void toResponse_communicativeSkills_onlyContainsWhateverKeysTheSummaryHas() {
-        AttemptReport report = report(UUID.randomUUID(), UUID.randomUUID(), true, Instant.now());
+        ExamResult report = report(UUID.randomUUID(), UUID.randomUUID(), true, Instant.now());
         Map<Skill, SkillScore> skillScores = new EnumMap<>(Skill.class);
         skillScores.put(Skill.SPEAKING, SkillScore.of(70));
         skillScores.put(Skill.READING, SkillScore.of(60));
@@ -54,7 +54,7 @@ class ReportMapperTest {
 
     @Test
     void toResponse_overallNull_whenSummaryOverallIsNull() {
-        AttemptReport report = report(UUID.randomUUID(), UUID.randomUUID(), true, Instant.now());
+        ExamResult report = report(UUID.randomUUID(), UUID.randomUUID(), true, Instant.now());
         AttemptScoreSummary summary = new AttemptScoreSummary(null, new EnumMap<>(Skill.class));
 
         ReportResponse response = ReportMapper.toResponse(report, summary);
@@ -64,7 +64,7 @@ class ReportMapperTest {
 
     @Test
     void toResponse_overallPresentButInsufficientData_notConflatedWithNull() {
-        AttemptReport report = report(UUID.randomUUID(), UUID.randomUUID(), true, Instant.now());
+        ExamResult report = report(UUID.randomUUID(), UUID.randomUUID(), true, Instant.now());
         AttemptScoreSummary summary = new AttemptScoreSummary(SkillScore.insufficientData(), new EnumMap<>(Skill.class));
 
         ReportResponse response = ReportMapper.toResponse(report, summary);
@@ -76,7 +76,7 @@ class ReportMapperTest {
 
     @Test
     void toResponse_overallPresentAndSufficientData_carriesScore() {
-        AttemptReport report = report(UUID.randomUUID(), UUID.randomUUID(), true, Instant.now());
+        ExamResult report = report(UUID.randomUUID(), UUID.randomUUID(), true, Instant.now());
         AttemptScoreSummary summary = new AttemptScoreSummary(SkillScore.of(75), new EnumMap<>(Skill.class));
 
         ReportResponse response = ReportMapper.toResponse(report, summary);
@@ -88,7 +88,7 @@ class ReportMapperTest {
     @Test
     void toResponse_carriesPublishedAndPublishedAtFromReport() {
         Instant publishedAt = Instant.now();
-        AttemptReport report = report(UUID.randomUUID(), UUID.randomUUID(), true, publishedAt);
+        ExamResult report = report(UUID.randomUUID(), UUID.randomUUID(), true, publishedAt);
         AttemptScoreSummary summary = new AttemptScoreSummary(null, new EnumMap<>(Skill.class));
 
         ReportResponse response = ReportMapper.toResponse(report, summary);
@@ -101,7 +101,7 @@ class ReportMapperTest {
     void toResponse_carriesAttemptAndSessionIds() {
         UUID attemptPublicId = UUID.randomUUID();
         UUID sessionPublicId = UUID.randomUUID();
-        AttemptReport report = report(attemptPublicId, sessionPublicId, false, null);
+        ExamResult report = report(attemptPublicId, sessionPublicId, false, null);
         AttemptScoreSummary summary = new AttemptScoreSummary(null, new EnumMap<>(Skill.class));
 
         ReportResponse response = ReportMapper.toResponse(report, summary);
@@ -112,7 +112,7 @@ class ReportMapperTest {
 
     @Test
     void toResponse_mapsSkillScoreFieldsIncludingInsufficientData() {
-        AttemptReport report = report(UUID.randomUUID(), UUID.randomUUID(), true, Instant.now());
+        ExamResult report = report(UUID.randomUUID(), UUID.randomUUID(), true, Instant.now());
         Map<Skill, SkillScore> skillScores = new EnumMap<>(Skill.class);
         skillScores.put(Skill.LISTENING, SkillScore.of(50));
         skillScores.put(Skill.WRITING, SkillScore.insufficientData());
@@ -133,7 +133,7 @@ class ReportMapperTest {
 
     @Test
     void toResponse_mapsAppliedWeightForScoreBreakdown() {
-        AttemptReport report = report(UUID.randomUUID(), UUID.randomUUID(), true, Instant.now());
+        ExamResult report = report(UUID.randomUUID(), UUID.randomUUID(), true, Instant.now());
         Map<Skill, SkillScore> skillScores = new EnumMap<>(Skill.class);
         skillScores.put(Skill.READING, SkillScore.of(74, BigDecimal.valueOf(25)));
 

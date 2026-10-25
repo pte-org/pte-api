@@ -1,6 +1,6 @@
 package com.pte.reporting;
 
-import com.pte.reporting.internal.repository.AttemptReportRepository;
+import com.pte.reporting.internal.repository.ExamResultRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,9 +13,9 @@ import java.util.UUID;
 @Service
 public class ReportingOverviewService {
 
-    private final AttemptReportRepository reportRepository;
+    private final ExamResultRepository reportRepository;
 
-    public ReportingOverviewService(AttemptReportRepository reportRepository) {
+    public ReportingOverviewService(ExamResultRepository reportRepository) {
         this.reportRepository = reportRepository;
     }
 

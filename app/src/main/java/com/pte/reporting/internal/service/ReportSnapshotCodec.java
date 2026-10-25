@@ -25,7 +25,7 @@ public class ReportSnapshotCodec {
             AttemptScoreSummary summary,
             List<ReportScoringAnswerView> inputs) {
         List<ReportSnapshotScoreInput> savedInputs = inputs.stream().map(input -> new ReportSnapshotScoreInput(
-                input.answerPublicId(), input.scoreTemplatePublicId(), input.taskType(), input.section(),
+                input.answerPublicId(), input.examDefinitionPublicId(), input.taskType(), input.section(),
                 input.scoringMethod(), input.aiRawScore(), input.aiProviderCategory(), input.aiProvider(),
                 input.aiModel(), input.aiProviderVersion(), input.examinerScore(), input.selectedScoreSource(),
                 input.selectedScore())).toList();

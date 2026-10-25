@@ -83,7 +83,7 @@ public class ScoreAggregationService {
     public AttemptScoreSummary aggregateFromInputs(UUID attemptPublicId, UUID tenantId,
             List<ReportScoringAnswerView> answers) {
         AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
-        ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.scoreTemplatePublicId());
+        ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.examDefinitionPublicId());
         return aggregateWithScores(attemptPublicId,
                 averageScoresByTaskType(answers, ReportScoringAnswerView::selectedScore), context, template.items());
     }
@@ -96,7 +96,7 @@ public class ScoreAggregationService {
         List<ReportScoringAnswerView> answers = scoringService.getReportScoringInputsForAttempt(tenantId,
                 attemptPublicId);
         AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
-        ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.scoreTemplatePublicId());
+        ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.examDefinitionPublicId());
         AttemptScoreSummary summary = aggregateWithScores(attemptPublicId,
                 averageScoresByTaskType(answers, ReportScoringAnswerView::provisionalScore), context,
                 template.items());
@@ -113,12 +113,12 @@ public class ScoreAggregationService {
         }
         Map<UUID, AttemptScoreContextView> contexts = attemptService.getScoreContexts(attemptPublicIds);
         Set<UUID> templateIds = contexts.values().stream()
-                .map(AttemptScoreContextView::scoreTemplatePublicId).collect(Collectors.toSet());
+                .map(AttemptScoreContextView::examDefinitionPublicId).collect(Collectors.toSet());
         Map<UUID, ExamDefinitionResponse> templates = examDefinitionService.getByPublicIds(templateIds);
         Map<UUID, ReportScoreAggregation> results = new HashMap<>();
         for (UUID attemptPublicId : attemptPublicIds) {
             AttemptScoreContextView context = contexts.get(attemptPublicId);
-            ExamDefinitionResponse template = templates.get(context.scoreTemplatePublicId());
+            ExamDefinitionResponse template = templates.get(context.examDefinitionPublicId());
             AttemptScoreSummary summary = aggregateWithScores(attemptPublicId,
                     averageScoresByTaskType(answersByAttempt.getOrDefault(attemptPublicId, List.of()),
                             ReportScoringAnswerView::selectedScore),
@@ -132,7 +132,7 @@ public class ScoreAggregationService {
     public AttemptScoreSummary aggregateLegacyPublished(UUID attemptPublicId, UUID tenantId) {
         List<ScoredAnswerView> answers = scoringService.getScoredAnswersForAttempt(attemptPublicId, tenantId);
         AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
-        ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.scoreTemplatePublicId());
+        ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.examDefinitionPublicId());
         return aggregateWithScores(attemptPublicId, averageRawScoresByTaskType(answers), context, template.items());
     }
 

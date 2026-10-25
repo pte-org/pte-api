@@ -1,6 +1,6 @@
 package com.pte.reporting.internal.repository;
 
-import com.pte.reporting.domain.AttemptReport;
+import com.pte.reporting.domain.ExamResult;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -10,12 +10,12 @@ import java.util.List;
 import java.util.UUID;
 
 /** Specifications for tenant-scoped immutable report reads with optional date filters. */
-public final class AttemptReportSpecifications {
+public final class ExamResultSpecifications {
 
-    private AttemptReportSpecifications() {
+    private ExamResultSpecifications() {
     }
 
-    public static Specification<AttemptReport> forStudent(UUID tenantId, UUID studentPublicId,
+    public static Specification<ExamResult> forStudent(UUID tenantId, UUID studentPublicId,
             Instant from, Instant to) {
         return (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();

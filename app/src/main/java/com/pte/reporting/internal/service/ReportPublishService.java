@@ -2,14 +2,15 @@ package com.pte.reporting.internal.service;
 
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptSummaryView;
-import com.pte.reporting.domain.AttemptReport;
+import com.pte.reporting.domain.ExamResult;
+import com.pte.reporting.domain.enums.Skill;
 import com.pte.reporting.dto.event.AttemptPublishedEvent;
 import com.pte.reporting.internal.constant.ReportingConstants;
 import com.pte.reporting.internal.dto.response.ReportPublicationBlockerResponse;
 import com.pte.reporting.internal.dto.response.ReportPublicationReadinessResponse;
 import com.pte.reporting.internal.dto.response.ReportPublicationSummaryResponse;
 import com.pte.reporting.internal.exception.ReportPublicationNotReadyException;
-import com.pte.reporting.internal.repository.AttemptReportRepository;
+import com.pte.reporting.internal.repository.ExamResultRepository;
 import com.pte.scoring.ScoringService;
 import com.pte.scoring.dto.response.ReportPublicationScoringView;
 import com.pte.scoring.dto.response.ReportScoringAnswerView;
@@ -27,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /** Atomically validates, snapshots, and publishes the full submitted session cohort. */
@@ -38,19 +40,19 @@ public class ReportPublishService {
     private final ScoringService scoringService;
     private final ScoreAggregationService aggregationService;
     private final ReportSnapshotCodec snapshotCodec;
-    private final AttemptReportRepository attemptReportRepository;
+    private final ExamResultRepository examResultRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     public ReportPublishService(SessionService sessionService, AttemptService attemptService,
             ScoringService scoringService, ScoreAggregationService aggregationService,
-            ReportSnapshotCodec snapshotCodec, AttemptReportRepository attemptReportRepository,
+            ReportSnapshotCodec snapshotCodec, ExamResultRepository examResultRepository,
             ApplicationEventPublisher eventPublisher) {
         this.sessionService = sessionService;
         this.attemptService = attemptService;
         this.scoringService = scoringService;
         this.aggregationService = aggregationService;
         this.snapshotCodec = snapshotCodec;
-        this.attemptReportRepository = attemptReportRepository;
+        this.examResultRepository = examResultRepository;
         this.eventPublisher = eventPublisher;
     }
 
@@ -67,13 +69,13 @@ public class ReportPublishService {
     @Transactional(readOnly = true)
     public ReportPublicationSummaryResponse publicationSummary(UUID sessionPublicId, UUID tenantId) {
         sessionService.verifyHostAccess(sessionPublicId, tenantId);
-        return attemptReportRepository
+        return examResultRepository
                 .findFirstBySessionPublicIdAndTenantIdAndPublishedTrueAndReportSnapshotJsonIsNotNullOrderByPublishedAtAsc(
                         sessionPublicId, tenantId)
                 .map(report -> new ReportPublicationSummaryResponse(sessionPublicId,
                         report.getPublicationPublicId(), report.getPublishedByPublicId(), report.getPublishedAt(),
                         report.getPublicationCohortSize() == null ? 0 : report.getPublicationCohortSize(),
-                        attemptReportRepository.countBySessionPublicIdAndTenantIdAndPublishedTrueAndReportSnapshotJsonIsNotNull(
+                        examResultRepository.countBySessionPublicIdAndTenantIdAndPublishedTrueAndReportSnapshotJsonIsNotNull(
                                 sessionPublicId, tenantId)))
                 .orElse(null);
     }
@@ -110,7 +112,7 @@ public class ReportPublishService {
         for (AttemptSummaryView summary : attempts) {
             List<ReportScoringAnswerView> attemptInputs =
                     inputsByAttempt.getOrDefault(summary.attemptPublicId(), List.of());
-            AttemptReport report = findOrCreate(summary);
+            ExamResult report = findOrCreate(summary);
             boolean newlyPublished = !report.isPublished();
             if (report.isPublished() && report.getReportSnapshotJson() != null) {
                 continue;
@@ -120,16 +122,31 @@ public class ReportPublishService {
                 throw new IllegalStateException(ReportingConstants.SCORE_AGGREGATION_MISSING);
             }
             String snapshotJson = snapshotCodec.encode(locked.publicationPublicId(), actorPublicId, publishedAt,
-                cohortSize, summary.snapshotPublicId(), scoreAggregation.context().scoreTemplatePublicId(),
-                scoreAggregation.context().scoreTemplateVersion(), scoreAggregation.summary(), attemptInputs);
+                cohortSize, summary.snapshotPublicId(), scoreAggregation.context().examDefinitionPublicId(),
+                scoreAggregation.context().examDefinitionVersion(), scoreAggregation.summary(), attemptInputs);
+            recordScores(report, scoreAggregation.summary());
             report.publishSnapshot(snapshotJson, locked.publicationPublicId(), actorPublicId, cohortSize, publishedAt);
-            attemptReportRepository.save(report);
+            examResultRepository.save(report);
             if (newlyPublished) {
                 eventPublisher.publishEvent(new AttemptPublishedEvent(report.getAttemptPublicId(),
                         report.getSessionPublicId(), report.getStudentPublicId(), report.getTenantId()));
             }
         }
         return cohortSize;
+    }
+
+    private static void recordScores(ExamResult report, AttemptScoreSummary summary) {
+        report.recordScores(scoreOf(summary.overall()), skillScore(summary, Skill.LISTENING),
+                skillScore(summary, Skill.READING), skillScore(summary, Skill.SPEAKING),
+                skillScore(summary, Skill.WRITING));
+    }
+
+    private static Integer skillScore(AttemptScoreSummary summary, Skill skill) {
+        return summary.skillScores() == null ? null : scoreOf(summary.skillScores().get(skill));
+    }
+
+    private static Integer scoreOf(SkillScore score) {
+        return score == null || !score.sufficientData() ? null : score.score();
     }
 
     private ReportPublicationReadinessResponse readiness(UUID sessionPublicId, boolean closed,
@@ -167,7 +184,8 @@ public class ReportPublishService {
         }
         blockers.sort(Comparator.comparing(ReportPublicationBlockerResponse::attemptPublicId)
                 .thenComparing(blocker -> blocker.answerPublicId() == null ? "" : blocker.answerPublicId().toString()));
-        int readyAttempts = attemptIds.size() - blockedAttemptIds.size();
+        // Session-level blockers carry the grading id, not an attempt id, so only count the attempts that are blocked.
+        int readyAttempts = (int) attemptIds.stream().filter(id -> !blockedAttemptIds.contains(id)).count();
         boolean canPublish = closed && !attemptIds.isEmpty() && blockers.isEmpty();
         return new ReportPublicationReadinessResponse(sessionPublicId, closed, attempts.size(), readyAttempts,
                 blockers.size(), canPublish, blockers);
@@ -184,7 +202,7 @@ public class ReportPublishService {
         Set<UUID> requiredIds = new HashSet<>(cohort.requiredAttemptPublicIds());
         Set<UUID> excludedIds = new HashSet<>(cohort.excludedAttemptPublicIds());
         Map<UUID, AttemptSummaryView> submittedById = allSubmitted.stream()
-                .collect(Collectors.toMap(AttemptSummaryView::attemptPublicId, java.util.function.Function.identity(), (a, b) -> a));
+                .collect(Collectors.toMap(AttemptSummaryView::attemptPublicId, Function.identity(), (a, b) -> a));
 
         for (UUID requiredId : requiredIds) {
             if (!submittedById.containsKey(requiredId)) {
@@ -193,7 +211,7 @@ public class ReportPublishService {
             }
         }
 
-        if ("MANUAL_EXAMINER".equals(cohort.markingMode())) {
+        if (cohort.manualExaminer()) {
             scoringService.evaluateManualPublicationBlockers(sessionPublicId, tenantId).ifPresent(reasons -> {
                 for (String reason : reasons) {
                     blockers.add(new ReportPublicationBlockerResponse(sessionPublicId, null, null, null, reason));
@@ -207,20 +225,16 @@ public class ReportPublishService {
                 .toList();
     }
 
-    private List<AttemptSummaryView> submittedAttempts(UUID sessionPublicId, UUID tenantId) {
-        return attemptService.getSubmittedAttemptsForSession(sessionPublicId, tenantId);
-    }
-
-    private AttemptReport findOrCreate(AttemptSummaryView summary) {
-        return attemptReportRepository.findByAttemptPublicId(summary.attemptPublicId())
+    private ExamResult findOrCreate(AttemptSummaryView summary) {
+        return examResultRepository.findByAttemptPublicId(summary.attemptPublicId())
                 .orElseGet(() -> save(ReportService.newReport(summary)));
     }
 
-    private AttemptReport save(AttemptReport report) {
+    private ExamResult save(ExamResult report) {
         try {
-            return attemptReportRepository.save(report);
+            return examResultRepository.save(report);
         } catch (DataIntegrityViolationException ex) {
-            return attemptReportRepository.findByAttemptPublicId(report.getAttemptPublicId()).orElseThrow();
+            return examResultRepository.findByAttemptPublicId(report.getAttemptPublicId()).orElseThrow();
         }
     }
 }

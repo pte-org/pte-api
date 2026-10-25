@@ -13,7 +13,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * reporting's own bounded fact about one attempt: whether its report is
+ * the published result of one attempt (10-90 skill scores): whether it is
  * visible yet. Created lazily (host viewing before publish, or the publish
  * command itself) from attempt's canonical {@code AttemptSummaryView} —
  * {@code published} is the ONLY field this module decides for itself, the
@@ -21,15 +21,15 @@ import java.util.UUID;
  * already owns.
  */
 @Entity
-@Table(name = "attempt_reports", indexes = {
-        @Index(name = "idx_attempt_reports_session", columnList = "session_public_id"),
-        @Index(name = "idx_attempt_reports_student_tenant_published",
+@Table(name = "exam_results", indexes = {
+        @Index(name = "idx_exam_results_session", columnList = "session_public_id"),
+        @Index(name = "idx_exam_results_student_tenant_published",
                 columnList = "student_public_id, tenant_id, published, published_at")
 })
 @Getter
 @Setter
 @NoArgsConstructor
-public class AttemptReport extends BaseEntity {
+public class ExamResult extends BaseEntity {
 
     @Column(nullable = false, unique = true)
     private UUID attemptPublicId;
@@ -64,6 +64,26 @@ public class AttemptReport extends BaseEntity {
 
     @Column(name = "publication_cohort_size")
     private Integer publicationCohortSize;
+
+    /** Published 10-90 scores; null means the skill (or the overall) had no scored answer to base a score on. */
+    private Integer overallScore;
+
+    private Integer listeningScore;
+
+    private Integer readingScore;
+
+    private Integer speakingScore;
+
+    private Integer writingScore;
+
+    /** Copies the published scores next to the snapshot so lists and filters need not parse the snapshot. */
+    public void recordScores(Integer overall, Integer listening, Integer reading, Integer speaking, Integer writing) {
+        this.overallScore = overall;
+        this.listeningScore = listening;
+        this.readingScore = reading;
+        this.speakingScore = speaking;
+        this.writingScore = writing;
+    }
 
     public void publishSnapshot(String snapshotJson, UUID publicationPublicId, UUID publishedByPublicId,
             int cohortSize, Instant publishedAt) {

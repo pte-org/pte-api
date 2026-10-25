@@ -1,6 +1,6 @@
 package com.pte.reporting.internal.repository;
 
-import com.pte.reporting.domain.AttemptReport;
+import com.pte.reporting.domain.ExamResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -13,10 +13,10 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
-class AttemptReportSpecificationsTest {
+class ExamResultSpecificationsTest {
 
     @Autowired
-    private AttemptReportRepository repository;
+    private ExamResultRepository repository;
 
     @Autowired
     private EntityManager entityManager;
@@ -29,33 +29,33 @@ class AttemptReportSpecificationsTest {
         Instant newerAt = Instant.parse("2026-02-01T00:00:00Z");
         Instant newestAt = Instant.parse("2026-03-01T00:00:00Z");
 
-        AttemptReport older = persist(tenantId, studentId, olderAt, true, true);
-        AttemptReport newer = persist(tenantId, studentId, newerAt, true, true);
-        AttemptReport newest = persist(tenantId, studentId, newestAt, true, true);
+        ExamResult older = persist(tenantId, studentId, olderAt, true, true);
+        ExamResult newer = persist(tenantId, studentId, newerAt, true, true);
+        ExamResult newest = persist(tenantId, studentId, newestAt, true, true);
         persist(tenantId, studentId, Instant.parse("2026-04-01T00:00:00Z"), false, true);
         persist(tenantId, studentId, Instant.parse("2026-05-01T00:00:00Z"), true, false);
-        AttemptReport deleted = persist(tenantId, studentId, Instant.parse("2026-06-01T00:00:00Z"), true, true);
+        ExamResult deleted = persist(tenantId, studentId, Instant.parse("2026-06-01T00:00:00Z"), true, true);
         deleted.setDeleted(true);
         repository.saveAndFlush(deleted);
         persist(UUID.randomUUID(), studentId, Instant.parse("2026-06-01T00:00:00Z"), true, true);
         persist(tenantId, UUID.randomUUID(), Instant.parse("2026-07-01T00:00:00Z"), true, true);
         entityManager.clear();
 
-        var all = repository.findAll(AttemptReportSpecifications.forStudent(tenantId, studentId,
+        var all = repository.findAll(ExamResultSpecifications.forStudent(tenantId, studentId,
                         null, null), Sort.by(Sort.Order.desc("publishedAt"), Sort.Order.desc("id")));
 
-        assertThat(all).extracting(AttemptReport::getPublicId)
+        assertThat(all).extracting(ExamResult::getPublicId)
                 .containsExactly(newest.getPublicId(), newer.getPublicId(), older.getPublicId());
 
-        var filtered = repository.findAll(AttemptReportSpecifications.forStudent(tenantId, studentId,
+        var filtered = repository.findAll(ExamResultSpecifications.forStudent(tenantId, studentId,
                         newerAt, newestAt), Sort.by(Sort.Order.desc("publishedAt"), Sort.Order.desc("id")));
 
-        assertThat(filtered).extracting(AttemptReport::getPublicId).containsExactly(newer.getPublicId());
+        assertThat(filtered).extracting(ExamResult::getPublicId).containsExactly(newer.getPublicId());
     }
 
-    private AttemptReport persist(UUID tenantId, UUID studentId, Instant publishedAt,
+    private ExamResult persist(UUID tenantId, UUID studentId, Instant publishedAt,
             boolean published, boolean hasSnapshot) {
-        AttemptReport report = new AttemptReport();
+        ExamResult report = new ExamResult();
         report.setTenantId(tenantId);
         report.setStudentPublicId(studentId);
         report.setAttemptPublicId(UUID.randomUUID());
@@ -63,8 +63,8 @@ class AttemptReportSpecificationsTest {
         report.setPublished(published);
         report.setPublishedAt(publishedAt);
         report.setReportSnapshotJson(hasSnapshot ? "{}" : null);
-        AttemptReport persisted = repository.saveAndFlush(report);
-        entityManager.createNativeQuery("update attempt_reports set published_at = :publishedAt where id = :id")
+        ExamResult persisted = repository.saveAndFlush(report);
+        entityManager.createNativeQuery("update exam_results set published_at = :publishedAt where id = :id")
                 .setParameter("publishedAt", publishedAt)
                 .setParameter("id", persisted.getId())
                 .executeUpdate();
