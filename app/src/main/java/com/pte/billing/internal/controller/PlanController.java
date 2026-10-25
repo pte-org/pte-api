@@ -15,6 +15,8 @@ import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.PlatformOperation;
 import com.pte.shared.security.PlatformOperationPolicy;
+import org.springframework.web.bind.annotation.PatchMapping;
+import com.pte.billing.internal.dto.request.PlanStatusRequest;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -79,17 +81,14 @@ public class PlanController {
         return ApiResponse.success(planService.update(publicId, request, CurrentUserContext.required()));
     }
 
-    @PostMapping("/plans/{publicId}/activation")
+    @PatchMapping("/plans/{publicId}/status")
     @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER')")
-    public ApiResponse<PlanResponse> activate(@PathVariable UUID publicId,
-            @Valid @RequestBody PlanTransitionRequest request) {
-        return ApiResponse.success(planService.activate(publicId, request, CurrentUserContext.required()));
-    }
-
-    @PostMapping("/plans/{publicId}/archive")
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER')")
-    public ApiResponse<PlanResponse> archive(@PathVariable UUID publicId,
-            @Valid @RequestBody PlanTransitionRequest request) {
-        return ApiResponse.success(planService.archive(publicId, request, CurrentUserContext.required()));
+    public ApiResponse<PlanResponse> changeStatus(@PathVariable UUID publicId,
+            @Valid @RequestBody PlanStatusRequest request) {
+        CurrentUser caller = CurrentUserContext.required();
+        return ApiResponse.success(switch (request.action()) {
+            case ACTIVATE -> planService.activate(publicId, request.asTransition(), caller);
+            case ARCHIVE -> planService.archive(publicId, request.asTransition(), caller);
+        });
     }
 }

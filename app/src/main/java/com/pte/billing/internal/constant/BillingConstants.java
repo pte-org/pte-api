@@ -123,8 +123,6 @@ public final class BillingConstants {
             "LICENSE_CODE_REVOKE_TENANT_MISMATCH";
     public static final String LICENSE_CODE_REVOKE_IMPACT_UNAVAILABLE =
             "LICENSE_CODE_REVOKE_IMPACT_UNAVAILABLE";
-    public static final String LICENSE_CODE_REVOKE_LEGACY_ENDPOINT =
-            "LICENSE_CODE_REVOKE_LEGACY_ENDPOINT";
     public static final String LICENSE_CODE_LEGACY_LIST_ENDPOINT =
             "LICENSE_CODE_LEGACY_LIST_ENDPOINT";
     public static final String LICENSE_CODE_LEGACY_LIST_ENDPOINT_MESSAGE =

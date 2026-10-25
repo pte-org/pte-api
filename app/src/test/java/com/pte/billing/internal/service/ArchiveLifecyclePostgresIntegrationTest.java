@@ -13,12 +13,15 @@ import com.pte.itembank.internal.service.*;
 import com.pte.billing.internal.dto.request.PlanTransitionRequest;
 import com.pte.billing.internal.dto.request.PlanUpdateRequest;
 import com.pte.shared.audit.AuditLogService;
+import com.pte.shared.idempotency.IdempotencyKeyService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -42,7 +45,8 @@ import static org.mockito.Mockito.*;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import({PlanService.class, QuestionDeletionService.class, AuditLogService.class, LicenseCodePersistenceService.class,
-        com.pte.shared.config.ClockConfig.class})
+        com.pte.shared.config.ClockConfig.class, IdempotencyKeyService.class})
+@ImportAutoConfiguration(JacksonAutoConfiguration.class)
 @EnabledIfSystemProperty(named = "lifecycle.test.db.url", matches = ".+")
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
 class ArchiveLifecyclePostgresIntegrationTest {

@@ -326,12 +326,6 @@ public class LicenseCodeService {
                 impact == null ? List.of() : impact.scheduledSessionPublicIds());
     }
 
-    /** Rejects the legacy bearer-token mutation route without echoing its path value. */
-    public void rejectLegacyRevoke(CurrentUser caller) {
-        requirePlatformAdmin(caller);
-        throw new LicenseCodeException(HttpStatus.CONFLICT, BillingConstants.LICENSE_CODE_REVOKE_LEGACY_ENDPOINT);
-    }
-
     @Transactional
     public SubscriptionActivationResponse redeem(String rawCode, CurrentUser caller) {
         UUID tenantId = requireHostTenant(caller);

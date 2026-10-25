@@ -51,13 +51,6 @@ public class LicenseCodeController {
                         BillingConstants.LICENSE_CODE_LEGACY_LIST_ENDPOINT_MESSAGE));
     }
 
-    @PostMapping("/{ignored}/revoke")
-    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
-    public ApiResponse<Void> revokeLegacy(@PathVariable String ignored) {
-        licenseCodeService.rejectLegacyRevoke(currentUser());
-        return ApiResponse.success(null);
-    }
-
     private CurrentUser currentUser() {
         return CurrentUserContext.required();
     }

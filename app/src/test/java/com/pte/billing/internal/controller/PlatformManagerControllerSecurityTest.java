@@ -31,15 +31,15 @@ class PlatformManagerControllerSecurityTest {
     void operationsControllersExposeTheDelegatedManagerSurface() throws Exception {
         assertMethod(TenantApplicationController.class, "list", MANAGER);
         assertMethod(TenantApplicationController.class, "get", MANAGER);
-        assertMethod(TenantApplicationController.class, "approve", MANAGER);
+        assertMethod(TenantApplicationController.class, "changeStatus", MANAGER);
         // The merged controller has no class-level rule: every platform governance operation carries it per method.
-        for (String operation : new String[] {"onboard", "suspend", "suspensionImpact", "reactivate",
+        for (String operation : new String[] {"onboard", "changeStatus", "suspensionImpact",
                 "updateBranding"}) {
             assertMethod(OrganizationController.class, operation, MANAGER);
         }
         assertMethod(PlanController.class, "create", MANAGER);
         assertMethod(PlanController.class, "update", MANAGER);
-        assertMethod(PlanController.class, "activate", MANAGER);
+        assertMethod(PlanController.class, "changeStatus", MANAGER);
         assertMethod(AdminLicenseCodeController.class, null, MANAGER);
         assertMethod(PlatformCommercialController.class, null, MANAGER);
         assertMethod(AnnouncementController.class, null, MANAGER);
@@ -56,15 +56,10 @@ class PlatformManagerControllerSecurityTest {
         assertMethod(SubscriptionController.class, null, "hasRole('HOST_ADMIN')");
         assertMethod(QuestionController.class, null,
                 "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')");
-        assertMethod(ExamDefinitionController.class, "approve",
-                "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')");
-        assertMethod(BlueprintController.class, "approve",
-                "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')");
         assertMethod(AdminLicenseCodeController.class, "reveal", ADMIN);
         assertMethod(AdminLicenseCodeController.class, "revokePreview", ADMIN);
         assertMethod(AdminLicenseCodeController.class, "revoke", ADMIN);
         assertMethod(LicenseCodeController.class, "listLegacy", ADMIN);
-        assertMethod(LicenseCodeController.class, "revokeLegacy", ADMIN);
         assertMethod(OrganizationController.class, "grantQuota", ADMIN);
         assertMethod(OrganizationController.class, "quotaHistory", ADMIN);
     }

@@ -86,16 +86,6 @@ class LicenseIssueHttpContractTest {
                 .andExpect(jsonPath("$.data.publicId").value(publicId.toString()))
                 .andExpect(jsonPath("$.data.scheduledCount").value(2))
                 .andExpect(jsonPath("$.data.scopeDigest").value("digest"));
-
-        doThrow(new LicenseCodeException(org.springframework.http.HttpStatus.CONFLICT,
-                BillingConstants.LICENSE_CODE_REVOKE_LEGACY_ENDPOINT))
-                .when(service).rejectLegacyRevoke(actor);
-        mvc.perform(post("/api/v1/license-codes/RAW-BEARER/revoke")
-                        .contentType("application/json")
-                        .content("{\"reason\":\"manual\"}"))
-                .andExpect(status().isConflict())
-                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("RAW-BEARER"))));
-        verify(service).rejectLegacyRevoke(actor);
     }
 
     @Test void adminReadsUseMaskedPageAndLegacyRawListIsRetired() throws Exception {

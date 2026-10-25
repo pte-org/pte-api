@@ -1,5 +1,6 @@
 package com.pte.billing.internal.service;
 
+import com.pte.shared.idempotency.IdempotencyKeyService;
 import com.pte.shared.idempotency.domain.IdempotencyKey;
 import com.pte.shared.idempotency.domain.IdempotencyScope;
 import com.pte.shared.idempotency.internal.repository.IdempotencyKeyRepository;
@@ -19,7 +20,9 @@ import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -46,7 +49,8 @@ import static org.mockito.Mockito.*;
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import({LicenseCodeService.class, LicenseCodePersistenceService.class, LicenseCodeGenerator.class,
         SubscriptionActivationService.class, SubscriptionPersistenceService.class, LicenseKeyGenerator.class,
-        ClockConfig.class, PlanService.class, AuditLogService.class})
+        ClockConfig.class, PlanService.class, AuditLogService.class, IdempotencyKeyService.class})
+@ImportAutoConfiguration(JacksonAutoConfiguration.class)
 @EnabledIfSystemProperty(named = "lifecycle.test.db.url", matches = ".+")
 @Timeout(120)
 class LicenseIssuePostgresIntegrationTest {
@@ -126,8 +130,20 @@ class LicenseIssuePostgresIntegrationTest {
             UUID key = UUID.randomUUID();
             List<Throwable> result = race(() -> service.issue(one.getPublicId(), null, key, admin),
                     () -> service.issue(two.getPublicId(), null, key, admin));
-            assertThat(result.stream().filter(Objects::nonNull).toList()).singleElement().isInstanceOf(LicenseCodeException.class);
+            // A racing loser cannot see the uncommitted winner, so it is told to retry; both answers are 409.
+            assertThat(result.stream().filter(Objects::nonNull).toList()).singleElement()
+                    .isInstanceOfAny(LicenseCodeException.class,
+                            com.pte.shared.idempotency.internal.exception.IdempotencyKeyInFlightException.class);
             assertThat(tx(() -> codes.findAll().stream().filter(c -> Set.of(one.getPublicId(), two.getPublicId()).contains(c.getPlanId())).count())).isEqualTo(1);
+            // Once the winner committed, reusing the key with the other payload is a key-reuse rejection.
+            List<Object> retries = new ArrayList<>();
+            for (ServicePlan plan : List.of(one, two)) {
+                try { retries.add(service.issue(plan.getPublicId(), null, key, admin)); }
+                catch (LicenseCodeException ex) { retries.add(ex.getMessage()); }
+            }
+            assertThat(retries).filteredOn(LicenseIssueReceipt.class::isInstance).singleElement()
+                    .satisfies(receipt -> assertThat(((LicenseIssueReceipt) receipt).replayed()).isTrue());
+            assertThat(retries).containsOnlyOnce(BillingConstants.LICENSE_CODE_IDEMPOTENCY_KEY_REUSED);
         }
     }
 
