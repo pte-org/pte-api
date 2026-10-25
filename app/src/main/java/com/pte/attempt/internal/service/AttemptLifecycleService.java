@@ -2,8 +2,6 @@ package com.pte.attempt.internal.service;
 
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
-import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.attempt.internal.exception.AlreadyAttemptedException;
@@ -14,7 +12,7 @@ import com.pte.attempt.internal.exception.AudioUrlExpiredException;
 import com.pte.attempt.internal.exception.DeviceCheckRequiredException;
 import com.pte.attempt.internal.exception.ExamCapabilityException;
 import com.pte.attempt.internal.exception.NotCurrentTaskException;
-import com.pte.attempt.internal.exception.PinnedSnapshotEmptyException;
+import com.pte.attempt.internal.exception.ExamEmptyException;
 import com.pte.attempt.internal.exception.ReplayLimitExceededException;
 import com.pte.attempt.internal.exception.RetryLimitReachedException;
 import com.pte.attempt.internal.dto.request.EncryptedSubmissionRequest;
@@ -29,12 +27,11 @@ import com.pte.attempt.internal.dto.response.AttemptPreflightResponse;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.policy.ManualNavigationPolicy;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
-import com.pte.attempt.internal.repository.PinnedItemRepository;
-import com.pte.attempt.internal.service.cache.PinnedItemView;
-import com.pte.attempt.internal.service.cache.PinnedSnapshotCacheService;
+import com.pte.attempt.internal.service.cache.ExamItemView;
 import com.pte.shared.security.CurrentUser;
+import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.session.SessionService;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.pte.session.dto.response.EntitlementResponse;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,15 +45,13 @@ import java.util.UUID;
  * SCORED/PUBLISHED are driven by application events from later phases, out
  * of scope here). Once {@link #startAttempt} returns, nothing in this class
  * calls another module again — every method after that operates purely on
- * this module's own pinned data (Phase 07's central invariant).
+ * this module's own data and the cached exam content (Phase 07's central invariant).
  */
 @Service
 public class AttemptLifecycleService {
 
     private final ExamAttemptRepository attemptRepository;
-    private final PinnedItemRepository pinnedItemRepository;
-    private final SnapshotPinService snapshotPinService;
-    private final PinnedSnapshotCacheService cacheService;
+    private final ExamContentService contentService;
     private final TimerService timerService;
     private final AnswerSubmitService answerSubmitService;
     private final AttemptMapper attemptMapper;
@@ -66,19 +61,14 @@ public class AttemptLifecycleService {
     private final CapabilityNegotiationService capabilityNegotiationService;
     private final SessionService sessionService;
 
-    @Autowired
-    public AttemptLifecycleService(ExamAttemptRepository attemptRepository, PinnedItemRepository pinnedItemRepository,
-                          SnapshotPinService snapshotPinService,
-                          PinnedSnapshotCacheService cacheService, TimerService timerService,
-                          AnswerSubmitService answerSubmitService, AttemptMapper attemptMapper,
-                          EncryptionKeyProvider encryptionKeyProvider,
+    public AttemptLifecycleService(ExamAttemptRepository attemptRepository, ExamContentService contentService,
+                          TimerService timerService, AnswerSubmitService answerSubmitService,
+                          AttemptMapper attemptMapper, EncryptionKeyProvider encryptionKeyProvider,
                           SubmissionDecryptionService submissionDecryptionService, HeartbeatService heartbeatService,
                           CapabilityNegotiationService capabilityNegotiationService,
                           SessionService sessionService) {
         this.attemptRepository = attemptRepository;
-        this.pinnedItemRepository = pinnedItemRepository;
-        this.snapshotPinService = snapshotPinService;
-        this.cacheService = cacheService;
+        this.contentService = contentService;
         this.timerService = timerService;
         this.answerSubmitService = answerSubmitService;
         this.attemptMapper = attemptMapper;
@@ -87,31 +77,6 @@ public class AttemptLifecycleService {
         this.heartbeatService = heartbeatService;
         this.capabilityNegotiationService = capabilityNegotiationService;
         this.sessionService = sessionService;
-    }
-
-    /** Compatibility constructor for tests and integrations predating the explicit session cutoff lock. */
-    public AttemptLifecycleService(ExamAttemptRepository attemptRepository, PinnedItemRepository pinnedItemRepository,
-                          SnapshotPinService snapshotPinService,
-                          PinnedSnapshotCacheService cacheService, TimerService timerService,
-                          AnswerSubmitService answerSubmitService, AttemptMapper attemptMapper,
-                          EncryptionKeyProvider encryptionKeyProvider,
-                          SubmissionDecryptionService submissionDecryptionService, HeartbeatService heartbeatService,
-                          CapabilityNegotiationService capabilityNegotiationService) {
-        this(attemptRepository, pinnedItemRepository, snapshotPinService, cacheService, timerService,
-                answerSubmitService, attemptMapper, encryptionKeyProvider, submissionDecryptionService,
-                heartbeatService, capabilityNegotiationService, null);
-    }
-
-    /** Compatibility constructor for focused lifecycle tests predating Phase 4. */
-    public AttemptLifecycleService(ExamAttemptRepository attemptRepository, PinnedItemRepository pinnedItemRepository,
-                          SnapshotPinService snapshotPinService,
-                          PinnedSnapshotCacheService cacheService, TimerService timerService,
-                          AnswerSubmitService answerSubmitService, AttemptMapper attemptMapper,
-                          EncryptionKeyProvider encryptionKeyProvider,
-                          SubmissionDecryptionService submissionDecryptionService, HeartbeatService heartbeatService) {
-        this(attemptRepository, pinnedItemRepository, snapshotPinService, cacheService, timerService,
-                answerSubmitService, attemptMapper, encryptionKeyProvider, submissionDecryptionService,
-                heartbeatService, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -139,24 +104,18 @@ public class AttemptLifecycleService {
 
     @Transactional
     public AttemptTaskResponse startAttempt(StartAttemptRequest request, CurrentUser caller) {
-        if (sessionService != null) {
-            sessionService.lockOpenForAttemptOperation(request.sessionPublicId(), caller.tenantId());
-        }
+        sessionService.lockOpenForAttemptOperation(request.sessionPublicId(), caller.tenantId());
         UUID studentPublicId = caller.userId();
-        var latest = attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+        var latest = attemptRepository.findFirstBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
                 request.sessionPublicId(), studentPublicId);
         if (latest.isPresent() && (latest.get().getStatus() == AttemptStatus.CREATED
                 || latest.get().getStatus() == AttemptStatus.IN_PROGRESS)) {
             requireTenantOwnership(latest.get(), caller);
-            if (capabilityNegotiationService != null) {
-                capabilityNegotiationService.authorizeExisting(latest.get(), request.capabilityManifest(), caller);
-            }
+            capabilityNegotiationService.authorizeExisting(latest.get(), request.capabilityManifest(), caller);
             return resumeOrReject(latest.get(), caller);
         }
 
-        if (sessionService != null) {
-            sessionService.assertTenantActiveForNewAttempt(caller.tenantId());
-        }
+        sessionService.assertTenantActiveForNewAttempt(caller.tenantId());
         int maxRetries = configuredRetries(request.sessionPublicId(), caller.tenantId());
         long submittedAttempts = attemptRepository.countBySessionPublicIdAndStudentPublicIdAndStatus(
                 request.sessionPublicId(), studentPublicId, AttemptStatus.SUBMITTED);
@@ -164,23 +123,19 @@ public class AttemptLifecycleService {
             throw new RetryLimitReachedException();
         }
 
-        String capabilityFingerprint = capabilityNegotiationService == null ? null
-                : capabilityNegotiationService.authorizeStart(request.sessionPublicId(), studentPublicId,
-                        request.capabilityManifest(), caller);
-        return createAndPin(request.sessionPublicId(), studentPublicId, caller.tenantId(),
+        String capabilityFingerprint = capabilityNegotiationService.authorizeStart(request.sessionPublicId(),
+                studentPublicId, request.capabilityManifest(), caller);
+        return createAndStart(request.sessionPublicId(), studentPublicId, caller.tenantId(),
                 request.deviceCheckConfirmed(), capabilityFingerprint, caller, (int) submittedAttempts + 1,
                 maxRetries);
     }
 
     private int configuredRetries(UUID sessionPublicId, UUID tenantId) {
-        if (sessionService == null) {
-            return 0;
-        }
         return sessionService.getAttemptRetryPolicy(sessionPublicId, tenantId).maxRetriesPerStudent();
     }
 
     /**
-     * Returns every task in the attempt's pinned snapshot in order. The client
+     * Returns every task of the attempt's exam in order. The client
      * uses this to prefetch the full list on start/resume and navigate locally
      * without a server round-trip per step. Timer values are computed at call
      * time: speaking/listening items get their own {@code prepSeconds}/
@@ -196,8 +151,8 @@ public class AttemptLifecycleService {
             return List.of(attemptMapper.toCompletedResponse(attempt));
         }
         assertStoredCapabilities(attempt, caller);
-        List<PinnedItemView> allItems = allItemViews(attempt);
-        String encryptionPublicKey = "STRICT".equals(attempt.getPinnedSnapshot().getAnswerIntegrityLevel())
+        List<ExamItemView> allItems = contentService.items(attempt);
+        String encryptionPublicKey = "STRICT".equals(attempt.getAnswerIntegrityLevel())
                 ? encryptionKeyProvider.getPublicKeyBase64()
                 : null;
         return allItems.stream()
@@ -205,7 +160,7 @@ public class AttemptLifecycleService {
                     int effectivePrep = timerService.resolveEffectivePrepSeconds(item);
                     int effectiveResponse = timerService.resolveEffectiveResponseSeconds(attempt, item, allItems);
                     return attemptMapper.toTaskResponse(attempt, item, effectivePrep, effectiveResponse,
-                            allItems.size(), encryptionPublicKey);
+                            allItems, encryptionPublicKey);
                 })
                 .toList();
     }
@@ -234,13 +189,11 @@ public class AttemptLifecycleService {
         }
         attempt = lockAttempt(attempt);
 
-        Long pinnedSnapshotId = attempt.getPinnedSnapshot().getId();
-        PinnedItem sourceItem = pinnedItemRepository.findByPublicId(request.fromPinnedItemPublicId())
-                .filter(item -> item.getPinnedSnapshot().getId().equals(pinnedSnapshotId))
+        ExamItemView sourceItem = contentService.item(attempt, request.fromPinnedItemPublicId())
                 .orElseThrow(NotCurrentTaskException::new);
-        int sourceIndex = sourceItem.getOrderIndex();
+        int sourceIndex = sourceItem.orderIndex();
         int targetIndex = sourceIndex + (request.direction() == NavigateTaskRequest.Direction.NEXT ? 1 : -1);
-        long totalTasks = pinnedItemRepository.countByPinnedSnapshotId(attempt.getPinnedSnapshot().getId());
+        long totalTasks = contentService.items(attempt).size();
         int currentIndex = attempt.getCurrentOrderIndex();
 
         // The answer-submit path may already have advanced one item before an
@@ -254,7 +207,7 @@ public class AttemptLifecycleService {
         }
 
         if (targetIndex >= totalTasks) {
-            if (!ManualNavigationPolicy.allowsSection(sourceItem.getSection())) {
+            if (!ManualNavigationPolicy.allowsSection(sourceItem.section())) {
                 throw new NotCurrentTaskException();
             }
             answerSubmitService.submitIfAbsent(attempt, sourceItem, null);
@@ -262,9 +215,9 @@ public class AttemptLifecycleService {
             return attemptMapper.toCompletedResponse(attempt);
         }
 
-        PinnedItem targetItem = itemAt(attempt, targetIndex);
-        if (!ManualNavigationPolicy.allowsSection(sourceItem.getSection())
-                || !ManualNavigationPolicy.allowsSection(targetItem.getSection())) {
+        ExamItemView targetItem = contentService.itemAt(attempt, targetIndex);
+        if (!ManualNavigationPolicy.allowsSection(sourceItem.section())
+                || !ManualNavigationPolicy.allowsSection(targetItem.section())) {
             throw new NotCurrentTaskException();
         }
 
@@ -272,15 +225,13 @@ public class AttemptLifecycleService {
         // answer from an earlier visit is left untouched.
         answerSubmitService.submitIfAbsent(attempt, sourceItem, null);
         if (currentIndex != targetIndex) {
-            List<PinnedItemView> allItems = allItemViews(attempt);
-            PinnedItemView targetView = PinnedSnapshotCacheService.toView(targetItem);
-            timerService.startTask(attempt, targetView, allItems);
+            timerService.startTask(attempt, targetItem, contentService.items(attempt));
             attemptRepository.save(attempt);
         }
         return advanceUntilLiveOrComplete(attempt, caller);
     }
 
-    /** STANDARD-pinned attempts only — a STRICT-pinned attempt must use {@link #submitEncryptedAnswer}. */
+    /** STANDARD attempts only — a STRICT attempt must use {@link #submitEncryptedAnswer}. */
     @Transactional
     public AttemptTaskResponse submitAnswer(UUID attemptPublicId, SubmitAnswerRequest request, CurrentUser caller) {
         ExamAttempt attempt = findOwned(attemptPublicId, caller);
@@ -299,7 +250,7 @@ public class AttemptLifecycleService {
     }
 
     /**
-     * STRICT-pinned attempts only — decrypts the per-submission AES-wrapped payload
+     * STRICT attempts only — decrypts the per-submission AES-wrapped payload
      * with this module's own private key before funneling the plaintext through the
      * same {@link #processAnswer} path a STANDARD submission uses. The decrypted
      * plaintext is indistinguishable from a plain submission once past this point:
@@ -315,7 +266,7 @@ public class AttemptLifecycleService {
         return processAnswer(attempt, request.pinnedItemPublicId(), payload, null, caller);
     }
 
-    /** STRICT-pinned counterpart to {@link #saveAnswer}; the answer is decrypted and saved without advancing. */
+    /** STRICT counterpart to {@link #saveAnswer}; the answer is decrypted and saved without advancing. */
     @Transactional
     public AttemptTaskResponse saveEncryptedAnswer(UUID attemptPublicId, EncryptedSubmissionRequest request,
                                                     CurrentUser caller) {
@@ -326,9 +277,9 @@ public class AttemptLifecycleService {
         return saveAnswerWithoutAdvance(attempt, request.pinnedItemPublicId(), payload, null, caller);
     }
 
-    /** Request shape (plain vs. encrypted) is server-decided by the pinned level, never client-chosen. */
+    /** Request shape (plain vs. encrypted) is server-decided by the attempt level, never client-chosen. */
     private void requireIntegrityLevel(ExamAttempt attempt, String expectedLevel) {
-        if (!expectedLevel.equals(attempt.getPinnedSnapshot().getAnswerIntegrityLevel())) {
+        if (!expectedLevel.equals(attempt.getAnswerIntegrityLevel())) {
             throw new AnswerIntegrityLevelMismatchException();
         }
     }
@@ -349,8 +300,8 @@ public class AttemptLifecycleService {
         // transaction only ever reads the version as of its own lock
         // acquisition, never a stale one.
         attempt = lockAttempt(attempt);
-        PinnedItem currentItem = currentItem(attempt);
-        if (!currentItem.getPublicId().equals(pinnedItemPublicId)) {
+        ExamItemView currentItem = contentService.itemAt(attempt, attempt.getCurrentOrderIndex());
+        if (!currentItem.publicId().equals(pinnedItemPublicId)) {
             throw new NotCurrentTaskException();
         }
 
@@ -366,9 +317,7 @@ public class AttemptLifecycleService {
             throw new AttemptAlreadyCompleteException();
         }
         attempt = lockAttempt(attempt);
-        Long pinnedSnapshotId = attempt.getPinnedSnapshot().getId();
-        PinnedItem answerItem = pinnedItemRepository.findByPublicId(pinnedItemPublicId)
-                .filter(item -> item.getPinnedSnapshot().getId().equals(pinnedSnapshotId))
+        ExamItemView answerItem = contentService.item(attempt, pinnedItemPublicId)
                 .orElseThrow(NotCurrentTaskException::new);
         // Saving an answer does not move the task pointer. Allow background
         // sync for every section; mode restrictions apply only to navigation.
@@ -376,7 +325,7 @@ public class AttemptLifecycleService {
         return advanceUntilLiveOrComplete(attempt, caller);
     }
 
-    private void persistAnswer(ExamAttempt attempt, PinnedItem item, String payload,
+    private void persistAnswer(ExamAttempt attempt, ExamItemView item, String payload,
             com.pte.attempt.ResponseConfidence confidence) {
         if (confidence == null) {
             // Preserve the established official call shape and behavior for
@@ -434,14 +383,12 @@ public class AttemptLifecycleService {
         // belongs to this attempt's snapshot is sufficient; requiring it to equal
         // currentOrderIndex incorrectly rejects valid audio requests on tasks the
         // student has navigated to without submitting the previous one.
-        Long snapshotId = attempt.getPinnedSnapshot().getId();
-        PinnedItem currentItem = pinnedItemRepository.findByPublicId(pinnedItemPublicId)
-                .filter(item -> item.getPinnedSnapshot().getId().equals(snapshotId))
+        ExamItemView currentItem = contentService.item(attempt, pinnedItemPublicId)
                 .orElseThrow(NotCurrentTaskException::new);
 
         if (playRequestId.equals(attempt.getLastPlayRequestId())) {
             if (Boolean.TRUE.equals(attempt.getLastPlayAllowed())) {
-                return new AudioPlayResponse(currentItem.getAudioUrl());
+                return new AudioPlayResponse(currentItem.audioUrl());
             }
             throw new ReplayLimitExceededException();
         }
@@ -450,7 +397,7 @@ public class AttemptLifecycleService {
             throw new AudioUrlExpiredException();
         }
 
-        int limit = resolvePlayLimit(currentItem, attempt.getPinnedSnapshot());
+        int limit = resolvePlayLimit(attempt);
         boolean allowed = limit < 0 || attempt.getPlayCount() < limit;
         attempt.setLastPlayRequestId(playRequestId);
         attempt.setLastPlayAllowed(allowed);
@@ -460,23 +407,20 @@ public class AttemptLifecycleService {
         }
         attempt.setPlayCount(attempt.getPlayCount() + 1);
         attemptRepository.save(attempt);
-        return new AudioPlayResponse(currentItem.getAudioUrl());
+        return new AudioPlayResponse(currentItem.audioUrl());
     }
 
-    /** Item override wins when present; UNLIMITED session policy (and no override) never rejects (limit &lt; 0 sentinel). */
-    private int resolvePlayLimit(PinnedItem item, PinnedExamSnapshot snapshot) {
-        if (item.getMaxPlayCountOverride() != null) {
-            return item.getMaxPlayCountOverride();
-        }
-        if ("UNLIMITED".equals(snapshot.getReplayPolicyType())) {
+    /** UNLIMITED session policy never rejects (limit &lt; 0 sentinel). */
+    private int resolvePlayLimit(ExamAttempt attempt) {
+        if ("UNLIMITED".equals(attempt.getReplayPolicyType())) {
             return -1;
         }
-        return snapshot.getReplayPolicyLimit();
+        return attempt.getReplayPolicyLimit();
     }
 
-    private boolean hasExpiredAuthenticatedAudioUrl(PinnedItem item) {
-        Instant expiresAt = item.getAudioUrlExpiresAt();
-        String audioUrl = item.getAudioUrl();
+    private boolean hasExpiredAuthenticatedAudioUrl(ExamItemView item) {
+        Instant expiresAt = item.audioUrlExpiresAt();
+        String audioUrl = item.audioUrl();
         if (expiresAt == null || audioUrl == null) {
             return false;
         }
@@ -492,9 +436,13 @@ public class AttemptLifecycleService {
         return advanceUntilLiveOrComplete(existing, caller);
     }
 
-    private AttemptTaskResponse createAndPin(UUID sessionPublicId, UUID studentPublicId, UUID tenantId,
+    private AttemptTaskResponse createAndStart(UUID sessionPublicId, UUID studentPublicId, UUID tenantId,
                                              boolean deviceCheckConfirmed, String capabilityFingerprint,
                                              CurrentUser caller, int attemptNumber, int maxRetriesPerStudent) {
+        // Throws session's own 403 unmodified if the student is not enrolled or the session is not open.
+        EntitlementResponse entitlement = sessionService.checkEntitlement(sessionPublicId, studentPublicId);
+        SnapshotContentResponse content = contentService.header(entitlement.snapshotPublicId());
+
         ExamAttempt attempt = new ExamAttempt();
         attempt.setSessionPublicId(sessionPublicId);
         attempt.setStudentPublicId(studentPublicId);
@@ -502,57 +450,60 @@ public class AttemptLifecycleService {
         attempt.setAttemptNumber(attemptNumber);
         attempt.setMaxRetriesPerStudent(maxRetriesPerStudent);
         attempt.setCapabilityFingerprint(capabilityFingerprint);
+        copyExamTerms(attempt, entitlement, content);
         try {
             attempt = attemptRepository.save(attempt);
         } catch (DataIntegrityViolationException ex) {
             throw new AlreadyAttemptedException();
         }
 
-        PinnedExamSnapshot pinned;
+        List<ExamItemView> items;
         try {
-            pinned = snapshotPinService.pin(attempt, sessionPublicId, studentPublicId);
+            items = contentService.loadForStart(attempt.getPublicId(), content, entitlement.tenantId(),
+                    entitlement.opensAt(), entitlement.closesAt());
         } catch (ExamCapabilityException ex) {
-            if (capabilityNegotiationService != null) {
-                capabilityNegotiationService.recordBlockedDelivery(caller, attempt.getPublicId(), ex.getCode());
-            }
+            capabilityNegotiationService.recordBlockedDelivery(caller, attempt.getPublicId(), ex.getCode());
             throw ex;
         }
-        if (pinned.getItems().isEmpty()) {
-            throw new PinnedSnapshotEmptyException();
+        if (items.isEmpty()) {
+            throw new ExamEmptyException();
         }
-        if (capabilityNegotiationService != null) {
-            capabilityNegotiationService.verifyPinnedForStart(pinned, capabilityFingerprint, caller);
-        }
-        if (pinned.isDeviceCheckRequired() && !deviceCheckConfirmed) {
+        capabilityNegotiationService.verifyForStart(items, attempt.getExamVersionPublicId(), capabilityFingerprint,
+                caller);
+        if (attempt.isDeviceCheckRequired() && !deviceCheckConfirmed) {
             throw new DeviceCheckRequiredException();
         }
-        attempt.setPinnedSnapshot(pinned);
         attempt.setDeviceCheckPassedAt(Instant.now());
         attempt.begin();
-        long totalExamSeconds = pinned.getItems().stream()
-                .mapToLong(item -> (long) item.getPrepSeconds() + item.getResponseSeconds())
+        long totalExamSeconds = items.stream()
+                .mapToLong(item -> (long) item.prepSeconds() + item.responseSeconds())
                 .sum();
         attempt.setExamEndTime(attempt.getStartedAt().plusSeconds(totalExamSeconds));
-        String encryptionPublicKey = "STRICT".equals(pinned.getAnswerIntegrityLevel())
+        String encryptionPublicKey = "STRICT".equals(attempt.getAnswerIntegrityLevel())
                 ? encryptionKeyProvider.getPublicKeyBase64()
                 : null;
         attempt = attemptRepository.save(attempt);
 
-        // attempt already has an id at this point (saved above), so this
-        // save() cascades via merge(), not persist() — merge() returns a
-        // NEW managed copy of the graph and never assigns generated ids
-        // (publicId included) onto the original `pinned`/`PinnedItem`
-        // instances we built. Re-read the saved copy off the returned
-        // `attempt` instead of the stale local `pinned` reference.
-        PinnedExamSnapshot savedPinned = attempt.getPinnedSnapshot();
-        List<PinnedItemView> views = savedPinned.getItems().stream().map(PinnedSnapshotCacheService::toView).toList();
-        cacheService.warm(savedPinned.getPublicId(), views);
-
-        PinnedItemView first = views.get(0);
-        timerService.startTask(attempt, first, views);
+        ExamItemView first = items.get(0);
+        timerService.startTask(attempt, first, items);
         int effectivePrep = timerService.resolveEffectivePrepSeconds(first);
-        int effectiveResponse = timerService.resolveEffectiveResponseSeconds(attempt, first, views);
-        return attemptMapper.toTaskResponse(attempt, first, effectivePrep, effectiveResponse, views.size(), encryptionPublicKey);
+        int effectiveResponse = timerService.resolveEffectiveResponseSeconds(attempt, first, items);
+        return attemptMapper.toTaskResponse(attempt, first, effectivePrep, effectiveResponse, items,
+                encryptionPublicKey);
+    }
+
+    /** The attempt keeps the rules it started under, so a later session edit can never change a running exam. */
+    private void copyExamTerms(ExamAttempt attempt, EntitlementResponse entitlement, SnapshotContentResponse content) {
+        attempt.setExamVersionPublicId(content.publicId());
+        attempt.setExamDefinitionPublicId(content.examDefinitionPublicId());
+        attempt.setExamDefinitionVersion(content.examDefinitionVersion());
+        attempt.setReplayPolicyType(entitlement.policy().replayPolicyType());
+        attempt.setReplayPolicyLimit(entitlement.policy().replayPolicyLimit());
+        attempt.setDeviceCheckRequired(Boolean.TRUE.equals(entitlement.policy().deviceCheckRequired()));
+        attempt.setProctorRequired(Boolean.TRUE.equals(entitlement.policy().proctorRequired()));
+        attempt.setAnswerIntegrityLevel(entitlement.policy().answerIntegrityLevel());
+        attempt.setLockdownMode(entitlement.policy().lockdownMode());
+        attempt.setExamMode(entitlement.examMode() == null ? "OFFICIAL_EXAM" : entitlement.examMode());
     }
 
     /**
@@ -565,38 +516,30 @@ public class AttemptLifecycleService {
      */
     private AttemptTaskResponse advanceUntilLiveOrComplete(ExamAttempt attempt, CurrentUser caller) {
         assertStoredCapabilities(attempt, caller);
-        long totalItems = pinnedItemRepository.countByPinnedSnapshotId(attempt.getPinnedSnapshot().getId());
-        List<PinnedItemView> allItems = allItemViews(attempt);
-        PinnedItemView currentView = PinnedSnapshotCacheService.toView(currentItem(attempt));
+        List<ExamItemView> allItems = contentService.items(attempt);
+        ExamItemView currentView = contentService.itemAt(attempt, attempt.getCurrentOrderIndex());
         int effectivePrep = timerService.resolveEffectivePrepSeconds(currentView);
         int effectiveResponse = timerService.resolveEffectiveResponseSeconds(attempt, currentView, allItems);
-        return attemptMapper.toTaskResponse(attempt, currentView, effectivePrep, effectiveResponse, (int) totalItems);
+        return attemptMapper.toTaskResponse(attempt, currentView, effectivePrep, effectiveResponse, allItems);
     }
 
     private AttemptTaskResponse advanceAfterCurrent(ExamAttempt attempt, CurrentUser caller) {
-        long totalItems = pinnedItemRepository.countByPinnedSnapshotId(attempt.getPinnedSnapshot().getId());
+        List<ExamItemView> allItems = contentService.items(attempt);
         int nextIndex = attempt.getCurrentOrderIndex() + 1;
-        if (nextIndex >= totalItems) {
+        if (nextIndex >= allItems.size()) {
             completeAttempt(attempt);
             return attemptMapper.toCompletedResponse(attempt);
         }
         assertStoredCapabilities(attempt, caller);
-        List<PinnedItemView> allItems = allItemViews(attempt);
-        PinnedItemView nextView = PinnedSnapshotCacheService.toView(itemAt(attempt, nextIndex));
+        ExamItemView nextView = contentService.itemAt(attempt, nextIndex);
         timerService.startTask(attempt, nextView, allItems);
         int effectivePrep = timerService.resolveEffectivePrepSeconds(nextView);
         int effectiveResponse = timerService.resolveEffectiveResponseSeconds(attempt, nextView, allItems);
-        return attemptMapper.toTaskResponse(attempt, nextView, effectivePrep, effectiveResponse, (int) totalItems);
-    }
-
-    private List<PinnedItemView> allItemViews(ExamAttempt attempt) {
-        return attempt.getPinnedSnapshot().getItems().stream().map(PinnedSnapshotCacheService::toView).toList();
+        return attemptMapper.toTaskResponse(attempt, nextView, effectivePrep, effectiveResponse, allItems);
     }
 
     private void assertStoredCapabilities(ExamAttempt attempt, CurrentUser caller) {
-        if (capabilityNegotiationService != null) {
-            capabilityNegotiationService.assertStoredCapabilities(attempt, caller);
-        }
+        capabilityNegotiationService.assertStoredCapabilities(attempt, caller);
     }
 
     /**
@@ -616,18 +559,8 @@ public class AttemptLifecycleService {
         attemptRepository.save(attempt);
     }
 
-    private PinnedItem currentItem(ExamAttempt attempt) {
-        return itemAt(attempt, attempt.getCurrentOrderIndex());
-    }
-
-    private PinnedItem itemAt(ExamAttempt attempt, int orderIndex) {
-        return pinnedItemRepository.findByPinnedSnapshotIdAndOrderIndex(attempt.getPinnedSnapshot().getId(), orderIndex)
-                .orElseThrow(() -> new IllegalStateException(
-                        String.format(AttemptConstants.MISSING_PINNED_ITEM_AT_INDEX, orderIndex)));
-    }
-
     ExamAttempt findOwned(UUID publicId, UUID studentPublicId) {
-        return attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(publicId, studentPublicId)
+        return attemptRepository.findByPublicIdAndStudentPublicId(publicId, studentPublicId)
                 .orElseThrow(AttemptNotFoundException::new);
     }
 
@@ -638,9 +571,7 @@ public class AttemptLifecycleService {
     }
 
     private void lockOpenSession(ExamAttempt attempt) {
-        if (sessionService != null) {
-            sessionService.lockOpenForAttemptOperation(attempt.getSessionPublicId(), attempt.getTenantId());
-        }
+        sessionService.lockOpenForAttemptOperation(attempt.getSessionPublicId(), attempt.getTenantId());
     }
 
     private void requireTenantOwnership(ExamAttempt attempt, CurrentUser caller) {
@@ -653,7 +584,7 @@ public class AttemptLifecycleService {
     /**
      * Re-fetches {@code attempt} under a pessimistic write lock, by id, within the
      * same persistence context — returns the SAME managed instance (JPA identity map),
-     * so already-loaded lazy associations (e.g. {@code pinnedSnapshot}) stay populated.
+     * so already-loaded state stays populated.
      * Every mutator of the relocated {@code currentOrderIndex}/{@code playCount}/
      * {@code lastPlayRequestId}/{@code lastPlayAllowed} fields must call this first.
      */

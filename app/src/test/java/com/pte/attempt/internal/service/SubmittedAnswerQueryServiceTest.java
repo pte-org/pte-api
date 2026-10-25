@@ -1,9 +1,8 @@
 package com.pte.attempt.internal.service;
 
+import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.attempt.domain.AttemptAnswer;
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
-import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.attempt.internal.repository.AttemptAnswerRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,61 +11,79 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class SubmittedAnswerQueryServiceTest {
 
-    private static final UUID SCORE_TEMPLATE_ID = UUID.randomUUID();
+    private static final UUID EXAM_DEFINITION_ID = UUID.randomUUID();
+    private static final UUID EXAM_VERSION_ID = UUID.randomUUID();
 
     @Mock
     private AttemptAnswerRepository attemptAnswerRepository;
 
+    @Mock
+    private ExamContentService contentService;
+
     private SubmittedAnswerQueryService service;
+    private final UUID sessionPublicId = UUID.randomUUID();
+    private final UUID tenantId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
-        service = new SubmittedAnswerQueryService(attemptAnswerRepository);
+        service = new SubmittedAnswerQueryService(attemptAnswerRepository, contentService);
     }
 
-    /** Every {@code PinnedItem} belongs to a {@code PinnedExamSnapshot} in production — tests must wire it too, or {@code getPinnedSnapshot()} is null. */
-    private void attachToPinnedSnapshot(PinnedItem item, UUID examDefinitionId) {
-        PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
-        snapshot.setScoreTemplatePublicId(examDefinitionId);
-        snapshot.addItem(item);
+    private ExamAttempt attempt() {
+        ExamAttempt attempt = new ExamAttempt();
+        attempt.setPublicId(UUID.randomUUID());
+        attempt.setSessionPublicId(sessionPublicId);
+        attempt.setTenantId(tenantId);
+        attempt.setExamVersionPublicId(EXAM_VERSION_ID);
+        attempt.setExamDefinitionPublicId(EXAM_DEFINITION_ID);
+        return attempt;
+    }
+
+    private static SnapshotContentResponse.Item item(UUID itemId, String taskType, String promptText,
+            String referenceAnswerText, UUID imagePromptRef, Integer minWordCount, Integer maxWordCount,
+            String correctAnswerText, String optionsJson) {
+        return new SnapshotContentResponse.Item(0, "READING", taskType, "title", promptText, null, imagePromptRef,
+                referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson, taskType, "title",
+                taskType, null, null, null, null, itemId);
+    }
+
+    private void exam(SnapshotContentResponse.Item... items) {
+        Map<UUID, SnapshotContentResponse.Item> byId = new LinkedHashMap<>();
+        for (SnapshotContentResponse.Item item : items) {
+            byId.put(item.itemPublicId(), item);
+        }
+        when(contentService.contentItems(EXAM_VERSION_ID)).thenReturn(byId);
+    }
+
+    private AttemptAnswer answer(ExamAttempt attempt, UUID itemId, String payload, boolean expired) {
+        AttemptAnswer answer = new AttemptAnswer();
+        answer.setPublicId(UUID.randomUUID());
+        answer.setAttempt(attempt);
+        answer.setItemPublicId(itemId);
+        answer.setPayload(payload);
+        answer.setExpired(expired);
+        return answer;
     }
 
     @Test
     void findForSession_mapsAttemptAnswerToSubmittedAnswerViewCorrectly() {
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-        UUID answerPublicId = UUID.randomUUID();
-        UUID attemptPublicId = UUID.randomUUID();
-        UUID pinnedItemPublicId = UUID.randomUUID();
-
-        ExamAttempt attempt = new ExamAttempt();
-        attempt.setPublicId(attemptPublicId);
-        attempt.setSessionPublicId(sessionPublicId);
-        attempt.setTenantId(tenantId);
-
-        PinnedItem pinnedItem = new PinnedItem();
-        pinnedItem.setPublicId(pinnedItemPublicId);
-        pinnedItem.setTaskType("MC_READING_SINGLE");
-        pinnedItem.setCorrectAnswerText("[{\"text\":\"A\",\"correct\":true}]");
-        pinnedItem.setOptionsJson("[{\"text\":\"A\",\"orderIndex\":0}]");
-        attachToPinnedSnapshot(pinnedItem, SCORE_TEMPLATE_ID);
-
-        AttemptAnswer answer = new AttemptAnswer();
-        answer.setPublicId(answerPublicId);
-        answer.setAttempt(attempt);
-        answer.setPinnedItem(pinnedItem);
-        answer.setPayload("0");
-        answer.setExpired(false);
-
+        UUID itemId = UUID.randomUUID();
+        ExamAttempt attempt = attempt();
+        exam(item(itemId, "MC_READING_SINGLE", null, null, null, null, null,
+                "[{\"text\":\"A\",\"correct\":true}]", "[{\"text\":\"A\",\"orderIndex\":0}]"));
+        AttemptAnswer answer = answer(attempt, itemId, "0", false);
         when(attemptAnswerRepository.findByAttempt_SessionPublicIdAndAttempt_TenantId(sessionPublicId, tenantId))
                 .thenReturn(List.of(answer));
 
@@ -74,9 +91,9 @@ class SubmittedAnswerQueryServiceTest {
 
         assertThat(results).hasSize(1);
         SubmittedAnswerView view = results.get(0);
-        assertThat(view.answerPublicId()).isEqualTo(answerPublicId);
-        assertThat(view.attemptPublicId()).isEqualTo(attemptPublicId);
-        assertThat(view.pinnedItemPublicId()).isEqualTo(pinnedItemPublicId);
+        assertThat(view.answerPublicId()).isEqualTo(answer.getPublicId());
+        assertThat(view.attemptPublicId()).isEqualTo(attempt.getPublicId());
+        assertThat(view.itemPublicId()).isEqualTo(itemId);
         assertThat(view.sessionPublicId()).isEqualTo(sessionPublicId);
         assertThat(view.tenantId()).isEqualTo(tenantId);
         assertThat(view.taskType()).isEqualTo("MC_READING_SINGLE");
@@ -84,39 +101,18 @@ class SubmittedAnswerQueryServiceTest {
         assertThat(view.correctAnswerText()).isEqualTo("[{\"text\":\"A\",\"correct\":true}]");
         assertThat(view.optionsJson()).isEqualTo("[{\"text\":\"A\",\"orderIndex\":0}]");
         assertThat(view.expired()).isFalse();
-        assertThat(view.scoreTemplatePublicId()).isEqualTo(SCORE_TEMPLATE_ID);
+        assertThat(view.examDefinitionPublicId()).isEqualTo(EXAM_DEFINITION_ID);
     }
 
     @Test
-    void findForSession_carriesPinnedQuestionContentForAiScoring() {
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
+    void findForSession_carriesQuestionContentForAiScoring() {
+        UUID itemId = UUID.randomUUID();
         UUID imagePromptRef = UUID.randomUUID();
-
-        ExamAttempt attempt = new ExamAttempt();
-        attempt.setPublicId(UUID.randomUUID());
-        attempt.setSessionPublicId(sessionPublicId);
-        attempt.setTenantId(tenantId);
-
-        PinnedItem pinnedItem = new PinnedItem();
-        pinnedItem.setPublicId(UUID.randomUUID());
-        pinnedItem.setTaskType("DESCRIBE_IMAGE");
-        pinnedItem.setPromptText("Describe the chart.");
-        pinnedItem.setReferenceAnswerText("Sales rose steadily.");
-        pinnedItem.setImagePromptRef(imagePromptRef);
-        pinnedItem.setImageUrl("https://expired.example/image.png");
-        pinnedItem.setMinWordCount(5);
-        pinnedItem.setMaxWordCount(75);
-        attachToPinnedSnapshot(pinnedItem, SCORE_TEMPLATE_ID);
-
-        AttemptAnswer answer = new AttemptAnswer();
-        answer.setPublicId(UUID.randomUUID());
-        answer.setAttempt(attempt);
-        answer.setPinnedItem(pinnedItem);
-        answer.setPayload("media-ref");
-
+        ExamAttempt attempt = attempt();
+        exam(item(itemId, "DESCRIBE_IMAGE", "Describe the chart.", "Sales rose steadily.", imagePromptRef, 5, 75,
+                null, null));
         when(attemptAnswerRepository.findByAttempt_SessionPublicIdAndAttempt_TenantId(sessionPublicId, tenantId))
-                .thenReturn(List.of(answer));
+                .thenReturn(List.of(answer(attempt, itemId, "media-ref", false)));
 
         SubmittedAnswerView view = service.findForSession(sessionPublicId, tenantId).get(0);
 
@@ -129,30 +125,11 @@ class SubmittedAnswerQueryServiceTest {
 
     @Test
     void findForSession_mapsExpiredFlag() {
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-
-        ExamAttempt attempt = new ExamAttempt();
-        attempt.setPublicId(UUID.randomUUID());
-        attempt.setSessionPublicId(sessionPublicId);
-        attempt.setTenantId(tenantId);
-
-        PinnedItem pinnedItem = new PinnedItem();
-        pinnedItem.setPublicId(UUID.randomUUID());
-        pinnedItem.setTaskType("MC_READING_SINGLE");
-        pinnedItem.setCorrectAnswerText("[{\"text\":\"A\",\"correct\":true}]");
-        pinnedItem.setOptionsJson("[{\"text\":\"A\",\"orderIndex\":0}]");
-        attachToPinnedSnapshot(pinnedItem, SCORE_TEMPLATE_ID);
-
-        AttemptAnswer answer = new AttemptAnswer();
-        answer.setPublicId(UUID.randomUUID());
-        answer.setAttempt(attempt);
-        answer.setPinnedItem(pinnedItem);
-        answer.setPayload("");
-        answer.setExpired(true);
-
+        UUID itemId = UUID.randomUUID();
+        ExamAttempt attempt = attempt();
+        exam(item(itemId, "MC_READING_SINGLE", null, null, null, null, null, "a", "o"));
         when(attemptAnswerRepository.findByAttempt_SessionPublicIdAndAttempt_TenantId(sessionPublicId, tenantId))
-                .thenReturn(List.of(answer));
+                .thenReturn(List.of(answer(attempt, itemId, "", true)));
 
         List<SubmittedAnswerView> results = service.findForSession(sessionPublicId, tenantId);
 
@@ -162,57 +139,22 @@ class SubmittedAnswerQueryServiceTest {
 
     @Test
     void findForSession_returnsEmptyListWhenNoAnswersFound() {
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-
         when(attemptAnswerRepository.findByAttempt_SessionPublicIdAndAttempt_TenantId(sessionPublicId, tenantId))
                 .thenReturn(List.of());
 
-        List<SubmittedAnswerView> results = service.findForSession(sessionPublicId, tenantId);
-
-        assertThat(results).isEmpty();
+        assertThat(service.findForSession(sessionPublicId, tenantId)).isEmpty();
     }
 
     @Test
     void findForSession_mapsMultipleAnswers() {
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-
-        ExamAttempt attempt = new ExamAttempt();
-        attempt.setPublicId(UUID.randomUUID());
-        attempt.setSessionPublicId(sessionPublicId);
-        attempt.setTenantId(tenantId);
-
-        PinnedItem pinnedItem1 = new PinnedItem();
-        pinnedItem1.setPublicId(UUID.randomUUID());
-        pinnedItem1.setTaskType("MC_READING_SINGLE");
-        pinnedItem1.setCorrectAnswerText("answer1");
-        pinnedItem1.setOptionsJson("options1");
-        attachToPinnedSnapshot(pinnedItem1, SCORE_TEMPLATE_ID);
-
-        PinnedItem pinnedItem2 = new PinnedItem();
-        pinnedItem2.setPublicId(UUID.randomUUID());
-        pinnedItem2.setTaskType("MC_READING_MULTIPLE");
-        pinnedItem2.setCorrectAnswerText("answer2");
-        pinnedItem2.setOptionsJson("options2");
-        attachToPinnedSnapshot(pinnedItem2, SCORE_TEMPLATE_ID);
-
-        AttemptAnswer answer1 = new AttemptAnswer();
-        answer1.setPublicId(UUID.randomUUID());
-        answer1.setAttempt(attempt);
-        answer1.setPinnedItem(pinnedItem1);
-        answer1.setPayload("payload1");
-        answer1.setExpired(false);
-
-        AttemptAnswer answer2 = new AttemptAnswer();
-        answer2.setPublicId(UUID.randomUUID());
-        answer2.setAttempt(attempt);
-        answer2.setPinnedItem(pinnedItem2);
-        answer2.setPayload("payload2");
-        answer2.setExpired(true);
-
+        UUID firstItem = UUID.randomUUID();
+        UUID secondItem = UUID.randomUUID();
+        ExamAttempt attempt = attempt();
+        exam(item(firstItem, "MC_READING_SINGLE", null, null, null, null, null, "answer1", "options1"),
+                item(secondItem, "MC_READING_MULTIPLE", null, null, null, null, null, "answer2", "options2"));
         when(attemptAnswerRepository.findByAttempt_SessionPublicIdAndAttempt_TenantId(sessionPublicId, tenantId))
-                .thenReturn(List.of(answer1, answer2));
+                .thenReturn(List.of(answer(attempt, firstItem, "payload1", false),
+                        answer(attempt, secondItem, "payload2", true)));
 
         List<SubmittedAnswerView> results = service.findForSession(sessionPublicId, tenantId);
 
@@ -221,5 +163,16 @@ class SubmittedAnswerQueryServiceTest {
         assertThat(results.get(0).expired()).isFalse();
         assertThat(results.get(1).taskType()).isEqualTo("MC_READING_MULTIPLE");
         assertThat(results.get(1).expired()).isTrue();
+    }
+
+    @Test
+    void findForAttempt_answerWhoseItemIsNotInTheExam_failsLoudly() {
+        ExamAttempt attempt = attempt();
+        exam();
+        when(attemptAnswerRepository.findByAttempt_PublicIdAndAttempt_TenantId(attempt.getPublicId(), tenantId))
+                .thenReturn(List.of(answer(attempt, UUID.randomUUID(), "x", false)));
+
+        assertThatThrownBy(() -> service.findForAttempt(attempt.getPublicId(), tenantId))
+                .isInstanceOf(IllegalStateException.class);
     }
 }

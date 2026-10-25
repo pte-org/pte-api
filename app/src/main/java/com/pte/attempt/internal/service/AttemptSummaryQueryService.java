@@ -24,9 +24,11 @@ public class AttemptSummaryQueryService {
     private static final int SCORE_CONTEXT_BATCH_SIZE = 500;
 
     private final ExamAttemptRepository attemptRepository;
+    private final ExamContentService contentService;
 
-    public AttemptSummaryQueryService(ExamAttemptRepository attemptRepository) {
+    public AttemptSummaryQueryService(ExamAttemptRepository attemptRepository, ExamContentService contentService) {
         this.attemptRepository = attemptRepository;
+        this.contentService = contentService;
     }
 
     /** Throws if the attempt doesn't exist or hasn't reached SUBMITTED — no tenant filter, the trusted caller checks that itself against the returned tenantId. */
@@ -46,7 +48,7 @@ public class AttemptSummaryQueryService {
     /** Backs reporting's per-attempt scoring (Phase 5) — no status/tenant filter, trusted caller. */
     @Transactional(readOnly = true)
     public AttemptScoreContextView getScoreContext(UUID attemptPublicId) {
-        ExamAttempt attempt = attemptRepository.findWithPinnedByPublicId(attemptPublicId)
+        ExamAttempt attempt = attemptRepository.findByPublicId(attemptPublicId)
                 .orElseThrow(AttemptNotFoundException::new);
         return scoreContext(attempt);
     }
@@ -60,7 +62,7 @@ public class AttemptSummaryQueryService {
         Map<UUID, AttemptScoreContextView> contexts = new LinkedHashMap<>();
         for (int start = 0; start < uniqueIds.size(); start += SCORE_CONTEXT_BATCH_SIZE) {
             List<UUID> batch = uniqueIds.subList(start, Math.min(start + SCORE_CONTEXT_BATCH_SIZE, uniqueIds.size()));
-            attemptRepository.findAllWithPinnedByPublicIds(batch)
+            attemptRepository.findAllByPublicIdInAndDeletedFalse(batch)
                     .forEach(attempt -> contexts.put(attempt.getPublicId(), scoreContext(attempt)));
         }
         if (contexts.size() != uniqueIds.size()) {
@@ -69,17 +71,16 @@ public class AttemptSummaryQueryService {
         return Map.copyOf(contexts);
     }
 
-    private static AttemptScoreContextView scoreContext(ExamAttempt attempt) {
-        Set<String> testedSections = attempt.getPinnedSnapshot().getItems().stream()
-                .map(item -> item.getSection())
+    private AttemptScoreContextView scoreContext(ExamAttempt attempt) {
+        Set<String> testedSections = contentService.outline(attempt.getExamVersionPublicId()).stream()
+                .map(ExamContentService.ExamItemOutline::section)
                 .collect(Collectors.toSet());
-        return new AttemptScoreContextView(attempt.getPinnedSnapshot().getScoreTemplatePublicId(),
-                attempt.getPinnedSnapshot().getScoreTemplateVersion(), testedSections);
+        return new AttemptScoreContextView(attempt.getExamDefinitionPublicId(), attempt.getExamDefinitionVersion(),
+                testedSections);
     }
 
     private static AttemptSummaryView toView(ExamAttempt attempt) {
         return new AttemptSummaryView(attempt.getPublicId(), attempt.getSessionPublicId(),
-                attempt.getStudentPublicId(), attempt.getTenantId(),
-                attempt.getPinnedSnapshot() == null ? null : attempt.getPinnedSnapshot().getSourceSnapshotPublicId());
+                attempt.getStudentPublicId(), attempt.getTenantId(), attempt.getExamVersionPublicId());
     }
 }

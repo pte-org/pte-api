@@ -2,15 +2,12 @@ package com.pte.attempt.internal.service;
 
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
-import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.dto.request.StartAttemptRequest;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
-import com.pte.attempt.internal.repository.PinnedItemRepository;
-import com.pte.attempt.internal.service.cache.PinnedSnapshotCacheService;
+import com.pte.attempt.internal.service.cache.ExamItemView;
 import com.pte.shared.security.CurrentUser;
 import com.pte.session.SessionService;
 import com.pte.session.dto.response.AttemptRetryPolicyResponse;
@@ -41,7 +38,7 @@ import static org.mockito.Mockito.verify;
  * Ported from services/exam-delivery's own AttemptServiceTest — same
  * coverage, minus OutboxWriter (no outbox in the monolith; startAttempt is
  * still the ONE call that pins a snapshot). Covers {@code startAttempt}'s
- * {@code encryptionPublicKey} population: non-null only for STRICT-pinned
+ * {@code encryptionPublicKey} population: non-null only for STRICT
  * attempts.
  */
 @ExtendWith(MockitoExtension.class)
@@ -51,14 +48,7 @@ class AttemptLifecycleServiceTest {
     @Mock
     private ExamAttemptRepository attemptRepository;
 
-    @Mock
-    private PinnedItemRepository pinnedItemRepository;
-
-    @Mock
-    private SnapshotPinService snapshotPinService;
-
-    @Mock
-    private PinnedSnapshotCacheService cacheService;
+    private final FakeExam exam = new FakeExam();
 
     @Mock
     private TimerService timerService;
@@ -74,6 +64,8 @@ class AttemptLifecycleServiceTest {
 
     @Mock
     private HeartbeatService heartbeatService;
+    @Mock
+    private CapabilityNegotiationService capabilityNegotiationService;
 
     @Mock
     private SessionService sessionService;
@@ -95,34 +87,31 @@ class AttemptLifecycleServiceTest {
                 .thenReturn(new AttemptRetryPolicyResponse(0));
         AttemptMapper attemptMapper = new AttemptMapper(JsonMapper.builder().build());
         attemptLifecycleService = new AttemptLifecycleService(
-            attemptRepository,
-            pinnedItemRepository,
-            snapshotPinService,
-            cacheService,
-            timerService,
-            answerSubmitService,
-            attemptMapper,
-            encryptionKeyProvider,
-            submissionDecryptionService,
-            heartbeatService,
-            null,
-            sessionService
-        );
+                attemptRepository,
+                exam.contentService,
+                timerService,
+                answerSubmitService,
+                attemptMapper,
+                encryptionKeyProvider,
+                submissionDecryptionService,
+                heartbeatService,
+                capabilityNegotiationService,
+                sessionService);
 
     }
 
     @Test
-    @DisplayName("startAttempt on STRICT-pinned attempt returns non-null encryptionPublicKey")
+    @DisplayName("startAttempt on STRICT attempt returns non-null encryptionPublicKey")
     void startAttemptStrictPinnedReturnsPublicKey() {
         UUID sessionPublicId = UUID.randomUUID();
         UUID studentPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("student"));
 
-        PinnedExamSnapshot pinnedSnapshot = createPinnedSnapshot(tenantId, "STRICT");
+        exam.add(FakeExam.view(0, "READING", "MC_READING_SINGLE", 30, 60));
+        exam.stubStart(sessionService, sessionPublicId, studentPublicId, tenantId, "STRICT");
 
         stubAttemptSave();
-        when(snapshotPinService.pin(any(), any(), any())).thenReturn(pinnedSnapshot);
         when(encryptionKeyProvider.getPublicKeyBase64()).thenReturn(TEST_PUBLIC_KEY_BASE64);
 
         StartAttemptRequest request = new StartAttemptRequest(sessionPublicId, true);
@@ -135,17 +124,17 @@ class AttemptLifecycleServiceTest {
     }
 
     @Test
-    @DisplayName("startAttempt on STANDARD-pinned attempt returns null encryptionPublicKey")
+    @DisplayName("startAttempt on STANDARD attempt returns null encryptionPublicKey")
     void startAttemptStandardPinnedReturnsNullPublicKey() {
         UUID sessionPublicId = UUID.randomUUID();
         UUID studentPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("student"));
 
-        PinnedExamSnapshot pinnedSnapshot = createPinnedSnapshot(tenantId, "STANDARD");
+        exam.add(FakeExam.view(0, "READING", "MC_READING_SINGLE", 30, 60));
+        exam.stubStart(sessionService, sessionPublicId, studentPublicId, tenantId, "STANDARD");
 
         stubAttemptSave();
-        when(snapshotPinService.pin(any(), any(), any())).thenReturn(pinnedSnapshot);
 
         StartAttemptRequest request = new StartAttemptRequest(sessionPublicId, true);
 
@@ -155,18 +144,17 @@ class AttemptLifecycleServiceTest {
     }
 
     @Test
-    @DisplayName("startAttempt on STANDARD-pinned attempt preserves all other response fields")
+    @DisplayName("startAttempt on STANDARD attempt preserves all other response fields")
     void startAttemptStandardPinnedPreservesOtherFields() {
         UUID sessionPublicId = UUID.randomUUID();
         UUID studentPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("student"));
 
-        PinnedExamSnapshot pinnedSnapshot = createPinnedSnapshot(tenantId, "STANDARD");
-        PinnedItem firstItem = pinnedSnapshot.getItems().get(0);
+        ExamItemView firstItem = exam.add(FakeExam.view(0, "READING", "MC_READING_SINGLE", 30, 60));
+        exam.stubStart(sessionService, sessionPublicId, studentPublicId, tenantId, "STANDARD");
 
         stubAttemptSave();
-        when(snapshotPinService.pin(any(), any(), any())).thenReturn(pinnedSnapshot);
 
         StartAttemptRequest request = new StartAttemptRequest(sessionPublicId, true);
 
@@ -176,7 +164,32 @@ class AttemptLifecycleServiceTest {
         assertThat(response.attemptStatus()).isEqualTo(AttemptStatus.IN_PROGRESS.name());
         assertThat(response.completed()).isFalse();
         assertThat(response.task()).isNotNull();
-        assertThat(response.task().pinnedItemPublicId()).isEqualTo(firstItem.getPublicId());
+        assertThat(response.task().pinnedItemPublicId()).isEqualTo(firstItem.publicId());
+    }
+
+    @Test
+    @DisplayName("startAttempt freezes the exam version and the session rules on the attempt")
+    void startAttemptCopiesTheExamTermsOntoTheAttempt() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID studentPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("student"));
+        exam.add(FakeExam.view(0, "READING", "MC_READING_SINGLE", 30, 60));
+        UUID versionId = exam.stubStart(sessionService, sessionPublicId, studentPublicId, tenantId, "STRICT");
+        when(encryptionKeyProvider.getPublicKeyBase64()).thenReturn(TEST_PUBLIC_KEY_BASE64);
+        stubAttemptSave();
+
+        attemptLifecycleService.startAttempt(new StartAttemptRequest(sessionPublicId, true), caller);
+
+        org.mockito.ArgumentCaptor<ExamAttempt> saved = org.mockito.ArgumentCaptor.forClass(ExamAttempt.class);
+        verify(attemptRepository, org.mockito.Mockito.atLeastOnce()).save(saved.capture());
+        ExamAttempt attempt = saved.getAllValues().get(0);
+        assertThat(attempt.getExamVersionPublicId()).isEqualTo(versionId);
+        assertThat(attempt.getExamDefinitionPublicId()).isNotNull();
+        assertThat(attempt.getAnswerIntegrityLevel()).isEqualTo("STRICT");
+        assertThat(attempt.getReplayPolicyType()).isEqualTo("UNLIMITED");
+        assertThat(attempt.getExamMode()).isEqualTo("OFFICIAL_EXAM");
+        assertThat(attempt.getExamEndTime()).isNotNull();
     }
 
     @Test
@@ -189,15 +202,22 @@ class AttemptLifecycleServiceTest {
         doThrow(new NotEntitledException()).when(sessionService)
                 .lockOpenForAttemptOperation(sessionPublicId, tenantId);
         AttemptLifecycleService cutoffAwareService = new AttemptLifecycleService(
-                attemptRepository, pinnedItemRepository, snapshotPinService, cacheService, timerService,
-                answerSubmitService, new AttemptMapper(JsonMapper.builder().build()), encryptionKeyProvider,
-                submissionDecryptionService, heartbeatService, null, sessionService);
+                attemptRepository,
+                exam.contentService,
+                timerService,
+                answerSubmitService,
+                new AttemptMapper(JsonMapper.builder().build()),
+                encryptionKeyProvider,
+                submissionDecryptionService,
+                heartbeatService,
+                capabilityNegotiationService,
+                sessionService);
 
         assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> cutoffAwareService.startAttempt(
                 new StartAttemptRequest(sessionPublicId, true), new CurrentUser(studentPublicId, tenantId, List.of("STUDENT")))))
                 .isInstanceOf(NotEntitledException.class);
 
-        verify(snapshotPinService, never()).pin(any(), any(), any());
+        verify(sessionService, never()).checkEntitlement(any(), any());
     }
 
     @Test
@@ -214,7 +234,7 @@ class AttemptLifecycleServiceTest {
                 new CurrentUser(studentPublicId, tenantId, List.of("STUDENT")))))
                 .isInstanceOf(TenantSuspendedException.class);
 
-        verify(snapshotPinService, never()).pin(any(), any(), any());
+        verify(sessionService, never()).checkEntitlement(any(), any());
     }
 
     @Test
@@ -224,58 +244,24 @@ class AttemptLifecycleServiceTest {
         UUID studentPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
-        PinnedExamSnapshot snapshot = createPinnedSnapshot(tenantId, "STANDARD");
+        ExamItemView currentItem = exam.add(FakeExam.view(0, "READING", "MC_READING_SINGLE", 30, 60));
         ExamAttempt existing = new ExamAttempt();
         existing.setPublicId(UUID.randomUUID());
         existing.setSessionPublicId(sessionPublicId);
         existing.setStudentPublicId(studentPublicId);
         existing.setTenantId(tenantId);
         existing.setStatus(AttemptStatus.IN_PROGRESS);
-        existing.setPinnedSnapshot(snapshot);
-        snapshot.setAttempt(existing);
-        PinnedItem currentItem = snapshot.getItems().get(0);
+        existing.setAnswerIntegrityLevel("STANDARD");
 
-        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+        when(attemptRepository.findFirstBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
                 sessionPublicId, studentPublicId)).thenReturn(Optional.of(existing));
-        when(pinnedItemRepository.countByPinnedSnapshotId(snapshot.getId())).thenReturn(1L);
-        when(pinnedItemRepository.findByPinnedSnapshotIdAndOrderIndex(snapshot.getId(), 0))
-                .thenReturn(Optional.of(currentItem));
 
         AttemptTaskResponse response = attemptLifecycleService.startAttempt(
                 new StartAttemptRequest(sessionPublicId, true), caller);
 
         assertThat(response.attemptPublicId()).isEqualTo(existing.getPublicId());
         verify(sessionService, never()).assertTenantActiveForNewAttempt(tenantId);
-        verify(snapshotPinService, never()).pin(any(), any(), any());
-    }
-
-    private PinnedExamSnapshot createPinnedSnapshot(UUID tenantId, String answerIntegrityLevel) {
-        PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
-        snapshot.setId(1L);
-        snapshot.setPublicId(UUID.randomUUID());
-        snapshot.setSourceSnapshotPublicId(UUID.randomUUID());
-        snapshot.setSourceSessionPublicId(UUID.randomUUID());
-        snapshot.setTenantId(tenantId);
-        snapshot.setReplayPolicyType("UNLIMITED");
-        snapshot.setDeviceCheckRequired(false);
-        snapshot.setProctorRequired(false);
-        snapshot.setAnswerIntegrityLevel(answerIntegrityLevel);
-
-        PinnedItem item = new PinnedItem();
-        item.setId(1L);
-        item.setPublicId(UUID.randomUUID());
-        item.setOrderIndex(0);
-        item.setSection("READING");
-        item.setTaskType("MC_READING_SINGLE");
-        item.setTitle("Sample title");
-        item.setPromptText("Sample prompt");
-        item.setOptionsJson("[]");
-        item.setPrepSeconds(30);
-        item.setResponseSeconds(60);
-        item.setPinnedSnapshot(snapshot);
-
-        snapshot.addItem(item);
-        return snapshot;
+        verify(sessionService, never()).checkEntitlement(any(), any());
     }
 
     private void stubAttemptSave() {

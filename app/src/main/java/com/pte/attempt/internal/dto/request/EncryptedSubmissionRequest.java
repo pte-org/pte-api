@@ -8,7 +8,7 @@ import java.util.UUID;
 
 /**
  * STRICT-integrity counterpart to {@link SubmitAnswerRequest}'s plain {@code payload} — used only
- * when the attempt's pinned {@code answerIntegrityLevel == STRICT}. {@code wrappedKey} is the
+ * when the attempt answerIntegrityLevel {@code == STRICT}. {@code wrappedKey} is the
  * per-submission AES-256 key wrapped with the server's RSA public key (RSA-OAEP, SHA-256/MGF1-SHA256);
  * {@code iv} is the 96-bit AES-GCM IV; {@code ciphertext} is the AES-GCM output with its 128-bit
  * auth tag appended. All three Base64-encoded.

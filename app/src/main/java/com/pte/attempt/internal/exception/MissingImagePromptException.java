@@ -4,7 +4,7 @@ import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.shared.exception.DomainException;
 import org.springframework.http.HttpStatus;
 
-/** A DESCRIBE_IMAGE pinned item has no {@code imagePromptRef} — an authoring data problem, not a client error. */
+/** A DESCRIBE_IMAGE exam item has no {@code imagePromptRef} — an authoring data problem, not a client error. */
 public class MissingImagePromptException extends DomainException {
 
     public MissingImagePromptException() {

@@ -4,13 +4,13 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Answer-key-free prompt projection read from an attempt's immutable pinned
+ * Answer-key-free prompt projection read from an attempt's frozen exam
  * item. The projection is intentionally owned by attempt because Examiner
  * work must display the content the student actually received, not the
  * current assessment snapshot.
  */
 public record AttemptExaminerPromptView(
-        UUID pinnedItemPublicId,
+        UUID itemPublicId,
         int orderIndex,
         String section,
         String taskType,

@@ -5,13 +5,10 @@ import com.pte.attempt.internal.dto.request.AttemptPreflightRequest;
 import com.pte.attempt.internal.dto.request.StartAttemptRequest;
 import com.pte.attempt.internal.dto.request.NavigateTaskRequest;
 import com.pte.attempt.internal.dto.request.SubmitAnswerRequest;
-import com.pte.attempt.internal.dto.request.RecordSecurityViolationRequest;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.dto.response.AudioPlayResponse;
-import com.pte.attempt.internal.dto.response.SecurityViolationReceipt;
 import com.pte.attempt.internal.dto.response.AttemptPreflightResponse;
 import com.pte.attempt.internal.service.AttemptLifecycleService;
-import com.pte.attempt.internal.service.AttemptSecurityAuditService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -30,7 +27,7 @@ import java.util.UUID;
 
 /**
  * Student-only, critical path. Every method after {@link #start} operates
- * purely on this module's own pinned data — no call to another module occurs.
+ * purely on this module's own data and the cached exam content — no call to another module occurs.
  */
 @RestController
 @RequestMapping("/api/v1/attempts")
@@ -38,12 +35,9 @@ import java.util.UUID;
 public class AttemptController {
 
     private final AttemptLifecycleService attemptLifecycleService;
-    private final AttemptSecurityAuditService attemptSecurityAuditService;
 
-    public AttemptController(AttemptLifecycleService attemptLifecycleService,
-                             AttemptSecurityAuditService attemptSecurityAuditService) {
+    public AttemptController(AttemptLifecycleService attemptLifecycleService) {
         this.attemptLifecycleService = attemptLifecycleService;
-        this.attemptSecurityAuditService = attemptSecurityAuditService;
     }
 
     @PostMapping
@@ -80,21 +74,21 @@ public class AttemptController {
         return ApiResponse.success(attemptLifecycleService.saveAnswer(publicId, request, currentUser()));
     }
 
-    /** STRICT-pinned counterpart to the non-advancing draft save endpoint. */
+    /** STRICT counterpart to the non-advancing draft save endpoint. */
     @PostMapping("/{publicId}/answers/encrypted/save")
     public ApiResponse<AttemptTaskResponse> saveEncryptedAnswer(@PathVariable UUID publicId,
             @Valid @RequestBody EncryptedSubmissionRequest request) {
         return ApiResponse.success(attemptLifecycleService.saveEncryptedAnswer(publicId, request, currentUser()));
     }
 
-    /** STANDARD-pinned attempts only — server rejects if the attempt is pinned STRICT. */
+    /** STANDARD attempts only — server rejects if the attempt is STRICT. */
     @PostMapping("/{publicId}/answers")
     public ApiResponse<AttemptTaskResponse> submitAnswer(@PathVariable UUID publicId,
                                                           @Valid @RequestBody SubmitAnswerRequest request) {
         return ApiResponse.success(attemptLifecycleService.submitAnswer(publicId, request, currentUser()));
     }
 
-    /** STRICT-pinned attempts only — server rejects if the attempt is pinned STANDARD. */
+    /** STRICT attempts only — server rejects if the attempt is STANDARD. */
     @PostMapping("/{publicId}/answers/encrypted")
     public ApiResponse<AttemptTaskResponse> submitEncryptedAnswer(@PathVariable UUID publicId,
                                                                    @Valid @RequestBody EncryptedSubmissionRequest request) {
@@ -104,13 +98,6 @@ public class AttemptController {
     @PostMapping("/{publicId}/submit")
     public ApiResponse<AttemptTaskResponse> submit(@PathVariable UUID publicId) {
         return ApiResponse.success(attemptLifecycleService.submitAttempt(publicId, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/security-violations")
-    public ApiResponse<SecurityViolationReceipt> recordSecurityViolation(
-            @PathVariable UUID publicId,
-            @Valid @RequestBody RecordSecurityViolationRequest request) {
-        return ApiResponse.success(attemptSecurityAuditService.record(publicId, request, currentUser()));
     }
 
     /** {@code X-Play-Request-Id} is a client-generated UUID per user-initiated play tap — required for idempotent retry-safety. */

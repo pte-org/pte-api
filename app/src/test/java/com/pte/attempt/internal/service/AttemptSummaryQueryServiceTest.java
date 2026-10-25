@@ -1,8 +1,6 @@
 package com.pte.attempt.internal.service;
 
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
-import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.attempt.dto.response.AttemptSummaryView;
@@ -28,11 +26,14 @@ class AttemptSummaryQueryServiceTest {
     @Mock
     private ExamAttemptRepository attemptRepository;
 
+    @Mock
+    private ExamContentService contentService;
+
     private AttemptSummaryQueryService service;
 
     @BeforeEach
     void setUp() {
-        service = new AttemptSummaryQueryService(attemptRepository);
+        service = new AttemptSummaryQueryService(attemptRepository, contentService);
     }
 
     @Test
@@ -159,46 +160,37 @@ class AttemptSummaryQueryServiceTest {
     }
 
     @Test
-    void getScoreContext_returnsPinnedTemplateAndDistinctTestedSections() {
+    void getScoreContext_returnsExamDefinitionAndDistinctTestedSections() {
         UUID attemptPublicId = UUID.randomUUID();
         UUID examDefinitionId = UUID.randomUUID();
-
-        PinnedExamSnapshot pinnedSnapshot = new PinnedExamSnapshot();
-        pinnedSnapshot.setScoreTemplatePublicId(examDefinitionId);
-        pinnedSnapshot.setScoreTemplateVersion(7);
-        pinnedSnapshot.addItem(pinnedItem("SPEAKING"));
-        pinnedSnapshot.addItem(pinnedItem("SPEAKING"));
-        pinnedSnapshot.addItem(pinnedItem("READING"));
+        UUID examVersionId = UUID.randomUUID();
 
         ExamAttempt attempt = new ExamAttempt();
         attempt.setPublicId(attemptPublicId);
-        attempt.setPinnedSnapshot(pinnedSnapshot);
+        attempt.setExamVersionPublicId(examVersionId);
+        attempt.setExamDefinitionPublicId(examDefinitionId);
+        attempt.setExamDefinitionVersion(7);
 
-        when(attemptRepository.findWithPinnedByPublicId(attemptPublicId)).thenReturn(Optional.of(attempt));
+        when(attemptRepository.findByPublicId(attemptPublicId)).thenReturn(Optional.of(attempt));
+        when(contentService.outline(examVersionId)).thenReturn(List.of(outline(0, "SPEAKING"),
+                outline(1, "SPEAKING"), outline(2, "READING")));
 
         AttemptScoreContextView context = service.getScoreContext(attemptPublicId);
 
-        assertThat(context.scoreTemplatePublicId()).isEqualTo(examDefinitionId);
-        assertThat(context.scoreTemplateVersion()).isEqualTo(7);
+        assertThat(context.examDefinitionPublicId()).isEqualTo(examDefinitionId);
+        assertThat(context.examDefinitionVersion()).isEqualTo(7);
         assertThat(context.testedSections()).containsExactlyInAnyOrder("SPEAKING", "READING");
     }
 
     @Test
     void getScoreContext_attemptNotFound_throwsAttemptNotFoundException() {
         UUID attemptPublicId = UUID.randomUUID();
-        when(attemptRepository.findWithPinnedByPublicId(attemptPublicId)).thenReturn(Optional.empty());
+        when(attemptRepository.findByPublicId(attemptPublicId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getScoreContext(attemptPublicId)).isInstanceOf(AttemptNotFoundException.class);
     }
 
-    private PinnedItem pinnedItem(String section) {
-        PinnedItem item = new PinnedItem();
-        item.setSection(section);
-        item.setTaskType("READ_ALOUD");
-        item.setTitle("title");
-        item.setOrderIndex(0);
-        item.setPrepSeconds(0);
-        item.setResponseSeconds(0);
-        return item;
+    private ExamContentService.ExamItemOutline outline(int orderIndex, String section) {
+        return new ExamContentService.ExamItemOutline(UUID.randomUUID(), orderIndex, section, "READ_ALOUD", null);
     }
 }

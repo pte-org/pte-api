@@ -19,17 +19,35 @@ import java.util.UUID;
 public class AttemptGradingQueryService {
 
     private final ExamAttemptRepository attemptRepository;
+    private final ExamContentService contentService;
 
-    public AttemptGradingQueryService(ExamAttemptRepository attemptRepository) {
+    public AttemptGradingQueryService(ExamAttemptRepository attemptRepository, ExamContentService contentService) {
         this.attemptRepository = attemptRepository;
+        this.contentService = contentService;
     }
 
     @Transactional(readOnly = true)
     public List<AttemptGradingCandidateView> findCandidates(UUID sessionPublicId, UUID tenantId) {
         return attemptRepository.findBySessionPublicIdAndTenantIdAndDeletedFalse(sessionPublicId, tenantId).stream()
                 .map(attempt -> new AttemptGradingCandidateView(attempt.getPublicId(), attempt.getStudentPublicId(),
-                        attempt.getStatus().name(), versionToken(attempt)))
+                        attempt.getStatus().name(), versionToken(attempt), attempt.isGradingExcluded(),
+                        attempt.getGradingExclusionReason()))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.Optional<AttemptGradingCandidateView> findCandidate(UUID attemptPublicId, UUID tenantId) {
+        return attemptRepository.findByPublicIdAndTenantId(attemptPublicId, tenantId).filter(attempt -> !attempt.isDeleted())
+                .map(attempt -> new AttemptGradingCandidateView(attempt.getPublicId(), attempt.getStudentPublicId(),
+                        attempt.getStatus().name(), versionToken(attempt), attempt.isGradingExcluded(),
+                        attempt.getGradingExclusionReason()));
+    }
+
+    /** Leaves the given attempts out of the session grading, each with the host's (or the automatic) reason. */
+    @Transactional
+    public void excludeFromGrading(UUID sessionPublicId, UUID tenantId, Map<UUID, String> reasonByAttempt) {
+        reasonByAttempt.forEach((attemptPublicId, reason) ->
+                attemptRepository.markGradingExcluded(attemptPublicId, tenantId, sessionPublicId, reason));
     }
 
     @Transactional(readOnly = true)
@@ -40,16 +58,14 @@ public class AttemptGradingQueryService {
         }
         List<UUID> ids = attemptPublicIds.stream().filter(java.util.Objects::nonNull).distinct().toList();
         Map<UUID, AttemptGradingCoverageView> result = new LinkedHashMap<>();
-        for (ExamAttempt attempt : attemptRepository.findAllWithPinnedByPublicIds(ids)) {
+        for (ExamAttempt attempt : attemptRepository.findAllByPublicIdInAndDeletedFalse(ids)) {
             if (!tenantId.equals(attempt.getTenantId()) || !sessionPublicId.equals(attempt.getSessionPublicId())) {
                 continue;
             }
-            List<AttemptGradingItemView> items = attempt.getPinnedSnapshot() == null
-                    ? List.of()
-                    : attempt.getPinnedSnapshot().getItems().stream()
-                            .map(item -> new AttemptGradingItemView(item.getPublicId(),
-                                    attempt.getPinnedSnapshot().getScoreTemplatePublicId(), item.getTaskType()))
-                            .toList();
+            List<AttemptGradingItemView> items = contentService.outline(attempt.getExamVersionPublicId()).stream()
+                    .map(item -> new AttemptGradingItemView(item.publicId(), attempt.getExamDefinitionPublicId(),
+                            item.taskType()))
+                    .toList();
             result.put(attempt.getPublicId(), new AttemptGradingCoverageView(attempt.getPublicId(), items));
         }
         return Map.copyOf(result);

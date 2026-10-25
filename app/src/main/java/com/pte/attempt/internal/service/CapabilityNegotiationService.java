@@ -3,8 +3,7 @@ package com.pte.attempt.internal.service;
 import com.pte.assessment.AssessmentService;
 import com.pte.assessment.dto.response.SnapshotResponse;
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedItem;
-import com.pte.attempt.domain.PinnedExamSnapshot;
+import com.pte.attempt.internal.service.cache.ExamItemView;
 import com.pte.attempt.internal.config.CapabilityProperties;
 import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.attempt.internal.dto.request.AttemptPreflightRequest;
@@ -28,6 +27,7 @@ import org.springframework.stereotype.Service;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 import java.util.Locale;
 import java.util.Set;
 import java.util.TreeSet;
@@ -37,7 +37,7 @@ import java.util.regex.Pattern;
 
 /**
  * Owns capability negotiation at the attempt boundary. It only consumes the
- * immutable runtime descriptors exposed by an exam summary or pinned item;
+ * immutable runtime descriptors exposed by an exam summary or exam item;
  * it never joins the mutable question-type/profile catalog during delivery.
  */
 @Service
@@ -51,34 +51,24 @@ public class CapabilityNegotiationService {
     private final CapabilityProperties properties;
     private final AuditLogService auditLogService;
     private final TaskTypeObservability observability;
+    private final ExamContentService contentService;
     private final Set<String> allowlistedCapabilities;
 
     @Autowired
     public CapabilityNegotiationService(SessionService sessionService, AssessmentService assessmentService,
             CapabilityProperties properties, AuditLogService auditLogService,
-            TaskTypeObservability observability) {
+            TaskTypeObservability observability, ExamContentService contentService) {
         this.sessionService = sessionService;
         this.assessmentService = assessmentService;
         this.properties = properties;
         this.auditLogService = auditLogService;
         this.observability = observability;
+        this.contentService = contentService;
         this.allowlistedCapabilities = TaskRuntimeProfileRegistry.all().stream()
                 .map(TaskRuntimeProfileDescriptor::requiredClientCapabilities)
                 .flatMap(Collection::stream)
                 .map(this::canonicalCapability)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
-    }
-
-    /** Compatibility constructor for focused negotiation tests. */
-    public CapabilityNegotiationService(SessionService sessionService, AssessmentService assessmentService,
-            CapabilityProperties properties, AuditLogService auditLogService) {
-        this(sessionService, assessmentService, properties, auditLogService, null);
-    }
-
-    /** Compatibility constructor for focused negotiation tests. */
-    public CapabilityNegotiationService(SessionService sessionService, AssessmentService assessmentService,
-            CapabilityProperties properties) {
-        this(sessionService, assessmentService, properties, null, null);
     }
 
     /** Answer-free and side-effect-free preflight. */
@@ -114,25 +104,20 @@ public class CapabilityNegotiationService {
      * stored decision; an omitted manifest reuses the stored decision.
      */
     public void authorizeExisting(ExamAttempt attempt, ClientCapabilityManifest manifest, CurrentUser caller) {
-        if (attempt.getPinnedSnapshot() == null) {
-            recordFailure(caller, "EXAM_ATTEMPT", attempt.getPublicId(),
-                    AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE);
-            throw configurationException();
-        }
-        CapabilityCheck stored = evaluatePinned(attempt.getPinnedSnapshot().getItems(),
-                attempt.getCapabilityFingerprint());
+        List<ExamItemView> items = contentService.items(attempt);
+        CapabilityCheck stored = evaluateItems(items, attempt.getCapabilityFingerprint());
         try {
             requireCompatible(stored);
         } catch (ExamCapabilityException ex) {
-            recordFailure(caller, attempt.getPinnedSnapshot().getSourceSnapshotPublicId(), ex.getCode());
+            recordFailure(caller, attempt.getExamVersionPublicId(), ex.getCode());
             throw ex;
         }
         if (manifest != null) {
-            CapabilityCheck supplied = evaluatePinned(attempt.getPinnedSnapshot().getItems(), manifest);
+            CapabilityCheck supplied = evaluateItems(items, manifest);
             try {
                 requireCompatible(supplied);
             } catch (ExamCapabilityException ex) {
-                recordFailure(caller, attempt.getPinnedSnapshot().getSourceSnapshotPublicId(), ex.getCode());
+                recordFailure(caller, attempt.getExamVersionPublicId(), ex.getCode());
                 throw ex;
             }
             if (isBlank(attempt.getCapabilityFingerprint())) {
@@ -141,17 +126,13 @@ public class CapabilityNegotiationService {
         }
     }
 
-    /** Called after pinning to defend the preflight decision against a bad source snapshot. */
-    public void verifyPinnedForStart(List<PinnedItem> items, String fingerprint) {
-        requireCompatible(evaluatePinned(items, fingerprint));
-    }
-
     /** Same verification with audit context for the authoritative start path. */
-    public void verifyPinnedForStart(PinnedExamSnapshot pinned, String fingerprint, CurrentUser caller) {
+    public void verifyForStart(List<ExamItemView> items, UUID examVersionPublicId, String fingerprint,
+            CurrentUser caller) {
         try {
-            requireCompatible(evaluatePinned(pinned.getItems(), fingerprint));
+            requireCompatible(evaluateItems(items, fingerprint));
         } catch (ExamCapabilityException ex) {
-            recordFailure(caller, pinned.getSourceSnapshotPublicId(), ex.getCode());
+            recordFailure(caller, examVersionPublicId, ex.getCode());
             throw ex;
         }
     }
@@ -163,21 +144,15 @@ public class CapabilityNegotiationService {
 
     /** Re-used before every task is returned and records a blocked delivery. */
     public void assertStoredCapabilities(ExamAttempt attempt, CurrentUser caller) {
-        if (attempt.getPinnedSnapshot() == null) {
-            ExamCapabilityException ex = configurationException();
-            recordFailure(caller, "EXAM_ATTEMPT", attempt.getPublicId(), ex.getCode());
-            throw ex;
-        }
         try {
-            requireCompatible(evaluatePinned(attempt.getPinnedSnapshot().getItems(),
-                    attempt.getCapabilityFingerprint()));
+            requireCompatible(evaluateItems(contentService.items(attempt), attempt.getCapabilityFingerprint()));
         } catch (ExamCapabilityException ex) {
-            recordFailure(caller, attempt.getPinnedSnapshot().getSourceSnapshotPublicId(), ex.getCode());
+            recordFailure(caller, attempt.getExamVersionPublicId(), ex.getCode());
             throw ex;
         }
     }
 
-    /** Records a pin-time runtime rejection when the source snapshot fails before a pinned graph exists. */
+    /** Records a start-time runtime rejection when the exam content fails to load. */
     void recordBlockedDelivery(CurrentUser caller, java.util.UUID attemptPublicId, String code) {
         recordFailure(caller, "EXAM_ATTEMPT", attemptPublicId, code);
     }
@@ -202,12 +177,12 @@ public class CapabilityNegotiationService {
         return evaluateProfiles(profiles, normalize(manifest));
     }
 
-    private CapabilityCheck evaluatePinned(List<PinnedItem> items, String fingerprint) {
+    private CapabilityCheck evaluateItems(List<ExamItemView> items, String fingerprint) {
         if (items == null || items.isEmpty() || items.stream().anyMatch(this::hasInvalidMapping)) {
             return CapabilityCheck.configuration();
         }
-        boolean anyRuntime = items.stream().anyMatch(item -> item.runtimeProfile() != null);
-        boolean allRuntime = items.stream().allMatch(item -> item.runtimeProfile() != null);
+        boolean anyRuntime = items.stream().anyMatch(item -> item.runtime() != null);
+        boolean allRuntime = items.stream().allMatch(item -> item.runtime() != null);
         if (anyRuntime != allRuntime) {
             return CapabilityCheck.configuration();
         }
@@ -226,25 +201,25 @@ public class CapabilityNegotiationService {
         }
         try {
             NormalizedCapabilities normalized = normalizeFingerprint(fingerprint);
-            return evaluateProfiles(items.stream().map(PinnedItem::runtimeProfile).toList(), normalized);
+            return evaluateProfiles(items.stream().map(ExamItemView::runtime).toList(), normalized);
         } catch (CapabilityManifestInvalidException ex) {
             return CapabilityCheck.configuration();
         }
     }
 
-    private CapabilityCheck evaluatePinned(List<PinnedItem> items, ClientCapabilityManifest manifest) {
+    private CapabilityCheck evaluateItems(List<ExamItemView> items, ClientCapabilityManifest manifest) {
         if (items == null || items.isEmpty() || items.stream().anyMatch(this::hasInvalidMapping)) {
             return CapabilityCheck.configuration();
         }
-        boolean anyRuntime = items.stream().anyMatch(item -> item.runtimeProfile() != null);
-        boolean allRuntime = items.stream().allMatch(item -> item.runtimeProfile() != null);
+        boolean anyRuntime = items.stream().anyMatch(item -> item.runtime() != null);
+        boolean allRuntime = items.stream().allMatch(item -> item.runtime() != null);
         if (anyRuntime != allRuntime) {
             return CapabilityCheck.configuration();
         }
         if (!allRuntime) {
             return CapabilityCheck.compatible(normalize(manifest).fingerprint());
         }
-        return evaluateProfiles(items.stream().map(PinnedItem::runtimeProfile).toList(), normalize(manifest));
+        return evaluateProfiles(items.stream().map(ExamItemView::runtime).toList(), normalize(manifest));
     }
 
     private CapabilityCheck evaluateProfiles(List<TaskRuntimeProfileDescriptor> profiles,
@@ -354,25 +329,21 @@ public class CapabilityNegotiationService {
                 : false;
     }
 
-    private boolean hasInvalidMapping(PinnedItem item) {
-        if (item.hasPartialRuntimeProfile()) {
+    private boolean hasInvalidMapping(ExamItemView item) {
+        if (!hasConsistentTaskTypeMapping(item.taskType(), item.taskTypeCode(), item.section(),
+                item.runtime() == null ? null : item.runtime().taskTypeCode())) {
             return true;
         }
-        if (!hasConsistentTaskTypeMapping(item.getTaskType(), item.getTaskTypeCode(), item.getSection(),
-                item.runtimeProfile() == null ? null : item.runtimeProfile().taskTypeCode())) {
-            return true;
-        }
-        if (item.runtimeProfile() != null) {
+        if (item.runtime() != null) {
             return !TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_CANONICAL
-                    .equals(item.getRuntimeMappingStatus())
+                    .equals(item.runtimeMappingStatus())
                     || !TaskRuntimeContractConstants.MAPPING_VERSION_CANONICAL
-                            .equals(item.getRuntimeMappingVersion());
+                            .equals(item.runtimeMappingVersion());
         }
-        return item.getRuntimeMappingStatus() != null || item.getRuntimeMappingVersion() != null
-                ? !TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_LEGACY
-                        .equals(item.getRuntimeMappingStatus())
+        return item.runtimeMappingStatus() != null || item.runtimeMappingVersion() != null
+                ? !TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_LEGACY.equals(item.runtimeMappingStatus())
                         || !TaskRuntimeContractConstants.MAPPING_VERSION_LEGACY
-                                .equals(item.getRuntimeMappingVersion())
+                                .equals(item.runtimeMappingVersion())
                 : false;
     }
 

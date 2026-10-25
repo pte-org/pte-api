@@ -2,14 +2,13 @@ package com.pte.attempt.internal.service;
 
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.exception.AttemptAlreadyCompleteException;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
-import com.pte.attempt.internal.repository.PinnedItemRepository;
-import com.pte.attempt.internal.service.cache.PinnedSnapshotCacheService;
+import com.pte.attempt.internal.service.cache.ExamItemView;
+import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -44,14 +43,7 @@ class AttemptLifecycleServiceSubmitAttemptTest {
     @Mock
     private ExamAttemptRepository attemptRepository;
 
-    @Mock
-    private PinnedItemRepository pinnedItemRepository;
-
-    @Mock
-    private SnapshotPinService snapshotPinService;
-
-    @Mock
-    private PinnedSnapshotCacheService cacheService;
+    private final FakeExam exam = new FakeExam();
 
     @Mock
     private TimerService timerService;
@@ -67,6 +59,10 @@ class AttemptLifecycleServiceSubmitAttemptTest {
 
     @Mock
     private HeartbeatService heartbeatService;
+    @Mock
+    private CapabilityNegotiationService capabilityNegotiationService;
+    @Mock
+    private SessionService sessionService;
 
     private AttemptLifecycleService attemptLifecycleService;
     private UUID studentPublicId;
@@ -78,17 +74,16 @@ class AttemptLifecycleServiceSubmitAttemptTest {
     void setUp() {
         AttemptMapper attemptMapper = new AttemptMapper(JsonMapper.builder().build());
         attemptLifecycleService = new AttemptLifecycleService(
-            attemptRepository,
-            pinnedItemRepository,
-            snapshotPinService,
-            cacheService,
-            timerService,
-            answerSubmitService,
-            attemptMapper,
-            encryptionKeyProvider,
-            submissionDecryptionService,
-            heartbeatService
-        );
+                attemptRepository,
+                exam.contentService,
+                timerService,
+                answerSubmitService,
+                attemptMapper,
+                encryptionKeyProvider,
+                submissionDecryptionService,
+                heartbeatService,
+                capabilityNegotiationService,
+                sessionService);
 
         studentPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
@@ -101,9 +96,8 @@ class AttemptLifecycleServiceSubmitAttemptTest {
         attempt.setStudentPublicId(studentPublicId);
         attempt.setTenantId(tenantId);
         attempt.begin();
-        attempt.setPinnedSnapshot(new PinnedExamSnapshot());
 
-        when(attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
+        when(attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
             .thenReturn(Optional.of(attempt));
     }
 

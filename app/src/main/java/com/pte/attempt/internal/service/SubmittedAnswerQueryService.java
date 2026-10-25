@@ -1,7 +1,9 @@
 package com.pte.attempt.internal.service;
 
 import com.pte.attempt.domain.AttemptAnswer;
-import com.pte.attempt.domain.PinnedItem;
+import com.pte.assessment.dto.response.SnapshotContentResponse;
+import com.pte.attempt.domain.ExamAttempt;
+import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.attempt.internal.repository.AttemptAnswerRepository;
 import org.springframework.stereotype.Service;
@@ -20,16 +22,19 @@ import java.util.UUID;
 public class SubmittedAnswerQueryService {
 
     private final AttemptAnswerRepository attemptAnswerRepository;
+    private final ExamContentService contentService;
 
-    public SubmittedAnswerQueryService(AttemptAnswerRepository attemptAnswerRepository) {
+    public SubmittedAnswerQueryService(AttemptAnswerRepository attemptAnswerRepository,
+            ExamContentService contentService) {
         this.attemptAnswerRepository = attemptAnswerRepository;
+        this.contentService = contentService;
     }
 
     @Transactional(readOnly = true)
     public List<SubmittedAnswerView> findForSession(UUID sessionPublicId, UUID tenantId) {
         return attemptAnswerRepository.findByAttempt_SessionPublicIdAndAttempt_TenantId(sessionPublicId, tenantId)
                 .stream()
-                .map(SubmittedAnswerQueryService::toView)
+                .map(this::toView)
                 .toList();
     }
 
@@ -37,18 +42,29 @@ public class SubmittedAnswerQueryService {
     public List<SubmittedAnswerView> findForAttempt(UUID attemptPublicId, UUID tenantId) {
         return attemptAnswerRepository.findByAttempt_PublicIdAndAttempt_TenantId(attemptPublicId, tenantId)
                 .stream()
-                .map(SubmittedAnswerQueryService::toView)
+                .map(this::toView)
                 .toList();
     }
 
-    private static SubmittedAnswerView toView(AttemptAnswer answer) {
-        PinnedItem item = answer.getPinnedItem();
-        return new SubmittedAnswerView(answer.getPublicId(), answer.getAttempt().getPublicId(),
-                item.getPublicId(), answer.getAttempt().getSessionPublicId(),
-                answer.getAttempt().getTenantId(), item.getPinnedSnapshot().getScoreTemplatePublicId(),
-                item.getTaskType(), answer.getPayload(),
-                item.getCorrectAnswerText(), item.getOptionsJson(),
-                answer.isExpired(), item.getPromptText(), item.getReferenceAnswerText(), item.getImagePromptRef(),
-                item.getMinWordCount(), item.getMaxWordCount());
+    @Transactional(readOnly = true)
+    public java.util.Optional<SubmittedAnswerView> findOne(UUID answerPublicId, UUID tenantId) {
+        return attemptAnswerRepository.findByPublicIdAndAttempt_TenantId(answerPublicId, tenantId).map(this::toView);
+    }
+
+    private SubmittedAnswerView toView(AttemptAnswer answer) {
+        ExamAttempt attempt = answer.getAttempt();
+        SnapshotContentResponse.Item item = contentService.contentItems(attempt.getExamVersionPublicId())
+                .get(answer.getItemPublicId());
+        if (item == null) {
+            throw new IllegalStateException(String.format(AttemptConstants.MISSING_ITEM_FOR_ANSWER,
+                    answer.getItemPublicId()));
+        }
+        return new SubmittedAnswerView(answer.getPublicId(), attempt.getPublicId(), answer.getItemPublicId(),
+                attempt.getSessionPublicId(), attempt.getTenantId(), attempt.getExamDefinitionPublicId(),
+                item.taskType(), answer.getPayload(), item.correctAnswerText(), item.optionsJson(),
+                answer.isExpired(), item.promptText(), item.referenceAnswerText(), item.imagePromptRef(),
+                item.minWordCount(), item.maxWordCount(), item.section(), ExamContentService.effectiveRuntime(item),
+                answer.getSelectedScoreSource(), answer.getSelectedScoreSourceAt(),
+                answer.getSelectedScoreSourceByPublicId(), answer.getSelectedEvaluationPublicId());
     }
 }

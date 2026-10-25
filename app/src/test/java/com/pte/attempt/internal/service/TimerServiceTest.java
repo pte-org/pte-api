@@ -1,7 +1,7 @@
 package com.pte.attempt.internal.service;
 
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.internal.service.cache.PinnedItemView;
+import com.pte.attempt.internal.service.cache.ExamItemView;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -27,20 +27,18 @@ class TimerServiceTest {
         attempt = new ExamAttempt();
     }
 
-    private PinnedItemView readingItem(int orderIndex, int responseSeconds) {
-        return new PinnedItemView(UUID.randomUUID(), orderIndex, "READING", "MC_READING_SINGLE", "title", "prompt",
-                null, null, null, null, null, null, "[]", 0, responseSeconds, null, null, null);
+    private ExamItemView readingItem(int orderIndex, int responseSeconds) {
+        return FakeExam.view(orderIndex, "READING", "MC_READING_SINGLE", 0, responseSeconds);
     }
 
-    private PinnedItemView taskScopedItem(int orderIndex, String section, String taskType, int prepSeconds,
+    private ExamItemView taskScopedItem(int orderIndex, String section, String taskType, int prepSeconds,
                                            int responseSeconds) {
-        return new PinnedItemView(UUID.randomUUID(), orderIndex, section, taskType, "title", "prompt", null, null,
-                null, null, null, null, "[]", prepSeconds, responseSeconds, null, null, null);
+        return FakeExam.view(orderIndex, section, taskType, prepSeconds, responseSeconds);
     }
 
     @Test
     void startTask_setsCurrentOrderIndex_andResetsReplayCounters() {
-        PinnedItemView item = taskScopedItem(2, "SPEAKING", "READ_ALOUD", 35, 40);
+        ExamItemView item = taskScopedItem(2, "SPEAKING", "READ_ALOUD", 35, 40);
         attempt.setPlayCount(3);
         attempt.setLastPlayRequestId("stale-request-id");
         attempt.setLastPlayAllowed(false);
@@ -55,7 +53,7 @@ class TimerServiceTest {
 
     @Test
     void startTask_taskScopedItem_clearsActiveSectionAndSectionStartedAt() {
-        PinnedItemView item = taskScopedItem(0, "SPEAKING", "READ_ALOUD", 35, 40);
+        ExamItemView item = taskScopedItem(0, "SPEAKING", "READ_ALOUD", 35, 40);
         attempt.setActiveSection("READING");
         attempt.setSectionStartedAt(Instant.now().minusSeconds(30));
 
@@ -67,7 +65,7 @@ class TimerServiceTest {
 
     @Test
     void startTask_firstReadingItem_setsActiveSectionAndStartsSectionClock() {
-        List<PinnedItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
+        List<ExamItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
 
         Instant before = Instant.now();
         timerService.startTask(attempt, items.get(0), items);
@@ -79,7 +77,7 @@ class TimerServiceTest {
 
     @Test
     void startTask_secondReadingItem_reusesExistingSectionStartedAt_doesNotReset() {
-        List<PinnedItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
+        List<ExamItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
         timerService.startTask(attempt, items.get(0), items);
         Instant firstSectionStart = attempt.getSectionStartedAt();
 
@@ -92,9 +90,9 @@ class TimerServiceTest {
 
     @Test
     void startTask_enteringReadingAfterAnotherSection_startsFreshSectionClock() {
-        PinnedItemView speaking = taskScopedItem(0, "SPEAKING", "READ_ALOUD", 35, 40);
-        PinnedItemView firstReading = readingItem(1, 60);
-        List<PinnedItemView> items = List.of(speaking, firstReading);
+        ExamItemView speaking = taskScopedItem(0, "SPEAKING", "READ_ALOUD", 35, 40);
+        ExamItemView firstReading = readingItem(1, 60);
+        List<ExamItemView> items = List.of(speaking, firstReading);
         timerService.startTask(attempt, speaking, items);
 
         Instant before = Instant.now();
@@ -107,8 +105,8 @@ class TimerServiceTest {
 
     @Test
     void resolveEffective_taskScopedItem_returnsItemsOwnValuesUnchanged() {
-        PinnedItemView item = taskScopedItem(0, "SPEAKING", "READ_ALOUD", 35, 40);
-        List<PinnedItemView> items = List.of(item);
+        ExamItemView item = taskScopedItem(0, "SPEAKING", "READ_ALOUD", 35, 40);
+        List<ExamItemView> items = List.of(item);
         timerService.startTask(attempt, item, items);
 
         assertThat(timerService.resolveEffectivePrepSeconds(item)).isEqualTo(35);
@@ -117,7 +115,7 @@ class TimerServiceTest {
 
     @Test
     void resolveEffective_firstReadingItem_prepIsZero_responseIsFullSectionBudget() {
-        List<PinnedItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
+        List<ExamItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
         timerService.startTask(attempt, items.get(0), items);
 
         assertThat(timerService.resolveEffectivePrepSeconds(items.get(0))).isZero();
@@ -126,7 +124,7 @@ class TimerServiceTest {
 
     @Test
     void resolveEffective_secondReadingItem_deductsElapsedTimeSinceSectionStart() {
-        List<PinnedItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
+        List<ExamItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
         timerService.startTask(attempt, items.get(0), items);
         // Simulate 20 elapsed seconds since the section actually started, without a real sleep.
         attempt.setSectionStartedAt(attempt.getSectionStartedAt().minusSeconds(20));
@@ -143,7 +141,7 @@ class TimerServiceTest {
 
     @Test
     void resolveEffective_elapsedExceedsBudget_clampsToZero_neverNegative() {
-        List<PinnedItemView> items = List.of(readingItem(0, 60));
+        List<ExamItemView> items = List.of(readingItem(0, 60));
         timerService.startTask(attempt, items.get(0), items);
         // Section budget is only 60s — simulate far more elapsed than that.
         attempt.setSectionStartedAt(attempt.getSectionStartedAt().minusSeconds(9999));
@@ -153,7 +151,7 @@ class TimerServiceTest {
 
     @Test
     void multiItemReadingSection_currentPointerAndSharedBudgetStayConsistentAcrossAllThreeItems() {
-        List<PinnedItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
+        List<ExamItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
 
         timerService.startTask(attempt, items.get(0), items);
         assertThat(attempt.getCurrentOrderIndex()).isEqualTo(0);

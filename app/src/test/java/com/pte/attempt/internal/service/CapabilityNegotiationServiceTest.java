@@ -3,8 +3,7 @@ package com.pte.attempt.internal.service;
 import com.pte.assessment.AssessmentService;
 import com.pte.assessment.dto.response.SnapshotResponse;
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
-import com.pte.attempt.domain.PinnedItem;
+import com.pte.attempt.internal.service.cache.ExamItemView;
 import com.pte.attempt.internal.config.CapabilityProperties;
 import com.pte.attempt.internal.dto.request.AttemptPreflightRequest;
 import com.pte.attempt.internal.dto.request.ClientCapabilityManifest;
@@ -13,6 +12,7 @@ import com.pte.attempt.internal.exception.ExamCapabilityException;
 import com.pte.attempt.internal.exception.AttemptNotFoundException;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
+import com.pte.itembank.TaskTypeObservability;
 import com.pte.itembank.TaskRuntimeContractConstants;
 import com.pte.session.SessionService;
 import com.pte.session.dto.response.EntitlementResponse;
@@ -52,6 +52,10 @@ class CapabilityNegotiationServiceTest {
     private AssessmentService assessmentService;
     @Mock
     private AuditLogService auditLogService;
+    @Mock
+    private TaskTypeObservability observability;
+    @Mock
+    private ExamContentService contentService;
 
     private CapabilityProperties properties;
     private CapabilityNegotiationService service;
@@ -60,7 +64,8 @@ class CapabilityNegotiationServiceTest {
     @BeforeEach
     void setUp() {
         properties = new CapabilityProperties();
-        service = new CapabilityNegotiationService(sessionService, assessmentService, properties, auditLogService);
+        service = new CapabilityNegotiationService(sessionService, assessmentService, properties, auditLogService,
+                observability, contentService);
         caller = new CurrentUser(STUDENT_ID, TENANT_ID, List.of("STUDENT"));
         lenient().when(sessionService.checkEntitlement(SESSION_ID, STUDENT_ID)).thenReturn(entitlement());
     }
@@ -135,7 +140,7 @@ class CapabilityNegotiationServiceTest {
     }
 
     @Test
-    void storedFingerprint_isCheckedBeforeReturningPinnedTask() {
+    void storedFingerprint_isCheckedBeforeReturningTask() {
         ExamAttempt attempt = attemptWithRuntime(runtime("READ_ALOUD"));
 
         assertThatThrownBy(() -> service.assertStoredCapabilities(attempt))
@@ -146,13 +151,7 @@ class CapabilityNegotiationServiceTest {
     @Test
     void legacySnapshot_canUseExplicitGrandfatheredMissingManifest() {
         ExamAttempt attempt = new ExamAttempt();
-        PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
-        PinnedItem item = new PinnedItem();
-        item.setSection("SPEAKING");
-        item.setTaskType("READ_ALOUD");
-        item.setTaskTypeCode("READ_ALOUD");
-        snapshot.addItem(item);
-        attempt.setPinnedSnapshot(snapshot);
+        when(contentService.items(attempt)).thenReturn(List.of(FakeExam.view(0, "SPEAKING", "READ_ALOUD", 0, 60)));
 
         service.assertStoredCapabilities(attempt);
     }
@@ -160,16 +159,11 @@ class CapabilityNegotiationServiceTest {
     @Test
     void legacySnapshot_isBlockedWhenGrandfatherFlagIsDisabled() {
         properties.setAllowLegacyMissingManifest(false);
-        service = new CapabilityNegotiationService(sessionService, assessmentService, properties, auditLogService);
+        service = new CapabilityNegotiationService(sessionService, assessmentService, properties, auditLogService,
+                observability, contentService);
 
         ExamAttempt attempt = new ExamAttempt();
-        PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
-        PinnedItem item = new PinnedItem();
-        item.setSection("SPEAKING");
-        item.setTaskType("READ_ALOUD");
-        item.setTaskTypeCode("READ_ALOUD");
-        snapshot.addItem(item);
-        attempt.setPinnedSnapshot(snapshot);
+        when(contentService.items(attempt)).thenReturn(List.of(FakeExam.view(0, "SPEAKING", "READ_ALOUD", 0, 60)));
 
         assertThatThrownBy(() -> service.assertStoredCapabilities(attempt))
                 .isInstanceOfSatisfying(ExamCapabilityException.class,
@@ -190,14 +184,10 @@ class CapabilityNegotiationServiceTest {
 
     private ExamAttempt attemptWithRuntime(TaskRuntimeProfileDescriptor runtime) {
         ExamAttempt attempt = new ExamAttempt();
-        PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
-        PinnedItem item = new PinnedItem();
-        item.setSection("SPEAKING");
-        item.setTaskType(runtime.taskTypeCode());
-        item.setTaskTypeCode(runtime.taskTypeCode());
-        item.pinRuntimeProfile(runtime, "CANONICAL_V1", "RESOLVED_CANONICAL");
-        snapshot.addItem(item);
-        attempt.setPinnedSnapshot(snapshot);
+        ExamItemView item = FakeExam.withRuntime(FakeExam.view(0, "SPEAKING", runtime.taskTypeCode(), 0, 60),
+                runtime, TaskRuntimeContractConstants.MAPPING_VERSION_CANONICAL,
+                TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_CANONICAL);
+        when(contentService.items(attempt)).thenReturn(List.of(item));
         attempt.setCapabilityFingerprint("");
         return attempt;
     }

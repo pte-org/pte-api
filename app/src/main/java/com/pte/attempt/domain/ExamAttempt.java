@@ -11,7 +11,6 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
 import jakarta.persistence.OneToMany;
-import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
 import jakarta.persistence.UniqueConstraint;
@@ -30,9 +29,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * The critical-path aggregate. Once IN_PROGRESS, this attempt (plus its
- * {@link PinnedExamSnapshot}) is the only data attempt needs — no call to
- * another module occurs for the rest of the attempt. The DB unique
+ * The critical-path aggregate. It points at the single frozen exam of its session
+ * ({@code examVersionPublicId}) and carries the session policy it started under; items are read from
+ * that exam through a cache, not copied per attempt. The DB unique
  * constraint on (session, student) is the actual double-attempt guard, not
  * an app-level check; {@code @Version} guards concurrent writes to the same
  * attempt (e.g. a racing timer-expiry auto-submit and a manual submit).
@@ -77,10 +76,10 @@ public class ExamAttempt extends BaseEntity {
     private Instant submittedAt;
 
     /**
-     * {@code startedAt} plus the sum of every pinned item's own
+     * {@code startedAt} plus the sum of every item's own
      * {@code prepSeconds + responseSeconds} — the whole-attempt deadline shown
      * as a countdown in the client's app bar. Computed once, right after
-     * {@link #begin()}, from the pinned snapshot that exists by then; never
+     * {@link #begin()}, from the exam terms copied at start; never
      * recomputed afterward. The client is the only thing that ever acts on
      * this value — no server-side enforcement reads it.
      */
@@ -91,7 +90,7 @@ public class ExamAttempt extends BaseEntity {
     @Column
     private Instant deviceCheckPassedAt;
 
-    /** Current pinned-item pointer — "which task is current" lives here, independent of any per-task timing state. */
+    /** Current item pointer — "which task is current" lives here, independent of any per-task timing state. */
     @Column(nullable = false, columnDefinition = "integer not null default 0")
     private int currentOrderIndex;
 
@@ -130,8 +129,55 @@ public class ExamAttempt extends BaseEntity {
     @Column(name = "capability_fingerprint", length = 2048)
     private String capabilityFingerprint;
 
-    @OneToOne(mappedBy = "attempt", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    private PinnedExamSnapshot pinnedSnapshot;
+    /** The single frozen exam this attempt sits; items are read from it, never copied per attempt. */
+    @Column(name = "exam_version_public_id", nullable = false)
+    private UUID examVersionPublicId;
+
+    /** Definition the exam was built from (timing, weights); copied from the exam version at start. */
+    @Column(name = "exam_definition_public_id", nullable = false)
+    private UUID examDefinitionPublicId;
+
+    @Column(name = "exam_definition_version")
+    private Integer examDefinitionVersion;
+
+    /** Session policy as it stood when the attempt started; never re-read for the attempt's lifetime. */
+    @Column(name = "replay_policy_type", nullable = false)
+    private String replayPolicyType = "UNLIMITED";
+
+    @Column(name = "replay_policy_limit")
+    private Integer replayPolicyLimit;
+
+    @Column(name = "device_check_required", nullable = false)
+    private boolean deviceCheckRequired;
+
+    @Column(name = "proctor_required", nullable = false)
+    private boolean proctorRequired;
+
+    @Column(name = "answer_integrity_level", nullable = false)
+    private String answerIntegrityLevel = "STANDARD";
+
+    @Column(name = "exam_mode", nullable = false, length = 16)
+    private String examMode = "OFFICIAL_EXAM";
+
+    @Column(name = "lockdown_mode", length = 20)
+    private String lockdownMode;
+
+    /**
+     * Last heartbeat. Written with a targeted update that bypasses {@code @Version}, so the ~15s
+     * presence signal never contends with the answer and replay writes that lock this row.
+     */
+    @Column(name = "last_seen_at")
+    private Instant lastSeenAt;
+
+    /**
+     * Set when the host freezes the session grading and leaves this attempt out (never submitted, withdrawn...).
+     * Written with a targeted UPDATE so the optimistic version and the grading preview version stay unchanged.
+     */
+    @Column(name = "grading_excluded", nullable = false)
+    private boolean gradingExcluded;
+
+    @Column(name = "grading_exclusion_reason", length = 500)
+    private String gradingExclusionReason;
 
     @OneToMany(mappedBy = "attempt", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<AttemptAnswer> answers = new ArrayList<>();

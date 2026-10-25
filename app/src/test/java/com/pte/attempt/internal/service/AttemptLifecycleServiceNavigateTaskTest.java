@@ -1,16 +1,14 @@
 package com.pte.attempt.internal.service;
 
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
-import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.internal.dto.request.NavigateTaskRequest;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.exception.NotCurrentTaskException;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
-import com.pte.attempt.internal.repository.PinnedItemRepository;
-import com.pte.attempt.internal.service.cache.PinnedSnapshotCacheService;
+import com.pte.attempt.internal.service.cache.ExamItemView;
+import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -46,12 +44,7 @@ class AttemptLifecycleServiceNavigateTaskTest {
 
     @Mock
     private ExamAttemptRepository attemptRepository;
-    @Mock
-    private PinnedItemRepository pinnedItemRepository;
-    @Mock
-    private SnapshotPinService snapshotPinService;
-    @Mock
-    private PinnedSnapshotCacheService cacheService;
+    private final FakeExam exam = new FakeExam();
     @Mock
     private TimerService timerService;
     @Mock
@@ -62,19 +55,23 @@ class AttemptLifecycleServiceNavigateTaskTest {
     private SubmissionDecryptionService submissionDecryptionService;
     @Mock
     private HeartbeatService heartbeatService;
+    @Mock
+    private CapabilityNegotiationService capabilityNegotiationService;
+    @Mock
+    private SessionService sessionService;
 
     private AttemptLifecycleService service;
     private CurrentUser caller;
     private UUID attemptPublicId;
     private ExamAttempt attempt;
-    private PinnedExamSnapshot snapshot;
 
     @BeforeEach
     void setUp() {
         service = new AttemptLifecycleService(
-                attemptRepository, pinnedItemRepository, snapshotPinService, cacheService,
+                attemptRepository, exam.contentService,
                 timerService, answerSubmitService, new AttemptMapper(JsonMapper.builder().build()),
-                encryptionKeyProvider, submissionDecryptionService, heartbeatService);
+                encryptionKeyProvider, submissionDecryptionService, heartbeatService,
+                capabilityNegotiationService, sessionService);
 
         UUID studentPublicId = UUID.randomUUID();
         caller = new CurrentUser(studentPublicId, UUID.randomUUID(), List.of("student"));
@@ -87,60 +84,42 @@ class AttemptLifecycleServiceNavigateTaskTest {
         attempt.begin();
         attempt.setCurrentOrderIndex(0);
 
-        snapshot = new PinnedExamSnapshot();
-        snapshot.setId(1L);
-        snapshot.setExamMode("OFFICIAL_EXAM");
-        snapshot.setAnswerIntegrityLevel("STANDARD");
-        attempt.setPinnedSnapshot(snapshot);
+        attempt.setExamMode("OFFICIAL_EXAM");
+        attempt.setAnswerIntegrityLevel("STANDARD");
 
-        when(attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
+        when(attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
                 .thenReturn(Optional.of(attempt));
         when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
     }
 
-    private PinnedItem item(int orderIndex, String section) {
-        PinnedItem item = new PinnedItem();
-        item.setId((long) orderIndex + 1);
-        item.setPublicId(UUID.randomUUID());
-        item.setOrderIndex(orderIndex);
-        item.setSection(section);
-        item.setTaskType("TASK");
-        item.setPrepSeconds(0);
-        item.setResponseSeconds(60);
-        item.setPinnedSnapshot(snapshot);
-        snapshot.addItem(item);
-        lenient().when(pinnedItemRepository.findByPublicId(item.getPublicId())).thenReturn(Optional.of(item));
-        lenient().when(pinnedItemRepository.findByPinnedSnapshotIdAndOrderIndex(1L, orderIndex))
-                .thenReturn(Optional.of(item));
-        return item;
+    private ExamItemView item(int orderIndex, String section) {
+        return exam.add(orderIndex, section);
     }
 
-    private NavigateTaskRequest next(PinnedItem from) {
-        return new NavigateTaskRequest(from.getPublicId(), NavigateTaskRequest.Direction.NEXT);
+    private NavigateTaskRequest next(ExamItemView from) {
+        return new NavigateTaskRequest(from.publicId(), NavigateTaskRequest.Direction.NEXT);
     }
 
     @Test
     @DisplayName("NEXT within WRITING is accepted: blank answer recorded and timer started on target")
     void navigateTask_nextWithinWriting_isAccepted() {
-        PinnedItem from = item(0, "WRITING");
-        PinnedItem to = item(1, "WRITING");
-        when(pinnedItemRepository.countByPinnedSnapshotId(1L)).thenReturn(2L);
+        ExamItemView from = item(0, "WRITING");
+        ExamItemView to = item(1, "WRITING");
 
         AttemptTaskResponse response = service.navigateTask(attemptPublicId, next(from), caller);
 
         assertThat(response).isNotNull();
         verify(answerSubmitService).submitIfAbsent(attempt, from, null);
         verify(timerService).startTask(eq(attempt),
-                eq(PinnedSnapshotCacheService.toView(to)), any());
+                eq(to), any());
         verify(attemptRepository).save(attempt);
     }
 
     @Test
     @DisplayName("NEXT from WRITING into a SPEAKING item is rejected without side effects")
     void navigateTask_nextFromWritingIntoSpeaking_isRejected() {
-        PinnedItem from = item(0, "WRITING");
+        ExamItemView from = item(0, "WRITING");
         item(1, "SPEAKING");
-        when(pinnedItemRepository.countByPinnedSnapshotId(1L)).thenReturn(2L);
 
         assertThatThrownBy(() -> service.navigateTask(attemptPublicId, next(from), caller))
                 .isInstanceOf(NotCurrentTaskException.class);
@@ -153,9 +132,8 @@ class AttemptLifecycleServiceNavigateTaskTest {
     @Test
     @DisplayName("NEXT from WRITING into a LISTENING item is rejected")
     void navigateTask_nextFromWritingIntoListening_isRejected() {
-        PinnedItem from = item(0, "WRITING");
+        ExamItemView from = item(0, "WRITING");
         item(1, "LISTENING");
-        when(pinnedItemRepository.countByPinnedSnapshotId(1L)).thenReturn(2L);
 
         assertThatThrownBy(() -> service.navigateTask(attemptPublicId, next(from), caller))
                 .isInstanceOf(NotCurrentTaskException.class);
@@ -166,9 +144,8 @@ class AttemptLifecycleServiceNavigateTaskTest {
     @Test
     @DisplayName("NEXT from a SPEAKING item into a WRITING item is rejected")
     void navigateTask_nextFromSpeakingIntoWriting_isRejected() {
-        PinnedItem from = item(0, "SPEAKING");
+        ExamItemView from = item(0, "SPEAKING");
         item(1, "WRITING");
-        when(pinnedItemRepository.countByPinnedSnapshotId(1L)).thenReturn(2L);
 
         assertThatThrownBy(() -> service.navigateTask(attemptPublicId, next(from), caller))
                 .isInstanceOf(NotCurrentTaskException.class);
@@ -180,9 +157,8 @@ class AttemptLifecycleServiceNavigateTaskTest {
     @DisplayName("NEXT past the last item from a SPEAKING item is rejected and does not complete the attempt")
     void navigateTask_nextPastLastFromSpeaking_isRejected() {
         item(0, "WRITING");
-        PinnedItem last = item(1, "SPEAKING");
+        ExamItemView last = item(1, "SPEAKING");
         attempt.setCurrentOrderIndex(1);
-        when(pinnedItemRepository.countByPinnedSnapshotId(1L)).thenReturn(2L);
 
         assertThatThrownBy(() -> service.navigateTask(attemptPublicId, next(last), caller))
                 .isInstanceOf(NotCurrentTaskException.class);
@@ -196,9 +172,8 @@ class AttemptLifecycleServiceNavigateTaskTest {
     @DisplayName("NEXT past the last item from a WRITING item records a blank answer and completes the attempt")
     void navigateTask_nextPastLastFromWriting_completesAttempt() {
         item(0, "WRITING");
-        PinnedItem last = item(1, "WRITING");
+        ExamItemView last = item(1, "WRITING");
         attempt.setCurrentOrderIndex(1);
-        when(pinnedItemRepository.countByPinnedSnapshotId(1L)).thenReturn(2L);
 
         service.navigateTask(attemptPublicId, next(last), caller);
 
@@ -209,11 +184,10 @@ class AttemptLifecycleServiceNavigateTaskTest {
     @Test
     @DisplayName("a stale source item (pointer already two ahead) is rejected")
     void navigateTask_staleSource_isRejected() {
-        PinnedItem from = item(0, "WRITING");
+        ExamItemView from = item(0, "WRITING");
         item(1, "WRITING");
         item(2, "WRITING");
         attempt.setCurrentOrderIndex(2);
-        when(pinnedItemRepository.countByPinnedSnapshotId(1L)).thenReturn(3L);
 
         assertThatThrownBy(() -> service.navigateTask(attemptPublicId, next(from), caller))
                 .isInstanceOf(NotCurrentTaskException.class);

@@ -4,6 +4,7 @@ import com.pte.attempt.dto.response.AttemptStaffContextView;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -14,29 +15,35 @@ import java.util.UUID;
 @Service
 public class AttemptStaffContextQueryService {
     private final ExamAttemptRepository attempts;
-    public AttemptStaffContextQueryService(ExamAttemptRepository attempts) { this.attempts = attempts; }
+    private final ExamContentService contentService;
+
+    public AttemptStaffContextQueryService(ExamAttemptRepository attempts, ExamContentService contentService) {
+        this.attempts = attempts;
+        this.contentService = contentService;
+    }
 
     @Transactional(readOnly = true)
     public Map<UUID, AttemptStaffContextView> find(UUID tenantId, Collection<UUID> ids) {
         var selected = ids.stream().filter(Objects::nonNull).distinct().toList();
         if (selected.isEmpty()) { return Map.of(); }
         if (selected.size() > 100) { throw new IllegalArgumentException("STAFF_CONTEXT_BATCH_TOO_LARGE"); }
-        var tasks = new LinkedHashMap<UUID, Map<String, Long>>();
-        for (var row : attempts.countStaffPinnedTasks(tenantId, selected)) {
-            if (row.getTaskType() != null) {
-                tasks.computeIfAbsent(row.getAttemptPublicId(), key -> new LinkedHashMap<>())
-                        .merge(row.getTaskType(), row.getTaskCount(), Long::sum);
-            }
-        }
         var result = new LinkedHashMap<UUID, AttemptStaffContextView>();
         for (var row : attempts.findStaffContexts(tenantId, selected)) {
-            boolean valid = row.getPinnedPublicId() != null && row.getScoreTemplatePublicId() != null
-                    && tenantId.equals(row.getPinnedTenantId())
-                    && row.getSessionPublicId().equals(row.getPinnedSessionPublicId())
-                    && !tasks.getOrDefault(row.getAttemptPublicId(), Map.of()).isEmpty();
+            Map<String, Long> tasks = new LinkedHashMap<>();
+            Map<String, TaskRuntimeProfileDescriptor> runtimes = new LinkedHashMap<>();
+            if (row.getExamVersionPublicId() != null) {
+                for (ExamContentService.ExamItemOutline item : contentService.outline(row.getExamVersionPublicId())) {
+                    if (item.taskType() != null) {
+                        tasks.merge(item.taskType(), 1L, Long::sum);
+                        if (item.runtime() != null) {
+                            runtimes.putIfAbsent(item.taskType(), item.runtime());
+                        }
+                    }
+                }
+            }
+            boolean valid = row.getExamDefinitionPublicId() != null && !tasks.isEmpty();
             result.put(row.getAttemptPublicId(), new AttemptStaffContextView(row.getAttemptPublicId(),
-                    row.getSessionPublicId(), row.getScoreTemplatePublicId(), valid,
-                    tasks.getOrDefault(row.getAttemptPublicId(), Map.of())));
+                    row.getSessionPublicId(), row.getExamDefinitionPublicId(), valid, tasks, runtimes));
         }
         return Map.copyOf(result);
     }

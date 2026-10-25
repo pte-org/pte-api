@@ -2,9 +2,7 @@ package com.pte.attempt.internal.service;
 
 import com.pte.assessment.AssessmentService;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
-import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
-import com.pte.attempt.domain.PinnedItem;
+import com.pte.attempt.internal.service.cache.ExamItemView;
 import com.pte.attempt.internal.config.TaskTimingConfig;
 import com.pte.attempt.internal.exception.MissingAudioDurationException;
 import com.pte.attempt.internal.exception.MissingAudioPromptException;
@@ -17,9 +15,6 @@ import com.pte.itembank.TaskRuntimeContractConstants;
 import com.pte.assessment.ExamDefinitionService;
 import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
-import com.pte.session.SessionService;
-import com.pte.session.dto.response.EntitlementResponse;
-import com.pte.session.dto.response.ExamPolicyResponse;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -46,7 +41,7 @@ import static org.mockito.Mockito.when;
 /**
  * Ported from services/exam-delivery's own SnapshotPinServiceTest (plans/modular-monolith
  * Phase 07 ★) — same coverage, with the three HTTP clients replaced by
- * in-process session/assessment/media calls. Covers {@code SnapshotPinService.toPinnedItem}'s
+ * in-process session/assessment/media calls. Covers {@code ExamItemLoader.toView}'s
  * presign branch: resolves non-LISTENING items' {@code audioPromptRef} too
  * (e.g. Speaking's REPEAT_SENTENCE), while preserving LISTENING's required-audio
  * invariant. {@code AudioResolutionFailedException}/{@code ImageResolutionFailedException}
@@ -56,14 +51,14 @@ import static org.mockito.Mockito.when;
  *
  * <p>Since Phase 3 (plans/score-template-exam-generation): every test below
  * that doesn't care about template-sourced timing runs against a stubbed
- * ACTIVE template with NO items — {@code toPinnedItem} then falls back to
+ * ACTIVE template with NO items — {@code toView} then falls back to
  * {@code taskTimingConfig} exactly as before Phase 3, so none of these
  * regression tests needed to change. The template-priority behavior itself
  * gets its own dedicated tests further down.
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("SnapshotPinService")
-class SnapshotPinServiceTest {
+@DisplayName("ExamItemLoader")
+class ExamItemLoaderTest {
 
     private static final UUID SESSION_ID = UUID.randomUUID();
     private static final UUID STUDENT_ID = UUID.randomUUID();
@@ -72,9 +67,6 @@ class SnapshotPinServiceTest {
     private static final UUID AUDIO_REF = UUID.randomUUID();
     private static final UUID IMAGE_REF = UUID.randomUUID();
     private static final UUID SCORE_TEMPLATE_ID = UUID.randomUUID();
-
-    @Mock
-    private SessionService sessionService;
 
     @Mock
     private AssessmentService assessmentService;
@@ -88,7 +80,7 @@ class SnapshotPinServiceTest {
     @Mock
     private ExamDefinitionService examDefinitionService;
 
-    private SnapshotPinService service;
+    private ExamItemLoader service;
 
     @BeforeEach
     void setUp() {
@@ -101,88 +93,73 @@ class SnapshotPinServiceTest {
         // strict-stubs' UnnecessaryStubbingException on those tests.
         lenient().when(taskTimingConfig.timingFor(any())).thenReturn(new TaskTimingConfig.Timing(10, 10, null, null));
         // Default: the pinned template has no rows for any taskType used below,
-        // so toPinnedItem always falls back to taskTimingConfig — the exact
+        // so toView always falls back to taskTimingConfig — the exact
         // pre-Phase-3 behavior these regression tests were written against.
         stubTemplateItems();
-        service = new SnapshotPinService(sessionService, assessmentService, mediaService, taskTimingConfig,
-                examDefinitionService);
+        service = new ExamItemLoader(assessmentService, mediaService, taskTimingConfig, examDefinitionService);
     }
 
     @Test
     @DisplayName("LISTENING item with null audioPromptRef still throws MissingAudioPromptException (regression)")
     void listeningItem_nullAudioPromptRef_throwsMissingAudioPrompt() {
-        stubEntitlement("MC_LISTENING_SINGLE");
         stubContent(item("LISTENING", "MC_LISTENING_SINGLE", null));
 
-        assertThatThrownBy(() -> service.pin(attempt(), SESSION_ID, STUDENT_ID))
+        assertThatThrownBy(() -> load())
                 .isInstanceOf(MissingAudioPromptException.class);
     }
 
     @Test
     @DisplayName("LISTENING item with non-null audioPromptRef still presigns as before (regression)")
     void listeningItem_withAudioPromptRef_presignsAsBefore() {
-        stubEntitlement("MC_LISTENING_SINGLE");
         stubContent(item("LISTENING", "MC_LISTENING_SINGLE", AUDIO_REF));
         when(mediaService.presignGet(eq(AUDIO_REF), anyLong(), any())).thenReturn(presigned());
 
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getAudioUrl()).isEqualTo("https://res.cloudinary.com/test/signed");
-        assertThat(pinnedItem.getAudioUrlExpiresAt()).isNotNull();
+        ExamItemView loaded = load().get(0);
+        assertThat(loaded.audioUrl()).isEqualTo("https://res.cloudinary.com/test/signed");
+        assertThat(loaded.audioUrlExpiresAt()).isNotNull();
     }
 
     @Test
     @DisplayName("Non-LISTENING item with non-null audioPromptRef presigns successfully")
     void speakingItem_withAudioPromptRef_presignsSuccessfully() {
-        stubEntitlement("REPEAT_SENTENCE");
         stubContent(item("SPEAKING", "REPEAT_SENTENCE", AUDIO_REF));
         when(mediaService.presignGet(eq(AUDIO_REF), anyLong(), any())).thenReturn(presigned());
 
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getAudioUrl()).isEqualTo("https://res.cloudinary.com/test/signed");
-        assertThat(pinnedItem.getAudioUrlExpiresAt()).isNotNull();
+        ExamItemView loaded = load().get(0);
+        assertThat(loaded.audioUrl()).isEqualTo("https://res.cloudinary.com/test/signed");
+        assertThat(loaded.audioUrlExpiresAt()).isNotNull();
     }
 
     @Test
-    @DisplayName("public audio URL is pinned without an expiry timestamp")
+    @DisplayName("public audio URL is loaded without an expiry timestamp")
     void speakingItem_withPublicAudioUrl_hasNoExpiryTimestamp() {
-        stubEntitlement("RE_TELL_LECTURE");
         stubContent(item("SPEAKING", "RE_TELL_LECTURE", AUDIO_REF));
         when(mediaService.presignGet(eq(AUDIO_REF), anyLong(), any()))
                 .thenReturn(new PresignedDownloadResponse("https://cdn.example.com/lecture.mp3", 0, 68));
 
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getAudioUrl()).isEqualTo("https://cdn.example.com/lecture.mp3");
-        assertThat(pinnedItem.getAudioUrlExpiresAt()).isNull();
+        ExamItemView loaded = load().get(0);
+        assertThat(loaded.audioUrl()).isEqualTo("https://cdn.example.com/lecture.mp3");
+        assertThat(loaded.audioUrlExpiresAt()).isNull();
     }
 
     @Test
     @DisplayName("Non-LISTENING item with null audioPromptRef pins with no exception and no audioUrl")
     void speakingItem_nullAudioPromptRef_pinsSilently() {
-        stubEntitlement("READ_ALOUD");
         stubContent(item("SPEAKING", "READ_ALOUD", null));
 
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getAudioUrl()).isNull();
-        assertThat(pinnedItem.getAudioUrlExpiresAt()).isNull();
+        ExamItemView loaded = load().get(0);
+        assertThat(loaded.audioUrl()).isNull();
+        assertThat(loaded.audioUrlExpiresAt()).isNull();
     }
 
     @Test
     @DisplayName("Presign failure propagates media's own exception unmodified (in-process call, no defensive null-check wrapper)")
     void presignFailure_propagatesMediaExceptionUnmodified() {
-        stubEntitlement("REPEAT_SENTENCE");
         stubContent(item("SPEAKING", "REPEAT_SENTENCE", AUDIO_REF));
         when(mediaService.presignGet(eq(AUDIO_REF), anyLong(), any()))
                 .thenThrow(new com.pte.media.internal.exception.MediaNotFoundException());
 
-        assertThatThrownBy(() -> service.pin(attempt(), SESSION_ID, STUDENT_ID))
+        assertThatThrownBy(() -> load())
                 .isInstanceOf(com.pte.media.internal.exception.MediaNotFoundException.class);
     }
 
@@ -193,39 +170,30 @@ class SnapshotPinServiceTest {
     @Test
     @DisplayName("DESCRIBE_IMAGE item with null imagePromptRef throws MissingImagePromptException")
     void describeImageItem_nullImagePromptRef_throwsMissingImagePrompt() {
-        stubEntitlement("DESCRIBE_IMAGE");
         stubContent(item("SPEAKING", "DESCRIBE_IMAGE", null, null));
 
-        assertThatThrownBy(() -> service.pin(attempt(), SESSION_ID, STUDENT_ID))
+        assertThatThrownBy(() -> load())
                 .isInstanceOf(MissingImagePromptException.class);
     }
 
     @Test
     @DisplayName("Non-DESCRIBE_IMAGE item with null imagePromptRef pins with no exception and no imageUrl")
     void nonDescribeImageItem_nullImagePromptRef_pinsSilently() {
-        stubEntitlement("READ_ALOUD");
         stubContent(item("SPEAKING", "READ_ALOUD", null, null));
 
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getImageUrl()).isNull();
-        assertThat(pinnedItem.getImageUrlExpiresAt()).isNull();
+        ExamItemView loaded = load().get(0);
+        assertThat(loaded.imageUrl()).isNull();
     }
 
     @Test
     @DisplayName("DESCRIBE_IMAGE item with non-null imagePromptRef presigns successfully")
     void describeImageItem_withImagePromptRef_presignsSuccessfully() {
-        stubEntitlement("DESCRIBE_IMAGE");
         stubContent(item("SPEAKING", "DESCRIBE_IMAGE", null, IMAGE_REF));
         when(mediaService.presignGet(eq(IMAGE_REF), anyLong(), any())).thenReturn(presigned());
 
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getImageUrl()).isEqualTo("https://res.cloudinary.com/test/signed");
-        assertThat(pinnedItem.getImageUrlExpiresAt()).isNotNull();
-        assertThat(pinnedItem.getAudioUrl()).isNull();
+        ExamItemView loaded = load().get(0);
+        assertThat(loaded.imageUrl()).isEqualTo("https://res.cloudinary.com/test/signed");
+        assertThat(loaded.audioUrl()).isNull();
     }
 
     // ------------------------------------------------------------------
@@ -245,17 +213,14 @@ class SnapshotPinServiceTest {
         // still supplies preListenSeconds.
         when(taskTimingConfig.timingForIfConfigured("REPEAT_SENTENCE")).thenReturn(new TaskTimingConfig.Timing(0, 0, 3, null));
         stubTemplateItems(templateItem("REPEAT_SENTENCE", "SPEAKING", 3, 15));
-        stubEntitlement("REPEAT_SENTENCE");
         stubContent(item("SPEAKING", "REPEAT_SENTENCE", AUDIO_REF));
         when(mediaService.presignGet(eq(AUDIO_REF), anyLong(), any())).thenReturn(presignedWithDuration(6));
 
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getPreListenSeconds()).isEqualTo(3);
-        assertThat(pinnedItem.getPreRecordSeconds()).isEqualTo(3);
+        ExamItemView loaded = load().get(0);
+        assertThat(loaded.preListenSeconds()).isEqualTo(3);
+        assertThat(loaded.preRecordSeconds()).isEqualTo(3);
         // 3 (preListen) + 6 (real audio) + 3 (preRecord) = 12, not the static 10.
-        assertThat(pinnedItem.getPrepSeconds()).isEqualTo(12);
+        assertThat(loaded.prepSeconds()).isEqualTo(12);
         // Same call resolves both the URL and the duration — no second media call.
         verify(mediaService, times(1)).presignGet(eq(AUDIO_REF), anyLong(), any());
     }
@@ -265,42 +230,35 @@ class SnapshotPinServiceTest {
     void respondToASituation_preservesPreListenValue() {
         when(taskTimingConfig.timingForIfConfigured("RESPOND_TO_A_SITUATION")).thenReturn(new TaskTimingConfig.Timing(0, 0, 20, null));
         stubTemplateItems(templateItem("RESPOND_TO_A_SITUATION", "SPEAKING", 10, 40));
-        stubEntitlement("RESPOND_TO_A_SITUATION");
         stubContent(item("SPEAKING", "RESPOND_TO_A_SITUATION", AUDIO_REF));
         when(mediaService.presignGet(eq(AUDIO_REF), anyLong(), any())).thenReturn(presignedWithDuration(10));
 
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getPreListenSeconds()).isEqualTo(20);
-        assertThat(pinnedItem.getPreRecordSeconds()).isEqualTo(10);
-        assertThat(pinnedItem.getPrepSeconds()).isEqualTo(40);
+        ExamItemView loaded = load().get(0);
+        assertThat(loaded.preListenSeconds()).isEqualTo(20);
+        assertThat(loaded.preRecordSeconds()).isEqualTo(10);
+        assertThat(loaded.prepSeconds()).isEqualTo(40);
     }
 
     @Test
     @DisplayName("Read Aloud (non-audio-prompt type) keeps its static prepSeconds and never populates preListen/preRecord")
     void readAloud_staticPrepTiming_noRegression() {
         when(taskTimingConfig.timingFor("READ_ALOUD")).thenReturn(new TaskTimingConfig.Timing(35, 40, null, null));
-        stubEntitlement("READ_ALOUD");
         stubContent(item("SPEAKING", "READ_ALOUD", null));
 
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getPrepSeconds()).isEqualTo(35);
-        assertThat(pinnedItem.getPreListenSeconds()).isNull();
-        assertThat(pinnedItem.getPreRecordSeconds()).isNull();
+        ExamItemView loaded = load().get(0);
+        assertThat(loaded.prepSeconds()).isEqualTo(35);
+        assertThat(loaded.preListenSeconds()).isNull();
+        assertThat(loaded.preRecordSeconds()).isNull();
     }
 
     @Test
     @DisplayName("An audio-prompt type whose resolved media response carries no duration fails with MissingAudioDurationException")
     void audioPromptType_missingDuration_throws() {
         when(taskTimingConfig.timingFor("ANSWER_SHORT_QUESTION")).thenReturn(new TaskTimingConfig.Timing(14, 10, 3, 3));
-        stubEntitlement("ANSWER_SHORT_QUESTION");
         stubContent(item("SPEAKING", "ANSWER_SHORT_QUESTION", AUDIO_REF));
         when(mediaService.presignGet(eq(AUDIO_REF), anyLong(), any())).thenReturn(presignedWithDuration(null));
 
-        assertThatThrownBy(() -> service.pin(attempt(), SESSION_ID, STUDENT_ID))
+        assertThatThrownBy(() -> load())
                 .isInstanceOf(MissingAudioDurationException.class);
     }
 
@@ -313,19 +271,16 @@ class SnapshotPinServiceTest {
     @Test
     @DisplayName("A static template-known type (e.g. MC_READING_SINGLE) uses the template's prep/responseSeconds, not taskTimingConfig's")
     void templateKnownStaticType_usesTemplateValues_notTaskTimingConfigFallback() {
-        stubEntitlement("MC_READING_SINGLE");
         stubContent(item("READING", "MC_READING_SINGLE", null));
         // taskTimingConfig's class-level any() stub returns Timing(10, 10, ...) —
         // if production wrongly used it, these assertions below would fail.
         stubTemplateItems(templateItem("MC_READING_SINGLE", "READING", 0, 77));
 
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getResponseSeconds()).isEqualTo(77);
-        assertThat(pinnedItem.getPrepSeconds()).isEqualTo(0);
-        assertThat(pinnedItem.getPreListenSeconds()).isNull();
-        assertThat(pinnedItem.getPreRecordSeconds()).isNull();
+        ExamItemView loaded = load().get(0);
+        assertThat(loaded.responseSeconds()).isEqualTo(77);
+        assertThat(loaded.prepSeconds()).isEqualTo(0);
+        assertThat(loaded.preListenSeconds()).isNull();
+        assertThat(loaded.preRecordSeconds()).isNull();
     }
 
     @Test
@@ -333,52 +288,33 @@ class SnapshotPinServiceTest {
     void audioPromptType_preRecordFromTemplate_preListenFromJson() {
         // Matches the slimmed task-timing.json shape since Phase 3: only preListenSeconds remains.
         when(taskTimingConfig.timingForIfConfigured("REPEAT_SENTENCE")).thenReturn(new TaskTimingConfig.Timing(0, 0, 3, null));
-        stubEntitlement("REPEAT_SENTENCE");
         stubContent(item("SPEAKING", "REPEAT_SENTENCE", AUDIO_REF));
         stubTemplateItems(templateItem("REPEAT_SENTENCE", "SPEAKING", 3, 15));
         when(mediaService.presignGet(eq(AUDIO_REF), anyLong(), any())).thenReturn(presignedWithDuration(6));
 
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getResponseSeconds()).isEqualTo(15); // from template, not taskTimingConfig's 0
-        assertThat(pinnedItem.getPreListenSeconds()).isEqualTo(3); // still from taskTimingConfig
-        assertThat(pinnedItem.getPreRecordSeconds()).isEqualTo(3); // from template's prep column, not taskTimingConfig
-        assertThat(pinnedItem.getPrepSeconds()).isEqualTo(12); // 3 (preListen) + 6 (real audio) + 3 (preRecord, from template)
+        ExamItemView loaded = load().get(0);
+        assertThat(loaded.responseSeconds()).isEqualTo(15); // from template, not taskTimingConfig's 0
+        assertThat(loaded.preListenSeconds()).isEqualTo(3); // still from taskTimingConfig
+        assertThat(loaded.preRecordSeconds()).isEqualTo(3); // from template's prep column, not taskTimingConfig
+        assertThat(loaded.prepSeconds()).isEqualTo(12); // 3 (preListen) + 6 (real audio) + 3 (preRecord, from template)
     }
 
     @Test
     @DisplayName("PERSONAL_INTRODUCTION (not in any ScoreTemplate) still falls back to taskTimingConfig and pins without error")
-    void toPinnedItem_taskTypeNotInTemplate_fallsBackToTaskTimingConfig() {
+    void taskTypeNotInDefinition_fallsBackToTaskTimingConfig() {
         when(taskTimingConfig.timingFor("PERSONAL_INTRODUCTION")).thenReturn(new TaskTimingConfig.Timing(25, 30, null, null));
-        stubEntitlement("PERSONAL_INTRODUCTION");
         stubContent(item("SPEAKING", "PERSONAL_INTRODUCTION", null));
         // Template has real rows for other task types, but none for PERSONAL_INTRODUCTION.
         stubTemplateItems(templateItem("READ_ALOUD", "SPEAKING", 35, 40));
 
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        PinnedItem pinnedItem = pinned.getItems().get(0);
-        assertThat(pinnedItem.getPrepSeconds()).isEqualTo(25);
-        assertThat(pinnedItem.getResponseSeconds()).isEqualTo(30);
-    }
-
-    @Test
-    @DisplayName("PinnedExamSnapshot.scoreTemplatePublicId is copied once from the source snapshot's pinned template")
-    void pin_copiesScoreTemplatePublicIdFromContent() {
-        stubEntitlement("READ_ALOUD");
-        stubContent(item("SPEAKING", "READ_ALOUD", null));
-
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        assertThat(pinned.getScoreTemplatePublicId()).isEqualTo(SCORE_TEMPLATE_ID);
-        assertThat(pinned.getScoreTemplateVersion()).isEqualTo(1);
+        ExamItemView loaded = load().get(0);
+        assertThat(loaded.prepSeconds()).isEqualTo(25);
+        assertThat(loaded.responseSeconds()).isEqualTo(30);
     }
 
     @Test
     @DisplayName("pin copies the frozen runtime contract without consulting a mutable catalog")
-    void pin_copiesFrozenRuntimeContractToPinnedItem() {
-        stubEntitlement("READ_ALOUD");
+    void load_copiesFrozenRuntimeContractToItem() {
         TaskRuntimeProfileDescriptor runtime = TaskRuntimeProfileRegistry.descriptorFor("READ_ALOUD");
         SnapshotContentResponse.Item source = new SnapshotContentResponse.Item(
                 0, "SPEAKING", "READ_ALOUD", "title", "prompt", null, null, null, null, null, null, null,
@@ -386,13 +322,13 @@ class SnapshotPinServiceTest {
                 TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_CANONICAL);
         stubContent(source);
 
-        PinnedItem pinnedItem = service.pin(attempt(), SESSION_ID, STUDENT_ID).getItems().get(0);
+        ExamItemView loaded = load().get(0);
 
-        assertThat(pinnedItem.getTaskType()).isEqualTo("READ_ALOUD");
-        assertThat(pinnedItem.getTaskTypeCode()).isEqualTo("READ_ALOUD");
-        assertThat(pinnedItem.runtimeProfile()).isEqualTo(runtime);
-        assertThat(pinnedItem.getRuntimeMappingVersion()).isEqualTo("CANONICAL_V1");
-        assertThat(pinnedItem.getRuntimeMappingStatus()).isEqualTo("RESOLVED_CANONICAL");
+        assertThat(loaded.taskType()).isEqualTo("READ_ALOUD");
+        assertThat(loaded.taskTypeCode()).isEqualTo("READ_ALOUD");
+        assertThat(loaded.runtime()).isEqualTo(runtime);
+        assertThat(loaded.runtimeMappingVersion()).isEqualTo("CANONICAL_V1");
+        assertThat(loaded.runtimeMappingStatus()).isEqualTo("RESOLVED_CANONICAL");
     }
 
     /** {@code taskType} is unused now (Plan B: no composition to filter by) — kept as a param so every existing call site reads unchanged. */
@@ -402,9 +338,8 @@ class SnapshotPinServiceTest {
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("Every item of the snapshot is pinned, in original orderIndex order — no composition filter")
-    void pin_pinsAllSnapshotItemsInOriginalOrder_noCompositionFilter() {
-        stubEntitlement("READ_ALOUD");
+    @DisplayName("Every item of the exam is loaded, in original orderIndex order — no composition filter")
+    void load_returnsAllItemsInOriginalOrder_noCompositionFilter() {
         SnapshotContentResponse.Item first = new SnapshotContentResponse.Item(
                 0, "SPEAKING", "READ_ALOUD", "t1", "p1", null, null, null, null, null, null, null);
         SnapshotContentResponse.Item second = new SnapshotContentResponse.Item(
@@ -413,56 +348,20 @@ class SnapshotPinServiceTest {
                 SNAPSHOT_ID, "snapshot", 1, SCORE_TEMPLATE_ID, TENANT_ID, List.of(second, first));
         when(assessmentService.getFullContent(SNAPSHOT_ID)).thenReturn(content);
 
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
+        List<ExamItemView> loaded = load();
 
-        assertThat(pinned.getItems()).hasSize(2);
-        assertThat(pinned.getItems().get(0).getTaskType()).isEqualTo("READ_ALOUD");
-        assertThat(pinned.getItems().get(1).getTaskType()).isEqualTo("MC_READING_SINGLE");
+        assertThat(loaded).hasSize(2);
+        assertThat(loaded.get(0).taskType()).isEqualTo("READ_ALOUD");
+        assertThat(loaded.get(1).taskType()).isEqualTo("MC_READING_SINGLE");
     }
 
     @Test
     @DisplayName("responseSeconds always comes from the template/json value — there is no override to apply anymore")
-    void pin_responseSecondsAlwaysFromTemplateOrJson_neverOverridden() {
-        stubEntitlement("MC_READING_SINGLE");
+    void load_responseSecondsAlwaysFromDefinitionOrJson_neverOverridden() {
         stubContent(item("READING", "MC_READING_SINGLE", null));
         stubTemplateItems(templateItem("MC_READING_SINGLE", "READING", 0, 77));
 
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        assertThat(pinned.getItems().get(0).getResponseSeconds()).isEqualTo(77);
-    }
-
-    @Test
-    @DisplayName("maxPlayCountOverride is always null — no composition to source it from")
-    void pin_maxPlayCountOverrideAlwaysNull() {
-        stubEntitlement("READ_ALOUD");
-        stubContent(item("SPEAKING", "READ_ALOUD", null));
-
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        assertThat(pinned.getItems().get(0).getMaxPlayCountOverride()).isNull();
-    }
-
-    @Test
-    @DisplayName("legacy snapshot pin carries the resolved standard lockdown mode and defaults exam mode")
-    void pin_copiesResolvedStandardLockdownMode() {
-        ExamPolicyResponse policy = new ExamPolicyResponse("UNLIMITED", null, false, false, "STANDARD", "STANDARD");
-        when(sessionService.checkEntitlement(SESSION_ID, STUDENT_ID)).thenReturn(new EntitlementResponse(
-                SESSION_ID, SNAPSHOT_ID, TENANT_ID, Instant.now(), Instant.now().plusSeconds(3600), policy,
-                null));
-        stubContent(item("SPEAKING", "READ_ALOUD", null));
-
-        PinnedExamSnapshot pinned = service.pin(attempt(), SESSION_ID, STUDENT_ID);
-
-        assertThat(pinned.getLockdownMode()).isEqualTo("STANDARD");
-        assertThat(pinned.getExamMode()).isEqualTo("OFFICIAL_EXAM");
-    }
-
-    private void stubEntitlement(String taskType) {
-        ExamPolicyResponse policy = new ExamPolicyResponse("UNLIMITED", null, false, false, "STANDARD", "NONE");
-        EntitlementResponse entitlement = new EntitlementResponse(
-                SESSION_ID, SNAPSHOT_ID, TENANT_ID, Instant.now(), Instant.now().plusSeconds(3600), policy);
-        when(sessionService.checkEntitlement(SESSION_ID, STUDENT_ID)).thenReturn(entitlement);
+        assertThat(load().get(0).responseSeconds()).isEqualTo(77);
     }
 
     private void stubContent(SnapshotContentResponse.Item item) {
@@ -500,7 +399,7 @@ class SnapshotPinServiceTest {
         return new PresignedDownloadResponse("https://res.cloudinary.com/test/signed", 3600L, durationSeconds);
     }
 
-    private ExamAttempt attempt() {
-        return new ExamAttempt();
+    private List<ExamItemView> load() {
+        return service.load(assessmentService.getFullContent(SNAPSHOT_ID), 3660L, TENANT_ID);
     }
 }

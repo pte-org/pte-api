@@ -1,8 +1,7 @@
 package com.pte.attempt.internal.service;
 
+import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
-import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.dto.response.AttemptExaminerPromptView;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,38 +29,37 @@ class AttemptExaminerPromptQueryServiceTest {
     @Mock
     private ExamAttemptRepository attemptRepository;
 
+    @Mock
+    private ExamContentService contentService;
+
     private AttemptExaminerPromptQueryService service;
 
     @BeforeEach
     void setUp() {
-        service = new AttemptExaminerPromptQueryService(attemptRepository, jsonMapper);
+        service = new AttemptExaminerPromptQueryService(attemptRepository, contentService, jsonMapper);
     }
 
     @Test
-    void readsPromptFromAttemptPinnedItemRatherThanAssessmentSnapshotId() throws Exception {
+    void readsPromptFromTheAttemptsExamVersion() throws Exception {
         UUID tenantId = UUID.randomUUID();
         UUID sessionId = UUID.randomUUID();
         UUID attemptId = UUID.randomUUID();
-        UUID pinnedItemId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
         ExamAttempt attempt = attempt(tenantId, sessionId, attemptId);
-        PinnedItem item = new PinnedItem();
-        item.setPublicId(pinnedItemId);
-        item.setOrderIndex(2);
-        item.setSection("SPEAKING");
-        item.setTaskTypeKey("READ_ALOUD");
-        item.setTitle("Read this aloud");
-        item.setPromptText("The platform supports daily English practice.");
-        item.setCorrectAnswerText("secret answer");
-        item.setOptionsJson("[{\"text\":\"choice\",\"correct\":true,\"orderIndex\":1,"
-                + "\"blankIndex\":null,\"correctGapIndex\":null}]");
-        attempt.getPinnedSnapshot().addItem(item);
-        when(attemptRepository.findWithPinnedByPublicId(attemptId)).thenReturn(Optional.of(attempt));
+        SnapshotContentResponse.Item item = new SnapshotContentResponse.Item(2, "SPEAKING", "READ_ALOUD",
+                "Read this aloud", "The platform supports daily English practice.", null, null, null,
+                "secret answer", null, null,
+                "[{\"text\":\"choice\",\"correct\":true,\"orderIndex\":1,\"blankIndex\":null,"
+                        + "\"correctGapIndex\":null}]",
+                "READ_ALOUD", "Read this aloud", "READ_ALOUD", null, null, null, null, itemId);
+        when(attemptRepository.findByPublicId(attemptId)).thenReturn(Optional.of(attempt));
+        when(contentService.contentItems(attempt.getExamVersionPublicId())).thenReturn(Map.of(itemId, item));
 
         Map<UUID, AttemptExaminerPromptView> result = service.findForExaminer(
-                attemptId, sessionId, tenantId, List.of(pinnedItemId, pinnedItemId));
+                attemptId, sessionId, tenantId, List.of(itemId, itemId));
 
-        assertThat(result).containsOnlyKeys(pinnedItemId);
-        AttemptExaminerPromptView prompt = result.get(pinnedItemId);
+        assertThat(result).containsOnlyKeys(itemId);
+        AttemptExaminerPromptView prompt = result.get(itemId);
         assertThat(prompt.taskType()).isEqualTo("READ_ALOUD");
         assertThat(prompt.promptText()).contains("daily English");
         assertThat(prompt.options()).extracting(AttemptExaminerPromptView.Option::text)
@@ -70,19 +68,17 @@ class AttemptExaminerPromptQueryServiceTest {
     }
 
     @Test
-    void rejectsMismatchedTenantOrSessionBeforeReturningPinnedContent() {
+    void rejectsMismatchedTenantOrSessionBeforeReturningExamContent() {
         UUID tenantId = UUID.randomUUID();
         UUID sessionId = UUID.randomUUID();
         UUID attemptId = UUID.randomUUID();
-        UUID pinnedItemId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
         ExamAttempt attempt = attempt(tenantId, sessionId, attemptId);
-        PinnedItem item = new PinnedItem();
-        item.setPublicId(pinnedItemId);
-        attempt.getPinnedSnapshot().addItem(item);
-        when(attemptRepository.findWithPinnedByPublicId(attemptId)).thenReturn(Optional.of(attempt));
+        when(attemptRepository.findByPublicId(attemptId)).thenReturn(Optional.of(attempt));
 
-        assertThat(service.findForExaminer(attemptId, UUID.randomUUID(), tenantId, List.of(pinnedItemId))).isEmpty();
-        assertThat(service.findForExaminer(attemptId, sessionId, UUID.randomUUID(), List.of(pinnedItemId))).isEmpty();
+        assertThat(service.findForExaminer(attemptId, UUID.randomUUID(), tenantId, List.of(itemId))).isEmpty();
+        assertThat(service.findForExaminer(attemptId, sessionId, UUID.randomUUID(), List.of(itemId))).isEmpty();
+        verify(contentService, never()).contentItems(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -92,7 +88,7 @@ class AttemptExaminerPromptQueryServiceTest {
         assertThat(service.findForExaminer(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), List.of()))
                 .isEmpty();
 
-        verify(attemptRepository, never()).findWithPinnedByPublicId(org.mockito.ArgumentMatchers.any());
+        verify(attemptRepository, never()).findByPublicId(org.mockito.ArgumentMatchers.any());
     }
 
     private ExamAttempt attempt(UUID tenantId, UUID sessionId, UUID attemptId) {
@@ -100,11 +96,7 @@ class AttemptExaminerPromptQueryServiceTest {
         attempt.setPublicId(attemptId);
         attempt.setTenantId(tenantId);
         attempt.setSessionPublicId(sessionId);
-        PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
-        snapshot.setTenantId(tenantId);
-        snapshot.setSourceSessionPublicId(sessionId);
-        snapshot.setAttempt(attempt);
-        attempt.setPinnedSnapshot(snapshot);
+        attempt.setExamVersionPublicId(UUID.randomUUID());
         return attempt;
     }
 }

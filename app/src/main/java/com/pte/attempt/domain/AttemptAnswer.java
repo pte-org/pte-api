@@ -17,16 +17,19 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
+import java.util.UUID;
+
 /**
- * A student's response to one pinned task. {@code payload} is a free-form
+ * A student's response to one task of the frozen exam. {@code payload} is a free-form
  * answer string (selected option ids as CSV for MCQ, essay text for Write
- * Essay) — scoring (Phase 08) interprets it against {@code PinnedItem}'s
+ * Essay) — scoring (Phase 08) interprets it against the exam item's
  * correct-answer data. {@code expired=true} marks an auto-finalized empty
  * answer whose response window elapsed without a submission.
  */
 @Entity
 @Table(name = "attempt_answers", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"attempt_id", "pinned_item_id"})
+        @UniqueConstraint(columnNames = {"attempt_id", "item_public_id"})
 }, indexes = {
         @Index(name = "idx_answers_attempt", columnList = "attempt_id")
 })
@@ -39,9 +42,12 @@ public class AttemptAnswer extends BaseEntity {
     @JoinColumn(name = "attempt_id", nullable = false)
     private ExamAttempt attempt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "pinned_item_id", nullable = false)
-    private PinnedItem pinnedItem;
+    /** The exam version item this answers; stable across the frozen exam's lifetime. */
+    @Column(name = "item_public_id", nullable = false)
+    private UUID itemPublicId;
+
+    @Column(name = "item_order_index", nullable = false)
+    private int itemOrderIndex;
 
     @Column(columnDefinition = "text")
     private String payload;
@@ -57,4 +63,21 @@ public class AttemptAnswer extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(length = 16)
     private ResponseConfidence confidence;
+
+    /**
+     * Which independently persisted score counts for this answer: "AI" or "EXAMINER" (the scoring module's
+     * vocabulary, kept as text because attempt does not depend on scoring). Null until the host chooses.
+     */
+    @Column(name = "selected_score_source", length = 16)
+    private String selectedScoreSource;
+
+    @Column(name = "selected_score_source_at")
+    private Instant selectedScoreSourceAt;
+
+    @Column(name = "selected_score_source_by")
+    private UUID selectedScoreSourceByPublicId;
+
+    /** The evaluation row the chosen source resolved to when it was chosen (the examiner score, if EXAMINER). */
+    @Column(name = "selected_evaluation_public_id")
+    private UUID selectedEvaluationPublicId;
 }

@@ -2,15 +2,12 @@ package com.pte.attempt.internal.service;
 
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
-import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
-import com.pte.attempt.internal.repository.PinnedItemRepository;
-import com.pte.attempt.internal.service.cache.PinnedItemView;
-import com.pte.attempt.internal.service.cache.PinnedSnapshotCacheService;
+import com.pte.attempt.internal.service.cache.ExamItemView;
+import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +27,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * Covers {@link AttemptLifecycleService#getAllTasks}: the bulk prefetch
- * endpoint returns all pinned items in order, with correct section flags
+ * endpoint returns all items in order, with correct section flags
  * ({@code canNavigatePrevious}/{@code canNavigateNext}) and correct
  * {@code prepSeconds}/{@code responseSeconds} per item.
  */
@@ -41,14 +38,7 @@ class AttemptLifecycleServiceGetAllTasksTest {
     @Mock
     private ExamAttemptRepository attemptRepository;
 
-    @Mock
-    private PinnedItemRepository pinnedItemRepository;
-
-    @Mock
-    private SnapshotPinService snapshotPinService;
-
-    @Mock
-    private PinnedSnapshotCacheService cacheService;
+    private final FakeExam exam = new FakeExam();
 
     @Mock
     private TimerService timerService;
@@ -64,6 +54,10 @@ class AttemptLifecycleServiceGetAllTasksTest {
 
     @Mock
     private HeartbeatService heartbeatService;
+    @Mock
+    private CapabilityNegotiationService capabilityNegotiationService;
+    @Mock
+    private SessionService sessionService;
 
     private AttemptLifecycleService service;
 
@@ -71,14 +65,20 @@ class AttemptLifecycleServiceGetAllTasksTest {
     private CurrentUser caller;
     private UUID attemptPublicId;
     private ExamAttempt attempt;
-    private PinnedExamSnapshot snapshot;
 
     @BeforeEach
     void setUp() {
         service = new AttemptLifecycleService(
-                attemptRepository, pinnedItemRepository, snapshotPinService, cacheService,
-                timerService, answerSubmitService, new AttemptMapper(JsonMapper.builder().build()),
-                encryptionKeyProvider, submissionDecryptionService, heartbeatService);
+                attemptRepository,
+                exam.contentService,
+                timerService,
+                answerSubmitService,
+                new AttemptMapper(JsonMapper.builder().build()),
+                encryptionKeyProvider,
+                submissionDecryptionService,
+                heartbeatService,
+                capabilityNegotiationService,
+                sessionService);
 
         studentPublicId = UUID.randomUUID();
         caller = new CurrentUser(studentPublicId, UUID.randomUUID(), List.of("student"));
@@ -91,42 +91,27 @@ class AttemptLifecycleServiceGetAllTasksTest {
         attempt.begin();
         attempt.setCurrentOrderIndex(0);
 
-        snapshot = new PinnedExamSnapshot();
-        snapshot.setId(1L);
-        snapshot.setAnswerIntegrityLevel("STANDARD");
-        attempt.setPinnedSnapshot(snapshot);
+        attempt.setAnswerIntegrityLevel("STANDARD");
 
-        when(attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
+        when(attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
                 .thenReturn(Optional.of(attempt));
     }
 
-    private PinnedItem item(int orderIndex, String section, String taskType) {
-        PinnedItem item = new PinnedItem();
-        item.setId((long) orderIndex + 1);
-        item.setPublicId(UUID.randomUUID());
-        item.setOrderIndex(orderIndex);
-        item.setSection(section);
-        item.setTaskType(taskType);
-        item.setPrepSeconds(0);
-        item.setResponseSeconds(60);
-        item.setPinnedSnapshot(snapshot);
-        return item;
+    private ExamItemView item(int orderIndex, String section, String taskType) {
+        return exam.add(FakeExam.view(orderIndex, section, taskType, 0, 60));
     }
 
     @Test
     @DisplayName("returns all items in order for an OFFICIAL_EXAM attempt")
     void getAllTasks_officialExam_returnsAllItemsInOrder() {
-        snapshot.setExamMode("OFFICIAL_EXAM");
-        PinnedItem item0 = item(0, "SPEAKING", "READ_ALOUD");
-        PinnedItem item1 = item(1, "SPEAKING", "READ_ALOUD");
-        PinnedItem item2 = item(2, "SPEAKING", "READ_ALOUD");
-        snapshot.addItem(item0);
-        snapshot.addItem(item1);
-        snapshot.addItem(item2);
+        attempt.setExamMode("OFFICIAL_EXAM");
+        ExamItemView item0 = item(0, "SPEAKING", "READ_ALOUD");
+        ExamItemView item1 = item(1, "SPEAKING", "READ_ALOUD");
+        ExamItemView item2 = item(2, "SPEAKING", "READ_ALOUD");
 
-        PinnedItemView view0 = PinnedSnapshotCacheService.toView(item0);
-        PinnedItemView view1 = PinnedSnapshotCacheService.toView(item1);
-        PinnedItemView view2 = PinnedSnapshotCacheService.toView(item2);
+        ExamItemView view0 = item0;
+        ExamItemView view1 = item1;
+        ExamItemView view2 = item2;
 
         when(timerService.resolveEffectivePrepSeconds(view0)).thenReturn(0);
         when(timerService.resolveEffectiveResponseSeconds(attempt, view0, List.of(view0, view1, view2))).thenReturn(60);
@@ -147,18 +132,15 @@ class AttemptLifecycleServiceGetAllTasksTest {
     @Test
     @DisplayName("OFFICIAL_EXAM: navigation stays inside WRITING and never crosses back into SPEAKING")
     void getAllTasks_officialExam_navigationStopsAtSectionBoundary() {
-        snapshot.setExamMode("OFFICIAL_EXAM");
-        PinnedItem item0 = item(0, "SPEAKING", "READ_ALOUD");
-        PinnedItem item1 = item(1, "WRITING", "WRITE_ESSAY");
-        PinnedItem item2 = item(2, "WRITING", "WRITE_ESSAY");
-        snapshot.addItem(item0);
-        snapshot.addItem(item1);
-        snapshot.addItem(item2);
+        attempt.setExamMode("OFFICIAL_EXAM");
+        ExamItemView item0 = item(0, "SPEAKING", "READ_ALOUD");
+        ExamItemView item1 = item(1, "WRITING", "WRITE_ESSAY");
+        ExamItemView item2 = item(2, "WRITING", "WRITE_ESSAY");
 
-        PinnedItemView view0 = PinnedSnapshotCacheService.toView(item0);
-        PinnedItemView view1 = PinnedSnapshotCacheService.toView(item1);
-        PinnedItemView view2 = PinnedSnapshotCacheService.toView(item2);
-        List<PinnedItemView> allViews = List.of(view0, view1, view2);
+        ExamItemView view0 = item0;
+        ExamItemView view1 = item1;
+        ExamItemView view2 = item2;
+        List<ExamItemView> allViews = List.of(view0, view1, view2);
 
         when(timerService.resolveEffectivePrepSeconds(view0)).thenReturn(0);
         when(timerService.resolveEffectiveResponseSeconds(attempt, view0, allViews)).thenReturn(60);
@@ -183,15 +165,13 @@ class AttemptLifecycleServiceGetAllTasksTest {
     @Test
     @DisplayName("TEST mode SPEAKING: both nav flags false")
     void getAllTasks_testModeSpeaking_noNavigation() {
-        snapshot.setExamMode("TEST");
-        PinnedItem item0 = item(0, "SPEAKING", "READ_ALOUD");
-        PinnedItem item1 = item(1, "SPEAKING", "READ_ALOUD");
-        snapshot.addItem(item0);
-        snapshot.addItem(item1);
+        attempt.setExamMode("TEST");
+        ExamItemView item0 = item(0, "SPEAKING", "READ_ALOUD");
+        ExamItemView item1 = item(1, "SPEAKING", "READ_ALOUD");
 
-        PinnedItemView view0 = PinnedSnapshotCacheService.toView(item0);
-        PinnedItemView view1 = PinnedSnapshotCacheService.toView(item1);
-        List<PinnedItemView> allViews = List.of(view0, view1);
+        ExamItemView view0 = item0;
+        ExamItemView view1 = item1;
+        List<ExamItemView> allViews = List.of(view0, view1);
 
         when(timerService.resolveEffectivePrepSeconds(view0)).thenReturn(0);
         when(timerService.resolveEffectiveResponseSeconds(attempt, view0, allViews)).thenReturn(40);
@@ -209,18 +189,15 @@ class AttemptLifecycleServiceGetAllTasksTest {
     @Test
     @DisplayName("TEST mode READING: canNavigateNext within section, canNavigatePrevious false")
     void getAllTasks_testModeReading_navigationWithinSection() {
-        snapshot.setExamMode("TEST");
-        PinnedItem item0 = item(0, "READING", "READING_AND_WRITING_FILL_IN_THE_BLANKS");
-        PinnedItem item1 = item(1, "READING", "READING_AND_WRITING_FILL_IN_THE_BLANKS");
-        PinnedItem item2 = item(2, "READING", "READING_AND_WRITING_FILL_IN_THE_BLANKS");
-        snapshot.addItem(item0);
-        snapshot.addItem(item1);
-        snapshot.addItem(item2);
+        attempt.setExamMode("TEST");
+        ExamItemView item0 = item(0, "READING", "READING_AND_WRITING_FILL_IN_THE_BLANKS");
+        ExamItemView item1 = item(1, "READING", "READING_AND_WRITING_FILL_IN_THE_BLANKS");
+        ExamItemView item2 = item(2, "READING", "READING_AND_WRITING_FILL_IN_THE_BLANKS");
 
-        PinnedItemView view0 = PinnedSnapshotCacheService.toView(item0);
-        PinnedItemView view1 = PinnedSnapshotCacheService.toView(item1);
-        PinnedItemView view2 = PinnedSnapshotCacheService.toView(item2);
-        List<PinnedItemView> allViews = List.of(view0, view1, view2);
+        ExamItemView view0 = item0;
+        ExamItemView view1 = item1;
+        ExamItemView view2 = item2;
+        List<ExamItemView> allViews = List.of(view0, view1, view2);
 
         when(timerService.resolveEffectivePrepSeconds(view0)).thenReturn(0);
         when(timerService.resolveEffectiveResponseSeconds(attempt, view0, allViews)).thenReturn(600);
@@ -255,14 +232,13 @@ class AttemptLifecycleServiceGetAllTasksTest {
     }
 
     @Test
-    @DisplayName("encryptionPublicKey is populated for STRICT-pinned attempts")
+    @DisplayName("encryptionPublicKey is populated for STRICT attempts")
     void getAllTasks_strictPinned_encryptionKeyPopulated() {
-        snapshot.setExamMode("OFFICIAL_EXAM");
-        snapshot.setAnswerIntegrityLevel("STRICT");
-        PinnedItem item0 = item(0, "SPEAKING", "READ_ALOUD");
-        snapshot.addItem(item0);
+        attempt.setExamMode("OFFICIAL_EXAM");
+        attempt.setAnswerIntegrityLevel("STRICT");
+        ExamItemView item0 = item(0, "SPEAKING", "READ_ALOUD");
 
-        PinnedItemView view0 = PinnedSnapshotCacheService.toView(item0);
+        ExamItemView view0 = item0;
         when(timerService.resolveEffectivePrepSeconds(view0)).thenReturn(0);
         when(timerService.resolveEffectiveResponseSeconds(attempt, view0, List.of(view0))).thenReturn(60);
         when(encryptionKeyProvider.getPublicKeyBase64()).thenReturn("base64key==");
@@ -275,15 +251,14 @@ class AttemptLifecycleServiceGetAllTasksTest {
     @Test
     @DisplayName("totalTasks reflects the full list size, not just the current position")
     void getAllTasks_totalTasksIsFullListSize() {
-        snapshot.setExamMode("OFFICIAL_EXAM");
+        attempt.setExamMode("OFFICIAL_EXAM");
         for (int i = 0; i < 5; i++) {
-            snapshot.addItem(item(i, "SPEAKING", "READ_ALOUD"));
+            item(i, "SPEAKING", "READ_ALOUD");
         }
         attempt.setCurrentOrderIndex(2);  // student is mid-exam
 
-        List<PinnedItemView> allViews = snapshot.getItems().stream()
-                .map(PinnedSnapshotCacheService::toView).toList();
-        for (PinnedItemView v : allViews) {
+        List<ExamItemView> allViews = List.copyOf(exam.items);
+        for (ExamItemView v : allViews) {
             when(timerService.resolveEffectivePrepSeconds(v)).thenReturn(0);
             when(timerService.resolveEffectiveResponseSeconds(attempt, v, allViews)).thenReturn(60);
         }

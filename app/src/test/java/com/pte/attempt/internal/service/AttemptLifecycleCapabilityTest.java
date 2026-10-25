@@ -1,8 +1,6 @@
 package com.pte.attempt.internal.service;
 
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
-import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.internal.constant.AttemptConstants;
@@ -12,9 +10,10 @@ import com.pte.attempt.internal.exception.AttemptNotFoundException;
 import com.pte.attempt.internal.exception.ExamCapabilityException;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
-import com.pte.attempt.internal.repository.PinnedItemRepository;
-import com.pte.attempt.internal.service.cache.PinnedSnapshotCacheService;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
+import com.pte.attempt.internal.service.cache.ExamItemView;
+import com.pte.session.SessionService;
+import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +35,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -50,12 +50,8 @@ class AttemptLifecycleCapabilityTest {
 
     @Mock
     private ExamAttemptRepository attemptRepository;
-    @Mock
-    private PinnedItemRepository pinnedItemRepository;
-    @Mock
-    private SnapshotPinService snapshotPinService;
-    @Mock
-    private PinnedSnapshotCacheService cacheService;
+
+    private final FakeExam exam = new FakeExam();
     @Mock
     private TimerService timerService;
     @Mock
@@ -67,21 +63,33 @@ class AttemptLifecycleCapabilityTest {
     @Mock
     private HeartbeatService heartbeatService;
     @Mock
+    private SessionService sessionService;
+    @Mock
     private CapabilityNegotiationService capabilityNegotiationService;
 
     private AttemptLifecycleService service;
 
     @BeforeEach
     void setUp() {
-        service = new AttemptLifecycleService(attemptRepository, pinnedItemRepository, snapshotPinService,
-                cacheService, timerService, answerSubmitService, new AttemptMapper(JsonMapper.builder().build()),
-                encryptionKeyProvider, submissionDecryptionService, heartbeatService, capabilityNegotiationService);
-
+        service = new AttemptLifecycleService(
+                attemptRepository,
+                exam.contentService,
+                timerService,
+                answerSubmitService,
+                new AttemptMapper(JsonMapper.builder().build()),
+                encryptionKeyProvider,
+                submissionDecryptionService,
+                heartbeatService,
+                capabilityNegotiationService,
+                sessionService);
+        lenient().when(sessionService.getAttemptRetryPolicy(any(), any()))
+                .thenReturn(new AttemptRetryPolicyResponse(0));
     }
 
     @Test
     void start_repeatsAuthoritativeCheckAndStoresNormalizedFingerprint() {
-        PinnedExamSnapshot pinned = pinnedSnapshot();
+        exam.add(FakeExam.view(0, "SPEAKING", "READ_ALOUD", 10, 20));
+        UUID versionId = exam.stubStart(sessionService, sessionId, studentId, tenantId, "STANDARD");
         when(attemptRepository.save(any(ExamAttempt.class))).thenAnswer(invocation -> {
             ExamAttempt attempt = invocation.getArgument(0);
             if (attempt.getId() == null) {
@@ -94,11 +102,10 @@ class AttemptLifecycleCapabilityTest {
         });
         when(timerService.resolveEffectivePrepSeconds(any())).thenReturn(10);
         when(timerService.resolveEffectiveResponseSeconds(any(), any(), anyList())).thenReturn(20);
-        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+        when(attemptRepository.findFirstBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
                 sessionId, studentId)).thenReturn(Optional.empty());
         when(capabilityNegotiationService.authorizeStart(sessionId, studentId, manifest(), caller))
                 .thenReturn("AUDIO_RECORDING@1");
-        when(snapshotPinService.pin(any(), eq(sessionId), eq(studentId))).thenReturn(pinned);
 
         var response = service.startAttempt(new StartAttemptRequest(sessionId, true, manifest()), caller);
 
@@ -106,13 +113,13 @@ class AttemptLifecycleCapabilityTest {
         ArgumentCaptor<ExamAttempt> captor = ArgumentCaptor.forClass(ExamAttempt.class);
         verify(attemptRepository, times(2)).save(captor.capture());
         assertThat(captor.getAllValues().get(0).getCapabilityFingerprint()).isEqualTo("AUDIO_RECORDING@1");
-        verify(capabilityNegotiationService).verifyPinnedForStart(eq(pinned), eq("AUDIO_RECORDING@1"), eq(caller));
+        verify(capabilityNegotiationService).verifyForStart(eq(exam.items), eq(versionId), eq("AUDIO_RECORDING@1"), eq(caller));
     }
 
     @Test
     void existingStart_checksCapabilitiesAfterOwnershipBeforeResume() {
         ExamAttempt existing = inProgressAttempt();
-        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+        when(attemptRepository.findFirstBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
                 sessionId, studentId)).thenReturn(Optional.of(existing));
         ExamCapabilityException failure = new ExamCapabilityException(
                 AttemptConstants.EXAM_REQUIRES_APP_UPDATE, List.of("AUDIO_RECORDING"));
@@ -121,8 +128,7 @@ class AttemptLifecycleCapabilityTest {
         assertThatThrownBy(() -> service.startAttempt(new StartAttemptRequest(sessionId, true), caller))
                 .isSameAs(failure);
         verify(capabilityNegotiationService).authorizeExisting(existing, null, caller);
-        verify(pinnedItemRepository, never()).countByPinnedSnapshotId(any());
-        verifyNoInteractions(pinnedItemRepository, snapshotPinService, cacheService, timerService);
+        verifyNoInteractions(timerService);
         verify(attemptRepository, never()).save(any());
     }
 
@@ -130,21 +136,20 @@ class AttemptLifecycleCapabilityTest {
     void existingStart_wrongTenant_rejectsBeforeCapabilityCheckOrResume() {
         ExamAttempt existing = inProgressAttempt();
         existing.setTenantId(UUID.randomUUID());
-        when(attemptRepository.findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(sessionId, studentId))
+        when(attemptRepository.findFirstBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(sessionId, studentId))
                 .thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> service.startAttempt(new StartAttemptRequest(sessionId, true), caller))
                 .isInstanceOf(AttemptNotFoundException.class);
 
-        verifyNoInteractions(capabilityNegotiationService, pinnedItemRepository, snapshotPinService,
-                cacheService, timerService);
+        verifyNoInteractions(capabilityNegotiationService, timerService);
         verify(attemptRepository, never()).save(any());
     }
 
     @Test
-    void nextTask_checksStoredCapabilitiesBeforeReadingOrReturningPinnedContent() {
+    void nextTask_checksStoredCapabilitiesBeforeReadingOrReturningExamContent() {
         ExamAttempt existing = inProgressAttempt();
-        when(attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(existing.getPublicId(), studentId))
+        when(attemptRepository.findByPublicIdAndStudentPublicId(existing.getPublicId(), studentId))
                 .thenReturn(Optional.of(existing));
         ExamCapabilityException failure = new ExamCapabilityException(
                 AttemptConstants.EXAM_REQUIRES_APP_UPDATE, List.of("AUDIO_RECORDING"));
@@ -153,7 +158,6 @@ class AttemptLifecycleCapabilityTest {
         assertThatThrownBy(() -> service.getNextTask(existing.getPublicId(), caller))
                 .isSameAs(failure);
         verify(capabilityNegotiationService).assertStoredCapabilities(existing, caller);
-        verify(pinnedItemRepository, never()).countByPinnedSnapshotId(any());
     }
 
     private ClientCapabilityManifest manifest() {
@@ -167,36 +171,6 @@ class AttemptLifecycleCapabilityTest {
         attempt.setStudentPublicId(studentId);
         attempt.setTenantId(tenantId);
         attempt.setStatus(AttemptStatus.IN_PROGRESS);
-        attempt.setPinnedSnapshot(pinnedSnapshot());
         return attempt;
-    }
-
-    private PinnedExamSnapshot pinnedSnapshot() {
-        PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
-        snapshot.setId(10L);
-        snapshot.setPublicId(UUID.randomUUID());
-        snapshot.setSourceSnapshotPublicId(UUID.randomUUID());
-        snapshot.setSourceSessionPublicId(sessionId);
-        snapshot.setTenantId(tenantId);
-        snapshot.setReplayPolicyType("UNLIMITED");
-        snapshot.setAnswerIntegrityLevel("STANDARD");
-        snapshot.setDeviceCheckRequired(false);
-        snapshot.setProctorRequired(false);
-
-        PinnedItem item = new PinnedItem();
-        item.setId(11L);
-        item.setPublicId(UUID.randomUUID());
-        item.setOrderIndex(0);
-        item.setSection("SPEAKING");
-        item.setTaskType("READ_ALOUD");
-        item.setTaskTypeCode("READ_ALOUD");
-        item.setTitle("Read aloud");
-        item.setPromptText("Prompt");
-        item.setPrepSeconds(10);
-        item.setResponseSeconds(20);
-        item.pinRuntimeProfile(TaskRuntimeProfileRegistry.descriptorFor("READ_ALOUD"),
-                "CANONICAL_V1", "RESOLVED_CANONICAL");
-        snapshot.addItem(item);
-        return snapshot;
     }
 }

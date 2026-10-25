@@ -1,12 +1,9 @@
 package com.pte.attempt.internal.service;
 
-import com.pte.attempt.domain.AttemptHeartbeat;
 import com.pte.attempt.domain.ExamAttempt;
 import com.pte.attempt.dto.response.MonitoringAttemptSummaryView;
 import com.pte.attempt.dto.response.MonitoringAttemptView;
 import com.pte.attempt.dto.response.MonitoringRosterAggregateView;
-import com.pte.attempt.dto.response.ProctorIntegrityReportView;
-import com.pte.attempt.internal.repository.AttemptHeartbeatRepository;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import com.pte.shared.web.PageMeta;
 import com.pte.shared.web.PagedResult;
@@ -14,7 +11,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,7 +27,7 @@ import java.util.stream.Collectors;
 
 /**
  * Proctor-scoped read queries for latest attempt statuses, bounded student history,
- * whole-session aggregates joining the exported Session membership view, and integrity checks.
+ * and whole-session status aggregates.
  */
 @Service
 public class AttemptMonitoringQueryService {
@@ -39,78 +35,18 @@ public class AttemptMonitoringQueryService {
     private static final int DEFAULT_SIZE = 25;
     private static final int MAX_SIZE = 100;
 
-    private static final String ROSTER_AGGREGATE_SQL = """
-            SELECT
-                COUNT(m.student_public_id) AS total_enrolled,
-                COUNT(CASE WHEN la.status = 'IN_PROGRESS' THEN 1 END) AS in_progress_count,
-                COUNT(CASE WHEN la.status = 'SUBMITTED' THEN 1 END) AS submitted_count,
-                COUNT(CASE WHEN la.status = 'CREATED' THEN 1 END) AS created_count,
-                COUNT(CASE WHEN la.status IS NULL THEN 1 END) AS not_started_count
-            FROM session_monitoring_enrollment_membership m
-            LEFT JOIN (
-                SELECT a.student_public_id, a.status
-                FROM exam_attempts a
-                JOIN (
-                    SELECT sub.student_public_id, MAX(sub.attempt_number) AS max_att
-                    FROM exam_attempts sub
-                    WHERE sub.session_public_id = ?
-                      AND sub.tenant_id = ?
-                      AND sub.deleted = FALSE
-                    GROUP BY sub.student_public_id
-                ) latest ON a.student_public_id = latest.student_public_id AND a.attempt_number = latest.max_att
-                WHERE a.session_public_id = ?
-                  AND a.tenant_id = ?
-                  AND a.deleted = FALSE
-            ) la ON m.student_public_id = la.student_public_id
-            WHERE m.exam_session_public_id = ?
-              AND m.tenant_id = ?
-            """;
-
-    private static final String DUPLICATE_MEMBERSHIP_SQL = """
-            SELECT student_public_id
-            FROM session_monitoring_enrollment_membership
-            WHERE exam_session_public_id = ? AND tenant_id = ?
-            GROUP BY student_public_id
-            HAVING COUNT(*) > 1
-            """;
-
-    private static final String TIED_ATTEMPT_NUMBER_SQL = """
-            SELECT student_public_id
-            FROM exam_attempts
-            WHERE session_public_id = ? AND tenant_id = ? AND deleted = FALSE
-            GROUP BY student_public_id, attempt_number
-            HAVING COUNT(*) > 1
-            """;
-
-    private static final String HISTORICAL_ORPHAN_ATTEMPTS_SQL = """
-            SELECT a.public_id
-            FROM exam_attempts a
-            LEFT JOIN session_monitoring_enrollment_membership m
-              ON a.session_public_id = m.exam_session_public_id
-             AND a.student_public_id = m.student_public_id
-             AND a.tenant_id = m.tenant_id
-            WHERE a.session_public_id = ?
-              AND a.tenant_id = ?
-              AND a.deleted = FALSE
-              AND m.student_public_id IS NULL
-            """;
+    private static final int ROSTER_BATCH_SIZE = 500;
 
     private final ExamAttemptRepository examAttemptRepository;
-    private final AttemptHeartbeatRepository attemptHeartbeatRepository;
-    private final JdbcTemplate jdbcTemplate;
 
     public AttemptMonitoringQueryService(
-            ExamAttemptRepository examAttemptRepository,
-            AttemptHeartbeatRepository attemptHeartbeatRepository,
-            JdbcTemplate jdbcTemplate) {
+            ExamAttemptRepository examAttemptRepository) {
         this.examAttemptRepository = examAttemptRepository;
-        this.attemptHeartbeatRepository = attemptHeartbeatRepository;
-        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
      * Batch latest attempt resolution for a page of enrolled students on an exam session.
-     * Guaranteed bounded query count (1 attempts query + 1 heartbeats query), independent of student count.
+     * Guaranteed bounded query count (1 attempts query), independent of student count.
      */
     @Transactional(readOnly = true)
     public Map<UUID, MonitoringAttemptView> findLatestAttemptsForStudents(
@@ -136,15 +72,6 @@ public class AttemptMonitoringQueryService {
                 .map(list -> list.get(0).getId())
                 .collect(Collectors.toSet());
 
-        Map<Long, Instant> heartbeatMap = latestAttemptIds.isEmpty()
-                ? Collections.emptyMap()
-                : attemptHeartbeatRepository.findByAttemptIdIn(latestAttemptIds).stream()
-                .filter(h -> h.getAttempt() != null && h.getLastSeenAt() != null)
-                .collect(Collectors.toMap(
-                        h -> h.getAttempt().getId(),
-                        AttemptHeartbeat::getLastSeenAt,
-                        (existing, replacement) -> existing));
-
         Map<UUID, MonitoringAttemptView> result = new HashMap<>();
         for (UUID studentId : targetStudentIds) {
             List<ExamAttempt> studentAttempts = attemptsByStudent.get(studentId);
@@ -152,7 +79,7 @@ public class AttemptMonitoringQueryService {
                 result.put(studentId, new MonitoringAttemptView(null, studentId, null, null, null, null, null, 0));
             } else {
                 ExamAttempt latest = studentAttempts.get(0);
-                Instant lastSeenAt = heartbeatMap.get(latest.getId());
+                Instant lastSeenAt = latest.getLastSeenAt();
                 result.put(studentId, new MonitoringAttemptView(
                         latest.getPublicId(),
                         studentId,
@@ -189,15 +116,6 @@ public class AttemptMonitoringQueryService {
                 .map(ExamAttempt::getId)
                 .collect(Collectors.toSet());
 
-        Map<Long, Instant> heartbeatMap = attemptIds.isEmpty()
-                ? Collections.emptyMap()
-                : attemptHeartbeatRepository.findByAttemptIdIn(attemptIds).stream()
-                .filter(h -> h.getAttempt() != null && h.getLastSeenAt() != null)
-                .collect(Collectors.toMap(
-                        h -> h.getAttempt().getId(),
-                        AttemptHeartbeat::getLastSeenAt,
-                        (existing, replacement) -> existing));
-
         List<MonitoringAttemptSummaryView> items = attemptPage.getContent().stream()
                 .map(a -> new MonitoringAttemptSummaryView(
                         a.getPublicId(),
@@ -206,7 +124,7 @@ public class AttemptMonitoringQueryService {
                         a.getStatus(),
                         a.getStartedAt(),
                         a.getSubmittedAt(),
-                        heartbeatMap.get(a.getId())))
+                        a.getLastSeenAt()))
                 .toList();
 
         PageMeta meta = new PageMeta(
@@ -223,58 +141,35 @@ public class AttemptMonitoringQueryService {
     }
 
     /**
-     * Whole-session roster status aggregate joining the exported Session membership view.
-     * Excludes orphan historical attempts and counts each enrolled student once by their latest attempt.
+     * Whole-session roster status aggregate over the given enrolled students: each counts once, by their latest
+     * attempt; attempts of students who are no longer enrolled never count.
      */
     @Transactional(readOnly = true)
-    public MonitoringRosterAggregateView getRosterAggregate(UUID sessionPublicId, UUID tenantId) {
-        if (sessionPublicId == null || tenantId == null) {
+    public MonitoringRosterAggregateView getRosterAggregate(UUID sessionPublicId, UUID tenantId,
+            Collection<UUID> enrolledStudentPublicIds) {
+        List<UUID> students = enrolledStudentPublicIds == null ? List.of()
+                : enrolledStudentPublicIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (sessionPublicId == null || tenantId == null || students.isEmpty()) {
             return new MonitoringRosterAggregateView(0, 0, 0, 0, 0);
         }
-
-        MonitoringRosterAggregateView view = jdbcTemplate.query(
-                ROSTER_AGGREGATE_SQL,
-                rs -> {
-                    if (rs.next()) {
-                        return new MonitoringRosterAggregateView(
-                                rs.getLong("total_enrolled"),
-                                rs.getLong("not_started_count"),
-                                rs.getLong("in_progress_count"),
-                                rs.getLong("submitted_count"),
-                                rs.getLong("created_count"));
-                    }
-                    return new MonitoringRosterAggregateView(0, 0, 0, 0, 0);
-                },
-                sessionPublicId, tenantId, sessionPublicId, tenantId, sessionPublicId, tenantId);
-
-        return view != null ? view : new MonitoringRosterAggregateView(0, 0, 0, 0, 0);
-    }
-
-    /**
-     * Inspects data integrity for an exam session: duplicate active memberships, tied attempt numbers,
-     * and historical orphan attempts.
-     */
-    @Transactional(readOnly = true)
-    public ProctorIntegrityReportView checkIntegrity(UUID sessionPublicId, UUID tenantId) {
-        if (sessionPublicId == null || tenantId == null) {
-            return new ProctorIntegrityReportView(List.of(), List.of(), List.of());
+        long inProgress = 0;
+        long submitted = 0;
+        long created = 0;
+        long started = 0;
+        for (int from = 0; from < students.size(); from += ROSTER_BATCH_SIZE) {
+            List<UUID> batch = students.subList(from, Math.min(from + ROSTER_BATCH_SIZE, students.size()));
+            for (ExamAttemptRepository.LatestStatusRow row
+                    : examAttemptRepository.findLatestStatuses(sessionPublicId, tenantId, batch)) {
+                started++;
+                switch (row.getStatus()) {
+                    case IN_PROGRESS -> inProgress++;
+                    case SUBMITTED -> submitted++;
+                    case CREATED -> created++;
+                    default -> { }
+                }
+            }
         }
-
-        List<UUID> duplicateMemberships = jdbcTemplate.query(
-                DUPLICATE_MEMBERSHIP_SQL,
-                (rs, rowNum) -> rs.getObject("student_public_id", UUID.class),
-                sessionPublicId, tenantId);
-
-        List<UUID> tiedAttempts = jdbcTemplate.query(
-                TIED_ATTEMPT_NUMBER_SQL,
-                (rs, rowNum) -> rs.getObject("student_public_id", UUID.class),
-                sessionPublicId, tenantId);
-
-        List<UUID> orphanAttempts = jdbcTemplate.query(
-                HISTORICAL_ORPHAN_ATTEMPTS_SQL,
-                (rs, rowNum) -> rs.getObject("public_id", UUID.class),
-                sessionPublicId, tenantId);
-
-        return new ProctorIntegrityReportView(duplicateMemberships, tiedAttempts, orphanAttempts);
+        return new MonitoringRosterAggregateView(students.size(), students.size() - started, inProgress,
+                submitted, created);
     }
 }

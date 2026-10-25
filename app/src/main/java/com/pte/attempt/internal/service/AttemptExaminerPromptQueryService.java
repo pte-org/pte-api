@@ -1,7 +1,7 @@
 package com.pte.attempt.internal.service;
 
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedItem;
+import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.attempt.dto.response.AttemptExaminerPromptView;
 import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
@@ -30,49 +30,49 @@ public class AttemptExaminerPromptQueryService {
     };
 
     private final ExamAttemptRepository attemptRepository;
+    private final ExamContentService contentService;
     private final JsonMapper jsonMapper;
 
-    public AttemptExaminerPromptQueryService(ExamAttemptRepository attemptRepository, JsonMapper jsonMapper) {
+    public AttemptExaminerPromptQueryService(ExamAttemptRepository attemptRepository,
+            ExamContentService contentService, JsonMapper jsonMapper) {
         this.attemptRepository = attemptRepository;
+        this.contentService = contentService;
         this.jsonMapper = jsonMapper;
     }
 
     @Transactional(readOnly = true)
     public Map<UUID, AttemptExaminerPromptView> findForExaminer(UUID attemptPublicId, UUID sessionPublicId,
-            UUID tenantId, Collection<UUID> pinnedItemPublicIds) {
+            UUID tenantId, Collection<UUID> itemPublicIds) {
         if (attemptPublicId == null || sessionPublicId == null || tenantId == null
-                || pinnedItemPublicIds == null || pinnedItemPublicIds.isEmpty()) {
+                || itemPublicIds == null || itemPublicIds.isEmpty()) {
             return Map.of();
         }
-        List<UUID> requestedItemIds = pinnedItemPublicIds.stream().filter(Objects::nonNull).distinct().toList();
+        List<UUID> requestedItemIds = itemPublicIds.stream().filter(Objects::nonNull).distinct().toList();
         if (requestedItemIds.isEmpty()) {
             return Map.of();
         }
 
-        ExamAttempt attempt = attemptRepository.findWithPinnedByPublicId(attemptPublicId).orElse(null);
+        ExamAttempt attempt = attemptRepository.findByPublicId(attemptPublicId).orElse(null);
         if (!belongsToRequestedScope(attempt, sessionPublicId, tenantId)) {
             return Map.of();
         }
 
-        return attempt.getPinnedSnapshot().getItems().stream()
-                .filter(item -> requestedItemIds.contains(item.getPublicId()))
-                .collect(Collectors.toUnmodifiableMap(PinnedItem::getPublicId, this::toView));
+        return contentService.contentItems(attempt.getExamVersionPublicId()).values().stream()
+                .filter(item -> requestedItemIds.contains(item.itemPublicId()))
+                .collect(Collectors.toUnmodifiableMap(SnapshotContentResponse.Item::itemPublicId, this::toView));
     }
 
     private boolean belongsToRequestedScope(ExamAttempt attempt, UUID sessionPublicId, UUID tenantId) {
         return attempt != null && tenantId.equals(attempt.getTenantId())
-                && sessionPublicId.equals(attempt.getSessionPublicId())
-                && attempt.getPinnedSnapshot() != null
-                && tenantId.equals(attempt.getPinnedSnapshot().getTenantId())
-                && sessionPublicId.equals(attempt.getPinnedSnapshot().getSourceSessionPublicId());
+                && sessionPublicId.equals(attempt.getSessionPublicId());
     }
 
-    private AttemptExaminerPromptView toView(PinnedItem item) {
-        String taskType = item.getTaskTypeKey() != null ? item.getTaskTypeKey()
-                : item.getTaskTypeCode() != null ? item.getTaskTypeCode() : item.getTaskType();
-        return new AttemptExaminerPromptView(item.getPublicId(), item.getOrderIndex(), item.getSection(), taskType,
-                item.getTitle(), item.getPromptText(), item.getAudioPromptRef(), item.getImagePromptRef(),
-                item.getMinWordCount(), item.getMaxWordCount(), parseOptions(item.getOptionsJson()));
+    private AttemptExaminerPromptView toView(SnapshotContentResponse.Item item) {
+        String taskType = item.taskTypeKey() != null ? item.taskTypeKey()
+                : item.taskTypeCode() != null ? item.taskTypeCode() : item.taskType();
+        return new AttemptExaminerPromptView(item.itemPublicId(), item.orderIndex(), item.section(), taskType,
+                item.title(), item.promptText(), item.audioPromptRef(), item.imagePromptRef(),
+                item.minWordCount(), item.maxWordCount(), parseOptions(item.optionsJson()));
     }
 
     private List<AttemptExaminerPromptView.Option> parseOptions(String optionsJson) {
@@ -85,7 +85,7 @@ public class AttemptExaminerPromptQueryService {
                             option.orderIndex(), option.text(), option.blankIndex()))
                     .toList();
         } catch (JacksonException ex) {
-            throw new IllegalStateException(AttemptConstants.PINNED_ITEM_OPTIONS_PARSE_FAILED, ex);
+            throw new IllegalStateException(AttemptConstants.EXAM_ITEM_OPTIONS_PARSE_FAILED, ex);
         }
     }
 

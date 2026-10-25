@@ -4,7 +4,7 @@ import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.shared.exception.DomainException;
 import org.springframework.http.HttpStatus;
 
-/** The pinned {@code audioUrlExpiresAt} has passed — should not happen under normal operation. */
+/** The {@code audioUrlExpiresAt} has passed — should not happen under normal operation. */
 public class AudioUrlExpiredException extends DomainException {
 
     public AudioUrlExpiredException() {

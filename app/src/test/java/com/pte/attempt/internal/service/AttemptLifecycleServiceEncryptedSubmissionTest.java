@@ -2,16 +2,14 @@ package com.pte.attempt.internal.service;
 
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
-import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.internal.exception.AnswerIntegrityLevelMismatchException;
 import com.pte.attempt.internal.dto.request.EncryptedSubmissionRequest;
 import com.pte.attempt.internal.dto.request.SubmitAnswerRequest;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
-import com.pte.attempt.internal.repository.PinnedItemRepository;
-import com.pte.attempt.internal.service.cache.PinnedSnapshotCacheService;
+import com.pte.attempt.internal.service.cache.ExamItemView;
+import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -50,14 +48,7 @@ class AttemptLifecycleServiceEncryptedSubmissionTest {
     @Mock
     private ExamAttemptRepository attemptRepository;
 
-    @Mock
-    private PinnedItemRepository pinnedItemRepository;
-
-    @Mock
-    private SnapshotPinService snapshotPinService;
-
-    @Mock
-    private PinnedSnapshotCacheService cacheService;
+    private final FakeExam exam = new FakeExam();
 
     @Mock
     private TimerService timerService;
@@ -73,6 +64,10 @@ class AttemptLifecycleServiceEncryptedSubmissionTest {
 
     @Mock
     private HeartbeatService heartbeatService;
+    @Mock
+    private CapabilityNegotiationService capabilityNegotiationService;
+    @Mock
+    private SessionService sessionService;
 
     private AttemptLifecycleService attemptLifecycleService;
 
@@ -85,17 +80,16 @@ class AttemptLifecycleServiceEncryptedSubmissionTest {
         AttemptMapper attemptMapper = new AttemptMapper(JsonMapper.builder().build());
 
         attemptLifecycleService = new AttemptLifecycleService(
-            attemptRepository,
-            pinnedItemRepository,
-            snapshotPinService,
-            cacheService,
-            timerService,
-            answerSubmitService,
-            attemptMapper,
-            encryptionKeyProvider,
-            submissionDecryptionService,
-            heartbeatService
-        );
+                attemptRepository,
+                exam.contentService,
+                timerService,
+                answerSubmitService,
+                attemptMapper,
+                encryptionKeyProvider,
+                submissionDecryptionService,
+                heartbeatService,
+                capabilityNegotiationService,
+                sessionService);
 
         studentPublicId = UUID.randomUUID();
         tenantId = UUID.randomUUID();
@@ -109,7 +103,7 @@ class AttemptLifecycleServiceEncryptedSubmissionTest {
         UUID pinnedItemPublicId = UUID.randomUUID();
         ExamAttempt attempt = createInProgressAttempt(attemptPublicId, "STRICT");
 
-        when(attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
+        when(attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
             .thenReturn(Optional.of(attempt));
 
         SubmitAnswerRequest request = new SubmitAnswerRequest(pinnedItemPublicId, "2");
@@ -125,7 +119,7 @@ class AttemptLifecycleServiceEncryptedSubmissionTest {
         UUID pinnedItemPublicId = UUID.randomUUID();
         ExamAttempt attempt = createInProgressAttempt(attemptPublicId, "STANDARD");
 
-        when(attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
+        when(attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
             .thenReturn(Optional.of(attempt));
 
         EncryptedSubmissionRequest request = new EncryptedSubmissionRequest(
@@ -143,22 +137,19 @@ class AttemptLifecycleServiceEncryptedSubmissionTest {
         String decryptedPlaintext = "2";
 
         ExamAttempt attempt = createInProgressAttempt(attemptPublicId, "STRICT");
-        PinnedItem item = createPinnedItem(pinnedItemPublicId, attempt.getPinnedSnapshot());
+        ExamItemView item = createItem(pinnedItemPublicId);
         PrivateKey privateKey = mock(PrivateKey.class);
 
-        when(attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
+        when(attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
             .thenReturn(Optional.of(attempt));
         when(attemptRepository.findWithLockById(attempt.getId())).thenReturn(Optional.of(attempt));
-        when(pinnedItemRepository.findByPinnedSnapshotIdAndOrderIndex(attempt.getPinnedSnapshot().getId(), 0))
-            .thenReturn(Optional.of(item));
         when(encryptionKeyProvider.getPrivateKey()).thenReturn(privateKey);
 
         EncryptedSubmissionRequest request = new EncryptedSubmissionRequest(
             pinnedItemPublicId, "wrappedKeyBase64", "ivBase64", "ciphertextBase64");
         when(submissionDecryptionService.decrypt(eq(request), eq(privateKey))).thenReturn(decryptedPlaintext);
 
-        // Only pinned item -> nextIndex >= totalItems -> attempt completes.
-        when(pinnedItemRepository.countByPinnedSnapshotId(attempt.getPinnedSnapshot().getId())).thenReturn(1L);
+        // Only one item -> nextIndex >= total -> attempt completes.
         when(attemptRepository.save(any(ExamAttempt.class))).thenReturn(attempt);
 
         AttemptTaskResponse response = attemptLifecycleService.submitEncryptedAnswer(attemptPublicId, request, caller);
@@ -176,16 +167,13 @@ class AttemptLifecycleServiceEncryptedSubmissionTest {
         UUID pinnedItemPublicId = UUID.randomUUID();
 
         ExamAttempt attempt = createInProgressAttempt(attemptPublicId, "STRICT");
-        PinnedItem item = createPinnedItem(pinnedItemPublicId, attempt.getPinnedSnapshot());
+        ExamItemView item = createItem(pinnedItemPublicId);
         PrivateKey privateKey = mock(PrivateKey.class);
 
-        when(attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
+        when(attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
             .thenReturn(Optional.of(attempt));
         when(attemptRepository.findWithLockById(attempt.getId())).thenReturn(Optional.of(attempt));
-        when(pinnedItemRepository.findByPinnedSnapshotIdAndOrderIndex(attempt.getPinnedSnapshot().getId(), 0))
-            .thenReturn(Optional.of(item));
         when(encryptionKeyProvider.getPrivateKey()).thenReturn(privateKey);
-        when(pinnedItemRepository.countByPinnedSnapshotId(attempt.getPinnedSnapshot().getId())).thenReturn(1L);
         when(attemptRepository.save(any(ExamAttempt.class))).thenReturn(attempt);
 
         EncryptedSubmissionRequest request = new EncryptedSubmissionRequest(
@@ -206,27 +194,11 @@ class AttemptLifecycleServiceEncryptedSubmissionTest {
         attempt.begin();
         attempt.setCurrentOrderIndex(0);
 
-        PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
-        snapshot.setId(1L);
-        snapshot.setPublicId(UUID.randomUUID());
-        snapshot.setAnswerIntegrityLevel(answerIntegrityLevel);
-        attempt.setPinnedSnapshot(snapshot);
+        attempt.setAnswerIntegrityLevel(answerIntegrityLevel);
         return attempt;
     }
 
-    private PinnedItem createPinnedItem(UUID publicId, PinnedExamSnapshot snapshot) {
-        PinnedItem item = new PinnedItem();
-        item.setId(1L);
-        item.setPublicId(publicId);
-        item.setOrderIndex(0);
-        item.setSection("READING");
-        item.setTaskType("MC_READING_SINGLE");
-        item.setTitle("Test task");
-        item.setPromptText("Test prompt");
-        item.setOptionsJson("[]");
-        item.setPrepSeconds(30);
-        item.setResponseSeconds(60);
-        item.setPinnedSnapshot(snapshot);
-        return item;
+    private ExamItemView createItem(UUID publicId) {
+        return exam.add(FakeExam.withId(FakeExam.view(0, "READING", "MC_READING_SINGLE", 30, 60), publicId));
     }
 }

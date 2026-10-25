@@ -6,8 +6,8 @@ import com.pte.attempt.internal.exception.AttemptAlreadyCompleteException;
 import com.pte.attempt.internal.exception.AttemptNotFoundException;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
-import com.pte.attempt.internal.repository.PinnedItemRepository;
-import com.pte.attempt.internal.service.cache.PinnedSnapshotCacheService;
+import com.pte.attempt.internal.service.cache.ExamItemView;
+import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -41,14 +41,7 @@ class AttemptLifecycleServiceHeartbeatTest {
     @Mock
     private ExamAttemptRepository attemptRepository;
 
-    @Mock
-    private PinnedItemRepository pinnedItemRepository;
-
-    @Mock
-    private SnapshotPinService snapshotPinService;
-
-    @Mock
-    private PinnedSnapshotCacheService cacheService;
+    private final FakeExam exam = new FakeExam();
 
     @Mock
     private TimerService timerService;
@@ -64,6 +57,10 @@ class AttemptLifecycleServiceHeartbeatTest {
 
     @Mock
     private HeartbeatService heartbeatService;
+    @Mock
+    private CapabilityNegotiationService capabilityNegotiationService;
+    @Mock
+    private SessionService sessionService;
 
     private AttemptLifecycleService attemptLifecycleService;
     private UUID studentPublicId;
@@ -74,17 +71,16 @@ class AttemptLifecycleServiceHeartbeatTest {
     void setUp() {
         AttemptMapper attemptMapper = new AttemptMapper(JsonMapper.builder().build());
         attemptLifecycleService = new AttemptLifecycleService(
-            attemptRepository,
-            pinnedItemRepository,
-            snapshotPinService,
-            cacheService,
-            timerService,
-            answerSubmitService,
-            attemptMapper,
-            encryptionKeyProvider,
-            submissionDecryptionService,
-            heartbeatService
-        );
+                attemptRepository,
+                exam.contentService,
+                timerService,
+                answerSubmitService,
+                attemptMapper,
+                encryptionKeyProvider,
+                submissionDecryptionService,
+                heartbeatService,
+                capabilityNegotiationService,
+                sessionService);
 
         studentPublicId = UUID.randomUUID();
         caller = new CurrentUser(studentPublicId, UUID.randomUUID(), List.of("student"));
@@ -92,7 +88,7 @@ class AttemptLifecycleServiceHeartbeatTest {
     }
 
     @Test
-    @DisplayName("owning student on an IN_PROGRESS attempt records a heartbeat via the lightweight lookup")
+    @DisplayName("owning student on an IN_PROGRESS attempt records a heartbeat")
     void recordHeartbeat_owningStudentInProgress_succeeds() {
         ExamAttempt attempt = new ExamAttempt();
         attempt.setId(1L);
@@ -105,7 +101,6 @@ class AttemptLifecycleServiceHeartbeatTest {
         attemptLifecycleService.recordHeartbeat(attemptPublicId, caller);
 
         verify(heartbeatService).recordHeartbeat(attempt);
-        verify(attemptRepository, never()).findWithPinnedByPublicIdAndStudentPublicId(any(), any());
     }
 
     @Test

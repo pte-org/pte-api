@@ -1,7 +1,7 @@
 package com.pte.attempt.internal.service;
 
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.internal.service.cache.PinnedItemView;
+import com.pte.attempt.internal.service.cache.ExamItemView;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -36,13 +36,13 @@ public class TimerService {
      * changes, so this must run BEFORE {@link #resolveEffectivePrepSeconds}/
      * {@link #resolveEffectiveResponseSeconds} are read for {@code item}.
      *
-     * @param allItems every item of the attempt's pinned snapshot, in
+     * @param allItems every item of the attempt's exam, in
      *                  {@code orderIndex} order — only scanned when {@code item}
      *                  is the first task of a new section-scoped section, to sum
      *                  that section's total budget (via
      *                  {@link #resolveEffectiveResponseSeconds}, not here).
      */
-    public void startTask(ExamAttempt attempt, PinnedItemView item, List<PinnedItemView> allItems) {
+    public void startTask(ExamAttempt attempt, ExamItemView item, List<ExamItemView> allItems) {
         attempt.setCurrentOrderIndex(item.orderIndex());
         attempt.setPlayCount(0);
         attempt.setLastPlayRequestId(null);
@@ -72,11 +72,11 @@ public class TimerService {
      * Must be called AFTER {@link #startTask}, which is what sets/maintains
      * that attempt field.
      */
-    public int resolveEffectivePrepSeconds(PinnedItemView item) {
+    public int resolveEffectivePrepSeconds(ExamItemView item) {
         return SECTION_SCOPED_SECTIONS.contains(item.section()) ? 0 : item.prepSeconds();
     }
 
-    public int resolveEffectiveResponseSeconds(ExamAttempt attempt, PinnedItemView item, List<PinnedItemView> allItems) {
+    public int resolveEffectiveResponseSeconds(ExamAttempt attempt, ExamItemView item, List<ExamItemView> allItems) {
         if (!SECTION_SCOPED_SECTIONS.contains(item.section())) {
             return item.responseSeconds();
         }
@@ -98,7 +98,7 @@ public class TimerService {
      * (matching real PTE section ordering), so a single forward/backward scan
      * from {@code item}'s own position finds the whole run.
      */
-    private long sectionBudgetSeconds(PinnedItemView item, List<PinnedItemView> allItems) {
+    private long sectionBudgetSeconds(ExamItemView item, List<ExamItemView> allItems) {
         return allItems.stream()
                 .filter(candidate -> item.section().equals(candidate.section()))
                 .mapToLong(candidate -> (long) candidate.prepSeconds() + candidate.responseSeconds())
