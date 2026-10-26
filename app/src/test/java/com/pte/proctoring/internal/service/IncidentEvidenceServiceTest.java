@@ -70,7 +70,7 @@ class IncidentEvidenceServiceTest {
     void standardPolicy_recordsAnAutoIncidentWithWarningAndServerOwnership() {
         lockdown("STANDARD");
         saveAssignsPublicId();
-        Instant before = Instant.now();
+        Instant before = com.pte.TestClocks.fixed().instant();
 
         SecurityViolationReceipt receipt = service.record(attemptId,
                 new RecordSecurityViolationRequest(" event-1 ", LockdownViolationType.LOCKDOWN_FULLSCREEN_EXIT,
@@ -88,7 +88,7 @@ class IncidentEvidenceServiceTest {
         assertThat(saved.getSessionPublicId()).isEqualTo(sessionId);
         assertThat(saved.getAttemptPublicId()).isEqualTo(attemptId);
         assertThat(saved.getType()).isEqualTo("LOCKDOWN_FULLSCREEN_EXIT");
-        assertThat(saved.getDetectedAt()).isBetween(before, Instant.now());
+        assertThat(saved.getDetectedAt()).isBetween(before, com.pte.TestClocks.fixed().instant());
     }
 
     @Test
@@ -149,7 +149,7 @@ class IncidentEvidenceServiceTest {
     void duplicateDifferentPayload_returnsStableConflict() {
         lockdown("STANDARD");
         ExamIncident existing = existing("event-6", LockdownViolationType.LOCKDOWN_FULLSCREEN_EXIT, "original",
-                Instant.now());
+                com.pte.TestClocks.fixed().instant());
         when(incidentRepository.findByAttemptPublicIdAndClientEventId(attemptId, "event-6"))
                 .thenReturn(Optional.of(existing));
 
@@ -163,7 +163,7 @@ class IncidentEvidenceServiceTest {
     private ExamIncident existing(String clientEventId, LockdownViolationType type, String detail,
                                   Instant detectedAt) {
         ExamIncident incident = new ExamIncident();
-        incident.setDetectedAt(java.time.Instant.now());
+        incident.setDetectedAt(com.pte.TestClocks.fixed().instant());
         incident.setPublicId(UUID.randomUUID());
         incident.setAttemptPublicId(attemptId);
         incident.setOrigin(IncidentOrigin.AUTO);
