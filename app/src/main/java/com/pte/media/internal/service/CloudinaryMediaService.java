@@ -1,5 +1,6 @@
 package com.pte.media.internal.service;
 
+import com.pte.media.internal.constant.MediaConstants;
 import com.pte.media.internal.dto.request.CloudinaryCompleteRequest;
 import com.pte.media.internal.dto.request.CloudinaryUploadRequest;
 import com.pte.media.internal.dto.response.CloudinaryUploadResponse;
@@ -28,7 +29,9 @@ import java.util.UUID;
 public class CloudinaryMediaService implements PracticeResponseMediaValidator {
 
     static final Set<String> IMAGE_TYPES = Set.of("image/png", "image/jpeg", "image/webp");
-    static final Set<String> AUDIO_TYPES = Set.of("audio/wav");
+    static final Set<String> AUDIO_TYPES = Set.of(MediaConstants.AUDIO_WAV, MediaConstants.AUDIO_MPEG);
+    /** Student recordings feed scoring, which only decodes WAV. */
+    static final Set<String> RESPONSE_AUDIO_TYPES = Set.of(MediaConstants.AUDIO_WAV);
     static final long SIGNATURE_TTL_SECONDS = 900;
 
     private final CloudinaryUploadRequester uploadRequester;
