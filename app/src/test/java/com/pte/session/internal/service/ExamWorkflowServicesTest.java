@@ -135,7 +135,7 @@ class ExamWorkflowServicesTest {
         templateId = UUID.randomUUID();
         subscriptionId = UUID.randomUUID();
         hostAdmin = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
-        opensAt = Instant.now().plusSeconds(3600);
+        opensAt = com.pte.TestClocks.fixed().instant().plusSeconds(3600);
         closesAt = opensAt.plusSeconds(3600);
     }
 
@@ -752,7 +752,7 @@ class ExamWorkflowServicesTest {
                 templateResponse()));
         when(billingService.getActiveSubscription(subscriptionId, tenantId)).thenReturn(Optional.of(
                 new SubscriptionView(subscriptionId, tenantId, UUID.randomUUID(), "LIC-TEST",
-                        Instant.now().minusSeconds(60), Instant.now().plusSeconds(86400), 100,
+                        com.pte.TestClocks.fixed().instant().minusSeconds(60), com.pte.TestClocks.fixed().instant().plusSeconds(86400), 100,
                         SubscriptionStatus.ACTIVE, ActivationSource.LICENSE_CODE)));
     }
 
@@ -776,7 +776,7 @@ class ExamWorkflowServicesTest {
     private void stubSubscriptionForDraft() {
         when(billingService.getActiveSubscription(subscriptionId, tenantId)).thenReturn(Optional.of(
                 new SubscriptionView(subscriptionId, tenantId, UUID.randomUUID(), "LIC-TEST",
-                        Instant.now().minusSeconds(60), Instant.now().plusSeconds(86400), 100,
+                        com.pte.TestClocks.fixed().instant().minusSeconds(60), com.pte.TestClocks.fixed().instant().plusSeconds(86400), 100,
                         SubscriptionStatus.ACTIVE, ActivationSource.LICENSE_CODE)));
     }
 

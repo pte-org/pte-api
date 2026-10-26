@@ -151,12 +151,12 @@ class SessionLifecycleServiceTest {
 
     @Test
     void create_rejectsWindowOutsideSubscription_asUnprocessable() {
-        Instant startsAt = Instant.now().minusSeconds(60);
-        SubscriptionView subscription = subscription(startsAt, Instant.now().plusSeconds(100), 200);
+        Instant startsAt = com.pte.TestClocks.fixed().instant().minusSeconds(60);
+        SubscriptionView subscription = subscription(startsAt, com.pte.TestClocks.fixed().instant().plusSeconds(100), 200);
         when(billingService.getActiveSubscription(subscriptionId, tenantId)).thenReturn(Optional.of(subscription));
 
         assertThatThrownBy(() -> service.create(request(100,
-                new Window(Instant.now().plusSeconds(200), Instant.now().plusSeconds(300))), hostAdmin))
+                new Window(com.pte.TestClocks.fixed().instant().plusSeconds(200), com.pte.TestClocks.fixed().instant().plusSeconds(300))), hostAdmin))
                 .isInstanceOf(SessionWindowOutsideSubscriptionException.class);
     }
 
@@ -268,7 +268,7 @@ class SessionLifecycleServiceTest {
 
         SessionResponse response = service.create(
                 new CreateSessionRequest("Default Session", subscriptionId, Set.of("SPEAKING"),
-                        Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
+                        com.pte.TestClocks.fixed().instant().plusSeconds(3600), com.pte.TestClocks.fixed().instant().plusSeconds(5400),
                         null, null, 100),
                 hostAdmin);
 
@@ -289,7 +289,7 @@ class SessionLifecycleServiceTest {
 
         SessionResponse response = service.create(
                 new CreateSessionRequest("Real Exam Session", subscriptionId, Set.of("SPEAKING"),
-                        Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
+                        com.pte.TestClocks.fixed().instant().plusSeconds(3600), com.pte.TestClocks.fixed().instant().plusSeconds(5400),
                         ExamMode.OFFICIAL_EXAM, null, 100),
                 hostAdmin);
 
@@ -304,7 +304,7 @@ class SessionLifecycleServiceTest {
 
         assertThatThrownBy(() -> service.create(
                 new CreateSessionRequest("Invalid Combo", subscriptionId, Set.of("SPEAKING"),
-                        Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
+                        com.pte.TestClocks.fixed().instant().plusSeconds(3600), com.pte.TestClocks.fixed().instant().plusSeconds(5400),
                         ExamMode.OFFICIAL_EXAM, LockdownMode.STANDARD, 100),
                 hostAdmin))
                 .isInstanceOf(com.pte.session.internal.exception.draft.InvalidLockdownModeException.class);
@@ -328,7 +328,7 @@ class SessionLifecycleServiceTest {
 
         SessionResponse response = service.create(
                 new CreateSessionRequest("Session", subscriptionId, skills,
-                        Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
+                        com.pte.TestClocks.fixed().instant().plusSeconds(3600), com.pte.TestClocks.fixed().instant().plusSeconds(5400),
                         ExamMode.OFFICIAL_EXAM, null, 100),
                 hostAdmin);
 
@@ -344,7 +344,7 @@ class SessionLifecycleServiceTest {
 
         assertThatThrownBy(() -> service.create(
                 new CreateSessionRequest("Session", subscriptionId, Set.of("SPEAKING"),
-                        Instant.now().plusSeconds(3600), Instant.now().plusSeconds(5400),
+                        com.pte.TestClocks.fixed().instant().plusSeconds(3600), com.pte.TestClocks.fixed().instant().plusSeconds(5400),
                         ExamMode.OFFICIAL_EXAM, null, 100),
                 hostAdmin))
                 .isInstanceOf(RuntimeException.class);
@@ -357,10 +357,10 @@ class SessionLifecycleServiceTest {
         jakarta.validation.Validator validator = jakarta.validation.Validation.buildDefaultValidatorFactory().getValidator();
 
         CreateSessionRequest empty = new CreateSessionRequest("Session", subscriptionId, Set.of(),
-                Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), ExamMode.OFFICIAL_EXAM, null, 100);
+                com.pte.TestClocks.fixed().instant().plusSeconds(3600), com.pte.TestClocks.fixed().instant().plusSeconds(7200), ExamMode.OFFICIAL_EXAM, null, 100);
         CreateSessionRequest tooMany = new CreateSessionRequest("Session", subscriptionId,
                 Set.of("SPEAKING", "WRITING", "READING", "LISTENING", "EXTRA"),
-                Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), ExamMode.OFFICIAL_EXAM, null, 100);
+                com.pte.TestClocks.fixed().instant().plusSeconds(3600), com.pte.TestClocks.fixed().instant().plusSeconds(7200), ExamMode.OFFICIAL_EXAM, null, 100);
 
         assertThat(validator.validate(empty)).isNotEmpty();
         assertThat(validator.validate(tooMany)).isNotEmpty();
@@ -524,7 +524,7 @@ class SessionLifecycleServiceTest {
     @Test
     void patchPolicy_isRejected_whenScheduledWindowHasAlreadyStarted() {
         ExamSession session = existingSession(SessionStatus.SCHEDULED, 100);
-        session.setOpensAt(Instant.now().minusSeconds(1));
+        session.setOpensAt(com.pte.TestClocks.fixed().instant().minusSeconds(1));
         when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
                 .thenReturn(Optional.of(session));
 
@@ -663,12 +663,12 @@ class SessionLifecycleServiceTest {
     }
 
     private SubscriptionView subscription(int maxCapacity) {
-        return subscription(Instant.now().minusSeconds(60), Instant.now().plusSeconds(7200), maxCapacity);
+        return subscription(com.pte.TestClocks.fixed().instant().minusSeconds(60), com.pte.TestClocks.fixed().instant().plusSeconds(7200), maxCapacity);
     }
 
     private SubscriptionView subscription(UUID id, int maxCapacity) {
-        return new SubscriptionView(id, tenantId, UUID.randomUUID(), "LIC-" + id, Instant.now().minusSeconds(60),
-                Instant.now().plusSeconds(7200), maxCapacity, SubscriptionStatus.ACTIVE,
+        return new SubscriptionView(id, tenantId, UUID.randomUUID(), "LIC-" + id, com.pte.TestClocks.fixed().instant().minusSeconds(60),
+                com.pte.TestClocks.fixed().instant().plusSeconds(7200), maxCapacity, SubscriptionStatus.ACTIVE,
                 ActivationSource.LICENSE_CODE);
     }
 
@@ -687,7 +687,7 @@ class SessionLifecycleServiceTest {
     }
 
     private Window futureWindow() {
-        Instant opensAt = Instant.now().plusSeconds(3600);
+        Instant opensAt = com.pte.TestClocks.fixed().instant().plusSeconds(3600);
         return new Window(opensAt, opensAt.plusSeconds(1800));
     }
 
@@ -700,8 +700,8 @@ class SessionLifecycleServiceTest {
         session.setLicenseKey("LIC-" + licenseKeyId);
         session.setName("Test Session");
         session.setExamVersionPublicId(UUID.randomUUID());
-        session.setOpensAt(Instant.now().plusSeconds(3600));
-        session.setClosesAt(Instant.now().plusSeconds(7200));
+        session.setOpensAt(com.pte.TestClocks.fixed().instant().plusSeconds(3600));
+        session.setClosesAt(com.pte.TestClocks.fixed().instant().plusSeconds(7200));
         session.setCapacity(capacity);
         session.setStatus(status);
         session.setPolicy(ExamPolicy.realExamDefault());
