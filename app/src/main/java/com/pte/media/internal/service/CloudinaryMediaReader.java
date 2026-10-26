@@ -7,6 +7,7 @@ import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.media.internal.dto.response.MediaPreviewResponse;
 import com.pte.media.internal.exception.MediaNotFoundException;
 import com.pte.media.internal.exception.MediaNotYetUploadedException;
+import com.pte.media.internal.constant.MediaConstants;
 import com.pte.media.internal.repository.MediaAssetRepository;
 import com.pte.shared.security.CurrentUser;
 
@@ -85,5 +86,24 @@ class CloudinaryMediaReader {
             return new PresignedDownloadResponse(media.getSecureUrl(), 0, media.getDurationSeconds());
         }
         return new PresignedDownloadResponse(signer.privateDownloadUrl(media, ttl), ttl, media.getDurationSeconds());
+    }
+
+    PresignedDownloadResponse presignOwnedPracticeResponseAudio(UUID mediaPublicId, UUID sessionPublicId,
+            UUID itemPublicId, CurrentUser owner, long ttlSeconds) {
+        if (mediaPublicId == null || sessionPublicId == null || itemPublicId == null || owner == null
+                || owner.userId() == null || owner.tenantId() == null) {
+            throw new MediaNotFoundException();
+        }
+        MediaAsset media = repository.findByPublicId(mediaPublicId)
+                .filter(candidate -> owner.userId().equals(candidate.getOwnerPublicId()))
+                .orElseThrow(MediaNotFoundException::new);
+        if (!MediaAccessGuard.isPracticeResponseAudio(media)
+                || media.getStatus() != MediaStatus.UPLOADED
+                || !sessionPublicId.equals(media.getPracticeSessionPublicId())
+                || !itemPublicId.equals(media.getPracticeItemPublicId())
+                || !MediaConstants.AUDIO_WAV.equals(media.getContentType())) {
+            throw new MediaNotFoundException();
+        }
+        return toTrustedDownloadResponse(media, ttlSeconds, owner.tenantId());
     }
 }
