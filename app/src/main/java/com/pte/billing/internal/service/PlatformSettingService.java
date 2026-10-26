@@ -5,11 +5,10 @@ import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.constant.PlatformSettingCatalog;
 import com.pte.billing.internal.dto.request.PlatformSettingBatchRequest;
 import com.pte.billing.internal.dto.request.PlatformSettingChangeRequest;
-import com.pte.billing.internal.dto.request.PlatformSettingRequest;
 import com.pte.billing.internal.dto.response.PlatformSettingResponse;
-import com.pte.billing.internal.exception.PlatformSettingInvalidException;
-import com.pte.billing.internal.exception.PlatformSettingNotFoundException;
-import com.pte.billing.internal.exception.PlatformSettingValidationException;
+import com.pte.billing.internal.exception.setting.PlatformSettingInvalidException;
+import com.pte.billing.internal.exception.setting.PlatformSettingNotFoundException;
+import com.pte.billing.internal.exception.setting.PlatformSettingValidationException;
 import com.pte.billing.internal.mapper.PlatformSettingMapper;
 import com.pte.billing.internal.repository.PlatformSettingRepository;
 import com.pte.shared.audit.AuditLogService;
@@ -75,15 +74,6 @@ public class PlatformSettingService {
     }
 
     @Transactional(readOnly = true)
-    public PlatformSettingResponse get(String key) {
-        PlatformSettingCatalog.Definition definition = requireDefinition(key);
-        PlatformSetting setting = platformSettingRepository.findByKey(key)
-                .orElseThrow(() -> new PlatformSettingNotFoundException(key));
-        valueCache.put(key, setting.getValue());
-        return PlatformSettingMapper.toResponse(setting, definition);
-    }
-
-    @Transactional(readOnly = true)
     public List<PlatformSettingResponse> list() {
         return platformSettingRepository.findAllByOrderByKeyAsc().stream()
                 .map(setting -> {
@@ -92,35 +82,6 @@ public class PlatformSettingService {
                 })
                 .filter(Objects::nonNull)
                 .toList();
-    }
-
-    /**
-     * The controller exposes this write only under its PLATFORM_ADMIN guard.
-     * The cache is evicted after the database flush. Evicting instead of
-     * populating before transaction commit prevents a rolled-back write from
-     * leaking into subsequent reads; the next read reloads the committed value.
-     */
-    @Transactional
-    public PlatformSettingResponse update(String key, PlatformSettingRequest request) {
-        return update(key, request, null);
-    }
-
-    @Transactional
-    public PlatformSettingResponse update(String key, PlatformSettingRequest request, CurrentUser caller) {
-        PlatformSettingCatalog.Definition definition = requireEditableDefinition(key);
-        if (request == null) {
-            throw new PlatformSettingValidationException(BillingConstants.PLATFORM_SETTING_VALUE_INVALID);
-        }
-        PlatformSetting setting = platformSettingRepository.findByKey(key)
-                .orElseThrow(() -> new PlatformSettingNotFoundException(key));
-        String normalizedValue = validateValue(definition, request.value());
-        String previousValue = setting.getValue();
-        setting.setValue(normalizedValue);
-        setting.setDescription(request.description());
-        PlatformSetting saved = platformSettingRepository.saveAndFlush(setting);
-        valueCache.remove(key);
-        recordUpdate(caller, key, previousValue, normalizedValue);
-        return PlatformSettingMapper.toResponse(saved, definition);
     }
 
     @Transactional

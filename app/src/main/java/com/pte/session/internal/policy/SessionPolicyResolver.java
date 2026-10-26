@@ -2,7 +2,7 @@ package com.pte.session.internal.policy;
 
 import com.pte.session.domain.enums.ExamMode;
 import com.pte.session.domain.enums.LockdownMode;
-import com.pte.session.internal.exception.InvalidLockdownModeException;
+import com.pte.session.internal.exception.draft.InvalidLockdownModeException;
 
 /** Resolves session lockdown policy at the session boundary. */
 public final class SessionPolicyResolver {

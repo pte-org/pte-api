@@ -1,11 +1,12 @@
 package com.pte.tenancy.domain.enums;
 
 /**
- * Independent from {@link TenantStatus}: an Organization (branch/facility)
- * can be suspended on its own without affecting its parent Tenant or
- * siblings â€” a deliberately separate lifecycle, not a shared enum.
+ * Organization lifecycle: an application starts {@code PENDING}; a platform reviewer moves it to {@code ACTIVE}
+ * or {@code REJECTED}; an active organization can be {@code SUSPENDED} (bounded or indefinite) and reactivated.
  */
 public enum OrganizationStatus {
+    PENDING,
     ACTIVE,
+    REJECTED,
     SUSPENDED
 }

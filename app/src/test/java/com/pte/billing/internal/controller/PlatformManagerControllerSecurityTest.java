@@ -6,15 +6,13 @@ import com.pte.billing.internal.controller.OrderController;
 import com.pte.billing.internal.controller.PlatformCommercialController;
 import com.pte.billing.internal.controller.PlatformSettingController;
 import com.pte.billing.internal.controller.SubscriptionController;
-import com.pte.assessment.internal.controller.BlueprintController;
 import com.pte.identity.internal.controller.PlatformUserController;
 import com.pte.itembank.internal.controller.QuestionController;
 import com.pte.notification.internal.controller.AnnouncementController;
-import com.pte.scoretemplate.internal.controller.ScoreTemplateController;
 import com.pte.support.internal.controller.AdminSupportTicketController;
 import com.pte.shared.audit.internal.controller.PlatformAuditLogController;
 import com.pte.identity.internal.controller.PlatformUserDirectoryController;
-import com.pte.tenancy.internal.controller.TenantController;
+import com.pte.tenancy.internal.controller.OrganizationController;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;
 
@@ -31,11 +29,15 @@ class PlatformManagerControllerSecurityTest {
     void operationsControllersExposeTheDelegatedManagerSurface() throws Exception {
         assertMethod(TenantApplicationController.class, "list", MANAGER);
         assertMethod(TenantApplicationController.class, "get", MANAGER);
-        assertMethod(TenantApplicationController.class, "approve", MANAGER);
-        assertMethod(TenantController.class, null, MANAGER);
+        assertMethod(TenantApplicationController.class, "changeStatus", MANAGER);
+        // The merged controller has no class-level rule: every platform governance operation carries it per method.
+        for (String operation : new String[] {"onboard", "changeStatus", "suspensionImpact",
+                "updateBranding"}) {
+            assertMethod(OrganizationController.class, operation, MANAGER);
+        }
         assertMethod(PlanController.class, "create", MANAGER);
         assertMethod(PlanController.class, "update", MANAGER);
-        assertMethod(PlanController.class, "activate", MANAGER);
+        assertMethod(PlanController.class, "changeStatus", MANAGER);
         assertMethod(AdminLicenseCodeController.class, null, MANAGER);
         assertMethod(PlatformCommercialController.class, null, MANAGER);
         assertMethod(AnnouncementController.class, null, MANAGER);
@@ -52,17 +54,12 @@ class PlatformManagerControllerSecurityTest {
         assertMethod(SubscriptionController.class, null, "hasRole('HOST_ADMIN')");
         assertMethod(QuestionController.class, null,
                 "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')");
-        assertMethod(ScoreTemplateController.class, "approve",
-                "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')");
-        assertMethod(BlueprintController.class, "approve",
-                "hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')");
         assertMethod(AdminLicenseCodeController.class, "reveal", ADMIN);
         assertMethod(AdminLicenseCodeController.class, "revokePreview", ADMIN);
         assertMethod(AdminLicenseCodeController.class, "revoke", ADMIN);
         assertMethod(LicenseCodeController.class, "listLegacy", ADMIN);
-        assertMethod(LicenseCodeController.class, "revokeLegacy", ADMIN);
-        assertMethod(TenantController.class, "grantQuota", ADMIN);
-        assertMethod(TenantController.class, "quotaHistory", ADMIN);
+        assertMethod(OrganizationController.class, "grantQuota", ADMIN);
+        assertMethod(OrganizationController.class, "quotaHistory", ADMIN);
     }
 
     private void assertMethod(Class<?> type, String methodName, String expected) throws Exception {

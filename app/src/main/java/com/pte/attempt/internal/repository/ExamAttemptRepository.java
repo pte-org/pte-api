@@ -6,9 +6,9 @@ import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -24,38 +24,22 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long>,
         JpaSpecificationExecutor<ExamAttempt> {
 
     @Query("select a.publicId as attemptPublicId, a.sessionPublicId as sessionPublicId, "
-            + "p.publicId as pinnedPublicId, p.scoreTemplatePublicId as scoreTemplatePublicId, "
-            + "p.tenantId as pinnedTenantId, p.sourceSessionPublicId as pinnedSessionPublicId "
-            + "from ExamAttempt a left join a.pinnedSnapshot p on p.deleted = false "
-            + "where a.tenantId = :tenantId and a.publicId in :ids and a.deleted = false")
+            + "a.examVersionPublicId as examVersionPublicId, a.examDefinitionPublicId as examDefinitionPublicId "
+            + "from ExamAttempt a where a.tenantId = :tenantId and a.publicId in :ids and a.deleted = false")
     List<StaffContextRow> findStaffContexts(@Param("tenantId") UUID tenantId, @Param("ids") List<UUID> ids);
 
-    @Query("select a.publicId as attemptPublicId, coalesce(i.taskTypeKey, i.taskType) as taskType, "
-            + "count(i.id) as taskCount from ExamAttempt a join a.pinnedSnapshot p join p.items i "
-            + "where a.tenantId = :tenantId and a.publicId in :ids and a.deleted = false "
-            + "and p.deleted = false and i.deleted = false and p.tenantId = :tenantId "
-            + "and p.sourceSessionPublicId = a.sessionPublicId "
-            + "group by a.publicId, coalesce(i.taskTypeKey, i.taskType)")
-    List<StaffTaskCountRow> countStaffPinnedTasks(@Param("tenantId") UUID tenantId, @Param("ids") List<UUID> ids);
-
     interface StaffContextRow {
-        UUID getAttemptPublicId(); UUID getSessionPublicId(); UUID getPinnedPublicId();
-        UUID getScoreTemplatePublicId(); UUID getPinnedTenantId(); UUID getPinnedSessionPublicId();
+        UUID getAttemptPublicId();
+        UUID getSessionPublicId();
+        UUID getExamVersionPublicId();
+        UUID getExamDefinitionPublicId();
     }
-    interface StaffTaskCountRow { UUID getAttemptPublicId(); String getTaskType(); long getTaskCount(); }
 
     Optional<ExamAttempt> findBySessionPublicIdAndStudentPublicId(UUID sessionPublicId, UUID studentPublicId);
 
-    @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
-    Optional<ExamAttempt> findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
+    /** The student's latest attempt on the session. */
+    Optional<ExamAttempt> findFirstBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
             UUID sessionPublicId, UUID studentPublicId);
-
-    /** Compatibility alias; production lifecycle uses the ordered multi-attempt query above. */
-    default Optional<ExamAttempt> findWithPinnedBySessionPublicIdAndStudentPublicId(UUID sessionPublicId,
-            UUID studentPublicId) {
-        return findWithPinnedBySessionPublicIdAndStudentPublicIdOrderByAttemptNumberDesc(
-                sessionPublicId, studentPublicId);
-    }
 
     long countBySessionPublicIdAndStudentPublicIdAndStatus(UUID sessionPublicId, UUID studentPublicId,
             AttemptStatus status);
@@ -65,10 +49,7 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long>,
 
     List<ExamAttempt> findBySessionPublicIdAndTenantIdAndDeletedFalse(UUID sessionPublicId, UUID tenantId);
 
-    @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
-    Optional<ExamAttempt> findWithPinnedByPublicIdAndStudentPublicId(UUID publicId, UUID studentPublicId);
-
-    /** No {@code pinnedSnapshot} eager-fetch — deliberately lighter than {@link #findWithPinnedByPublicIdAndStudentPublicId} for the heartbeat endpoint, which only needs ownership + status, never task content. */
+    /** Ownership + status lookup; task content never rides on the attempt, so every student read is this light. */
     Optional<ExamAttempt> findByPublicIdAndStudentPublicId(UUID publicId, UUID studentPublicId);
 
     /** Serializes concurrent audio-play/answer-submit requests for the same attempt. */
@@ -80,11 +61,9 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long>,
     Optional<ExamAttempt> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 
     /** No tenant filter: reporting (Phase 10) resolves tenant from the attempt itself, then checks it against the caller — same trusted-caller pattern as session's EntitlementService. */
-    @EntityGraph(attributePaths = "pinnedSnapshot")
     Optional<ExamAttempt> findByPublicIdAndStatus(UUID publicId, AttemptStatus status);
 
     /** Reporting's publish fanout (Phase 10) — every submitted attempt in a session. */
-    @EntityGraph(attributePaths = "pinnedSnapshot")
     List<ExamAttempt> findBySessionPublicIdAndTenantIdAndStatus(UUID sessionPublicId, UUID tenantId, AttemptStatus status);
 
     List<ExamAttempt> findByTenantIdAndSessionPublicIdInAndStudentPublicIdInAndStatus(
@@ -93,9 +72,8 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long>,
     /** Existence check used by support module's EntityReferenceValidator — trusted caller, never student-facing. */
     boolean existsByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 
-    /** Mirrors {@link #findWithPinnedByPublicIdAndStudentPublicId} but no student filter — trusted internal caller (reporting's per-attempt scoring, Phase 5), not a student-facing read. */
-    @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
-    Optional<ExamAttempt> findWithPinnedByPublicId(UUID publicId);
+    /** No student filter: trusted internal caller (reporting's per-attempt scoring), not a student-facing read. */
+    Optional<ExamAttempt> findByPublicId(UUID publicId);
 
     /** Timeout hint (ms) for the heavy overview counts. */
     String OVERVIEW_QUERY_TIMEOUT_MS = "2000";
@@ -129,10 +107,35 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long>,
             + "AND a.startedAt >= :from AND a.startedAt < :to")
     long countDistinctStudentsStartedBetweenPlatformWide(@Param("from") Instant from, @Param("to") Instant to);
 
-    /** Batch context read for report publication; loads each pinned section set with a single query. */
-    @EntityGraph(attributePaths = {"pinnedSnapshot", "pinnedSnapshot.items"})
-    @Query("SELECT DISTINCT a FROM ExamAttempt a WHERE a.publicId IN :publicIds AND a.deleted = false")
-    List<ExamAttempt> findAllWithPinnedByPublicIds(@Param("publicIds") List<UUID> publicIds);
+    /** Batch context read for report publication and grading coverage. */
+    List<ExamAttempt> findAllByPublicIdInAndDeletedFalse(Collection<UUID> publicIds);
+
+    /** The status of each given student's latest attempt in the session (students without an attempt are absent). */
+    @Query("select a.studentPublicId as studentPublicId, a.status as status from ExamAttempt a "
+            + "where a.sessionPublicId = :sessionPublicId and a.tenantId = :tenantId and a.deleted = false "
+            + "and a.studentPublicId in :studentPublicIds and a.attemptNumber = ("
+            + "select max(b.attemptNumber) from ExamAttempt b where b.sessionPublicId = a.sessionPublicId "
+            + "and b.tenantId = a.tenantId and b.studentPublicId = a.studentPublicId and b.deleted = false)")
+    List<LatestStatusRow> findLatestStatuses(@Param("sessionPublicId") UUID sessionPublicId,
+            @Param("tenantId") UUID tenantId, @Param("studentPublicIds") Collection<UUID> studentPublicIds);
+
+    interface LatestStatusRow {
+        UUID getStudentPublicId();
+
+        AttemptStatus getStatus();
+    }
+
+    /** Records the latest sign of life without touching the version column, so a ping never fails a submit. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update ExamAttempt a set a.lastSeenAt = :seenAt where a.id = :id")
+    int touchLastSeen(@Param("id") Long id, @Param("seenAt") Instant seenAt);
+
+    /** Leaves attempts out of the session grading; a bulk UPDATE keeps the version and update time untouched. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update ExamAttempt a set a.gradingExcluded = true, a.gradingExclusionReason = :reason "
+            + "where a.publicId = :publicId and a.tenantId = :tenantId and a.sessionPublicId = :sessionPublicId")
+    int markGradingExcluded(@Param("publicId") UUID publicId, @Param("tenantId") UUID tenantId,
+            @Param("sessionPublicId") UUID sessionPublicId, @Param("reason") String reason);
 
     /** Batch read of attempts for the given students on an exam session; ordered by attempt number desc. */
     List<ExamAttempt> findBySessionPublicIdAndTenantIdAndStudentPublicIdInAndDeletedFalseOrderByAttemptNumberDesc(

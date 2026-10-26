@@ -1,15 +1,10 @@
 package com.pte.scoring.internal.repository;
 
-import com.pte.scoring.domain.ExaminerAssignmentBatch;
-import com.pte.scoring.domain.ExaminerAttemptAssignment;
-import com.pte.scoring.domain.enums.AssignmentBatchMode;
-import com.pte.scoring.domain.enums.AssignmentBatchStatus;
+import com.pte.scoring.domain.GradingAssignment;
+import com.pte.scoring.domain.enums.ExaminerWorkflowStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 
 import java.time.Instant;
 import java.util.List;
@@ -21,36 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ExaminerAssignmentRepositoryTest {
 
     @Autowired
-    private ExaminerAssignmentBatchRepository batchRepository;
-
-    @Autowired
-    private ExaminerAttemptAssignmentRepository assignmentRepository;
-
-    @Test
-    void batchHistoryCanBePagedAndExpiredPreviewsArePersistentlyMarked() {
-        UUID tenantId = UUID.randomUUID();
-        UUID sessionId = UUID.randomUUID();
-        Instant now = Instant.now();
-        ExaminerAssignmentBatch overdue = batch(tenantId, sessionId, now.minusSeconds(1));
-        ExaminerAssignmentBatch fresh = batch(tenantId, sessionId, now.plusSeconds(60));
-        batchRepository.saveAllAndFlush(List.of(overdue, fresh));
-
-        int expiredCount = batchRepository.expireOverduePreviews(tenantId, sessionId,
-                AssignmentBatchStatus.PREVIEWED, AssignmentBatchStatus.EXPIRED, now);
-        Page<ExaminerAssignmentBatch> page = batchRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(
-                tenantId, sessionId, PageRequest.of(0, 1,
-                        Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))));
-
-        assertThat(expiredCount).isEqualTo(1);
-        assertThat(page.getTotalElements()).isEqualTo(2);
-        assertThat(page.getContent()).hasSize(1);
-        assertThat(batchRepository.findByPublicIdAndTenantIdAndSessionPublicId(
-                overdue.getPublicId(), tenantId, sessionId)).get()
-                .extracting(ExaminerAssignmentBatch::getStatus).isEqualTo(AssignmentBatchStatus.EXPIRED);
-        assertThat(batchRepository.findByPublicIdAndTenantIdAndSessionPublicId(
-                fresh.getPublicId(), tenantId, sessionId)).get()
-                .extracting(ExaminerAssignmentBatch::getStatus).isEqualTo(AssignmentBatchStatus.PREVIEWED);
-    }
+    private GradingAssignmentRepository assignmentRepository;
 
     @Test
     void committedAssignmentLoadsAreAggregatedFromPersistedAnswerCounts() {
@@ -59,14 +25,10 @@ class ExaminerAssignmentRepositoryTest {
         UUID hostId = UUID.randomUUID();
         UUID examinerA = UUID.randomUUID();
         UUID examinerB = UUID.randomUUID();
-        Instant committedAt = Instant.now();
-        ExaminerAssignmentBatch batch = batch(tenantId, sessionId, committedAt.plusSeconds(60));
-        batch.commit(committedAt);
-        batchRepository.saveAndFlush(batch);
         assignmentRepository.saveAllAndFlush(List.of(
-                assignment(batch, tenantId, sessionId, hostId, examinerA, 2),
-                assignment(batch, tenantId, sessionId, hostId, examinerA, 3),
-                assignment(batch, tenantId, sessionId, hostId, examinerB, 5)));
+                assignment(tenantId, sessionId, hostId, examinerA, 2),
+                assignment(tenantId, sessionId, hostId, examinerA, 3),
+                assignment(tenantId, sessionId, hostId, examinerB, 5)));
 
         var loads = assignmentRepository.summarizeLoads(tenantId, sessionId);
 
@@ -85,14 +47,41 @@ class ExaminerAssignmentRepositoryTest {
         });
     }
 
-    private ExaminerAssignmentBatch batch(UUID tenantId, UUID sessionId, Instant expiresAt) {
-        return new ExaminerAssignmentBatch(tenantId, sessionId, UUID.randomUUID(), AssignmentBatchMode.RANDOM,
-                "{}", "[]", UUID.randomUUID(), expiresAt);
+    @Test
+    void anAttemptHasOneAssignmentPerSession() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        assignmentRepository.saveAndFlush(new GradingAssignment(tenantId, sessionId, attemptId, UUID.randomUUID(), 1,
+                UUID.randomUUID(), Instant.now()));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> assignmentRepository.saveAndFlush(
+                new GradingAssignment(tenantId, sessionId, attemptId, UUID.randomUUID(), 1, UUID.randomUUID(),
+                        Instant.now()))).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
-    private ExaminerAttemptAssignment assignment(ExaminerAssignmentBatch batch, UUID tenantId, UUID sessionId,
-            UUID hostId, UUID examinerId, int answerCount) {
-        return new ExaminerAttemptAssignment(batch.getPublicId(), tenantId, sessionId, UUID.randomUUID(), examinerId,
-                answerCount, hostId, Instant.now());
+    @Test
+    void startingMovesTheOwnProgressWithoutChangingTheOwner() {
+        UUID tenantId = UUID.randomUUID();
+        UUID examiner = UUID.randomUUID();
+        GradingAssignment saved = assignmentRepository.saveAndFlush(assignment(tenantId, UUID.randomUUID(),
+                UUID.randomUUID(), examiner, 4));
+        assertThat(saved.isStarted()).isFalse();
+        assertThat(saved.getStatus()).isEqualTo(ExaminerWorkflowStatus.PENDING);
+
+        saved.start(Instant.parse("2026-10-24T10:00:00Z"));
+        assignmentRepository.saveAndFlush(saved);
+
+        GradingAssignment reloaded = assignmentRepository.findForUpdate(tenantId, saved.getPublicId()).orElseThrow();
+        assertThat(reloaded.isStarted()).isTrue();
+        assertThat(reloaded.getWorkVersion()).isEqualTo(1L);
+        assertThat(reloaded.getStatus()).isEqualTo(ExaminerWorkflowStatus.IN_PROGRESS);
+        assertThat(reloaded.getExaminerPublicId()).isEqualTo(examiner);
+    }
+
+    private GradingAssignment assignment(UUID tenantId, UUID sessionId, UUID hostId, UUID examinerId,
+            int answerCount) {
+        return new GradingAssignment(tenantId, sessionId, UUID.randomUUID(), examinerId, answerCount, hostId,
+                Instant.now());
     }
 }

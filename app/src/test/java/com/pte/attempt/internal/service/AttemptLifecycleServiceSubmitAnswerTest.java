@@ -1,15 +1,14 @@
 package com.pte.attempt.internal.service;
 
+import com.pte.attempt.internal.service.capability.CapabilityNegotiationService;
 import com.pte.attempt.internal.config.EncryptionKeyProvider;
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
-import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.internal.dto.request.SubmitAnswerRequest;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
-import com.pte.attempt.internal.repository.PinnedItemRepository;
-import com.pte.attempt.internal.service.cache.PinnedSnapshotCacheService;
+import com.pte.attempt.internal.service.cache.ExamItemView;
+import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -41,14 +40,7 @@ class AttemptLifecycleServiceSubmitAnswerTest {
     @Mock
     private ExamAttemptRepository attemptRepository;
 
-    @Mock
-    private PinnedItemRepository pinnedItemRepository;
-
-    @Mock
-    private SnapshotPinService snapshotPinService;
-
-    @Mock
-    private PinnedSnapshotCacheService cacheService;
+    private final FakeExam exam = new FakeExam();
 
     @Mock
     private TimerService timerService;
@@ -64,6 +56,10 @@ class AttemptLifecycleServiceSubmitAnswerTest {
 
     @Mock
     private HeartbeatService heartbeatService;
+    @Mock
+    private CapabilityNegotiationService capabilityNegotiationService;
+    @Mock
+    private SessionService sessionService;
 
     private AttemptLifecycleService attemptLifecycleService;
     private UUID studentPublicId;
@@ -71,23 +67,22 @@ class AttemptLifecycleServiceSubmitAnswerTest {
     private UUID attemptPublicId;
     private UUID pinnedItemPublicId;
     private ExamAttempt attempt;
-    private PinnedItem item;
+    private ExamItemView item;
 
     @BeforeEach
     void setUp() {
         AttemptMapper attemptMapper = new AttemptMapper(JsonMapper.builder().build());
         attemptLifecycleService = new AttemptLifecycleService(
-            attemptRepository,
-            pinnedItemRepository,
-            snapshotPinService,
-            cacheService,
-            timerService,
-            answerSubmitService,
-            attemptMapper,
-            encryptionKeyProvider,
-            submissionDecryptionService,
-            heartbeatService
-        );
+                attemptRepository,
+                exam.contentService,
+                timerService,
+                answerSubmitService,
+                attemptMapper,
+                encryptionKeyProvider,
+                submissionDecryptionService,
+                heartbeatService,
+                capabilityNegotiationService,
+                sessionService, com.pte.TestClocks.fixed());
 
         studentPublicId = UUID.randomUUID();
         caller = new CurrentUser(studentPublicId, UUID.randomUUID(), List.of("student"));
@@ -98,38 +93,18 @@ class AttemptLifecycleServiceSubmitAnswerTest {
         attempt.setId(1L);
         attempt.setStudentPublicId(studentPublicId);
         attempt.setTenantId(caller.tenantId());
-        attempt.begin();
+        attempt.begin(java.time.Instant.now());
         attempt.setCurrentOrderIndex(0);
 
-        PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
-        snapshot.setId(1L);
-        snapshot.setAnswerIntegrityLevel("STANDARD");
-        attempt.setPinnedSnapshot(snapshot);
+        attempt.setAnswerIntegrityLevel("STANDARD");
 
-        item = new PinnedItem();
-        item.setId(1L);
-        item.setPublicId(pinnedItemPublicId);
-        item.setOrderIndex(0);
-        item.setSection("WRITING");
-        item.setTaskType("WRITE_ESSAY");
-        item.setPinnedSnapshot(snapshot);
+        item = exam.add(FakeExam.withId(FakeExam.view(0, "WRITING", "WRITE_ESSAY", 0, 60), pinnedItemPublicId));
+        // 2 items total -> submitting item 0 advances to item 1, doesn't complete.
+        exam.add(1, "WRITING");
 
-        when(attemptRepository.findWithPinnedByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
+        when(attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
             .thenReturn(Optional.of(attempt));
         when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
-        when(pinnedItemRepository.findByPinnedSnapshotIdAndOrderIndex(1L, 0)).thenReturn(Optional.of(item));
-        // 2 pinned items total -> submitting item 0 advances to item 1, doesn't complete.
-        when(pinnedItemRepository.countByPinnedSnapshotId(1L)).thenReturn(2L);
-        PinnedItem secondItem = new PinnedItem();
-        secondItem.setId(2L);
-        secondItem.setPublicId(UUID.randomUUID());
-        secondItem.setOrderIndex(1);
-        secondItem.setSection("WRITING");
-        secondItem.setTaskType("WRITE_ESSAY");
-        secondItem.setPinnedSnapshot(snapshot);
-        when(pinnedItemRepository.findByPinnedSnapshotIdAndOrderIndex(1L, 1)).thenReturn(Optional.of(secondItem));
-        snapshot.addItem(item);
-        snapshot.addItem(secondItem);
     }
 
     @Test

@@ -11,7 +11,7 @@ import com.pte.scoring.dto.response.ScoreSourceSelectionResultResponse;
 import com.pte.scoring.dto.response.ScoreSourceAuditResponse;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.dto.response.AttemptReviewItemResponse;
-import com.pte.scoring.internal.service.ScoringAttemptReviewService;
+import com.pte.scoring.internal.service.review.ScoringAttemptReviewService;
 import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;

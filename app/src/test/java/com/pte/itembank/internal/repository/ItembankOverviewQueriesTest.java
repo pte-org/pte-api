@@ -60,7 +60,7 @@ class ItembankOverviewQueriesTest {
     @BeforeEach
     void setUp() {
         service = new ItembankOverviewService(questions);
-        legacy = new ItembankService(questions, new QuestionValidationHelper(), new ItembankAccessPolicy());
+        legacy = com.pte.itembank.ItembankFixtures.itembankService(questions, new QuestionValidationHelper(null), new ItembankAccessPolicy());
     }
 
     // ---- builders ----

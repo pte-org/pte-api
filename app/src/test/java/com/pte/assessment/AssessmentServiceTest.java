@@ -28,7 +28,7 @@ class AssessmentServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AssessmentService(snapshotPublishService, examGenerationService);
+        service = new AssessmentService(snapshotPublishService, examGenerationService, null, null);
     }
 
     @Test

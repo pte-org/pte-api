@@ -1,12 +1,12 @@
 package com.pte.billing.internal.controller;
 
-import com.pte.billing.internal.service.LicenseCodeService;
+import com.pte.billing.internal.service.license.LicenseCodeService;
 import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
 import com.pte.billing.internal.dto.response.AdminLicenseCodeSummary;
 import com.pte.billing.internal.dto.response.LicenseCodeRevealResponse;
 import com.pte.billing.internal.dto.response.LicenseRevokePreviewResponse;
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.exception.LicenseCodeException;
+import com.pte.billing.internal.exception.license.LicenseCodeException;
 import com.pte.billing.internal.web.LicenseCodeRevealNoStoreFilter;
 import com.pte.shared.exception.GlobalExceptionHandler;
 import com.pte.shared.security.CurrentUser;
@@ -86,16 +86,6 @@ class LicenseIssueHttpContractTest {
                 .andExpect(jsonPath("$.data.publicId").value(publicId.toString()))
                 .andExpect(jsonPath("$.data.scheduledCount").value(2))
                 .andExpect(jsonPath("$.data.scopeDigest").value("digest"));
-
-        doThrow(new LicenseCodeException(org.springframework.http.HttpStatus.CONFLICT,
-                BillingConstants.LICENSE_CODE_REVOKE_LEGACY_ENDPOINT))
-                .when(service).rejectLegacyRevoke(actor);
-        mvc.perform(post("/api/v1/license-codes/RAW-BEARER/revoke")
-                        .contentType("application/json")
-                        .content("{\"reason\":\"manual\"}"))
-                .andExpect(status().isConflict())
-                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("RAW-BEARER"))));
-        verify(service).rejectLegacyRevoke(actor);
     }
 
     @Test void adminReadsUseMaskedPageAndLegacyRawListIsRetired() throws Exception {

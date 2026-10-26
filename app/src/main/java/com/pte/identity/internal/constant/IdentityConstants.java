@@ -17,6 +17,7 @@ public final class IdentityConstants {
     public static final String USER_NOT_FOUND = "USER_NOT_FOUND";
     public static final String IDENTITY_NOT_ELIGIBLE = "IDENTITY_NOT_ELIGIBLE";
     public static final String EMAIL_ALREADY_USED = "EMAIL_ALREADY_USED";
+    public static final String HOST_CONTACT_IS_PLATFORM_ACCOUNT = "HOST_CONTACT_IS_PLATFORM_ACCOUNT";
     public static final String USER_EMAIL_REQUIRED = "USER_EMAIL_REQUIRED";
     public static final String STUDENT_CREDENTIAL_EMAIL_NOT_ALLOWED = "STUDENT_CREDENTIAL_EMAIL_NOT_ALLOWED";
     public static final String INVALID_REFRESH_TOKEN = "INVALID_REFRESH_TOKEN";
@@ -100,4 +101,5 @@ public final class IdentityConstants {
 
     private IdentityConstants() {
     }
+    public static final String USER_STATUS_ACTION_UNSUPPORTED = "USER_STATUS_ACTION_UNSUPPORTED";
 }

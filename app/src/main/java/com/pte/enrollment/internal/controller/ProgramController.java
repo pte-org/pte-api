@@ -1,6 +1,7 @@
 package com.pte.enrollment.internal.controller;
 
 import com.pte.enrollment.internal.dto.request.CreateProgramRequest;
+import com.pte.enrollment.internal.dto.request.TrainingStatusRequest;
 import com.pte.enrollment.internal.dto.request.UpdateProgramRequest;
 import com.pte.enrollment.internal.dto.response.ProgramDashboardResponse;
 import com.pte.enrollment.internal.dto.response.ProgramResponse;
@@ -12,6 +13,7 @@ import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -55,28 +57,16 @@ public class ProgramController {
         return ApiResponse.success(programService.update(organizationPublicId, publicId, request, currentUser()));
     }
 
-    @PostMapping("/{publicId}/activate")
-    public ApiResponse<ProgramResponse> activate(@PathVariable UUID organizationPublicId,
-            @PathVariable UUID publicId) {
-        return ApiResponse.success(programService.activate(organizationPublicId, publicId, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/deactivate")
-    public ApiResponse<ProgramResponse> deactivate(@PathVariable UUID organizationPublicId,
-            @PathVariable UUID publicId) {
-        return ApiResponse.success(programService.deactivate(organizationPublicId, publicId, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/suspend")
-    public ApiResponse<ProgramResponse> suspend(@PathVariable UUID organizationPublicId,
-            @PathVariable UUID publicId) {
-        return ApiResponse.success(programService.suspend(organizationPublicId, publicId, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/archive")
-    public ApiResponse<ProgramResponse> archive(@PathVariable UUID organizationPublicId,
-            @PathVariable UUID publicId) {
-        return ApiResponse.success(programService.archive(organizationPublicId, publicId, currentUser()));
+    @PatchMapping("/{publicId}/status")
+    public ApiResponse<ProgramResponse> changeStatus(@PathVariable UUID organizationPublicId, @PathVariable UUID publicId,
+            @Valid @RequestBody TrainingStatusRequest request) {
+        CurrentUser caller = currentUser();
+        return ApiResponse.success(switch (request.action()) {
+            case ACTIVATE -> programService.activate(organizationPublicId, publicId, caller);
+            case DEACTIVATE -> programService.deactivate(organizationPublicId, publicId, caller);
+            case SUSPEND -> programService.suspend(organizationPublicId, publicId, caller);
+            case ARCHIVE -> programService.archive(organizationPublicId, publicId, caller);
+        });
     }
 
     @GetMapping("/{publicId}/dashboard")

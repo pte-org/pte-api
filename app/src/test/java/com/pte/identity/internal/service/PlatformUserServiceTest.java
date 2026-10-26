@@ -4,13 +4,11 @@ import com.pte.identity.UserCredentialsEmailRequestedEvent;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.constant.IdentityConstants;
-import com.pte.identity.internal.domain.LoginHash;
-import com.pte.identity.internal.dto.request.PlatformUserCreateRequest;
-import com.pte.identity.internal.dto.request.PlatformUserRoleUpdateRequest;
+import com.pte.identity.internal.dto.request.user.PlatformUserCreateRequest;
+import com.pte.identity.internal.dto.request.user.PlatformUserRoleUpdateRequest;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.ForbiddenUserManagementException;
 import com.pte.identity.internal.exception.ForbiddenRoleAssignmentException;
-import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
@@ -47,9 +45,6 @@ class PlatformUserServiceTest {
     private UserRepository userRepository;
 
     @Mock
-    private LoginHashRepository loginHashRepository;
-
-    @Mock
     private PasswordEncoder passwordEncoder;
 
     @Mock
@@ -68,7 +63,7 @@ class PlatformUserServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PlatformUserService(userRepository, loginHashRepository, passwordEncoder,
+        service = new PlatformUserService(userRepository, passwordEncoder,
                 provisioningHelper, auditLogService, refreshTokenService, eventPublisher);
     }
 
@@ -95,7 +90,7 @@ class PlatformUserServiceTest {
         User saved = platformUser(UUID.randomUUID(), Role.ACADEMIC_STAFF);
         when(provisioningHelper.resolvePlatformRoles(caller, request.roles()))
                 .thenReturn(Set.of(Role.ACADEMIC_STAFF));
-        when(userRepository.existsByUsernameAndTenantId(request.email(), null)).thenReturn(false);
+        when(userRepository.existsByUsername(request.email())).thenReturn(false);
         when(passwordEncoder.encode(request.password())).thenReturn("hash");
         when(userRepository.saveAndFlush(any(User.class))).thenReturn(saved);
 
@@ -103,7 +98,9 @@ class PlatformUserServiceTest {
 
         assertThat(response.tenantId()).isNull();
         assertThat(response.roles()).containsExactly("ACADEMIC_STAFF");
-        verify(loginHashRepository).save(any(LoginHash.class));
+        ArgumentCaptor<User> createdCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(createdCaptor.capture());
+        assertThat(createdCaptor.getValue().getCredentialHash()).isEqualTo("hash");
         verify(auditLogService).record(eq(caller), eq("PlatformUser"),
                 eq(saved.getPublicId().toString()), eq("PlatformUserCreated"), any(String.class));
         verify(eventPublisher, never()).publishEvent(any(UserCredentialsEmailRequestedEvent.class));
@@ -117,7 +114,7 @@ class PlatformUserServiceTest {
         User saved = platformUser(UUID.randomUUID(), Role.ACADEMIC_STAFF);
         when(provisioningHelper.resolvePlatformRoles(caller, request.roles()))
                 .thenReturn(Set.of(Role.ACADEMIC_STAFF));
-        when(userRepository.existsByUsernameAndTenantId(request.email(), null)).thenReturn(false);
+        when(userRepository.existsByUsername(request.email())).thenReturn(false);
         when(passwordEncoder.encode(any(String.class))).thenReturn("generated-hash");
         when(userRepository.saveAndFlush(any(User.class))).thenReturn(saved);
 

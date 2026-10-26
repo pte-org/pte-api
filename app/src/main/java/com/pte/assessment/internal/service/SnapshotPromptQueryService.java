@@ -1,9 +1,9 @@
 package com.pte.assessment.internal.service;
 
-import com.pte.assessment.domain.SnapshotItem;
+import com.pte.assessment.domain.ExamVersionItem;
 import com.pte.assessment.dto.response.ExaminerQuestionPromptView;
 import com.pte.assessment.internal.constant.AssessmentConstants;
-import com.pte.assessment.internal.repository.SnapshotItemRepository;
+import com.pte.assessment.internal.repository.ExamVersionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /** Reads a tenant-pinned question prompt without exposing scoring keys to human markers. */
@@ -24,11 +23,11 @@ public class SnapshotPromptQueryService {
 
     private static final TypeReference<List<FrozenOption>> OPTIONS = new TypeReference<>() { };
 
-    private final SnapshotItemRepository snapshotItemRepository;
+    private final ExamVersionRepository examVersionRepository;
     private final JsonMapper jsonMapper;
 
-    public SnapshotPromptQueryService(SnapshotItemRepository snapshotItemRepository, JsonMapper jsonMapper) {
-        this.snapshotItemRepository = snapshotItemRepository;
+    public SnapshotPromptQueryService(ExamVersionRepository examVersionRepository, JsonMapper jsonMapper) {
+        this.examVersionRepository = examVersionRepository;
         this.jsonMapper = jsonMapper;
     }
 
@@ -42,11 +41,11 @@ public class SnapshotPromptQueryService {
         if (requestedItemIds.isEmpty()) {
             return Map.of();
         }
-        return snapshotItemRepository.findAllForTenant(requestedItemIds, tenantId).stream()
-                .collect(Collectors.toUnmodifiableMap(SnapshotItem::getPublicId, this::toView));
+        return examVersionRepository.findItemsForTenant(requestedItemIds, tenantId).stream()
+                .collect(Collectors.toUnmodifiableMap(ExamVersionItem::getPublicId, this::toView));
     }
 
-    private ExaminerQuestionPromptView toView(SnapshotItem item) {
+    private ExaminerQuestionPromptView toView(ExamVersionItem item) {
         String taskType = item.getTaskTypeKey() != null ? item.getTaskTypeKey()
                 : item.getTaskTypeCode() != null ? item.getTaskTypeCode()
                 : item.getPteTaskType() == null ? null : item.getPteTaskType().name();

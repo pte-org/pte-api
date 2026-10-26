@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
  * model (LLMs miscount). A failed check scores Form zero; {@code status} says
  * how far outside the range the text was. Ported from the POC's {@code rules.py}.
  */
-record FormCheck(int wordCount, Integer sentenceCount, boolean passed, String status, String message) {
+public record FormCheck(int wordCount, Integer sentenceCount, boolean passed, String status, String message) {
 
     static final String IN_RANGE = "in_range";
     static final String OUTSIDE_FULL_RANGE = "outside_full_range";
@@ -35,7 +35,7 @@ record FormCheck(int wordCount, Integer sentenceCount, boolean passed, String st
             "e.g.", "i.e.", "etc.", "vs.", "U.S.", "U.K.", "U.N.",
             "Inc.", "Ltd.", "Co.", "approx.", "cf.", "et al.");
 
-    static FormCheck summarizeWrittenText(String text, Integer minWords, Integer maxWords) {
+    public static FormCheck summarizeWrittenText(String text, Integer minWords, Integer maxWords) {
         int words = countWords(text);
         int sentences = countSentences(text);
         int min = limit(minWords, SWT_MIN_WORDS);
@@ -52,7 +52,7 @@ record FormCheck(int wordCount, Integer sentenceCount, boolean passed, String st
                 passed ? "OK" : issues.toString());
     }
 
-    static FormCheck essay(String text, Integer minWords, Integer maxWords) {
+    public static FormCheck essay(String text, Integer minWords, Integer maxWords) {
         int words = countWords(text);
         int min = limit(minWords, ESSAY_MIN_WORDS);
         int max = limit(maxWords, ESSAY_MAX_WORDS);
@@ -66,7 +66,7 @@ record FormCheck(int wordCount, Integer sentenceCount, boolean passed, String st
      * is the POC's explicit zero-form boundary. The question's own range moves
      * the full-form window but never narrows the boundary.
      */
-    static FormCheck summarizeSpokenText(String text, Integer minWords, Integer maxWords) {
+    public static FormCheck summarizeSpokenText(String text, Integer minWords, Integer maxWords) {
         int words = countWords(text);
         int min = limit(minWords, SST_MIN_WORDS);
         int max = limit(maxWords, SST_MAX_WORDS);
@@ -99,11 +99,11 @@ record FormCheck(int wordCount, Integer sentenceCount, boolean passed, String st
     }
 
     /** Form is all or nothing: a failed check is worth zero. */
-    int score() {
+    public int score() {
         return passed ? 100 : 0;
     }
 
-    Map<String, Object> detail() {
+    public Map<String, Object> detail() {
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("wordCount", wordCount);
         detail.put("sentenceCount", sentenceCount);

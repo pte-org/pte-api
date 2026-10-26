@@ -50,7 +50,7 @@ class PracticeEntitlementServiceTest {
     @BeforeEach
     void setUp() {
         service = new PracticeEntitlementService(
-                identityService, billingService, tenancyService, true, observability);
+                identityService, billingService, tenancyService, true, observability, com.pte.TestClocks.fixed());
         studentId = UUID.randomUUID();
         tenantId = UUID.randomUUID();
         caller = new CurrentUser(studentId, tenantId, List.of("STUDENT"));
@@ -68,6 +68,8 @@ class PracticeEntitlementServiceTest {
         assertThat(result.organizationContext().publicId()).isEqualTo(tenantId);
         assertThat(result.availableOrganizations()).hasSize(1);
         assertThat(result.student().status()).isEqualTo("ACTIVE");
+        assertThat(result.refreshAt()).isEqualTo(com.pte.TestClocks.fixed().instant()
+                .plusSeconds(com.pte.practice.internal.constant.PracticeConstants.ENTITLEMENT_REFRESH_SECONDS));
     }
 
     @Test
@@ -151,7 +153,7 @@ class PracticeEntitlementServiceTest {
     @Test
     void assertUnlocked_disabledStrictEntitlement_remainsFailClosed() {
         PracticeEntitlementService disabledService = new PracticeEntitlementService(
-                identityService, billingService, tenancyService, false, observability);
+                identityService, billingService, tenancyService, false, observability, com.pte.TestClocks.fixed());
 
         assertThatThrownBy(() -> disabledService.assertUnlocked(caller, tenantId))
                 .isInstanceOf(PracticeNotEntitledException.class);

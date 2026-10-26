@@ -2,7 +2,7 @@ package com.pte.shared.web;
 
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.controller.PlanController;
-import com.pte.billing.internal.exception.PlanLifecycleException;
+import com.pte.billing.internal.exception.plan.PlanLifecycleException;
 import com.pte.billing.internal.service.PlanService;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.internal.controller.QuestionController;

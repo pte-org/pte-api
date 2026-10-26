@@ -1,7 +1,6 @@
 package com.pte.notification.internal.listener;
 
 import com.pte.billing.TenantApplicationSubmittedEvent;
-import com.pte.identity.IdentityRoleMember;
 import com.pte.identity.IdentityService;
 import com.pte.identity.domain.Role;
 import com.pte.notification.InboxNotificationRequested;

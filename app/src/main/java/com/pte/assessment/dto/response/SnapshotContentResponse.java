@@ -16,15 +16,15 @@ public record SnapshotContentResponse(
         UUID publicId,
         String name,
         int version,
-        UUID scoreTemplatePublicId,
-        Integer scoreTemplateVersion,
+        UUID examDefinitionPublicId,
+        Integer examDefinitionVersion,
         UUID tenantId,
         List<Item> items) {
 
     /** Source-compatible constructor for callers created before template-version pinning. */
-    public SnapshotContentResponse(UUID publicId, String name, int version, UUID scoreTemplatePublicId,
+    public SnapshotContentResponse(UUID publicId, String name, int version, UUID examDefinitionPublicId,
             UUID tenantId, List<Item> items) {
-        this(publicId, name, version, scoreTemplatePublicId, null, tenantId, items);
+        this(publicId, name, version, examDefinitionPublicId, null, tenantId, items);
     }
 
     public record Item(
@@ -46,7 +46,8 @@ public record SnapshotContentResponse(
             TaskRuntimeProfileDescriptor runtime,
             String runtimeMappingVersion,
             String runtimeMappingStatus,
-            UUID sourceQuestionPublicId) {
+            UUID sourceQuestionPublicId,
+            UUID itemPublicId) {
 
         public Item(int orderIndex, String section, String taskType, String title, String promptText,
                 UUID audioPromptRef, UUID imagePromptRef, String referenceAnswerText,
@@ -54,7 +55,7 @@ public record SnapshotContentResponse(
                 String taskTypeCode, TaskRuntimeProfileDescriptor runtime) {
             this(orderIndex, section, taskType, title, promptText, audioPromptRef, imagePromptRef,
                     referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson,
-                    taskTypeCode, title, taskTypeCode, runtime, null, null, null);
+                    taskTypeCode, title, taskTypeCode, runtime, null, null, null, null);
         }
 
         public Item(int orderIndex, String section, String taskType, String title, String promptText,
@@ -64,7 +65,7 @@ public record SnapshotContentResponse(
                 String runtimeMappingVersion, String runtimeMappingStatus) {
             this(orderIndex, section, taskType, title, promptText, audioPromptRef, imagePromptRef,
                     referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson,
-                    taskTypeCode, title, taskTypeCode, runtime, runtimeMappingVersion, runtimeMappingStatus, null);
+                    taskTypeCode, title, taskTypeCode, runtime, runtimeMappingVersion, runtimeMappingStatus, null, null);
         }
 
         public Item(int orderIndex, String section, String taskType, String title,
@@ -73,7 +74,7 @@ public record SnapshotContentResponse(
                 Integer maxWordCount, String optionsJson) {
             this(orderIndex, section, taskType, title, promptText, audioPromptRef, imagePromptRef,
                     referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson,
-                    taskType, title, taskType, null, null, null, null);
+                    taskType, title, taskType, null, null, null, null, null);
         }
 
         public Item(int orderIndex, String section, String taskType, String title,
@@ -85,7 +86,7 @@ public record SnapshotContentResponse(
             this(orderIndex, section, taskType, title, promptText, audioPromptRef, imagePromptRef,
                     referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson,
                     taskTypeKey, taskTypeDisplayName, taskTypeCode, runtime, runtimeMappingVersion,
-                    runtimeMappingStatus, null);
+                    runtimeMappingStatus, null, null);
         }
     }
 }

@@ -1,6 +1,6 @@
 package com.pte.itembank;
 
-import com.pte.itembank.domain.QuestionTypeDefinition;
+import com.pte.itembank.domain.QuestionType;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.dto.request.CreateQuestionTypeRequest;
 import com.pte.itembank.dto.request.UpdateQuestionTypeRequest;
@@ -14,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,12 +35,12 @@ class QuestionTypeServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new QuestionTypeService(repository);
+        service = com.pte.itembank.ItembankFixtures.questionTypeService(repository);
     }
 
     @Test
     void listActiveOnly_readsTheActiveCatalogQuery() {
-        QuestionTypeDefinition definition = definition("READ_ALOUD", true);
+        QuestionType definition = definition("READ_ALOUD", true);
         when(repository.findAllByDeletedFalseAndActiveTrueOrderByDisplayOrderAscCodeAsc())
                 .thenReturn(List.of(definition));
 
@@ -66,7 +67,7 @@ class QuestionTypeServiceTest {
     @Test
     void update_persistsPresentationAndAuthoringMetadata_withoutChangingStableCode() {
         UUID publicId = UUID.randomUUID();
-        QuestionTypeDefinition definition = definition("READ_ALOUD", true);
+        QuestionType definition = definition("READ_ALOUD", true);
         definition.setPublicId(publicId);
         when(repository.findByPublicIdAndDeletedFalse(publicId)).thenReturn(java.util.Optional.of(definition));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -125,7 +126,7 @@ class QuestionTypeServiceTest {
 
     @Test
     void findDefinitionByCode_keepsDeletedMetadataAvailableToRuntimeValidation() {
-        QuestionTypeDefinition definition = definition("READ_ALOUD", false);
+        QuestionType definition = definition("READ_ALOUD", false);
         definition.setDeleted(true);
         when(repository.findByCode("READ_ALOUD")).thenReturn(Optional.of(definition));
 
@@ -134,7 +135,7 @@ class QuestionTypeServiceTest {
 
     @Test
     void findDefinitionByCode_readsTheKnownLegacyAliasAsCanonical() {
-        QuestionTypeDefinition definition = definition("FILL_IN_THE_BLANKS_DRAG_AND_DROP", true);
+        QuestionType definition = definition("FILL_IN_THE_BLANKS_DRAG_AND_DROP", true);
         when(repository.findByCode("FILL_IN_THE_BLANKS_DRAG_AND_DROP")).thenReturn(Optional.of(definition));
 
         assertThat(service.findDefinitionByCode("FILL_BLANKS_READING")).containsSame(definition);
@@ -143,7 +144,7 @@ class QuestionTypeServiceTest {
     @Test
     void delete_softDeletesTheCatalogRowToPreserveExistingQuestionReferences() {
         UUID publicId = UUID.randomUUID();
-        QuestionTypeDefinition definition = definition("READ_ALOUD", true);
+        QuestionType definition = definition("READ_ALOUD", true);
         definition.setPublicId(publicId);
         when(repository.findByPublicIdAndDeletedFalse(publicId)).thenReturn(Optional.of(definition));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -166,8 +167,8 @@ class QuestionTypeServiceTest {
                 "PERSONAL_INTRODUCTION", "Personal Introduction", "PI", "SPEAKING", 1, true), staff);
 
         assertThat(result.active()).isFalse();
-        org.mockito.ArgumentCaptor<QuestionTypeDefinition> captor =
-                org.mockito.ArgumentCaptor.forClass(QuestionTypeDefinition.class);
+        org.mockito.ArgumentCaptor<QuestionType> captor =
+                org.mockito.ArgumentCaptor.forClass(QuestionType.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getAuthorUserPublicId()).isEqualTo(staffId);
         assertThat(captor.getValue().getLifecycleStatus()).isEqualTo("DRAFT");
@@ -178,7 +179,7 @@ class QuestionTypeServiceTest {
         UUID publicId = UUID.randomUUID();
         UUID staffId = UUID.randomUUID();
         CurrentUser staff = new CurrentUser(staffId, null, List.of("ACADEMIC_STAFF"));
-        QuestionTypeDefinition definition = definition("READ_ALOUD", true);
+        QuestionType definition = definition("READ_ALOUD", true);
         definition.setPublicId(publicId);
         definition.setLifecycleStatus("ACTIVE");
         when(repository.findByPublicIdAndDeletedFalse(publicId)).thenReturn(Optional.of(definition));
@@ -189,8 +190,8 @@ class QuestionTypeServiceTest {
                 .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
     }
 
-    private QuestionTypeDefinition definition(String code, boolean active) {
-        QuestionTypeDefinition definition = new QuestionTypeDefinition();
+    private QuestionType definition(String code, boolean active) {
+        QuestionType definition = new QuestionType();
         definition.setPublicId(UUID.randomUUID());
         definition.setCode(code);
         definition.setDisplayName(code);
@@ -199,5 +200,29 @@ class QuestionTypeServiceTest {
         definition.setDisplayOrder(1);
         definition.setSection(com.pte.itembank.domain.enums.PteSection.SPEAKING);
         return definition;
+    }
+
+    @Test
+    void recordPublishedUse_stampsFirstPublicationAndLocksTheRuntimeOnce() {
+        QuestionType type = new QuestionType();
+        type.setCode("READ_ALOUD");
+        type.setTaskTypeKey("READ_ALOUD");
+        Instant first = Instant.parse("2026-10-24T01:00:00Z");
+        when(repository.findByTaskTypeKey("READ_ALOUD")).thenReturn(Optional.of(type));
+
+        service.recordPublishedUse(List.of("READ_ALOUD"), first);
+        service.recordPublishedUse(List.of("READ_ALOUD"), first.plusSeconds(60));
+
+        assertThat(type.getFirstPublishedAt()).isEqualTo(first);
+        assertThat(type.getRuntimeLockedAt()).isEqualTo(first);
+    }
+
+    @Test
+    void recordPublishedUse_ignoresAnUnknownTaskTypeKey() {
+        when(repository.findByTaskTypeKey("READ_ALOUD")).thenReturn(Optional.empty());
+
+        service.recordPublishedUse(List.of("READ_ALOUD"), Instant.now());
+
+        verify(repository).findByTaskTypeKey("READ_ALOUD");
     }
 }

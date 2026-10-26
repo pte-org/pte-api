@@ -1,7 +1,7 @@
 package com.pte.session;
 
 import com.pte.session.dto.response.StaffSessionView;
-import com.pte.session.internal.service.StaffScheduleQueryService;
+import com.pte.session.internal.service.staff.StaffScheduleQueryService;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import java.util.UUID;

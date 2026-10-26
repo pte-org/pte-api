@@ -1,11 +1,9 @@
 package com.pte.scoring.internal.controller;
 
 import com.pte.scoring.dto.request.CommitExaminerAssignmentRequest;
-import com.pte.scoring.dto.request.CreateExaminerAssignmentPreviewRequest;
 import com.pte.scoring.dto.response.ExaminerAssignmentOverviewResponse;
-import com.pte.scoring.dto.response.ExaminerAssignmentPreviewResponse;
 import com.pte.scoring.dto.response.ExaminerAssignmentRosterResponse;
-import com.pte.scoring.internal.service.ExaminerAssignmentService;
+import com.pte.scoring.internal.service.examiner.ExaminerAssignmentService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -16,12 +14,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-/** Host-only, per-session Examiner allocation preview and confirmation. */
+/** Host-only, per-session examiner assignment: read the roster, commit the full table once. */
 @RestController
 @RequestMapping("/api/v1/sessions/{sessionPublicId}/examiner-assignments")
 @PreAuthorize("hasRole('HOST_ADMIN')")
@@ -34,14 +31,8 @@ public class ExaminerAssignmentController {
     }
 
     @GetMapping
-    public ApiResponse<ExaminerAssignmentOverviewResponse> overview(@PathVariable UUID sessionPublicId,
-            @RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        CurrentUser caller = currentUser();
-        return ApiResponse.success(search == null || search.isBlank()
-                ? assignmentService.overview(sessionPublicId, caller, page, size)
-                : assignmentService.overview(sessionPublicId, caller, search, page, size));
+    public ApiResponse<ExaminerAssignmentOverviewResponse> overview(@PathVariable UUID sessionPublicId) {
+        return ApiResponse.success(assignmentService.overview(sessionPublicId, currentUser()));
     }
 
     @GetMapping("/roster")
@@ -53,18 +44,6 @@ public class ExaminerAssignmentController {
     public ApiResponse<ExaminerAssignmentRosterResponse> commit(@PathVariable UUID sessionPublicId,
             @Valid @RequestBody CommitExaminerAssignmentRequest request) {
         return ApiResponse.success(assignmentService.commit(sessionPublicId, request, currentUser()));
-    }
-
-    @PostMapping("/previews")
-    public ApiResponse<ExaminerAssignmentPreviewResponse> preview(@PathVariable UUID sessionPublicId,
-            @Valid @RequestBody CreateExaminerAssignmentPreviewRequest request) {
-        return ApiResponse.success(assignmentService.preview(sessionPublicId, request, currentUser()));
-    }
-
-    @PostMapping("/{batchPublicId}/confirm")
-    public ApiResponse<ExaminerAssignmentPreviewResponse> confirm(@PathVariable UUID sessionPublicId,
-            @PathVariable UUID batchPublicId) {
-        return ApiResponse.success(assignmentService.confirm(sessionPublicId, batchPublicId, currentUser()));
     }
 
     private CurrentUser currentUser() {

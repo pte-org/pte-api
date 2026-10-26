@@ -4,13 +4,14 @@ import com.pte.billing.BillingOverviewService;
 import com.pte.billing.BillingOverviewService.SubscriptionSummary;
 import com.pte.billing.CurrentSubscriptionView;
 import com.pte.billing.domain.Order;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.Subscription;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.OrderStatus;
 import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.domain.enums.SubscriptionStatus;
+import com.pte.tenancy.TenancyService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
@@ -28,6 +29,7 @@ import java.time.ZoneOffset;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * Subscription summary and pending-order count behind {@link BillingOverviewService} on the embedded database,
@@ -43,16 +45,13 @@ class BillingOverviewQueriesTest {
     private SubscriptionRepository subscriptions;
 
     @Autowired
-    private PlanRepository plans;
+    private ServicePlanRepository plans;
 
     @Autowired
     private OrderRepository orders;
 
     @Autowired
     private LicenseCodeRepository licenseCodes;
-
-    @Autowired
-    private TenantApplicationRepository applications;
 
     @Autowired
     private EntityManager em;
@@ -65,11 +64,12 @@ class BillingOverviewQueriesTest {
 
     @BeforeEach
     void setUp() {
-        service = new BillingOverviewService(subscriptions, plans, orders, licenseCodes, applications, CLOCK);
+        service = new BillingOverviewService(subscriptions, plans, orders, licenseCodes,
+                mock(TenancyService.class), CLOCK);
     }
 
-    private Plan plan(String name, PlanType type) {
-        Plan plan = new Plan();
+    private ServicePlan plan(String name, PlanType type) {
+        ServicePlan plan = new ServicePlan();
         plan.setName(name);
         plan.setType(type);
         plan.setPrice(new BigDecimal("100000.00"));
@@ -93,7 +93,7 @@ class BillingOverviewQueriesTest {
         return subscriptions.saveAndFlush(subscription);
     }
 
-    private Subscription expiringIn(UUID tenant, Plan plan, Duration fromNow) {
+    private Subscription expiringIn(UUID tenant, ServicePlan plan, Duration fromNow) {
         return subscription(tenant, plan.getPublicId(), NOW.minus(Duration.ofDays(100)), NOW.plus(fromNow),
                 SubscriptionStatus.ACTIVE, false);
     }
@@ -120,7 +120,7 @@ class BillingOverviewQueriesTest {
     @Test
     void aTenantWithoutAnySubscriptionGetsNullExpiryAndNotExpiringSoon() {
         UUID tenant = UUID.randomUUID();
-        Plan plan = plan("Pro", PlanType.EXAM_PACKAGE);
+        ServicePlan plan = plan("Pro", PlanType.EXAM_PACKAGE);
         expiringIn(UUID.randomUUID(), plan, Duration.ofDays(5)); // someone else's
 
         SubscriptionSummary summary = service.subscriptionSummary(tenant);
@@ -149,7 +149,7 @@ class BillingOverviewQueriesTest {
     void twentyNineDaysIsExpiringSoonAndThirtyOneDaysIsNot() {
         UUID soon = UUID.randomUUID();
         UUID later = UUID.randomUUID();
-        Plan plan = plan("Pro", PlanType.EXAM_PACKAGE);
+        ServicePlan plan = plan("Pro", PlanType.EXAM_PACKAGE);
         expiringIn(soon, plan, Duration.ofDays(29));
         expiringIn(later, plan, Duration.ofDays(31));
 
@@ -200,7 +200,7 @@ class BillingOverviewQueriesTest {
     @Test
     void anAlreadyExpiredSubscriptionIsIgnoredEvenWhenStillMarkedActive() {
         UUID tenant = UUID.randomUUID();
-        Plan plan = plan("Pro", PlanType.EXAM_PACKAGE);
+        ServicePlan plan = plan("Pro", PlanType.EXAM_PACKAGE);
         expiringIn(tenant, plan, Duration.ofDays(-3));
         expiringIn(tenant, plan, Duration.ofSeconds(1));
 
@@ -216,7 +216,7 @@ class BillingOverviewQueriesTest {
     @Test
     void onlyActiveStartedUndeletedSubscriptionsOfTheTenantAreListed() {
         UUID tenant = UUID.randomUUID();
-        Plan plan = plan("Pro", PlanType.EXAM_PACKAGE);
+        ServicePlan plan = plan("Pro", PlanType.EXAM_PACKAGE);
         Subscription usable = expiringIn(tenant, plan, Duration.ofDays(90));
         subscription(tenant, plan.getPublicId(), NOW.minusSeconds(10000), NOW.plus(Duration.ofDays(5)),
                 SubscriptionStatus.EXPIRED, false);
@@ -239,7 +239,7 @@ class BillingOverviewQueriesTest {
     @Test
     void aSubscriptionStartingExactlyNowIsAlreadyUsable() {
         UUID tenant = UUID.randomUUID();
-        Plan plan = plan("Pro", PlanType.EXAM_PACKAGE);
+        ServicePlan plan = plan("Pro", PlanType.EXAM_PACKAGE);
         Subscription starting = subscription(tenant, plan.getPublicId(), NOW, NOW.plus(Duration.ofDays(60)),
                 SubscriptionStatus.ACTIVE, false);
 
@@ -250,7 +250,7 @@ class BillingOverviewQueriesTest {
     @Test
     void listIsSoonestExpiryFirstAndNearestExpiryDrivesTheSummary() {
         UUID tenant = UUID.randomUUID();
-        Plan plan = plan("Pro", PlanType.EXAM_PACKAGE);
+        ServicePlan plan = plan("Pro", PlanType.EXAM_PACKAGE);
         Subscription far = expiringIn(tenant, plan, Duration.ofDays(200));
         Subscription near = expiringIn(tenant, plan, Duration.ofDays(10));
         Subscription mid = expiringIn(tenant, plan, Duration.ofDays(60));
@@ -267,7 +267,7 @@ class BillingOverviewQueriesTest {
     @Test
     void listIsCappedAtTheMaximumKeepingTheNearestExpiries() {
         UUID tenant = UUID.randomUUID();
-        Plan plan = plan("Pro", PlanType.EXAM_PACKAGE);
+        ServicePlan plan = plan("Pro", PlanType.EXAM_PACKAGE);
         for (int i = 1; i <= BillingOverviewService.MAX_CURRENT_SUBSCRIPTIONS + 5; i++) {
             expiringIn(tenant, plan, Duration.ofDays(i));
         }
@@ -301,7 +301,7 @@ class BillingOverviewQueriesTest {
     @Test
     void viewCarriesPlanNameTypeDatesAndStatusAsStrings() {
         UUID tenant = UUID.randomUUID();
-        Plan plan = plan("Exam Pack 30", PlanType.EXAM_PACKAGE);
+        ServicePlan plan = plan("Exam Pack 30", PlanType.EXAM_PACKAGE);
         Subscription sub = expiringIn(tenant, plan, Duration.ofDays(45));
 
         CurrentSubscriptionView view = service.subscriptionSummary(tenant).current().get(0);
@@ -332,9 +332,9 @@ class BillingOverviewQueriesTest {
     @Test
     void planNamesAreResolvedInOneBatchQueryNotPerRow() {
         UUID tenant = UUID.randomUUID();
-        Plan planA = plan("Plan A", PlanType.EXAM_PACKAGE);
-        Plan planB = plan("Plan B", PlanType.EXAM_PACKAGE);
-        Plan planC = plan("Plan C", PlanType.EXAM_PACKAGE);
+        ServicePlan planA = plan("Plan A", PlanType.EXAM_PACKAGE);
+        ServicePlan planB = plan("Plan B", PlanType.EXAM_PACKAGE);
+        ServicePlan planC = plan("Plan C", PlanType.EXAM_PACKAGE);
         for (int i = 1; i <= 6; i++) {
             expiringIn(tenant, i % 3 == 0 ? planC : i % 2 == 0 ? planB : planA, Duration.ofDays(i));
         }

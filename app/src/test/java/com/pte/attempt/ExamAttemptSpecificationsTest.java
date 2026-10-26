@@ -73,6 +73,8 @@ class ExamAttemptSpecificationsTest {
     private ExamAttempt persist(UUID tenantId, UUID studentId, Instant createdAt, AttemptStatus status,
             boolean deleted) {
         ExamAttempt attempt = new ExamAttempt();
+        attempt.setExamVersionPublicId(UUID.randomUUID());
+        attempt.setExamDefinitionPublicId(UUID.randomUUID());
         attempt.setTenantId(tenantId);
         attempt.setStudentPublicId(studentId);
         attempt.setSessionPublicId(UUID.randomUUID());

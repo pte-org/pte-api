@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -26,16 +27,14 @@ public class ProctorCommandService {
 
     private final ExamAttemptRepository attemptRepository;
     private final SessionService sessionService;
+    private final Clock clock;
 
     @Autowired
-    public ProctorCommandService(ExamAttemptRepository attemptRepository, SessionService sessionService) {
+    public ProctorCommandService(ExamAttemptRepository attemptRepository, SessionService sessionService,
+            Clock clock) {
         this.attemptRepository = attemptRepository;
         this.sessionService = sessionService;
-    }
-
-    public ProctorCommandService(ExamAttemptRepository attemptRepository) {
-        this.attemptRepository = attemptRepository;
-        this.sessionService = null;
+        this.clock = clock;
     }
 
     @Transactional
@@ -44,7 +43,7 @@ public class ProctorCommandService {
             if (sessionService != null) {
                 sessionService.lockOpenWithinWindowForProctorOperation(attempt.getSessionPublicId(), tenantId);
             }
-            attempt.submit();
+            attempt.submit(clock.instant());
             attemptRepository.save(attempt);
         });
     }
@@ -57,7 +56,7 @@ public class ProctorCommandService {
         return attemptRepository.findWithLockByPublicIdAndSessionPublicIdAndTenantId(attemptPublicId, sessionPublicId, tenantId)
                 .filter(attempt -> attempt.getStatus() == AttemptStatus.IN_PROGRESS)
                 .map(attempt -> {
-                    attempt.submit();
+                    attempt.submit(clock.instant());
                     attemptRepository.save(attempt);
                     return true;
                 })

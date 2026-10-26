@@ -1,7 +1,7 @@
 package com.pte.billing.internal.controller;
 
-import com.pte.billing.internal.dto.request.RejectApplicationRequest;
-import com.pte.billing.internal.dto.request.SubmitApplicationRequest;
+import com.pte.billing.internal.dto.request.application.RejectApplicationRequest;
+import com.pte.billing.internal.dto.request.application.SubmitApplicationRequest;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.service.TenantApplicationService;
 import com.pte.shared.security.CurrentUser;
@@ -10,6 +10,11 @@ import com.pte.shared.web.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import com.pte.billing.internal.dto.request.application.ApplicationStatusAction;
+import com.pte.billing.internal.dto.request.application.ApplicationStatusRequest;
+import com.pte.billing.internal.constant.BillingConstants;
+import com.pte.shared.exception.StatusReasonRequiredException;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -55,18 +60,17 @@ public class TenantApplicationController {
         return ApiResponse.success(applicationService.get(publicId, currentUser()));
     }
 
-    @PostMapping("/applications/{publicId}/approval")
+    @PatchMapping("/applications/{publicId}/status")
     @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER')")
-    public ApiResponse<Void> approve(@PathVariable UUID publicId) {
-        applicationService.approve(publicId, currentUser());
-        return ApiResponse.success(null);
-    }
-
-    @PostMapping("/applications/{publicId}/rejection")
-    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER')")
-    public ApiResponse<TenantApplicationResponse> reject(@PathVariable UUID publicId,
-            @Valid @RequestBody RejectApplicationRequest request) {
-        return ApiResponse.success(applicationService.reject(publicId, request, currentUser()));
+    public ApiResponse<TenantApplicationResponse> changeStatus(@PathVariable UUID publicId,
+            @Valid @RequestBody ApplicationStatusRequest request) {
+        CurrentUser caller = currentUser();
+        if (request.action() == ApplicationStatusAction.APPROVE) {
+            applicationService.approve(publicId, caller);
+            return ApiResponse.success(null);
+        }
+        String reason = StatusReasonRequiredException.requireReason(request.reason(), BillingConstants.REJECT_REASON_REQUIRED);
+        return ApiResponse.success(applicationService.reject(publicId, new RejectApplicationRequest(reason), caller));
     }
 
     private CurrentUser currentUser() {

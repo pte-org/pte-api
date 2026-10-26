@@ -10,8 +10,6 @@ import com.pte.session.dto.response.SlotConflict;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.util.List;
-
 /** Notifies tenant hosts when bulk enrollment skips students with overlapping exams. */
 @Component
 public class StudentEnrollmentConflictNotificationListener {

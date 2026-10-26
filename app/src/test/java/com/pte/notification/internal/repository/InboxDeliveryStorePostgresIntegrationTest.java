@@ -2,11 +2,10 @@ package com.pte.notification.internal.repository;
 
 import com.pte.notification.InboxNotificationRequested;
 import com.pte.notification.InboxRecipient;
-import com.pte.notification.domain.InboxAnnouncement;
-import com.pte.notification.domain.InboxContent;
-import com.pte.notification.domain.InboxDeliveryIntent;
-import com.pte.notification.domain.InboxItem;
-import com.pte.notification.domain.InboxRecipientStream;
+import com.pte.notification.domain.Announcement;
+import com.pte.notification.domain.Notification;
+import com.pte.notification.domain.NotificationRecipient;
+import com.pte.notification.domain.NotificationRecipientStream;
 import com.pte.notification.domain.enums.InboxCategory;
 import com.pte.notification.domain.enums.InboxImportance;
 import com.pte.notification.domain.enums.InboxNotificationType;
@@ -21,19 +20,16 @@ import org.junit.jupiter.api.Timeout;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.springframework.transaction.event.TransactionalEventListenerFactory;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -79,14 +75,7 @@ class InboxDeliveryStorePostgresIntegrationTest {
         dataSource = new DriverManagerDataSource(url + (url.contains("?") ? "&" : "?")
                 + "currentSchema=" + schema, user, password);
         jdbc = new JdbcTemplate(dataSource);
-        // Only the FK identities V72 needs. Never load historical application data/migrations.
-        jdbc.execute("CREATE TABLE users (public_id UUID PRIMARY KEY)");
-        jdbc.execute("CREATE TABLE tenants (public_id UUID PRIMARY KEY)");
-        jdbc.update("INSERT INTO users(public_id) VALUES (?), (?)", admin, secondAdmin);
-        try (Connection connection = dataSource.getConnection()) {
-            ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V72__notification_inbox_foundation.sql"));
-        }
+        InboxTestSchema.load(dataSource, schema, admin, secondAdmin);
         transaction = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         store = new InboxDeliveryStore(new NamedParameterJdbcTemplate(dataSource));
     }
@@ -104,20 +93,19 @@ class InboxDeliveryStorePostgresIntegrationTest {
     @Test
     void fiveInboxEntityMappingsValidateAgainstActualV71WithoutSchemaWrites() {
         org.hibernate.cfg.Configuration configuration = new org.hibernate.cfg.Configuration();
-        configuration.addAnnotatedClass(InboxContent.class);
-        configuration.addAnnotatedClass(InboxDeliveryIntent.class);
-        configuration.addAnnotatedClass(InboxItem.class);
-        configuration.addAnnotatedClass(InboxRecipientStream.class);
-        configuration.addAnnotatedClass(InboxAnnouncement.class);
+        configuration.addAnnotatedClass(Notification.class);
+        configuration.addAnnotatedClass(NotificationRecipient.class);
+        configuration.addAnnotatedClass(NotificationRecipientStream.class);
+        configuration.addAnnotatedClass(Announcement.class);
         configuration.setPhysicalNamingStrategy(new org.hibernate.boot.model.naming.PhysicalNamingStrategySnakeCaseImpl());
         configuration.getProperties().put("hibernate.connection.datasource", dataSource);
         configuration.setProperty("hibernate.hbm2ddl.auto", "validate");
         configuration.setProperty("hibernate.default_schema", schema);
         try (org.hibernate.SessionFactory factory = configuration.buildSessionFactory()) {
-            assertThat(factory.getMetamodel().getEntities()).hasSize(5);
+            assertThat(factory.getMetamodel().getEntities()).hasSize(4);
             assertThat(factory.getMetamodel().getEntities().stream().map(entity -> entity.getJavaType().getSimpleName()))
-                    .containsExactlyInAnyOrder("InboxContent", "InboxDeliveryIntent", "InboxItem",
-                            "InboxRecipientStream", "InboxAnnouncement");
+                    .containsExactlyInAnyOrder("Notification", "NotificationRecipient",
+                            "NotificationRecipientStream", "Announcement");
         }
     }
 
@@ -127,8 +115,8 @@ class InboxDeliveryStorePostgresIntegrationTest {
             store.append(request("rollback", "Body", List.of(new InboxRecipient(admin, null))), NOW);
             throw new IllegalStateException("test rollback");
         })).isInstanceOf(IllegalStateException.class);
-        assertThat(count("notification_inbox_contents")).isZero();
-        assertThat(count("notification_inbox_deliveries")).isZero();
+        assertThat(count("notifications")).isZero();
+        assertThat(count("notification_recipients")).isZero();
     }
 
     @Test
@@ -138,15 +126,15 @@ class InboxDeliveryStorePostgresIntegrationTest {
             InboxNotificationRequested event = request("listener", "Body", List.of(new InboxRecipient(admin, null)));
             assertThatThrownBy(() -> appender.append(event)).isInstanceOf(IllegalTransactionStateException.class);
             context.publishEvent(event); // fallbackExecution=false: no originating transaction, no intent.
-            assertThat(count("notification_inbox_deliveries")).isZero();
+            assertThat(count("notification_recipients")).isZero();
             assertThatThrownBy(() -> tx(() -> {
                 context.publishEvent(event);
                 throw new IllegalStateException("source transaction rollback");
             })).isInstanceOf(IllegalStateException.class);
-            assertThat(count("notification_inbox_deliveries")).isZero();
+            assertThat(count("notification_recipients")).isZero();
             tx(() -> { context.publishEvent(event); return null; });
-            assertThat(count("notification_inbox_contents")).isEqualTo(1);
-            assertThat(count("notification_inbox_deliveries")).isEqualTo(1);
+            assertThat(count("notifications")).isEqualTo(1);
+            assertThat(count("notification_recipients")).isEqualTo(1);
         }
     }
 
@@ -164,9 +152,9 @@ class InboxDeliveryStorePostgresIntegrationTest {
             start.countDown();
             for (Future<Void> job : work) { job.get(15, TimeUnit.SECONDS); }
         }
-        assertThat(count("notification_inbox_contents")).isEqualTo(1);
-        assertThat(count("notification_inbox_deliveries")).isEqualTo(2);
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM notification_inbox_deliveries WHERE tenant_id IS NULL",
+        assertThat(count("notifications")).isEqualTo(1);
+        assertThat(count("notification_recipients")).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM notification_recipients WHERE tenant_id IS NULL",
                 Long.class)).isEqualTo(2L);
     }
 
@@ -177,8 +165,8 @@ class InboxDeliveryStorePostgresIntegrationTest {
             store.append(request("immutable", "Changed body", List.of(new InboxRecipient(admin, null))), NOW);
             return null;
         })).isInstanceOf(com.pte.notification.internal.exception.InboxNotificationException.class);
-        assertThat(jdbc.queryForObject("SELECT body FROM notification_inbox_contents", String.class)).isEqualTo("Body");
-        assertThat(count("notification_inbox_deliveries")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT body FROM notifications", String.class)).isEqualTo("Body");
+        assertThat(count("notification_recipients")).isEqualTo(1);
     }
 
     @Test
@@ -221,7 +209,7 @@ class InboxDeliveryStorePostgresIntegrationTest {
         assertThat(tx(() -> store.findClaim(old, later))).isEmpty();
         assertThat(tx(() -> store.lockClaim(old, later))).isFalse();
         deliver(current, later);
-        assertThat(count("notification_inbox_items")).isEqualTo(1);
+        assertThat(delivered()).isEqualTo(1);
         assertThat(status(current)).isEqualTo("DELIVERED");
         assertThat(tx(() -> store.lockClaim(old, later))).isFalse();
     }
@@ -234,12 +222,12 @@ class InboxDeliveryStorePostgresIntegrationTest {
             deliverInsideTransaction(claim, NOW);
             throw new IllegalStateException("crash before commit");
         })).isInstanceOf(IllegalStateException.class);
-        assertThat(count("notification_inbox_items")).isZero();
+        assertThat(delivered()).isZero();
         assertThat(status(claim)).isEqualTo("PROCESSING");
-        assertThat(jdbc.queryForObject("SELECT coalesce(sum(last_sequence), 0) FROM notification_inbox_streams",
+        assertThat(jdbc.queryForObject("SELECT coalesce(sum(last_sequence), 0) FROM notification_recipient_streams",
                 Long.class)).isZero();
         deliver(claim, NOW);
-        assertThat(count("notification_inbox_items")).isEqualTo(1);
+        assertThat(delivered()).isEqualTo(1);
         assertThat(status(claim)).isEqualTo("DELIVERED");
     }
 
@@ -261,11 +249,11 @@ class InboxDeliveryStorePostgresIntegrationTest {
             Future<Long> readAll = executor.submit(() -> tx(() -> {
                 readerAtLock.countDown();
                 // Mirror the later read-all contract: acquire/create the SAME recipient stream lock.
-                jdbc.update("INSERT INTO notification_inbox_streams(public_id,recipient_user_public_id,tenant_id) "
+                jdbc.update("INSERT INTO notification_recipient_streams(public_id,recipient_user_public_id,tenant_id) "
                         + "VALUES (?, ?, NULL) ON CONFLICT (recipient_user_public_id) DO NOTHING", UUID.randomUUID(), admin);
-                Long watermark = jdbc.queryForObject("SELECT last_sequence FROM notification_inbox_streams "
+                Long watermark = jdbc.queryForObject("SELECT last_sequence FROM notification_recipient_streams "
                         + "WHERE recipient_user_public_id = ? FOR UPDATE", Long.class, admin);
-                jdbc.update("UPDATE notification_inbox_items SET read_at = ? WHERE recipient_user_public_id = ? "
+                jdbc.update("UPDATE notification_recipients SET read_at = ? WHERE recipient_user_public_id = ? "
                         + "AND sequence_no <= ? AND read_at IS NULL", java.sql.Timestamp.from(NOW), admin, watermark);
                 return watermark;
             }));
@@ -278,9 +266,9 @@ class InboxDeliveryStorePostgresIntegrationTest {
         } finally { releaseDelivery.countDown(); }
         append("second");
         deliver(claim(NOW, 5), NOW);
-        assertThat(jdbc.queryForList("SELECT sequence_no FROM notification_inbox_items WHERE read_at IS NULL",
+        assertThat(jdbc.queryForList("SELECT sequence_no FROM notification_recipients WHERE read_at IS NULL",
                 Long.class)).containsExactly(2L);
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM notification_inbox_items WHERE read_at IS NOT NULL",
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM notification_recipients WHERE read_at IS NOT NULL",
                 Long.class)).isEqualTo(1L);
     }
 
@@ -296,8 +284,8 @@ class InboxDeliveryStorePostgresIntegrationTest {
         InboxDeliveryClaim retried = claim(later, 5);
         assertThat(retried.publicId()).isEqualTo(first.publicId());
         assertThat(retried.token()).isNotEqualTo(first.token());
-        assertThat(count("notification_inbox_contents")).isEqualTo(1);
-        assertThat(count("notification_inbox_deliveries")).isEqualTo(1);
+        assertThat(count("notifications")).isEqualTo(1);
+        assertThat(count("notification_recipients")).isEqualTo(1);
         assertThat(tx(() -> store.retryFailed(first.publicId(), later))).isFalse();
     }
 
@@ -318,9 +306,9 @@ class InboxDeliveryStorePostgresIntegrationTest {
 
         assertThat(tx(() -> store.exhaustExpired(later, 1)))
                 .isEqualTo(InboxConstants.RECOVERY_BATCH_LIMIT);
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM notification_inbox_deliveries WHERE status='FAILED'",
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM notification_recipients WHERE status='FAILED'",
                 Long.class)).isEqualTo((long) InboxConstants.RECOVERY_BATCH_LIMIT);
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM notification_inbox_deliveries WHERE status='PROCESSING'",
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM notification_recipients WHERE status='PROCESSING'",
                 Long.class)).isEqualTo(1L);
     }
 
@@ -376,13 +364,18 @@ class InboxDeliveryStorePostgresIntegrationTest {
     }
 
     private String status(InboxDeliveryClaim claim) {
-        return jdbc.queryForObject("SELECT status FROM notification_inbox_deliveries WHERE public_id = ?",
+        return jdbc.queryForObject("SELECT status FROM notification_recipients WHERE public_id = ?",
                 String.class, claim.publicId());
     }
 
     private long count(String table) {
-        if (!table.matches("notification_inbox_[a-z_]+")) { throw new AssertionError("Invalid test table"); }
+        if (!table.matches("notification[a-z_]*")) { throw new AssertionError("Invalid test table"); }
         return jdbc.queryForObject("SELECT count(*) FROM " + table, Long.class);
+    }
+
+    /** Recipients whose notification reached the inbox (sequence assigned). */
+    private long delivered() {
+        return jdbc.queryForObject("SELECT count(*) FROM notification_recipients WHERE sequence_no IS NOT NULL", Long.class);
     }
 
     private <T> T tx(Supplier<T> action) { return transaction.execute(status -> action.get()); }

@@ -1,6 +1,6 @@
 package com.pte.itembank.internal.repository;
 
-import com.pte.itembank.domain.QuestionTypeDefinition;
+import com.pte.itembank.domain.QuestionType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
@@ -8,30 +8,30 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface QuestionTypeRepository extends JpaRepository<QuestionTypeDefinition, Long> {
+public interface QuestionTypeRepository extends JpaRepository<QuestionType, Long> {
 
-    List<QuestionTypeDefinition> findAllByDeletedFalseOrderByDisplayOrderAscCodeAsc();
+    List<QuestionType> findAllByDeletedFalseOrderByDisplayOrderAscCodeAsc();
 
-    List<QuestionTypeDefinition> findAllByDeletedFalseAndActiveTrueOrderByDisplayOrderAscCodeAsc();
+    List<QuestionType> findAllByDeletedFalseAndActiveTrueOrderByDisplayOrderAscCodeAsc();
 
-    Optional<QuestionTypeDefinition> findByCodeAndDeletedFalse(String code);
+    Optional<QuestionType> findByCodeAndDeletedFalse(String code);
 
     /** Includes soft-deleted rows so a deleted standard type can be restored. */
-    Optional<QuestionTypeDefinition> findByCode(String code);
+    Optional<QuestionType> findByCode(String code);
 
-    Optional<QuestionTypeDefinition> findByTaskTypeKey(String taskTypeKey);
+    Optional<QuestionType> findByTaskTypeKey(String taskTypeKey);
 
     /** Includes retired/soft-deleted rows because display names are never reusable. */
-    Optional<QuestionTypeDefinition> findByNormalizedDisplayName(String normalizedDisplayName);
+    Optional<QuestionType> findByNormalizedDisplayName(String normalizedDisplayName);
 
-    Optional<QuestionTypeDefinition> findByTaskTypeKeyAndDeletedFalse(String taskTypeKey);
+    Optional<QuestionType> findByTaskTypeKeyAndDeletedFalse(String taskTypeKey);
 
     boolean existsByTaskTypeKey(String taskTypeKey);
 
     boolean existsByNormalizedDisplayName(String normalizedDisplayName);
 
-    Optional<QuestionTypeDefinition> findByPublicIdAndDeletedFalse(UUID publicId);
+    Optional<QuestionType> findByPublicIdAndDeletedFalse(UUID publicId);
 
-    @Query("SELECT COALESCE(MAX(q.displayOrder), 0) FROM QuestionTypeDefinition q WHERE q.deleted = false")
+    @Query("SELECT COALESCE(MAX(q.displayOrder), 0) FROM QuestionType q WHERE q.deleted = false")
     int findMaxDisplayOrder();
 }

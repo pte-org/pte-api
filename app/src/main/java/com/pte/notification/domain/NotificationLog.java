@@ -56,9 +56,9 @@ public class NotificationLog extends BaseEntity {
     @Column(name = "sent_at")
     private Instant sentAt;
 
-    public void markSent() {
+    public void markSent(Instant now) {
         this.status = NotificationStatus.SENT;
-        this.sentAt = Instant.now();
+        this.sentAt = now;
     }
 
     public void markFailed() {

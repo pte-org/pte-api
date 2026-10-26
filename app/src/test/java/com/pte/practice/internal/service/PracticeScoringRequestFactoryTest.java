@@ -1,6 +1,6 @@
 package com.pte.practice.internal.service;
 
-import com.pte.practice.internal.domain.PracticeSessionItem;
+import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.scoring.PracticeScoringException;
 import com.pte.scoring.PracticeScoringFailure;
 import com.pte.scoring.PracticeScoringRequest;
@@ -22,7 +22,7 @@ class PracticeScoringRequestFactoryTest {
         UUID media = UUID.randomUUID();
         UUID image = UUID.randomUUID();
         UUID tenant = UUID.randomUUID();
-        PracticeSessionItem item = item("DESCRIBE_IMAGE", "DESCRIBE_IMAGE_V1",
+        PracticeResponse item = item("DESCRIBE_IMAGE", "DESCRIBE_IMAGE_V1",
                 "{\"mediaPublicId\":\"" + media + "\"}");
         item.setPromptText("Describe the chart");
         item.setReferenceAnswerText("model answer");
@@ -46,14 +46,14 @@ class PracticeScoringRequestFactoryTest {
 
     @Test
     void writingItemCarriesTheRawText() {
-        PracticeSessionItem item = item("SUMMARIZE_WRITTEN_TEXT", "SUMMARIZE_WRITTEN_TEXT_V1", "{\"text\":\"A short summary.\"}");
+        PracticeResponse item = item("SUMMARIZE_WRITTEN_TEXT", "SUMMARIZE_WRITTEN_TEXT_V1", "{\"text\":\"A short summary.\"}");
 
         assertThat(factory.build(item, UUID.randomUUID()).payload()).isEqualTo("A short summary.");
     }
 
     @Test
     void objectiveItemCarriesTheFrozenOptionSnapshot() {
-        PracticeSessionItem item = item("MC_SINGLE_ANSWER_READING", "MC_READING_SINGLE_V1",
+        PracticeResponse item = item("MC_SINGLE_ANSWER_READING", "MC_READING_SINGLE_V1",
                 "{\"selectedOption\":\"2\"}");
         item.setObjectiveOptionsJson("[{\"text\":\"a\",\"correct\":true,\"orderIndex\":0}]");
 
@@ -65,7 +65,7 @@ class PracticeScoringRequestFactoryTest {
 
     @Test
     void anAnswerThatCannotBeCanonicalisedIsInvalidPayload() {
-        PracticeSessionItem item = item("SUMMARIZE_WRITTEN_TEXT", "SUMMARIZE_WRITTEN_TEXT_V1", "{\"unexpected\":true}");
+        PracticeResponse item = item("SUMMARIZE_WRITTEN_TEXT", "SUMMARIZE_WRITTEN_TEXT_V1", "{\"unexpected\":true}");
 
         assertThatThrownBy(() -> factory.build(item, UUID.randomUUID()))
                 .isInstanceOfSatisfying(PracticeScoringException.class,
@@ -74,15 +74,15 @@ class PracticeScoringRequestFactoryTest {
 
     @Test
     void aMissingAnswerIsInvalidPayload() {
-        PracticeSessionItem item = item("SUMMARIZE_WRITTEN_TEXT", "SUMMARIZE_WRITTEN_TEXT_V1", null);
+        PracticeResponse item = item("SUMMARIZE_WRITTEN_TEXT", "SUMMARIZE_WRITTEN_TEXT_V1", null);
 
         assertThatThrownBy(() -> factory.build(item, UUID.randomUUID()))
                 .isInstanceOfSatisfying(PracticeScoringException.class,
                         ex -> assertThat(ex.failure()).isEqualTo(PracticeScoringFailure.INVALID_PAYLOAD));
     }
 
-    private static PracticeSessionItem item(String taskCode, String rendererKey, String payload) {
-        PracticeSessionItem item = new PracticeSessionItem();
+    private static PracticeResponse item(String taskCode, String rendererKey, String payload) {
+        PracticeResponse item = new PracticeResponse();
         item.setTaskCode(taskCode);
         item.setRendererKey(rendererKey);
         item.setSavedPayload(payload);

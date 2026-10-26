@@ -2,13 +2,13 @@ package com.pte.practice.internal.service;
 
 import com.pte.practice.internal.config.PracticeScoringProperties;
 import com.pte.practice.internal.domain.PracticeSession;
-import com.pte.practice.internal.domain.PracticeSessionItem;
+import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.domain.enums.PracticeScoringStatus;
 import com.pte.practice.internal.dto.response.PracticeItemResultResponse;
 import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.messaging.PracticeScoringDispatcher;
 import com.pte.practice.internal.messaging.PracticeScoringJob;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.scoring.PracticeAiEvaluation;
 import com.pte.scoring.PracticeScoringFailure;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,14 +38,14 @@ class PracticeScoringStateServiceTest {
     private static final Instant NOW = Instant.parse("2026-10-24T10:00:00Z");
 
     @Mock
-    private PracticeSessionItemRepository itemRepository;
+    private PracticeResponseRepository itemRepository;
     @Mock
     private PracticeScoringDispatcher dispatcher;
 
     private PracticeScoringProperties properties;
     private PracticeScoringStateService service;
     private PracticeSession session;
-    private PracticeSessionItem item;
+    private PracticeResponse item;
 
     @BeforeEach
     void setUp() {
@@ -55,7 +55,7 @@ class PracticeScoringStateServiceTest {
         session = new PracticeSession();
         session.setStudentPublicId(UUID.randomUUID());
         session.setTenantId(UUID.randomUUID());
-        item = new PracticeSessionItem();
+        item = new PracticeResponse();
         item.setPublicId(UUID.randomUUID());
         item.setTaskCode("READ_ALOUD");
     }
@@ -279,7 +279,7 @@ class PracticeScoringStateServiceTest {
         UUID jobToken = scoringItem(NOW.minusSeconds(2));
         when(itemRepository.findByPublicIdAndDeletedFalse(item.getPublicId())).thenReturn(Optional.of(item));
 
-        PracticeSessionItem claimed = service.claim(item.getPublicId(), jobToken, NOW);
+        PracticeResponse claimed = service.claim(item.getPublicId(), jobToken, NOW);
 
         assertThat(claimed).isSameAs(item);
         assertThat(item.getScoringDispatchToken()).isNotNull().isNotEqualTo(jobToken);

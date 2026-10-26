@@ -1,0 +1,44 @@
+package com.pte.enrollment.internal.repository;
+
+import com.pte.enrollment.domain.TrainingClass;
+import com.pte.enrollment.internal.dto.response.ClassStudentCountResponse;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+public interface TrainingClassRepository extends JpaRepository<TrainingClass, Long> {
+
+    Optional<TrainingClass> findByPublicId(UUID publicId);
+
+    List<TrainingClass> findByProgram_PublicIdAndDeletedFalseOrderByCreatedAtAsc(UUID programPublicId);
+
+    boolean existsByProgram_PublicIdAndNameIgnoreCaseAndDeletedFalse(UUID programPublicId, String name);
+
+    /** Overview: active, non-deleted classes of a tenant whose program is not deleted either. */
+    @Query("SELECT COUNT(c) FROM TrainingClass c JOIN c.program p JOIN p.organization o "
+            + "WHERE o.publicId = :tenantPublicId AND c.deleted = false AND p.deleted = false "
+            + "AND c.status = com.pte.enrollment.domain.enums.ClassStatus.ACTIVE")
+    long countActiveForTenant(@Param("tenantPublicId") UUID tenantPublicId);
+
+    /** Used by {@code ProgramService.archive()}'s active-children guard. */
+    boolean existsByProgram_PublicIdAndDeletedFalse(UUID programPublicId);
+
+    /**
+     * Backs Phase 13's Program dashboard â€” one grouped {@code LEFT JOIN}
+     * query returns every non-archived Class under a Program together with
+     * its live student count (0 for a Class with no members yet), so the
+     * dashboard never issues a second per-Class query (N+1 discipline,
+     * matching {@code ClassStudentRepository}'s existing
+     * {@code @EntityGraph} queries).
+     */
+    @Query("SELECT new com.pte.enrollment.internal.dto.response.ClassStudentCountResponse(c.publicId, c.name, COUNT(m)) "
+            + "FROM TrainingClass c LEFT JOIN ClassStudent m ON m.trainingClass = c "
+            + "WHERE c.program.publicId = :programPublicId AND c.deleted = false "
+            + "GROUP BY c.publicId, c.name "
+            + "ORDER BY c.name ASC")
+    List<ClassStudentCountResponse> countStudentsByClassForProgram(@Param("programPublicId") UUID programPublicId);
+}

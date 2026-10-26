@@ -1,7 +1,7 @@
 package com.pte.billing.internal.dto.response;
 
 import com.pte.billing.domain.LicenseCode;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.LicenseCodeStatus;
 import com.pte.tenancy.TenantSummary;
 
@@ -29,7 +29,7 @@ public record AdminLicenseCodeSummary(
         UUID subscriptionPublicId) {
 
     public static AdminLicenseCodeSummary from(LicenseCode licenseCode,
-            LicenseCodeStatus effectiveStatus, Plan plan, TenantSummary recipient) {
+            LicenseCodeStatus effectiveStatus, ServicePlan plan, TenantSummary recipient) {
         boolean planAvailable = plan != null && !plan.isDeleted();
         boolean recipientAvailable = recipient != null && !recipient.deleted();
         return new AdminLicenseCodeSummary(

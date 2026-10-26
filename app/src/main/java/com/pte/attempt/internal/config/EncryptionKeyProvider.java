@@ -23,7 +23,7 @@ import java.util.Set;
  * so attempt never needs a call to identity for key material. Outside
  * dev/local profiles, missing PEM config fails fast at startup instead of
  * silently generating an ephemeral keypair that would invalidate every
- * STRICT-pinned attempt's public key on the next restart.
+ * STRICT attempt's public key on the next restart.
  */
 @Component
 public class EncryptionKeyProvider {

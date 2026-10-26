@@ -4,7 +4,7 @@ import com.pte.practice.internal.dto.response.PracticeReviewResponse;
 import com.pte.practice.internal.dto.response.PracticeTaskContentResponse;
 import com.pte.practice.internal.service.PracticeRecordingPlaybackService;
 import com.pte.practice.internal.service.PracticeReviewService;
-import com.pte.practice.internal.service.PracticeSessionService;
+import com.pte.practice.internal.service.session.PracticeSessionService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import org.junit.jupiter.api.AfterEach;

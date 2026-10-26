@@ -1,7 +1,7 @@
 package com.pte.attempt.internal.config;
 
 import com.pte.attempt.internal.constant.AttemptConstants;
-import com.pte.attempt.internal.exception.TaskTimingNotConfiguredException;
+import com.pte.attempt.internal.exception.content.TaskTimingNotConfiguredException;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -43,9 +43,9 @@ public class TaskTimingConfig {
      * Non-throwing lookup — {@code null} if this task type has no entry here
      * at all. Since Phase 3, that's every task type except {@code
      * PERSONAL_INTRODUCTION} and the 5 audio-prompt Speaking types (everyone
-     * else's timing now lives in the pinned {@code ScoreTemplate}); {@code
+     * else's timing now lives in the exam definition); {@code
      * SnapshotPinService} uses this instead of {@link #timingFor} whenever a
-     * task type IS in the pinned template, so a template-only static type
+     * task type IS in the exam definition, so a template-only static type
      * (e.g. {@code MC_READING_SINGLE}) never trips {@link
      * TaskTimingNotConfiguredException} just because it's absent from this file.
      */

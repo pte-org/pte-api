@@ -11,7 +11,7 @@ import java.util.UUID;
  * Phase 08): options-based types (e.g. {@code MC_READING_SINGLE}) — the selected
  * option's {@code orderIndex} as a decimal string ("2"); free-text types (e.g.
  * {@code WRITE_ESSAY}) — the raw response text; audio types (e.g.
- * {@code READ_ALOUD}) — the media module's {@code MediaObject.publicId} for the
+ * {@code READ_ALOUD}) — the media module's {@code MediaAsset.publicId} for the
  * already-uploaded (and completed) recording, NOT raw audio bytes.
  */
 public record SubmitAnswerRequest(

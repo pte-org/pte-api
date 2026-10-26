@@ -172,4 +172,6 @@ public final class PracticeConstants {
 
     private PracticeConstants() {
     }
+    public static final String OPERATION_KEY_FORMAT = "%s:%s:%s";
+    public static final String OPERATION_RECEIPT = "{}";
 }

@@ -1,7 +1,7 @@
 package com.pte.practice.internal.messaging;
 
 import com.pte.practice.internal.constant.PracticeConstants;
-import com.pte.practice.internal.domain.PracticeSessionItem;
+import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.service.PracticeScoringRequestFactory;
 import com.pte.practice.internal.service.PracticeScoringStateService;
 import com.pte.scoring.PracticeAiEvaluation;
@@ -43,7 +43,7 @@ public class PracticeScoringWorker {
     @RabbitListener(queues = PracticeConstants.PRACTICE_SCORING_QUEUE,
             containerFactory = "practiceScoringRabbitListenerContainerFactory")
     public void handle(PracticeScoringJob job) {
-        PracticeSessionItem item = stateService.claim(job.itemPublicId(), job.dispatchToken(), clock.instant());
+        PracticeResponse item = stateService.claim(job.itemPublicId(), job.dispatchToken(), clock.instant());
         if (item == null) {
             log.info("Practice scoring job for item {} is stale, already claimed or final; skipped",
                     job.itemPublicId());

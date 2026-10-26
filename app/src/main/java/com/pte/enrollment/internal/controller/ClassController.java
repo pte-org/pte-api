@@ -3,6 +3,7 @@ package com.pte.enrollment.internal.controller;
 import com.pte.enrollment.internal.dto.request.AssignStudentRequest;
 import com.pte.enrollment.internal.dto.request.BulkAssignStudentsRequest;
 import com.pte.enrollment.internal.dto.request.CreateClassRequest;
+import com.pte.enrollment.internal.dto.request.TrainingStatusRequest;
 import com.pte.enrollment.internal.dto.request.MergeClassesRequest;
 import com.pte.enrollment.internal.dto.request.SplitClassRequest;
 import com.pte.enrollment.internal.dto.request.TransferStudentRequest;
@@ -12,7 +13,10 @@ import com.pte.enrollment.internal.dto.response.ClassMembershipResponse;
 import com.pte.enrollment.internal.dto.response.ClassResponse;
 import com.pte.enrollment.internal.dto.response.MergeClassesResponse;
 import com.pte.enrollment.internal.dto.response.SplitClassResponse;
+import com.pte.enrollment.internal.service.ClassLifecycleService;
+import com.pte.enrollment.internal.service.ClassReorganizationService;
 import com.pte.enrollment.internal.service.ClassService;
+import com.pte.enrollment.internal.service.ClassStudentService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -21,6 +25,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,9 +42,16 @@ import java.util.UUID;
 public class ClassController {
 
     private final ClassService classService;
+    private final ClassLifecycleService lifecycleService;
+    private final ClassStudentService studentService;
+    private final ClassReorganizationService reorganizationService;
 
-    public ClassController(ClassService classService) {
+    public ClassController(ClassService classService, ClassLifecycleService lifecycleService,
+            ClassStudentService studentService, ClassReorganizationService reorganizationService) {
         this.classService = classService;
+        this.lifecycleService = lifecycleService;
+        this.studentService = studentService;
+        this.reorganizationService = reorganizationService;
     }
 
     @PostMapping
@@ -68,32 +80,17 @@ public class ClassController {
                 classService.update(organizationPublicId, programPublicId, classPublicId, request, currentUser()));
     }
 
-    @PostMapping("/{classPublicId}/activate")
-    public ApiResponse<ClassResponse> activate(@PathVariable UUID organizationPublicId,
-            @PathVariable UUID programPublicId, @PathVariable UUID classPublicId) {
-        return ApiResponse.success(
-                classService.activate(organizationPublicId, programPublicId, classPublicId, currentUser()));
-    }
-
-    @PostMapping("/{classPublicId}/deactivate")
-    public ApiResponse<ClassResponse> deactivate(@PathVariable UUID organizationPublicId,
-            @PathVariable UUID programPublicId, @PathVariable UUID classPublicId) {
-        return ApiResponse.success(
-                classService.deactivate(organizationPublicId, programPublicId, classPublicId, currentUser()));
-    }
-
-    @PostMapping("/{classPublicId}/suspend")
-    public ApiResponse<ClassResponse> suspend(@PathVariable UUID organizationPublicId,
-            @PathVariable UUID programPublicId, @PathVariable UUID classPublicId) {
-        return ApiResponse.success(
-                classService.suspend(organizationPublicId, programPublicId, classPublicId, currentUser()));
-    }
-
-    @PostMapping("/{classPublicId}/archive")
-    public ApiResponse<ClassResponse> archive(@PathVariable UUID organizationPublicId,
-            @PathVariable UUID programPublicId, @PathVariable UUID classPublicId) {
-        return ApiResponse.success(
-                classService.archive(organizationPublicId, programPublicId, classPublicId, currentUser()));
+    @PatchMapping("/{classPublicId}/status")
+    public ApiResponse<ClassResponse> changeStatus(@PathVariable UUID organizationPublicId,
+            @PathVariable UUID programPublicId, @PathVariable UUID classPublicId,
+            @Valid @RequestBody TrainingStatusRequest request) {
+        CurrentUser caller = currentUser();
+        return ApiResponse.success(switch (request.action()) {
+            case ACTIVATE -> lifecycleService.activate(organizationPublicId, programPublicId, classPublicId, caller);
+            case DEACTIVATE -> lifecycleService.deactivate(organizationPublicId, programPublicId, classPublicId, caller);
+            case SUSPEND -> lifecycleService.suspend(organizationPublicId, programPublicId, classPublicId, caller);
+            case ARCHIVE -> lifecycleService.archive(organizationPublicId, programPublicId, classPublicId, caller);
+        });
     }
 
     @PostMapping("/{classPublicId}/students")
@@ -101,7 +98,7 @@ public class ClassController {
             @PathVariable UUID programPublicId, @PathVariable UUID classPublicId,
             @Valid @RequestBody AssignStudentRequest request) {
         return ApiResponse.success(
-                classService.assign(organizationPublicId, programPublicId, classPublicId, request, currentUser()));
+                studentService.assign(organizationPublicId, programPublicId, classPublicId, request, currentUser()));
     }
 
     @PostMapping("/{classPublicId}/students/bulk")
@@ -109,13 +106,13 @@ public class ClassController {
             @PathVariable UUID programPublicId, @PathVariable UUID classPublicId,
             @Valid @RequestBody BulkAssignStudentsRequest request) {
         return ApiResponse.success(
-                classService.bulkAssign(organizationPublicId, programPublicId, classPublicId, request, currentUser()));
+                studentService.bulkAssign(organizationPublicId, programPublicId, classPublicId, request, currentUser()));
     }
 
     @DeleteMapping("/{classPublicId}/students/{membershipPublicId}")
     public ApiResponse<Void> unassign(@PathVariable UUID organizationPublicId, @PathVariable UUID programPublicId,
             @PathVariable UUID classPublicId, @PathVariable UUID membershipPublicId) {
-        classService.unassign(organizationPublicId, programPublicId, classPublicId, membershipPublicId, currentUser());
+        studentService.unassign(organizationPublicId, programPublicId, classPublicId, membershipPublicId, currentUser());
         return ApiResponse.success(null);
     }
 
@@ -123,7 +120,7 @@ public class ClassController {
     public ApiResponse<ClassMembershipResponse> transfer(@PathVariable UUID organizationPublicId,
             @PathVariable UUID programPublicId, @PathVariable UUID classPublicId,
             @PathVariable UUID membershipPublicId, @Valid @RequestBody TransferStudentRequest request) {
-        return ApiResponse.success(classService.transfer(organizationPublicId, programPublicId, classPublicId,
+        return ApiResponse.success(studentService.transfer(organizationPublicId, programPublicId, classPublicId,
                 membershipPublicId, request, currentUser()));
     }
 
@@ -132,7 +129,7 @@ public class ClassController {
             @PathVariable UUID programPublicId, @PathVariable UUID classPublicId,
             @Valid @RequestBody MergeClassesRequest request) {
         return ApiResponse.success(
-                classService.mergeClasses(organizationPublicId, programPublicId, classPublicId, request, currentUser()));
+                reorganizationService.mergeClasses(organizationPublicId, programPublicId, classPublicId, request, currentUser()));
     }
 
     @PostMapping("/{classPublicId}/split")
@@ -140,7 +137,7 @@ public class ClassController {
             @PathVariable UUID programPublicId, @PathVariable UUID classPublicId,
             @Valid @RequestBody SplitClassRequest request) {
         return ApiResponse.success(
-                classService.splitClass(organizationPublicId, programPublicId, classPublicId, request, currentUser()));
+                reorganizationService.splitClass(organizationPublicId, programPublicId, classPublicId, request, currentUser()));
     }
 
     private CurrentUser currentUser() {

@@ -3,8 +3,8 @@ package com.pte.practice.internal.mapper;
 import com.pte.media.MediaService;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
-import com.pte.practice.internal.domain.PracticeSessionItem;
-import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
+import com.pte.practice.internal.domain.PracticeResponse;
+import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionKind;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.response.PracticeCatalogResponse;
@@ -14,7 +14,7 @@ import com.pte.practice.internal.dto.response.PracticeSessionResponse;
 import com.pte.practice.internal.dto.response.PracticeTaskContentResponse;
 import com.pte.practice.internal.dto.response.PracticeTaskResponse;
 import com.pte.practice.internal.service.PracticeCatalogService;
-import com.pte.practice.internal.service.PracticeSessionItemService;
+import com.pte.practice.internal.service.PracticeResponseService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -38,18 +38,18 @@ public class PracticeSessionResponseMapper {
     private static final Logger log = LoggerFactory.getLogger(PracticeSessionResponseMapper.class);
 
     private final PracticeCatalogService catalogService;
-    private final PracticeSessionItemService itemService;
+    private final PracticeResponseService itemService;
     private final JsonMapper jsonMapper;
     private final MediaService mediaService;
 
     public PracticeSessionResponseMapper(PracticeCatalogService catalogService,
-            PracticeSessionItemService itemService) {
+            PracticeResponseService itemService) {
         this(catalogService, itemService, JsonMapper.builder().build(), null);
     }
 
     @Autowired
     public PracticeSessionResponseMapper(PracticeCatalogService catalogService,
-            PracticeSessionItemService itemService, JsonMapper jsonMapper, MediaService mediaService) {
+            PracticeResponseService itemService, JsonMapper jsonMapper, MediaService mediaService) {
         this.catalogService = catalogService;
         this.itemService = itemService;
         this.jsonMapper = jsonMapper;
@@ -68,7 +68,7 @@ public class PracticeSessionResponseMapper {
                         .toList();
 
         PracticeSessionStatus status = session.getStatus();
-        List<PracticeSessionItem> items = itemService.itemsFor(session);
+        List<PracticeResponse> items = itemService.itemsFor(session);
         int totalItemCount = items.isEmpty()
                 ? (selected.isEmpty()
                         ? catalog.sections().stream().mapToInt(section -> section.taskTypes().size()).sum()
@@ -76,8 +76,8 @@ public class PracticeSessionResponseMapper {
                                 ? session.getQuestionCount()
                                 : selected.size() * plannedQuestionsPerTask(session))
                 : items.size();
-        PracticeSessionItem currentItem = items.stream()
-                .filter(item -> item.getStatus() == PracticeSessionItemStatus.PENDING)
+        PracticeResponse currentItem = items.stream()
+                .filter(item -> item.getStatus() == PracticeResponseStatus.PENDING)
                 .findFirst()
                 .orElse(null);
 
@@ -99,7 +99,7 @@ public class PracticeSessionResponseMapper {
                 status == PracticeSessionStatus.OVERVIEW || currentItem != null,
                 status == PracticeSessionStatus.OVERVIEW || currentItem != null
                         ? PracticeConstants.PRACTICE_NEXT_ACTION : null,
-                (int) items.stream().filter(item -> item.getStatus() == PracticeSessionItemStatus.ANSWERED).count(),
+                (int) items.stream().filter(item -> item.getStatus() == PracticeResponseStatus.ANSWERED).count(),
                 totalItemCount,
                 sections,
                 currentItem == null ? null : toTaskResponse(currentItem, session.getTenantId()),
@@ -111,7 +111,7 @@ public class PracticeSessionResponseMapper {
                 selected.size() == 1 ? selected.iterator().next() : null);
     }
 
-    private PracticeTaskResponse toTaskResponse(PracticeSessionItem item, UUID tenantId) {
+    private PracticeTaskResponse toTaskResponse(PracticeResponse item, UUID tenantId) {
         return new PracticeTaskResponse(
                 item.getPublicId(),
                 item.getOrderIndex(),
@@ -129,7 +129,7 @@ public class PracticeSessionResponseMapper {
     }
 
     /** Timing exists only on items of TIMED sessions; UNTIMED and legacy items carry none. */
-    private PracticeItemTimingResponse toTiming(PracticeSessionItem item) {
+    private PracticeItemTimingResponse toTiming(PracticeResponse item) {
         if (item.getResponseSeconds() == null) {
             return null;
         }
@@ -137,7 +137,7 @@ public class PracticeSessionResponseMapper {
                 item.getPreRecordSeconds() == null ? 0 : item.getPreRecordSeconds(), item.getResponseSeconds());
     }
 
-    private PracticeTaskContentResponse toContent(PracticeSessionItem item, UUID tenantId) {
+    private PracticeTaskContentResponse toContent(PracticeResponse item, UUID tenantId) {
         if ((item.getPromptText() == null || item.getPromptText().isBlank())
                 && (item.getOptionsJson() == null || item.getOptionsJson().isBlank())
                 && item.getAudioPromptRef() == null && item.getImagePromptRef() == null) {
@@ -167,7 +167,7 @@ public class PracticeSessionResponseMapper {
      * Students cannot resolve media refs themselves, so the prompt audio and image (and nothing else) are presigned
      * here. A media failure leaves the URL empty rather than failing the whole session read.
      */
-    private Map<UUID, String> presignPromptMedia(PracticeSessionItem item, UUID tenantId) {
+    private Map<UUID, String> presignPromptMedia(PracticeResponse item, UUID tenantId) {
         Set<UUID> refs = new LinkedHashSet<>();
         if (item.getAudioPromptRef() != null) {
             refs.add(item.getAudioPromptRef());

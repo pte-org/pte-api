@@ -25,17 +25,12 @@ class BlueprintControllerSecurityTest {
     }
 
     @Test
-    void methodLevelRestrictionsOnlyNarrowTheClassLevelRestriction() {
+    void noMethodBroadensTheClassLevelRestriction() {
         for (var method : BlueprintController.class.getDeclaredMethods()) {
-            PreAuthorize methodLevel = method.getAnnotation(PreAuthorize.class);
-            if (method.getName().equals("approve") || method.getName().equals("reject")) {
-                assertThat(methodLevel).isNotNull();
-                assertThat(methodLevel.value()).isEqualTo("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')");
-            } else {
-                assertThat(methodLevel)
-                        .as("method %s must not broaden the controller's platform-only restriction", method.getName())
-                        .isNull();
-            }
+            assertThat(method.getAnnotation(PreAuthorize.class))
+                    .as("method %s must not broaden the controller's platform-only restriction (roles per status "
+                            + "action are enforced inside changeStatus)", method.getName())
+                    .isNull();
         }
     }
 }

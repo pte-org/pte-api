@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 
 import java.util.UUID;
 
-/** Explicit candidate navigation request; authorization is enforced from the pinned session mode. */
+/** Explicit candidate navigation request; authorization is enforced from the attempt exam mode. */
 public record NavigateTaskRequest(
         @NotNull UUID fromPinnedItemPublicId,
         @NotNull Direction direction) {

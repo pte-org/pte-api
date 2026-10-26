@@ -3,13 +3,13 @@ package com.pte.practice.internal.service;
 import com.pte.practice.internal.config.PracticeScoringProperties;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
-import com.pte.practice.internal.domain.PracticeSessionItem;
+import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.domain.enums.PracticeScoringStatus;
 import com.pte.practice.internal.dto.response.PracticeItemResultResponse;
 import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.messaging.PracticeScoringDispatcher;
 import com.pte.practice.internal.messaging.PracticeScoringJob;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.scoring.PracticeAiEvaluation;
 import com.pte.scoring.PracticeScoringFailure;
 import org.springframework.http.HttpStatus;
@@ -37,12 +37,12 @@ public class PracticeScoringStateService {
     static final String FAILURE_TIMED_OUT = "TIMED_OUT";
     private static final Duration RATE_LIMIT_WINDOW = Duration.ofMinutes(1);
 
-    private final PracticeSessionItemRepository itemRepository;
+    private final PracticeResponseRepository itemRepository;
     private final PracticeScoringDispatcher dispatcher;
     private final PracticeScoringProperties properties;
     private final JsonMapper jsonMapper;
 
-    public PracticeScoringStateService(PracticeSessionItemRepository itemRepository,
+    public PracticeScoringStateService(PracticeResponseRepository itemRepository,
             PracticeScoringDispatcher dispatcher, PracticeScoringProperties properties, JsonMapper jsonMapper) {
         this.itemRepository = itemRepository;
         this.dispatcher = dispatcher;
@@ -51,11 +51,11 @@ public class PracticeScoringStateService {
     }
 
     /** First submission of an AI-scored answer: enforce the rate limit, mark SCORING and queue the job after commit. */
-    public void startScoring(PracticeSession session, PracticeSessionItem item, Instant now) {
+    public void startScoring(PracticeSession session, PracticeResponse item, Instant now) {
         begin(session, item, now, 1);
     }
 
-    private void begin(PracticeSession session, PracticeSessionItem item, Instant now, int attempts) {
+    private void begin(PracticeSession session, PracticeResponse item, Instant now, int attempts) {
         requireWithinRateLimit(session, now);
         item.setScoringRequestedAt(now);
         item.setScoringAttempts(attempts);
@@ -65,7 +65,7 @@ public class PracticeScoringStateService {
     }
 
     /** Stores a result computed inside the answer call (objective types); the item is final immediately. */
-    public void recordInline(PracticeSessionItem item, PracticeAiEvaluation evaluation, Instant now) {
+    public void recordInline(PracticeResponse item, PracticeAiEvaluation evaluation, Instant now) {
         applyResult(item, evaluation);
         item.setObjectiveScore(evaluation.rawScore());
         item.setObjectiveEvaluatedAt(now);
@@ -76,7 +76,7 @@ public class PracticeScoringStateService {
      * Repairs an item whose job was lost or never finished: past the max age it becomes FAILED, past the redispatch
      * threshold it is re-sent once with a new token. Runs on every poll and read, so no sweeper is needed.
      */
-    public void recover(PracticeSession session, PracticeSessionItem item, Instant now) {
+    public void recover(PracticeSession session, PracticeResponse item, Instant now) {
         if (item.getScoringStatus() != PracticeScoringStatus.SCORING) {
             return;
         }
@@ -97,7 +97,7 @@ public class PracticeScoringStateService {
     }
 
     /** Re-submits a FAILED item. A second call while it is SCORING just returns the current state. */
-    public PracticeItemResultResponse retry(PracticeSession session, PracticeSessionItem item, Instant now) {
+    public PracticeItemResultResponse retry(PracticeSession session, PracticeResponse item, Instant now) {
         if (item.getScoringStatus() == PracticeScoringStatus.SCORING) {
             return resultOf(item);
         }
@@ -117,8 +117,8 @@ public class PracticeScoringStateService {
      * The rotated token (and dispatch time) also restarts the re-dispatch window from when work really began.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public PracticeSessionItem claim(UUID itemPublicId, UUID jobToken, Instant now) {
-        PracticeSessionItem item = awaiting(itemPublicId, jobToken);
+    public PracticeResponse claim(UUID itemPublicId, UUID jobToken, Instant now) {
+        PracticeResponse item = awaiting(itemPublicId, jobToken);
         if (item == null) {
             return null;
         }
@@ -134,7 +134,7 @@ public class PracticeScoringStateService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean complete(UUID itemPublicId, UUID dispatchToken, PracticeAiEvaluation evaluation) {
-        PracticeSessionItem item = awaiting(itemPublicId, dispatchToken);
+        PracticeResponse item = awaiting(itemPublicId, dispatchToken);
         if (item == null) {
             return false;
         }
@@ -147,7 +147,7 @@ public class PracticeScoringStateService {
     /** Worker write for a provider or internal failure, under the same token rule as {@link #complete}. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean fail(UUID itemPublicId, UUID dispatchToken, PracticeScoringFailure failure) {
-        PracticeSessionItem item = awaiting(itemPublicId, dispatchToken);
+        PracticeResponse item = awaiting(itemPublicId, dispatchToken);
         if (item == null) {
             return false;
         }
@@ -157,7 +157,7 @@ public class PracticeScoringStateService {
     }
 
     /** The item if it is still SCORING for exactly this dispatch token, else null. */
-    private PracticeSessionItem awaiting(UUID itemPublicId, UUID dispatchToken) {
+    private PracticeResponse awaiting(UUID itemPublicId, UUID dispatchToken) {
         if (itemPublicId == null || dispatchToken == null) {
             return null;
         }
@@ -167,7 +167,7 @@ public class PracticeScoringStateService {
                 .orElse(null);
     }
 
-    public PracticeItemResultResponse resultOf(PracticeSessionItem item) {
+    public PracticeItemResultResponse resultOf(PracticeResponse item) {
         PracticeScoringStatus state = item.getScoringStatus();
         boolean scored = state == PracticeScoringStatus.SCORED;
         boolean failed = state == PracticeScoringStatus.FAILED;
@@ -183,11 +183,11 @@ public class PracticeScoringStateService {
     }
 
     /** Objective items fill both result sets; fall back to the objective score if the AI column is empty. */
-    private static Integer scoreOf(PracticeSessionItem item) {
+    private static Integer scoreOf(PracticeResponse item) {
         return item.getAiScore() != null ? item.getAiScore() : item.getObjectiveScore();
     }
 
-    private boolean isRetryable(PracticeSessionItem item) {
+    private boolean isRetryable(PracticeResponse item) {
         if (item.getScoringStatus() != PracticeScoringStatus.FAILED
                 || item.getScoringAttempts() >= 1 + properties.getMaxRetries()) {
             return false;
@@ -203,7 +203,7 @@ public class PracticeScoringStateService {
         }
     }
 
-    private void dispatch(PracticeSession session, PracticeSessionItem item, Instant now) {
+    private void dispatch(PracticeSession session, PracticeResponse item, Instant now) {
         UUID token = UUID.randomUUID();
         item.setScoringStatus(PracticeScoringStatus.SCORING);
         item.setScoringDispatchToken(token);
@@ -221,19 +221,19 @@ public class PracticeScoringStateService {
         }
     }
 
-    private void markFailed(PracticeSessionItem item, String failureCode) {
+    private void markFailed(PracticeResponse item, String failureCode) {
         item.setScoringStatus(PracticeScoringStatus.FAILED);
         item.setScoringFailureCode(failureCode);
         item.setScoringDispatchToken(null);
     }
 
-    private void finalise(PracticeSessionItem item) {
+    private void finalise(PracticeResponse item) {
         item.setScoringStatus(PracticeScoringStatus.SCORED);
         item.setScoringFailureCode(null);
         item.setScoringDispatchToken(null);
     }
 
-    private void applyResult(PracticeSessionItem item, PracticeAiEvaluation evaluation) {
+    private void applyResult(PracticeResponse item, PracticeAiEvaluation evaluation) {
         item.setAiScore(evaluation.rawScore());
         item.setAiScoreStatus(evaluation.scoreStatus());
         item.setAiSubScoresJson(writeSubScores(evaluation.subScores()));

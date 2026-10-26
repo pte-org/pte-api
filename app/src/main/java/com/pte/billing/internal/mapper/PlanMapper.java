@@ -1,6 +1,6 @@
 package com.pte.billing.internal.mapper;
 
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.internal.dto.response.PlanResponse;
 import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.internal.constant.BillingConstants;
@@ -10,11 +10,11 @@ public final class PlanMapper {
     private PlanMapper() {
     }
 
-    public static PlanResponse toResponse(Plan plan) {
+    public static PlanResponse toResponse(ServicePlan plan) {
         return toResponse(plan, true, true);
     }
 
-    public static PlanResponse toResponse(Plan plan, boolean referenced, boolean outstandingCodes) {
+    public static PlanResponse toResponse(ServicePlan plan, boolean referenced, boolean outstandingCodes) {
         boolean draft = !plan.isDeleted() && plan.getStatus() == PlanStatus.DRAFT;
         boolean active = !plan.isDeleted() && plan.getStatus() == PlanStatus.ACTIVE;
         return new PlanResponse(

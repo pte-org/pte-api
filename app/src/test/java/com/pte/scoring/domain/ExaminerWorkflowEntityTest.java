@@ -1,9 +1,7 @@
 package com.pte.scoring.domain;
 
-import com.pte.scoring.domain.enums.AssignmentBatchMode;
-import com.pte.scoring.domain.enums.AssignmentBatchStatus;
-import com.pte.scoring.domain.enums.ScoreSource;
-import com.pte.scoring.domain.enums.ScoreSourceSelectionScope;
+import com.pte.scoring.domain.enums.ExaminerAnswerScoreStatus;
+import com.pte.scoring.domain.enums.ExaminerDecisionKind;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -17,8 +15,8 @@ class ExaminerWorkflowEntityTest {
     @Test
     void examinerScoreSupportsBoundariesAndOnlyIdenticalRetry() {
         UUID examiner = UUID.randomUUID();
-        ExaminerAnswerScore zero = score(0, examiner);
-        ExaminerAnswerScore hundred = score(100, examiner);
+        ExaminerEvaluation zero = score(0, examiner);
+        ExaminerEvaluation hundred = score(100, examiner);
 
         zero.requireIdenticalRetry(examiner, 0);
         hundred.requireIdenticalRetry(examiner, 100);
@@ -33,43 +31,32 @@ class ExaminerWorkflowEntityTest {
     }
 
     @Test
-    void assignmentBatchCommitsTheStoredPreviewAndExpiresOldPreviews() {
+    void aDraftBecomesTheSubmittedScoreOfTheSameRowAndThenNeverChanges() {
+        UUID examiner = UUID.randomUUID();
         Instant now = Instant.parse("2026-09-23T10:00:00Z");
-        ExaminerAssignmentBatch batch = new ExaminerAssignmentBatch(UUID.randomUUID(), UUID.randomUUID(),
-                UUID.randomUUID(), AssignmentBatchMode.RANDOM, "{}", "{}", UUID.randomUUID(), now.plusSeconds(60));
-        assertThat(batch.commit(now)).isTrue();
-        assertThat(batch.getStatus()).isEqualTo(AssignmentBatchStatus.COMMITTED);
-        assertThat(batch.getCommittedAt()).isEqualTo(now);
+        ExaminerEvaluation draft = ExaminerEvaluation.draft(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), examiner, 9L, 55, "note", ExaminerDecisionKind.MANUAL, "rv-1", null, now);
 
-        ExaminerAssignmentBatch expired = new ExaminerAssignmentBatch(UUID.randomUUID(), UUID.randomUUID(),
-                UUID.randomUUID(), AssignmentBatchMode.MANUAL, "{}", "{}", null, now);
-        assertThat(expired.commit(now)).isFalse();
-        assertThat(expired.getStatus()).isEqualTo(AssignmentBatchStatus.EXPIRED);
+        assertThat(draft.getStatus()).isEqualTo(ExaminerAnswerScoreStatus.DRAFT);
+        assertThat(draft.getDraftVersion()).isEqualTo(1L);
+        assertThat(draft.isPublishable()).isFalse();
+
+        draft.updateDraft(60, "note 2", ExaminerDecisionKind.MANUAL, "rv-1", null, now.plusSeconds(5));
+        assertThat(draft.getDraftVersion()).isEqualTo(2L);
+        assertThat(draft.getScore()).isEqualTo(60);
+
+        draft.submit(60, now.plusSeconds(10), ExaminerDecisionKind.MANUAL, null, null, "rv-1", UUID.randomUUID(),
+                "fingerprint");
+
+        assertThat(draft.isSubmitted()).isTrue();
+        assertThat(draft.isPublishable()).isTrue();
+        assertThat(draft.getSubmittedAt()).isEqualTo(now.plusSeconds(10));
+        assertThatThrownBy(() -> draft.updateDraft(70, null, ExaminerDecisionKind.MANUAL, "rv-1", null, now))
+                .isInstanceOf(IllegalStateException.class);
     }
 
-    @Test
-    void scoreSourceAuditRequiresScopeSpecificValueAndNonnegativeCount() {
-        UUID tenant = UUID.randomUUID();
-        UUID session = UUID.randomUUID();
-        UUID actor = UUID.randomUUID();
-        Instant now = Instant.now();
-
-        ScoreSourceAudit all = new ScoreSourceAudit(tenant, session, actor,
-                ScoreSourceSelectionScope.ALL, null, ScoreSource.EXAMINER, 12, now);
-        assertThat(all.getAffectedAnswerCount()).isEqualTo(12);
-        assertThatThrownBy(() -> new ScoreSourceAudit(tenant, session, actor,
-                ScoreSourceSelectionScope.ALL, "SPEAKING", ScoreSource.AI, 1, now))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ScoreSourceAudit(tenant, session, actor,
-                ScoreSourceSelectionScope.SECTION, null, ScoreSource.AI, 1, now))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ScoreSourceAudit(tenant, session, actor,
-                ScoreSourceSelectionScope.TASK_TYPE, "READ_ALOUD", ScoreSource.AI, -1, now))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    private ExaminerAnswerScore score(int score, UUID examiner) {
-        return new ExaminerAnswerScore(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                examiner, score, Instant.now());
+    private ExaminerEvaluation score(int score, UUID examiner) {
+        return ExaminerEvaluation.submittedDirectly(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), examiner, score, Instant.now(), null, null, null, null, null, null);
     }
 }

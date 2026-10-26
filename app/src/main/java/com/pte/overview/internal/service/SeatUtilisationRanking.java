@@ -15,7 +15,7 @@ import java.util.UUID;
  * counts in memory (never a per-tenant quota lookup). Tenants without a positive seat limit
  * are skipped: a ratio would be meaningless.
  */
-final class SeatUtilisationRanking {
+public final class SeatUtilisationRanking {
 
     private static final int PERCENT = 100;
     private static final int PERCENT_SCALE = 1;
@@ -33,7 +33,7 @@ final class SeatUtilisationRanking {
     private SeatUtilisationRanking() {
     }
 
-    static List<SeatUtilisation> top(List<TenantSeatLimit> limits, Map<UUID, Long> studentsByTenant, int n) {
+    public static List<SeatUtilisation> top(List<TenantSeatLimit> limits, Map<UUID, Long> studentsByTenant, int n) {
         return limits.stream()
                 .filter(limit -> limit.studentLimit() > 0)
                 .map(limit -> toRow(limit, studentsByTenant.getOrDefault(limit.publicId(), 0L)))

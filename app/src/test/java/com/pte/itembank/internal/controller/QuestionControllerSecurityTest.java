@@ -6,10 +6,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Reflection-only check (no {@code @WebMvcTest} harness in this codebase, see
- * {@code ScoreTemplateControllerSecurityTest}). Guards the 2026-09-17 decision:
- * host loses every question-bank permission (list/get/create included) —
- * only platform touches {@link QuestionController}.
+ * Reflection-only check. Guards the 2026-09-17 decision: host loses every question-bank permission, only platform
+ * touches {@link QuestionController}. Per-action roles of the status route are covered by
+ * {@code QuestionStatusEndpointTest}.
  */
 class QuestionControllerSecurityTest {
 
@@ -23,18 +22,12 @@ class QuestionControllerSecurityTest {
     }
 
     @Test
-    void methodLevelRestrictionsOnlyNarrowTheClassLevelRestriction() {
+    void noMethodBroadensTheClassLevelRestriction() {
         for (var method : QuestionController.class.getDeclaredMethods()) {
-            PreAuthorize methodLevel = method.getAnnotation(PreAuthorize.class);
-            if (method.getName().equals("approve") || method.getName().equals("reject")
-                    || method.getName().equals("publish")) {
-                assertThat(methodLevel).isNotNull();
-                assertThat(methodLevel.value()).isEqualTo("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER')");
-            } else {
-                assertThat(methodLevel)
-                        .as("method %s must not broaden the controller's platform-only restriction", method.getName())
-                        .isNull();
-            }
+            assertThat(method.getAnnotation(PreAuthorize.class))
+                    .as("method %s must not broaden the controller's platform-only restriction (roles per status "
+                            + "action are enforced inside changeStatus)", method.getName())
+                    .isNull();
         }
     }
 }

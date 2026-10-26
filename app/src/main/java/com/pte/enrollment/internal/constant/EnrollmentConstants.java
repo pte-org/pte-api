@@ -35,7 +35,7 @@ public final class EnrollmentConstants {
     public static final String EVENT_PROGRAM_STATUS_CHANGED = "ProgramStatusChanged";
     public static final String EVENT_PROGRAM_ARCHIVED = "ProgramArchived";
 
-    public static final String AGGREGATE_CLASS = "StudentClass";
+    public static final String AGGREGATE_CLASS = "TrainingClass";
     public static final String EVENT_CLASS_CREATED = "ClassCreated";
     public static final String EVENT_CLASS_UPDATED = "ClassUpdated";
     public static final String EVENT_CLASS_STATUS_CHANGED = "ClassStatusChanged";

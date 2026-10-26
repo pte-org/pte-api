@@ -1,7 +1,13 @@
 package com.pte.scoring.internal.service;
 
-import com.pte.scoring.domain.ScoringAnswer;
-import com.pte.scoring.domain.ScoringAnswerAiDetail;
+import com.pte.scoring.internal.service.ai.AiScoringDispatcher;
+import com.pte.scoring.internal.service.ai.AiScoringResultPersistenceService;
+import com.pte.scoring.internal.service.grading.SessionGradingGateway;
+import com.pte.scoring.internal.service.objective.AnswerContentReader;
+import com.pte.scoring.internal.service.objective.ObjectiveScoringService;
+import com.pte.scoring.internal.service.selection.ScorePublicationLockService;
+import com.pte.scoring.domain.AiEvaluation;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.domain.enums.AiProviderCategory;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
@@ -10,12 +16,11 @@ import com.pte.scoring.internal.config.AiProviderProperties;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.consumer.AiScoringWorker;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
-import com.pte.scoring.internal.repository.ScoringAnswerAiDetailRepository;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.repository.ScoringSessionStateRepository;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.EssayScoringClient;
 import com.pte.scoring.internal.vendor.stub.StubSpeechScoringClient;
+import com.pte.scoring.support.EvaluationFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -50,6 +55,7 @@ import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -73,35 +79,34 @@ class AiScoringPipelineDatabaseTest {
 
     private static final Instant T0 = Instant.parse("2026-10-11T10:00:00Z");
     private static final Duration PAST_STALE_LIMIT = Duration.ofMinutes(15);
-    private static final UUID SCORE_TEMPLATE_ID = UUID.randomUUID();
 
     @Autowired
-    private ScoringAnswerRepository answerRepository;
-    @Autowired
-    private ScoringSessionStateRepository sessionStateRepository;
-    @Autowired
-    private ScoringAnswerAiDetailRepository detailRepository;
+    private AiEvaluationRepository answerRepository;
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    private final SessionGradingGateway gateway = mock(SessionGradingGateway.class);
     private final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
-    private final ScoringMethodResolver scoringMethodResolver = mock(ScoringMethodResolver.class);
+    private final AnswerContentReader contentReader = mock(AnswerContentReader.class);
     private AiScoringResultPersistenceService persistence;
     private AiScoringWorker worker;
 
     @BeforeEach
     void setUp() {
-        when(scoringMethodResolver.resolve(SCORE_TEMPLATE_ID, ScoringConstants.TASK_TYPE_READ_ALOUD))
-                .thenReturn(Optional.of(ScoringMethod.AI_SPEECH));
-        persistence = new AiScoringResultPersistenceService(answerRepository, sessionStateRepository,
-                detailRepository, JsonMapper.builder().build(), mock(ApplicationEventPublisher.class));
+        when(contentReader.one(any(UUID.class), any(UUID.class))).thenAnswer(call -> Optional.of(
+                new SubmittedAnswerView(call.getArgument(0), UUID.randomUUID(), UUID.randomUUID(),
+                        UUID.randomUUID(), call.getArgument(1), UUID.randomUUID(),
+                        ScoringConstants.TASK_TYPE_READ_ALOUD, "audio-ref", "reference", null, false, null, null,
+                        null, null, null, "SPEAKING", null, null, null, null, null)));
+        persistence = new AiScoringResultPersistenceService(answerRepository, gateway,
+                JsonMapper.builder().build(), mock(ApplicationEventPublisher.class), null, com.pte.TestClocks.fixed());
         worker = new AiScoringWorker(answerRepository, new StubSpeechScoringClient(), mock(EssayScoringClient.class),
-                java.util.List.of(), persistence, Clock.fixed(T0, ZoneOffset.UTC), new AiProviderProperties());
+                java.util.List.of(), persistence, Clock.fixed(T0, ZoneOffset.UTC), new AiProviderProperties(), contentReader);
     }
 
     @Test
     void jobIsSentOnlyAfterTheHostCommitsAndTheWorkerThenScoresTheRow() {
-        ScoringAnswer answer = persist(newAnswer());
+        AiEvaluation answer = persist(newAnswer());
 
         inTransaction(() -> {
             host(T0).requestScoring(answer.getSessionPublicId(), answer.getTenantId());
@@ -110,7 +115,7 @@ class AiScoringPipelineDatabaseTest {
         });
 
         AiScoringJob job = sentJobs(1).getFirst();
-        ScoringAnswer inFlight = reload(answer);
+        AiEvaluation inFlight = reload(answer);
         assertThat(inFlight.getStatus()).isEqualTo(ScoringAnswerStatus.AI_SCORING);
         assertThat(inFlight.getAiDispatchedAt()).isEqualTo(T0);
         assertThat(job.dispatchToken()).isEqualTo(inFlight.getDispatchToken());
@@ -120,18 +125,17 @@ class AiScoringPipelineDatabaseTest {
             return null;
         });
 
-        ScoringAnswer scored = reload(answer);
+        AiEvaluation scored = reload(answer);
         assertThat(scored.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
         assertThat(scored.getRawScore()).isEqualTo(65);
         assertThat(scored.getAiProviderCategory()).isEqualTo(AiProviderCategory.STUB);
-        ScoringAnswerAiDetail detail = detail(answer);
-        assertThat(detail.getFailureReason()).isNull();
-        assertThat(detail.getCriteriaScoresJson()).contains("ORAL_FLUENCY");
+        assertThat(scored.getFailureReason()).isNull();
+        assertThat(scored.getCriteriaScoresJson()).contains("ORAL_FLUENCY");
     }
 
     @Test
     void rolledBackHostTransactionSendsNothing() {
-        ScoringAnswer answer = persist(newAnswer());
+        AiEvaluation answer = persist(newAnswer());
 
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
         transaction.executeWithoutResult(status -> {
@@ -140,14 +144,14 @@ class AiScoringPipelineDatabaseTest {
         });
 
         verifyNoInteractions(rabbitTemplate);
-        ScoringAnswer reloaded = reload(answer);
+        AiEvaluation reloaded = reload(answer);
         assertThat(reloaded.getStatus()).isEqualTo(ScoringAnswerStatus.PENDING);
         assertThat(reloaded.getDispatchToken()).isZero();
     }
 
     @Test
     void failedAnswerIsRescoredAndMessagesFromTheOldDispatchChangeNothing() {
-        ScoringAnswer answer = persist(newAnswer());
+        AiEvaluation answer = persist(newAnswer());
         inTransaction(() -> {
             host(T0).requestScoring(answer.getSessionPublicId(), answer.getTenantId());
             return null;
@@ -158,7 +162,7 @@ class AiScoringPipelineDatabaseTest {
             return null;
         });
         assertThat(reload(answer).getStatus()).isEqualTo(ScoringAnswerStatus.SCORING_FAILED);
-        assertThat(detail(answer).getFailureReason()).isEqualTo(AiFailureReason.INTERNAL_ERROR);
+        assertThat(reload(answer).getFailureReason()).isEqualTo(AiFailureReason.INTERNAL_ERROR);
 
         inTransaction(() -> {
             host(T0.plusSeconds(60)).requestScoring(answer.getSessionPublicId(), answer.getTenantId());
@@ -172,7 +176,7 @@ class AiScoringPipelineDatabaseTest {
         });
 
         assertThat(reload(answer).getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
-        assertThat(detail(answer).getFailureReason()).isNull();
+        assertThat(reload(answer).getFailureReason()).isNull();
 
         inTransaction(() -> {
             worker.onDeadLettered(firstJob);
@@ -180,16 +184,16 @@ class AiScoringPipelineDatabaseTest {
             return null;
         });
 
-        ScoringAnswer finalRow = reload(answer);
+        AiEvaluation finalRow = reload(answer);
         assertThat(finalRow.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
         assertThat(finalRow.getDispatchToken()).isEqualTo(rescoreJob.dispatchToken());
-        assertThat(detail(answer).getFailureReason()).isNull();
+        assertThat(reload(answer).getFailureReason()).isNull();
     }
 
     @Test
     @Timeout(value = 20, unit = TimeUnit.SECONDS)
     void staleRedispatchLosesToAWorkerThatIsStoringTheResult() throws Exception {
-        ScoringAnswer answer = newAnswer();
+        AiEvaluation answer = newAnswer();
         long token = answer.markAiDispatched(T0);
         persist(answer);
         CountDownLatch workerHoldsTheRow = new CountDownLatch(1);
@@ -217,7 +221,7 @@ class AiScoringPipelineDatabaseTest {
         }
 
         // The host read the row before the worker committed; its version check makes it fail, not overwrite.
-        ScoringAnswer finalRow = reload(answer);
+        AiEvaluation finalRow = reload(answer);
         assertThat(finalRow.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
         assertThat(finalRow.getDispatchToken()).isEqualTo(token);
         verifyNoInteractions(rabbitTemplate);
@@ -226,7 +230,7 @@ class AiScoringPipelineDatabaseTest {
     @Test
     @Timeout(value = 20, unit = TimeUnit.SECONDS)
     void workerWithASupersededTokenWaitsForTheHostAndThenStoresNothing() throws Exception {
-        ScoringAnswer answer = newAnswer();
+        AiEvaluation answer = newAnswer();
         long oldToken = answer.markAiDispatched(T0);
         persist(answer);
         CountDownLatch hostHoldsTheRow = new CountDownLatch(1);
@@ -250,7 +254,7 @@ class AiScoringPipelineDatabaseTest {
             executor.shutdownNow();
         }
 
-        ScoringAnswer finalRow = reload(answer);
+        AiEvaluation finalRow = reload(answer);
         assertThat(finalRow.getStatus()).isEqualTo(ScoringAnswerStatus.AI_SCORING);
         assertThat(finalRow.getDispatchToken()).isGreaterThan(oldToken);
         assertThat(sentJobs(1).getFirst().dispatchToken()).isEqualTo(finalRow.getDispatchToken());
@@ -259,27 +263,26 @@ class AiScoringPipelineDatabaseTest {
     @Test
     void scoringWorkIsNewFailedAndLostAnswersButNotJobsInFlightOrScoredRows() {
         Instant staleBefore = T0.minus(PAST_STALE_LIMIT);
-        ScoringAnswer pending = newAnswer();
+        AiEvaluation pending = newAnswer();
         UUID sessionPublicId = pending.getSessionPublicId();
         UUID tenantId = pending.getTenantId();
-        ScoringAnswer failed = inSession(newAnswer(), pending);
+        AiEvaluation failed = newAnswer(tenantId, sessionPublicId);
         failed.setStatus(ScoringAnswerStatus.SCORING_FAILED);
-        ScoringAnswer lost = inSession(newAnswer(), pending);
+        AiEvaluation lost = newAnswer(tenantId, sessionPublicId);
         lost.markAiDispatched(staleBefore.minusSeconds(1));
-        ScoringAnswer queuedBeforeDispatchTimes = inSession(newAnswer(), pending);
+        AiEvaluation queuedBeforeDispatchTimes = newAnswer(tenantId, sessionPublicId);
         queuedBeforeDispatchTimes.setStatus(ScoringAnswerStatus.AI_SCORING);
-        ScoringAnswer inFlight = inSession(newAnswer(), pending);
+        AiEvaluation inFlight = newAnswer(tenantId, sessionPublicId);
         inFlight.markAiDispatched(staleBefore.plusSeconds(1));
-        ScoringAnswer scored = inSession(newAnswer(), pending);
-        scored.markScored(70);
-        ScoringAnswer otherSession = newAnswer();
-        otherSession.setTenantId(tenantId);
+        AiEvaluation scored = newAnswer(tenantId, sessionPublicId);
+        scored.markScored(70, java.time.Instant.now());
+        AiEvaluation otherSession = newAnswer(tenantId, UUID.randomUUID());
         Stream.of(pending, failed, lost, queuedBeforeDispatchTimes, inFlight, scored, otherSession)
                 .forEach(this::persist);
 
-        List<ScoringAnswer> work = answerRepository.findScoringWork(sessionPublicId, tenantId, staleBefore);
+        List<AiEvaluation> work = answerRepository.findScoringWork(sessionPublicId, tenantId, staleBefore);
 
-        assertThat(work).extracting(ScoringAnswer::getAnswerPublicId).containsExactlyInAnyOrder(
+        assertThat(work).extracting(AiEvaluation::getAnswerPublicId).containsExactlyInAnyOrder(
                 pending.getAnswerPublicId(), failed.getAnswerPublicId(), lost.getAnswerPublicId(),
                 queuedBeforeDispatchTimes.getAnswerPublicId());
     }
@@ -288,7 +291,9 @@ class AiScoringPipelineDatabaseTest {
         AiScoringDispatcher dispatcher = new AiScoringDispatcher(answerRepository, rabbitTemplate,
                 Clock.fixed(now, ZoneOffset.UTC), new AiProviderProperties());
         return new ScoringCommandService(mock(ScoringIngestService.class), answerRepository,
-                mock(ObjectiveScoringService.class), dispatcher, scoringMethodResolver);
+                mock(ObjectiveScoringService.class), dispatcher, contentReader,
+                mock(com.pte.session.SessionService.class), mock(ScorePublicationLockService.class),
+                mock(ApplicationEventPublisher.class), com.pte.TestClocks.fixed());
     }
 
     private List<AiScoringJob> sentJobs(int expected) {
@@ -298,36 +303,21 @@ class AiScoringPipelineDatabaseTest {
         return jobs.getAllValues();
     }
 
-    private ScoringAnswer newAnswer() {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(UUID.randomUUID());
-        answer.setAttemptPublicId(UUID.randomUUID());
-        answer.setPinnedItemPublicId(UUID.randomUUID());
-        answer.setSessionPublicId(UUID.randomUUID());
-        answer.setTenantId(UUID.randomUUID());
-        answer.setScoreTemplatePublicId(SCORE_TEMPLATE_ID);
-        answer.setTaskType(ScoringConstants.TASK_TYPE_READ_ALOUD);
-        answer.setPayload(UUID.randomUUID().toString());
-        answer.setCorrectAnswerText("reference");
-        return answer;
+    private AiEvaluation newAnswer() {
+        return newAnswer(UUID.randomUUID(), UUID.randomUUID());
     }
 
-    private static ScoringAnswer inSession(ScoringAnswer answer, ScoringAnswer sibling) {
-        answer.setSessionPublicId(sibling.getSessionPublicId());
-        answer.setTenantId(sibling.getTenantId());
-        return answer;
+    private AiEvaluation newAnswer(UUID tenantId, UUID sessionPublicId) {
+        return EvaluationFixtures.ai(tenantId, sessionPublicId, ScoringConstants.TASK_TYPE_READ_ALOUD,
+                ScoringMethod.AI_SPEECH);
     }
 
-    private ScoringAnswer persist(ScoringAnswer answer) {
+    private AiEvaluation persist(AiEvaluation answer) {
         return inTransaction(() -> answerRepository.save(answer));
     }
 
-    private ScoringAnswer reload(ScoringAnswer answer) {
+    private AiEvaluation reload(AiEvaluation answer) {
         return answerRepository.findByAnswerPublicId(answer.getAnswerPublicId()).orElseThrow();
-    }
-
-    private ScoringAnswerAiDetail detail(ScoringAnswer answer) {
-        return detailRepository.findByAnswerPublicId(answer.getAnswerPublicId()).orElseThrow();
     }
 
     private static AiScoreResult result() {

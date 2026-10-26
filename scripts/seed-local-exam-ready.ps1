@@ -317,7 +317,8 @@ function Ensure-ActivePlan {
         }
     }
     if ("$($plan.status)".ToUpperInvariant() -eq "DRAFT") {
-        $plan = Invoke-SeedApi -Method POST -Path "/api/v1/plans/$($plan.publicId)/activation" -Token $script:AdminToken -Body @{
+        $plan = Invoke-SeedApi -Method PATCH -Path "/api/v1/plans/$($plan.publicId)/status" -Token $script:AdminToken -Body @{
+            action = "ACTIVATE"
             expectedVersion = [long]$plan.version
         }
     }
@@ -429,11 +430,11 @@ $templateCode = $seedToken + "_TEMPLATE"
 $examName = "PTE local exam $SeedKey"
 
 Write-Host "== Creating or reusing tenant =="
-$tenants = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/tenants" -Token $script:AdminToken)
+$tenants = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/organizations" -Token $script:AdminToken)
 $tenant = $tenants | Where-Object { $_.code -eq $tenantCode } | Select-Object -First 1
 if ($null -eq $tenant) {
     $taxCode = ("PTE-LOCAL-" + ($slug -replace "-", "")).ToUpperInvariant()
-    $tenant = Invoke-SeedApi -Method POST -Path "/api/v1/tenants" -Token $script:AdminToken -Body @{
+    $tenant = Invoke-SeedApi -Method POST -Path "/api/v1/organizations" -Token $script:AdminToken -Body @{
         code             = $tenantCode
         name             = $tenantName
         organizationType = "SCHOOL"
@@ -443,14 +444,11 @@ if ($null -eq $tenant) {
     }
 }
 if ("$($tenant.status)".ToUpperInvariant() -ne "ACTIVE") {
-    $tenant = Invoke-SeedApi -Method POST -Path "/api/v1/tenants/$($tenant.publicId)/reactivate" -Token $script:AdminToken
+    $tenant = Invoke-SeedApi -Method PATCH -Path "/api/v1/organizations/$($tenant.publicId)/status" -Body @{ action = "REACTIVATE" } -Token $script:AdminToken
 }
 
-$organizations = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/tenants/$($tenant.publicId)/organizations" -Token $script:AdminToken)
-$organization = $organizations | Select-Object -First 1
-if ($null -eq $organization) {
-    throw "Tenant '$($tenant.code)' has no provisioned organization."
-}
+# The tenant is itself the organization: its public id is the organization id.
+$organization = $tenant
 $script:OrganizationId = $organization.publicId
 
 Write-Host "== Creating or reusing host and student accounts =="
@@ -469,7 +467,7 @@ $plan = Invoke-WithSeedMutex -Key $SeedKey -Action { Ensure-ActivePlan -Name $pl
 $subscription = Ensure-Subscription -PlanId $plan.publicId -SeedKey $SeedKey
 
 Write-Host "== Finding the active seeded template =="
-$templates = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/score-templates" -Token $script:AdminToken)
+$templates = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/exam-definitions" -Token $script:AdminToken)
 $template = $templates | Where-Object { $_.code -eq $templateCode -and "$($_.status)".ToUpperInvariant() -eq "ACTIVE" } | Select-Object -First 1
 if ($null -eq $template) {
     throw "Active template '$templateCode' was not found. Run seed-local-template-and-question-bank.ps1 first."
@@ -487,7 +485,7 @@ if ($null -eq $session) {
     $closesAt = $now.AddHours(2).ToString("yyyy-MM-ddTHH:mm:ssZ")
     $session = Invoke-SeedApi -Method POST -Path "/api/v1/sessions/drafts" -Token $script:HostToken -Body @{
         name                 = $examName
-        templatePublicId     = $template.publicId
+        examDefinitionPublicId = $template.publicId
         subscriptionPublicId = $subscription.publicId
         opensAt              = $createOpensAt
         closesAt             = $closesAt
@@ -532,17 +530,28 @@ if ($sessionStatus -eq "DRAFT") {
 }
 
 if ($sessionStatus -eq "READY") {
-    $null = Invoke-SeedApi -Method POST -Path "/api/v1/sessions/$($session.publicId)/publish" -Token $script:HostToken
+    $null = Invoke-SeedApi -Method PATCH -Path "/api/v1/sessions/$($session.publicId)/status" -Body @{ action = "PUBLISH" } -Token $script:HostToken
     $sessionStatus = "SCHEDULED"
 }
 if ($sessionStatus -eq "SCHEDULED") {
-    $session = Invoke-SeedApi -Method POST -Path "/api/v1/sessions/$($session.publicId)/open" -Token $script:HostToken
+    $session = Invoke-SeedApi -Method PATCH -Path "/api/v1/sessions/$($session.publicId)/status" -Body @{ action = "OPEN" } -Token $script:HostToken
 }
 elseif ($sessionStatus -eq "OPEN") {
     $session = Invoke-SeedApi -Method GET -Path "/api/v1/sessions/$($session.publicId)" -Token $script:HostToken
 }
 else {
     throw "Seed exam '$examName' is in unsupported status '$($session.status)'."
+}
+
+# Students are refused entry before opensAt, so wait for the window that was set just ahead of now.
+if ($session.opensAt) {
+    $opensAt = if ($session.opensAt -is [datetime]) { [DateTimeOffset]$session.opensAt.ToUniversalTime() }
+               else { [DateTimeOffset]::Parse("$($session.opensAt)", [Globalization.CultureInfo]::InvariantCulture) }
+    $waitSeconds = ($opensAt - [DateTimeOffset]::UtcNow).TotalSeconds
+    if ($waitSeconds -gt 0) {
+        Write-Host ("Waiting {0:N0}s for the exam window to open..." -f [Math]::Ceiling($waitSeconds))
+        Start-Sleep -Seconds ([int][Math]::Ceiling($waitSeconds) + 1)
+    }
 }
 
 Write-Host "== Verifying pte-app capability negotiation =="

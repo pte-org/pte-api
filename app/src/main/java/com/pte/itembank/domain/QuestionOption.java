@@ -1,39 +1,34 @@
 package com.pte.itembank.domain;
 
-import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.Index;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.Embeddable;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.UUID;
+
 /**
  * An answer option for options-based task types (multiple choice, re-order,
- * select-missing-word, highlight-correct-summary). {@code correct} marks the
- * expected choice(s); {@code orderIndex} preserves authored order.
+ * select-missing-word, highlight-correct-summary), stored in the
+ * {@code question_options} child table of its {@link Question}. {@code correct} marks the
+ * expected choice(s); {@code orderIndex} preserves authored order. {@code publicId} is the identifier
+ * clients use to refer to the option; it is assigned when the option is authored and replaced together with
+ * the whole option list on every edit.
  * {@code blankIndex} is null for every task type except
  * {@code FILL_IN_THE_BLANKS_DROPDOWN}, where it groups this option under one
  * of the question's several independently-choosable blanks (each blank has
  * its own distinct option list, unlike the shared word bank used by
  * {@code FILL_IN_THE_BLANKS_DRAG_AND_DROP}).
  */
-@Entity
-@Table(name = "question_options", indexes = {
-        @Index(name = "idx_options_question", columnList = "question_id")
-})
+@Embeddable
 @Getter
 @Setter
 @NoArgsConstructor
-public class QuestionOption extends BaseEntity {
+public class QuestionOption {
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "question_id", nullable = false)
-    private Question question;
+    @Column(name = "public_id", nullable = false, updatable = false)
+    private UUID publicId = UUID.randomUUID();
 
     @Column(nullable = false, columnDefinition = "text")
     private String text;
@@ -41,10 +36,10 @@ public class QuestionOption extends BaseEntity {
     @Column(nullable = false)
     private boolean correct;
 
-    @Column(nullable = false)
+    @Column(name = "order_index", nullable = false)
     private int orderIndex;
 
-    @Column
+    @Column(name = "blank_index")
     private Integer blankIndex;
 
     /**
@@ -56,6 +51,6 @@ public class QuestionOption extends BaseEntity {
      * {@code blankIndex}) treat a shared-word-bank task as blank-grouped, so
      * this field must never be set alongside a non-null {@code blankIndex}.
      */
-    @Column
+    @Column(name = "correct_gap_index")
     private Integer correctGapIndex;
 }

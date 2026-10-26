@@ -1,6 +1,7 @@
 package com.pte.identity.internal.repository;
 
 import com.pte.identity.IdentityOverviewService;
+import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
@@ -35,17 +36,30 @@ class IdentityPlatformOverviewQueriesTest {
     private UserRepository users;
 
     @Autowired
+    private OrganizationMemberRepository members;
+
+    @Autowired
     private EntityManagerFactory emf;
 
     private void user(UUID tenant, UserStatus status, boolean deleted, Role... roles) {
         User u = new User();
         u.setUsername("u-" + UUID.randomUUID());
         u.setEmail(u.getUsername() + "@example.test");
-        u.setTenantId(tenant);
         u.setStatus(status);
         u.setDeleted(deleted);
-        u.setRoles(new HashSet<>(Arrays.asList(roles)));
+        if (tenant == null) {
+            // A platform account holds its roles itself and has no membership.
+            u.setRoles(new HashSet<>(Arrays.asList(roles)));
+            users.saveAndFlush(u);
+            return;
+        }
         users.saveAndFlush(u);
+        OrganizationMember m = new OrganizationMember();
+        m.setUser(u);
+        m.setOrganizationId(tenant);
+        m.setStatus(status);
+        m.setRoles(new HashSet<>(Arrays.asList(roles)));
+        members.saveAndFlush(m);
     }
 
     private void students(UUID tenant, int count) {

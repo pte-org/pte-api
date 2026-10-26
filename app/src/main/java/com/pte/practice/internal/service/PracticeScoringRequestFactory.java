@@ -1,6 +1,6 @@
 package com.pte.practice.internal.service;
 
-import com.pte.practice.internal.domain.PracticeSessionItem;
+import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.scoring.PracticeScoringException;
 import com.pte.scoring.PracticeScoringFailure;
 import com.pte.scoring.PracticeScoringRequest;
@@ -23,7 +23,7 @@ public class PracticeScoringRequestFactory {
     }
 
     /** @throws PracticeScoringException INVALID_PAYLOAD when the saved answer has no scoreable form */
-    public PracticeScoringRequest build(PracticeSessionItem item, UUID tenantId) {
+    public PracticeScoringRequest build(PracticeResponse item, UUID tenantId) {
         String payload = canonicalizer.canonicalize(item.getRendererKey(), item.getSavedPayload(),
                 item.getObjectiveOptionsJson()).orElseThrow(
                         () -> new PracticeScoringException(PracticeScoringFailure.INVALID_PAYLOAD));

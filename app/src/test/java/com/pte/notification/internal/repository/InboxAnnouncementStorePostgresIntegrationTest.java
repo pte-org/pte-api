@@ -10,15 +10,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.sql.Connection;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -54,18 +51,7 @@ class InboxAnnouncementStorePostgresIntegrationTest {
         dataSource = new DriverManagerDataSource(url + (url.contains("?") ? "&" : "?")
                 + "currentSchema=" + schema, user, password);
         jdbc = new JdbcTemplate(dataSource);
-        jdbc.execute("CREATE TABLE users (public_id UUID PRIMARY KEY)");
-        jdbc.execute("CREATE TABLE tenants (public_id UUID PRIMARY KEY)");
-        jdbc.update("INSERT INTO users(public_id) VALUES (?), (?), (?)", admin, host, UUID.randomUUID());
-        jdbc.update("INSERT INTO tenants(public_id) VALUES (?)", tenant);
-        try (Connection connection = dataSource.getConnection()) {
-            ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V72__notification_inbox_foundation.sql"));
-            ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V73__notification_inbox_snapshots.sql"));
-            ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V74__notification_announcement_query_indexes.sql"));
-        }
+        InboxTestSchema.load(dataSource, schema, admin, host, UUID.randomUUID());
         transaction = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         announcementStore = new InboxAnnouncementStore(new NamedParameterJdbcTemplate(dataSource));
         deliveryStore = new InboxDeliveryStore(new NamedParameterJdbcTemplate(dataSource));
@@ -115,7 +101,7 @@ class InboxAnnouncementStorePostgresIntegrationTest {
                 .isEqualTo(1);
 
         tx(() -> {
-            jdbc.update("UPDATE notification_inbox_items SET read_at=? WHERE content_public_id=?",
+            jdbc.update("UPDATE notification_recipients SET read_at=? WHERE content_public_id=?",
                     java.sql.Timestamp.from(NOW), content);
             return null;
         });

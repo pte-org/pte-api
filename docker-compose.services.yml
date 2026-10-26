@@ -26,6 +26,7 @@ services:
       - "${APP_PORT:-8091}:8091"
     environment:
       APP_PORT: 8091
+      SPRING_PROFILES_ACTIVE: ${APP_SPRING_PROFILES:-}
       APP_DB_URL: jdbc:postgresql://postgres:5432/pte
       APP_DB_USER: ${APP_DB_USER:?set APP_DB_USER in the env file}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in the env file}

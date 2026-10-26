@@ -4,7 +4,7 @@ import com.pte.scoring.internal.dto.request.SubmitTeacherScoreRequest;
 import com.pte.scoring.internal.dto.response.AnswerListResponse;
 import com.pte.scoring.internal.dto.response.AnswerReviewDetailResponse;
 import com.pte.scoring.internal.dto.response.ScoringAnswerResponse;
-import com.pte.scoring.internal.service.ScoringReviewService;
+import com.pte.scoring.internal.service.review.ScoringReviewService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;

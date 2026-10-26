@@ -4,7 +4,6 @@ import com.pte.tenancy.StudentCountProvider;
 import com.pte.tenancy.TenancyService;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
-import com.pte.tenancy.internal.repository.TenantRepository;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -19,16 +18,24 @@ import static org.mockito.Mockito.when;
 class TenancyServiceCountOrganizationsTest {
 
     private final OrganizationRepository organizations = mock(OrganizationRepository.class);
-    private final TenancyService tenancy = new TenancyService(organizations, mock(TenantRepository.class),
-            mock(TenantLifecycleService.class), mock(QuotaTransactionService.class), mock(StudentCountProvider.class));
+    private final TenancyService tenancy = new TenancyService(organizations,
+            mock(OrganizationLifecycleService.class), mock(QuotaGrantService.class), mock(StudentCountProvider.class));
 
     @Test
-    void returnsTheNonDeletedOrganizationCountOfTheGivenTenant() {
+    void returnsOneWhenTheOrganizationOfTheGivenTenantExists() {
         UUID tenantId = UUID.randomUUID();
-        when(organizations.countByTenant_PublicIdAndDeletedFalse(tenantId)).thenReturn(4L);
+        when(organizations.existsByPublicId(tenantId)).thenReturn(true);
 
-        assertThat(tenancy.countOrganizations(tenantId)).isEqualTo(4);
-        verify(organizations).countByTenant_PublicIdAndDeletedFalse(tenantId);
+        assertThat(tenancy.countOrganizations(tenantId)).isEqualTo(1);
+        verify(organizations).existsByPublicId(tenantId);
+    }
+
+    @Test
+    void returnsZeroWhenTheOrganizationOfTheGivenTenantDoesNotExist() {
+        UUID tenantId = UUID.randomUUID();
+        when(organizations.existsByPublicId(tenantId)).thenReturn(false);
+
+        assertThat(tenancy.countOrganizations(tenantId)).isZero();
     }
 
     @Test

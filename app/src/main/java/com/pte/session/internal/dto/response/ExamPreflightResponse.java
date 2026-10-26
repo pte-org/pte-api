@@ -1,12 +1,13 @@
 package com.pte.session.internal.dto.response;
 
-import com.pte.scoretemplate.dto.response.ScoreTemplateFeasibilityResponse;
+import com.pte.session.internal.dto.response.audience.AudiencePreviewResponse;
+import com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse;
 
 import java.util.List;
 
 public record ExamPreflightResponse(
         boolean ready,
-        ScoreTemplateFeasibilityResponse template,
+        ExamDefinitionFeasibilityResponse examDefinition,
         AudiencePreviewResponse audience,
         boolean subscriptionReady,
         boolean windowReady,

@@ -49,6 +49,8 @@ class AttemptSubmittedPerMonthBoundaryTest {
 
     private void submitted(UUID tenant, Instant submittedAt) {
         ExamAttempt attempt = new ExamAttempt();
+        attempt.setExamVersionPublicId(UUID.randomUUID());
+        attempt.setExamDefinitionPublicId(UUID.randomUUID());
         attempt.setTenantId(tenant);
         attempt.setSessionPublicId(UUID.randomUUID());
         attempt.setStudentPublicId(UUID.randomUUID());

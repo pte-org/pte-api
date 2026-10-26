@@ -1,8 +1,8 @@
 package com.pte.tenancy.internal.service;
 
-import com.pte.tenancy.domain.Tenant;
-import com.pte.tenancy.domain.enums.TenantStatus;
-import com.pte.tenancy.internal.repository.TenantRepository;
+import com.pte.tenancy.domain.Organization;
+import com.pte.tenancy.domain.enums.OrganizationStatus;
+import com.pte.tenancy.internal.repository.OrganizationRepository;
 import com.pte.shared.audit.AuditLogService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,7 +23,7 @@ import static org.mockito.Mockito.when;
 class TenantSuspensionExpirationServiceTest {
 
     @Mock
-    private TenantRepository tenantRepository;
+    private OrganizationRepository organizationRepository;
 
     @Mock
     private AuditLogService auditLogService;
@@ -31,36 +31,36 @@ class TenantSuspensionExpirationServiceTest {
     @Test
     void reactivateDueTenants_reactivatesExpiredBoundedSuspensionsOnly() {
         Instant now = Instant.parse("2026-10-17T00:00:00Z");
-        Tenant due = suspendedTenant(now.minusSeconds(1), TenantStatus.SUSPENDED);
-        Tenant indefinite = suspendedTenant(null, TenantStatus.SUSPENDED);
-        when(tenantRepository
+        Organization due = suspendedTenant(now.minusSeconds(1), OrganizationStatus.SUSPENDED);
+        Organization indefinite = suspendedTenant(null, OrganizationStatus.SUSPENDED);
+        when(organizationRepository
                 .findByStatusAndSuspendedUntilIsNotNullAndSuspendedUntilLessThanEqualAndDeletedFalse(
-                        TenantStatus.SUSPENDED, now))
+                        OrganizationStatus.SUSPENDED, now))
                 .thenReturn(List.of(due));
 
         TenantSuspensionExpirationService service = new TenantSuspensionExpirationService(
-                tenantRepository, Clock.fixed(now, ZoneOffset.UTC));
+                organizationRepository, Clock.fixed(now, ZoneOffset.UTC));
 
         assertThat(service.reactivateDueTenants()).isEqualTo(1);
-        assertThat(due.getStatus()).isEqualTo(TenantStatus.ACTIVE);
+        assertThat(due.getStatus()).isEqualTo(OrganizationStatus.ACTIVE);
         assertThat(due.getSuspendedUntil()).isNull();
-        assertThat(indefinite.getStatus()).isEqualTo(TenantStatus.SUSPENDED);
-        verify(tenantRepository)
+        assertThat(indefinite.getStatus()).isEqualTo(OrganizationStatus.SUSPENDED);
+        verify(organizationRepository)
                 .findByStatusAndSuspendedUntilIsNotNullAndSuspendedUntilLessThanEqualAndDeletedFalse(
-                        TenantStatus.SUSPENDED, now);
+                        OrganizationStatus.SUSPENDED, now);
     }
 
     @Test
     void reactivateDueTenants_recordsSystemAuditAndIsIdempotentOnNextRun() {
         Instant now = Instant.parse("2026-10-17T00:00:00Z");
-        Tenant due = suspendedTenant(now.minusSeconds(1), TenantStatus.SUSPENDED);
-        when(tenantRepository
+        Organization due = suspendedTenant(now.minusSeconds(1), OrganizationStatus.SUSPENDED);
+        when(organizationRepository
                 .findByStatusAndSuspendedUntilIsNotNullAndSuspendedUntilLessThanEqualAndDeletedFalse(
-                        TenantStatus.SUSPENDED, now))
+                        OrganizationStatus.SUSPENDED, now))
                 .thenReturn(List.of(due), List.of());
 
         TenantSuspensionExpirationService service = new TenantSuspensionExpirationService(
-                tenantRepository, Clock.fixed(now, ZoneOffset.UTC), auditLogService);
+                organizationRepository, Clock.fixed(now, ZoneOffset.UTC), auditLogService);
 
         assertThat(service.reactivateDueTenants()).isEqualTo(1);
         assertThat(service.reactivateDueTenants()).isZero();
@@ -71,8 +71,8 @@ class TenantSuspensionExpirationServiceTest {
                 org.mockito.ArgumentMatchers.eq("Reactivated tenant"));
     }
 
-    private Tenant suspendedTenant(Instant suspendedUntil, TenantStatus status) {
-        Tenant tenant = new Tenant();
+    private Organization suspendedTenant(Instant suspendedUntil, OrganizationStatus status) {
+        Organization tenant = new Organization();
         tenant.setPublicId(UUID.randomUUID());
         tenant.setStatus(status);
         tenant.setSuspendedUntil(suspendedUntil);

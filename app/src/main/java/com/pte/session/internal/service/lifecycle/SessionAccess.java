@@ -1,7 +1,7 @@
 package com.pte.session.internal.service.lifecycle;
 
 import com.pte.session.domain.ExamSession;
-import com.pte.session.internal.exception.HostContextRequiredException;
+import com.pte.session.internal.exception.staff.HostContextRequiredException;
 import com.pte.session.internal.exception.SessionNotFoundException;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.shared.security.CurrentUser;
