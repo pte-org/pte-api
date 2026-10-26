@@ -3,7 +3,7 @@ package com.pte.practice.internal.service;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeStudentProfile;
 import com.pte.practice.internal.dto.request.PracticeProfileUpdateRequest;
-import com.pte.practice.internal.dto.response.PracticeProfileResponse;
+import com.pte.practice.internal.dto.response.profile.PracticeProfileResponse;
 import com.pte.practice.internal.exception.PracticeProfileException;
 import com.pte.practice.internal.repository.PracticeStudentProfileRepository;
 import com.pte.shared.security.CurrentUser;
@@ -57,7 +57,7 @@ public class PracticeProfileService {
 
         LocalDate examDate = request != null ? request.examDate() : null;
         if (examDate != null) {
-            LocalDate today = LocalDate.now(clock.withZone(VIETNAM_ZONE));
+            LocalDate today = clock.instant().atZone(VIETNAM_ZONE).toLocalDate();
             LocalDate maxDate = today.plusYears(2);
             if (examDate.isBefore(today) || examDate.isAfter(maxDate)) {
                 throw new PracticeProfileException(

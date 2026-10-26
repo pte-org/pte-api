@@ -1,7 +1,7 @@
-package com.pte.practice.internal.service;
+package com.pte.practice.internal.service.selection;
 
 /** Splits a total question count across task types for a skill session. */
-final class PracticeQuestionAllocation {
+public final class PracticeQuestionAllocation {
 
     private PracticeQuestionAllocation() {
     }
@@ -10,7 +10,7 @@ final class PracticeQuestionAllocation {
      * Even split of {@code total} over {@code taskCount} task types; the remainder goes to the first types, so the
      * parts always add up to {@code total} (10 over 3 is 4, 3, 3; 2 over 3 is 1, 1, 0).
      */
-    static int[] distribute(int total, int taskCount) {
+    public static int[] distribute(int total, int taskCount) {
         if (total < 0 || taskCount <= 0) {
             throw new IllegalArgumentException("total must be >= 0 and taskCount > 0");
         }

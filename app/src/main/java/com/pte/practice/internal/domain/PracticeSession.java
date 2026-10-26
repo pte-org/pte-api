@@ -87,16 +87,16 @@ public class PracticeSession extends BaseEntity {
     @Column(name = "last_activity_at")
     private Instant lastActivityAt;
 
-    /** Null on sessions created before V133; read through {@link #effectiveTimingMode()}. */
+    /** Null on sessions created before V3; read through {@link #effectiveTimingMode()}. */
     @Enumerated(EnumType.STRING)
     @Column(name = "timing_mode", length = 16)
     private PracticeTimingMode timingMode;
 
-    /** Questions per task type the student asked for; null on sessions created before V133 (one per type). */
+    /** Questions per task type the student asked for; null on sessions created before V3 (one per type). */
     @Column(name = "question_count")
     private Integer questionCount;
 
-    /** Null on sessions created before V134; read through {@link #effectiveKind()}. */
+    /** Null on sessions created before V4; read through {@link #effectiveKind()}. */
     @Enumerated(EnumType.STRING)
     @Column(name = "kind", length = 16)
     private PracticeSessionKind kind;

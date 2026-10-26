@@ -2,7 +2,7 @@ package com.pte.practice.internal.controller;
 
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.dto.request.PracticeProfileUpdateRequest;
-import com.pte.practice.internal.dto.response.PracticeProfileResponse;
+import com.pte.practice.internal.dto.response.profile.PracticeProfileResponse;
 import com.pte.practice.internal.service.PracticeProfileService;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;

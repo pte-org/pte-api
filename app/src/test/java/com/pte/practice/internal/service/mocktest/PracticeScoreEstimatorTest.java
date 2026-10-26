@@ -1,9 +1,9 @@
-package com.pte.practice.internal.service;
+package com.pte.practice.internal.service.mocktest;
 
-import com.pte.practice.internal.dto.response.PracticeEstimatedScoresResponse;
-import com.pte.practice.internal.service.PracticeScoreEstimator.ItemOutcome;
-import com.pte.practice.internal.service.PracticeScoreEstimator.ScoredItem;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
+import com.pte.practice.internal.dto.response.mocktest.PracticeEstimatedScoresResponse;
+import com.pte.practice.internal.service.mocktest.PracticeScoreEstimator.ItemOutcome;
+import com.pte.practice.internal.service.mocktest.PracticeScoreEstimator.ScoredItem;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -15,13 +15,13 @@ class PracticeScoreEstimatorTest {
 
     private final PracticeScoreEstimator estimator = new PracticeScoreEstimator();
 
-    private static ScoreTemplateItemResponse template(String type, String section, double overall, double speaking,
+    private static ExamDefinitionItemResponse template(String type, String section, double overall, double speaking,
             double reading) {
-        return new ScoreTemplateItemResponse(type, section, 1, 1, 1, 0, 0, "AI", BigDecimal.valueOf(overall),
+        return new ExamDefinitionItemResponse(type, section, 1, 1, 1, 0, 0, "AI", BigDecimal.valueOf(overall),
                 BigDecimal.valueOf(speaking), BigDecimal.ZERO, BigDecimal.valueOf(reading), BigDecimal.ZERO);
     }
 
-    private final List<ScoreTemplateItemResponse> templateItems = List.of(
+    private final List<ExamDefinitionItemResponse> templateItems = List.of(
             template("READ_ALOUD", "SPEAKING", 2, 3, 0),
             template("REPEAT_SENTENCE", "SPEAKING", 1, 1, 0),
             template("MC_READING_SINGLE", "READING", 1, 0, 1));

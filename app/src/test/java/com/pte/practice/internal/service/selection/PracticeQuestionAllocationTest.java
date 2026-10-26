@@ -1,4 +1,4 @@
-package com.pte.practice.internal.service;
+package com.pte.practice.internal.service.selection;
 
 import org.junit.jupiter.api.Test;
 

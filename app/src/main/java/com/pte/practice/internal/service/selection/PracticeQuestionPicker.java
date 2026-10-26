@@ -1,4 +1,4 @@
-package com.pte.practice.internal.service;
+package com.pte.practice.internal.service.selection;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -56,7 +56,7 @@ public class PracticeQuestionPicker {
         return List.copyOf(picked.subList(0, Math.min(count, picked.size())));
     }
 
-    /** Fisher–Yates on the given (already copied) list. */
+    /** Fisherâ€“Yates on the given (already copied) list. */
     private void shuffle(List<UUID> values, RandomGenerator random) {
         for (int index = values.size() - 1; index > 0; index--) {
             int swap = random.nextInt(index + 1);

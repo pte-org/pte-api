@@ -7,7 +7,7 @@ import com.pte.practice.internal.dto.request.PracticeSaveAndExitRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionActionRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionStartRequest;
 import com.pte.practice.internal.dto.response.PracticeItemResultResponse;
-import com.pte.practice.internal.dto.response.PracticeRecordingPlaybackResponse;
+import com.pte.practice.internal.dto.response.media.PracticeRecordingPlaybackResponse;
 import com.pte.practice.internal.dto.response.PracticeReviewResponse;
 import com.pte.practice.internal.dto.response.PracticeSessionResponse;
 import com.pte.practice.internal.service.PracticeRecordingPlaybackService;

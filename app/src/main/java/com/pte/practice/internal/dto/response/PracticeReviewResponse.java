@@ -1,5 +1,7 @@
 package com.pte.practice.internal.dto.response;
 
+import com.pte.practice.internal.dto.response.mocktest.PracticeEstimatedScoresResponse;
+
 import java.util.List;
 import java.time.Instant;
 import java.util.UUID;

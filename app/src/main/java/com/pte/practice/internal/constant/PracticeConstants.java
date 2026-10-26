@@ -136,7 +136,7 @@ public final class PracticeConstants {
             "ANSWER_SHORT_QUESTION_V1",
             "RESPOND_TO_A_SITUATION_V1",
             "SUMMARIZE_GROUP_DISCUSSION_V1");
-    /** Sessions have no session-wide limit since V133; the field stays on the wire as 0 for older clients. */
+    /** Sessions have no session-wide limit since V3; the field stays on the wire as 0 for older clients. */
     public static final int PRACTICE_NO_SESSION_TIME_LIMIT_SECONDS = 0;
     public static final int PRACTICE_DEFAULT_QUESTION_COUNT = 10;
     public static final int PRACTICE_MAX_QUESTION_COUNT = 50;
@@ -155,7 +155,7 @@ public final class PracticeConstants {
     public static final String PRACTICE_SESSION_REQUEST_INVALID = "PRACTICE_SESSION_REQUEST_INVALID";
     public static final String PRACTICE_SESSION_REQUEST_INVALID_MESSAGE =
             "Choose either task types, a skill or a mock test, not a mix";
-    /** Sessions started before V133 carry no question count and keep the old one-item-per-task behaviour. */
+    /** Sessions started before V3 carry no question count and keep the old one-item-per-task behaviour. */
     public static final int PRACTICE_LEGACY_QUESTION_COUNT = 1;
     /**
      * Prompt audio/image link lifetime. Equal to the media module's signing cap (longer requests are clamped to

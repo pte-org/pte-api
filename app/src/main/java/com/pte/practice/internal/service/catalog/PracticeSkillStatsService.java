@@ -1,10 +1,12 @@
-package com.pte.practice.internal.service;
+package com.pte.practice.internal.service.catalog;
+
+import com.pte.practice.internal.service.timing.PracticeTimingService;
 
 import com.pte.itembank.PracticeQuestionService;
 import com.pte.practice.internal.dto.response.PracticeCatalogResponse;
 import com.pte.practice.internal.dto.response.PracticeCatalogSectionResponse;
 import com.pte.practice.internal.dto.response.PracticeCatalogTaskResponse;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,10 +22,10 @@ import java.util.UUID;
 public class PracticeSkillStatsService {
 
     private final PracticeQuestionService practiceQuestionService;
-    private final PracticeSessionItemRepository itemRepository;
+    private final PracticeResponseRepository itemRepository;
 
     public PracticeSkillStatsService(PracticeQuestionService practiceQuestionService,
-            PracticeSessionItemRepository itemRepository) {
+            PracticeResponseRepository itemRepository) {
         this.practiceQuestionService = practiceQuestionService;
         this.itemRepository = itemRepository;
     }

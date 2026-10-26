@@ -3,7 +3,7 @@ package com.pte.practice.internal.service;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeStudentProfile;
 import com.pte.practice.internal.dto.request.PracticeProfileUpdateRequest;
-import com.pte.practice.internal.dto.response.PracticeProfileResponse;
+import com.pte.practice.internal.dto.response.profile.PracticeProfileResponse;
 import com.pte.practice.internal.exception.PracticeNotEntitledException;
 import com.pte.practice.internal.exception.PracticeProfileException;
 import com.pte.practice.internal.repository.PracticeStudentProfileRepository;

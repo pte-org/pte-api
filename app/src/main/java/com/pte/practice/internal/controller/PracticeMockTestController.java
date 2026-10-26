@@ -1,8 +1,8 @@
 package com.pte.practice.internal.controller;
 
 import com.pte.practice.internal.constant.PracticeConstants;
-import com.pte.practice.internal.dto.response.PracticeMockTestResponse;
-import com.pte.practice.internal.service.PracticeMockTestService;
+import com.pte.practice.internal.dto.response.mocktest.PracticeMockTestResponse;
+import com.pte.practice.internal.service.mocktest.PracticeMockTestService;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

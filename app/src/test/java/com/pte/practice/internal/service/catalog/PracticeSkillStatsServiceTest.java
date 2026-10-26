@@ -1,11 +1,11 @@
-package com.pte.practice.internal.service;
+package com.pte.practice.internal.service.catalog;
 
 import com.pte.itembank.PracticeQuestionService;
 import com.pte.practice.internal.dto.response.PracticeCatalogAvailability;
 import com.pte.practice.internal.dto.response.PracticeCatalogResponse;
 import com.pte.practice.internal.dto.response.PracticeCatalogSectionResponse;
 import com.pte.practice.internal.dto.response.PracticeCatalogTaskResponse;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -25,7 +25,7 @@ class PracticeSkillStatsServiceTest {
     @Mock
     private PracticeQuestionService questionService;
     @Mock
-    private PracticeSessionItemRepository itemRepository;
+    private PracticeResponseRepository itemRepository;
 
     private static PracticeCatalogTaskResponse task(String code, String section) {
         return new PracticeCatalogTaskResponse(code, code, section, true, PracticeCatalogAvailability.RUNNABLE, null,
@@ -71,7 +71,7 @@ class PracticeSkillStatsServiceTest {
 
         assertThat(speaking.get(0).answeredQuestionCount()).isEqualTo(3);
         assertThat(speaking.get(0).averageScore()).isEqualTo(72);
-        // No answer yet: no count and no average, so the UI shows "—" rather than a red 0%.
+        // No answer yet: no count and no average, so the UI shows "â€”" rather than a red 0%.
         assertThat(speaking.get(1).answeredQuestionCount()).isZero();
         assertThat(speaking.get(1).averageScore()).isNull();
     }

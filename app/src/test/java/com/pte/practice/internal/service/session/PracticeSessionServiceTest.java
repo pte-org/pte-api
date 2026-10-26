@@ -4,7 +4,7 @@ import com.pte.practice.internal.service.PracticeAnswerValidationService;
 import com.pte.practice.internal.service.PracticeCatalogService;
 import com.pte.practice.internal.service.PracticeEntitlementService;
 import com.pte.practice.internal.service.PracticeResponseService;
-import com.pte.practice.internal.service.PracticeMockTestService;
+import com.pte.practice.internal.service.mocktest.PracticeMockTestService;
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.attempt.ResponseConfidence;
@@ -260,7 +260,7 @@ class PracticeSessionServiceTest {
 
         assertThat(response.status()).isEqualTo(PracticeSessionStatus.IN_PROGRESS);
         assertThat(response.startedAt()).isEqualTo(now);
-        // V133: no session-wide limit; a null deadline never expires.
+        // V3: no session-wide limit; a null deadline never expires.
         assertThat(response.deadlineAt()).isNull();
     }
 

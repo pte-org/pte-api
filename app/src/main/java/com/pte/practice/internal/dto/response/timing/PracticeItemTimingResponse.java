@@ -1,4 +1,4 @@
-package com.pte.practice.internal.dto.response;
+package com.pte.practice.internal.dto.response.timing;
 
 /**
  * Per-item pacing of a TIMED practice session, pinned from the active Score Template when the session began.

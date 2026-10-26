@@ -38,7 +38,7 @@ public interface PracticeResponseRepository extends JpaRepository<PracticeRespon
 
     /** Questions this student has already had in any practice session, so new sessions can prefer unseen ones. */
     @Query("""
-            select distinct item.sourceQuestionPublicId from PracticeSessionItem item, PracticeSession owner
+            select distinct item.sourceQuestionPublicId from PracticeResponse item, PracticeSession owner
              where item.practiceSessionId = owner.id
                and owner.studentPublicId = :studentPublicId
                and item.taskCode in :taskCodes
@@ -48,14 +48,14 @@ public interface PracticeResponseRepository extends JpaRepository<PracticeRespon
     List<UUID> findSeenSourceQuestionIds(@Param("studentPublicId") UUID studentPublicId,
             @Param("taskCodes") Collection<String> taskCodes);
 
-    List<PracticeSessionItem> findByPracticeSessionIdInAndDeletedFalse(Collection<Long> practiceSessionIds);
+    List<PracticeResponse> findByPracticeSessionIdInAndDeletedFalse(Collection<Long> practiceSessionIds);
 
     /** Distinct questions the student has answered, per task code: {@code [taskCode, count]} rows. */
     @Query("""
-            select item.taskCode, count(distinct item.sourceQuestionPublicId) from PracticeSessionItem item, PracticeSession owner
+            select item.taskCode, count(distinct item.sourceQuestionPublicId) from PracticeResponse item, PracticeSession owner
              where item.practiceSessionId = owner.id
                and owner.studentPublicId = :studentPublicId
-               and item.status = com.pte.practice.internal.domain.enums.PracticeSessionItemStatus.ANSWERED
+               and item.status = com.pte.practice.internal.domain.enums.PracticeResponseStatus.ANSWERED
                and item.sourceQuestionPublicId is not null
                and item.deleted = false
              group by item.taskCode
@@ -64,10 +64,10 @@ public interface PracticeResponseRepository extends JpaRepository<PracticeRespon
 
     /** Mean score (0-100) of the student's scored answers per task code: {@code [taskCode, average]} rows. */
     @Query("""
-            select item.taskCode, avg(coalesce(item.aiScore, item.objectiveScore)) from PracticeSessionItem item, PracticeSession owner
+            select item.taskCode, avg(coalesce(item.aiScore, item.objectiveScore)) from PracticeResponse item, PracticeSession owner
              where item.practiceSessionId = owner.id
                and owner.studentPublicId = :studentPublicId
-               and item.status = com.pte.practice.internal.domain.enums.PracticeSessionItemStatus.ANSWERED
+               and item.status = com.pte.practice.internal.domain.enums.PracticeResponseStatus.ANSWERED
                and coalesce(item.aiScore, item.objectiveScore) is not null
                and item.deleted = false
              group by item.taskCode

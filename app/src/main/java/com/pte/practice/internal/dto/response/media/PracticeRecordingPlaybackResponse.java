@@ -1,4 +1,4 @@
-package com.pte.practice.internal.dto.response;
+package com.pte.practice.internal.dto.response.media;
 
 /**
  * Short-lived link to the student's own saved recording of an item, used to replay it and draw its waveform after

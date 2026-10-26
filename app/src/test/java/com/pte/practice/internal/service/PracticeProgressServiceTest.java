@@ -104,13 +104,13 @@ class PracticeProgressServiceTest {
         skill.setSelectedTaskTypes("MC_READING_SINGLE,RE_ORDER_PARAGRAPHS");
         PracticeSession legacy = session(PracticeSessionStatus.COMPLETED);
         legacy.setSelectedTaskTypes("READ_ALOUD");
-        PracticeSessionItem scored = item(PracticeSessionItemStatus.ANSWERED, "a", null);
+        PracticeResponse scored = item(PracticeResponseStatus.ANSWERED, "a", null);
         scored.setPracticeSessionId(skill.getId());
         scored.setObjectiveScore(80);
-        PracticeSessionItem aiScored = item(PracticeSessionItemStatus.ANSWERED, "b", null);
+        PracticeResponse aiScored = item(PracticeResponseStatus.ANSWERED, "b", null);
         aiScored.setPracticeSessionId(skill.getId());
         aiScored.setAiScore(65);
-        PracticeSessionItem unscored = item(PracticeSessionItemStatus.ANSWERED, "c", null);
+        PracticeResponse unscored = item(PracticeResponseStatus.ANSWERED, "c", null);
         unscored.setPracticeSessionId(legacy.getId());
         when(sessionRepository.findTop100ByStudentPublicIdAndDeletedFalseOrderByCreatedAtDesc(studentId))
                 .thenReturn(List.of(skill, legacy));
@@ -124,7 +124,7 @@ class PracticeProgressServiceTest {
         assertThat(entries.get(0).skillCode()).isEqualTo("READING");
         assertThat(entries.get(0).taskCode()).isNull();
         assertThat(entries.get(0).score()).isEqualTo(72.5);
-        // A session from before V134 has no kind: it reads as a single-task session.
+        // A session from before V4 has no kind: it reads as a single-task session.
         assertThat(entries.get(1).kind()).isEqualTo("TASK");
         assertThat(entries.get(1).taskCode()).isEqualTo("READ_ALOUD");
         assertThat(entries.get(1).score()).isNull();

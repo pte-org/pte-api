@@ -1,4 +1,4 @@
-package com.pte.practice.internal.dto.response;
+package com.pte.practice.internal.dto.response.mocktest;
 
 import java.util.UUID;
 

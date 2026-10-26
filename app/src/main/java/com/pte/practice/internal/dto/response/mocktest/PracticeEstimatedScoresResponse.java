@@ -1,4 +1,4 @@
-package com.pte.practice.internal.dto.response;
+package com.pte.practice.internal.dto.response.mocktest;
 
 /**
  * Reference-only 10-90 estimate of a full mock test, built from the item scores with the Score Template weights.

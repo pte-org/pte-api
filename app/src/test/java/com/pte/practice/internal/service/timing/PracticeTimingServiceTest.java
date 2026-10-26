@@ -1,10 +1,10 @@
-package com.pte.practice.internal.service;
+package com.pte.practice.internal.service.timing;
 
 import com.pte.attempt.TaskTimingCatalog;
 import com.pte.practice.internal.exception.PracticeSessionException;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -24,7 +24,7 @@ import static org.mockito.Mockito.when;
 class PracticeTimingServiceTest {
 
     @Mock
-    private ScoreTemplateService scoreTemplateService;
+    private ExamDefinitionService scoreTemplateService;
     @Mock
     private TaskTimingCatalog taskTimingCatalog;
 
@@ -32,14 +32,14 @@ class PracticeTimingServiceTest {
         return new PracticeTimingService(scoreTemplateService, taskTimingCatalog);
     }
 
-    private static ScoreTemplateItemResponse item(String type, int prep, int response) {
-        return new ScoreTemplateItemResponse(type, "SPEAKING", 1, 1, 1, prep, response, "AI",
+    private static ExamDefinitionItemResponse item(String type, int prep, int response) {
+        return new ExamDefinitionItemResponse(type, "SPEAKING", 1, 1, 1, prep, response, "AI",
                 BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 
-    private void activeTemplate(ScoreTemplateItemResponse... items) {
+    private void activeTemplate(ExamDefinitionItemResponse... items) {
         when(scoreTemplateService.findActive()).thenReturn(Optional.of(
-                new ScoreTemplateResponse(UUID.randomUUID(), "T", 1, "T", "ACTIVE", List.of(items))));
+                new ExamDefinitionResponse(UUID.randomUUID(), "T", 1, "T", "ACTIVE", List.of(items))));
     }
 
     @Test

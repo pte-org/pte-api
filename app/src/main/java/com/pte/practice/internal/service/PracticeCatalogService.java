@@ -1,5 +1,7 @@
 package com.pte.practice.internal.service;
 
+import com.pte.practice.internal.service.timing.PracticeTimingService;
+
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.PracticeQuestionService;
 import com.pte.itembank.domain.enums.PteSection;

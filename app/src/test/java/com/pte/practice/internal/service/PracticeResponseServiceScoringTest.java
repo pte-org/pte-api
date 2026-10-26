@@ -69,6 +69,37 @@ class PracticeResponseServiceScoringTest {
     }
 
     @Test
+    void skippedAnswerCanBeSubmittedThroughTheScoringRouter() {
+        item.setStatus(PracticeResponseStatus.SKIPPED);
+        item.setSkippedAt(NOW.minusSeconds(30));
+        route(PracticeScoringRoute.OBJECTIVE);
+        when(scoringService.scorePracticeAnswer(request)).thenReturn(evaluation);
+
+        answer("{\"selectedOption\":\"a\"}");
+
+        verify(stateService).recordInline(item, evaluation, NOW);
+        assertThat(item.getSkippedAt()).isNull();
+        assertAnswered();
+    }
+
+    @Test
+    void skippedAnswerCanSaveADraftWithoutScoringOrLosingItsSkipState() {
+        item.setStatus(PracticeResponseStatus.SKIPPED);
+        Instant skippedAt = NOW.minusSeconds(30);
+        item.setSkippedAt(skippedAt);
+        String payload = "{\"selectedOption\":\"a\"}";
+
+        service.saveDraft(session, item, payload, ResponseConfidence.HIGH, caller);
+
+        verify(validation).validateDraft(item.getRendererKey(), 1, payload, ResponseConfidence.HIGH);
+        verify(itemRepository).saveAndFlush(item);
+        verifyNoInteractions(scoringService, stateService);
+        assertThat(item.getSavedPayload()).isEqualTo(payload);
+        assertThat(item.getStatus()).isEqualTo(PracticeResponseStatus.SKIPPED);
+        assertThat(item.getSkippedAt()).isEqualTo(skippedAt);
+    }
+
+    @Test
     void objectiveAnswerIsScoredInsideTheCallAndFinal() {
         route(PracticeScoringRoute.OBJECTIVE);
         when(scoringService.scorePracticeAnswer(request)).thenReturn(evaluation);

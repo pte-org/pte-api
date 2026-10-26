@@ -1,8 +1,8 @@
-package com.pte.practice.internal.service;
+package com.pte.practice.internal.service.mocktest;
 
 import com.pte.itembank.TaskTypeCodeCompatibility;
-import com.pte.practice.internal.dto.response.PracticeEstimatedScoresResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
+import com.pte.practice.internal.dto.response.mocktest.PracticeEstimatedScoresResponse;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -45,7 +45,7 @@ public class PracticeScoreEstimator {
     }
 
     public PracticeEstimatedScoresResponse estimate(List<ScoredItem> items,
-            List<ScoreTemplateItemResponse> templateItems) {
+            List<ExamDefinitionItemResponse> templateItems) {
         Map<String, BigDecimal> sumByType = new HashMap<>();
         Map<String, Integer> countByType = new HashMap<>();
         int skipped = 0;
@@ -67,11 +67,11 @@ public class PracticeScoreEstimator {
         sumByType.forEach((type, sum) -> avgByType.put(type,
                 sum.divide(BigDecimal.valueOf(countByType.get(type)), MATH)));
         return new PracticeEstimatedScoresResponse(
-                weighted(templateItems, avgByType, ScoreTemplateItemResponse::overallWeight),
-                weighted(templateItems, avgByType, ScoreTemplateItemResponse::speakingWeight),
-                weighted(templateItems, avgByType, ScoreTemplateItemResponse::writingWeight),
-                weighted(templateItems, avgByType, ScoreTemplateItemResponse::readingWeight),
-                weighted(templateItems, avgByType, ScoreTemplateItemResponse::listeningWeight),
+                weighted(templateItems, avgByType, ExamDefinitionItemResponse::overallWeight),
+                weighted(templateItems, avgByType, ExamDefinitionItemResponse::speakingWeight),
+                weighted(templateItems, avgByType, ExamDefinitionItemResponse::writingWeight),
+                weighted(templateItems, avgByType, ExamDefinitionItemResponse::readingWeight),
+                weighted(templateItems, avgByType, ExamDefinitionItemResponse::listeningWeight),
                 skipped, excluded, pending);
     }
 
@@ -80,11 +80,11 @@ public class PracticeScoreEstimator {
         counts.merge(type, 1, Integer::sum);
     }
 
-    private Integer weighted(List<ScoreTemplateItemResponse> templateItems, Map<String, BigDecimal> avgByType,
-            Function<ScoreTemplateItemResponse, BigDecimal> weightOf) {
+    private Integer weighted(List<ExamDefinitionItemResponse> templateItems, Map<String, BigDecimal> avgByType,
+            Function<ExamDefinitionItemResponse, BigDecimal> weightOf) {
         BigDecimal weightedSum = BigDecimal.ZERO;
         BigDecimal totalWeight = BigDecimal.ZERO;
-        for (ScoreTemplateItemResponse item : templateItems) {
+        for (ExamDefinitionItemResponse item : templateItems) {
             BigDecimal weight = weightOf.apply(item);
             if (weight == null || weight.signum() <= 0) {
                 continue;

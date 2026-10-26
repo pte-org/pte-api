@@ -124,9 +124,9 @@ public class PracticeProgressService {
                 singleTaskCode(session.getSelectedTaskTypes()));
     }
 
-    private Double averageScore(List<PracticeSessionItem> items) {
+    private Double averageScore(List<PracticeResponse> items) {
         var scores = items.stream()
-                .filter(item -> item.getStatus() == PracticeSessionItemStatus.ANSWERED)
+                .filter(item -> item.getStatus() == PracticeResponseStatus.ANSWERED)
                 .map(item -> item.getAiScore() != null ? item.getAiScore() : item.getObjectiveScore())
                 .filter(java.util.Objects::nonNull)
                 .mapToInt(Integer::intValue)

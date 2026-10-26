@@ -9,7 +9,7 @@ import com.pte.practice.internal.domain.enums.PracticeSessionKind;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.response.PracticeCatalogResponse;
 import com.pte.practice.internal.dto.response.PracticeCatalogSectionResponse;
-import com.pte.practice.internal.dto.response.PracticeItemTimingResponse;
+import com.pte.practice.internal.dto.response.timing.PracticeItemTimingResponse;
 import com.pte.practice.internal.dto.response.PracticeSessionResponse;
 import com.pte.practice.internal.dto.response.PracticeTaskContentResponse;
 import com.pte.practice.internal.dto.response.PracticeTaskResponse;

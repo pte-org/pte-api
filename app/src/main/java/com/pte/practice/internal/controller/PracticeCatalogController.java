@@ -5,7 +5,7 @@ import com.pte.practice.internal.dto.request.PracticePreflightRequest;
 import com.pte.practice.internal.dto.response.PracticeCatalogResponse;
 import com.pte.practice.internal.dto.response.PracticePreflightResponse;
 import com.pte.practice.internal.service.PracticeCatalogService;
-import com.pte.practice.internal.service.PracticeSkillStatsService;
+import com.pte.practice.internal.service.catalog.PracticeSkillStatsService;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
 import jakarta.validation.Valid;

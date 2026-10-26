@@ -1,11 +1,11 @@
-package com.pte.practice.internal.service;
+package com.pte.practice.internal.service.timing;
 
 import com.pte.attempt.TaskTimingCatalog;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.exception.PracticeSessionException;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -26,10 +26,10 @@ public class PracticeTimingService {
 
     private static final Logger log = LoggerFactory.getLogger(PracticeTimingService.class);
 
-    private final ScoreTemplateService scoreTemplateService;
+    private final ExamDefinitionService scoreTemplateService;
     private final TaskTimingCatalog taskTimingCatalog;
 
-    public PracticeTimingService(ScoreTemplateService scoreTemplateService, TaskTimingCatalog taskTimingCatalog) {
+    public PracticeTimingService(ExamDefinitionService scoreTemplateService, TaskTimingCatalog taskTimingCatalog) {
         this.scoreTemplateService = scoreTemplateService;
         this.taskTimingCatalog = taskTimingCatalog;
     }
@@ -45,7 +45,7 @@ public class PracticeTimingService {
             return Map.of();
         }
         Map<String, Timing> timings = new HashMap<>();
-        for (ScoreTemplateItemResponse item : active.get().items()) {
+        for (ExamDefinitionItemResponse item : active.get().items()) {
             String code = normalize(item.taskTypeKey() == null ? item.taskType() : item.taskTypeKey());
             if (code == null) {
                 continue;

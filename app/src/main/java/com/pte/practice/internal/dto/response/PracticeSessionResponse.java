@@ -36,7 +36,7 @@ public record PracticeSessionResponse(
         PracticeItemResultResponse itemResult,
         PracticeTimingMode timingMode,
         Integer questionCount,
-        /** TASK, SKILL or MOCK_TEST; sessions before V134 read as TASK. */
+        /** TASK, SKILL or MOCK_TEST; sessions before V4 read as TASK. */
         String kind,
         String skillCode,
         /** The task type when the session covers exactly one; null otherwise. */

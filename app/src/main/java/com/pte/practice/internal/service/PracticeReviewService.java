@@ -1,5 +1,7 @@
 package com.pte.practice.internal.service;
 
+import com.pte.practice.internal.service.mocktest.PracticeMockTestService;
+
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.dto.response.PracticeReviewResponse;
 import com.pte.practice.internal.dto.response.PracticeTaskContentResponse;
@@ -50,7 +52,7 @@ public class PracticeReviewService {
                 .findByPublicIdAndStudentPublicIdAndDeletedFalse(sessionPublicId, caller.userId())
                 .orElseThrow(com.pte.practice.internal.exception.PracticeSessionNotFoundException::new);
         itemService.recoverScoring(session, clock.instant());
-        List<com.pte.practice.internal.domain.PracticeSessionItem> sessionItems = itemRepository
+        List<com.pte.practice.internal.domain.PracticeResponse> sessionItems = itemRepository
                 .findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(session.getId());
         return new PracticeReviewResponse(session.getPublicId(), sessionItems.stream()
                 .map(item -> new PracticeReviewResponse.Item(item.getPublicId(), item.getOrderIndex(), item.getTaskCode(),
@@ -64,8 +66,8 @@ public class PracticeReviewService {
     }
 
     /** Reference estimate for a finished mock test; null for other sessions or while the test is unfinished. */
-    private com.pte.practice.internal.dto.response.PracticeEstimatedScoresResponse estimatedScoresOf(
-            PracticeSession session, List<com.pte.practice.internal.domain.PracticeSessionItem> items) {
+    private com.pte.practice.internal.dto.response.mocktest.PracticeEstimatedScoresResponse estimatedScoresOf(
+            PracticeSession session, List<com.pte.practice.internal.domain.PracticeResponse> items) {
         if (mockTestService == null || session.effectiveKind() != com.pte.practice.internal.domain.enums.PracticeSessionKind.MOCK_TEST
                 || session.getStatus() != com.pte.practice.internal.domain.enums.PracticeSessionStatus.COMPLETED
                 || session.getMockTestId() == null) {

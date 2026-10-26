@@ -1,17 +1,20 @@
-package com.pte.practice.internal.service;
+package com.pte.practice.internal.service.mocktest;
+
+import com.pte.practice.internal.service.selection.PracticeQuestionPicker;
+import com.pte.practice.internal.service.timing.PracticeTimingService;
 
 import com.pte.itembank.PracticeQuestionService;
 import com.pte.practice.internal.domain.PracticeMockTest;
 import com.pte.practice.internal.domain.PracticeMockTestItem;
-import com.pte.practice.internal.dto.response.PracticeMockTestResponse;
+import com.pte.practice.internal.dto.response.mocktest.PracticeMockTestResponse;
 import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.repository.PracticeMockTestItemRepository;
 import com.pte.practice.internal.repository.PracticeMockTestRepository;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,11 +48,11 @@ class PracticeMockTestServiceTest {
     @Mock
     private PracticeSessionRepository sessionRepository;
     @Mock
-    private PracticeSessionItemRepository sessionItemRepository;
+    private PracticeResponseRepository sessionItemRepository;
     @Mock
     private PracticeQuestionService questionService;
     @Mock
-    private ScoreTemplateService scoreTemplateService;
+    private ExamDefinitionService scoreTemplateService;
     @Mock
     private PracticeTimingService timingService;
 
@@ -69,14 +72,14 @@ class PracticeMockTestServiceTest {
         });
     }
 
-    private static ScoreTemplateItemResponse templateItem(String type, String section, int sequence, int minCount) {
-        return new ScoreTemplateItemResponse(type, section, sequence, minCount, minCount, 5, 40, "AI",
+    private static ExamDefinitionItemResponse templateItem(String type, String section, int sequence, int minCount) {
+        return new ExamDefinitionItemResponse(type, section, sequence, minCount, minCount, 5, 40, "AI",
                 BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 
-    private void activeTemplate(ScoreTemplateItemResponse... items) {
+    private void activeTemplate(ExamDefinitionItemResponse... items) {
         when(scoreTemplateService.findActive()).thenReturn(Optional.of(
-                new ScoreTemplateResponse(UUID.randomUUID(), "T", 3, "T", "ACTIVE", List.of(items))));
+                new ExamDefinitionResponse(UUID.randomUUID(), "T", 3, "T", "ACTIVE", List.of(items))));
     }
 
     private static List<UUID> ids(int count) {
@@ -185,7 +188,7 @@ class PracticeMockTestServiceTest {
 
     @Test
     void capacityIsHowManyTestsTheBankFillsWithoutRepeatingAQuestion() {
-        List<ScoreTemplateItemResponse> plan = List.of(templateItem("READ_ALOUD", "SPEAKING", 1, 6),
+        List<ExamDefinitionItemResponse> plan = List.of(templateItem("READ_ALOUD", "SPEAKING", 1, 6),
                 templateItem("REPEAT_SENTENCE", "SPEAKING", 2, 10));
         when(questionService.countPublishedByTaskTypeKeys(any())).thenReturn(Map.of(
                 "READ_ALOUD", 24L, "REPEAT_SENTENCE", 25L));

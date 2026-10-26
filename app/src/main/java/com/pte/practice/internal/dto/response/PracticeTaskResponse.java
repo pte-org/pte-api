@@ -1,5 +1,7 @@
 package com.pte.practice.internal.dto.response;
 
+import com.pte.practice.internal.dto.response.timing.PracticeItemTimingResponse;
+
 import com.pte.attempt.ResponseConfidence;
 import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 
@@ -32,7 +34,7 @@ public record PracticeTaskResponse(
     /** Compatibility constructor for callers that predate per-item timing. */
     public PracticeTaskResponse(UUID publicId, int orderIndex, String taskCode, String displayName,
             String section, String rendererKey, Integer contractVersion, Integer answerSchemaVersion,
-            PracticeSessionItemStatus status, String savedPayload, ResponseConfidence confidence,
+            PracticeResponseStatus status, String savedPayload, ResponseConfidence confidence,
             PracticeTaskContentResponse content) {
         this(publicId, orderIndex, taskCode, displayName, section, rendererKey, contractVersion,
                 answerSchemaVersion, status, savedPayload, confidence, content, null);

@@ -4,11 +4,11 @@ import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
-import com.pte.practice.internal.domain.PracticeSessionItem;
-import com.pte.practice.internal.dto.response.PracticeRecordingPlaybackResponse;
+import com.pte.practice.internal.domain.PracticeResponse;
+import com.pte.practice.internal.dto.response.media.PracticeRecordingPlaybackResponse;
 import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.exception.PracticeSessionNotFoundException;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
@@ -25,12 +25,12 @@ import java.util.UUID;
 public class PracticeRecordingPlaybackService {
 
     private final PracticeSessionRepository sessionRepository;
-    private final PracticeSessionItemRepository itemRepository;
+    private final PracticeResponseRepository itemRepository;
     private final PracticeAnswerValidationService answerValidationService;
     private final MediaService mediaService;
 
     public PracticeRecordingPlaybackService(PracticeSessionRepository sessionRepository,
-            PracticeSessionItemRepository itemRepository, PracticeAnswerValidationService answerValidationService,
+            PracticeResponseRepository itemRepository, PracticeAnswerValidationService answerValidationService,
             MediaService mediaService) {
         this.sessionRepository = sessionRepository;
         this.itemRepository = itemRepository;
@@ -47,7 +47,7 @@ public class PracticeRecordingPlaybackService {
                 || !caller.tenantId().equals(session.getTenantId())) {
             throw new PracticeSessionNotFoundException();
         }
-        PracticeSessionItem item = itemRepository
+        PracticeResponse item = itemRepository
                 .findByPublicIdAndPracticeSessionIdAndDeletedFalse(itemPublicId, session.getId())
                 .orElseThrow(PracticeSessionNotFoundException::new);
         if (!PracticeConstants.PRACTICE_RECORDING_RENDERER_KEYS.contains(item.getRendererKey())
@@ -67,7 +67,7 @@ public class PracticeRecordingPlaybackService {
                 download.durationSeconds());
     }
 
-    private UUID recordedMediaId(PracticeSessionItem item) {
+    private UUID recordedMediaId(PracticeResponse item) {
         try {
             return answerValidationService.requireRecordedMediaPublicId(item.getRendererKey(), item.getSavedPayload());
         } catch (PracticeSessionException ex) {
