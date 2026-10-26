@@ -87,7 +87,7 @@ class ExaminerScoringAiDetailTest {
         service = new ExaminerScoringService(workQueueRepository, assignmentRepository, scoringAnswerRepository,
                 examinerAnswerScoreRepository, gateway, eligibilityQueryService, answerPayloadDecoder,
                 contentReader, identityService, attemptService, mediaService, entityManager, null,
-                new ExaminerReviewVersionService(), null, null, null, null, null, aiDetails);
+                new ExaminerReviewVersionService(), null, null, null, null, com.pte.TestClocks.fixed(), aiDetails);
         examiner = new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("EXAMINER"));
         when(identityService.findActiveExaminers(examiner.tenantId(), List.of(examiner.userId())))
                 .thenReturn(List.of(new ExaminerIdentityView(examiner.userId(), "Examiner", "e@example.test")));

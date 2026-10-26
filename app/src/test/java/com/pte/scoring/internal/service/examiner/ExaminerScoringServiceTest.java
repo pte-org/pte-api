@@ -99,7 +99,7 @@ class ExaminerScoringServiceTest {
         service = new ExaminerScoringService(workQueueRepository, assignmentRepository, scoringAnswerRepository,
                 examinerAnswerScoreRepository, gateway, eligibilityQueryService, answerPayloadDecoder,
                 contentReader, identityService, attemptService, mediaService, entityManager, null,
-                new ExaminerReviewVersionService(), null, null, null, null, null, null);
+                new ExaminerReviewVersionService(), null, null, null, null, com.pte.TestClocks.fixed(), null);
     }
 
     @Test
