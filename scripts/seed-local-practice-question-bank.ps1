@@ -38,7 +38,7 @@ function Resolve-Secret {
 
 function Invoke-SeedApi {
     param(
-        [Parameter(Mandatory = $true)][ValidateSet("GET", "POST")][string]$Method,
+        [Parameter(Mandatory = $true)][ValidateSet("GET", "POST", "PATCH", "PUT", "DELETE")][string]$Method,
         [Parameter(Mandatory = $true)][string]$Path,
         [string]$Token,
         [AllowNull()][object]$Body
@@ -124,7 +124,7 @@ function Ensure-Question {
     }
     $status = "$($question.status)".ToUpperInvariant()
     if ($status -eq "DRAFT") {
-        $question = Invoke-SeedApi -Method POST -Path "/api/v1/questions/$($question.publicId)/publish" -Token $script:Token
+        $question = Invoke-SeedApi -Method PATCH -Path "/api/v1/questions/$($question.publicId)/status" -Body @{ action = "PUBLISH" } -Token $script:Token
     } elseif ($status -ne "APPROVED" -and $status -ne "PUBLISHED") {
         throw "Question '$title' is in status '$($question.status)'; resolve it before rerunning."
     }
