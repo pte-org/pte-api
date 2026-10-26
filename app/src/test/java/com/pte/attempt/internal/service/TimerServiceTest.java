@@ -54,7 +54,7 @@ class TimerServiceTest {
     void startTask_taskScopedItem_clearsActiveSectionAndSectionStartedAt() {
         ExamItemView item = taskScopedItem(0, "SPEAKING", "READ_ALOUD", 35, 40);
         attempt.setActiveSection("READING");
-        attempt.setSectionStartedAt(Instant.now().minusSeconds(30));
+        attempt.setSectionStartedAt(com.pte.TestClocks.fixed().instant().minusSeconds(30));
 
         timerService.startTask(attempt, item, List.of(item));
 
@@ -66,9 +66,9 @@ class TimerServiceTest {
     void startTask_firstReadingItem_setsActiveSectionAndStartsSectionClock() {
         List<ExamItemView> items = List.of(readingItem(0, 60), readingItem(1, 90), readingItem(2, 75));
 
-        Instant before = Instant.now();
+        Instant before = com.pte.TestClocks.fixed().instant();
         timerService.startTask(attempt, items.get(0), items);
-        Instant after = Instant.now();
+        Instant after = com.pte.TestClocks.fixed().instant();
 
         assertThat(attempt.getActiveSection()).isEqualTo("READING");
         assertThat(attempt.getSectionStartedAt()).isBetween(before, after);
@@ -94,9 +94,9 @@ class TimerServiceTest {
         List<ExamItemView> items = List.of(speaking, firstReading);
         timerService.startTask(attempt, speaking, items);
 
-        Instant before = Instant.now();
+        Instant before = com.pte.TestClocks.fixed().instant();
         timerService.startTask(attempt, firstReading, items);
-        Instant after = Instant.now();
+        Instant after = com.pte.TestClocks.fixed().instant();
 
         assertThat(attempt.getActiveSection()).isEqualTo("READING");
         assertThat(attempt.getSectionStartedAt()).isBetween(before, after);

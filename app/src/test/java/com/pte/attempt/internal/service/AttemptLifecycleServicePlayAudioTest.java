@@ -22,7 +22,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -104,14 +103,14 @@ class AttemptLifecycleServicePlayAudioTest {
         attempt.setPublicId(attemptPublicId);
         attempt.setStudentPublicId(studentPublicId);
         attempt.setTenantId(tenantId);
-        attempt.begin(java.time.Instant.now());
+        attempt.begin(com.pte.TestClocks.fixed().instant());
         attempt.setCurrentOrderIndex(0);
 
         attempt.setReplayPolicyType("LIMITED");
         attempt.setReplayPolicyLimit(2);
 
         item = FakeExam.withAudio(FakeExam.withId(FakeExam.view(0, "LISTENING", "SUMMARIZE_SPOKEN_TEXT", 0, 60),
-                pinnedItemPublicId), "https://res.cloudinary.com/test/signed-audio", Instant.now().plusSeconds(600));
+                pinnedItemPublicId), "https://res.cloudinary.com/test/signed-audio", com.pte.TestClocks.fixed().instant().plusSeconds(600));
         exam.add(item);
 
         when(attemptRepository.findByPublicIdAndStudentPublicId(attemptPublicId, studentPublicId))
@@ -179,7 +178,7 @@ class AttemptLifecycleServicePlayAudioTest {
     @DisplayName("expired audio URL throws before any replay-count logic runs")
     void playAudio_audioUrlExpired_throws() {
         replaceItem(FakeExam.withAudio(item, "https://api.cloudinary.com/v1_1/test/video/download?type=authenticated",
-                Instant.now().minusSeconds(1)));
+                com.pte.TestClocks.fixed().instant().minusSeconds(1)));
         when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
 
         assertThatThrownBy(() -> attemptLifecycleService.playAudio(attemptPublicId, pinnedItemPublicId, "req-1", caller))
@@ -194,7 +193,7 @@ class AttemptLifecycleServicePlayAudioTest {
     @DisplayName("public legacy audio remains playable when its stored zero-TTL timestamp is in the past")
     void playAudio_publicLegacyAudio_ignoresStaleExpiryTimestamp() {
         replaceItem(FakeExam.withAudio(item, "https://cdn.example.com/public/lecture.mp3",
-                Instant.now().minusSeconds(1)));
+                com.pte.TestClocks.fixed().instant().minusSeconds(1)));
         when(attemptRepository.findWithLockById(1L)).thenReturn(Optional.of(attempt));
         when(attemptRepository.save(any(ExamAttempt.class))).thenReturn(attempt);
 
@@ -238,7 +237,7 @@ class AttemptLifecycleServicePlayAudioTest {
     @Test
     @DisplayName("an already-completed attempt throws before acquiring the lock")
     void playAudio_attemptAlreadyComplete_throwsWithoutLocking() {
-        attempt.submit(java.time.Instant.now());
+        attempt.submit(com.pte.TestClocks.fixed().instant());
 
         assertThatThrownBy(() -> attemptLifecycleService.playAudio(attemptPublicId, pinnedItemPublicId, "req-1", caller))
             .isInstanceOf(AttemptAlreadyCompleteException.class);

@@ -37,13 +37,13 @@ class HeartbeatServiceTest {
     @Test
     @DisplayName("a heartbeat stamps lastSeenAt on the attempt row with a targeted update")
     void recordHeartbeat_stampsLastSeenAt() {
-        Instant before = Instant.now();
+        Instant before = com.pte.TestClocks.fixed().instant();
 
         heartbeatService.recordHeartbeat(attempt);
 
         ArgumentCaptor<Instant> seenAt = ArgumentCaptor.forClass(Instant.class);
         verify(attemptRepository).touchLastSeen(eq(1L), seenAt.capture());
-        assertThat(seenAt.getValue()).isBetween(before, Instant.now());
+        assertThat(seenAt.getValue()).isBetween(before, com.pte.TestClocks.fixed().instant());
     }
 
     @Test
