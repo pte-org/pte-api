@@ -13,9 +13,9 @@ ALTER TABLE practice_sessions ADD CONSTRAINT ck_practice_sessions_question_count
 
 -- pre_record_seconds is the template's gap before recording, not the exam's PinnedItem.prepSeconds
 -- (which adds preListen and prompt audio length).
-ALTER TABLE practice_session_items ADD COLUMN IF NOT EXISTS pre_listen_seconds INTEGER;
-ALTER TABLE practice_session_items ADD COLUMN IF NOT EXISTS pre_record_seconds INTEGER;
-ALTER TABLE practice_session_items ADD COLUMN IF NOT EXISTS response_seconds INTEGER;
+ALTER TABLE practice_responses ADD COLUMN IF NOT EXISTS pre_listen_seconds INTEGER;
+ALTER TABLE practice_responses ADD COLUMN IF NOT EXISTS pre_record_seconds INTEGER;
+ALTER TABLE practice_responses ADD COLUMN IF NOT EXISTS response_seconds INTEGER;
 
 -- Unfinished sessions created under the old 60-minute limit would expire as soon as they are opened.
 -- Null deadline means "never expires"; EXPIRED, COMPLETED and DISCARDED sessions keep their history.

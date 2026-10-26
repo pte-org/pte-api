@@ -44,8 +44,10 @@ curl http://localhost:8091/actuator/health
 
 ### Populating test data for end-to-end testing
 
-Flyway applies one migration, `V1__baseline.sql` (the complete schema plus reference data and a demo seed), so an empty
-database comes up ready to log in:
+Flyway applies `V1__baseline.sql` (the base schema plus reference data and a demo seed), followed by the
+practice migrations in order: `V2__drop_practice_email_identity.sql`, `V3__practice_timing_mode.sql`,
+`V4__practice_skill_sessions_and_mock_tests.sql`, and `V5__practice_student_profiles.sql`.
+An empty database comes up ready to log in:
 
 - `admin@test.local` (PLATFORM_ADMIN) and `host.e2e@test.local` (HOST_ADMIN of the `e2e` organization), BCrypt hashes
   only. The password is shared out of band; never write it into the repository.

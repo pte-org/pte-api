@@ -39,7 +39,7 @@ ALTER TABLE practice_sessions ADD COLUMN IF NOT EXISTS mock_test_id BIGINT REFER
 ALTER TABLE practice_sessions ADD CONSTRAINT ck_practice_sessions_kind
     CHECK (kind IS NULL OR kind IN ('TASK', 'SKILL', 'MOCK_TEST'));
 
--- A full mock test has 65 questions; the 1..50 limit of V133 is the per-task-type choice of the other kinds.
+-- A full mock test has 65 questions; the 1..50 limit of V3 is the per-task-type choice of the other kinds.
 ALTER TABLE practice_sessions DROP CONSTRAINT IF EXISTS ck_practice_sessions_question_count;
 ALTER TABLE practice_sessions ADD CONSTRAINT ck_practice_sessions_question_count
     CHECK (question_count IS NULL OR question_count >= 1

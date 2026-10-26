@@ -4,6 +4,7 @@
 -- Existing practice sessions stay owned by student_public_id; tenantless shell users created by the old flow
 -- have no password and can no longer sign in.
 
+DROP TABLE IF EXISTS otp_challenges;
 DROP TABLE IF EXISTS practice_email_challenges;
 DROP TABLE IF EXISTS practice_identity_memberships;
 DROP TABLE IF EXISTS practice_identities;
