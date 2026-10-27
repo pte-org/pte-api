@@ -19,8 +19,7 @@ import java.util.UUID;
 
 /**
  * The leaf level of a Host's academic hierarchy ("Lớp"), under a {@link Program}
- * (Khối/Khóa); its students and lecturers are the {@link ClassStudent} and
- * {@link ClassLecturer} child tables. Named {@code TrainingClass} rather than
+ * (Khối/Khóa); its students are stored in the {@link ClassStudent} child table. Named {@code TrainingClass} rather than
  * {@code Class}: that name would shadow {@code java.lang.Class} and is a keyword
  * in HQL. {@code organizationId} is the owning organization's public id, copied
  * from the program, so ownership checks need no join through the program.

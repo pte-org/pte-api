@@ -60,6 +60,7 @@ class CloudinaryRequestSigner {
     private String fileFormat(String contentType) {
         return switch (contentType) {
             case "audio/wav" -> "wav";
+            case "audio/mpeg" -> "mp3";
             case "image/png" -> "png";
             case "image/jpeg" -> "jpg";
             case "image/webp" -> "webp";

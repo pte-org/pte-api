@@ -106,9 +106,10 @@ class CloudinaryUploadRequester {
     private void validateContentType(String contentType, String assetKind) {
         boolean allowed = MediaConstants.IMAGE_PROMPT.equals(assetKind)
                 ? CloudinaryMediaService.IMAGE_TYPES.contains(contentType)
-                : (MediaConstants.AUDIO_PROMPT.equals(assetKind)
-                        || MediaConstants.STUDENT_RESPONSE_AUDIO.equals(assetKind))
-                                && CloudinaryMediaService.AUDIO_TYPES.contains(contentType);
+                : MediaConstants.AUDIO_PROMPT.equals(assetKind)
+                        ? CloudinaryMediaService.AUDIO_TYPES.contains(contentType)
+                        : MediaConstants.STUDENT_RESPONSE_AUDIO.equals(assetKind)
+                                && CloudinaryMediaService.RESPONSE_AUDIO_TYPES.contains(contentType);
         if (!allowed) {
             throw new UnsupportedContentTypeException();
         }

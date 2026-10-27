@@ -155,6 +155,31 @@ class CloudinaryMediaServiceTest {
     }
 
     @Test
+    void academicStaffCanRequestMp3AudioPrompt() {
+        when(repository.save(any(MediaAsset.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        CloudinaryUploadResponse response = service().requestUpload(
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_MPEG, MediaConstants.AUDIO_PROMPT, 1024L),
+                new CurrentUser(UUID.randomUUID(), null, List.of("ACADEMIC_STAFF")));
+
+        assertThat(response.resourceType()).isEqualTo("video");
+        ArgumentCaptor<MediaAsset> captor = ArgumentCaptor.forClass(MediaAsset.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getContentType()).isEqualTo(MediaConstants.AUDIO_MPEG);
+    }
+
+    @Test
+    void studentResponseUploadRejectsMp3() {
+        CloudinaryMediaService service = service();
+
+        assertThatThrownBy(() -> service.requestUpload(
+                new CloudinaryUploadRequest(MediaConstants.AUDIO_MPEG, MediaConstants.STUDENT_RESPONSE_AUDIO, 1024L),
+                new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("STUDENT"))))
+                .isInstanceOf(com.pte.media.internal.exception.UnsupportedContentTypeException.class);
+        verifyNoInteractions(repository);
+    }
+
+    @Test
     void platformManagerCannotRequestAuthoringMedia() {
         assertThatThrownBy(() -> service().requestUpload(
                 new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.AUDIO_PROMPT, 1024L),
