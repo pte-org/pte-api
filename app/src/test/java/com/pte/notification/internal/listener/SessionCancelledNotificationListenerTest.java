@@ -1,7 +1,6 @@
 package com.pte.notification.internal.listener;
 
 import com.pte.identity.IdentityService;
-import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
 import com.pte.notification.domain.enums.NotificationType;
@@ -50,22 +49,18 @@ class SessionCancelledNotificationListenerTest {
         User first = new User();
         first.setPublicId(firstId);
         first.setEmail("first@example.com");
-        first.setTenantId(tenantId);
         first.setStatus(UserStatus.ACTIVE);
-        first.setRoles(java.util.Set.of(Role.PROCTOR));
         User second = new User();
         second.setPublicId(secondId);
         second.setEmail("second@example.com");
-        second.setTenantId(tenantId);
         second.setStatus(UserStatus.ACTIVE);
-        second.setRoles(java.util.Set.of(Role.EXAMINER));
         when(sessionService.findAssignedProctorPublicIds(sessionId, tenantId)).thenReturn(List.of(firstId));
         when(scoringService.findAssignedExaminerPublicIds(tenantId, sessionId))
                 .thenReturn(List.of(secondId, firstId));
-        when(identityService.findById(firstId)).thenReturn(Optional.of(first));
-        when(identityService.findById(secondId)).thenReturn(Optional.of(second));
+        when(identityService.findActiveStaffInTenant(firstId, tenantId)).thenReturn(Optional.of(first));
+        when(identityService.findActiveStaffInTenant(secondId, tenantId)).thenReturn(Optional.of(second));
 
-        new SessionCancelledNotificationListener(sessionService, scoringService, identityService, dispatchService)
+        new SessionCancelledNotificationListener(sessionService, scoringService, identityService, dispatchService, com.pte.TestClocks.fixed())
                 .onSessionCancelled(new SessionCancelledEvent(sessionId, tenantId, "Exam A", Instant.now()));
 
         ArgumentCaptor<NotificationType> types = ArgumentCaptor.forClass(NotificationType.class);

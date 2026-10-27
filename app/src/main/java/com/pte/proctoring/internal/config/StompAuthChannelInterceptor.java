@@ -18,6 +18,7 @@ import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.stereotype.Component;
 
 import java.security.Principal;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -48,16 +49,19 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private final ProctorConnectionRegistry connectionRegistry;
     private final SessionService sessionService;
     private final IdentityService identityService;
+    private final Clock clock;
 
     public StompAuthChannelInterceptor(
             JwtDecoder jwtDecoder,
             ProctorConnectionRegistry connectionRegistry,
             SessionService sessionService,
-            IdentityService identityService) {
+            IdentityService identityService,
+            Clock clock) {
         this.jwtDecoder = jwtDecoder;
         this.connectionRegistry = connectionRegistry;
         this.sessionService = sessionService;
         this.identityService = identityService;
+        this.clock = clock;
     }
 
     @Override
@@ -163,7 +167,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             throw new IllegalArgumentException("Unregistered transport session");
         }
         var conn = connOpt.get();
-        if (conn.isExpired(Instant.now())) {
+        if (conn.isExpired(clock.instant())) {
             throw new IllegalArgumentException("Transport session token expired");
         }
 

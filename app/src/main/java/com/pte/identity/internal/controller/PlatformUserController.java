@@ -1,8 +1,8 @@
 package com.pte.identity.internal.controller;
 
-import com.pte.identity.internal.dto.request.PlatformUserCreateRequest;
-import com.pte.identity.internal.dto.request.PlatformUserRoleUpdateRequest;
-import com.pte.identity.internal.dto.request.UpdatePlatformUserProfileRequest;
+import com.pte.identity.internal.dto.request.user.PlatformUserCreateRequest;
+import com.pte.identity.internal.dto.request.user.PlatformUserRoleUpdateRequest;
+import com.pte.identity.internal.dto.request.profile.UpdatePlatformUserProfileRequest;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.service.PlatformUserLifecycleService;
 import com.pte.identity.internal.service.PlatformUserService;
@@ -12,9 +12,9 @@ import com.pte.shared.web.ApiResponse;
 import com.pte.shared.web.PagedResult;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import com.pte.identity.internal.dto.request.user.UserStatusRequest;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -78,24 +78,16 @@ public class PlatformUserController {
         return ApiResponse.success(platformUserLifecycleService.resetPassword(publicId, currentUser()));
     }
 
-    @PostMapping("/{publicId}/suspend")
-    public ApiResponse<UserResponse> suspend(@PathVariable UUID publicId) {
-        return ApiResponse.success(platformUserService.suspend(publicId, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/reactivate")
-    public ApiResponse<UserResponse> reactivate(@PathVariable UUID publicId) {
-        return ApiResponse.success(platformUserService.reactivate(publicId, currentUser()));
-    }
-
-    @DeleteMapping("/{publicId}")
-    public ApiResponse<UserResponse> archive(@PathVariable UUID publicId) {
-        return ApiResponse.success(platformUserLifecycleService.archive(publicId, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/restore")
-    public ApiResponse<UserResponse> restore(@PathVariable UUID publicId) {
-        return ApiResponse.success(platformUserLifecycleService.restore(publicId, currentUser()));
+    @PatchMapping("/{publicId}/status")
+    public ApiResponse<UserResponse> changeStatus(@PathVariable UUID publicId,
+            @Valid @RequestBody UserStatusRequest request) {
+        CurrentUser caller = currentUser();
+        return ApiResponse.success(switch (request.action()) {
+            case SUSPEND -> platformUserService.suspend(publicId, caller);
+            case REACTIVATE -> platformUserService.reactivate(publicId, caller);
+            case ARCHIVE -> platformUserLifecycleService.archive(publicId, caller);
+            case RESTORE -> platformUserLifecycleService.restore(publicId, caller);
+        });
     }
 
     private CurrentUser currentUser() {

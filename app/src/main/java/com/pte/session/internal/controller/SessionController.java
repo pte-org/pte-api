@@ -9,16 +9,18 @@ import com.pte.session.internal.dto.request.CreateExamDraftRequest;
 import com.pte.session.internal.dto.request.PatchExamDraftRequest;
 import com.pte.session.internal.dto.request.PatchExamPolicyRequest;
 import com.pte.session.internal.dto.request.PatchExamScheduleRequest;
-import com.pte.session.internal.dto.response.AudiencePreviewResponse;
-import com.pte.session.internal.dto.response.AudienceSourceResponse;
+import com.pte.session.internal.dto.response.audience.AudiencePreviewResponse;
+import com.pte.session.internal.dto.response.audience.AudienceSourceResponse;
 import com.pte.session.internal.dto.response.ExamPreflightResponse;
 import com.pte.session.internal.dto.response.ExamPreviewResponse;
 import com.pte.session.internal.dto.response.GenerationJobResponse;
 import com.pte.session.internal.dto.response.SessionResponse;
-import com.pte.session.internal.exception.LegacySessionCreateRequiresNewWorkflowException;
+import com.pte.session.internal.exception.draft.LegacySessionCreateRequiresNewWorkflowException;
 import com.pte.session.internal.service.SessionLifecycleService;
-import com.pte.session.internal.service.ExamOrchestrationService;
-import com.pte.session.internal.service.SessionExamPreviewService;
+import com.pte.session.internal.service.audience.ExamAudienceService;
+import com.pte.session.internal.service.draft.ExamDraftService;
+import com.pte.session.internal.service.draft.ExamPublishService;
+import com.pte.session.internal.service.draft.SessionExamPreviewService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -26,6 +28,7 @@ import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import com.pte.session.internal.dto.request.SessionStatusRequest;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -51,14 +54,18 @@ import java.util.UUID;
 public class SessionController {
 
     private final SessionLifecycleService sessionLifecycleService;
-    private final ExamOrchestrationService examOrchestrationService;
+    private final ExamDraftService draftService;
+    private final ExamAudienceService audienceService;
+    private final ExamPublishService publishService;
     private final SessionExamPreviewService sessionExamPreviewService;
 
     public SessionController(SessionLifecycleService sessionLifecycleService,
-            ExamOrchestrationService examOrchestrationService,
+            ExamDraftService draftService, ExamAudienceService audienceService, ExamPublishService publishService,
             SessionExamPreviewService sessionExamPreviewService) {
         this.sessionLifecycleService = sessionLifecycleService;
-        this.examOrchestrationService = examOrchestrationService;
+        this.draftService = draftService;
+        this.audienceService = audienceService;
+        this.publishService = publishService;
         this.sessionExamPreviewService = sessionExamPreviewService;
     }
 
@@ -73,72 +80,74 @@ public class SessionController {
 
     @PostMapping("/drafts")
     public ApiResponse<SessionResponse> createDraft(@Valid @RequestBody CreateExamDraftRequest request) {
-        return ApiResponse.success(examOrchestrationService.createDraft(request, currentUser()));
+        return ApiResponse.success(draftService.createDraft(request, currentUser()));
     }
 
     @PatchMapping("/{publicId}")
     public ApiResponse<SessionResponse> updateDraft(@PathVariable UUID publicId,
             @Valid @RequestBody PatchExamDraftRequest request) {
-        return ApiResponse.success(examOrchestrationService.updateDraft(publicId, request, currentUser()));
+        return ApiResponse.success(draftService.updateDraft(publicId, request, currentUser()));
     }
 
     @PostMapping("/{publicId}/audience-sources")
     public ApiResponse<AudienceSourceResponse> addAudienceSource(@PathVariable UUID publicId,
             @Valid @RequestBody AudienceSourceRequest request) {
-        return ApiResponse.success(examOrchestrationService.addSource(publicId, request, currentUser()));
+        return ApiResponse.success(audienceService.addSource(publicId, request, currentUser()));
     }
 
     @PostMapping("/{publicId}/audience-sources/bulk")
     public ApiResponse<List<AudienceSourceResponse>> addAudienceSources(@PathVariable UUID publicId,
             @Valid @RequestBody AddAudienceSourcesRequest request) {
-        return ApiResponse.success(examOrchestrationService.addSources(publicId, request.sources(), currentUser()));
+        return ApiResponse.success(audienceService.addSources(publicId, request.sources(), currentUser()));
     }
 
     @GetMapping("/{publicId}/audience-sources")
     public ApiResponse<List<AudienceSourceResponse>> listAudienceSources(@PathVariable UUID publicId) {
-        return ApiResponse.success(examOrchestrationService.listSources(publicId, currentUser()));
+        return ApiResponse.success(audienceService.listSources(publicId, currentUser()));
     }
 
     @DeleteMapping("/{publicId}/audience-sources/{sourcePublicId}")
     public ApiResponse<Void> removeAudienceSource(@PathVariable UUID publicId, @PathVariable UUID sourcePublicId) {
-        examOrchestrationService.removeSource(publicId, sourcePublicId, currentUser());
+        audienceService.removeSource(publicId, sourcePublicId, currentUser());
         return ApiResponse.success(null);
     }
 
     @PostMapping("/{publicId}/audience-preview")
     public ApiResponse<AudiencePreviewResponse> previewAudience(@PathVariable UUID publicId) {
-        return ApiResponse.success(examOrchestrationService.previewAudience(publicId, currentUser()));
+        return ApiResponse.success(audienceService.previewAudience(publicId, currentUser()));
     }
 
     @PostMapping("/{publicId}/preflight")
     public ApiResponse<ExamPreflightResponse> preflight(@PathVariable UUID publicId) {
-        return ApiResponse.success(examOrchestrationService.preflight(publicId, currentUser()));
+        return ApiResponse.success(publishService.preflight(publicId, currentUser()));
     }
 
     @PostMapping("/{publicId}/generate")
     public ApiResponse<GenerationJobResponse> generate(@PathVariable UUID publicId,
             @RequestParam String idempotencyKey) {
-        return ApiResponse.success(examOrchestrationService.generate(publicId, idempotencyKey, currentUser()));
+        return ApiResponse.success(publishService.generate(publicId, idempotencyKey, currentUser()));
     }
 
     @GetMapping("/{publicId}/generation")
     public ApiResponse<GenerationJobResponse> generation(@PathVariable UUID publicId) {
-        return ApiResponse.success(examOrchestrationService.generation(publicId, currentUser()));
+        return ApiResponse.success(publishService.generation(publicId, currentUser()));
     }
 
-    @PostMapping("/{publicId}/publish")
-    public ApiResponse<SessionResponse> publish(@PathVariable UUID publicId) {
-        return ApiResponse.success(examOrchestrationService.publish(publicId, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/cancel")
-    public ApiResponse<SessionResponse> cancel(@PathVariable UUID publicId) {
-        return ApiResponse.success(examOrchestrationService.cancel(publicId, currentUser()));
+    @PatchMapping("/{publicId}/status")
+    public ApiResponse<SessionResponse> changeStatus(@PathVariable UUID publicId,
+            @Valid @RequestBody SessionStatusRequest request) {
+        CurrentUser caller = currentUser();
+        return ApiResponse.success(switch (request.action()) {
+            case PUBLISH -> publishService.publish(publicId, caller);
+            case CANCEL -> publishService.cancel(publicId, caller);
+            case OPEN -> sessionLifecycleService.open(publicId, caller);
+            case CLOSE -> sessionLifecycleService.close(publicId, caller);
+        });
     }
 
     @DeleteMapping("/{publicId}")
     public ApiResponse<Void> deleteDraft(@PathVariable UUID publicId) {
-        examOrchestrationService.deleteDraft(publicId, currentUser());
+        draftService.deleteDraft(publicId, currentUser());
         return ApiResponse.success(null);
     }
 
@@ -168,16 +177,6 @@ public class SessionController {
     public ApiResponse<SessionResponse> patchSchedule(@PathVariable UUID publicId,
             @Valid @RequestBody PatchExamScheduleRequest request) {
         return ApiResponse.success(sessionLifecycleService.patchSchedule(publicId, request, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/open")
-    public ApiResponse<SessionResponse> open(@PathVariable UUID publicId) {
-        return ApiResponse.success(sessionLifecycleService.open(publicId, currentUser()));
-    }
-
-    @PostMapping("/{publicId}/close")
-    public ApiResponse<SessionResponse> close(@PathVariable UUID publicId) {
-        return ApiResponse.success(sessionLifecycleService.close(publicId, currentUser()));
     }
 
     @PatchMapping("/{publicId}/subscription")

@@ -9,7 +9,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -23,11 +22,6 @@ import java.util.UUID;
 public class PracticeAnswerValidationService {
 
     private final ObjectMapper objectMapper;
-
-    /** Kept for focused unit tests that exercise the validation boundary alone. */
-    public PracticeAnswerValidationService() {
-        this(JsonMapper.builder().build());
-    }
 
     @Autowired
     public PracticeAnswerValidationService(ObjectMapper objectMapper) {
@@ -52,7 +46,8 @@ public class PracticeAnswerValidationService {
 
     public void validate(String rendererKey, Integer answerSchemaVersion, String payload,
             ResponseConfidence confidence) {
-        validatePayload(rendererKey, answerSchemaVersion, payload, confidence, true);
+        // Practice no longer asks how confident the student is, so an answer never needs a confidence.
+        validatePayload(rendererKey, answerSchemaVersion, payload, confidence, false);
     }
 
     /** Validates a non-empty draft while allowing confidence to be selected later. */

@@ -41,7 +41,7 @@ public class InboxAnnouncementStore {
                 .addValue("affectedUntil", utc(affectedUntil), Types.TIMESTAMP_WITH_TIMEZONE)
                 .addValue("correctionOf", correctionOfPublicId, Types.OTHER);
         return jdbc.query("""
-                INSERT INTO notification_inbox_announcements
+                INSERT INTO notification_announcements
                   (public_id,author_user_public_id,title,body,category,importance,affected_from,affected_until,
                    correction_of_public_id,version,created_at,updated_at)
                 VALUES (:publicId,:author,:title,:body,:category,:importance,:affectedFrom,:affectedUntil,
@@ -76,7 +76,7 @@ public class InboxAnnouncementStore {
             params.addValue("search", "%" + normalized + "%");
         }
         long total = jdbc.queryForObject("""
-                SELECT count(*) FROM notification_inbox_announcements
+                SELECT count(*) FROM notification_announcements
                 WHERE deleted=FALSE
                 """ + filter, params, Long.class);
         params.addValue("limit", limit).addValue("offset", offset);
@@ -93,7 +93,7 @@ public class InboxAnnouncementStore {
             InboxCategory category, InboxImportance importance, Instant affectedFrom, Instant affectedUntil,
             Instant now) {
         return jdbc.update("""
-                UPDATE notification_inbox_announcements
+                UPDATE notification_announcements
                 SET title=:title,body=:body,category=:category,importance=:importance,
                     affected_from=:affectedFrom,affected_until=:affectedUntil,
                     version=version+1,updated_at=:now
@@ -110,7 +110,7 @@ public class InboxAnnouncementStore {
 
     public boolean deleteDraft(UUID publicId, long expectedVersion, Instant now) {
         return jdbc.update("""
-                UPDATE notification_inbox_announcements
+                UPDATE notification_announcements
                 SET deleted=TRUE,version=version+1,updated_at=:now
                 WHERE public_id=:publicId AND deleted=FALSE AND published_content_public_id IS NULL
                   AND version=:expectedVersion
@@ -121,7 +121,7 @@ public class InboxAnnouncementStore {
     public Optional<AnnouncementRow> markPublished(UUID publicId, long expectedVersion, UUID contentPublicId,
             Instant publishedAt) {
         int changed = jdbc.update("""
-                UPDATE notification_inbox_announcements
+                UPDATE notification_announcements
                 SET published_content_public_id=:contentId,published_at=:publishedAt,
                     version=version+1,updated_at=:publishedAt
                 WHERE public_id=:publicId AND deleted=FALSE AND published_content_public_id IS NULL
@@ -141,18 +141,18 @@ public class InboxAnnouncementStore {
 
     private String select() {
         String stats = """
-                ,COALESCE((SELECT count(*) FROM notification_inbox_deliveries d
+                ,COALESCE((SELECT count(*) FROM notification_recipients d
                     WHERE d.content_public_id=a.published_content_public_id AND d.deleted=FALSE),0) AS audience_count
-                ,COALESCE((SELECT count(*) FROM notification_inbox_deliveries d
+                ,COALESCE((SELECT count(*) FROM notification_recipients d
                     WHERE d.content_public_id=a.published_content_public_id
                       AND d.status IN ('PENDING','PROCESSING') AND d.deleted=FALSE),0) AS pending_count
-                ,COALESCE((SELECT count(*) FROM notification_inbox_deliveries d
+                ,COALESCE((SELECT count(*) FROM notification_recipients d
                     WHERE d.content_public_id=a.published_content_public_id AND d.status='DELIVERED' AND d.deleted=FALSE),0) AS delivered_count
-                ,COALESCE((SELECT count(*) FROM notification_inbox_deliveries d
+                ,COALESCE((SELECT count(*) FROM notification_recipients d
                     WHERE d.content_public_id=a.published_content_public_id AND d.status='FAILED' AND d.deleted=FALSE),0) AS failed_count
-                ,COALESCE((SELECT count(*) FROM notification_inbox_deliveries d
+                ,COALESCE((SELECT count(*) FROM notification_recipients d
                     WHERE d.content_public_id=a.published_content_public_id AND d.status='SUPPRESSED' AND d.deleted=FALSE),0) AS suppressed_count
-                ,COALESCE((SELECT count(*) FROM notification_inbox_items i
+                ,COALESCE((SELECT count(*) FROM notification_recipients i
                     WHERE i.content_public_id=a.published_content_public_id AND i.read_at IS NOT NULL AND i.deleted=FALSE),0) AS read_count
                 """;
         return """
@@ -160,7 +160,7 @@ public class InboxAnnouncementStore {
                        a.affected_from,a.affected_until,a.published_content_public_id,a.published_at,
                        a.correction_of_public_id,a.version,a.created_at,a.updated_at
                 """ + stats + """
-                FROM notification_inbox_announcements a
+                FROM notification_announcements a
                 """;
     }
 

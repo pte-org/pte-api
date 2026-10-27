@@ -2,13 +2,13 @@ package com.pte.scoring;
 
 import com.pte.scoring.dto.response.AiEligibleAttemptView;
 import com.pte.scoring.dto.response.ScoredAnswerView;
-import com.pte.scoring.internal.service.ExaminerWorkQueryService;
-import com.pte.scoring.internal.service.PracticeAiScoringService;
-import com.pte.scoring.internal.service.ScorePublicationLockService;
-import com.pte.scoring.internal.service.ScoreSourceSelectionService;
-import com.pte.scoring.internal.service.ScoringEligibilityQueryService;
-import com.pte.scoring.internal.service.ScoringReviewReadQueryService;
-import com.pte.scoring.internal.service.ScoredAnswerQueryService;
+import com.pte.scoring.internal.service.examiner.ExaminerWorkQueryService;
+import com.pte.scoring.internal.service.ai.PracticeAiScoringService;
+import com.pte.scoring.internal.service.selection.ScorePublicationLockService;
+import com.pte.scoring.internal.service.selection.ScoreSourceSelectionService;
+import com.pte.scoring.internal.service.staff.ScoringEligibilityQueryService;
+import com.pte.scoring.internal.service.review.ScoringReviewReadQueryService;
+import com.pte.scoring.internal.service.selection.ScoredAnswerQueryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,9 +51,7 @@ class ScoringServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ScoringService(scoredAnswerQueryService, scoringEligibilityQueryService,
-                examinerWorkQueryService, scoringReviewReadQueryService,
-                scoreSourceSelectionService, scorePublicationLockService);
+        service = new ScoringService(scoredAnswerQueryService, scoringEligibilityQueryService, examinerWorkQueryService, scoringReviewReadQueryService, scoreSourceSelectionService, scorePublicationLockService, null, null);
     }
 
     @Test

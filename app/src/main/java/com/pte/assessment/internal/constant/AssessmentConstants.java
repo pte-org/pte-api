@@ -38,8 +38,6 @@ public final class AssessmentConstants {
     public static final String PINNED_QUESTION_OPTIONS_DECODE_FAILED = "Pinned question options could not be decoded";
     public static final String EXAMINER_PROMPT_DEPENDENCIES_NOT_CONFIGURED =
             "Examiner prompt dependencies are not configured";
-    public static final String TEMPLATE_FEASIBILITY_DEPENDENCIES_NOT_CONFIGURED =
-            "Template feasibility dependencies are not configured";
     public static final String SNAPSHOT_RUNTIME_CONTRACT_INVALID = "EXAM_CONFIGURATION_NOT_COMPATIBLE";
     public static final String SNAPSHOT_RUNTIME_CONTRACT_MESSAGE =
             "This exam is not currently compatible with the configured task runtime. Please ask an administrator to review the exam configuration.";

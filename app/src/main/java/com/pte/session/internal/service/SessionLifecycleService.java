@@ -143,11 +143,11 @@ public class SessionLifecycleService {
         sessionRevocationService.cancelScheduledSessionsBySubscription(subscriptionId, tenantId);
     }
 
-    ExamSession findOwned(UUID publicId, CurrentUser caller) {
+    public ExamSession findOwned(UUID publicId, CurrentUser caller) {
         return sessionAccess.findOwned(publicId, caller);
     }
 
-    ExamSession findOwnedWithLock(UUID publicId, CurrentUser caller) {
+    public ExamSession findOwnedWithLock(UUID publicId, CurrentUser caller) {
         return sessionAccess.findOwnedWithLock(publicId, caller);
     }
 

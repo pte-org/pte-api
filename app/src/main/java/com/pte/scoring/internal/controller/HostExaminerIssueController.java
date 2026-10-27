@@ -2,7 +2,7 @@ package com.pte.scoring.internal.controller;
 
 import com.pte.scoring.dto.request.ResolveGradingIssueRequest;
 import com.pte.scoring.dto.response.ExaminerGradingIssueResponse;
-import com.pte.scoring.internal.service.ExaminerWorkflowCommandService;
+import com.pte.scoring.internal.service.examiner.ExaminerWorkflowCommandService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;

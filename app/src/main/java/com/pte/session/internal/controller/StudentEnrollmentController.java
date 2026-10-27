@@ -1,7 +1,7 @@
 package com.pte.session.internal.controller;
 
-import com.pte.session.internal.dto.response.StudentEnrollmentResponse;
-import com.pte.session.internal.service.EnrollmentService;
+import com.pte.session.internal.dto.response.enrollment.StudentEnrollmentResponse;
+import com.pte.session.internal.service.enrollment.EnrollmentService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;

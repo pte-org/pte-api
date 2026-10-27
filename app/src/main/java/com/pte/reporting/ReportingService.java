@@ -1,7 +1,7 @@
 package com.pte.reporting;
 
-import com.pte.reporting.domain.AttemptReport;
-import com.pte.reporting.internal.repository.AttemptReportRepository;
+import com.pte.reporting.domain.ExamResult;
+import com.pte.reporting.internal.repository.ExamResultRepository;
 import com.pte.reporting.internal.service.AttemptScoreSummary;
 import com.pte.reporting.internal.service.ReportSnapshotCodec;
 import com.pte.reporting.internal.service.SkillScore;
@@ -17,11 +17,11 @@ import java.util.UUID;
 @Service
 public class ReportingService {
 
-    private final AttemptReportRepository attemptReportRepository;
+    private final ExamResultRepository examResultRepository;
     private final ReportSnapshotCodec snapshotCodec;
 
-    public ReportingService(AttemptReportRepository attemptReportRepository, ReportSnapshotCodec snapshotCodec) {
-        this.attemptReportRepository = attemptReportRepository;
+    public ReportingService(ExamResultRepository examResultRepository, ReportSnapshotCodec snapshotCodec) {
+        this.examResultRepository = examResultRepository;
         this.snapshotCodec = snapshotCodec;
     }
 
@@ -31,7 +31,7 @@ public class ReportingService {
         if (tenantId == null || studentPublicId == null || attemptPublicIds == null || attemptPublicIds.isEmpty()) {
             return List.of();
         }
-        return attemptReportRepository.findByTenantIdAndStudentPublicIdAndDeletedFalseAndAttemptPublicIdIn(
+        return examResultRepository.findByTenantIdAndStudentPublicIdAndDeletedFalseAndAttemptPublicIdIn(
                         tenantId, studentPublicId, attemptPublicIds.stream().distinct().toList())
                 .stream().map(this::toSummaryWithSnapshot).toList();
     }
@@ -42,11 +42,11 @@ public class ReportingService {
         if (tenantId == null || studentPublicId == null) {
             return List.of();
         }
-        return attemptReportRepository.findPublishedImmutableForStudent(tenantId, studentPublicId, from, to)
+        return examResultRepository.findPublishedImmutableForStudent(tenantId, studentPublicId, from, to)
                 .stream().map(this::toSummaryWithSnapshot).toList();
     }
 
-    private StudentReportSummaryView toSummaryWithSnapshot(AttemptReport report) {
+    private StudentReportSummaryView toSummaryWithSnapshot(ExamResult report) {
         if (report.getReportSnapshotJson() == null) {
             return new StudentReportSummaryView(report.getAttemptPublicId(), report.getSessionPublicId(),
                     report.isPublished(), report.getPublishedAt(), false, null, List.of());

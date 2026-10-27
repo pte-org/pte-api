@@ -2,10 +2,10 @@ package com.pte.attempt.internal.service;
 
 import com.pte.attempt.domain.AttemptAnswer;
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedItem;
+import com.pte.attempt.internal.service.cache.ExamItemView;
 import com.pte.attempt.domain.enums.AnswerStatus;
 import com.pte.attempt.ResponseConfidence;
-import com.pte.attempt.internal.exception.AnswerAlreadySubmittedException;
+import com.pte.attempt.internal.exception.answer.AnswerAlreadySubmittedException;
 import com.pte.attempt.internal.repository.AttemptAnswerRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -34,19 +34,20 @@ public class AnswerSubmitService {
      * persists {@code false} — there is no server-side deadline auto-expiry.
      */
     @Transactional
-    public AttemptAnswer submit(ExamAttempt attempt, PinnedItem item, String payload) {
+    public AttemptAnswer submit(ExamAttempt attempt, ExamItemView item, String payload) {
         return submit(attempt, item, payload, null);
     }
 
     /** Additive confidence-aware path shared by official compatibility and practice execution. */
     @Transactional
-    public AttemptAnswer submit(ExamAttempt attempt, PinnedItem item, String payload,
+    public AttemptAnswer submit(ExamAttempt attempt, ExamItemView item, String payload,
             ResponseConfidence confidence) {
-        AttemptAnswer answer = attemptAnswerRepository.findByAttemptIdAndPinnedItemId(attempt.getId(), item.getId())
+        AttemptAnswer answer = attemptAnswerRepository.findByAttemptIdAndItemPublicId(attempt.getId(), item.publicId())
                 .orElseGet(() -> {
                     AttemptAnswer created = new AttemptAnswer();
                     created.setAttempt(attempt);
-                    created.setPinnedItem(item);
+                    created.setItemPublicId(item.publicId());
+                    created.setItemOrderIndex(item.orderIndex());
                     return created;
                 });
         answer.setPayload(payload);
@@ -62,8 +63,8 @@ public class AnswerSubmitService {
 
     /** Creates an empty answer only when the student skips an item with no saved response. */
     @Transactional
-    public AttemptAnswer submitIfAbsent(ExamAttempt attempt, PinnedItem item, String payload) {
-        return attemptAnswerRepository.findByAttemptIdAndPinnedItemId(attempt.getId(), item.getId())
+    public AttemptAnswer submitIfAbsent(ExamAttempt attempt, ExamItemView item, String payload) {
+        return attemptAnswerRepository.findByAttemptIdAndItemPublicId(attempt.getId(), item.publicId())
                 .orElseGet(() -> submit(attempt, item, payload));
     }
 }

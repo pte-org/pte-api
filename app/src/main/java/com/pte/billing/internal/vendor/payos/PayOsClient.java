@@ -2,7 +2,7 @@ package com.pte.billing.internal.vendor.payos;
 
 import com.pte.billing.domain.Order;
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.exception.PayOsException;
+import com.pte.billing.internal.exception.order.PayOsException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -17,7 +17,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
-import java.time.Instant;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -34,12 +34,15 @@ public class PayOsClient {
     private final RestClient restClient;
     private final PayOsProperties properties;
     private final JsonMapper jsonMapper;
+    private final Clock clock;
 
     public PayOsClient(@Qualifier("payOsRestClient") RestClient restClient,
-            PayOsProperties properties, JsonMapper jsonMapper) {
+            PayOsProperties properties, JsonMapper jsonMapper,
+            Clock clock) {
         this.restClient = restClient;
         this.properties = properties;
         this.jsonMapper = jsonMapper;
+        this.clock = clock;
     }
 
     public String createPaymentLink(Order order) {
@@ -207,7 +210,7 @@ public class PayOsClient {
 
     private int expirationEpochSecond() {
         try {
-            return Math.toIntExact(Instant.now().plusSeconds(properties.getPaymentLinkTtlHours() * 3_600L)
+            return Math.toIntExact(clock.instant().plusSeconds(properties.getPaymentLinkTtlHours() * 3_600L)
                     .getEpochSecond());
         } catch (ArithmeticException ex) {
             throw new PayOsException(BillingConstants.PAYOS_RESPONSE_INVALID, ex);

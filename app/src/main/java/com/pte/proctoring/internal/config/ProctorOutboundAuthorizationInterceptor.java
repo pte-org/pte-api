@@ -13,7 +13,7 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ExecutorChannelInterceptor;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
+import java.time.Clock;
 import java.util.UUID;
 
 /**
@@ -30,14 +30,17 @@ public class ProctorOutboundAuthorizationInterceptor implements ExecutorChannelI
     private final ProctorConnectionRegistry registry;
     private final SessionService sessionService;
     private final IdentityService identityService;
+    private final Clock clock;
 
     public ProctorOutboundAuthorizationInterceptor(
             ProctorConnectionRegistry registry,
             SessionService sessionService,
-            IdentityService identityService) {
+            IdentityService identityService,
+            Clock clock) {
         this.registry = registry;
         this.sessionService = sessionService;
         this.identityService = identityService;
+        this.clock = clock;
     }
 
     @Override
@@ -61,7 +64,7 @@ public class ProctorOutboundAuthorizationInterceptor implements ExecutorChannelI
         }
 
         var conn = connOpt.get();
-        if (conn.isExpired(Instant.now())) {
+        if (conn.isExpired(clock.instant())) {
             log.warn("Denied outbound message to expired session: {}", sessionId);
             return null;
         }

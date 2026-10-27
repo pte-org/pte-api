@@ -1,0 +1,17 @@
+# Local development while the entity model is being consolidated
+# (pte-doc/projects/plans/quang-entity-consolidation). Enable with SPRING_PROFILES_ACTIVE=local-schema
+# (compose: APP_SPRING_PROFILES=local-schema). Hibernate owns the schema; Flyway is off; a final Flyway V1
+# is generated once in the last phase. Never use this profile on a deployed environment.
+spring:
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: update
+    defer-datasource-initialization: true
+  sql:
+    init:
+      mode: always
+      data-locations: classpath*:db/dev-seed/*.sql
+      separator: "@@"
+      continue-on-error: false

@@ -3,7 +3,7 @@ package com.pte.itembank.internal.mapper;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.TaskRuntimeContractDescriptor;
-import com.pte.itembank.domain.QuestionTypeDefinition;
+import com.pte.itembank.domain.QuestionType;
 import com.pte.itembank.dto.response.QuestionTypeResponse;
 import com.pte.itembank.dto.response.TaskTypeEditabilityResponse;
 import com.pte.itembank.dto.response.TaskTypeReadinessResponse;
@@ -15,11 +15,11 @@ public final class QuestionTypeMapper {
     private QuestionTypeMapper() {
     }
 
-    public static QuestionTypeResponse toResponse(QuestionTypeDefinition definition) {
+    public static QuestionTypeResponse toResponse(QuestionType definition) {
         return toResponse(definition, TaskRuntimeProfileRegistry.descriptorFor(definition.getCode()));
     }
 
-    public static QuestionTypeResponse toResponse(QuestionTypeDefinition definition,
+    public static QuestionTypeResponse toResponse(QuestionType definition,
             TaskRuntimeProfileDescriptor runtimeProfile) {
         return new QuestionTypeResponse(
                 definition.getPublicId(),
@@ -49,7 +49,7 @@ public final class QuestionTypeMapper {
                 definition.isRequiresReferenceAnswer());
     }
 
-    public static QuestionTypeResponse toResponse(QuestionTypeDefinition definition,
+    public static QuestionTypeResponse toResponse(QuestionType definition,
             TaskRuntimeContractDescriptor contract, boolean locked) {
         TaskRuntimeProfileDescriptor legacy = contract == null ? null : new TaskRuntimeProfileDescriptor(
                 definition.getTaskTypeKey(), contract.profileKey(), contract.profileVersion(),
@@ -73,13 +73,13 @@ public final class QuestionTypeMapper {
                 response.lifecycleStatus(), response.requiresReferenceAnswer());
     }
 
-    private static TaskTypeReadinessResponse readiness(QuestionTypeDefinition definition,
+    private static TaskTypeReadinessResponse readiness(QuestionType definition,
             TaskRuntimeProfileDescriptor runtime) {
         return new TaskTypeReadinessResponse(runtime != null && runtime.active(),
                 runtime == null ? "UNAVAILABLE" : "MANIFEST_REQUIRED", List.of());
     }
 
-    private static TaskTypeEditabilityResponse editability(QuestionTypeDefinition definition) {
+    private static TaskTypeEditabilityResponse editability(QuestionType definition) {
         boolean locked = definition.getRuntimeLockedAt() != null;
         return new TaskTypeEditabilityResponse(false, !locked, true,
                 locked ? "This task type is used by a published template, so its runtime contract is locked." : null);

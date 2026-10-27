@@ -1,12 +1,12 @@
 package com.pte.billing;
 
 import com.pte.billing.domain.Subscription;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.domain.enums.SubscriptionStatus;
 import com.pte.billing.internal.repository.SubscriptionRepository;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.web.PagedResult;
 import org.springframework.data.domain.PageImpl;
@@ -35,11 +35,11 @@ class BillingServiceTest {
     private SubscriptionRepository subscriptionRepository;
 
     @Mock
-    private PlanRepository planRepository;
+    private ServicePlanRepository planRepository;
 
     @Test
     void getActiveSubscriptionByPublicId_scopesToTenantAndChecksUsableWindow() {
-        BillingService service = new BillingService(subscriptionRepository, planRepository);
+        BillingService service = new BillingService(subscriptionRepository, planRepository, null, com.pte.TestClocks.fixed());
         UUID subscriptionId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         Subscription subscription = subscription(subscriptionId, tenantId, SubscriptionStatus.ACTIVE);
@@ -53,7 +53,7 @@ class BillingServiceTest {
 
     @Test
     void getSubscriptionByPublicIdReturnsInactiveTenantOwnedSubscription() {
-        BillingService service = new BillingService(subscriptionRepository, planRepository);
+        BillingService service = new BillingService(subscriptionRepository, planRepository, null, com.pte.TestClocks.fixed());
         UUID subscriptionId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         Subscription subscription = subscription(subscriptionId, tenantId, SubscriptionStatus.CANCELLED);
@@ -68,7 +68,7 @@ class BillingServiceTest {
 
     @Test
     void lockSubscriptions_usesAscendingPublicIdOrder() {
-        BillingService service = new BillingService(subscriptionRepository, planRepository);
+        BillingService service = new BillingService(subscriptionRepository, planRepository, null, com.pte.TestClocks.fixed());
         UUID tenantId = UUID.randomUUID();
         UUID low = UUID.fromString("00000000-0000-0000-0000-000000000001");
         UUID high = UUID.fromString("00000000-0000-0000-0000-000000000002");
@@ -87,12 +87,12 @@ class BillingServiceTest {
 
     @Test
     void activeExamPackageIsDifferentFromCapacityOnlyPlan() {
-        BillingService service = new BillingService(subscriptionRepository, planRepository);
+        BillingService service = new BillingService(subscriptionRepository, planRepository, null, com.pte.TestClocks.fixed());
         UUID tenantId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
         Subscription subscription = subscription(UUID.randomUUID(), tenantId, SubscriptionStatus.ACTIVE);
         subscription.setPlanId(planId);
-        Plan plan = new Plan();
+        ServicePlan plan = new ServicePlan();
         plan.setPublicId(planId);
         plan.setType(PlanType.EXAM_PACKAGE);
         when(subscriptionRepository
@@ -107,7 +107,7 @@ class BillingServiceTest {
 
     @Test
     void platformManagerSubscriptionReadAppliesTenantFilterServerSide() {
-        BillingService service = new BillingService(subscriptionRepository, planRepository);
+        BillingService service = new BillingService(subscriptionRepository, planRepository, null, com.pte.TestClocks.fixed());
         UUID tenantId = UUID.randomUUID();
         Subscription subscription = subscription(UUID.randomUUID(), tenantId, SubscriptionStatus.ACTIVE);
         when(subscriptionRepository.findByDeletedFalseAndTenantIdOrderByCreatedAtDesc(eq(tenantId), org.mockito.ArgumentMatchers.any()))

@@ -21,8 +21,6 @@ practice:
     max-retries: ${PRACTICE_SCORING_MAX_RETRIES:2}
     redispatch-after-seconds: ${PRACTICE_SCORING_REDISPATCH_AFTER_SECONDS:100}
     max-age-seconds: ${PRACTICE_SCORING_MAX_AGE_SECONDS:180}
-  email-auth:
-    enabled: ${PRACTICE_EMAIL_AUTH_ENABLED:false}
   strict-entitlement:
     enabled: ${PRACTICE_STRICT_ENTITLEMENT_ENABLED:false}
 

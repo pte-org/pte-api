@@ -8,14 +8,14 @@ import java.util.function.Supplier;
  * section still fails on its own while the source is queried once. Sections run
  * sequentially within a request, so it is intentionally not thread-safe.
  */
-final class Memo<T> implements Supplier<T> {
+public final class Memo<T> implements Supplier<T> {
 
     private final Supplier<T> source;
     private boolean resolved;
     private T value;
     private RuntimeException failure;
 
-    Memo(Supplier<T> source) {
+    public Memo(Supplier<T> source) {
         this.source = source;
     }
 

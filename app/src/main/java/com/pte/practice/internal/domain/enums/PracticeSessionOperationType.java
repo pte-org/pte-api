@@ -6,5 +6,6 @@ public enum PracticeSessionOperationType {
     HEARTBEAT,
     ANSWER,
     SKIP,
-    SAVE_AND_EXIT
+    SAVE_AND_EXIT,
+    SAVE_DRAFT
 }

@@ -22,6 +22,7 @@ public final class TenancyConstants {
     public static final String STUDENT_COUNT_INVALID = "STUDENT_COUNT_INVALID";
     public static final String SYSTEM_QUOTA_PACKAGE = "student-capacity";
     /** Reserved scalar actor for quota grants triggered by a system activation. */
+    public static final String SYSTEM_ROLE = "SYSTEM";
     public static final UUID SYSTEM_ACTOR_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
 
     public static final String TENANT_CODE_REQUIRED = "Tenant code is required";
@@ -67,7 +68,7 @@ public final class TenancyConstants {
     public static final String EVENT_ORGANIZATION_REACTIVATED = "OrganizationReactivated";
     public static final String AUDIT_ORGANIZATION_UPDATED_SUMMARY = "Updated organization profile";
 
-    public static final String AGGREGATE_QUOTA_TRANSACTION = "QuotaTransaction";
+    public static final String AGGREGATE_QUOTA_TRANSACTION = "QuotaGrant";
     public static final String EVENT_QUOTA_GRANTED = "QuotaGranted";
 
     private TenancyConstants() {

@@ -1,7 +1,7 @@
 package com.pte.reporting.internal.repository;
 
 import com.pte.reporting.ReportingOverviewService;
-import com.pte.reporting.domain.AttemptReport;
+import com.pte.reporting.domain.ExamResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -21,10 +21,10 @@ class ReportingOverviewQueriesTest {
     private ReportingOverviewService service;
 
     @Autowired
-    private AttemptReportRepository reports;
+    private ExamResultRepository reports;
 
     private void report(UUID tenant, boolean published, boolean deleted) {
-        AttemptReport report = new AttemptReport();
+        ExamResult report = new ExamResult();
         report.setTenantId(tenant);
         report.setStudentPublicId(UUID.randomUUID());
         report.setAttemptPublicId(UUID.randomUUID());

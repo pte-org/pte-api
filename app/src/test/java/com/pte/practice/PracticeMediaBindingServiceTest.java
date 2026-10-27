@@ -2,10 +2,10 @@ package com.pte.practice;
 
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
-import com.pte.practice.internal.domain.PracticeSessionItem;
-import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
+import com.pte.practice.internal.domain.PracticeResponse;
+import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,7 +31,7 @@ class PracticeMediaBindingServiceTest {
     @Mock
     private PracticeSessionRepository sessionRepository;
     @Mock
-    private PracticeSessionItemRepository itemRepository;
+    private PracticeResponseRepository itemRepository;
 
     private PracticeMediaBindingService service;
     private UUID sessionId;
@@ -52,7 +52,7 @@ class PracticeMediaBindingServiceTest {
     @Test
     void allowsOnlyThePendingRecordingItemInALiveSession() {
         PracticeSession session = session();
-        PracticeSessionItem item = item(session);
+        PracticeResponse item = item(session);
         when(sessionRepository.findByPublicIdAndStudentPublicIdAndDeletedFalse(sessionId, studentId))
                 .thenReturn(Optional.of(session));
         when(itemRepository.findByPublicIdAndPracticeSessionIdAndDeletedFalse(itemId, session.getId()))
@@ -78,7 +78,7 @@ class PracticeMediaBindingServiceTest {
     @Test
     void rejectsANonRecordingOrAlreadyAnsweredItem() {
         PracticeSession session = session();
-        PracticeSessionItem item = item(session);
+        PracticeResponse item = item(session);
         item.setRendererKey("MC_READING_SINGLE_V1");
         when(sessionRepository.findByPublicIdAndStudentPublicIdAndDeletedFalse(sessionId, studentId))
                 .thenReturn(Optional.of(session));
@@ -90,7 +90,7 @@ class PracticeMediaBindingServiceTest {
                 .hasFieldOrPropertyWithValue("code", PracticeConstants.PRACTICE_MEDIA_ITEM_NOT_RECORDABLE);
 
         item.setRendererKey("READ_ALOUD_V1");
-        item.setStatus(PracticeSessionItemStatus.ANSWERED);
+        item.setStatus(PracticeResponseStatus.ANSWERED);
         assertThatThrownBy(() -> service.assertCanUseResponseAudio(sessionId, itemId,
                 new CurrentUser(studentId, null, List.of("STUDENT"))))
                 .hasFieldOrPropertyWithValue("code", PracticeConstants.PRACTICE_SESSION_NOT_STARTABLE);
@@ -106,12 +106,12 @@ class PracticeMediaBindingServiceTest {
         return session;
     }
 
-    private PracticeSessionItem item(PracticeSession session) {
-        PracticeSessionItem item = new PracticeSessionItem();
+    private PracticeResponse item(PracticeSession session) {
+        PracticeResponse item = new PracticeResponse();
         item.setPublicId(itemId);
         item.setPracticeSessionId(session.getId());
         item.setRendererKey("READ_ALOUD_V1");
-        item.setStatus(PracticeSessionItemStatus.PENDING);
+        item.setStatus(PracticeResponseStatus.PENDING);
         return item;
     }
 }

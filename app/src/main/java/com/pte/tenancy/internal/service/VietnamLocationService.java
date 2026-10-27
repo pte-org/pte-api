@@ -11,6 +11,7 @@ import org.springframework.web.client.RestClientException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,12 +32,15 @@ public class VietnamLocationService {
     private final JsonMapper jsonMapper;
     private final Map<String, CachedOptions> wardCache = new ConcurrentHashMap<>();
     private volatile CachedOptions provinceCache;
+    private final Clock clock;
 
     public VietnamLocationService(@Qualifier("vietnamLocationRestClient") RestClient restClient,
-            VietnamLocationProperties properties, JsonMapper jsonMapper) {
+            VietnamLocationProperties properties, JsonMapper jsonMapper,
+            Clock clock) {
         this.restClient = restClient;
         this.properties = properties;
         this.jsonMapper = jsonMapper;
+        this.clock = clock;
     }
 
     public List<LocationOptionResponse> listProvinces() {
@@ -50,7 +54,7 @@ public class VietnamLocationService {
                 return current.options();
             }
             List<LocationOptionResponse> options = parseOptions(fetch(PROVINCES_PATH), false);
-            provinceCache = new CachedOptions(options, System.currentTimeMillis());
+            provinceCache = new CachedOptions(options, clock.millis());
             return options;
         }
     }
@@ -100,7 +104,7 @@ public class VietnamLocationService {
                 return current.options();
             }
             List<LocationOptionResponse> options = parseOptions(fetchWards(provinceCode), true);
-            wardCache.put(provinceCode, new CachedOptions(options, System.currentTimeMillis()));
+            wardCache.put(provinceCode, new CachedOptions(options, clock.millis()));
             return options;
         }
     }
@@ -164,7 +168,7 @@ public class VietnamLocationService {
 
     private boolean isFresh(CachedOptions cached) {
         return cached != null
-                && System.currentTimeMillis() - cached.loadedAtMs() < properties.getCacheTtlMs();
+                && clock.millis() - cached.loadedAtMs() < properties.getCacheTtlMs();
     }
 
     private static LocationOptionResponse find(List<LocationOptionResponse> options, String code) {

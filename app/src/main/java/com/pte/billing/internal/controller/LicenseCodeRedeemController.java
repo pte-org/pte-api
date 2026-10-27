@@ -1,8 +1,8 @@
 package com.pte.billing.internal.controller;
 
-import com.pte.billing.internal.dto.request.RedeemLicenseCodeRequest;
+import com.pte.billing.internal.dto.request.license.RedeemLicenseCodeRequest;
 import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
-import com.pte.billing.internal.service.LicenseCodeService;
+import com.pte.billing.internal.service.license.LicenseCodeService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;

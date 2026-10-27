@@ -3,15 +3,14 @@ package com.pte.tenancy.internal.service;
 import com.pte.tenancy.StudentCountProvider;
 import com.pte.tenancy.StudentQuota;
 import com.pte.tenancy.TenancyService;
-import com.pte.tenancy.domain.Tenant;
-import com.pte.tenancy.domain.enums.TenantStatus;
+import com.pte.tenancy.domain.Organization;
+import com.pte.tenancy.domain.enums.OrganizationStatus;
 import com.pte.tenancy.internal.dto.response.StudentQuotaResponse;
 import com.pte.tenancy.internal.exception.InvalidStudentCountException;
 import com.pte.tenancy.internal.exception.StudentLimitExceededException;
 import com.pte.tenancy.internal.exception.TenantNotFoundException;
 import com.pte.tenancy.internal.exception.TenantSuspendedException;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
-import com.pte.tenancy.internal.repository.TenantRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,13 +36,10 @@ class TenancyServiceTest {
     private OrganizationRepository organizationRepository;
 
     @Mock
-    private TenantRepository tenantRepository;
+    private OrganizationLifecycleService organizationLifecycleService;
 
     @Mock
-    private TenantLifecycleService tenantLifecycleService;
-
-    @Mock
-    private QuotaTransactionService quotaTransactionService;
+    private QuotaGrantService quotaGrantService;
 
     @Mock
     private StudentCountProvider studentCountProvider;
@@ -52,15 +48,15 @@ class TenancyServiceTest {
 
     @BeforeEach
     void setUp() {
-        tenancyService = new TenancyService(organizationRepository, tenantRepository, tenantLifecycleService,
-                quotaTransactionService, studentCountProvider);
+        tenancyService = new TenancyService(organizationRepository, organizationLifecycleService,
+                quotaGrantService, studentCountProvider);
     }
 
     @Test
     void getStudentQuota_returnsCurrentCountAndTenantLimit() {
         UUID tenantId = UUID.randomUUID();
-        Tenant tenant = tenant(tenantId, 1000);
-        when(tenantRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant));
+        Organization tenant = tenant(tenantId, 1000);
+        when(organizationRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant));
         when(studentCountProvider.countStudents(tenantId)).thenReturn(487L);
 
         StudentQuota quota = tenancyService.getStudentQuota(tenantId);
@@ -75,7 +71,7 @@ class TenancyServiceTest {
     @Test
     void getStudentLimit_returnsTenantLimit() {
         UUID tenantId = UUID.randomUUID();
-        when(tenantRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant(tenantId, 1000)));
+        when(organizationRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant(tenantId, 1000)));
 
         assertThat(tenancyService.getStudentLimit(tenantId)).isEqualTo(1000);
     }
@@ -83,20 +79,20 @@ class TenancyServiceTest {
     @Test
     void assertCanAddStudents_locksTenantBeforeCountingAndAllowsWithinLimit() {
         UUID tenantId = UUID.randomUUID();
-        when(tenantRepository.findWithLockByPublicId(tenantId)).thenReturn(Optional.of(tenant(tenantId, 100)));
+        when(organizationRepository.findWithLockByPublicId(tenantId)).thenReturn(Optional.of(tenant(tenantId, 100)));
         when(studentCountProvider.countStudents(tenantId)).thenReturn(40L);
 
         tenancyService.assertCanAddStudents(tenantId, 60L);
 
-        InOrder order = inOrder(tenantRepository, studentCountProvider);
-        order.verify(tenantRepository).findWithLockByPublicId(tenantId);
+        InOrder order = inOrder(organizationRepository, studentCountProvider);
+        order.verify(organizationRepository).findWithLockByPublicId(tenantId);
         order.verify(studentCountProvider).countStudents(tenantId);
     }
 
     @Test
     void assertCanAddStudents_exceedingLimitIncludesAllThreeCountsAndDoesNotWrite() {
         UUID tenantId = UUID.randomUUID();
-        when(tenantRepository.findWithLockByPublicId(tenantId)).thenReturn(Optional.of(tenant(tenantId, 100)));
+        when(organizationRepository.findWithLockByPublicId(tenantId)).thenReturn(Optional.of(tenant(tenantId, 100)));
         when(studentCountProvider.countStudents(tenantId)).thenReturn(95L);
 
         assertThatThrownBy(() -> tenancyService.assertCanAddStudents(tenantId, 10L))
@@ -114,14 +110,14 @@ class TenancyServiceTest {
         assertThatThrownBy(() -> tenancyService.assertCanAddStudents(UUID.randomUUID(), 0L))
                 .isInstanceOf(InvalidStudentCountException.class);
 
-        verify(tenantRepository, never()).findWithLockByPublicId(any());
+        verify(organizationRepository, never()).findWithLockByPublicId(any());
         verify(studentCountProvider, never()).countStudents(any());
     }
 
     @Test
     void assertCanAddStudents_unknownTenantFailsWithoutCounting() {
         UUID tenantId = UUID.randomUUID();
-        when(tenantRepository.findWithLockByPublicId(tenantId)).thenReturn(Optional.empty());
+        when(organizationRepository.findWithLockByPublicId(tenantId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> tenancyService.assertCanAddStudents(tenantId, 1L))
                 .isInstanceOf(TenantNotFoundException.class);
@@ -132,9 +128,9 @@ class TenancyServiceTest {
     @Test
     void assertTenantActive_rejectsSuspendedTenant() {
         UUID tenantId = UUID.randomUUID();
-        Tenant tenant = tenant(tenantId, 100);
-        tenant.setStatus(com.pte.tenancy.domain.enums.TenantStatus.SUSPENDED);
-        when(tenantRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant));
+        Organization tenant = tenant(tenantId, 100);
+        tenant.setStatus(OrganizationStatus.SUSPENDED);
+        when(organizationRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant));
 
         assertThatThrownBy(() -> tenancyService.assertTenantActive(tenantId))
                 .isInstanceOfSatisfying(TenantSuspendedException.class,
@@ -144,7 +140,7 @@ class TenancyServiceTest {
     @Test
     void assertTenantActive_allowsActiveTenant() {
         UUID tenantId = UUID.randomUUID();
-        when(tenantRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant(tenantId, 100)));
+        when(organizationRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant(tenantId, 100)));
 
         tenancyService.assertTenantActive(tenantId);
     }
@@ -152,20 +148,21 @@ class TenancyServiceTest {
     @Test
     void findLoginOrganization_allowsSuspendedTenantForAuthentication() {
         UUID tenantId = UUID.randomUUID();
-        Tenant tenant = tenant(tenantId, 100);
+        Organization tenant = tenant(tenantId, 100);
         tenant.setCode("suspended-school");
         tenant.setName("Suspended School");
         tenant.setOrganizationType("SCHOOL");
-        tenant.setStatus(TenantStatus.SUSPENDED);
-        when(tenantRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant));
+        tenant.setStatus(OrganizationStatus.SUSPENDED);
+        when(organizationRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant));
 
         assertThat(tenancyService.findLoginOrganization(tenantId)).isPresent()
                 .get().extracting("tenantId").isEqualTo(tenantId);
     }
 
-    private Tenant tenant(UUID publicId, int studentLimit) {
-        Tenant tenant = new Tenant();
+    private Organization tenant(UUID publicId, int studentLimit) {
+        Organization tenant = new Organization();
         tenant.setPublicId(publicId);
+        tenant.setStatus(OrganizationStatus.ACTIVE);
         tenant.setStudentLimit(studentLimit);
         return tenant;
     }

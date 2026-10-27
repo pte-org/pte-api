@@ -1,6 +1,6 @@
 package com.pte.practice.internal.messaging;
 
-import com.pte.practice.internal.domain.PracticeSessionItem;
+import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.service.PracticeScoringRequestFactory;
 import com.pte.practice.internal.service.PracticeScoringStateService;
 import com.pte.scoring.PracticeAiEvaluation;
@@ -42,7 +42,7 @@ class PracticeScoringWorkerTest {
     private final UUID token = UUID.randomUUID();
     private final UUID claimToken = UUID.randomUUID();
     private final PracticeScoringJob job = new PracticeScoringJob(itemId, tenantId, token);
-    private final PracticeSessionItem item = new PracticeSessionItem();
+    private final PracticeResponse item = new PracticeResponse();
     private final PracticeScoringRequest request = mock(PracticeScoringRequest.class);
     private final PracticeAiEvaluation evaluation = mock(PracticeAiEvaluation.class);
 

@@ -4,11 +4,12 @@ import com.pte.billing.SubscriptionRevocationImpactQuery.SubscriptionRevocationI
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.event.SessionCancelledEvent;
-import com.pte.session.internal.exception.SubscriptionRevocationScopeConflictException;
+import com.pte.session.internal.exception.capacity.SubscriptionRevocationScopeConflictException;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,11 +19,14 @@ public class SessionRevocationService {
 
     private final ExamSessionRepository sessionRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
     public SessionRevocationService(ExamSessionRepository sessionRepository,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            Clock clock) {
         this.sessionRepository = sessionRepository;
         this.eventPublisher = eventPublisher;
+        this.clock = clock;
     }
 
     @Transactional
@@ -50,7 +54,7 @@ public class SessionRevocationService {
                 subscriptionId, SessionStatus.SCHEDULED)) {
             session.cancel();
             eventPublisher.publishEvent(new SessionCancelledEvent(
-                    session.getPublicId(), session.getTenantId(), session.getName(), java.time.Instant.now()));
+                    session.getPublicId(), session.getTenantId(), session.getName(), clock.instant()));
         }
         sessionRepository.flush();
     }
@@ -71,7 +75,7 @@ public class SessionRevocationService {
             }
             session.cancel();
             eventPublisher.publishEvent(new SessionCancelledEvent(
-                    session.getPublicId(), session.getTenantId(), session.getName(), java.time.Instant.now()));
+                    session.getPublicId(), session.getTenantId(), session.getName(), clock.instant()));
         }
         sessionRepository.flush();
     }

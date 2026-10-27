@@ -1,26 +1,26 @@
 package com.pte.billing.internal.service;
 
-import com.pte.billing.domain.TenantApplication;
 import com.pte.billing.domain.enums.TenantApplicationStatus;
 import com.pte.billing.TenantApplicationApprovedEvent;
-import com.pte.billing.internal.dto.request.RejectApplicationRequest;
-import com.pte.billing.internal.dto.request.SubmitApplicationRequest;
+import com.pte.billing.internal.dto.request.application.RejectApplicationRequest;
+import com.pte.billing.internal.dto.request.application.SubmitApplicationRequest;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.exception.ApplicationNotPendingException;
-import com.pte.billing.internal.exception.RequestedCodeAlreadyUsedException;
-import com.pte.billing.internal.exception.RequestedNameAlreadyUsedException;
-import com.pte.billing.internal.exception.RequestedTaxCodeAlreadyUsedException;
-import com.pte.billing.internal.exception.TenantApplicationNotFoundException;
-import com.pte.billing.internal.exception.TenantApplicationValidationException;
-import com.pte.billing.internal.repository.TenantApplicationRepository;
+import com.pte.billing.internal.exception.application.ApplicationNotPendingException;
+import com.pte.billing.internal.exception.license.RequestedCodeAlreadyUsedException;
+import com.pte.billing.internal.exception.application.RequestedNameAlreadyUsedException;
+import com.pte.billing.internal.exception.application.RequestedTaxCodeAlreadyUsedException;
+import com.pte.billing.internal.exception.application.TenantApplicationNotFoundException;
+import com.pte.billing.internal.exception.application.TenantApplicationValidationException;
+import com.pte.billing.internal.mapper.TenantApplicationMapper;
 import com.pte.identity.domain.HostAdminCreated;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.IdentityService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
-import com.pte.tenancy.domain.Tenant;
+import com.pte.tenancy.domain.Organization;
+import com.pte.tenancy.domain.enums.OrganizationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +30,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -38,15 +39,14 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class TenantApplicationServiceTest {
-
-    @Mock
-    private TenantApplicationRepository applicationRepository;
 
     @Mock
     private TenancyService tenancyService;
@@ -64,8 +64,7 @@ class TenantApplicationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TenantApplicationService(applicationRepository, tenancyService, identityService,
-                platformSettingService, eventPublisher);
+        service = new TenantApplicationService(tenancyService, identityService, platformSettingService, eventPublisher, null);
     }
 
     private SubmitApplicationRequest submitRequest(String code) {
@@ -75,47 +74,40 @@ class TenantApplicationServiceTest {
 
     @Test
     void submit_savesApplicationAsPending() {
+        Organization saved = pendingApplication(UUID.randomUUID(), "acme");
         when(tenancyService.existsByName("Acme School")).thenReturn(false);
-        when(applicationRepository.existsByOrgNameAndStatus("Acme School", TenantApplicationStatus.PENDING))
-                .thenReturn(false);
         when(tenancyService.existsByCode("acme")).thenReturn(false);
-        when(applicationRepository.existsByRequestedCodeAndStatus("acme", TenantApplicationStatus.PENDING))
-                .thenReturn(false);
-        when(applicationRepository.saveAndFlush(any(TenantApplication.class))).thenAnswer(invocation -> {
-            TenantApplication application = invocation.getArgument(0);
-            application.setPublicId(UUID.randomUUID());
-            return application;
-        });
+        when(tenancyService.submitApplication("Acme School", "SCHOOL", "acme", "0123456789",
+                "contact@acme.example", null)).thenReturn(saved);
 
         service.submit(submitRequest("acme"));
 
+        verify(tenancyService).submitApplication("Acme School", "SCHOOL", "acme", "0123456789",
+                "contact@acme.example", null);
         verify(eventPublisher).publishEvent(any(Object.class));
     }
 
     @Test
     void submit_codeAlreadyATenant_throwsWithoutSaving() {
         when(tenancyService.existsByName("Acme School")).thenReturn(false);
-        when(applicationRepository.existsByOrgNameAndStatus("Acme School", TenantApplicationStatus.PENDING))
-                .thenReturn(false);
         when(tenancyService.existsByCode("acme")).thenReturn(true);
 
         assertThatThrownBy(() -> service.submit(submitRequest("acme")))
                 .isInstanceOf(RequestedCodeAlreadyUsedException.class);
-        verify(applicationRepository, never()).saveAndFlush(any());
+        verify(tenancyService, never()).submitApplication(any(), any(), any(), any(), any(), any());
     }
 
+    // A pending application is an organization row now, so "held by another pending application" is the same
+    // existsByCode check; the PENDING case itself is covered by OrganizationRepositoryTest.
     @Test
     void submit_codeHeldByAnotherPendingApplication_throwsWithoutSaving() {
         when(tenancyService.existsByName("Acme School")).thenReturn(false);
-        when(applicationRepository.existsByOrgNameAndStatus("Acme School", TenantApplicationStatus.PENDING))
-                .thenReturn(false);
-        when(tenancyService.existsByCode("acme")).thenReturn(false);
-        when(applicationRepository.existsByRequestedCodeAndStatus("acme", TenantApplicationStatus.PENDING))
-                .thenReturn(true);
+        when(tenancyService.existsByCode("acme")).thenReturn(true);
 
         assertThatThrownBy(() -> service.submit(submitRequest("acme")))
                 .isInstanceOf(RequestedCodeAlreadyUsedException.class);
-        verify(applicationRepository, never()).saveAndFlush(any());
+        verify(tenancyService, never()).submitApplication(any(), any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 
     @Test
@@ -124,53 +116,48 @@ class TenantApplicationServiceTest {
 
         assertThatThrownBy(() -> service.submit(submitRequest("acme-new")))
                 .isInstanceOf(RequestedNameAlreadyUsedException.class);
-        verify(applicationRepository, never()).saveAndFlush(any());
+        verify(tenancyService, never()).submitApplication(any(), any(), any(), any(), any(), any());
     }
 
     @Test
     void submit_nameHeldByAnotherPendingApplication_throwsWithoutSaving() {
-        when(tenancyService.existsByName("Acme School")).thenReturn(false);
-        when(applicationRepository.existsByOrgNameAndStatus("Acme School", TenantApplicationStatus.PENDING))
-                .thenReturn(true);
+        when(tenancyService.existsByName("Acme School")).thenReturn(true);
 
         assertThatThrownBy(() -> service.submit(submitRequest("acme-new")))
                 .isInstanceOf(RequestedNameAlreadyUsedException.class);
-        verify(applicationRepository, never()).saveAndFlush(any());
+        verify(tenancyService, never()).submitApplication(any(), any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 
     @Test
     void get_returnsExactApplicationOutsideTheListPage() {
         UUID applicationId = UUID.randomUUID();
-        TenantApplication application = pendingApplication(applicationId, "acme");
-        when(applicationRepository.findByPublicId(applicationId)).thenReturn(Optional.of(application));
+        Organization application = pendingApplication(applicationId, "acme");
+        when(tenancyService.findApplication(applicationId)).thenReturn(Optional.of(application));
 
         TenantApplicationResponse response = service.get(applicationId);
 
         assertThat(response.publicId()).isEqualTo(applicationId);
         assertThat(response.status()).isEqualTo("PENDING");
-        verify(applicationRepository).findByPublicId(applicationId);
+        verify(tenancyService).findApplication(applicationId);
     }
 
-    private TenantApplication pendingApplication(UUID publicId, String code) {
-        TenantApplication application = new TenantApplication();
+    private Organization pendingApplication(UUID publicId, String code) {
+        Organization application = new Organization();
         application.setPublicId(publicId);
-        application.setOrgName("Acme School");
-        application.setOrgType("SCHOOL");
-        application.setRequestedCode(code);
+        application.setName("Acme School");
+        application.setOrganizationType("SCHOOL");
+        application.setCode(code);
         application.setContactEmail("contact@acme.example");
         application.setTaxCode("0123456789");
         return application;
     }
 
     @Test
-    void approve_createsTenantAndHostAdmin_marksApplicationApproved() {
+    void approve_activatesTenantAndCreatesHostAdmin_marksApplicationApproved() {
         UUID applicationId = UUID.randomUUID();
         UUID reviewerId = UUID.randomUUID();
-        TenantApplication application = pendingApplication(applicationId, "acme");
-
-        Tenant tenant = new Tenant();
-        tenant.setPublicId(UUID.randomUUID());
-        tenant.setCode("acme");
+        Organization application = pendingApplication(applicationId, "acme");
 
         User hostAdminUser = new User();
         hostAdminUser.setPublicId(UUID.randomUUID());
@@ -178,17 +165,23 @@ class TenantApplicationServiceTest {
         hostAdminUser.setRoles(Set.of(Role.HOST_ADMIN));
         HostAdminCreated hostAdmin = new HostAdminCreated(hostAdminUser, "Gener4ted!");
 
-        when(applicationRepository.findByPublicIdForUpdate(applicationId)).thenReturn(Optional.of(application));
+        when(tenancyService.findApplicationForUpdate(applicationId)).thenReturn(Optional.of(application));
         when(platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY)).thenReturn(75);
-        when(tenancyService.createTenant("Acme School", "SCHOOL", "acme", "0123456789", 75)).thenReturn(tenant);
-        when(identityService.createHostAdmin(tenant.getPublicId(), "contact@acme.example")).thenReturn(hostAdmin);
+        when(tenancyService.approveApplication(application, reviewerId, 75)).thenAnswer(invocation -> {
+            application.setStudentLimit(75);
+            application.approve(reviewerId, Instant.parse("2026-10-17T00:00:00Z"));
+            return application;
+        });
+        when(identityService.createHostAdmin(applicationId, "contact@acme.example")).thenReturn(hostAdmin);
 
         CurrentUser caller = new CurrentUser(reviewerId, null, List.of("PLATFORM_MANAGER"));
         service.approve(applicationId, caller);
 
-        assertThat(application.getStatus()).isEqualTo(TenantApplicationStatus.APPROVED);
+        assertThat(TenantApplicationMapper.statusOf(application)).isEqualTo(TenantApplicationStatus.APPROVED);
+        assertThat(application.getStatus()).isEqualTo(OrganizationStatus.ACTIVE);
         assertThat(application.getReviewedBy()).isEqualTo(reviewerId);
-        verify(applicationRepository).saveAndFlush(application);
+        assertThat(application.getStudentLimit()).isEqualTo(75);
+        verify(tenancyService).approveApplication(application, reviewerId, 75);
         ArgumentCaptor<TenantApplicationApprovedEvent> eventCaptor =
                 ArgumentCaptor.forClass(TenantApplicationApprovedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
@@ -199,7 +192,7 @@ class TenantApplicationServiceTest {
     @Test
     void approve_unknownApplication_throwsNotFound() {
         UUID applicationId = UUID.randomUUID();
-        when(applicationRepository.findByPublicIdForUpdate(applicationId)).thenReturn(Optional.empty());
+        when(tenancyService.findApplicationForUpdate(applicationId)).thenReturn(Optional.empty());
 
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
 
@@ -210,15 +203,15 @@ class TenantApplicationServiceTest {
     @Test
     void approve_alreadyReviewedApplication_throwsAndCreatesNothing() {
         UUID applicationId = UUID.randomUUID();
-        TenantApplication application = pendingApplication(applicationId, "acme");
-        application.approve(UUID.randomUUID());
-        when(applicationRepository.findByPublicIdForUpdate(applicationId)).thenReturn(Optional.of(application));
+        Organization application = pendingApplication(applicationId, "acme");
+        application.approve(UUID.randomUUID(), Instant.parse("2026-10-17T00:00:00Z"));
+        when(tenancyService.findApplicationForUpdate(applicationId)).thenReturn(Optional.of(application));
 
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
 
         assertThatThrownBy(() -> service.approve(applicationId, caller))
                 .isInstanceOf(ApplicationNotPendingException.class);
-        verify(tenancyService, never()).createTenant(any(), any(), any(), any(), org.mockito.ArgumentMatchers.anyInt());
+        verify(tenancyService, never()).approveApplication(any(), any(), anyInt());
         verify(identityService, never()).createHostAdmin(any(), any());
     }
 
@@ -226,8 +219,9 @@ class TenantApplicationServiceTest {
     void reject_marksApplicationRejectedWithReason() {
         UUID applicationId = UUID.randomUUID();
         UUID reviewerId = UUID.randomUUID();
-        TenantApplication application = pendingApplication(applicationId, "acme");
-        when(applicationRepository.findByPublicIdForUpdate(applicationId)).thenReturn(Optional.of(application));
+        Organization application = pendingApplication(applicationId, "acme");
+        when(tenancyService.findApplicationForUpdate(applicationId)).thenReturn(Optional.of(application));
+        rejectingApplicationOnReview(application);
 
         CurrentUser caller = new CurrentUser(reviewerId, null, List.of("PLATFORM_ADMIN"));
         TenantApplicationResponse response = service.reject(applicationId,
@@ -236,55 +230,66 @@ class TenantApplicationServiceTest {
         assertThat(response.status()).isEqualTo("REJECTED");
         assertThat(response.rejectReason()).isEqualTo("Brand name conflict");
         assertThat(application.getReviewedBy()).isEqualTo(reviewerId);
-        verify(applicationRepository).saveAndFlush(application);
+        verify(tenancyService).rejectApplication(application, reviewerId, "Brand name conflict");
         verify(eventPublisher).publishEvent(any(Object.class));
     }
 
     @Test
     void reject_alreadyReviewedApplication_throws() {
         UUID applicationId = UUID.randomUUID();
-        TenantApplication application = pendingApplication(applicationId, "acme");
-        application.reject(UUID.randomUUID(), "first reason");
-        when(applicationRepository.findByPublicIdForUpdate(applicationId)).thenReturn(Optional.of(application));
+        Organization application = pendingApplication(applicationId, "acme");
+        application.reject(UUID.randomUUID(), Instant.parse("2026-10-17T00:00:00Z"), "first reason");
+        when(tenancyService.findApplicationForUpdate(applicationId)).thenReturn(Optional.of(application));
 
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
 
         assertThatThrownBy(() -> service.reject(applicationId,
                 new RejectApplicationRequest("second reason"), caller))
                 .isInstanceOf(ApplicationNotPendingException.class);
+        verify(tenancyService, never()).rejectApplication(any(), any(), any());
     }
 
     @Test
     void approve_mapsApprovalTimeTaxConstraintToBillingConflict() {
         UUID applicationId = UUID.randomUUID();
-        TenantApplication application = pendingApplication(applicationId, "acme");
-        when(applicationRepository.findByPublicIdForUpdate(applicationId)).thenReturn(Optional.of(application));
+        Organization application = pendingApplication(applicationId, "acme");
+        when(tenancyService.findApplicationForUpdate(applicationId)).thenReturn(Optional.of(application));
         when(platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY)).thenReturn(75);
-        when(tenancyService.createTenant(any(), any(), any(), any(), org.mockito.ArgumentMatchers.anyInt()))
-                .thenThrow(new DataIntegrityViolationException("uk_tenants_tax_code"));
+        when(tenancyService.approveApplication(eq(application), any(), anyInt()))
+                .thenThrow(new DataIntegrityViolationException("uq_org_tax_code_approved"));
 
         assertThatThrownBy(() -> service.approve(applicationId,
                 new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"))))
                 .isInstanceOf(RequestedTaxCodeAlreadyUsedException.class);
         verify(identityService, never()).createHostAdmin(any(), any());
-        assertThat(application.getStatus()).isEqualTo(TenantApplicationStatus.PENDING);
+        assertThat(TenantApplicationMapper.statusOf(application)).isEqualTo(TenantApplicationStatus.PENDING);
     }
 
     @Test
     void reject_trimsReasonAndDirectBlankReasonIsUnprocessable() {
         UUID applicationId = UUID.randomUUID();
-        TenantApplication application = pendingApplication(applicationId, "acme");
-        when(applicationRepository.findByPublicIdForUpdate(applicationId)).thenReturn(Optional.of(application));
+        Organization application = pendingApplication(applicationId, "acme");
+        when(tenancyService.findApplicationForUpdate(applicationId)).thenReturn(Optional.of(application));
+        rejectingApplicationOnReview(application);
 
         service.reject(applicationId, new RejectApplicationRequest("  fix the tax code  "),
                 new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN")));
 
         assertThat(application.getRejectReason()).isEqualTo("fix the tax code");
         UUID blankApplicationId = UUID.randomUUID();
-        when(applicationRepository.findByPublicIdForUpdate(blankApplicationId))
+        when(tenancyService.findApplicationForUpdate(blankApplicationId))
                 .thenReturn(Optional.of(pendingApplication(blankApplicationId, "other-acme")));
         assertThatThrownBy(() -> service.reject(blankApplicationId, new RejectApplicationRequest("   "),
                 new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"))))
                 .isInstanceOf(TenantApplicationValidationException.class);
+    }
+
+    /** Makes the mocked tenancy module apply the real organization transition, as the production one does. */
+    private void rejectingApplicationOnReview(Organization application) {
+        when(tenancyService.rejectApplication(eq(application), any(), any())).thenAnswer(invocation -> {
+            application.reject(invocation.getArgument(1), Instant.parse("2026-10-17T00:00:00Z"),
+                    invocation.getArgument(2));
+            return application;
+        });
     }
 }

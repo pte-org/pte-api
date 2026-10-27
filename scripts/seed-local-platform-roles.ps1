@@ -152,7 +152,7 @@ function Ensure-PlatformUser {
     }
 
     if ("$($user.status)".ToUpperInvariant() -eq "SUSPENDED") {
-        $user = Invoke-SeedApi -Method POST -Path "/api/v1/platform-users/$($user.publicId)/reactivate" -Token $Token
+        $user = Invoke-SeedApi -Method PATCH -Path "/api/v1/platform-users/$($user.publicId)/status" -Body @{ action = "REACTIVATE" } -Token $Token
         Write-Host "Reactivated local platform fixture: $Username"
     }
     else {

@@ -1,7 +1,7 @@
 package com.pte.itembank;
 
 import com.pte.itembank.domain.enums.PteTaskType;
-import com.pte.itembank.internal.exception.InvalidQuestionTypeException;
+import com.pte.itembank.internal.exception.tasktype.InvalidQuestionTypeException;
 
 import java.util.Map;
 

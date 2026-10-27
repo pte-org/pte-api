@@ -1,7 +1,7 @@
 package com.pte.assessment.internal.mapper;
 
-import com.pte.assessment.domain.ExamSnapshot;
-import com.pte.assessment.domain.SnapshotItem;
+import com.pte.assessment.domain.ExamVersion;
+import com.pte.assessment.domain.ExamVersionItem;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.itembank.domain.enums.PteSection;
 import org.junit.jupiter.api.Test;
@@ -21,7 +21,7 @@ class SnapshotMapperTest {
     @Test
     void toContentResponse_sourceQuestionPublicId_isPropagatedWhenSet() {
         UUID questionId = UUID.randomUUID();
-        ExamSnapshot snapshot = snapshotWithItem(questionId);
+        ExamVersion snapshot = snapshotWithItem(questionId);
 
         SnapshotContentResponse response = SnapshotMapper.toContentResponse(snapshot);
 
@@ -31,7 +31,7 @@ class SnapshotMapperTest {
 
     @Test
     void toContentResponse_sourceQuestionPublicId_isPreservedAsNullWhenAbsent() {
-        ExamSnapshot snapshot = snapshotWithItem(null);
+        ExamVersion snapshot = snapshotWithItem(null);
 
         SnapshotContentResponse response = SnapshotMapper.toContentResponse(snapshot);
 
@@ -44,10 +44,10 @@ class SnapshotMapperTest {
         UUID firstId = UUID.randomUUID();
         UUID secondId = UUID.randomUUID();
 
-        ExamSnapshot snapshot = new ExamSnapshot();
+        ExamVersion snapshot = new ExamVersion();
         snapshot.setName("Multi-item Snapshot");
         snapshot.setVersion(1);
-        snapshot.setScoreTemplatePublicId(UUID.randomUUID());
+        snapshot.setExamDefinitionPublicId(UUID.randomUUID());
         snapshot.setTenantId(UUID.randomUUID());
         snapshot.addItem(buildItem(0, firstId));
         snapshot.addItem(buildItem(1, secondId));
@@ -63,10 +63,10 @@ class SnapshotMapperTest {
     void toContentResponse_mixedNullAndNonNullSourceIds_mappedCorrectly() {
         UUID presentId = UUID.randomUUID();
 
-        ExamSnapshot snapshot = new ExamSnapshot();
+        ExamVersion snapshot = new ExamVersion();
         snapshot.setName("Mixed Snapshot");
         snapshot.setVersion(1);
-        snapshot.setScoreTemplatePublicId(UUID.randomUUID());
+        snapshot.setExamDefinitionPublicId(UUID.randomUUID());
         snapshot.setTenantId(UUID.randomUUID());
         snapshot.addItem(buildItem(0, presentId));
         snapshot.addItem(buildItem(1, null));
@@ -80,18 +80,18 @@ class SnapshotMapperTest {
 
     // --- helpers ---
 
-    private ExamSnapshot snapshotWithItem(UUID sourceQuestionPublicId) {
-        ExamSnapshot snapshot = new ExamSnapshot();
+    private ExamVersion snapshotWithItem(UUID sourceQuestionPublicId) {
+        ExamVersion snapshot = new ExamVersion();
         snapshot.setName("Test Snapshot");
         snapshot.setVersion(1);
-        snapshot.setScoreTemplatePublicId(UUID.randomUUID());
+        snapshot.setExamDefinitionPublicId(UUID.randomUUID());
         snapshot.setTenantId(UUID.randomUUID());
         snapshot.addItem(buildItem(0, sourceQuestionPublicId));
         return snapshot;
     }
 
-    private SnapshotItem buildItem(int orderIndex, UUID sourceQuestionPublicId) {
-        SnapshotItem item = new SnapshotItem();
+    private ExamVersionItem buildItem(int orderIndex, UUID sourceQuestionPublicId) {
+        ExamVersionItem item = new ExamVersionItem();
         item.setOrderIndex(orderIndex);
         item.setSection(PteSection.READING);
         item.setTaskTypeKey("MC_READING_SINGLE");

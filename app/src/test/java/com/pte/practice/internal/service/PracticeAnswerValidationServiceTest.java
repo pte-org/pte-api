@@ -19,6 +19,12 @@ class PracticeAnswerValidationServiceTest {
     }
 
     @Test
+    void anAnswerNoLongerNeedsAConfidence() {
+        assertThatCode(() -> service.validate("MC_READING_SINGLE_V1", "{\"selectedOption\":\"a\"}", null))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     void blankPayloadMayRepresentAExplicitSkipWithoutConfidence() {
         assertThatCode(() -> service.requireConfidenceForAnsweredPayload(" ", null))
                 .doesNotThrowAnyException();

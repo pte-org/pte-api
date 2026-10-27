@@ -1,6 +1,6 @@
 package com.pte.billing;
 
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.Subscription;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.LicenseCodeStatus;
@@ -8,12 +8,11 @@ import com.pte.billing.domain.enums.OrderStatus;
 import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.domain.enums.SubscriptionStatus;
-import com.pte.billing.domain.enums.TenantApplicationStatus;
+import com.pte.tenancy.TenancyService;
 import com.pte.billing.internal.repository.LicenseCodeRepository;
 import com.pte.billing.internal.repository.OrderRepository;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.billing.internal.repository.SubscriptionRepository;
-import com.pte.billing.internal.repository.TenantApplicationRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,20 +51,20 @@ public class BillingOverviewService {
     public static final int LICENSE_EXPIRING_SOON_DAYS = 7;
 
     private final SubscriptionRepository subscriptionRepository;
-    private final PlanRepository planRepository;
+    private final ServicePlanRepository planRepository;
     private final OrderRepository orderRepository;
     private final LicenseCodeRepository licenseCodeRepository;
-    private final TenantApplicationRepository applicationRepository;
+    private final TenancyService tenancyService;
     private final Clock clock;
 
-    public BillingOverviewService(SubscriptionRepository subscriptionRepository, PlanRepository planRepository,
+    public BillingOverviewService(SubscriptionRepository subscriptionRepository, ServicePlanRepository planRepository,
             OrderRepository orderRepository, LicenseCodeRepository licenseCodeRepository,
-            TenantApplicationRepository applicationRepository, Clock clock) {
+            TenancyService tenancyService, Clock clock) {
         this.subscriptionRepository = subscriptionRepository;
         this.planRepository = planRepository;
         this.orderRepository = orderRepository;
         this.licenseCodeRepository = licenseCodeRepository;
-        this.applicationRepository = applicationRepository;
+        this.tenancyService = tenancyService;
         this.clock = clock;
     }
 
@@ -109,9 +108,9 @@ public class BillingOverviewService {
         if (subscriptions.isEmpty()) {
             return new SubscriptionSummary(List.of(), null, null, false);
         }
-        Map<UUID, Plan> plans = planRepository
+        Map<UUID, ServicePlan> plans = planRepository
                 .findByPublicIdIn(subscriptions.stream().map(Subscription::getPlanId).distinct().toList()).stream()
-                .collect(Collectors.toMap(Plan::getPublicId, Function.identity()));
+                .collect(Collectors.toMap(ServicePlan::getPublicId, Function.identity()));
         List<CurrentSubscriptionView> current = subscriptions.stream().map(s -> toView(s, plans.get(s.getPlanId())))
                 .toList();
         Instant nearest = subscriptions.get(0).getExpiresAt();
@@ -189,13 +188,13 @@ public class BillingOverviewService {
     /** Applications waiting for review. */
     @Transactional(readOnly = true)
     public long pendingApplicationCount() {
-        return applicationRepository.countByStatusAndDeletedFalse(TenantApplicationStatus.PENDING);
+        return tenancyService.countPendingApplications();
     }
 
     /** Applications received (created) in {@code [from, to)}, whatever their review state is now. */
     @Transactional(readOnly = true)
     public long countApplicationsReceivedBetween(Instant from, Instant to) {
-        return applicationRepository.countReceivedBetween(from, to);
+        return tenancyService.countApplicationsReceivedBetween(from, to);
     }
 
     /** The {@code limit} longest-waiting pending applications, oldest first. */
@@ -204,10 +203,10 @@ public class BillingOverviewService {
         if (limit <= 0) {
             return List.of();
         }
-        return applicationRepository.findOldestByStatus(TenantApplicationStatus.PENDING, PageRequest.of(0, limit))
+        return tenancyService.findOldestPendingApplications(limit)
                 .stream()
-                .map(a -> new PendingApplicationView(a.getPublicId(), a.getOrgName(), a.getOrgType(),
-                        a.getRequestedCode(), a.getCreatedAt()))
+                .map(a -> new PendingApplicationView(a.getPublicId(), a.getName(), a.getOrganizationType(),
+                        a.getCode(), a.getCreatedAt()))
                 .toList();
     }
 
@@ -224,18 +223,18 @@ public class BillingOverviewService {
                 SubscriptionStatus.ACTIVE, now);
         Map<UUID, Subscription> soonest = new LinkedHashMap<>();
         usable.forEach(s -> soonest.putIfAbsent(s.getTenantId(), s));
-        Map<UUID, Plan> plans = planRepository
+        Map<UUID, ServicePlan> plans = planRepository
                 .findByPublicIdIn(soonest.values().stream().map(Subscription::getPlanId).distinct().toList()).stream()
-                .collect(Collectors.toMap(Plan::getPublicId, Function.identity()));
+                .collect(Collectors.toMap(ServicePlan::getPublicId, Function.identity()));
         Map<UUID, TenantPlanBrief> result = new LinkedHashMap<>();
         soonest.forEach((tenantId, s) -> {
-            Plan plan = plans.get(s.getPlanId());
+            ServicePlan plan = plans.get(s.getPlanId());
             result.put(tenantId, new TenantPlanBrief(plan == null ? null : plan.getName(), s.getExpiresAt()));
         });
         return Collections.unmodifiableMap(result);
     }
 
-    private static CurrentSubscriptionView toView(Subscription subscription, Plan plan) {
+    private static CurrentSubscriptionView toView(Subscription subscription, ServicePlan plan) {
         return new CurrentSubscriptionView(subscription.getPublicId(), plan == null ? null : plan.getName(),
                 plan == null ? null : plan.getType().name(), subscription.getStartsAt(), subscription.getExpiresAt(),
                 subscription.getStatus().name());

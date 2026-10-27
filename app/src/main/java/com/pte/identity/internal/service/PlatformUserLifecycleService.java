@@ -3,13 +3,10 @@ package com.pte.identity.internal.service;
 import com.pte.identity.UserCredentialsEmailRequestedEvent;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.constant.IdentityConstants;
-import com.pte.identity.internal.domain.LoginHash;
-import com.pte.identity.internal.dto.request.UpdatePlatformUserProfileRequest;
+import com.pte.identity.internal.dto.request.profile.UpdatePlatformUserProfileRequest;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.UserEmailRequiredException;
-import com.pte.identity.internal.exception.UserNotFoundException;
 import com.pte.identity.internal.mapper.UserMapper;
-import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.util.PasswordGenerator;
 import com.pte.shared.audit.AuditLogService;
@@ -27,19 +24,17 @@ public class PlatformUserLifecycleService {
 
     private final PlatformUserService platformUserService;
     private final UserRepository userRepository;
-    private final LoginHashRepository loginHashRepository;
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenService refreshTokenService;
     private final ApplicationEventPublisher eventPublisher;
     private final AuditLogService auditLogService;
 
     public PlatformUserLifecycleService(PlatformUserService platformUserService, UserRepository userRepository,
-            LoginHashRepository loginHashRepository, PasswordEncoder passwordEncoder,
+            PasswordEncoder passwordEncoder,
             RefreshTokenService refreshTokenService, ApplicationEventPublisher eventPublisher,
             AuditLogService auditLogService) {
         this.platformUserService = platformUserService;
         this.userRepository = userRepository;
-        this.loginHashRepository = loginHashRepository;
         this.passwordEncoder = passwordEncoder;
         this.refreshTokenService = refreshTokenService;
         this.eventPublisher = eventPublisher;
@@ -69,15 +64,12 @@ public class PlatformUserLifecycleService {
         }
 
         String temporaryPassword = PasswordGenerator.generateReadable();
-        LoginHash loginHash = loginHashRepository.findByUserId(target.getId())
-                .orElseThrow(UserNotFoundException::new);
-        loginHash.setHash(passwordEncoder.encode(temporaryPassword));
-        loginHashRepository.save(loginHash);
+        target.setCredentialHash(passwordEncoder.encode(temporaryPassword));
         target.setMustChangePassword(true);
         userRepository.save(target);
         refreshTokenService.revokeAllForUser(target.getId());
         eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(
-                UUID.randomUUID(), target.getPublicId(), target.getTenantId(), target.getUsername(),
+                UUID.randomUUID(), target.getPublicId(), null, target.getUsername(),
                 target.getEmail(), target.getFullName(), temporaryPassword));
         auditLogService.record(caller, IdentityConstants.PLATFORM_USER_AGGREGATE, publicId.toString(),
                 IdentityConstants.PLATFORM_USER_PASSWORD_RESET,

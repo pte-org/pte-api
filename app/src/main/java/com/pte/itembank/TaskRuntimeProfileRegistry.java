@@ -30,15 +30,6 @@ public final class TaskRuntimeProfileRegistry {
         return Arrays.stream(PteTaskType.values()).map(PROFILES::get).toList();
     }
 
-    /** Resolves a standard profile by its semantic screen key and version. */
-    public static TaskRuntimeProfileDescriptor descriptorForScreen(String screenKey, int profileVersion) {
-        return all().stream()
-                .filter(profile -> profile.rendererKey().equals(screenKey)
-                        && profile.profileVersion() == profileVersion)
-                .findFirst()
-                .orElse(null);
-    }
-
     /**
      * Checks the immutable, code-owned part of a persisted/profile response.
      * The lifecycle status is deliberately excluded from this comparison so a
@@ -77,27 +68,6 @@ public final class TaskRuntimeProfileRegistry {
                 && left.stream().sorted().toList().equals(right.stream().sorted().toList());
     }
 
-    /**
-     * Validates the canonical screen-contract projection independently of a
-     * logical task key. Custom task keys may reuse a standard screen, so the
-     * task-key-specific check above is not sufficient for the capability
-     * registry boundary.
-     */
-    public static boolean isAllowlistedScreenContract(TaskRuntimeContractDescriptor actual) {
-        if (actual == null || !("ACTIVE".equals(actual.status()) || "RETIRED".equals(actual.status()))) {
-            return false;
-        }
-        return all().stream()
-                .filter(profile -> profile.screenKey().equals(actual.screenKey())
-                        && profile.contractVersion() == actual.contractVersion())
-                .anyMatch(profile -> profileKeyMatches(profile, actual)
-                        && "1.0.0".equals(actual.minSupportedAppVersion())
-                        && ("PTE." + profile.taskTypeCode() + "_AUTHORING")
-                                .equals(actual.authoringContractKey())
-                        && Integer.valueOf(1).equals(actual.authoringContractVersion())
-                        && authoringRequirementsFor(profile.taskTypeCode()).equals(actual.authoringRequirements()));
-    }
-
     /** Returns the code-owned authoring contract for a standard runtime key. */
     public static TaskAuthoringRequirements authoringRequirementsFor(String taskTypeCode) {
         PteTaskType taskType = TaskTypeCodeCompatibility.parse(taskTypeCode);
@@ -111,19 +81,6 @@ public final class TaskRuntimeProfileRegistry {
                 taskType == PteTaskType.MC_READING_SINGLE || taskType == PteTaskType.MC_LISTENING_SINGLE,
                 taskType == PteTaskType.RE_ORDER_PARAGRAPHS,
                 taskType.requiresReferenceAnswer());
-    }
-
-    private static boolean profileKeyMatches(TaskRuntimeProfileDescriptor profile,
-            TaskRuntimeContractDescriptor actual) {
-        return profile.profileKey().equals(actual.profileKey())
-                && profile.profileVersion() == actual.profileVersion()
-                && profile.behaviorKey().equals(actual.behaviorKey())
-                && profile.rendererKey().equals(actual.rendererKey())
-                && profile.answerSchemaVersion() == actual.answerSchemaVersion()
-                && profile.scoringProfileKey().equals(actual.scoringProfileKey())
-                && profile.scoringProfileVersion() == actual.scoringProfileVersion()
-                && sameCapabilities(profile.requiredClientCapabilities(), actual.requiredClientCapabilities())
-                && profile.scoringMode().equals(actual.scoringMode());
     }
 
     private static Map<PteTaskType, TaskRuntimeProfileDescriptor> buildProfiles() {

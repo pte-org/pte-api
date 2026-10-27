@@ -196,9 +196,9 @@ WHERE NOT EXISTS (
 );
 
 -- 6. Additional Tenants for Platform Admin Overview (Org-type split, Growth chart, Recent Tenants)
-INSERT INTO tenants (
+INSERT INTO organizations (
     public_id, created_at, updated_at, deleted,
-    code, name, organization_type, status, package_name, student_limit
+    code, name, organization_type, status, package_name, student_limit, facility_type, version
 )
 SELECT
     '11111111-2222-4000-8000-000000000001'::uuid,
@@ -210,14 +210,16 @@ SELECT
     'UNIVERSITY',
     'ACTIVE',
     'ENTERPRISE',
-    200
+    200,
+    'MAIN',
+    0
 WHERE NOT EXISTS (
-    SELECT 1 FROM tenants WHERE code = 'fpt-danang'
+    SELECT 1 FROM organizations WHERE code = 'fpt-danang'
 );
 
-INSERT INTO tenants (
+INSERT INTO organizations (
     public_id, created_at, updated_at, deleted,
-    code, name, organization_type, status, package_name, student_limit
+    code, name, organization_type, status, package_name, student_limit, facility_type, version
 )
 SELECT
     '11111111-2222-4000-8000-000000000002'::uuid,
@@ -229,14 +231,16 @@ SELECT
     'ENTERPRISE',
     'ACTIVE',
     'PROFESSIONAL',
-    100
+    100,
+    'MAIN',
+    0
 WHERE NOT EXISTS (
-    SELECT 1 FROM tenants WHERE code = 'ila-vietnam'
+    SELECT 1 FROM organizations WHERE code = 'ila-vietnam'
 );
 
-INSERT INTO tenants (
+INSERT INTO organizations (
     public_id, created_at, updated_at, deleted,
-    code, name, organization_type, status, package_name, student_limit
+    code, name, organization_type, status, package_name, student_limit, facility_type, version
 )
 SELECT
     '11111111-2222-4000-8000-000000000003'::uuid,
@@ -248,9 +252,11 @@ SELECT
     'SCHOOL',
     'SUSPENDED',
     'STARTER',
-    50
+    50,
+    'MAIN',
+    0
 WHERE NOT EXISTS (
-    SELECT 1 FROM tenants WHERE code = 'vus-center'
+    SELECT 1 FROM organizations WHERE code = 'vus-center'
 );
 
 -- Additional paid order for FPT Da Nang

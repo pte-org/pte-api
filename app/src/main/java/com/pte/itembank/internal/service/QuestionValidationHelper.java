@@ -2,7 +2,7 @@ package com.pte.itembank.internal.service;
 
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.QuestionOption;
-import com.pte.itembank.domain.QuestionTypeDefinition;
+import com.pte.itembank.domain.QuestionType;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.internal.constant.ItembankConstants;
 import com.pte.itembank.internal.exception.QuestionValidationException;
@@ -30,14 +30,9 @@ public class QuestionValidationHelper {
         this.questionTypeService = questionTypeService;
     }
 
-    /** Compatibility constructor for focused tests without the catalog bean. */
-    public QuestionValidationHelper() {
-        this.questionTypeService = null;
-    }
-
     public void validate(Question question) {
         PteTaskType type = question.getPteTaskType();
-        QuestionTypeDefinition definition = definitionFor(question);
+        QuestionType definition = definitionFor(question);
         boolean requiresAudioPrompt = definition == null ? type != null && type.requiresAudioPrompt() : definition.isRequiresAudioPrompt();
         boolean requiresImagePrompt = definition == null ? type != null && type.requiresImagePrompt() : definition.isRequiresImagePrompt();
         boolean requiresPromptText = definition == null ? type != null && type.requiresPromptText() : definition.isRequiresPromptText();
@@ -76,7 +71,7 @@ public class QuestionValidationHelper {
         return question.getTaskTypeKey() == null && type != null ? type.name() : question.getTaskTypeKey();
     }
 
-    private void validateAnswers(Question question, PteTaskType type, QuestionTypeDefinition definition) {
+    private void validateAnswers(Question question, PteTaskType type, QuestionType definition) {
         boolean requiresOptions = definition == null ? type != null && type.requiresOptions() : definition.isRequiresOptions();
         boolean requiresCorrectAnswer = definition == null ? type != null && type.requiresCorrectAnswer() : definition.isRequiresCorrectAnswer();
         boolean requiresSingleCorrectOption = definition == null
@@ -109,7 +104,7 @@ public class QuestionValidationHelper {
         }
     }
 
-    private QuestionTypeDefinition definitionFor(Question question) {
+    private QuestionType definitionFor(Question question) {
         PteTaskType type = question.getPteTaskType();
         if (questionTypeService == null) {
             if (type == null) throw new QuestionValidationException(ItembankConstants.UNKNOWN_TASK_TYPE);

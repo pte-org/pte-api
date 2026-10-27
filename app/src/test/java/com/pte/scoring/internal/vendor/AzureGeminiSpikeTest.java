@@ -10,7 +10,7 @@ import com.pte.scoring.internal.vendor.azure.SpeechSegmentResult;
 import com.pte.scoring.internal.vendor.gemini.GeminiRequest;
 import com.pte.scoring.internal.vendor.gemini.GeminiResponse;
 import com.pte.scoring.internal.vendor.gemini.GeminiRestClient;
-import com.pte.scoring.internal.vendor.gemini.SummarizeGroupDiscussionScorer;
+import com.pte.scoring.internal.vendor.gemini.scorer.SummarizeGroupDiscussionScorer;
 import com.pte.scoring.internal.vendor.speech.SpeechAudioLoader;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;

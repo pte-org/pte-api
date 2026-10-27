@@ -2,10 +2,10 @@ package com.pte.billing.internal.controller;
 
 import com.pte.billing.BillingService;
 import com.pte.billing.SubscriptionView;
-import com.pte.billing.internal.dto.request.RevealLicenseKeyRequest;
+import com.pte.billing.internal.dto.request.license.RevealLicenseKeyRequest;
 import com.pte.billing.internal.dto.response.LicenseKeyResponse;
 import com.pte.billing.internal.dto.response.SubscriptionResponse;
-import com.pte.billing.internal.exception.InvalidLicenseKeyRevealPasswordException;
+import com.pte.billing.internal.exception.license.InvalidLicenseKeyRevealPasswordException;
 import com.pte.billing.internal.exception.SubscriptionNotFoundException;
 import com.pte.identity.IdentityService;
 import com.pte.shared.security.CurrentUser;

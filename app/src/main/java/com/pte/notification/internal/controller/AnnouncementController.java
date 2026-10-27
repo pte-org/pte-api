@@ -15,6 +15,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import com.pte.notification.internal.dto.request.AnnouncementStatusAction;
+import com.pte.notification.internal.dto.request.AnnouncementStatusRequest;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -73,15 +76,13 @@ public class AnnouncementController {
         return ApiResponse.success(service.preview(currentUser(), publicId));
     }
 
-    @PostMapping("/{publicId}/publish")
-    public ApiResponse<AnnouncementResponse> publish(@PathVariable UUID publicId,
-            @RequestBody AnnouncementPublishRequest request) {
-        return ApiResponse.success(service.publish(currentUser(), publicId, request));
-    }
-
-    @PostMapping("/{publicId}/retry-delivery")
-    public ApiResponse<AnnouncementResponse> retry(@PathVariable UUID publicId) {
-        return ApiResponse.success(service.retryDelivery(currentUser(), publicId));
+    @PatchMapping("/{publicId}/status")
+    public ApiResponse<AnnouncementResponse> changeStatus(@PathVariable UUID publicId,
+            @Valid @RequestBody AnnouncementStatusRequest request) {
+        CurrentUser caller = currentUser();
+        return ApiResponse.success(request.action() == AnnouncementStatusAction.PUBLISH
+                ? service.publish(caller, publicId, new AnnouncementPublishRequest(request.expectedDraftVersion()))
+                : service.retryDelivery(caller, publicId));
     }
 
     private CurrentUser currentUser() {

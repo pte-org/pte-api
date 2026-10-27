@@ -9,5 +9,5 @@ import jakarta.validation.constraints.PositiveOrZero;
 public record PracticeAnswerRequest(
         @NotNull @PositiveOrZero Long clientVersion,
         @NotBlank String payload,
-        @NotNull ResponseConfidence confidence) {
+        ResponseConfidence confidence) {
 }

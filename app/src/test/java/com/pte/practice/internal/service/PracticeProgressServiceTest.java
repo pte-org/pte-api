@@ -2,12 +2,12 @@ package com.pte.practice.internal.service;
 
 import com.pte.attempt.ResponseConfidence;
 import com.pte.practice.internal.domain.PracticeSession;
-import com.pte.practice.internal.domain.PracticeSessionItem;
+import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.domain.enums.PracticeProgressStatus;
-import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
+import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.response.PracticeProgressResponse;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,7 +31,7 @@ class PracticeProgressServiceTest {
     @Mock
     private PracticeSessionRepository sessionRepository;
     @Mock
-    private PracticeSessionItemRepository itemRepository;
+    private PracticeResponseRepository itemRepository;
 
     private PracticeProgressService service;
     private UUID studentId;
@@ -47,7 +47,7 @@ class PracticeProgressServiceTest {
     @Test
     void returnsCompletedHistoryWithoutRecheckingCurrentEntitlement() {
         PracticeSession session = session(PracticeSessionStatus.COMPLETED);
-        PracticeSessionItem item = item(PracticeSessionItemStatus.ANSWERED, "answer", ResponseConfidence.HIGH);
+        PracticeResponse item = item(PracticeResponseStatus.ANSWERED, "answer", ResponseConfidence.HIGH);
         item.setPracticeSessionId(session.getId());
         when(sessionRepository.findTop100ByStudentPublicIdAndDeletedFalseOrderByCreatedAtDesc(studentId))
                 .thenReturn(List.of(session));
@@ -75,11 +75,11 @@ class PracticeProgressServiceTest {
         when(sessionRepository.findTop100ByStudentPublicIdAndDeletedFalseOrderByCreatedAtDesc(studentId))
                 .thenReturn(List.of(discarded, skipped, expired));
         when(sessionRepository.countByStudentPublicIdAndDeletedFalse(studentId)).thenReturn(3L);
-        PracticeSessionItem discardedItem = item(PracticeSessionItemStatus.PENDING, null, null);
+        PracticeResponse discardedItem = item(PracticeResponseStatus.PENDING, null, null);
         discardedItem.setPracticeSessionId(discarded.getId());
-        PracticeSessionItem skippedItem = item(PracticeSessionItemStatus.SKIPPED, null, null);
+        PracticeResponse skippedItem = item(PracticeResponseStatus.SKIPPED, null, null);
         skippedItem.setPracticeSessionId(skipped.getId());
-        PracticeSessionItem expiredItem = item(PracticeSessionItemStatus.PENDING, "draft", ResponseConfidence.LOW);
+        PracticeResponse expiredItem = item(PracticeResponseStatus.PENDING, "draft", ResponseConfidence.LOW);
         expiredItem.setPracticeSessionId(expired.getId());
         when(itemRepository.findByPracticeSessionIdInAndDeletedFalseOrderByPracticeSessionIdAscOrderIndexAsc(
                 List.of(discarded.getId(), skipped.getId(), expired.getId())))
@@ -94,6 +94,40 @@ class PracticeProgressServiceTest {
                     assertThat(entry.draftItemCount()).isEqualTo(1);
                 });
         assertThat(response.hasMore()).isFalse();
+    }
+
+    @Test
+    void progressEntryCarriesTheSessionKindAndAverageScore() {
+        PracticeSession skill = session(PracticeSessionStatus.COMPLETED);
+        skill.setKind(com.pte.practice.internal.domain.enums.PracticeSessionKind.SKILL);
+        skill.setSkillCode("READING");
+        skill.setSelectedTaskTypes("MC_READING_SINGLE,RE_ORDER_PARAGRAPHS");
+        PracticeSession legacy = session(PracticeSessionStatus.COMPLETED);
+        legacy.setSelectedTaskTypes("READ_ALOUD");
+        PracticeResponse scored = item(PracticeResponseStatus.ANSWERED, "a", null);
+        scored.setPracticeSessionId(skill.getId());
+        scored.setObjectiveScore(80);
+        PracticeResponse aiScored = item(PracticeResponseStatus.ANSWERED, "b", null);
+        aiScored.setPracticeSessionId(skill.getId());
+        aiScored.setAiScore(65);
+        PracticeResponse unscored = item(PracticeResponseStatus.ANSWERED, "c", null);
+        unscored.setPracticeSessionId(legacy.getId());
+        when(sessionRepository.findTop100ByStudentPublicIdAndDeletedFalseOrderByCreatedAtDesc(studentId))
+                .thenReturn(List.of(skill, legacy));
+        when(sessionRepository.countByStudentPublicIdAndDeletedFalse(studentId)).thenReturn(2L);
+        when(itemRepository.findByPracticeSessionIdInAndDeletedFalseOrderByPracticeSessionIdAscOrderIndexAsc(
+                List.of(skill.getId(), legacy.getId()))).thenReturn(List.of(scored, aiScored, unscored));
+
+        var entries = service.getProgress(studentId).entries();
+
+        assertThat(entries.get(0).kind()).isEqualTo("SKILL");
+        assertThat(entries.get(0).skillCode()).isEqualTo("READING");
+        assertThat(entries.get(0).taskCode()).isNull();
+        assertThat(entries.get(0).score()).isEqualTo(72.5);
+        // A session from before V4 has no kind: it reads as a single-task session.
+        assertThat(entries.get(1).kind()).isEqualTo("TASK");
+        assertThat(entries.get(1).taskCode()).isEqualTo("READ_ALOUD");
+        assertThat(entries.get(1).score()).isNull();
     }
 
     @Test
@@ -112,9 +146,9 @@ class PracticeProgressServiceTest {
         return session;
     }
 
-    private PracticeSessionItem item(PracticeSessionItemStatus status, String payload,
+    private PracticeResponse item(PracticeResponseStatus status, String payload,
             ResponseConfidence confidence) {
-        PracticeSessionItem item = new PracticeSessionItem();
+        PracticeResponse item = new PracticeResponse();
         item.setStatus(status);
         item.setSavedPayload(payload);
         item.setConfidence(confidence);

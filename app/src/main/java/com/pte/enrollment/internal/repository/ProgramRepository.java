@@ -15,10 +15,10 @@ public interface ProgramRepository extends JpaRepository<Program, Long> {
     List<Program> findByOrganization_PublicIdAndDeletedFalseOrderByCreatedAtAsc(UUID organizationPublicId);
 
     /** Single-join, tenant-wide â€” not called until Phase 13's dashboard, added now while touching this file. */
-    List<Program> findByOrganization_Tenant_PublicIdAndDeletedFalse(UUID tenantPublicId);
+    List<Program> findByOrganization_PublicIdAndDeletedFalse(UUID tenantPublicId);
 
     /** Overview: count of non-deleted programs of one tenant in the given status. */
-    long countByOrganization_Tenant_PublicIdAndStatusAndDeletedFalse(UUID tenantPublicId, ProgramStatus status);
+    long countByOrganization_PublicIdAndStatusAndDeletedFalse(UUID tenantPublicId, ProgramStatus status);
 
     boolean existsByOrganization_PublicIdAndNameIgnoreCaseAndDeletedFalse(UUID organizationPublicId, String name);
 }

@@ -1,13 +1,14 @@
 package com.pte.session.internal.service;
 
+import com.pte.session.internal.service.enrollment.SessionEntryGate;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.enums.SessionStatus;
-import com.pte.session.internal.exception.HostContextRequiredException;
+import com.pte.session.internal.exception.staff.HostContextRequiredException;
 import com.pte.session.internal.exception.SessionNotFoundException;
-import com.pte.session.internal.exception.NotEntitledException;
-import com.pte.session.internal.exception.SessionNotClosedForExaminerAssignmentException;
-import com.pte.session.internal.exception.SessionNotClosedForGradingCohortException;
-import com.pte.session.internal.exception.SessionNotClosedForReportPublicationException;
+import com.pte.session.internal.exception.enrollment.NotEntitledException;
+import com.pte.session.internal.exception.lifecycle.SessionNotClosedForExaminerAssignmentException;
+import com.pte.session.internal.exception.lifecycle.SessionNotClosedForGradingCohortException;
+import com.pte.session.internal.exception.lifecycle.SessionNotClosedForReportPublicationException;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -24,20 +25,12 @@ public class SessionOperationGuardService {
     private final Clock clock;
     private final TenancyService tenancyService;
 
-    public SessionOperationGuardService(ExamSessionRepository sessionRepository) {
-        this(sessionRepository, Clock.systemUTC(), null);
-    }
-
     @Autowired
     public SessionOperationGuardService(ExamSessionRepository sessionRepository, Clock clock,
             TenancyService tenancyService) {
         this.sessionRepository = sessionRepository;
-        this.clock = clock != null ? clock : Clock.systemUTC();
+        this.clock = clock;
         this.tenancyService = tenancyService;
-    }
-
-    public SessionOperationGuardService(ExamSessionRepository sessionRepository, Clock clock) {
-        this(sessionRepository, clock, null);
     }
 
     @Transactional

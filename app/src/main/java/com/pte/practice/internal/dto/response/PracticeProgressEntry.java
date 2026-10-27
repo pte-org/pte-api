@@ -23,5 +23,11 @@ public record PracticeProgressEntry(
         int lowConfidenceCount,
         int mediumConfidenceCount,
         int highConfidenceCount,
-        Double score) {
+        /** Mean score (0-100) of the session's scored answers; null while none is scored. */
+        Double score,
+        /** TASK, SKILL or MOCK_TEST; sessions before V4 read as TASK. */
+        String kind,
+        String skillCode,
+        /** The task type when the session covers exactly one; null otherwise. */
+        String taskCode) {
 }

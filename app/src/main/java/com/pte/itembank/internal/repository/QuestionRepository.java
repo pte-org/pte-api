@@ -89,6 +89,20 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     List<UUID> findPublishedPracticeQuestionIdsByTaskTypeKey(@Param("taskTypeKey") String taskTypeKey,
             Pageable pageable);
 
+    /** Number of practice-ready questions per task type key, same pool rule as {@link #findPublishedPracticeQuestionIdsByTaskTypeKey}. */
+    @Query("""
+            SELECT q.taskTypeKey, COUNT(q) FROM Question q
+            WHERE q.deleted = false
+              AND q.visibility = com.pte.itembank.domain.enums.Visibility.SHARED
+              AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED
+              AND q.current = true
+              AND (q.availableForPractice = true OR (q.availabilityFlagsExplicit = false
+                   AND q.pool = com.pte.itembank.domain.enums.QuestionPool.PRACTICE))
+              AND q.taskTypeKey IN :taskTypeKeys
+            GROUP BY q.taskTypeKey
+            """)
+    List<Object[]> countPublishedPracticeQuestionsByTaskTypeKeys(@Param("taskTypeKeys") Collection<String> taskTypeKeys);
+
     @Query("""
             select case when count(q) > 0 then true else false end from Question q
              where q.deleted = false and q.visibility = :visibility and q.status = :status

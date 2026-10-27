@@ -5,9 +5,8 @@ import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
 import com.pte.identity.internal.constant.IdentityConstants;
-import com.pte.identity.internal.domain.LoginHash;
-import com.pte.identity.internal.dto.request.PlatformUserCreateRequest;
-import com.pte.identity.internal.dto.request.PlatformUserRoleUpdateRequest;
+import com.pte.identity.internal.dto.request.user.PlatformUserCreateRequest;
+import com.pte.identity.internal.dto.request.user.PlatformUserRoleUpdateRequest;
 import com.pte.identity.internal.dto.response.UserDirectoryEntryResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.EmailAlreadyUsedException;
@@ -15,7 +14,6 @@ import com.pte.identity.internal.exception.ForbiddenRoleAssignmentException;
 import com.pte.identity.internal.exception.ForbiddenUserManagementException;
 import com.pte.identity.internal.exception.UserNotFoundException;
 import com.pte.identity.internal.mapper.UserMapper;
-import com.pte.identity.internal.repository.LoginHashRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.util.PasswordGenerator;
 import com.pte.shared.audit.AuditLogService;
@@ -45,19 +43,17 @@ public class PlatformUserService {
     private static final int MAX_SIZE = 100;
 
     private final UserRepository userRepository;
-    private final LoginHashRepository loginHashRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserProvisioningHelper provisioningHelper;
     private final AuditLogService auditLogService;
     private final RefreshTokenService refreshTokenService;
     private final ApplicationEventPublisher eventPublisher;
 
-    public PlatformUserService(UserRepository userRepository, LoginHashRepository loginHashRepository,
+    public PlatformUserService(UserRepository userRepository,
             PasswordEncoder passwordEncoder, UserProvisioningHelper provisioningHelper,
             AuditLogService auditLogService, RefreshTokenService refreshTokenService,
             ApplicationEventPublisher eventPublisher) {
         this.userRepository = userRepository;
-        this.loginHashRepository = loginHashRepository;
         this.passwordEncoder = passwordEncoder;
         this.provisioningHelper = provisioningHelper;
         this.auditLogService = auditLogService;
@@ -69,7 +65,7 @@ public class PlatformUserService {
     public UserResponse create(PlatformUserCreateRequest request, CurrentUser caller) {
         requirePlatformUserManagement(caller);
         Set<Role> roles = resolveAssignablePlatformRoles(caller, request.roles());
-        if (userRepository.existsByUsernameAndTenantId(request.email(), null)) {
+        if (userRepository.existsByUsername(request.email())) {
             throw new EmailAlreadyUsedException();
         }
 
@@ -77,7 +73,6 @@ public class PlatformUserService {
         user.setUsername(request.email());
         user.setEmail(request.email());
         user.setFullName(request.fullName());
-        user.setTenantId(null);
         user.setRoles(roles);
         String password = request.password();
         boolean generatedPassword = password == null || password.isBlank();
@@ -85,21 +80,17 @@ public class PlatformUserService {
             password = PasswordGenerator.generateReadable();
             user.setMustChangePassword(true);
         }
+        user.setCredentialHash(passwordEncoder.encode(password));
         User saved = userRepository.saveAndFlush(user);
         if (generatedPassword) {
             saved.setMustChangePassword(true);
         }
-
-        LoginHash loginHash = new LoginHash();
-        loginHash.setUserId(saved.getId());
-        loginHash.setHash(passwordEncoder.encode(password));
-        loginHashRepository.save(loginHash);
         auditLogService.record(caller, IdentityConstants.PLATFORM_USER_AGGREGATE,
                 saved.getPublicId().toString(), IdentityConstants.PLATFORM_USER_CREATED,
                 IdentityConstants.PLATFORM_USER_CREATED_SUMMARY);
         if (generatedPassword) {
             eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(
-                    UUID.randomUUID(), saved.getPublicId(), saved.getTenantId(), saved.getUsername(),
+                    UUID.randomUUID(), saved.getPublicId(), null, saved.getUsername(),
                     saved.getEmail(), saved.getFullName(), password));
         }
         return UserMapper.toResponse(saved);
@@ -256,7 +247,7 @@ public class PlatformUserService {
     private User findPlatformTarget(UUID publicId) {
         User target = userRepository.findByPublicIdAndDeletedFalse(publicId)
                 .orElseThrow(UserNotFoundException::new);
-        if (target.getTenantId() != null || !provisioningHelper.isPlatformTarget(target.getRoles())) {
+        if (!provisioningHelper.isPlatformTarget(target.getRoles())) {
             throw new UserNotFoundException();
         }
         return target;
@@ -264,7 +255,7 @@ public class PlatformUserService {
 
     User findPlatformTargetWithLock(UUID publicId) {
         User target = userRepository.findWithLockByPublicId(publicId).orElseThrow(UserNotFoundException::new);
-        if (target.getTenantId() != null || !provisioningHelper.isPlatformTarget(target.getRoles())) {
+        if (!provisioningHelper.isPlatformTarget(target.getRoles())) {
             throw new UserNotFoundException();
         }
         return target;
@@ -273,7 +264,7 @@ public class PlatformUserService {
     User findPlatformTargetWithLockIncludingDeleted(UUID publicId) {
         User target = userRepository.findWithLockByPublicIdIncludingDeleted(publicId)
                 .orElseThrow(UserNotFoundException::new);
-        if (target.getTenantId() != null || !provisioningHelper.isPlatformTarget(target.getRoles())) {
+        if (!provisioningHelper.isPlatformTarget(target.getRoles())) {
             throw new UserNotFoundException();
         }
         return target;

@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class QuestionValidationHelperTest {
 
-    private final QuestionValidationHelper helper = new QuestionValidationHelper();
+    private final QuestionValidationHelper helper = new QuestionValidationHelper(null);
 
     @Test
     void reorderParagraphs_usesOrderIndexAsCorrectPosition_notCorrectFlag() {

@@ -1,13 +1,9 @@
 package com.pte.scoring.domain.enums;
 
 /**
- * How a task type's rawScore gets produced — resolved per-answer from its
- * pinned {@code ScoreTemplate} (spec FR-07), via {@code
- * ScoringMethodResolver}. A local copy of {@code
- * scoretemplate.domain.enums.ScoringMethod}'s 4 values rather than an import
- * of it — {@code scoring} stays independent of {@code scoretemplate}'s
- * internal enums, matching how {@code taskType}/{@code section} already
- * cross module lines as plain Strings elsewhere in this codebase.
+ * How a task type's rawScore gets produced — read from the exam version item's runtime profile when the answer
+ * is opened for scoring. A local enum rather than an import of the item bank's, so {@code scoring} stays
+ * independent of its internals; {@code taskType}/{@code section} cross module lines as plain Strings.
  */
 public enum ScoringMethod {
     AI_SPEECH,

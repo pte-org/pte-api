@@ -2,7 +2,7 @@ package com.pte.practice.internal.service;
 
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.exception.PracticeSessionNotFoundException;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,8 +28,8 @@ class PracticeReviewServiceRecoveryTest {
     private static final Instant NOW = Instant.parse("2026-10-24T02:00:00Z");
 
     private final PracticeSessionRepository sessionRepository = mock(PracticeSessionRepository.class);
-    private final PracticeSessionItemRepository itemRepository = mock(PracticeSessionItemRepository.class);
-    private final PracticeSessionItemService itemService = mock(PracticeSessionItemService.class);
+    private final PracticeResponseRepository itemRepository = mock(PracticeResponseRepository.class);
+    private final PracticeResponseService itemService = mock(PracticeResponseService.class);
     private final CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("STUDENT"));
     private final UUID sessionId = UUID.randomUUID();
     private PracticeReviewService service;

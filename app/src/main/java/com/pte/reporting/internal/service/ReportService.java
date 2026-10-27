@@ -2,11 +2,11 @@ package com.pte.reporting.internal.service;
 
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptSummaryView;
-import com.pte.reporting.domain.AttemptReport;
+import com.pte.reporting.domain.ExamResult;
 import com.pte.reporting.internal.dto.response.ReportResponse;
 import com.pte.reporting.internal.exception.ReportNotFoundException;
 import com.pte.reporting.internal.mapper.ReportMapper;
-import com.pte.reporting.internal.repository.AttemptReportRepository;
+import com.pte.reporting.internal.repository.ExamResultRepository;
 import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,19 +22,19 @@ public class ReportService {
 
     private static final String ROLE_STUDENT = "STUDENT";
 
-    private final AttemptReportRepository attemptReportRepository;
+    private final ExamResultRepository examResultRepository;
     private final ScoreAggregationService scoreAggregationService;
     private final AttemptService attemptService;
     private final ReportSnapshotCodec snapshotCodec;
     private final SessionService sessionService;
 
     @Autowired
-    public ReportService(AttemptReportRepository attemptReportRepository,
+    public ReportService(ExamResultRepository examResultRepository,
             ScoreAggregationService scoreAggregationService,
             AttemptService attemptService,
             ReportSnapshotCodec snapshotCodec,
             SessionService sessionService) {
-        this.attemptReportRepository = attemptReportRepository;
+        this.examResultRepository = examResultRepository;
         this.scoreAggregationService = scoreAggregationService;
         this.attemptService = attemptService;
         this.snapshotCodec = snapshotCodec;
@@ -43,15 +43,15 @@ public class ReportService {
 
     @Transactional
     public ReportResponse getReport(UUID attemptPublicId, CurrentUser caller) {
-        AttemptReport report = attemptReportRepository.findByAttemptPublicId(attemptPublicId).orElse(null);
+        ExamResult report = examResultRepository.findByAttemptPublicId(attemptPublicId).orElse(null);
         if (report == null) {
             AttemptSummaryView attempt = attemptService.getSubmittedAttempt(attemptPublicId);
             if (!canViewAttempt(attempt, caller)) {
                 throw new ReportNotFoundException();
             }
             sessionService.lockForScoreReviewMutation(attempt.sessionPublicId(), attempt.tenantId());
-            report = attemptReportRepository.findByAttemptPublicId(attemptPublicId)
-                    .orElseGet(() -> attemptReportRepository.save(newReport(attempt)));
+            report = examResultRepository.findByAttemptPublicId(attemptPublicId)
+                    .orElseGet(() -> examResultRepository.save(newReport(attempt)));
         }
         if (!canView(report, caller)) {
             throw new ReportNotFoundException();
@@ -72,7 +72,7 @@ public class ReportService {
         if (caller == null || !caller.hasRole(ROLE_STUDENT) || caller.tenantId() == null) {
             return List.of();
         }
-        return attemptReportRepository
+        return examResultRepository
                 .findByStudentPublicIdAndTenantIdAndPublishedTrueAndDeletedFalseOrderByPublishedAtDesc(
                         caller.userId(), caller.tenantId())
                 .stream()
@@ -80,15 +80,15 @@ public class ReportService {
                 .toList();
     }
 
-    private AttemptScoreSummary publishedSummary(AttemptReport report) {
+    private AttemptScoreSummary publishedSummary(ExamResult report) {
         if (report.getReportSnapshotJson() == null) {
             return scoreAggregationService.aggregateLegacyPublished(report.getAttemptPublicId(), report.getTenantId());
         }
         return snapshotCodec.decode(report.getReportSnapshotJson()).scoreSummary();
     }
 
-    static AttemptReport newReport(AttemptSummaryView summary) {
-        AttemptReport report = new AttemptReport();
+    static ExamResult newReport(AttemptSummaryView summary) {
+        ExamResult report = new ExamResult();
         report.setAttemptPublicId(summary.attemptPublicId());
         report.setSessionPublicId(summary.sessionPublicId());
         report.setStudentPublicId(summary.studentPublicId());
@@ -97,7 +97,7 @@ public class ReportService {
         return report;
     }
 
-    private boolean canView(AttemptReport report, CurrentUser caller) {
+    private boolean canView(ExamResult report, CurrentUser caller) {
         if (caller == null) {
             return false;
         }

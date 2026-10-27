@@ -1,7 +1,7 @@
 package com.pte.billing;
 
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.exception.PlatformSettingNotFoundException;
+import com.pte.billing.internal.exception.setting.PlatformSettingNotFoundException;
 import com.pte.billing.internal.service.PlatformSettingService;
 import com.pte.tenancy.TenantSuspensionDurationProvider;
 import org.springframework.stereotype.Service;

@@ -1,17 +1,16 @@
 package com.pte.proctoring.internal.service;
 
-import com.pte.proctoring.domain.ProctorSession;
-import com.pte.proctoring.domain.ViolationEvent;
-import com.pte.proctoring.domain.enums.ProctorSessionStatus;
+import com.pte.attempt.AttemptService;
+import com.pte.proctoring.domain.ExamIncident;
+import com.pte.proctoring.domain.enums.IncidentOrigin;
 import com.pte.proctoring.domain.enums.ViolationType;
 import com.pte.proctoring.dto.event.ViolationDetectedEvent;
-import com.pte.proctoring.internal.constant.ProctorConstants;
 import com.pte.proctoring.internal.dto.request.FlagViolationRequest;
 import com.pte.proctoring.internal.dto.response.ViolationEventResponse;
-import com.pte.proctoring.internal.exception.ProctorSessionNotActiveException;
+import com.pte.proctoring.internal.exception.TargetAttemptInvalidException;
 import com.pte.proctoring.internal.mapper.ProctorMapper;
-import com.pte.proctoring.internal.repository.ProctorSessionRepository;
-import com.pte.proctoring.internal.repository.ViolationEventRepository;
+import com.pte.proctoring.internal.policy.ProctorAccessPolicy;
+import com.pte.proctoring.internal.repository.ExamIncidentRepository;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,7 +28,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,166 +36,107 @@ import static org.mockito.Mockito.when;
 class ViolationServiceTest {
 
     @Mock
-    private ProctorSessionService proctorSessionService;
+    private ProctorWatchService watchService;
 
     @Mock
-    private ProctorSessionRepository proctorSessionRepository;
-
-    @Mock
-    private ViolationEventRepository violationEventRepository;
-
-    @Mock
-    private HashChainService hashChainService;
+    private ExamIncidentRepository incidentRepository;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
     @Mock
-    private ProctorMapper proctorMapper;
-
-    @Mock
     private SimpMessagingTemplate messagingTemplate;
 
+    @Mock
+    private AttemptService attemptService;
+
+    @Mock
+    private ProctorAccessPolicy proctorAccessPolicy;
+
+    private final ProctorMapper mapper = new ProctorMapper();
     private ViolationService service;
+    private final UUID sessionPublicId = UUID.randomUUID();
+    private final UUID proctorPublicId = UUID.randomUUID();
+    private final UUID tenantId = UUID.randomUUID();
+    private final UUID attemptPublicId = UUID.randomUUID();
+    private final CurrentUser caller = new CurrentUser(proctorPublicId, tenantId, List.of("PROCTOR"));
 
     @BeforeEach
     void setUp() {
-        service = new ViolationService(proctorSessionService, proctorSessionRepository, violationEventRepository,
-                hashChainService, eventPublisher, proctorMapper, messagingTemplate);
+        service = new ViolationService(watchService, incidentRepository, eventPublisher, mapper, messagingTemplate,
+                attemptService, proctorAccessPolicy, com.pte.TestClocks.fixed());
     }
 
     @Test
-    void flag_activeSession_savesViolationAdvancesChainPublishesEventAndBroadcasts() {
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID proctorSessionPublicId = UUID.randomUUID();
-        UUID proctorPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-        UUID attemptPublicId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(proctorPublicId, tenantId, List.of("PROCTOR"));
-
-        ProctorSession session = new ProctorSession();
-        session.setPublicId(proctorSessionPublicId);
-        session.setSessionPublicId(sessionPublicId);
-        session.setProctorPublicId(proctorPublicId);
-        session.setTenantId(tenantId);
-        session.setStatus(ProctorSessionStatus.ACTIVE);
-        session.setLastSequenceNo(0);
-        session.setLastHash("initial_hash");
-
+    void flag_attemptOfTheSession_recordsAProctorFlagPublishesEventAndBroadcasts() {
         FlagViolationRequest request = new FlagViolationRequest(attemptPublicId, ViolationType.TAB_SWITCH, "detail");
+        when(watchService.authorizeCommand(sessionPublicId, caller)).thenReturn(tenantId);
+        when(attemptService.attemptBelongsToSession(attemptPublicId, sessionPublicId, tenantId)).thenReturn(true);
+        when(incidentRepository.save(any(ExamIncident.class))).thenAnswer(invocation -> {
+            ExamIncident saved = invocation.getArgument(0);
+            saved.setPublicId(UUID.randomUUID());
+            return saved;
+        });
 
-        when(proctorSessionService.findOwned(proctorSessionPublicId, proctorPublicId, tenantId))
-                .thenReturn(session);
+        ViolationEventResponse result = service.flag(sessionPublicId, request, caller);
 
-        String computedHash = "computed_hash_123";
-        when(hashChainService.computeHash(
-                any(UUID.class), any(Integer.class), any(UUID.class), any(ViolationType.class),
-                any(String.class), any(Instant.class), any(String.class)))
-                .thenReturn(computedHash);
+        ArgumentCaptor<ExamIncident> saved = ArgumentCaptor.forClass(ExamIncident.class);
+        verify(incidentRepository).save(saved.capture());
+        ExamIncident incident = saved.getValue();
+        assertThat(incident.getOrigin()).isEqualTo(IncidentOrigin.PROCTOR_FLAG);
+        assertThat(incident.getType()).isEqualTo("TAB_SWITCH");
+        assertThat(incident.getDescription()).isEqualTo("detail");
+        assertThat(incident.getTenantId()).isEqualTo(tenantId);
+        assertThat(incident.getSessionPublicId()).isEqualTo(sessionPublicId);
+        assertThat(incident.getAttemptPublicId()).isEqualTo(attemptPublicId);
+        assertThat(incident.getReporterPublicId()).isEqualTo(proctorPublicId);
+        assertThat(result.violationType()).isEqualTo(ViolationType.TAB_SWITCH);
+        assertThat(result.proctorPublicId()).isEqualTo(proctorPublicId);
 
-        ViolationEvent savedEvent = new ViolationEvent();
-        savedEvent.setPublicId(UUID.randomUUID());
-        savedEvent.setSequenceNo(1);
-        savedEvent.setHash(computedHash);
-        savedEvent.setAttemptPublicId(attemptPublicId);
-        savedEvent.setViolationType(ViolationType.TAB_SWITCH);
-        savedEvent.setDetail("detail");
-        savedEvent.setDetectedAt(Instant.now());
-
-        when(violationEventRepository.save(any(ViolationEvent.class))).thenReturn(savedEvent);
-
-        ViolationEventResponse expectedResponse = new ViolationEventResponse(
-                savedEvent.getPublicId(), attemptPublicId, ViolationType.TAB_SWITCH, "detail", 1, computedHash, savedEvent.getDetectedAt());
-        when(proctorMapper.toResponse(savedEvent)).thenReturn(expectedResponse);
-
-        ViolationEventResponse result = service.flag(proctorSessionPublicId, request, caller);
-
-        assertThat(result).isEqualTo(expectedResponse);
-
-        // Verify violation event was saved with correct fields
-        ArgumentCaptor<ViolationEvent> eventCaptor = ArgumentCaptor.forClass(ViolationEvent.class);
-        verify(violationEventRepository).save(eventCaptor.capture());
-        ViolationEvent savedViolation = eventCaptor.getValue();
-        assertThat(savedViolation.getSequenceNo()).isEqualTo(1);
-        assertThat(savedViolation.getAttemptPublicId()).isEqualTo(attemptPublicId);
-        assertThat(savedViolation.getHash()).isEqualTo(computedHash);
-        assertThat(savedViolation.getPrevHash()).isEqualTo("initial_hash");
-
-        // Verify session chain was advanced
-        assertThat(session.getLastSequenceNo()).isEqualTo(1);
-        assertThat(session.getLastHash()).isEqualTo(computedHash);
-        verify(proctorSessionRepository).save(session);
-
-        // Verify event was published
-        ArgumentCaptor<ViolationDetectedEvent> eventPublishCaptor = ArgumentCaptor.forClass(ViolationDetectedEvent.class);
-        verify(eventPublisher).publishEvent(eventPublishCaptor.capture());
-        ViolationDetectedEvent publishedEvent = eventPublishCaptor.getValue();
-        assertThat(publishedEvent.attemptPublicId()).isEqualTo(attemptPublicId);
-        assertThat(publishedEvent.sessionPublicId()).isEqualTo(sessionPublicId);
-        assertThat(publishedEvent.violationType()).isEqualTo(ViolationType.TAB_SWITCH);
-        assertThat(publishedEvent.detail()).isEqualTo("detail");
-        assertThat(publishedEvent.tenantId()).isEqualTo(tenantId);
-
-        // SimpMessagingTemplate's convertAndSend has ambiguous overloads, so we skip verification
+        ArgumentCaptor<ViolationDetectedEvent> published = ArgumentCaptor.forClass(ViolationDetectedEvent.class);
+        verify(eventPublisher).publishEvent(published.capture());
+        assertThat(published.getValue().attemptPublicId()).isEqualTo(attemptPublicId);
+        assertThat(published.getValue().sessionPublicId()).isEqualTo(sessionPublicId);
+        assertThat(published.getValue().violationType()).isEqualTo(ViolationType.TAB_SWITCH);
+        assertThat(published.getValue().tenantId()).isEqualTo(tenantId);
     }
 
     @Test
-    void flag_inactiveSession_throwsException_noSaveNoPublish() {
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID proctorSessionPublicId = UUID.randomUUID();
-        UUID proctorPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-        UUID attemptPublicId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(proctorPublicId, tenantId, List.of("PROCTOR"));
-
-        ProctorSession session = new ProctorSession();
-        session.setPublicId(proctorSessionPublicId);
-        session.setSessionPublicId(sessionPublicId);
-        session.setProctorPublicId(proctorPublicId);
-        session.setTenantId(tenantId);
-        session.setStatus(ProctorSessionStatus.ENDED);
-
+    void flag_attemptOfAnotherSession_isRejectedWithoutRecordingOrPublishing() {
         FlagViolationRequest request = new FlagViolationRequest(attemptPublicId, ViolationType.TAB_SWITCH, "detail");
+        when(watchService.authorizeCommand(sessionPublicId, caller)).thenReturn(tenantId);
+        when(attemptService.attemptBelongsToSession(attemptPublicId, sessionPublicId, tenantId)).thenReturn(false);
 
-        when(proctorSessionService.findOwned(proctorSessionPublicId, proctorPublicId, tenantId))
-                .thenReturn(session);
+        assertThatThrownBy(() -> service.flag(sessionPublicId, request, caller))
+                .isInstanceOf(TargetAttemptInvalidException.class);
 
-        assertThatThrownBy(() -> service.flag(proctorSessionPublicId, request, caller))
-                .isInstanceOf(ProctorSessionNotActiveException.class);
-
-        verify(violationEventRepository, never()).save(any());
-        verify(proctorSessionRepository, never()).save(any());
+        verify(incidentRepository, never()).save(any());
         verify(eventPublisher, never()).publishEvent(any());
-        // SimpMessagingTemplate's convertAndSend has ambiguous overloads, so we skip verification
     }
 
     @Test
-    void listForSession_delegatesToRepository() {
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-        UUID proctorPublicId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(proctorPublicId, tenantId, List.of("PROCTOR"));
-
-        ViolationEvent event1 = new ViolationEvent();
-        event1.setPublicId(UUID.randomUUID());
-        ViolationEvent event2 = new ViolationEvent();
-        event2.setPublicId(UUID.randomUUID());
-
-        when(violationEventRepository.findBySessionPublicIdAndTenantIdOrderByDetectedAtAsc(sessionPublicId, tenantId))
-                .thenReturn(List.of(event1, event2));
-
-        ViolationEventResponse response1 = new ViolationEventResponse(
-                event1.getPublicId(), UUID.randomUUID(), ViolationType.TAB_SWITCH, null, 1, "hash1", Instant.now());
-        ViolationEventResponse response2 = new ViolationEventResponse(
-                event2.getPublicId(), UUID.randomUUID(), ViolationType.MULTIPLE_FACES, null, 2, "hash2", Instant.now());
-
-        when(proctorMapper.toResponse(event1)).thenReturn(response1);
-        when(proctorMapper.toResponse(event2)).thenReturn(response2);
+    void listForSession_returnsTheSessionsProctorFlagsOldestFirst() {
+        ExamIncident first = flag(ViolationType.TAB_SWITCH, Instant.parse("2026-09-28T04:00:00Z"));
+        ExamIncident second = flag(ViolationType.MULTIPLE_FACES, Instant.parse("2026-09-28T04:00:05Z"));
+        when(proctorAccessPolicy.authorizeReadAssigned(sessionPublicId, caller)).thenReturn(tenantId);
+        when(incidentRepository.findBySessionPublicIdAndTenantIdAndOriginAndDeletedFalseOrderByDetectedAtAsc(
+                sessionPublicId, tenantId, IncidentOrigin.PROCTOR_FLAG)).thenReturn(List.of(first, second));
 
         List<ViolationEventResponse> result = service.listForSession(sessionPublicId, caller);
 
-        assertThat(result).hasSize(2);
-        assertThat(result).containsExactly(response1, response2);
-        verify(violationEventRepository).findBySessionPublicIdAndTenantIdOrderByDetectedAtAsc(sessionPublicId, tenantId);
+        assertThat(result).extracting(ViolationEventResponse::violationType)
+                .containsExactly(ViolationType.TAB_SWITCH, ViolationType.MULTIPLE_FACES);
+    }
+
+    private ExamIncident flag(ViolationType type, Instant detectedAt) {
+        ExamIncident incident = new ExamIncident();
+        incident.setDetectedAt(java.time.Instant.now());
+        incident.setPublicId(UUID.randomUUID());
+        incident.setOrigin(IncidentOrigin.PROCTOR_FLAG);
+        incident.setType(type.name());
+        incident.setAttemptPublicId(attemptPublicId);
+        incident.setReporterPublicId(proctorPublicId);
+        incident.setDetectedAt(detectedAt);
+        return incident;
     }
 }

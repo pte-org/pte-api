@@ -67,7 +67,7 @@ class ItembankServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ItembankService(questionRepository, new QuestionValidationHelper(),
+        service = com.pte.itembank.ItembankFixtures.itembankService(questionRepository, new QuestionValidationHelper(null),
                 new ItembankAccessPolicy());
         hostCaller = new CurrentUser(UUID.randomUUID(), TENANT_ID, List.of("HOST_ADMIN"));
         platformCaller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"));

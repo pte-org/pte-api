@@ -9,9 +9,9 @@ import com.pte.assessment.internal.exception.InsufficientQuestionBankException;
 import com.pte.assessment.internal.repository.ExamBlueprintRepository;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.domain.enums.PteTaskType;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,7 +52,7 @@ import static org.mockito.Mockito.when;
 class ExamGenerationServiceTest {
 
     @Mock
-    private ScoreTemplateService scoreTemplateService;
+    private ExamDefinitionService examDefinitionService;
     @Mock
     private ItembankService itembankService;
     @Mock
@@ -90,26 +90,26 @@ class ExamGenerationServiceTest {
             new Row("HIGHLIGHT_INCORRECT_WORDS", "LISTENING", 21, 2, 3),
             new Row("WRITE_FROM_DICTATION", "LISTENING", 22, 3, 4));
 
-    private ScoreTemplateResponse v5Template() {
-        List<ScoreTemplateItemResponse> items = V5_ROWS.stream()
-                .map(r -> new ScoreTemplateItemResponse(r.taskType(), r.section(), r.sequence(), r.min(), r.max(),
+    private ExamDefinitionResponse v5Template() {
+        List<ExamDefinitionItemResponse> items = V5_ROWS.stream()
+                .map(r -> new ExamDefinitionItemResponse(r.taskType(), r.section(), r.sequence(), r.min(), r.max(),
                         0, 30, "OBJECTIVE", BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO,
                         BigDecimal.ZERO, BigDecimal.ZERO))
                 .toList();
-        return new ScoreTemplateResponse(UUID.randomUUID(), "PTE_Score_Template", 1, "APEUni PTE Score Table V5",
+        return new ExamDefinitionResponse(UUID.randomUUID(), "PTE_Score_Template", 1, "APEUni PTE Score Table V5",
                 "ACTIVE", items);
     }
 
     @BeforeEach
     void setUp() {
-        service = new ExamGenerationService(scoreTemplateService, itembankService, blueprintRepository,
+        service = new ExamGenerationService(examDefinitionService, itembankService, blueprintRepository,
                 snapshotPublishService);
         hostCaller = new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("HOST_ADMIN"));
     }
 
     /** Every requested task type has "infinite" stock: count = maxCount, random draw returns exactly n ids. */
     private void stubUnlimitedStock() {
-        when(scoreTemplateService.getActive()).thenReturn(v5Template());
+        when(examDefinitionService.getActive()).thenReturn(v5Template());
         when(itembankService.countPublishedByTaskTypes(anySet())).thenAnswer(inv -> {
             Set<PteTaskType> requested = inv.getArgument(0);
             Map<PteTaskType, Long> counts = new EnumMap<>(PteTaskType.class);
@@ -191,10 +191,10 @@ class ExamGenerationServiceTest {
     void generate_orderIsSpeakingListeningReadingWriting_thenBySequence_summarizeSpokenTextClosesListening() {
         stubUnlimitedStock();
         // Reverse the fixture so sequence ordering is checked independently of input order.
-        ScoreTemplateResponse template = v5Template();
-        List<ScoreTemplateItemResponse> reversedItems = new ArrayList<>(template.items());
+        ExamDefinitionResponse template = v5Template();
+        List<ExamDefinitionItemResponse> reversedItems = new ArrayList<>(template.items());
         java.util.Collections.reverse(reversedItems);
-        when(scoreTemplateService.getActive()).thenReturn(new ScoreTemplateResponse(
+        when(examDefinitionService.getActive()).thenReturn(new ExamDefinitionResponse(
                 template.publicId(), template.code(), template.version(), template.name(), template.status(),
                 reversedItems));
         Set<String> allSkills = Set.of("SPEAKING", "WRITING", "READING", "LISTENING");
@@ -268,7 +268,7 @@ class ExamGenerationServiceTest {
 
     @Test
     void generate_randomSelectionReturnsFewerThanN_throwsInsufficient_savesNothing() {
-        when(scoreTemplateService.getActive()).thenReturn(v5Template());
+        when(examDefinitionService.getActive()).thenReturn(v5Template());
         when(itembankService.countPublishedByTaskTypes(anySet())).thenAnswer(inv -> {
             Set<PteTaskType> requested = inv.getArgument(0);
             Map<PteTaskType, Long> counts = new EnumMap<>(PteTaskType.class);
@@ -298,7 +298,7 @@ class ExamGenerationServiceTest {
 
     @Test
     void generate_oneShortageAmongMany_throwsWithAllShortagesListed_savesNothing() {
-        when(scoreTemplateService.getActive()).thenReturn(v5Template());
+        when(examDefinitionService.getActive()).thenReturn(v5Template());
         when(itembankService.countPublishedByTaskTypes(anySet())).thenAnswer(inv -> {
             Set<PteTaskType> requested = inv.getArgument(0);
             Map<PteTaskType, Long> counts = new EnumMap<>(PteTaskType.class);
@@ -323,7 +323,7 @@ class ExamGenerationServiceTest {
 
     @Test
     void generate_missingPersonalIntroductionStock_reportedAsShortage() {
-        when(scoreTemplateService.getActive()).thenReturn(v5Template());
+        when(examDefinitionService.getActive()).thenReturn(v5Template());
         when(itembankService.countPublishedByTaskTypes(anySet())).thenAnswer(inv -> {
             Set<PteTaskType> requested = inv.getArgument(0);
             Map<PteTaskType, Long> counts = new EnumMap<>(PteTaskType.class);
@@ -350,7 +350,7 @@ class ExamGenerationServiceTest {
         assertThatThrownBy(() -> service.generate("Exam", Set.of("NOT_A_SECTION"), hostCaller))
                 .isInstanceOf(InvalidSectionException.class);
 
-        verifyNoInteractions(scoreTemplateService);
+        verifyNoInteractions(examDefinitionService);
         verifyNoInteractions(itembankService);
     }
 
@@ -370,18 +370,18 @@ class ExamGenerationServiceTest {
     @Test
     void generateDeterministic_sameSeedAndTemplateProducesSameBlueprintOrder() {
         UUID templateId = UUID.randomUUID();
-        ScoreTemplateResponse template = new ScoreTemplateResponse(
+        ExamDefinitionResponse template = new ExamDefinitionResponse(
                 templateId,
                 "CUSTOM",
                 4,
                 "Deterministic template",
                 "ACTIVE",
                 null,
-                List.of(new ScoreTemplateItemResponse(
+                List.of(new ExamDefinitionItemResponse(
                         "READ_ALOUD", "SPEAKING", 1, 2, 2, 0, 30, "AI_SPEECH", BigDecimal.ONE,
                         BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)),
                 "CUSTOM");
-        when(scoreTemplateService.findActiveByPublicId(templateId)).thenReturn(Optional.of(template));
+        when(examDefinitionService.findActiveByPublicId(templateId)).thenReturn(Optional.of(template));
         when(itembankService.countPublishedByTaskTypes(anySet())).thenAnswer(invocation -> {
             Set<PteTaskType> requested = invocation.getArgument(0);
             Map<PteTaskType, Long> counts = new EnumMap<>(PteTaskType.class);
@@ -399,7 +399,7 @@ class ExamGenerationServiceTest {
             blueprint.setPublicId(UUID.randomUUID());
             return blueprint;
         });
-        when(snapshotPublishService.publish(any(UUID.class), any(CurrentUser.class), any(ScoreTemplateResponse.class),
+        when(snapshotPublishService.publish(any(UUID.class), any(CurrentUser.class), any(ExamDefinitionResponse.class),
                 anyLong(), anyString(), anyString())).thenReturn(mock(SnapshotResponse.class));
 
         long seed = 20260921L;
@@ -417,5 +417,30 @@ class ExamGenerationServiceTest {
                 eq(template), eq(seed), eq("PTE_SEEDED_V1"), eq(templateId + ":4"));
         verify(itembankService, org.mockito.Mockito.never())
                 .publishedQuestionIds(PteTaskType.PERSONAL_INTRODUCTION);
+    }
+
+    @Test
+    void templateFeasibilityReportsEverySlotAndWhetherThePoolCoversIt() {
+        ExamDefinitionResponse template = v5Template();
+        when(examDefinitionService.getByPublicId(template.publicId())).thenReturn(template);
+        when(itembankService.countPublishedByTaskTypes(anySet())).thenAnswer(inv -> {
+            Set<PteTaskType> requested = inv.getArgument(0);
+            Map<PteTaskType, Long> counts = new EnumMap<>(PteTaskType.class);
+            requested.forEach(type -> counts.put(type, type == PteTaskType.WRITE_ESSAY ? 0L : 100L));
+            return counts;
+        });
+
+        var feasibility = service.getTemplateFeasibility(template.publicId(), Set.of("WRITING"));
+
+        assertThat(feasibility.examDefinitionPublicId()).isEqualTo(template.publicId());
+        assertThat(feasibility.slots()).extracting(slot -> slot.taskType())
+                .containsExactlyInAnyOrder("SUMMARIZE_WRITTEN_TEXT", "WRITE_ESSAY");
+        assertThat(feasibility.ready()).isFalse();
+        assertThat(feasibility.slots()).filteredOn(slot -> slot.taskType().equals("WRITE_ESSAY"))
+                .singleElement().satisfies(slot -> {
+                    assertThat(slot.ready()).isFalse();
+                    assertThat(slot.available()).isZero();
+                    assertThat(slot.reason()).isEqualTo("INSUFFICIENT_POOL");
+                });
     }
 }

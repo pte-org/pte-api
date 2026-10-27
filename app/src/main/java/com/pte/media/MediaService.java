@@ -41,6 +41,17 @@ public class MediaService {
         return cloudinaryMediaService.resolveForTrustedCallers(mediaPublicIds, ttlSeconds, tenantId);
     }
 
+    /**
+     * Playback link for a student's own saved practice recording. The caller must already have verified that the
+     * session and item belong to the student; this checks the media's owner, purpose, session/item binding and
+     * upload state, and answers {@code MediaNotFoundException} for anything else. Works for any session state.
+     */
+    public PresignedDownloadResponse presignOwnedPracticeResponseAudio(UUID mediaPublicId, UUID sessionPublicId,
+            UUID itemPublicId, CurrentUser owner, long ttlSeconds) {
+        return cloudinaryMediaService.presignOwnedPracticeResponseAudio(
+                mediaPublicId, sessionPublicId, itemPublicId, owner, ttlSeconds);
+    }
+
     public void validateAuthoringMedia(UUID mediaPublicId, String assetKind, CurrentUser caller) {
         cloudinaryMediaService.validateAuthoringMedia(mediaPublicId, assetKind, caller);
     }

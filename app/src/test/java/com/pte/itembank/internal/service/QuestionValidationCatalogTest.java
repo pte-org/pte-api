@@ -2,7 +2,7 @@ package com.pte.itembank.internal.service;
 
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.domain.Question;
-import com.pte.itembank.domain.QuestionTypeDefinition;
+import com.pte.itembank.domain.QuestionType;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.domain.enums.PteTaskType;
 import org.junit.jupiter.api.Test;
@@ -29,7 +29,7 @@ class QuestionValidationCatalogTest {
 
     @Test
     void validation_usesPersistedRequirements_insteadOfEnumFlags() {
-        QuestionTypeDefinition definition = new QuestionTypeDefinition();
+        QuestionType definition = new QuestionType();
         definition.setCode(PteTaskType.READ_ALOUD.name());
         definition.setSection(PteSection.SPEAKING);
         definition.setRequiresPromptText(false);
@@ -91,8 +91,8 @@ class QuestionValidationCatalogTest {
                 .hasMessage(ItembankConstants.PROMPT_TEXT_REQUIRED);
     }
 
-    private void stubDefinition(PteTaskType type, java.util.function.Consumer<QuestionTypeDefinition> configure) {
-        QuestionTypeDefinition definition = new QuestionTypeDefinition();
+    private void stubDefinition(PteTaskType type, java.util.function.Consumer<QuestionType> configure) {
+        QuestionType definition = new QuestionType();
         definition.setCode(type.name());
         definition.setSection(type.getSection());
         configure.accept(definition);

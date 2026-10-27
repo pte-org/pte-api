@@ -1,10 +1,11 @@
 package com.pte.session.domain;
 
+import com.pte.session.domain.enums.SessionGradingStatus;
 import com.pte.session.domain.enums.SessionStatus;
-import com.pte.session.domain.enums.FormMode;
 import com.pte.session.domain.enums.ReusePolicy;
 import com.pte.session.domain.enums.ExamMode;
 import com.pte.session.domain.converter.ExamModeCompatibilityConverter;
+import com.pte.session.internal.constant.SessionConstants;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
@@ -20,7 +21,6 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
@@ -67,18 +67,15 @@ public class ExamSession extends BaseEntity {
     @Column(nullable = false, length = 64)
     private String licenseKey;
 
+    /** The single frozen exam every student of this session sits; built when the session is generated. */
     @Column
-    private UUID snapshotPublicId;
+    private UUID examVersionPublicId;
 
     @Column
-    private UUID templatePublicId;
+    private UUID examDefinitionPublicId;
 
     @Column
-    private Integer templateVersion;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "form_mode", length = 32)
-    private FormMode formMode = FormMode.SHARED_FORM;
+    private Integer examDefinitionVersion;
 
     @Convert(converter = ExamModeCompatibilityConverter.class)
     @Column(name = "exam_mode", length = 16)
@@ -103,9 +100,6 @@ public class ExamSession extends BaseEntity {
     @Column(name = "max_retries_per_student", nullable = false)
     private int maxRetriesPerStudent = 0;
 
-    @Column(name = "generation_job_public_id")
-    private UUID generationJobPublicId;
-
     @Version
     @Column(name = "draft_version", nullable = false)
     private Long draftVersion = 0L;
@@ -123,6 +117,36 @@ public class ExamSession extends BaseEntity {
     /** Snapshot of the requested per-session capacity, bounded by the subscription cap. */
     @Column(nullable = false)
     private Integer capacity;
+
+    /**
+     * Grading and publication state of the session, written by the scoring and reporting phases: the id of the
+     * report publication that froze the grading cohort and when it was locked. Null until results are published.
+     */
+    @Column(name = "publication_public_id")
+    private UUID publicationPublicId;
+
+    @Column(name = "publication_locked_at")
+    private Instant publicationLockedAt;
+
+    /** Grading of the closed session: who grades it (marking mode), when the host froze it and when it completed. */
+    @Column(name = "grading_marking_mode", length = 24)
+    private String gradingMarkingMode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "grading_status", length = 16)
+    private SessionGradingStatus gradingStatus;
+
+    @Column(name = "grading_preview_version", length = 128)
+    private String gradingPreviewVersion;
+
+    @Column(name = "grading_frozen_by_public_id")
+    private UUID gradingFrozenByPublicId;
+
+    @Column(name = "grading_frozen_at")
+    private Instant gradingFrozenAt;
+
+    @Column(name = "grading_completed_at")
+    private Instant gradingCompletedAt;
 
     @Embedded
     private ExamPolicy policy = ExamPolicy.mockTestDefault();
@@ -148,5 +172,39 @@ public class ExamSession extends BaseEntity {
         if (status != expected) {
             throw new IllegalStateException("Session must be " + expected + " before this transition");
         }
+    }
+
+    /** Fixes how the closed session is graded; a session is frozen once. */
+    public void freezeGrading(String markingMode, String previewVersion, UUID frozenByPublicId, Instant frozenAt) {
+        if (gradingStatus != null) {
+            throw new IllegalStateException(SessionConstants.GRADING_ALREADY_FROZEN);
+        }
+        this.gradingMarkingMode = markingMode;
+        this.gradingPreviewVersion = previewVersion;
+        this.gradingFrozenByPublicId = frozenByPublicId;
+        this.gradingFrozenAt = frozenAt;
+        this.gradingStatus = SessionGradingStatus.FROZEN;
+    }
+
+    /** @return true only on the transition that completes grading, so completion is announced once */
+    public boolean completeGrading(Instant completedAt) {
+        if (gradingStatus != SessionGradingStatus.FROZEN) {
+            return false;
+        }
+        this.gradingStatus = SessionGradingStatus.COMPLETED;
+        this.gradingCompletedAt = completedAt;
+        return true;
+    }
+
+    /** Locks the published results; repeating the same publication is a no-op, another one is rejected. */
+    public void lockPublication(UUID publicationPublicId, Instant lockedAt) {
+        if (this.publicationPublicId != null) {
+            if (!this.publicationPublicId.equals(publicationPublicId)) {
+                throw new IllegalStateException(SessionConstants.PUBLICATION_ALREADY_LOCKED);
+            }
+            return;
+        }
+        this.publicationPublicId = publicationPublicId;
+        this.publicationLockedAt = lockedAt;
     }
 }

@@ -1,5 +1,7 @@
 package com.pte.practice.internal.service;
 
+import com.pte.practice.internal.service.timing.PracticeTimingService;
+
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.PracticeQuestionService;
 import com.pte.itembank.domain.enums.PteSection;
@@ -39,16 +41,50 @@ public class PracticeCatalogService {
 
     private final QuestionTypeService questionTypeService;
     private final PracticeCatalogTaskMapper taskMapper;
+    /** Null in focused tests: timed practice is then reported as unavailable. */
+    private final PracticeTimingService timingService;
 
     public PracticeCatalogService(QuestionTypeService questionTypeService) {
-        this(questionTypeService, null);
+        this(questionTypeService, null, null);
+    }
+
+    /** Compatibility constructor for callers that do not need timed availability. */
+    public PracticeCatalogService(QuestionTypeService questionTypeService,
+            PracticeQuestionService practiceQuestionService) {
+        this(questionTypeService, practiceQuestionService, null);
     }
 
     @Autowired
     public PracticeCatalogService(QuestionTypeService questionTypeService,
-            PracticeQuestionService practiceQuestionService) {
+            PracticeQuestionService practiceQuestionService, PracticeTimingService timingService) {
         this.questionTypeService = questionTypeService;
         this.taskMapper = new PracticeCatalogTaskMapper(practiceQuestionService);
+        this.timingService = timingService;
+    }
+
+    /**
+     * The catalog the student UI reads: {@link #getCatalog()} plus, per task, whether the active Score Template
+     * can pace it. Kept separate so the session mapper, which calls {@code getCatalog()} on every response, does
+     * not pay for a template lookup each time.
+     */
+    @Transactional(readOnly = true)
+    public PracticeCatalogResponse getStudentCatalog() {
+        PracticeCatalogResponse catalog = getCatalog();
+        Map<String, PracticeTimingService.Timing> timings = timingService == null
+                ? Map.of() : timingService.activeTimings();
+        String reason = timings.isEmpty()
+                ? PracticeConstants.PRACTICE_TIMED_MODE_UNAVAILABLE_MESSAGE : null;
+        return new PracticeCatalogResponse(catalog.productCode(), catalog.title(), catalog.catalogVersion(),
+                catalog.timeLimitSeconds(), catalog.sections().stream()
+                        .map(section -> new PracticeCatalogSectionResponse(section.code(), section.displayName(),
+                                section.taskTypes().stream().map(task -> {
+                                    boolean covered = timings.containsKey(
+                                            PracticeTimingService.normalize(task.code()));
+                                    return task.withTimedAvailability(covered, covered ? null
+                                            : reason != null ? reason
+                                                    : PracticeConstants.PRACTICE_TIMED_MODE_UNAVAILABLE_MESSAGE);
+                                }).toList()))
+                        .toList());
     }
 
     @Transactional(readOnly = true)
@@ -73,7 +109,7 @@ public class PracticeCatalogService {
                 PracticeConstants.PRACTICE_PRODUCT_CODE,
                 PracticeConstants.PRACTICE_PRODUCT_TITLE,
                 PracticeConstants.PRACTICE_CATALOG_VERSION,
-                PracticeConstants.PRACTICE_TIME_LIMIT_SECONDS,
+                PracticeConstants.PRACTICE_NO_SESSION_TIME_LIMIT_SECONDS,
                 groupBySection(tasks.values()));
     }
 
@@ -129,6 +165,17 @@ public class PracticeCatalogService {
                     contentNotReady ? PracticeConstants.PRACTICE_CONTENT_NOT_READY_MESSAGE
                             : PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME_MESSAGE);
         }
+    }
+
+    /** Codes of the task types of one skill that can run now, in catalog order; empty when the skill has none. */
+    @Transactional(readOnly = true)
+    public List<String> runnableTaskCodesForSkill(String skillCode) {
+        return getCatalog().sections().stream()
+                .filter(section -> section.code().equalsIgnoreCase(skillCode))
+                .flatMap(section -> section.taskTypes().stream())
+                .filter(task -> task.availability() == PracticeCatalogAvailability.RUNNABLE)
+                .map(PracticeCatalogTaskResponse::code)
+                .toList();
     }
 
     /**

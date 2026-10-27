@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * A human-readable view of {@code ScoringAnswer.payload}. Fields are
+ * A human-readable view of {@code SubmittedAnswerView.payload}. Fields are
  * mutually exclusive per {@code kind}: {@code AUDIO} sets {@code
  * mediaPublicId} (always) and {@code mediaUrl} (only if presigning it
  * succeeded); {@code TEXT}/{@code UNRECOGNIZED} set only {@code text}; {@code

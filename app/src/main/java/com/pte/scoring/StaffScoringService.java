@@ -1,7 +1,7 @@
 package com.pte.scoring;
 
 import com.pte.scoring.dto.response.ExaminerProgressView;
-import com.pte.scoring.internal.service.StaffScoringQueryService;
+import com.pte.scoring.internal.service.staff.StaffScoringQueryService;
 import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;

@@ -2,8 +2,8 @@ package com.pte.billing;
 
 import com.pte.billing.domain.Subscription;
 import com.pte.billing.domain.enums.SubscriptionStatus;
-import com.pte.billing.domain.Plan;
-import com.pte.billing.internal.repository.PlanRepository;
+import com.pte.billing.domain.ServicePlan;
+import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.billing.internal.repository.SubscriptionRepository;
 import com.pte.tenancy.TenantSuspensionImpact;
 import com.pte.tenancy.TenantSuspensionImpactProvider;
@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 public class BillingTenantSuspensionImpactProvider implements TenantSuspensionImpactProvider {
 
     private final SubscriptionRepository subscriptionRepository;
-    private final PlanRepository planRepository;
+    private final ServicePlanRepository planRepository;
 
     public BillingTenantSuspensionImpactProvider(SubscriptionRepository subscriptionRepository) {
         this(subscriptionRepository, null);
@@ -36,7 +36,7 @@ public class BillingTenantSuspensionImpactProvider implements TenantSuspensionIm
 
     @Autowired
     public BillingTenantSuspensionImpactProvider(SubscriptionRepository subscriptionRepository,
-            PlanRepository planRepository) {
+            ServicePlanRepository planRepository) {
         this.subscriptionRepository = subscriptionRepository;
         this.planRepository = planRepository;
     }
@@ -81,7 +81,7 @@ public class BillingTenantSuspensionImpactProvider implements TenantSuspensionIm
                 .distinct()
                 .toList();
         return planRepository.findByPublicIdIn(planIds).stream()
-                .collect(Collectors.toUnmodifiableMap(Plan::getPublicId, Plan::getName, (first, ignored) -> first));
+                .collect(Collectors.toUnmodifiableMap(ServicePlan::getPublicId, ServicePlan::getName, (first, ignored) -> first));
     }
 
     private String digest(UUID tenantPublicId, int suspensionDays, Instant suspendedUntil,
