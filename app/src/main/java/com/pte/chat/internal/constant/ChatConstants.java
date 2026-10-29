@@ -1,6 +1,7 @@
 package com.pte.chat.internal.constant;
 
 import java.time.ZoneId;
+import java.util.UUID;
 
 /** Names and fixed values shared across the chat module. */
 public final class ChatConstants {
@@ -9,6 +10,9 @@ public final class ChatConstants {
     public static final String PROPERTY_ENABLED = PROPERTY_PREFIX + ".enabled";
 
     /** Quota days roll over at 00:00 in this zone; the server picks the day, never the client. */
+    /** Replaces student and session ids when the retention job anonymises a row; no real id is all zeros. */
+    public static final UUID NIL_UUID = new UUID(0L, 0L);
+
     public static final String ZONE_ID = "Asia/Ho_Chi_Minh";
     public static final ZoneId ZONE = ZoneId.of(ZONE_ID);
 
@@ -31,6 +35,13 @@ public final class ChatConstants {
     public static final String MESSAGES_PATH = "/messages";
     public static final String QUOTA_PATH = "/quota";
     public static final String LATEST_SESSION_PATH = "/sessions/latest";
+    public static final String CONSENT_PATH = "/consent";
+
+    /**
+     * The privacy text a student agrees to before using chat. Bump it whenever that text changes in a way the
+     * student should see again; everyone is then asked once more. Kept in step with the web app's consent copy.
+     */
+    public static final String CONSENT_POLICY_VERSION = "2026-10-29";
 
     /** Most messages the "latest session" endpoint returns, so a very long conversation cannot bloat a reload. */
     public static final int DISPLAY_MESSAGE_LIMIT = 50;
@@ -41,8 +52,10 @@ public final class ChatConstants {
     public static final String ERR_BUSY = "CHAT_BUSY";
     public static final String ERR_SESSION_NOT_FOUND = "CHAT_SESSION_NOT_FOUND";
     public static final String ERR_INVALID_REQUEST = "CHAT_INVALID_REQUEST";
+    public static final String ERR_CONSENT_REQUIRED = "CHAT_CONSENT_REQUIRED";
 
     /** Defaults for {@code chat.ai.retention-*}; the privacy hand-off fixes 12 months of text and 30 days of cache. */
+    public static final int DEFAULT_CACHE_MAX_QUESTION_CHARS = 300;
     public static final int DEFAULT_RETENTION_CONTENT_MONTHS = 12;
     public static final int DEFAULT_RETENTION_CACHE_DAYS = 30;
     public static final int DEFAULT_RETENTION_BATCH_SIZE = 1_000;
@@ -55,7 +68,9 @@ public final class ChatConstants {
             "You have used all of today's chat messages. Please come back after the reset time.";
     public static final String REQUEST_IN_FLIGHT_MESSAGE =
             "Your previous question is still being answered. Please wait for it to finish.";
-    public static final String SESSION_NOT_FOUND_MESSAGE = "This chat could not be found. Please start a new chat.";
+    public static final String CONSENT_REQUIRED_MESSAGE =
+            "Please read and accept the chat privacy notice before you use the assistant.";
+    public static final String SESSION_NOT_FOUND_MESSAGE ="This chat could not be found. Please start a new chat.";
     /** Takes the field detail below, never the value: the value may be a student's private text. */
     public static final String INVALID_REQUEST_MESSAGE_TEMPLATE = "Your message could not be sent: %s.";
 
@@ -65,12 +80,17 @@ public final class ChatConstants {
     public static final String DETAIL_MESSAGE_UNSUPPORTED_CHARS = "message has unsupported characters";
     public static final String DETAIL_TASK_TYPE_UNSUPPORTED = "task type is not supported";
     public static final String DETAIL_LANGUAGE_UNSUPPORTED = "language is not supported";
+    public static final String DETAIL_CONSENT_VERSION_MISMATCH = "the privacy notice has changed, please read it again";
+    public static final String DETAIL_AGE_NOT_CONFIRMED = "age or guardian consent is not confirmed";
 
     /** Bean validation messages for the request body. */
     public static final String SESSION_ID_REQUIRED_MESSAGE = "sessionId is required";
     public static final String MESSAGE_REQUIRED_MESSAGE = "message is required";
+    public static final String POLICY_VERSION_REQUIRED_MESSAGE = "policyVersion is required";
+    public static final String AGE_CONFIRMED_REQUIRED_MESSAGE = "ageConfirmed is required";
 
     /** Keys of the {@code data} object sent with a quota-exceeded error. */
+    public static final String DATA_POLICY_VERSION = "policyVersion";
     public static final String DATA_RESET_AT = "resetAt";
     public static final String DATA_LIMIT = "limit";
     public static final String DATA_REMAINING = "remaining";

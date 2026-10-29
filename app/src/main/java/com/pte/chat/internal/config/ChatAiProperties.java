@@ -28,6 +28,8 @@ public class ChatAiProperties {
     private int maxConcurrent = 20;
     /** Cached answers cost no quota, so each student gets a daily cap; past it a question is charged as usual. */
     private int maxCacheHitsPerDay = 100;
+    /** Longest question allowed into the shared answer cache; a longer one is probably pasted personal text. */
+    private int cacheMaxQuestionChars = ChatConstants.DEFAULT_CACHE_MAX_QUESTION_CHARS;
     /** Question and answer text older than this many months is blanked; cost columns stay for reports. */
     private int retentionContentMonths = ChatConstants.DEFAULT_RETENTION_CONTENT_MONTHS;
     /** A cached answer is served for this many days, then deleted and replaced by the next fresh answer. */
