@@ -12,6 +12,8 @@ import com.pte.chat.internal.exception.ChatBusyException;
 import com.pte.chat.internal.prompt.ChatPrompts;
 import com.pte.chat.internal.repository.ChatMessageRepository;
 import com.pte.chat.internal.service.cache.ChatAnswerCacheService;
+import com.pte.chat.internal.service.cache.ChatCachePolicy;
+import com.pte.chat.internal.service.consent.ChatConsentCheck;
 import com.pte.chat.internal.service.cache.ChatCacheKey;
 import com.pte.chat.internal.service.quota.ChatQuotaService;
 import com.pte.chat.internal.service.quota.ChatQuotaSnapshot;
@@ -23,6 +25,7 @@ import com.pte.practice.PracticeEntitlementGate;
 import com.pte.shared.security.CurrentUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
@@ -69,10 +72,24 @@ public class ChatService {
     private final ChatSendValidator validator;
     private final ChatMessageFactory messages;
 
+    private final ChatConsentCheck consentCheck;
+
+    /** Without a consent check, for callers that do not gate on the privacy notice. */
     public ChatService(PracticeEntitlementGate entitlementGate, ChatAiProperties properties,
                        ChatQuotaService quotaService, ChatSessionService sessionService, ChatConcurrencyGate gate,
                        ChatAnswerCacheService cacheService, GeminiChatClient client,
                        ChatMessageRepository messageRepository, ChatObservability observability, Clock clock) {
+        this(entitlementGate, properties, quotaService, sessionService, gate, cacheService, client,
+                messageRepository, observability, clock, studentId -> { });
+    }
+
+    @Autowired
+    public ChatService(PracticeEntitlementGate entitlementGate, ChatAiProperties properties,
+                       ChatQuotaService quotaService, ChatSessionService sessionService, ChatConcurrencyGate gate,
+                       ChatAnswerCacheService cacheService, GeminiChatClient client,
+                       ChatMessageRepository messageRepository, ChatObservability observability, Clock clock,
+                       ChatConsentCheck consentCheck) {
+        this.consentCheck = consentCheck;
         this.entitlementGate = entitlementGate;
         this.properties = properties;
         this.quotaService = quotaService;
@@ -104,14 +121,18 @@ public class ChatService {
 
     public ChatReply send(CurrentUser caller, ChatSendCommand command) {
         entitlementGate.assertUnlocked(caller, null);
-        ChatSendInput input = validator.validate(command);
         UUID studentId = caller.userId();
+        consentCheck.require(studentId);
+        ChatSendInput input = validator.validate(command);
         sessionService.requireNotOwnedByOther(input.sessionId(), studentId);
         Lease studentLease = gate.lockStudent(studentId);
         try {
             boolean emptySession = !sessionService.hasAnswers(input.sessionId(), studentId);
+            // A question that may carry personal text is neither served from nor written to the shared cache.
+            boolean cacheable = emptySession
+                    && ChatCachePolicy.cacheable(input.message(), properties.getCacheMaxQuestionChars());
             String cacheKey = ChatCacheKey.of(input.message(), input.language(), input.taskType(), ChatPrompts.VERSION);
-            if (emptySession && cacheHitsAllowed(studentId)) {
+            if (cacheable && cacheHitsAllowed(studentId)) {
                 Optional<String> hit = cacheService.find(cacheKey);
                 if (hit.isPresent()) {
                     return cacheHit(caller, input, hit.get());
@@ -119,7 +140,7 @@ public class ChatService {
             }
             Lease slot = gate.acquireSlot();
             try {
-                return charged(caller, input, emptySession, cacheKey);
+                return charged(caller, input, cacheable, cacheKey);
             } finally {
                 slot.close();
             }
@@ -151,7 +172,7 @@ public class ChatService {
         return new ChatReply(answer, true, true, quotaService.snapshot(caller.userId()), input.sessionId());
     }
 
-    private ChatReply charged(CurrentUser caller, ChatSendInput input, boolean emptySession, String cacheKey) {
+    private ChatReply charged(CurrentUser caller, ChatSendInput input, boolean cacheable, String cacheKey) {
         UUID studentId = caller.userId();
         ChatQuotaTicket ticket = quotaService.consume(studentId);
         List<ChatTurn> turns;
@@ -184,7 +205,7 @@ public class ChatService {
             throw new ChatBusyException();
         }
         observability.messageStored(ChatConstants.STATUS_OK, false);
-        if (emptySession) {
+        if (cacheable) {
             storeInCache(cacheKey, answer);
         }
         return new ChatReply(answer.markdown(), true, false, quotaService.snapshot(ticket), input.sessionId());
