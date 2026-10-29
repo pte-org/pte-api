@@ -25,7 +25,6 @@ import com.pte.practice.PracticeEntitlementGate;
 import com.pte.shared.security.CurrentUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
@@ -74,16 +73,6 @@ public class ChatService {
 
     private final ChatConsentCheck consentCheck;
 
-    /** Without a consent check, for callers that do not gate on the privacy notice. */
-    public ChatService(PracticeEntitlementGate entitlementGate, ChatAiProperties properties,
-                       ChatQuotaService quotaService, ChatSessionService sessionService, ChatConcurrencyGate gate,
-                       ChatAnswerCacheService cacheService, GeminiChatClient client,
-                       ChatMessageRepository messageRepository, ChatObservability observability, Clock clock) {
-        this(entitlementGate, properties, quotaService, sessionService, gate, cacheService, client,
-                messageRepository, observability, clock, studentId -> { });
-    }
-
-    @Autowired
     public ChatService(PracticeEntitlementGate entitlementGate, ChatAiProperties properties,
                        ChatQuotaService quotaService, ChatSessionService sessionService, ChatConcurrencyGate gate,
                        ChatAnswerCacheService cacheService, GeminiChatClient client,
@@ -129,9 +118,11 @@ public class ChatService {
         try {
             boolean emptySession = !sessionService.hasAnswers(input.sessionId(), studentId);
             // A question that may carry personal text is neither served from nor written to the shared cache.
+            // Judged on what the student typed: input.message() already has contact details hidden.
             boolean cacheable = emptySession
-                    && ChatCachePolicy.cacheable(input.message(), properties.getCacheMaxQuestionChars());
-            String cacheKey = ChatCacheKey.of(input.message(), input.language(), input.taskType(), ChatPrompts.VERSION);
+                    && ChatCachePolicy.cacheable(command.message(), properties.getCacheMaxQuestionChars());
+            String cacheKey = ChatCacheKey.of(input.message(), input.language(), input.taskType(), ChatPrompts.VERSION,
+                    input.exercisePrompt());
             if (cacheable && cacheHitsAllowed(studentId)) {
                 Optional<String> hit = cacheService.find(cacheKey);
                 if (hit.isPresent()) {
@@ -185,8 +176,11 @@ public class ChatService {
         }
         ChatAiAnswer answer;
         try {
-            answer = client.generate(ChatPrompts.systemInstruction(), turns, input.message());
+            answer = client.generate(ChatPrompts.systemInstruction(), turns,
+                    ChatPrompts.userTurn(input.message(), input.exercisePrompt()));
         } catch (ChatAiException ex) {
+            // The reason and status come from fixed texts, never from the question, the answer or the key.
+            log.warn("Chat provider call failed: reason={} detail={}", ex.reason(), ex.getMessage());
             observability.providerFailed(ex.reason());
             return failed(caller, input, ticket, ex.usage());
         } catch (RuntimeException ex) {

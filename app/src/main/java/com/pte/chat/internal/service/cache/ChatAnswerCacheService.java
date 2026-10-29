@@ -7,7 +7,6 @@ import com.pte.chat.internal.repository.ChatAnswerCacheRepository;
 import com.pte.chat.internal.service.ChatErrors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -36,19 +35,12 @@ public class ChatAnswerCacheService {
     private final Clock clock;
     private final ChatAiProperties properties;
 
-    @Autowired
     public ChatAnswerCacheService(ChatAnswerCacheRepository repository, NamedParameterJdbcTemplate jdbc,
                                   Clock clock, ChatAiProperties properties) {
         this.repository = repository;
         this.jdbc = jdbc;
         this.clock = clock;
         this.properties = properties;
-    }
-
-    /** With the default lifetime; kept for callers that do not tune {@code chat.ai.retention-cache-days}. */
-    public ChatAnswerCacheService(ChatAnswerCacheRepository repository, NamedParameterJdbcTemplate jdbc,
-                                  Clock clock) {
-        this(repository, jdbc, clock, new ChatAiProperties());
     }
 
     public Optional<String> find(String cacheKey) {
