@@ -71,7 +71,8 @@ final class ChatLoadStack implements AutoCloseable {
         service = new ChatService((caller, organization) -> { }, properties,
                 new ChatQuotaService(new ChatQuotaRepository(jdbc), properties, clock, observability),
                 new ChatSessionService(sessions, messages, jdbc), gate,
-                new ChatAnswerCacheService(cache, jdbc, clock), client, messages, observability, clock);
+                new ChatAnswerCacheService(cache, jdbc, clock, properties), client, messages, observability, clock,
+                studentId -> { });
     }
 
     private void script(long latencyMs, int length) {

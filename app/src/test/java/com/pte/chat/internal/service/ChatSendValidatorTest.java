@@ -31,6 +31,48 @@ class ChatSendValidatorTest {
         return validator.validate(new ChatSendCommand(sessionId, message, taskType, language));
     }
 
+    private ChatSendInput validateWithExercise(String exercisePrompt) {
+        return validator.validate(new ChatSendCommand(sessionId, "How do I say this?", null, "en", exercisePrompt));
+    }
+
+    @Test
+    void anExercisePromptIsOptionalAndBlankMeansNone() {
+        assertThat(validateWithExercise(null).exercisePrompt()).isNull();
+        assertThat(validateWithExercise("   \n ").exercisePrompt()).isNull();
+        assertThat(validate("hello").exercisePrompt()).isNull();
+    }
+
+    @Test
+    void anExercisePromptIsTrimmed() {
+        assertThat(validateWithExercise("  Some people think cars should go.  ").exercisePrompt())
+                .isEqualTo("Some people think cars should go.");
+    }
+
+    @Test
+    void aLongExercisePromptIsCutToTheCapInsteadOfRejected() {
+        String longPrompt = "word ".repeat(1000);
+
+        String kept = validateWithExercise(longPrompt).exercisePrompt();
+
+        assertThat(kept.length()).isLessThanOrEqualTo(ChatConstants.EXERCISE_PROMPT_MAX_CHARS);
+        assertThat(kept).startsWith("word word");
+    }
+
+    @Test
+    void controlCharactersInAnExercisePromptAreReplacedNotStored() {
+        String kept = validateWithExercise("line one\u0000\u0001 line two\nline three").exercisePrompt();
+
+        assertThat(kept).doesNotContain("\u0000").doesNotContain("\u0001");
+        assertThat(kept).contains("line one").contains("line two").contains("\n");
+    }
+
+    @Test
+    void contactDetailsInAnExercisePromptAreHiddenToo() {
+        String kept = validateWithExercise("Write to an.nguyen@gmail.com or call 0912 345 678").exercisePrompt();
+
+        assertThat(kept).doesNotContain("@").doesNotContain("0912").contains("[email]").contains("[phone]");
+    }
+
     private void assertRejectedWithoutEcho(ChatSendCommand command, String... secrets) {
         assertThatThrownBy(() -> validator.validate(command))
                 .isInstanceOf(ChatInvalidRequestException.class)
@@ -118,8 +160,8 @@ class ChatSendValidatorTest {
     void theLimitFollowsTheConfiguredMaximum() {
         properties.setMaxInputChars(10);
 
-        assertThat(validate("0123456789").message()).hasSize(10);
-        assertThatThrownBy(() -> validate("0123456789X")).isInstanceOf(ChatInvalidRequestException.class);
+        assertThat(validate("abcdefghij").message()).hasSize(10);
+        assertThatThrownBy(() -> validate("abcdefghijX")).isInstanceOf(ChatInvalidRequestException.class);
     }
 
     @Test

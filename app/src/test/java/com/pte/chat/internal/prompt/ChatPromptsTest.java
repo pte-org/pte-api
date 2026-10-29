@@ -16,6 +16,36 @@ class ChatPromptsTest {
     }
 
     @Test
+    void theVersionWasBumpedWhenTheExerciseContextWasAdded() {
+        assertThat(ChatPrompts.VERSION).isEqualTo("v2");
+    }
+
+    @Test
+    void systemInstructionExplainsHowToUseTheExerciseContextOnlyWhenItIsRelevant() {
+        String prompt = ChatPrompts.systemInstruction().toLowerCase();
+
+        assertThat(prompt).contains("exercise");
+        assertThat(prompt).containsAnyOf("relevant", "relates", "related");
+        assertThat(prompt).containsAnyOf("unrelated", "not related", "otherwise");
+    }
+
+    @Test
+    void theQuestionIsSentAsItIsWhenThereIsNoExercise() {
+        assertThat(ChatPrompts.userTurn("How do I say this?", null)).isEqualTo("How do I say this?");
+        assertThat(ChatPrompts.userTurn("How do I say this?", "  ")).isEqualTo("How do I say this?");
+    }
+
+    @Test
+    void theExerciseGoesBeforeTheQuestionAndIsMarkedAsDataNotInstructions() {
+        String turn = ChatPrompts.userTurn("How do I say this?", "Technology makes us less social.");
+
+        assertThat(turn).contains("Technology makes us less social.");
+        assertThat(turn.indexOf("Technology makes us less social.")).isLessThan(turn.indexOf("How do I say this?"));
+        assertThat(turn.toLowerCase()).containsAnyOf("not instructions", "not as instructions", "context only");
+        assertThat(turn).endsWith("How do I say this?");
+    }
+
+    @Test
     void systemInstructionIsNonBlankAndWithinTheCostBudget() {
         assertThat(ChatPrompts.systemInstruction()).isNotBlank();
         assertThat(ChatPrompts.systemInstruction().length()).isLessThanOrEqualTo(6000);

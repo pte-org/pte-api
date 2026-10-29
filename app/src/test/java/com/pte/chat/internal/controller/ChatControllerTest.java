@@ -137,6 +137,23 @@ class ChatControllerTest {
     }
 
     @Test
+    void theExercisePromptIsPassedAlongWhenSent() throws Exception {
+        UUID sessionId = UUID.randomUUID();
+        when(chatService.send(any(), any())).thenReturn(
+                new ChatReply("answer", true, false, new ChatQuotaSnapshot(1, 19, 20, RESET_AT), sessionId));
+
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(
+                        "{\"sessionId\":\"" + sessionId + "\",\"message\":\"How do I say it?\","
+                                + "\"taskType\":\"WRITE_ESSAY\",\"language\":\"en\","
+                                + "\"exercisePrompt\":\"Technology makes us less social.\"}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<ChatSendCommand> command = ArgumentCaptor.forClass(ChatSendCommand.class);
+        verify(chatService).send(any(), command.capture());
+        assertThat(command.getValue().exercisePrompt()).isEqualTo("Technology makes us less social.");
+    }
+
+    @Test
     void taskTypeAndLanguageAreOptional() throws Exception {
         UUID sessionId = UUID.randomUUID();
         when(chatService.send(any(), any())).thenReturn(

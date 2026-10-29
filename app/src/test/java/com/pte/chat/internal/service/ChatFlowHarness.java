@@ -66,10 +66,10 @@ final class ChatFlowHarness implements AutoCloseable {
                 properties.getTemperature(), properties.getMaxTokens(), providerTimeout);
         quota = new ChatQuotaService(new ChatQuotaRepository(jdbc), properties, clock, observability);
         sessions = new ChatSessionService(sessionRepository, messageRepository, jdbc);
-        cache = new ChatAnswerCacheService(cacheRepository, jdbc, clock);
+        cache = new ChatAnswerCacheService(cacheRepository, jdbc, clock, properties);
         service = new ChatService((caller, organization) -> { }, properties, quota, sessions,
                 new ChatConcurrencyGate(properties, observability), cache, client, messageRepository, observability,
-                clock);
+                clock, studentId -> { });
     }
 
     /** A harness whose entitlement gate lets everyone in. */
