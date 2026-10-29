@@ -13,9 +13,20 @@ public final class ChatCacheKey {
     }
 
     public static String of(String question, String language, String taskType, String promptVersion) {
+        return of(question, language, taskType, promptVersion, null);
+    }
+
+    /** The exercise is part of the key: the same question may get a different answer next to a different exercise. */
+    public static String of(String question, String language, String taskType, String promptVersion,
+                            String exercisePrompt) {
+        String exercise = exercisePrompt == null || exercisePrompt.isBlank() ? "" : exercisePrompt;
         StringBuilder input = new StringBuilder();
-        for (String field : new String[]{ChatQuestionNormalizer.normalize(question), nullToEmpty(language),
-                nullToEmpty(taskType), nullToEmpty(promptVersion)}) {
+        String[] fields = exercise.isEmpty()
+                ? new String[]{ChatQuestionNormalizer.normalize(question), nullToEmpty(language),
+                        nullToEmpty(taskType), nullToEmpty(promptVersion)}
+                : new String[]{ChatQuestionNormalizer.normalize(question), nullToEmpty(language),
+                        nullToEmpty(taskType), nullToEmpty(promptVersion), ChatQuestionNormalizer.normalize(exercise)};
+        for (String field : fields) {
             input.append(field.length()).append(':').append(field).append('|');
         }
         try {

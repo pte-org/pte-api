@@ -50,6 +50,12 @@ public class ChatConsentService implements ChatConsentCheck {
         }
     }
 
+    /** Takes the student's consent back: chat closes again until they accept the notice anew. */
+    public ChatConsentStatus withdraw(UUID studentId) {
+        jdbc.update("DELETE FROM chat_consent WHERE student_id = :s", new MapSqlParameterSource("s", studentId));
+        return status(studentId);
+    }
+
     public ChatConsentStatus give(UUID studentId, String policyVersion, boolean ageConfirmed) {
         if (!ChatConstants.CONSENT_POLICY_VERSION.equals(policyVersion)) {
             throw new ChatInvalidRequestException(ChatConstants.DETAIL_CONSENT_VERSION_MISMATCH);

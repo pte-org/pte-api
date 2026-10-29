@@ -1,7 +1,6 @@
 package com.pte.chat.internal.service.cache;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.pte.chat.internal.service.privacy.ChatContactDetails;
 
 /**
  * Decides whether a question may enter the answer cache shared by all students. A cached answer is replayed to
@@ -11,29 +10,11 @@ import java.util.regex.Pattern;
  */
 public final class ChatCachePolicy {
 
-    private static final Pattern EMAIL = Pattern.compile(
-            "[A-Za-z0-9._%+\\-]+@[A-Za-z0-9\\-]+(?:\\.[A-Za-z0-9\\-]+)*\\.[A-Za-z]{2,}");
-    /** A run of digits that may be split by spaces, dots, dashes or brackets, as phone numbers usually are. */
-    private static final Pattern DIGIT_RUN = Pattern.compile("[+(]?\\d[\\d ().\\-]{6,}\\d");
-    private static final int MIN_PHONE_DIGITS = 8;
-
     private ChatCachePolicy() {
     }
 
+    /** {@code question} is what the student typed, before any masking. */
     public static boolean cacheable(String question, int maxChars) {
-        if (question.length() > maxChars) {
-            return false;
-        }
-        return !EMAIL.matcher(question).find() && !hasPhoneNumber(question);
-    }
-
-    private static boolean hasPhoneNumber(String question) {
-        Matcher run = DIGIT_RUN.matcher(question);
-        while (run.find()) {
-            if (run.group().chars().filter(Character::isDigit).count() >= MIN_PHONE_DIGITS) {
-                return true;
-            }
-        }
-        return false;
+        return question.length() <= maxChars && !ChatContactDetails.contains(question);
     }
 }
