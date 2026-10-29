@@ -171,6 +171,28 @@ class ChatRetentionServicePostgresTest {
     }
 
     @Test
+    void dailyCountersOlderThanTheWindowAreDeletedAndRecentOnesStay() {
+        // The cutoff is 2025-10-29 in Vietnam time: that day itself is kept, the day before is not.
+        data.setUsed(student, java.time.LocalDate.of(2025, 10, 28), 5);
+        data.setUsed(student, java.time.LocalDate.of(2025, 10, 29), 6);
+        data.setUsed(student, java.time.LocalDate.of(2026, 10, 29), 7);
+
+        assertThat(service.deleteOldUsage(NOW)).isEqualTo(1);
+
+        assertThat(data.usageRows(student)).isEqualTo(2);
+        assertThat(data.used(student, java.time.LocalDate.of(2025, 10, 28))).isZero();
+        assertThat(data.used(student, java.time.LocalDate.of(2026, 10, 29))).isEqualTo(7);
+    }
+
+    @Test
+    void messagesCanBeFoundBySessionWithoutScanningTheTable() {
+        java.util.List<String> definitions = jdbc.getJdbcOperations().queryForList(
+                "SELECT indexdef FROM pg_indexes WHERE tablename = 'chat_message'", String.class);
+
+        assertThat(definitions).anyMatch(definition -> definition.endsWith("(session_id)"));
+    }
+
+    @Test
     void anExpiredCacheEntryIsDeletedButFreshAndPermanentOnesStay() {
         data.insertCache("expired", "a", NOW.minusSeconds(1));
         data.insertCache("due-now", "a", NOW);
@@ -186,11 +208,14 @@ class ChatRetentionServicePostgresTest {
     }
 
     @Test
-    void theScheduledRunDoesAllThreeJobs() {
+    void theScheduledRunDoesAllTheJobs() {
         data.insertMessage(session, student, "old", "a", "OK", CUTOFF.minusSeconds(1));
         data.insertCache("expired", "a", NOW.minusSeconds(1));
+        data.setUsed(student, java.time.LocalDate.of(2025, 1, 1), 3);
 
         service.purge();
+
+        assertThat(data.usageRows(student)).isZero();
 
         assertThat(onlyRow()).containsEntry("question", "").containsEntry("student_id", ChatConstants.NIL_UUID);
         assertThat(data.sessionRows(session)).isZero();
