@@ -42,6 +42,8 @@ chat:
     history-size: ${CHAT_AI_HISTORY_SIZE:6}
     max-concurrent: ${CHAT_AI_MAX_CONCURRENT:20}
     max-cache-hits-per-day: ${CHAT_AI_MAX_CACHE_HITS_PER_DAY:100}
+    # A longer question (likely pasted personal text) is answered but never stored in the shared cache.
+    cache-max-question-chars: ${CHAT_AI_CACHE_MAX_QUESTION_CHARS:300}
     # Privacy hand-off: chat text is blanked after 12 months, cached answers expire after 30 days.
     retention-content-months: ${CHAT_AI_RETENTION_CONTENT_MONTHS:12}
     retention-cache-days: ${CHAT_AI_RETENTION_CACHE_DAYS:30}

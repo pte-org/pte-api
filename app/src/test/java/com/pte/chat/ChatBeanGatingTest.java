@@ -5,6 +5,7 @@ import com.pte.chat.internal.config.ChatAiConfig;
 import com.pte.chat.internal.config.ChatAiProperties;
 import com.pte.chat.internal.config.ChatGeminiConfig;
 import com.pte.chat.internal.constant.ChatConstants;
+import com.pte.chat.internal.controller.ChatConsentController;
 import com.pte.chat.internal.controller.ChatController;
 import com.pte.chat.internal.repository.ChatAnswerCacheRepository;
 import com.pte.chat.internal.repository.ChatMessageRepository;
@@ -12,6 +13,8 @@ import com.pte.chat.internal.repository.ChatSessionRepository;
 import com.pte.chat.internal.service.ChatObservability;
 import com.pte.chat.internal.service.ChatService;
 import com.pte.chat.internal.service.cache.ChatAnswerCacheService;
+import com.pte.chat.internal.service.consent.ChatConsentService;
+import com.pte.chat.internal.service.retention.ChatRetentionService;
 import com.pte.chat.internal.service.quota.ChatQuotaRepository;
 import com.pte.chat.internal.service.quota.ChatQuotaService;
 import com.pte.chat.internal.service.session.ChatConcurrencyGate;
@@ -48,8 +51,11 @@ class ChatBeanGatingTest {
             ChatSessionService.class,
             ChatConcurrencyGate.class,
             ChatAnswerCacheService.class,
+            ChatConsentService.class,
+            ChatRetentionService.class,
             ChatService.class,
-            ChatController.class);
+            ChatController.class,
+            ChatConsentController.class);
 
     static List<Class<?>> gatedBeans() {
         return GATED_BEANS;
