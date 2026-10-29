@@ -34,6 +34,9 @@ public final class ChatAiPropertiesValidator {
         if (apiKey == null || !API_KEY.matcher(apiKey).matches()) {
             problems.add(ChatConstants.CONFIG_API_KEY_MESSAGE);
         }
+        if (!isHttpAddress(properties.getBaseUrl())) {
+            problems.add(ChatConstants.CONFIG_BASE_URL_MESSAGE);
+        }
         String model = properties.getModel();
         if (model == null || model.isBlank()) {
             problems.add(ChatConstants.CONFIG_MODEL_UNSET_MESSAGE);
@@ -53,6 +56,13 @@ public final class ChatAiPropertiesValidator {
         requireAtLeastOne(problems, "chat.ai.max-cache-hits-per-day", properties.getMaxCacheHitsPerDay());
         requireAtLeastOne(problems, "chat.ai.cache-max-question-chars", properties.getCacheMaxQuestionChars());
         requireAtLeastOne(problems, "chat.ai.retention-content-months", properties.getRetentionContentMonths());
+        requireNotNegative(problems, "chat.ai.price-input-per-million-usd", properties.getPriceInputPerMillionUsd());
+        requireNotNegative(problems, "chat.ai.price-output-per-million-usd", properties.getPriceOutputPerMillionUsd());
+        // The privacy notice promises "at most 12 months": the setting may shorten it but never outgrow the text.
+        if (properties.getRetentionContentMonths() > ChatConstants.DEFAULT_RETENTION_CONTENT_MONTHS) {
+            problems.add(ChatConstants.CONFIG_RETENTION_MONTHS_MAX_TEMPLATE.formatted(
+                    ChatConstants.DEFAULT_RETENTION_CONTENT_MONTHS));
+        }
         requireAtLeastOne(problems, "chat.ai.retention-cache-days", properties.getRetentionCacheDays());
         requireAtLeastOne(problems, "chat.ai.retention-batch-size", properties.getRetentionBatchSize());
         // A zero timeout can mean "wait forever" to an HTTP client, which would pin a request thread.
@@ -72,6 +82,24 @@ public final class ChatAiPropertiesValidator {
         List<String> problems = validate(properties);
         if (!problems.isEmpty()) {
             throw new IllegalStateException(ChatConstants.CONFIG_INVALID_PREFIX + String.join("; ", problems));
+        }
+    }
+
+    private static boolean isHttpAddress(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        try {
+            java.net.URI uri = java.net.URI.create(value.strip());
+            return ("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) && uri.getHost() != null;
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
+    private static void requireNotNegative(List<String> problems, String name, java.math.BigDecimal value) {
+        if (value == null || value.signum() < 0) {
+            problems.add(ChatConstants.CONFIG_NOT_NEGATIVE_TEMPLATE.formatted(name));
         }
     }
 

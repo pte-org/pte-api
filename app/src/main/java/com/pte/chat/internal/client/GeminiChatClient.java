@@ -25,14 +25,15 @@ import java.util.concurrent.TimeoutException;
  * Gemini {@code generateContent} for the student chat: a multi-turn request whose answer is forced into
  * {@code {is_on_topic, markdown_content}}. One call is one HTTP exchange; there is deliberately no retry,
  * a failed call is refunded by the caller and the student asks again. The API key travels only in the
- * {@code x-goog-api-key} header. Thinking is left at the model's default, so {@code ChatGeminiConfig} only
- * accepts a model whose default is off: thinking tokens count against {@code maxOutputTokens}.
+ * {@code x-goog-api-key} header. Thinking tokens count against {@code maxOutputTokens}, so a model whose default
+ * is off is left alone and a model that thinks by default is asked for the lowest level via
+ * {@code generationConfig.thinkingConfig.thinkingLevel} (checked against the live API on 2026-10-29: accepted for
+ * gemini-3.5-flash-lite, while {@code thinkingBudget: 0} is rejected with 400).
  *
  * <p>Request fields checked against ai.google.dev on 2026-10-28: {@code generationConfig} with
  * {@code temperature}, {@code maxOutputTokens}, {@code responseMimeType}, {@code responseSchema} (uppercase
  * OpenAPI-subset types and {@code propertyOrdering}, the same shape the scoring client already runs in
- * production) and the response's {@code usageMetadata.thoughtsTokenCount}. The thinking-level field is not
- * sent because its REST name could not be verified. A {@code generateContent} answer without a
+ * production) and the response's {@code usageMetadata.thoughtsTokenCount}. A {@code generateContent} answer without a
  * {@code finishReason} is rejected: only STOP is a normal end.
  */
 public class GeminiChatClient {
@@ -52,9 +53,17 @@ public class GeminiChatClient {
     private final double temperature;
     private final int maxOutputTokens;
     private final Duration timeout;
+    /** Null leaves the model's default thinking alone. */
+    private final String thinkingLevel;
 
     public GeminiChatClient(HttpClient httpClient, JsonMapper jsonMapper, URI baseUri, String apiKey,
                             String model, double temperature, int maxOutputTokens, Duration timeout) {
+        this(httpClient, jsonMapper, baseUri, apiKey, model, temperature, maxOutputTokens, timeout, null);
+    }
+
+    public GeminiChatClient(HttpClient httpClient, JsonMapper jsonMapper, URI baseUri, String apiKey,
+                            String model, double temperature, int maxOutputTokens, Duration timeout,
+                            String thinkingLevel) {
         this.httpClient = httpClient;
         this.jsonMapper = jsonMapper;
         this.endpoint = baseUri.resolve("/v1beta/models/" + model + ":generateContent");
@@ -63,6 +72,7 @@ public class GeminiChatClient {
         this.temperature = temperature;
         this.maxOutputTokens = maxOutputTokens;
         this.timeout = timeout;
+        this.thinkingLevel = thinkingLevel;
     }
 
     public ChatAiAnswer generate(String systemInstruction, List<ChatTurn> history, String userMessage) {
@@ -96,11 +106,15 @@ public class GeminiChatClient {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("systemInstruction", Map.of("parts", List.of(Map.of("text", systemInstruction))));
         body.put("contents", contents);
-        body.put("generationConfig", Map.of(
-                "temperature", temperature,
-                "maxOutputTokens", maxOutputTokens,
-                "responseMimeType", "application/json",
-                "responseSchema", responseSchema()));
+        Map<String, Object> generationConfig = new LinkedHashMap<>();
+        generationConfig.put("temperature", temperature);
+        generationConfig.put("maxOutputTokens", maxOutputTokens);
+        generationConfig.put("responseMimeType", "application/json");
+        generationConfig.put("responseSchema", responseSchema());
+        if (thinkingLevel != null) {
+            generationConfig.put("thinkingConfig", Map.of("thinkingLevel", thinkingLevel));
+        }
+        body.put("generationConfig", generationConfig);
         return body;
     }
 
