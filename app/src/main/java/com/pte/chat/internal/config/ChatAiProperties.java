@@ -25,7 +25,7 @@ public class ChatAiProperties {
     private double temperature = 0.2;
     private int maxTokens = 800;
     private int connectTimeoutMs = 2_000;
-    private int readTimeoutMs = 20_000;
+    private int readTimeoutMs = 30_000;
     private int dailyLimit = 20;
     private int maxInputChars = 1_000;
     private int historySize = 6;

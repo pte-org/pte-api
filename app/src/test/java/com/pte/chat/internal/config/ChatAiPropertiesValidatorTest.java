@@ -31,7 +31,7 @@ class ChatAiPropertiesValidatorTest {
         assertThat(properties.getTemperature()).isEqualTo(0.2);
         assertThat(properties.getMaxTokens()).isEqualTo(800);
         assertThat(properties.getConnectTimeoutMs()).isEqualTo(2000);
-        assertThat(properties.getReadTimeoutMs()).isEqualTo(20000);
+        assertThat(properties.getReadTimeoutMs()).isEqualTo(30000);
         assertThat(properties.getDailyLimit()).isEqualTo(20);
         assertThat(properties.getMaxInputChars()).isEqualTo(1000);
         assertThat(properties.getHistorySize()).isEqualTo(6);

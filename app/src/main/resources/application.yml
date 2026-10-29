@@ -38,7 +38,7 @@ chat:
     temperature: ${CHAT_AI_TEMPERATURE:0.2}
     max-tokens: ${CHAT_AI_MAX_TOKENS:800}
     connect-timeout-ms: ${CHAT_AI_CONNECT_TIMEOUT_MS:2000}
-    read-timeout-ms: ${CHAT_AI_READ_TIMEOUT_MS:20000}
+    read-timeout-ms: ${CHAT_AI_READ_TIMEOUT_MS:30000}
     daily-limit: ${CHAT_AI_DAILY_LIMIT:20}
     max-input-chars: ${CHAT_AI_MAX_INPUT_CHARS:1000}
     history-size: ${CHAT_AI_HISTORY_SIZE:6}
