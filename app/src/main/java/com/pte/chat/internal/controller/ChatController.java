@@ -39,7 +39,8 @@ public class ChatController {
     public ApiResponse<ChatMessageResponse> send(@Valid @RequestBody ChatMessageRequest request) {
         CurrentUser caller = CurrentUserContext.required();
         ChatReply reply = chatService.send(caller,
-                new ChatSendCommand(request.sessionId(), request.message(), request.taskType(), request.language()));
+                new ChatSendCommand(request.sessionId(), request.message(), request.taskType(), request.language(),
+                        request.exercisePrompt()));
         return ApiResponse.success(new ChatMessageResponse(reply.markdown(), reply.onTopic(), reply.fromCache(),
                 reply.quota().remaining(), reply.quota().limit(), reply.quota().resetAt(), reply.sessionId()));
     }

@@ -12,6 +12,7 @@ import com.pte.shared.web.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -45,6 +46,12 @@ public class ChatConsentController {
         entitlementGate.assertUnlocked(caller, null);
         return ApiResponse.success(response(
                 consentService.give(caller.userId(), request.policyVersion(), request.ageConfirmed())));
+    }
+
+    /** Withdraws the caller's consent. No entitlement check: a lapsed student may still withdraw. */
+    @DeleteMapping
+    public ApiResponse<ChatConsentResponse> withdraw() {
+        return ApiResponse.success(response(consentService.withdraw(CurrentUserContext.required().userId())));
     }
 
     private static ChatConsentResponse response(ChatConsentStatus status) {

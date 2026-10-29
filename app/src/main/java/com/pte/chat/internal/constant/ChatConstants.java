@@ -13,6 +13,10 @@ public final class ChatConstants {
     /** Replaces student and session ids when the retention job anonymises a row; no real id is all zeros. */
     public static final UUID NIL_UUID = new UUID(0L, 0L);
 
+    /** What an email address or phone number in a question is replaced with before it is stored or sent. */
+    public static final String MASK_EMAIL = "[email]";
+    public static final String MASK_PHONE = "[phone]";
+
     public static final String ZONE_ID = "Asia/Ho_Chi_Minh";
     public static final ZoneId ZONE = ZoneId.of(ZONE_ID);
 
@@ -36,6 +40,8 @@ public final class ChatConstants {
     public static final String QUOTA_PATH = "/quota";
     public static final String LATEST_SESSION_PATH = "/sessions/latest";
     public static final String CONSENT_PATH = "/consent";
+    public static final String HISTORY_PATH = "/history";
+    public static final String ADMIN_USAGE_PATH = "/api/v1/admin/chat/usage";
 
     /**
      * The privacy text a student agrees to before using chat. Bump it whenever that text changes in a way the
@@ -55,6 +61,7 @@ public final class ChatConstants {
     public static final String ERR_CONSENT_REQUIRED = "CHAT_CONSENT_REQUIRED";
 
     /** Defaults for {@code chat.ai.retention-*}; the privacy hand-off fixes 12 months of text and 30 days of cache. */
+    public static final String DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com";
     public static final int DEFAULT_CACHE_MAX_QUESTION_CHARS = 300;
     public static final int DEFAULT_RETENTION_CONTENT_MONTHS = 12;
     public static final int DEFAULT_RETENTION_CACHE_DAYS = 30;
@@ -79,9 +86,12 @@ public final class ChatConstants {
     public static final String DETAIL_MESSAGE_TOO_LONG = "message is too long";
     public static final String DETAIL_MESSAGE_UNSUPPORTED_CHARS = "message has unsupported characters";
     public static final String DETAIL_TASK_TYPE_UNSUPPORTED = "task type is not supported";
+    /** Longest exercise text sent as context; the web client cuts at the same length (shared contract file). */
+    public static final int EXERCISE_PROMPT_MAX_CHARS = 1500;
     public static final String DETAIL_LANGUAGE_UNSUPPORTED = "language is not supported";
     public static final String DETAIL_CONSENT_VERSION_MISMATCH = "the privacy notice has changed, please read it again";
-    public static final String DETAIL_AGE_NOT_CONFIRMED = "age or guardian consent is not confirmed";
+    public static final String DETAIL_REPORT_RANGE_INVALID = "the date range must start before it ends and cover at most a year";
+    public static final String DETAIL_AGE_NOT_CONFIRMED ="age or guardian consent is not confirmed";
 
     /** Bean validation messages for the request body. */
     public static final String SESSION_ID_REQUIRED_MESSAGE = "sessionId is required";
@@ -125,12 +135,17 @@ public final class ChatConstants {
     public static final String CONFIG_MODEL_CHARS_MESSAGE =
             "chat.ai.model may only contain letters, digits, '.', '_' and '-'";
     public static final String CONFIG_MODEL_LATEST_MESSAGE = "chat.ai.model must be a pinned model, not a '-latest' alias";
-    public static final String CONFIG_AT_LEAST_ONE_TEMPLATE = "%s must be at least 1 (was %d)";
+    public static final String CONFIG_BASE_URL_MESSAGE =
+            "chat.ai.base-url must be an http or https address with a host (CHAT_AI_BASE_URL)";
+    public static final String CONFIG_NOT_NEGATIVE_TEMPLATE ="%s must be set and not negative";
+    public static final String CONFIG_AT_LEAST_ONE_TEMPLATE ="%s must be at least 1 (was %d)";
     public static final String CONFIG_TEMPERATURE_TEMPLATE = "chat.ai.temperature must be between %s and %s";
+    public static final String CONFIG_RETENTION_MONTHS_MAX_TEMPLATE =
+            "chat.ai.retention-content-months must be at most %d (the published privacy notice says at most that long)";
     public static final String CONFIG_MAX_INPUT_TEMPLATE =
             "chat.ai.max-input-chars must be at most %d (the question column length)";
     public static final String CONFIG_MODEL_UNSUPPORTED_TEMPLATE =
-            "chat.ai.model '%s' is not supported: only %s* is verified to have thinking off by default";
+            "chat.ai.model '%s' is not supported: only these families are verified (thinking off or minimal): %s";
     public static final String SHA256_UNAVAILABLE_MESSAGE = "SHA-256 is always available";
 
     private ChatConstants() {
