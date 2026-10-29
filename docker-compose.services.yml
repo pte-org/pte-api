@@ -46,6 +46,21 @@ services:
       PRACTICE_SCORING_REDISPATCH_AFTER_SECONDS: ${PRACTICE_SCORING_REDISPATCH_AFTER_SECONDS:-100}
       PRACTICE_SCORING_MAX_AGE_SECONDS: ${PRACTICE_SCORING_MAX_AGE_SECONDS:-180}
       PRACTICE_STRICT_ENTITLEMENT_ENABLED: ${PRACTICE_STRICT_ENTITLEMENT_ENABLED:-false}
+      # com.pte.chat (student AI chat) — default off. Turning it on also needs
+      # PRACTICE_STRICT_ENTITLEMENT_ENABLED=true (else every student gets 403), a paid Gemini key and a pinned
+      # model; see pte-doc/plans/261028-ninh-practice-ai-chat-box/ops-runbook.md.
+      CHAT_AI_ENABLED: ${CHAT_AI_ENABLED:-false}
+      CHAT_AI_GEMINI_API_KEY: ${CHAT_AI_GEMINI_API_KEY:-}
+      CHAT_AI_MODEL: ${CHAT_AI_MODEL:-}
+      CHAT_AI_DAILY_LIMIT: ${CHAT_AI_DAILY_LIMIT:-20}
+      CHAT_AI_MAX_INPUT_CHARS: ${CHAT_AI_MAX_INPUT_CHARS:-1000}
+      CHAT_AI_MAX_TOKENS: ${CHAT_AI_MAX_TOKENS:-800}
+      CHAT_AI_TEMPERATURE: ${CHAT_AI_TEMPERATURE:-0.2}
+      CHAT_AI_HISTORY_SIZE: ${CHAT_AI_HISTORY_SIZE:-6}
+      CHAT_AI_MAX_CONCURRENT: ${CHAT_AI_MAX_CONCURRENT:-20}
+      CHAT_AI_MAX_CACHE_HITS_PER_DAY: ${CHAT_AI_MAX_CACHE_HITS_PER_DAY:-100}
+      CHAT_AI_CONNECT_TIMEOUT_MS: ${CHAT_AI_CONNECT_TIMEOUT_MS:-2000}
+      CHAT_AI_READ_TIMEOUT_MS: ${CHAT_AI_READ_TIMEOUT_MS:-20000}
       # com.pte.shared.web.RateLimitFilter (gateway-removal) — per-tenant
       # request ceiling, ported from gateway's Redis token-bucket as a
       # simpler fixed-window counter.
