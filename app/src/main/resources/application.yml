@@ -21,8 +21,27 @@ practice:
     max-retries: ${PRACTICE_SCORING_MAX_RETRIES:2}
     redispatch-after-seconds: ${PRACTICE_SCORING_REDISPATCH_AFTER_SECONDS:100}
     max-age-seconds: ${PRACTICE_SCORING_MAX_AGE_SECONDS:180}
+  # Chat checks entitlement through assertUnlocked, which is fail-closed: with this false every student
+  # gets 403 from chat. Set true in every environment that runs chat (dev, staging, production).
   strict-entitlement:
     enabled: ${PRACTICE_STRICT_ENTITLEMENT_ENABLED:false}
+
+# Student chat. Own key and a pinned model, never shared with scoring.ai.*; nothing is validated while
+# enabled is false. model has no default on purpose: pin a concrete name, '-latest' aliases are rejected.
+chat:
+  ai:
+    enabled: ${CHAT_AI_ENABLED:false}
+    api-key: ${CHAT_AI_GEMINI_API_KEY:}
+    model: ${CHAT_AI_MODEL:}
+    temperature: ${CHAT_AI_TEMPERATURE:0.2}
+    max-tokens: ${CHAT_AI_MAX_TOKENS:800}
+    connect-timeout-ms: ${CHAT_AI_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${CHAT_AI_READ_TIMEOUT_MS:20000}
+    daily-limit: ${CHAT_AI_DAILY_LIMIT:20}
+    max-input-chars: ${CHAT_AI_MAX_INPUT_CHARS:1000}
+    history-size: ${CHAT_AI_HISTORY_SIZE:6}
+    max-concurrent: ${CHAT_AI_MAX_CONCURRENT:20}
+    max-cache-hits-per-day: ${CHAT_AI_MAX_CACHE_HITS_PER_DAY:100}
 
 billing:
   payos:
