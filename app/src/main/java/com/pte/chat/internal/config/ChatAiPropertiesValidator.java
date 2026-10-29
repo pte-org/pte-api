@@ -32,17 +32,17 @@ public final class ChatAiPropertiesValidator {
         }
         String apiKey = properties.getApiKey();
         if (apiKey == null || !API_KEY.matcher(apiKey).matches()) {
-            problems.add("chat.ai.api-key must be set and contain no whitespace (CHAT_AI_GEMINI_API_KEY)");
+            problems.add(ChatConstants.CONFIG_API_KEY_MESSAGE);
         }
         String model = properties.getModel();
         if (model == null || model.isBlank()) {
-            problems.add("chat.ai.model must be set to a pinned model name (CHAT_AI_MODEL)");
+            problems.add(ChatConstants.CONFIG_MODEL_UNSET_MESSAGE);
         } else {
             if (!MODEL.matcher(model).matches()) {
-                problems.add("chat.ai.model may only contain letters, digits, '.', '_' and '-'");
+                problems.add(ChatConstants.CONFIG_MODEL_CHARS_MESSAGE);
             }
             if (model.toLowerCase().contains(LATEST_ALIAS)) {
-                problems.add("chat.ai.model must be a pinned model, not a '-latest' alias");
+                problems.add(ChatConstants.CONFIG_MODEL_LATEST_MESSAGE);
             }
         }
         requireAtLeastOne(problems, "chat.ai.daily-limit", properties.getDailyLimit());
@@ -56,11 +56,10 @@ public final class ChatAiPropertiesValidator {
         requireAtLeastOne(problems, "chat.ai.read-timeout-ms", properties.getReadTimeoutMs());
         double temperature = properties.getTemperature();
         if (Double.isNaN(temperature) || temperature < MIN_TEMPERATURE || temperature > MAX_TEMPERATURE) {
-            problems.add("chat.ai.temperature must be between " + MIN_TEMPERATURE + " and " + MAX_TEMPERATURE);
+            problems.add(ChatConstants.CONFIG_TEMPERATURE_TEMPLATE.formatted(MIN_TEMPERATURE, MAX_TEMPERATURE));
         }
         if (properties.getMaxInputChars() > ChatConstants.MAX_QUESTION_CHARS) {
-            problems.add("chat.ai.max-input-chars must be at most " + ChatConstants.MAX_QUESTION_CHARS
-                    + " (the question column length)");
+            problems.add(ChatConstants.CONFIG_MAX_INPUT_TEMPLATE.formatted(ChatConstants.MAX_QUESTION_CHARS));
         }
         return problems;
     }
@@ -68,13 +67,13 @@ public final class ChatAiPropertiesValidator {
     public static void requireValid(ChatAiProperties properties) {
         List<String> problems = validate(properties);
         if (!problems.isEmpty()) {
-            throw new IllegalStateException("Invalid chat.ai settings: " + String.join("; ", problems));
+            throw new IllegalStateException(ChatConstants.CONFIG_INVALID_PREFIX + String.join("; ", problems));
         }
     }
 
     private static void requireAtLeastOne(List<String> problems, String name, int value) {
         if (value < 1) {
-            problems.add(name + " must be at least 1 (was " + value + ")");
+            problems.add(ChatConstants.CONFIG_AT_LEAST_ONE_TEMPLATE.formatted(name, value));
         }
     }
 }

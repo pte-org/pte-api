@@ -26,22 +26,22 @@ public final class ChatOutputParser {
 
     public static ChatModelOutput parse(String rawText) {
         if (rawText == null || rawText.isBlank()) {
-            throw invalid("Chat model returned no text");
+            throw invalid(ChatConstants.PARSE_NO_TEXT_MESSAGE);
         }
         JsonNode root = readObject(stripFence(rawText.strip()));
         JsonNode onTopic = root.get("is_on_topic");
         if (onTopic == null || !onTopic.isBoolean()) {
-            throw invalid("Chat model field is_on_topic is missing or not a boolean");
+            throw invalid(ChatConstants.PARSE_ON_TOPIC_INVALID_MESSAGE);
         }
         if (!onTopic.asBoolean()) {
             return new ChatModelOutput(false, "");
         }
         JsonNode markdown = root.get("markdown_content");
         if (markdown == null || !markdown.isString() || markdown.asString().isBlank()) {
-            throw invalid("Chat model field markdown_content is missing or blank");
+            throw invalid(ChatConstants.PARSE_MARKDOWN_MISSING_MESSAGE);
         }
         if (markdown.asString().length() > MAX_MARKDOWN_CHARS) {
-            throw invalid("Chat model field markdown_content is too long");
+            throw invalid(ChatConstants.PARSE_MARKDOWN_TOO_LONG_MESSAGE);
         }
         return new ChatModelOutput(true, markdown.asString());
     }
@@ -57,7 +57,7 @@ public final class ChatOutputParser {
         }
         inner = inner.strip();
         if (!inner.endsWith(FENCE)) {
-            throw invalid("Chat model output has an unterminated code fence");
+            throw invalid(ChatConstants.PARSE_UNTERMINATED_FENCE_MESSAGE);
         }
         return inner.substring(0, inner.length() - FENCE.length()).strip();
     }
@@ -68,10 +68,10 @@ public final class ChatOutputParser {
             root = MAPPER.readTree(text);
         } catch (JacksonException ex) {
             // The parser message quotes the input, so the cause is dropped on purpose.
-            throw invalid("Chat model output is not valid JSON");
+            throw invalid(ChatConstants.PARSE_NOT_JSON_MESSAGE);
         }
         if (root == null || !root.isObject()) {
-            throw invalid("Chat model output is not a JSON object");
+            throw invalid(ChatConstants.PARSE_NOT_OBJECT_MESSAGE);
         }
         return root;
     }

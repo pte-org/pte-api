@@ -1,5 +1,6 @@
 package com.pte.chat.internal.client;
 
+import com.pte.chat.internal.constant.ChatConstants;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -68,7 +69,8 @@ public class GeminiChatClient {
         HttpResponse<byte[]> response = send(requestBody(systemInstruction, history, userMessage));
         int status = response.statusCode();
         if (status / 100 != 2) {
-            throw new ChatAiException(classifyStatus(status, response.body()), "Chat provider answered HTTP " + status);
+            throw new ChatAiException(classifyStatus(status, response.body()),
+                    ChatConstants.PROVIDER_HTTP_STATUS_MESSAGE + status);
         }
         JsonNode root = readJson(response.body());
         JsonNode candidate = root.path("candidates").path(0);
@@ -136,17 +138,18 @@ public class GeminiChatClient {
             return call.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException ex) {
             call.cancel(true);
-            throw new ChatAiException(ChatAiFailureReason.TIMEOUT, "Chat provider timed out", ex);
+            throw new ChatAiException(ChatAiFailureReason.TIMEOUT, ChatConstants.PROVIDER_TIMEOUT_MESSAGE, ex);
         } catch (ExecutionException ex) {
             Throwable cause = ex.getCause();
             ChatAiFailureReason reason = cause instanceof HttpTimeoutException
                     ? ChatAiFailureReason.TIMEOUT
                     : ChatAiFailureReason.NETWORK_ERROR;
-            throw new ChatAiException(reason, "Chat provider could not be reached", cause);
+            throw new ChatAiException(reason, ChatConstants.PROVIDER_UNREACHABLE_MESSAGE, cause);
         } catch (InterruptedException ex) {
             call.cancel(true);
             Thread.currentThread().interrupt();
-            throw new ChatAiException(ChatAiFailureReason.NETWORK_ERROR, "Chat provider call was interrupted", ex);
+            throw new ChatAiException(ChatAiFailureReason.NETWORK_ERROR,
+                    ChatConstants.PROVIDER_INTERRUPTED_MESSAGE, ex);
         }
     }
 
@@ -155,7 +158,8 @@ public class GeminiChatClient {
             return jsonMapper.readTree(body);
         } catch (JacksonException ex) {
             // The parser message quotes the body, so the cause is dropped on purpose.
-            throw new ChatAiException(ChatAiFailureReason.INVALID_RESPONSE, "Chat provider body is not JSON");
+            throw new ChatAiException(ChatAiFailureReason.INVALID_RESPONSE,
+                    ChatConstants.PROVIDER_BODY_NOT_JSON_MESSAGE);
         }
     }
 
@@ -170,25 +174,31 @@ public class GeminiChatClient {
 
     private static void requireUsableCandidate(JsonNode root, JsonNode candidate, ChatAiUsage usage) {
         if (root.path("promptFeedback").hasNonNull("blockReason")) {
-            throw new ChatAiException(ChatAiFailureReason.CONTENT_BLOCKED, "Chat prompt was blocked", usage);
+            throw new ChatAiException(ChatAiFailureReason.CONTENT_BLOCKED,
+                    ChatConstants.PROVIDER_PROMPT_BLOCKED_MESSAGE, usage);
         }
         if (!candidate.isObject()) {
-            throw new ChatAiException(ChatAiFailureReason.EMPTY_RESPONSE, "Chat provider returned no candidates", usage);
+            throw new ChatAiException(ChatAiFailureReason.EMPTY_RESPONSE,
+                    ChatConstants.PROVIDER_NO_CANDIDATES_MESSAGE, usage);
         }
         String finish = usage.finishReason();
         if (FINISH_STOP.equals(finish)) {
             return;
         }
         if (finish == null || finish.isBlank()) {
-            throw new ChatAiException(ChatAiFailureReason.INVALID_RESPONSE, "Chat answer has no finish reason", usage);
+            throw new ChatAiException(ChatAiFailureReason.INVALID_RESPONSE,
+                    ChatConstants.PROVIDER_NO_FINISH_REASON_MESSAGE, usage);
         }
         if (BLOCKED_FINISH_REASONS.contains(finish)) {
-            throw new ChatAiException(ChatAiFailureReason.CONTENT_BLOCKED, "Chat answer was blocked", usage);
+            throw new ChatAiException(ChatAiFailureReason.CONTENT_BLOCKED,
+                    ChatConstants.PROVIDER_ANSWER_BLOCKED_MESSAGE, usage);
         }
         if (FINISH_MAX_TOKENS.equals(finish)) {
-            throw new ChatAiException(ChatAiFailureReason.TRUNCATED, "Chat answer hit the token limit", usage);
+            throw new ChatAiException(ChatAiFailureReason.TRUNCATED,
+                    ChatConstants.PROVIDER_TOKEN_LIMIT_MESSAGE, usage);
         }
-        throw new ChatAiException(ChatAiFailureReason.INVALID_RESPONSE, "Chat answer ended unexpectedly", usage);
+        throw new ChatAiException(ChatAiFailureReason.INVALID_RESPONSE,
+                ChatConstants.PROVIDER_UNEXPECTED_END_MESSAGE, usage);
     }
 
     /** Thought parts are the model's reasoning, not part of the answer. */
