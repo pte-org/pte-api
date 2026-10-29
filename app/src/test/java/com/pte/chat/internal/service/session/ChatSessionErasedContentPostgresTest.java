@@ -1,5 +1,6 @@
 package com.pte.chat.internal.service.session;
 
+import com.pte.chat.internal.constant.ChatConstants;
 import com.pte.chat.internal.domain.ChatMessage;
 import com.pte.chat.internal.repository.ChatMessageRepository;
 import com.pte.chat.internal.repository.ChatSessionRepository;
@@ -93,6 +94,14 @@ class ChatSessionErasedContentPostgresTest {
         message("", "", "OK", 5);
 
         assertThat(service.latestSessionId(student)).contains(older);
+    }
+
+    @Test
+    void anAnonymisedRowIsInvisibleToEveryStudent() {
+        data.insertMessage(ChatConstants.NIL_UUID, ChatConstants.NIL_UUID, "", "", "OK", T0);
+
+        assertThat(service.latestSessionId(student)).isEmpty();
+        assertThat(service.history(ChatConstants.NIL_UUID, student, 6)).isEmpty();
     }
 
     @Test

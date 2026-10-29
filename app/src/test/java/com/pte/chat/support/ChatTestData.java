@@ -22,7 +22,24 @@ public final class ChatTestData {
 
     public void truncateAll() {
         jdbc.getJdbcOperations().execute(
-                "TRUNCATE chat_message, chat_session, chat_usage, chat_answer_cache RESTART IDENTITY");
+                "TRUNCATE chat_message, chat_session, chat_usage, chat_answer_cache, chat_consent RESTART IDENTITY");
+    }
+
+    // ---- consent -----------------------------------------------------------------------------------------
+
+    public int consentRows(UUID student) {
+        return count("SELECT count(*) FROM chat_consent WHERE student_id = :s", new MapSqlParameterSource("s", student));
+    }
+
+    public Map<String, Object> consentRow(UUID student) {
+        return jdbc.queryForMap("SELECT * FROM chat_consent WHERE student_id = :s", new MapSqlParameterSource("s", student));
+    }
+
+    public void insertConsent(UUID student, String policyVersion, Instant consentedAt) {
+        jdbc.update("INSERT INTO chat_consent (student_id, policy_version, consented_at, age_confirmed) "
+                        + "VALUES (:s, :v, :c, true)",
+                new MapSqlParameterSource("s", student).addValue("v", policyVersion)
+                        .addValue("c", Timestamp.from(consentedAt)));
     }
 
     // ---- usage -------------------------------------------------------------------------------------------
@@ -100,6 +117,11 @@ public final class ChatTestData {
     public List<Map<String, Object>> messages(UUID sessionId) {
         return jdbc.queryForList("SELECT * FROM chat_message WHERE session_id = :id ORDER BY id",
                 new MapSqlParameterSource("id", sessionId));
+    }
+
+    /** Every message row, oldest first; for tests where the session id itself may have been erased. */
+    public List<Map<String, Object>> allMessages() {
+        return jdbc.queryForList("SELECT * FROM chat_message ORDER BY id", new MapSqlParameterSource());
     }
 
     // ---- answer cache ------------------------------------------------------------------------------------

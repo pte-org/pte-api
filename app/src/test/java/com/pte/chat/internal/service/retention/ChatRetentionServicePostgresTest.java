@@ -1,6 +1,7 @@
 package com.pte.chat.internal.service.retention;
 
 import com.pte.chat.internal.config.ChatAiProperties;
+import com.pte.chat.internal.constant.ChatConstants;
 import com.pte.chat.support.ChatPostgresJpaTest;
 import com.pte.chat.support.ChatTestData;
 import com.pte.chat.support.MutableClock;
@@ -15,7 +16,10 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Content older than the retention window is blanked in batches; cost columns, young rows and the cache rules hold. */
+/**
+ * Content older than the retention window is blanked and anonymised in batches: the text goes, the link to the
+ * student and the session goes, the cost columns stay. Young rows, sessions in use and the cache rules hold.
+ */
 @ChatPostgresJpaTest
 class ChatRetentionServicePostgresTest {
 
@@ -44,7 +48,7 @@ class ChatRetentionServicePostgresTest {
     }
 
     private Map<String, Object> onlyRow() {
-        return data.messages(session).getFirst();
+        return data.allMessages().getFirst();
     }
 
     @Test
@@ -62,16 +66,28 @@ class ChatRetentionServicePostgresTest {
     }
 
     @Test
-    void aMessageExactlyAtTheCutoffIsKept() {
+    void anErasedMessageIsNoLongerLinkedToTheStudentOrTheSession() {
+        data.insertMessage(session, student, "my essay", "the answer", "OK", CUTOFF.minusSeconds(1));
+
+        service.eraseExpiredContent(NOW);
+
+        assertThat(onlyRow()).containsEntry("student_id", ChatConstants.NIL_UUID)
+                .containsEntry("session_id", ChatConstants.NIL_UUID);
+        assertThat(data.messageRowsForStudent(student)).isZero();
+    }
+
+    @Test
+    void aMessageExactlyAtTheCutoffIsKeptWithItsOwner() {
         data.insertMessage(session, student, "my essay", "the answer", "OK", CUTOFF);
 
         assertThat(service.eraseExpiredContent(NOW)).isZero();
 
-        assertThat(onlyRow()).containsEntry("question", "my essay").containsEntry("answer", "the answer");
+        assertThat(onlyRow()).containsEntry("question", "my essay").containsEntry("answer", "the answer")
+                .containsEntry("student_id", student).containsEntry("session_id", session);
     }
 
     @Test
-    void costAndIdentityColumnsSurviveTheErase() {
+    void costColumnsSurviveTheErase() {
         data.insertMessage(session, student, "q", "a", "OK", CUTOFF.minusSeconds(60));
         data.execute("UPDATE chat_message SET tokens_in = 11, tokens_out = 22, model = 'm', prompt_version = 'v1', "
                 + "finish_reason = 'STOP'");
@@ -81,7 +97,7 @@ class ChatRetentionServicePostgresTest {
         Map<String, Object> row = onlyRow();
         assertThat(row).containsEntry("status", "OK").containsEntry("tokens_in", 11).containsEntry("tokens_out", 22)
                 .containsEntry("model", "m").containsEntry("prompt_version", "v1")
-                .containsEntry("finish_reason", "STOP").containsEntry("student_id", student);
+                .containsEntry("finish_reason", "STOP").containsEntry("from_cache", false);
     }
 
     @Test
@@ -95,15 +111,24 @@ class ChatRetentionServicePostgresTest {
         assertThat(service.eraseExpiredContent(NOW)).isEqualTo(5);
         assertThat(service.eraseExpiredContent(NOW)).isZero();
 
-        assertThat(data.messages(session)).filteredOn(row -> "".equals(row.get("question"))).hasSize(5);
-        assertThat(data.messages(session)).filteredOn(row -> "recent".equals(row.get("question"))).hasSize(1);
+        assertThat(data.allMessages()).filteredOn(row -> "".equals(row.get("question"))).hasSize(5);
+        assertThat(data.allMessages()).filteredOn(row -> "recent".equals(row.get("question"))).hasSize(1);
     }
 
     @Test
-    void aRowThatWasAlreadyBlankIsNotCountedAgain() {
-        data.insertMessage(session, student, "", "", "FAILED", CUTOFF.minusSeconds(60));
+    void aRowThatIsAlreadyBlankAndAnonymousIsNotCountedAgain() {
+        data.insertMessage(ChatConstants.NIL_UUID, ChatConstants.NIL_UUID, "", "", "FAILED", CUTOFF.minusSeconds(60));
 
         assertThat(service.eraseExpiredContent(NOW)).isZero();
+    }
+
+    @Test
+    void aBlankRowThatStillHasAnOwnerIsAnonymised() {
+        data.insertMessage(session, student, "", "", "FAILED", CUTOFF.minusSeconds(60));
+
+        assertThat(service.eraseExpiredContent(NOW)).isEqualTo(1);
+
+        assertThat(onlyRow()).containsEntry("student_id", ChatConstants.NIL_UUID);
     }
 
     @Test
@@ -112,6 +137,37 @@ class ChatRetentionServicePostgresTest {
         data.insertMessage(session, student, "nine months old", "a", "OK", Instant.parse("2026-01-29T10:00:00Z"));
 
         assertThat(service.eraseExpiredContent(NOW)).isEqualTo(1);
+    }
+
+    @Test
+    void anOldSessionWithNoMessagesLeftIsDeleted() {
+        data.insertMessage(session, student, "old", "a", "OK", CUTOFF.minusSeconds(60));
+        service.eraseExpiredContent(NOW);
+
+        assertThat(service.deleteOrphanedSessions(NOW)).isEqualTo(1);
+
+        assertThat(data.sessionRows(session)).isZero();
+    }
+
+    @Test
+    void aSessionThatStillHasRecentMessagesIsKept() {
+        data.insertMessage(session, student, "old", "a", "OK", CUTOFF.minusSeconds(60));
+        data.insertMessage(session, student, "recent", "a", "OK", NOW.minusSeconds(60));
+        service.eraseExpiredContent(NOW);
+
+        assertThat(service.deleteOrphanedSessions(NOW)).isZero();
+
+        assertThat(data.sessionRows(session)).isEqualTo(1);
+    }
+
+    @Test
+    void aYoungSessionWithNoMessagesYetIsKept() {
+        UUID fresh = UUID.randomUUID();
+        data.insertSession(fresh, student, NOW.minusSeconds(60));
+
+        service.deleteOrphanedSessions(NOW);
+
+        assertThat(data.sessionRows(fresh)).isEqualTo(1);
     }
 
     @Test
@@ -130,13 +186,14 @@ class ChatRetentionServicePostgresTest {
     }
 
     @Test
-    void theScheduledRunDoesBothJobs() {
+    void theScheduledRunDoesAllThreeJobs() {
         data.insertMessage(session, student, "old", "a", "OK", CUTOFF.minusSeconds(1));
         data.insertCache("expired", "a", NOW.minusSeconds(1));
 
         service.purge();
 
-        assertThat(onlyRow()).containsEntry("question", "");
+        assertThat(onlyRow()).containsEntry("question", "").containsEntry("student_id", ChatConstants.NIL_UUID);
+        assertThat(data.sessionRows(session)).isZero();
         assertThat(data.cacheRows("expired")).isZero();
     }
 }
