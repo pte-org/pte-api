@@ -27,7 +27,10 @@ import java.util.UUID;
 @ConditionalOnProperty(name = ChatConstants.PROPERTY_ENABLED, havingValue = "true")
 public class ChatSessionService {
 
-    private static final String COLUMNS = "id, created_at, session_id, student_id, question, answer, status";
+    /** The retention job blanks old text but keeps the row; such a row is neither shown nor sent as context. */
+    private static final String HAS_TEXT = "question <> ''";
+
+    private static final String COLUMNS ="id, created_at, session_id, student_id, question, answer, status";
 
     private static final RowMapper<ChatMessage> MESSAGE = (rs, n) -> {
         ChatMessage message = new ChatMessage();
@@ -71,7 +74,7 @@ public class ChatSessionService {
 
     public boolean hasAnswers(UUID sessionId, UUID studentId) {
         Boolean exists = jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM chat_message WHERE session_id = :id "
-                        + "AND student_id = :s AND status = '" + ChatConstants.STATUS_OK + "' AND deleted = false)",
+                        + "AND student_id = :s AND status = '" + ChatConstants.STATUS_OK + "' AND deleted = false AND " + HAS_TEXT + ")",
                 new MapSqlParameterSource("id", sessionId).addValue("s", studentId), Boolean.class);
         return Boolean.TRUE.equals(exists);
     }
@@ -95,14 +98,14 @@ public class ChatSessionService {
 
     public Optional<UUID> latestSessionId(UUID studentId) {
         return jdbc.query("SELECT session_id FROM chat_message WHERE student_id = :s AND deleted = false "
-                        + "ORDER BY created_at DESC, id DESC LIMIT 1",
+                        + "AND " + HAS_TEXT + " ORDER BY created_at DESC, id DESC LIMIT 1",
                 new MapSqlParameterSource("s", studentId), (rs, n) -> rs.getObject(1, UUID.class))
                 .stream().findFirst();
     }
 
     private List<ChatMessage> lastMessages(String statusFilter, UUID sessionId, UUID studentId, int limit) {
         return jdbc.query("SELECT " + COLUMNS + " FROM (SELECT " + COLUMNS + " FROM chat_message "
-                        + "WHERE session_id = :id AND student_id = :s AND deleted = false AND " + statusFilter
+                        + "WHERE session_id = :id AND student_id = :s AND deleted = false AND " + HAS_TEXT + " AND " + statusFilter
                         + " ORDER BY created_at DESC, id DESC LIMIT :n) latest ORDER BY created_at ASC, id ASC",
                 new MapSqlParameterSource("id", sessionId).addValue("s", studentId).addValue("n", limit), MESSAGE);
     }

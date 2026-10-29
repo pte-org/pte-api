@@ -9,7 +9,8 @@ public final class ChatConstants {
     public static final String PROPERTY_ENABLED = PROPERTY_PREFIX + ".enabled";
 
     /** Quota days roll over at 00:00 in this zone; the server picks the day, never the client. */
-    public static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    public static final String ZONE_ID = "Asia/Ho_Chi_Minh";
+    public static final ZoneId ZONE = ZoneId.of(ZONE_ID);
 
     /** Length of {@code chat_message.question}; a larger {@code chat.ai.max-input-chars} would fail the insert. */
     public static final int MAX_QUESTION_CHARS = 4000;
@@ -40,6 +41,12 @@ public final class ChatConstants {
     public static final String ERR_BUSY = "CHAT_BUSY";
     public static final String ERR_SESSION_NOT_FOUND = "CHAT_SESSION_NOT_FOUND";
     public static final String ERR_INVALID_REQUEST = "CHAT_INVALID_REQUEST";
+
+    /** Defaults for {@code chat.ai.retention-*}; the privacy hand-off fixes 12 months of text and 30 days of cache. */
+    public static final int DEFAULT_RETENTION_CONTENT_MONTHS = 12;
+    public static final int DEFAULT_RETENTION_CACHE_DAYS = 30;
+    public static final int DEFAULT_RETENTION_BATCH_SIZE = 1_000;
+    public static final String RETENTION_CRON_PROPERTY = "${chat.ai.retention-cron:0 30 3 * * *}";
 
     /** Student-facing error messages; the code above is what the web client keys on. */
     public static final String BUSY_MESSAGE =
