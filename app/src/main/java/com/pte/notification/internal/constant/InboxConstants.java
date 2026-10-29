@@ -70,6 +70,9 @@ public final class InboxConstants {
     public static final String SESSION_GRADING_COMPLETED_NOTIFICATION_TITLE = "Exam grading completed";
     public static final String SESSION_GRADING_COMPLETED_NOTIFICATION_BODY =
             "Grading for exam session '%s' is complete and ready for host review.";
+    public static final String SESSION_PREVIEW_READY_NOTIFICATION_TITLE = "Exam preview ready";
+    public static final String SESSION_PREVIEW_READY_NOTIFICATION_BODY =
+            "Exam session '%s' (%s) is ready. Log in to PTE App as a host to preview it without changing the exam status.";
     public static final String SUPPORT_TICKET_SUBMITTED_NOTIFICATION_TITLE = "New feedback received";
     public static final String SUPPORT_TICKET_SUBMITTED_NOTIFICATION_BODY =
             "New %s feedback was submitted for admin review.";

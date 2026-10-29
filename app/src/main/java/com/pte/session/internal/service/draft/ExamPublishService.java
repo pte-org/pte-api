@@ -15,6 +15,7 @@ import com.pte.session.domain.enums.AudienceMemberStatus;
 import com.pte.session.domain.enums.GenerationJobStatus;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.response.SlotConflict;
+import com.pte.session.dto.event.ExamPreviewReadyEvent;
 import com.pte.session.dto.event.SessionCancelledEvent;
 import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.dto.request.BulkEnrollRequest;
@@ -130,6 +131,8 @@ public class ExamPublishService {
         session.setStatus(SessionStatus.READY);
         sessionRepository.save(session);
         access.recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_GENERATED, session.getName());
+        eventPublisher.publishEvent(new ExamPreviewReadyEvent(session.getPublicId(), session.getTenantId(),
+                exam.publicId(), session.getSessionCode(), session.getName(), caller.userId(), clock.instant()));
         return generationOf(session);
     }
 

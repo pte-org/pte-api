@@ -27,6 +27,7 @@ import com.pte.session.domain.enums.AudienceSourceType;
 import com.pte.session.domain.enums.ExamMode;
 import com.pte.session.domain.enums.ReusePolicy;
 import com.pte.session.domain.enums.SessionStatus;
+import com.pte.session.dto.event.ExamPreviewReadyEvent;
 import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.dto.request.AudienceSourceRequest;
 import com.pte.session.internal.dto.response.audience.AudienceSourceResponse;
@@ -66,6 +67,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
@@ -615,6 +617,7 @@ class ExamWorkflowServicesTest {
     void generate_buildsOneFrozenExamAndMovesTheDraftToReady() {
         ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
                 com.pte.session.domain.enums.LockdownMode.STRICT);
+        session.setSessionCode("FPT-261010-K7QM");
         ExamRegistration member = audienceMember(session, UUID.randomUUID());
         stubPublishDependencies(session, List.of(member));
         when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
@@ -633,6 +636,12 @@ class ExamWorkflowServicesTest {
         verify(auditLogService).record(hostAdmin, SessionConstants.AGGREGATE_EXAM_SESSION,
                 session.getPublicId().toString(), session.getName(), session.getSessionCode(),
                 SessionConstants.EVENT_EXAM_GENERATED, session.getName());
+        verify(eventPublisher).publishEvent(argThat((Object event) -> event instanceof ExamPreviewReadyEvent preview
+                && preview.sessionPublicId().equals(session.getPublicId())
+                && preview.tenantPublicId().equals(tenantId)
+                && preview.snapshotPublicId().equals(examVersionId)
+                && preview.sessionCode().equals(session.getSessionCode())
+                && preview.actorUserPublicId().equals(hostAdmin.userId())));
     }
 
     @Test
@@ -644,6 +653,7 @@ class ExamWorkflowServicesTest {
 
         assertThat(response.publicId()).isEqualTo(session.getExamVersionPublicId());
         verifyNoInteractions(assessmentService);
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
