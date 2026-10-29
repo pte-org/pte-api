@@ -127,6 +127,44 @@ class ChatConsentServicePostgresTest {
     }
 
     @Test
+    void withdrawingRemovesTheConsentAndClosesChatAgain() {
+        service.give(student, CURRENT, true);
+
+        ChatConsentStatus status = service.withdraw(student);
+
+        assertThat(status.consented()).isFalse();
+        assertThat(data.consentRows(student)).isZero();
+        assertThatThrownBy(() -> service.require(student)).isInstanceOf(ChatConsentRequiredException.class);
+    }
+
+    @Test
+    void withdrawingWithoutAConsentIsHarmless() {
+        assertThatCode(() -> service.withdraw(student)).doesNotThrowAnyException();
+        assertThat(service.status(student).consented()).isFalse();
+    }
+
+    @Test
+    void withdrawingTouchesOnlyThatStudent() {
+        UUID other = UUID.randomUUID();
+        service.give(student, CURRENT, true);
+        service.give(other, CURRENT, true);
+
+        service.withdraw(student);
+
+        assertThat(service.status(other).consented()).isTrue();
+    }
+
+    @Test
+    void aStudentCanConsentAgainAfterWithdrawing() {
+        service.give(student, CURRENT, true);
+        service.withdraw(student);
+
+        service.give(student, CURRENT, true);
+
+        assertThat(service.status(student).consented()).isTrue();
+    }
+
+    @Test
     void theRetentionJobNeverTouchesConsentRows() {
         service.give(student, CURRENT, true);
         data.execute("UPDATE chat_consent SET consented_at = now() - interval '5 years'");

@@ -91,7 +91,7 @@ abstract class ChatServiceTestSupport {
 
     ChatService newService() {
         return new ChatService(entitlementGate, properties, quotaService, sessionService, gate, cacheService, client,
-                messageRepository, observability, clock);
+                messageRepository, observability, clock, studentId -> { });
     }
 
     ChatSendCommand command(String message) {

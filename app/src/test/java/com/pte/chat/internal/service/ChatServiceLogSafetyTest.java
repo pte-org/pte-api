@@ -163,6 +163,20 @@ class ChatServiceLogSafetyTest extends ChatServiceTestSupport {
     }
 
     @Test
+    void aProviderFailureLogsItsReasonAndStatusSoAnOperatorCanFixIt() {
+        when(client.generate(any(), any(), any())).thenThrow(
+                new ChatAiException(ChatAiFailureReason.BAD_REQUEST, "Provider returned HTTP status 404"));
+
+        assertThatThrownBy(() -> service.send(caller, command(QUESTION))).isInstanceOf(ChatBusyException.class);
+
+        assertThat(appender.list).anySatisfy(event -> {
+            assertThat(event.getLevel()).isEqualTo(Level.WARN);
+            assertThat(event.getFormattedMessage()).contains("BAD_REQUEST").contains("404");
+        });
+        assertThat(everythingLogged()).noneSatisfy(text -> assertThat(text).contains(QUESTION));
+    }
+
+    @Test
     void anUnexpectedProviderExceptionWithAFailingFailedSaveLogsNoStudentText() {
         when(client.generate(any(), any(), any())).thenThrow(leakyRuntimeError());
         when(messageRepository.save(any(ChatMessage.class))).thenThrow(leakyDatabaseError());

@@ -1,5 +1,6 @@
 package com.pte.chat.internal.service.cache;
 
+import com.pte.chat.internal.config.ChatAiProperties;
 import com.pte.chat.internal.prompt.ChatPrompts;
 import com.pte.chat.internal.repository.ChatAnswerCacheRepository;
 import com.pte.chat.support.ChatPostgresJpaTest;
@@ -36,7 +37,7 @@ class ChatAnswerCacheServicePostgresTest {
     @BeforeEach
     void setUp() {
         clock = new MutableClock(NOW);
-        service = new ChatAnswerCacheService(repository, jdbc, clock);
+        service = new ChatAnswerCacheService(repository, jdbc, clock, new ChatAiProperties());
         data = new ChatTestData(jdbc);
     }
 

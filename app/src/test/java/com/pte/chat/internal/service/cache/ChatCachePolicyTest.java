@@ -59,6 +59,11 @@ class ChatCachePolicyTest {
     }
 
     @Test
+    void aQuestionAboutYearsAndDatesIsStillCacheable() {
+        assertThat(ChatCachePolicy.cacheable("What changed in 2023-2024, and on 12-05-2024?", LIMIT)).isTrue();
+    }
+
+    @Test
     void anAtSignWithoutADomainIsNotAnEmail() {
         assertThat(ChatCachePolicy.cacheable("What does the @ symbol mean in an address?", LIMIT)).isTrue();
     }

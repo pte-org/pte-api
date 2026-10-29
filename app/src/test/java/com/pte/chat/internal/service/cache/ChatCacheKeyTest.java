@@ -45,6 +45,21 @@ class ChatCacheKeyTest {
     }
 
     @Test
+    void aDifferentExerciseGivesADifferentKeyBecauseTheAnswerMayUseIt() {
+        String withEssay = ChatCacheKey.of(QUESTION, "en", "WRITE_ESSAY", "v2", "Technology makes us less social.");
+        String withOther = ChatCacheKey.of(QUESTION, "en", "WRITE_ESSAY", "v2", "Should university be free?");
+
+        assertThat(withEssay).isNotEqualTo(withOther);
+        assertThat(withEssay).isNotEqualTo(key(QUESTION, "en", "WRITE_ESSAY", "v2"));
+    }
+
+    @Test
+    void noExerciseGivesTheSameKeyAsBefore() {
+        assertThat(ChatCacheKey.of(QUESTION, "en", "WRITE_ESSAY", "v2", null)).isEqualTo(key(QUESTION, "en", "WRITE_ESSAY", "v2"));
+        assertThat(ChatCacheKey.of(QUESTION, "en", "WRITE_ESSAY", "v2", "  ")).isEqualTo(key(QUESTION, "en", "WRITE_ESSAY", "v2"));
+    }
+
+    @Test
     void aDifferentLanguageGivesADifferentKey() {
         assertThat(key(QUESTION, "en", "WRITE_ESSAY", "v1")).isNotEqualTo(key(QUESTION, "vi", "WRITE_ESSAY", "v1"));
     }
