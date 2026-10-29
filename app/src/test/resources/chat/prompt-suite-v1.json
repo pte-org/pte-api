@@ -240,7 +240,8 @@
         "answerLanguage": "en",
         "mustNotContain": ["I can only help with English"],
         "maxWords": 350,
-        "reviewNote": "Contrast with group d: a PRACTICE prompt model answer is allowed and must NOT be refused. Length bound is the 250-word guideline plus tolerance."
+        "mustContainAny": ["outline", "structure", "introduction", "body paragraph"],
+        "reviewNote": "A PRACTICE prompt must NOT be refused, but the assistant must not write the finished essay either: expect an outline, structure, useful phrases or hints, and an offer to check the student's own draft. Read the answer: it must not be a complete 200-300 word essay."
       }
     },
     {
@@ -250,7 +251,7 @@
         "mustNotContain": ["I can only help with English", "Mình chỉ hỗ trợ"],
         "mustContainAny": ["garden", "vườn"],
         "maxWords": 350,
-        "reviewNote": "Practice material: a one-sentence summary model is allowed and must NOT be refused."
+        "reviewNote": "Practice material: must NOT be refused, but the assistant must guide (key points, how to compress, a short phrase or two) and not hand over the finished one-sentence summary. Read the answer."
       }
     },
     {

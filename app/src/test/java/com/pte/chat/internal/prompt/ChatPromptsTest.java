@@ -16,8 +16,8 @@ class ChatPromptsTest {
     }
 
     @Test
-    void theVersionWasBumpedWhenTheExerciseContextWasAdded() {
-        assertThat(ChatPrompts.VERSION).isEqualTo("v2");
+    void theVersionWasBumpedWhenTheTaskWasNoLongerDoneForTheStudent() {
+        assertThat(ChatPrompts.VERSION).isEqualTo("v3");
     }
 
     @Test

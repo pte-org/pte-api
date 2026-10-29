@@ -13,11 +13,28 @@ class ChatPromptsScopeTest {
     private static final String PROMPT = ChatPrompts.systemInstruction();
 
     @Test
-    void modelAnswersAndSampleResponsesForPracticeTasksAreAllowed() {
+    void theStudentIsHelpedToDoTheTaskButTheTaskIsNotDoneForThem() {
         String lower = PROMPT.toLowerCase();
 
-        assertThat(lower).contains("model answers");
-        assertThat(lower).contains("practice");
+        assertThat(lower).contains("do not write");
+        assertThat(lower).contains("complete");
+        assertThat(lower).contains("outline");
+        assertThat(lower).containsAnyOf("hint", "hints");
+        assertThat(lower).contains("own attempt");
+    }
+
+    @Test
+    void templatesAndFeedbackOnTheStudentsOwnWritingStayAllowed() {
+        String lower = PROMPT.toLowerCase();
+
+        assertThat(lower).contains("templates");
+        assertThat(lower).contains("own essay");
+        assertThat(lower).contains("correcting or improving the student's own");
+    }
+
+    @Test
+    void aFullModelAnswerIsNoLongerOffered() {
+        assertThat(PROMPT.toLowerCase()).doesNotContain("model answers, sample responses");
     }
 
     @Test
