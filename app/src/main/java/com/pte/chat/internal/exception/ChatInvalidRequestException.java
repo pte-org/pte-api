@@ -8,6 +8,6 @@ public class ChatInvalidRequestException extends DomainException {
 
     public ChatInvalidRequestException(String detail) {
         super(HttpStatus.BAD_REQUEST, ChatConstants.ERR_INVALID_REQUEST, null,
-                "Your message could not be sent: " + detail + ".");
+                ChatConstants.INVALID_REQUEST_MESSAGE_TEMPLATE.formatted(detail));
     }
 }

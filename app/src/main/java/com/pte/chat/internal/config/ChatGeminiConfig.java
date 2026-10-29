@@ -32,8 +32,8 @@ public class ChatGeminiConfig {
     GeminiChatClient geminiChatClient(ChatAiProperties properties, JsonMapper jsonMapper) {
         String model = properties.getModel();
         if (model == null || !model.startsWith(THINKING_OFF_MODEL_PREFIX)) {
-            throw new IllegalStateException("chat.ai.model '" + model + "' is not supported: only "
-                    + THINKING_OFF_MODEL_PREFIX + "* is verified to have thinking off by default");
+            throw new IllegalStateException(
+                    ChatConstants.CONFIG_MODEL_UNSUPPORTED_TEMPLATE.formatted(model, THINKING_OFF_MODEL_PREFIX));
         }
         HttpClient httpClient = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
