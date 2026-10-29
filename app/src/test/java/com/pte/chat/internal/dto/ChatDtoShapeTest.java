@@ -42,7 +42,8 @@ class ChatDtoShapeTest {
     void theRequestHasTheAgreedFields() {
         assertThat(components(ChatMessageRequest.class)).containsExactly(
                 Map.entry("sessionId", UUID.class), Map.entry("message", String.class),
-                Map.entry("taskType", String.class), Map.entry("language", String.class));
+                Map.entry("taskType", String.class), Map.entry("language", String.class),
+                Map.entry("exercisePrompt", String.class));
     }
 
     @Test
