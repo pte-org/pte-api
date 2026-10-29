@@ -1,7 +1,7 @@
-package com.pte.attempt.internal.config;
+package com.pte.assessment.internal.config;
 
-import com.pte.attempt.internal.constant.AttemptConstants;
-import com.pte.attempt.internal.exception.content.TaskTimingNotConfiguredException;
+import com.pte.assessment.internal.constant.AssessmentConstants;
+import com.pte.assessment.internal.exception.content.TaskTimingNotConfiguredException;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -14,11 +14,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Loads per-task-type prep/response timing from {@code config/task-timing.json}
- * (config-driven, matching itembank's skill-mapping pattern). Only the task
- * types actually delivered are configured — an unconfigured type fails fast at
- * pin time rather than silently defaulting (server is the timing source of
- * truth, so a wrong default is a real correctness bug, not a cosmetic gap).
+ * Shared read-only fallback timing source for task types that are not present
+ * in the pinned exam definition. The assessment module owns this source so
+ * host preview and student delivery resolve the same values.
  */
 @Component
 public class TaskTimingConfig {
@@ -39,16 +37,7 @@ public class TaskTimingConfig {
         return timing;
     }
 
-    /**
-     * Non-throwing lookup — {@code null} if this task type has no entry here
-     * at all. Since Phase 3, that's every task type except {@code
-     * PERSONAL_INTRODUCTION} and the 5 audio-prompt Speaking types (everyone
-     * else's timing now lives in the exam definition); {@code
-     * SnapshotPinService} uses this instead of {@link #timingFor} whenever a
-     * task type IS in the exam definition, so a template-only static type
-     * (e.g. {@code MC_READING_SINGLE}) never trips {@link
-     * TaskTimingNotConfiguredException} just because it's absent from this file.
-     */
+    /** Returns {@code null} when the JSON has no entry for this task type. */
     public Timing timingForIfConfigured(String taskType) {
         return timings.get(taskType);
     }
@@ -65,18 +54,10 @@ public class TaskTimingConfig {
                         node.has("preRecordSeconds") ? node.path("preRecordSeconds").asInt() : null));
             });
         } catch (IOException | JacksonException ex) {
-            throw new IllegalStateException(String.format(AttemptConstants.TASK_TIMING_LOAD_FAILED, RESOURCE), ex);
+            throw new IllegalStateException(String.format(AssessmentConstants.TASK_TIMING_LOAD_FAILED, RESOURCE), ex);
         }
     }
 
-    /**
-     * {@code prepSeconds} stays the static per-type fallback for every task
-     * type — for the 5 audio-prompt Speaking types it becomes dead/unused once
-     * {@code SnapshotPinService} computes prep dynamically from real audio
-     * duration instead. {@code preListenSeconds}/{@code preRecordSeconds} are
-     * {@code null} for every task type except those 5 — their presence (not
-     * the task type name) is what a pinning call actually checks.
-     */
     public record Timing(int prepSeconds, int responseSeconds, Integer preListenSeconds, Integer preRecordSeconds) {
     }
 }

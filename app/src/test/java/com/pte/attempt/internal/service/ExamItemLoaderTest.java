@@ -1,9 +1,9 @@
 package com.pte.attempt.internal.service;
 
 import com.pte.assessment.AssessmentService;
+import com.pte.assessment.internal.config.TaskTimingConfig;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.attempt.internal.service.cache.ExamItemView;
-import com.pte.attempt.internal.config.TaskTimingConfig;
 import com.pte.attempt.internal.exception.content.MissingAudioDurationException;
 import com.pte.attempt.internal.exception.content.MissingAudioPromptException;
 import com.pte.attempt.internal.exception.content.MissingImagePromptException;
