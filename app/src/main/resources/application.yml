@@ -33,6 +33,8 @@ chat:
     enabled: ${CHAT_AI_ENABLED:false}
     api-key: ${CHAT_AI_GEMINI_API_KEY:}
     model: ${CHAT_AI_MODEL:}
+    # Google by default; point at a proxy or a stand-in server only for staging or end-to-end checks.
+    base-url: ${CHAT_AI_BASE_URL:https://generativelanguage.googleapis.com}
     temperature: ${CHAT_AI_TEMPERATURE:0.2}
     max-tokens: ${CHAT_AI_MAX_TOKENS:800}
     connect-timeout-ms: ${CHAT_AI_CONNECT_TIMEOUT_MS:2000}
@@ -44,6 +46,9 @@ chat:
     max-cache-hits-per-day: ${CHAT_AI_MAX_CACHE_HITS_PER_DAY:100}
     # A longer question (likely pasted personal text) is answered but never stored in the shared cache.
     cache-max-question-chars: ${CHAT_AI_CACHE_MAX_QUESTION_CHARS:300}
+    # Only for the admin cost estimate; update when the provider changes the price of the pinned model.
+    price-input-per-million-usd: ${CHAT_AI_PRICE_INPUT_PER_MILLION_USD:0.10}
+    price-output-per-million-usd: ${CHAT_AI_PRICE_OUTPUT_PER_MILLION_USD:0.40}
     # Privacy hand-off: chat text is blanked after 12 months, cached answers expire after 30 days.
     retention-content-months: ${CHAT_AI_RETENTION_CONTENT_MONTHS:12}
     retention-cache-days: ${CHAT_AI_RETENTION_CACHE_DAYS:30}

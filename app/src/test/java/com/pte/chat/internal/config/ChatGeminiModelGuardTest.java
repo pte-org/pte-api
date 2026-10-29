@@ -10,8 +10,9 @@ import tools.jackson.databind.json.JsonMapper;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Thinking tokens count against {@code max-tokens}, so only the Flash-Lite 2.5 family (thinking off by default)
- * may be configured until a verified thinking level is sent. Any other model stops startup with a clear reason.
+ * Thinking tokens count against {@code max-tokens}, so only models whose thinking is controlled may be configured:
+ * Flash-Lite 2.5 (off by default) and Flash-Lite 3.5 (the client sends the minimal thinking level, verified against
+ * the live API on 2026-10-29). Any other model stops startup with a clear reason.
  */
 class ChatGeminiModelGuardTest {
 
@@ -26,8 +27,8 @@ class ChatGeminiModelGuardTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"gemini-2.5-flash-lite", "gemini-2.5-flash-lite-preview-09-2025"})
-    void theFlashLiteTwoPointFiveFamilyCreatesTheClient(String model) {
+    @ValueSource(strings = {"gemini-2.5-flash-lite", "gemini-2.5-flash-lite-preview-09-2025", "gemini-3.5-flash-lite"})
+    void theSupportedFlashLiteFamiliesCreateTheClient(String model) {
         enabledWith(model).run(context -> {
             assertThat(context).hasNotFailed();
             assertThat(context).hasSingleBean(GeminiChatClient.class);
@@ -35,18 +36,19 @@ class ChatGeminiModelGuardTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"gemini-2.5-flash", "gemini-3.5-flash-lite", "gemini-1.5-flash"})
+    @ValueSource(strings = {"gemini-2.5-flash", "gemini-3.5-flash", "gemini-1.5-flash"})
     void anyOtherModelStopsStartupNamingTheModelAndTheSupportedFamily(String model) {
         enabledWith(model).run(context -> {
             assertThat(context).hasFailed();
             assertThat(context.getStartupFailure()).rootCause()
                     .hasMessageContaining(model)
-                    .hasMessageContaining("gemini-2.5-flash-lite");
+                    .hasMessageContaining("gemini-2.5-flash-lite")
+                    .hasMessageContaining("gemini-3.5-flash-lite");
         });
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"gemini-2.5-flash", "gemini-3.5-flash-lite", "gemini-1.5-flash"})
+    @ValueSource(strings = {"gemini-2.5-flash", "gemini-3.5-flash", "gemini-1.5-flash"})
     void theStartupFailureNeverContainsTheApiKey(String model) {
         enabledWith(model).run(context -> {
             assertThat(context).hasFailed();
@@ -56,6 +58,13 @@ class ChatGeminiModelGuardTest {
                 failure = failure.getCause();
             }
         });
+    }
+
+    @Test
+    void theThreePointFiveModelIsAskedForMinimalThinkingAndTheTwoPointFiveModelIsLeftAlone() {
+        assertThat(ChatGeminiConfig.thinkingLevelFor("gemini-3.5-flash-lite")).isEqualTo("minimal");
+        assertThat(ChatGeminiConfig.thinkingLevelFor("gemini-3.5-flash-lite-001")).isEqualTo("minimal");
+        assertThat(ChatGeminiConfig.thinkingLevelFor("gemini-2.5-flash-lite")).isNull();
     }
 
     @Test

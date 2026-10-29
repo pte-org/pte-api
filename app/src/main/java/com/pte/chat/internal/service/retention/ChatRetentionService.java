@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZonedDateTime;
 
 /**
@@ -35,6 +36,8 @@ public class ChatRetentionService {
             + "ORDER BY id LIMIT :batch)";
     private static final String DELETE_ORPHANED_SESSIONS = "DELETE FROM chat_session s WHERE s.created_at < :cutoff "
             + "AND NOT EXISTS (SELECT 1 FROM chat_message m WHERE m.session_id = s.session_id)";
+    /** Daily counters carry the student's id, so they are not kept past the window either. */
+    private static final String DELETE_OLD_USAGE = "DELETE FROM chat_usage WHERE usage_date < :day";
     private static final String DELETE_EXPIRED_CACHE =
             "DELETE FROM chat_answer_cache WHERE expires_at IS NOT NULL AND expires_at <= :now";
 
@@ -53,9 +56,17 @@ public class ChatRetentionService {
         Instant now = clock.instant();
         int erased = eraseExpiredContent(now);
         int sessions = deleteOrphanedSessions(now);
+        int counters = deleteOldUsage(now);
         int cached = deleteExpiredCache(now);
-        log.info("Chat retention anonymised {} messages, deleted {} sessions and {} cached answers",
-                erased, sessions, cached);
+        log.info("Chat retention anonymised {} messages, deleted {} sessions, {} daily counters and {} cached answers",
+                erased, sessions, counters, cached);
+    }
+
+    /** Deletes daily counters from before the window's first day (Vietnam time); today's and recent ones stay. */
+    public int deleteOldUsage(Instant now) {
+        LocalDate firstKept = contentCutoff(now, properties.getRetentionContentMonths())
+                .atZone(ChatConstants.ZONE).toLocalDate();
+        return jdbc.update(DELETE_OLD_USAGE, new MapSqlParameterSource("day", firstKept));
     }
 
     /** Blanks and anonymises every message older than the window; returns how many rows were changed. */

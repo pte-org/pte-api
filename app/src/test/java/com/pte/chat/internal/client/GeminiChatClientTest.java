@@ -187,6 +187,30 @@ class GeminiChatClientTest {
         assertThat(texts(schema.path("propertyOrdering"))).containsExactly("is_on_topic", "markdown_content");
     }
 
+    @Test
+    void sendsNoThinkingFieldWhenNoLevelIsSet() {
+        server.enqueue(200, candidate(ON_TOPIC_TEXT, "STOP"));
+
+        ask();
+
+        JsonNode config = jsonMapper.readTree(server.requests().getFirst().body()).path("generationConfig");
+        assertThat(config.has("thinkingConfig")).isFalse();
+    }
+
+    @Test
+    void sendsTheThinkingLevelInsideGenerationConfigWhenOneIsSet() {
+        server.enqueue(200, candidate(ON_TOPIC_TEXT, "STOP"));
+        GeminiChatClient minimal = new GeminiChatClient(httpClient, jsonMapper, server.baseUri(), KEY, MODEL,
+                TEMPERATURE, MAX_OUTPUT_TOKENS, Duration.ofSeconds(5), "minimal");
+
+        minimal.generate(SYSTEM, history(), QUESTION);
+
+        JsonNode config = jsonMapper.readTree(server.requests().getFirst().body()).path("generationConfig");
+        assertThat(config.path("thinkingConfig").path("thinkingLevel").asText()).isEqualTo("minimal");
+        assertThat(config.path("thinkingConfig").has("thinkingBudget")).isFalse();
+        assertThat(config.path("maxOutputTokens").asInt()).isEqualTo(MAX_OUTPUT_TOKENS);
+    }
+
     @SuppressWarnings("unchecked")
     private List<String> propertyNamesInOrder(JsonNode properties) {
         return new ArrayList<>(jsonMapper.convertValue(properties, LinkedHashMap.class).keySet());

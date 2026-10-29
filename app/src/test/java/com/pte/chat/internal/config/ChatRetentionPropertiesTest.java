@@ -68,6 +68,37 @@ class ChatRetentionPropertiesTest {
         assertRejected(ChatAiProperties::setRetentionBatchSize, value, "chat.ai.retention-batch-size");
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {13, 24, 120})
+    void moreThanTwelveMonthsIsRejectedBecauseThePublishedNoticeSaysAtMostTwelve(int months) {
+        assertRejected(ChatAiProperties::setRetentionContentMonths, months, "chat.ai.retention-content-months");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 6, 12})
+    void twelveMonthsOrFewerIsAccepted(int months) {
+        ChatAiProperties properties = validEnabled();
+        properties.setRetentionContentMonths(months);
+
+        assertThat(ChatAiPropertiesValidator.validate(properties)).isEmpty();
+    }
+
+    @Test
+    void thePricesDefaultToGemini25FlashLiteAndAreValidated() {
+        ChatAiProperties properties = new ChatAiProperties();
+        assertThat(properties.getPriceInputPerMillionUsd()).isEqualByComparingTo("0.10");
+        assertThat(properties.getPriceOutputPerMillionUsd()).isEqualByComparingTo("0.40");
+
+        ChatAiProperties negative = validEnabled();
+        negative.setPriceInputPerMillionUsd(new java.math.BigDecimal("-1"));
+        assertThat(ChatAiPropertiesValidator.validate(negative))
+                .anyMatch(problem -> problem.startsWith("chat.ai.price-input-per-million-usd"));
+
+        ChatAiProperties free = validEnabled();
+        free.setPriceOutputPerMillionUsd(java.math.BigDecimal.ZERO);
+        assertThat(ChatAiPropertiesValidator.validate(free)).isEmpty();
+    }
+
     @Test
     void disabledChatIsNeverValidated() {
         ChatAiProperties properties = new ChatAiProperties();

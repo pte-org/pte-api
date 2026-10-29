@@ -7,6 +7,10 @@ import com.pte.chat.internal.config.ChatGeminiConfig;
 import com.pte.chat.internal.constant.ChatConstants;
 import com.pte.chat.internal.controller.ChatConsentController;
 import com.pte.chat.internal.controller.ChatController;
+import com.pte.chat.internal.controller.ChatAdminUsageController;
+import com.pte.chat.internal.controller.ChatHistoryController;
+import com.pte.chat.internal.service.report.ChatUsageReportService;
+import com.pte.chat.internal.service.privacy.ChatStudentDataService;
 import com.pte.chat.internal.repository.ChatAnswerCacheRepository;
 import com.pte.chat.internal.repository.ChatMessageRepository;
 import com.pte.chat.internal.repository.ChatSessionRepository;
@@ -53,6 +57,10 @@ class ChatBeanGatingTest {
             ChatAnswerCacheService.class,
             ChatConsentService.class,
             ChatRetentionService.class,
+            ChatStudentDataService.class,
+            ChatUsageReportService.class,
+            ChatAdminUsageController.class,
+            ChatHistoryController.class,
             ChatService.class,
             ChatController.class,
             ChatConsentController.class);

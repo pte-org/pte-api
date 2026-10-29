@@ -12,3 +12,7 @@ CREATE TABLE chat_consent (
 
 -- The nightly retention job looks for messages older than the retention window.
 CREATE INDEX idx_chat_message_created ON chat_message (created_at);
+
+-- ... and, for each old session, for any message that still points to it. The existing session index starts with
+-- student_id, so it cannot answer "any message in this session?" without scanning the table.
+CREATE INDEX idx_chat_message_session_id ON chat_message (session_id);
