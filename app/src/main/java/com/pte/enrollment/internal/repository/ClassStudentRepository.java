@@ -14,8 +14,6 @@ public interface ClassStudentRepository extends JpaRepository<ClassStudent, Long
 
     Optional<ClassStudent> findByPublicIdAndOrganizationId(UUID publicId, UUID tenantId);
 
-    boolean existsByStudentPublicIdAndOrganizationId(UUID studentPublicId, UUID tenantId);
-
     List<ClassStudent> findByOrganizationIdAndStudentPublicIdIn(UUID tenantId, List<UUID> studentPublicIds);
 
     /** Current assignment read for the tenant student workspace. */
@@ -36,16 +34,24 @@ public interface ClassStudentRepository extends JpaRepository<ClassStudent, Long
     List<ClassStudent> findByOrganizationIdAndTrainingClass_PublicIdAndStudentPublicIdIn(
             UUID tenantId, UUID classPublicId, List<UUID> studentPublicIds);
 
-    /**
-     * Tenant-wide roster, unfiltered â€” the shared data source Phase 7 (search),
-     * Phase 10 (bulk exam-session roster resolution) and Phase 13 (dashboard)
-     * all reuse. {@code caller.tenantId()} MUST always be passed in by the
-     * caller; no program-only overload of this query may ever be added (a
-     * cross-tenant leak here poisons Phase 10's bulk-enroll input). The
-     * {@code @EntityGraph} forces a single query with the {@code trainingClass}
-     * and {@code trainingClass.program} associations join-fetched, so mapping
-     * each row to a response never triggers a lazy load per row.
-     */
+    /** Management roster includes future and inactive assignments, with optional program scope. */
+    @Query("""
+            select m from ClassStudent m
+            join fetch m.trainingClass c
+            join fetch c.program p
+            join p.organization o
+            where m.organizationId = :tenantId
+              and c.organizationId = :tenantId
+              and o.publicId = :tenantId
+              and m.deleted = false
+              and c.deleted = false
+              and p.deleted = false
+              and (:programPublicId is null or p.publicId = :programPublicId)
+            """)
+    List<ClassStudent> findManagementMemberships(
+            @Param("tenantId") UUID tenantId, @Param("programPublicId") UUID programPublicId);
+
+    /** Eligible roster for active classes and programs within the current program date range. */
     @EntityGraph(attributePaths = {"trainingClass", "trainingClass.program"})
     @Query("""
             select m from ClassStudent m
