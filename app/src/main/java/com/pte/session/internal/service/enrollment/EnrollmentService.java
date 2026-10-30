@@ -87,7 +87,8 @@ public class EnrollmentService {
         }
         List<SlotConflict> conflicts = findConflicts(session, List.of(studentPublicId));
         if (!conflicts.isEmpty()) {
-            throw new SessionTimeConflictException(conflicts.get(0).conflictingSessionPublicId());
+            throw new SessionTimeConflictException(conflicts.get(0).conflictingSessionPublicId(),
+                    conflicts.get(0).conflictingSessionName());
         }
         if (session.getCapacity() != null && enrolledCount(session) >= session.getCapacity()) {
             throw new SessionCapacityExceededException();
