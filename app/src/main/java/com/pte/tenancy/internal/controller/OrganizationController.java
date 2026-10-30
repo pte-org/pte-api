@@ -5,7 +5,6 @@ import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
 import com.pte.tenancy.TenantSuspensionImpact;
 import com.pte.tenancy.internal.dto.request.GrantQuotaRequest;
-import com.pte.tenancy.internal.dto.request.OnboardTenantRequest;
 import com.pte.tenancy.internal.dto.request.UpdateBrandingRequest;
 import com.pte.tenancy.internal.dto.request.UpdateOrganizationProfileRequest;
 import com.pte.tenancy.internal.dto.response.OrganizationResponse;
@@ -55,11 +54,8 @@ public class OrganizationController {
         this.quotaGrantService = quotaGrantService;
     }
 
-    @PostMapping
-    @PreAuthorize(PLATFORM_OPERATORS)
-    public ApiResponse<OrganizationResponse> onboard(@Valid @RequestBody OnboardTenantRequest request) {
-        return ApiResponse.success(lifecycleService.onboard(request, currentUser()));
-    }
+    // Direct creation lives in billing (POST /api/v1/admin/organizations) so it follows the approval rules:
+    // free student limit, first host account, credentials email. There is no plan to pick at creation.
 
     @GetMapping
     @PreAuthorize(PLATFORM_OPERATORS_OR_HOST)
