@@ -4,6 +4,7 @@ import com.pte.itembank.domain.QuestionType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,6 +26,9 @@ public interface QuestionTypeRepository extends JpaRepository<QuestionType, Long
     Optional<QuestionType> findByNormalizedDisplayName(String normalizedDisplayName);
 
     Optional<QuestionType> findByTaskTypeKeyAndDeletedFalse(String taskTypeKey);
+
+    /** Includes retired/soft-deleted rows: exams already published with such a type still render it. */
+    List<QuestionType> findAllByTaskTypeKeyIn(Collection<String> taskTypeKeys);
 
     boolean existsByTaskTypeKey(String taskTypeKey);
 
