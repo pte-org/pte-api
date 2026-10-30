@@ -1,5 +1,6 @@
 package com.pte.billing;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -14,5 +15,7 @@ public record CommercialOutcomeConfirmedEvent(
         CommercialActivationSource activationSource,
         CommercialActivationTarget targetType,
         UUID targetPublicId,
-        Integer grantedStudentSlots) {
+        Integer grantedStudentSlots,
+        /** Start of the activated subscription; null for student capacity. */
+        Instant startsAt) {
 }

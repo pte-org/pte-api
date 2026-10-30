@@ -54,7 +54,7 @@ class LicenseCodeRedeemer {
         int updated = licenseCodeRepository.markRedeemed(codeValue, tenantId, now,
                 LicenseCodeStatus.ISSUED, LicenseCodeStatus.REDEEMED);
         if (updated != 1) {
-            throw explainRedeemFailure(codeValue, now);
+            throw explainRedeemFailure(codeValue, tenantId, now);
         }
 
         LicenseCode licenseCode = licenseCodeRepository.findByCodeForUpdate(codeValue)
@@ -83,12 +83,15 @@ class LicenseCodeRedeemer {
                 activation.kind() == SubscriptionActivationResponse.ActivationKind.SUBSCRIPTION
                         ? CommercialActivationTarget.SUBSCRIPTION : CommercialActivationTarget.QUOTA,
                 activation.targetPublicId(),
-                activation.grantedStudentSlots()));
+                activation.grantedStudentSlots(),
+                activation.startsAt()));
         return activation;
     }
 
-    private LicenseCodeException explainRedeemFailure(String codeValue, Instant now) {
+    private LicenseCodeException explainRedeemFailure(String codeValue, UUID tenantId, Instant now) {
         LicenseCode licenseCode = licenseCodeRepository.findByCode(codeValue)
+                // A code granted to another organization must not reveal that it exists.
+                .filter(code -> code.getBoundTenantId() == null || code.getBoundTenantId().equals(tenantId))
                 .orElseThrow(() -> new LicenseCodeException(HttpStatus.NOT_FOUND,
                         BillingConstants.LICENSE_CODE_NOT_FOUND));
         if (licenseCode.getStatus() == LicenseCodeStatus.REVOKED) {

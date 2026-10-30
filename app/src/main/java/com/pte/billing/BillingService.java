@@ -104,6 +104,34 @@ public class BillingService {
                 .toList();
     }
 
+    /** An owned lane exams can be scheduled on now, including one that starts later; see {@link SubscriptionView#isSchedulableAt}. */
+    @Transactional(readOnly = true)
+    public Optional<SubscriptionView> getSchedulableSubscription(UUID subscriptionPublicId, UUID tenantId) {
+        if (subscriptionPublicId == null || tenantId == null) {
+            return Optional.empty();
+        }
+        Instant now = clock.instant();
+        return subscriptionRepository.findByPublicIdAndTenantId(subscriptionPublicId, tenantId)
+                .filter(subscription -> !subscription.isDeleted())
+                .map(SubscriptionView::from)
+                .filter(view -> view.isSchedulableAt(now));
+    }
+
+    /** Active lanes that have not expired, newest first, including ones that start later (host list and pickers). */
+    @Transactional(readOnly = true)
+    public List<SubscriptionView> listSchedulableSubscriptions(UUID tenantId) {
+        if (tenantId == null) {
+            return List.of();
+        }
+        Instant now = clock.instant();
+        return subscriptionRepository
+                .findByTenantIdAndStatusAndExpiresAtGreaterThanOrderByCreatedAtDesc(
+                        tenantId, SubscriptionStatus.ACTIVE, now).stream()
+                .filter(subscription -> !subscription.isDeleted())
+                .map(SubscriptionView::from)
+                .toList();
+    }
+
     /** Returns only subscriptions usable at this instant; status alone is not sufficient. */
     @Transactional(readOnly = true)
     public List<SubscriptionView> listActiveSubscriptions(UUID tenantId) {

@@ -5,6 +5,7 @@ import com.pte.billing.SubscriptionView;
 import com.pte.session.internal.exception.capacity.InvalidSessionWindowException;
 import com.pte.session.internal.exception.capacity.SessionSubscriptionCapacityException;
 import com.pte.session.internal.exception.capacity.SessionSubscriptionNotFoundException;
+import com.pte.session.internal.exception.capacity.SessionSubscriptionNotStartedException;
 import com.pte.session.internal.exception.capacity.SessionTimeConflictException;
 import com.pte.session.internal.exception.capacity.SessionWindowOutsideSubscriptionException;
 import com.pte.session.internal.repository.ExamSessionRepository;
@@ -41,19 +42,33 @@ public class SessionSubscriptionRules {
         if (!locked.isEmpty()) {
             return locked.get(0);
         }
-        return billingService.getActiveSubscription(subscriptionId, tenantId)
+        return billingService.getSchedulableSubscription(subscriptionId, tenantId)
                 .orElseThrow(SessionSubscriptionNotFoundException::new);
     }
 
+    /** Scheduling check: a lane that starts later is accepted when the exam window fits inside it. */
     public void validateSubscriptionWindowAndCapacity(SubscriptionView subscription, Instant opensAt,
             Instant closesAt, long capacityOrEnrollmentCount, boolean enrollmentCount) {
+        validateSubscriptionWindowAndCapacity(subscription, opensAt, closesAt, capacityOrEnrollmentCount,
+                enrollmentCount, false);
+    }
+
+    /**
+     * {@code requireStarted} is true only when an exam opens: an exam on a not-yet-started lane can be scheduled
+     * and published, but must not open early, because attempts only check that the exam is OPEN.
+     */
+    public void validateSubscriptionWindowAndCapacity(SubscriptionView subscription, Instant opensAt,
+            Instant closesAt, long capacityOrEnrollmentCount, boolean enrollmentCount, boolean requireStarted) {
         Instant now = clock.instant();
         if (subscription == null || subscription.status() == null || subscription.maxStudentsPerSession() == null
-                || subscription.maxStudentsPerSession() <= 0 || !subscription.isUsableAt(now)) {
+                || subscription.maxStudentsPerSession() <= 0 || !subscription.isSchedulableAt(now)) {
             throw new SessionSubscriptionNotFoundException();
         }
+        if (requireStarted && !subscription.isUsableAt(now)) {
+            throw new SessionSubscriptionNotStartedException(subscription.startsAt());
+        }
         if (opensAt.isBefore(subscription.startsAt()) || closesAt.isAfter(subscription.expiresAt())) {
-            throw new SessionWindowOutsideSubscriptionException();
+            throw new SessionWindowOutsideSubscriptionException(subscription.startsAt(), subscription.expiresAt());
         }
         if (enrollmentCount) {
             if (capacityOrEnrollmentCount > subscription.maxStudentsPerSession()) {

@@ -4,7 +4,9 @@ import com.pte.billing.TenantApplicationApprovedEvent;
 import com.pte.billing.TenantApplicationRejectedEvent;
 import com.pte.billing.TenantApplicationSubmittedEvent;
 import com.pte.billing.internal.constant.BillingConstants;
+import com.pte.billing.internal.dto.request.application.DirectOnboardRequest;
 import com.pte.billing.internal.dto.request.application.RejectApplicationRequest;
+import com.pte.billing.internal.dto.response.DirectOnboardResponse;
 import com.pte.billing.internal.dto.request.application.SubmitApplicationRequest;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.exception.application.ApplicationNotPendingException;
@@ -109,7 +111,32 @@ public class TenantApplicationService {
     @Transactional
     public void approve(UUID applicationPublicId, CurrentUser caller) {
         requireOperation(caller, PlatformOperation.APPLICATION_REVIEW, BillingConstants.AUDIT_APPLICATION_REVIEW);
-        Organization application = findPendingForUpdate(applicationPublicId);
+        approvePending(findPendingForUpdate(applicationPublicId), caller);
+    }
+
+    /**
+     * A platform operator creates an organization directly. It is recorded as an application and approved in the
+     * same transaction, so it follows the approval rules exactly: the free student limit from platform settings,
+     * a first HOST_ADMIN for the given email and the credentials email. Packages are granted separately.
+     */
+    @Transactional
+    public DirectOnboardResponse onboardDirect(DirectOnboardRequest request, CurrentUser caller) {
+        requireOperation(caller, PlatformOperation.TENANT_ONBOARD, BillingConstants.AUDIT_TENANT_DIRECT_ONBOARD);
+        String organizationName = request.name().trim();
+        if (tenancyService.existsByName(organizationName)) {
+            throw new RequestedNameAlreadyUsedException();
+        }
+        if (tenancyService.existsByCode(request.code())) {
+            throw new RequestedCodeAlreadyUsedException();
+        }
+        Organization application = tenancyService.submitApplication(organizationName, request.organizationType(),
+                request.code(), request.taxCode().trim(), request.hostEmail().trim(), null);
+        HostAdminCreated hostAdmin = approvePending(application, caller);
+        return new DirectOnboardResponse(application.getPublicId(), application.getCode(), application.getName(),
+                hostAdmin.user().getUsername());
+    }
+
+    private HostAdminCreated approvePending(Organization application, CurrentUser caller) {
         try {
             int freeStudentLimit = platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY);
             Organization tenant = tenancyService.approveApplication(application, caller.userId(), freeStudentLimit);
@@ -120,6 +147,7 @@ public class TenantApplicationService {
             eventPublisher.publishEvent(new TenantApplicationApprovedEvent(
                     application.getPublicId(), tenant.getPublicId(), application.getName(), tenant.getCode(),
                     application.getContactEmail(), hostAdmin.user().getUsername(), hostAdmin.generatedPassword()));
+            return hostAdmin;
         } catch (DataIntegrityViolationException ex) {
             throw translateApprovalConflict(ex);
         }

@@ -25,6 +25,14 @@ public record SubscriptionView(
                 && expiresAt.isAfter(now);
     }
 
+    /**
+     * Whether exams can still be scheduled on this lane, including a granted lane that starts later. Opening an
+     * exam still requires {@link #isUsableAt}; the exam window itself must lie inside {@code [startsAt, expiresAt]}.
+     */
+    public boolean isSchedulableAt(Instant now) {
+        return status == SubscriptionStatus.ACTIVE && expiresAt.isAfter(now);
+    }
+
     static SubscriptionView from(Subscription subscription) {
         return new SubscriptionView(
                 subscription.getPublicId(),
