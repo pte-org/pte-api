@@ -63,8 +63,8 @@ public class OrganizationController {
 
     @GetMapping
     @PreAuthorize(PLATFORM_OPERATORS_OR_HOST)
-    public ApiResponse<List<OrganizationResponse>> list() {
-        return ApiResponse.success(organizationService.list(currentUser()));
+    public ApiResponse<List<OrganizationResponse>> list(@RequestParam(required = false) String q) {
+        return ApiResponse.success(organizationService.list(currentUser(), q));
     }
 
     @GetMapping("/{publicId}")

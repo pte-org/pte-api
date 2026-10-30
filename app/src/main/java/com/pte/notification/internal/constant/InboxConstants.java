@@ -1,5 +1,7 @@
 package com.pte.notification.internal.constant;
 
+import java.time.ZoneId;
+
 /** Stable codes are distinct from approved display copy and existing email constants. */
 public final class InboxConstants {
     public static final String INVALID_REQUEST = "INBOX_INVALID_REQUEST";
@@ -60,6 +62,8 @@ public final class InboxConstants {
     public static final String APPLICATION_NOTIFICATION_BODY = "Organization '%s' submitted an application for platform review.";
     public static final String COMMERCIAL_NOTIFICATION_TITLE = "Commercial access updated";
     public static final String COMMERCIAL_EXAM_BODY = "Your exam package is active from %s. Open the billing target to review access.";
+    public static final String COMMERCIAL_DATE_PATTERN = "dd/MM/yyyy";
+    public static final ZoneId COMMERCIAL_DATE_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     public static final String COMMERCIAL_CAPACITY_BODY = "Your student capacity increased by %d slots from %s.";
     public static final String ORDER_EXPIRED_NOTIFICATION_TITLE = "Payment order expired";
     public static final String ORDER_EXPIRED_NOTIFICATION_BODY = "Payment order %s expired before payment was confirmed.";

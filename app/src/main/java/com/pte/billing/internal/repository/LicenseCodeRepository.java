@@ -123,6 +123,7 @@ public interface LicenseCodeRepository extends JpaRepository<LicenseCode, Long> 
              where code.code = :codeValue
                and code.status = :issued
                and (code.codeExpiresAt is null or code.codeExpiresAt > :now)
+               and (code.boundTenantId is null or code.boundTenantId = :tenantId)
             """)
     int markRedeemed(@Param("codeValue") String codeValue,
             @Param("tenantId") java.util.UUID tenantId,

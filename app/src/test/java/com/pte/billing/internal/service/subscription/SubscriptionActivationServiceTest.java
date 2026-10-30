@@ -91,7 +91,7 @@ class SubscriptionActivationServiceTest {
         assertThat(result.expiresAt()).isAfter(existingExpiry.plus(Duration.ofDays(17)));
         assertThat(result.expiresAt()).isBefore(existingExpiry.plus(Duration.ofDays(19)));
         assertThat(result.maxStudentsPerSession()).isEqualTo(plan.getMaxStudentsPerSession());
-        verify(subscriptionRepository, never()).findUsableForPlanRenewal(any(UUID.class), any(UUID.class),
+        verify(subscriptionRepository, never()).findRenewableForPlan(any(UUID.class), any(UUID.class),
                 any(SubscriptionStatus.class), any(Instant.class));
     }
 
