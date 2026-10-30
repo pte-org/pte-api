@@ -39,5 +39,7 @@ public record ResolvedExamItemResponse(
         Instant imageUrlExpiresAt,
         TaskRuntimeProfileDescriptor runtime,
         String runtimeMappingVersion,
-        String runtimeMappingStatus) {
+        String runtimeMappingStatus,
+        /** Current task-type instruction, resolved live; null when the catalog has none. */
+        String taskTypeInstruction) {
 }

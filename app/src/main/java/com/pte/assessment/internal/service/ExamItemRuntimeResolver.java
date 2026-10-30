@@ -12,6 +12,7 @@ import com.pte.attempt.internal.exception.content.MissingAudioDurationException;
 import com.pte.attempt.internal.exception.content.MissingAudioPromptException;
 import com.pte.attempt.internal.exception.content.MissingImagePromptException;
 import com.pte.assessment.internal.exception.content.TaskTimingNotConfiguredException;
+import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskRuntimeContractConstants;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
@@ -43,13 +44,15 @@ public class ExamItemRuntimeResolver {
     private final MediaService mediaService;
     private final TaskTimingConfig taskTimingConfig;
     private final ExamDefinitionService examDefinitionService;
+    private final QuestionTypeService questionTypeService;
     private final Clock clock;
 
     public ExamItemRuntimeResolver(MediaService mediaService, TaskTimingConfig taskTimingConfig,
-            ExamDefinitionService examDefinitionService, Clock clock) {
+            ExamDefinitionService examDefinitionService, QuestionTypeService questionTypeService, Clock clock) {
         this.mediaService = mediaService;
         this.taskTimingConfig = taskTimingConfig;
         this.examDefinitionService = examDefinitionService;
+        this.questionTypeService = questionTypeService;
         this.clock = clock;
     }
 
@@ -60,15 +63,21 @@ public class ExamItemRuntimeResolver {
                 .collect(Collectors.toMap(item -> TaskTypeCodeCompatibility.normalizeTaskTypeKey(
                         item.taskTypeKey() == null ? item.taskType() : item.taskTypeKey()),
                         Function.identity(), (first, second) -> first));
-        return content.items().stream()
+        List<SnapshotContentResponse.Item> items = content.items().stream()
                 .sorted(Comparator.comparingInt(SnapshotContentResponse.Item::orderIndex))
-                .map(item -> resolveItem(item, definitionItemsByTaskType, mediaUrlTtlSeconds, tenantId))
+                .toList();
+        // Instruction is display text read live, not frozen in the snapshot, so admin edits reach published exams.
+        Map<String, String> instructionsByTaskType = questionTypeService.findInstructionsByTaskTypeKeys(
+                items.stream().map(this::requireCompatibleTaskType).collect(Collectors.toSet()));
+        return items.stream()
+                .map(item -> resolveItem(item, definitionItemsByTaskType, instructionsByTaskType,
+                        mediaUrlTtlSeconds, tenantId))
                 .toList();
     }
 
     private ResolvedExamItemResponse resolveItem(SnapshotContentResponse.Item source,
-            Map<String, ExamDefinitionItemResponse> definitionItemsByTaskType, long mediaUrlTtlSeconds,
-            UUID tenantId) {
+            Map<String, ExamDefinitionItemResponse> definitionItemsByTaskType,
+            Map<String, String> instructionsByTaskType, long mediaUrlTtlSeconds, UUID tenantId) {
         String taskTypeCode = requireCompatibleTaskType(source);
         ExamDefinitionItemResponse definitionItem = definitionItemsByTaskType.get(taskTypeCode);
         TaskTimingConfig.Timing jsonTiming = definitionItem != null
@@ -148,7 +157,8 @@ public class ExamItemRuntimeResolver {
                 expiry(image),
                 runtime,
                 mappingVersion,
-                mappingStatus);
+                mappingStatus,
+                instructionsByTaskType.get(taskTypeCode));
     }
 
     private Instant expiry(PresignedDownloadResponse presigned) {

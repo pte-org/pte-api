@@ -265,7 +265,7 @@ class AttemptMapperTest {
         return new ExamItemView(id, orderIndex, section, taskType, title, promptText, audioPromptRef,
                 imagePromptRef, referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson,
                 prepSeconds, responseSeconds, preListenSeconds, preRecordSeconds, imageUrl, null, null, taskType,
-                null, null, null, taskType);
+                null, null, null, taskType, null);
     }
 
     private TaskView toTaskFromItem(ExamItemView item) {

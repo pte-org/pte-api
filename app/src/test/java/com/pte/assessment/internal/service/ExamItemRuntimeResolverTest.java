@@ -6,6 +6,7 @@ import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.dto.response.ResolvedExamItemResponse;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.internal.config.TaskTimingConfig;
+import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskRuntimeContractConstants;
 import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
@@ -20,6 +21,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,13 +44,15 @@ class ExamItemRuntimeResolverTest {
     private TaskTimingConfig taskTimingConfig;
     @Mock
     private ExamDefinitionService examDefinitionService;
+    @Mock
+    private QuestionTypeService questionTypeService;
 
     private ExamItemRuntimeResolver resolver;
 
     @BeforeEach
     void setUp() {
         resolver = new ExamItemRuntimeResolver(mediaService, taskTimingConfig, examDefinitionService,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                questionTypeService, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -108,6 +113,37 @@ class ExamItemRuntimeResolverTest {
         assertThat(item.responseSeconds()).isEqualTo(42);
         assertThat(item.preListenSeconds()).isNull();
         assertThat(item.preRecordSeconds()).isNull();
+    }
+
+    @Test
+    void instructionsAreLookedUpOnceForTheWholeExamAndMissingOnesStayNull() {
+        when(examDefinitionService.getByPublicId(TEMPLATE_ID)).thenReturn(
+                new ExamDefinitionResponse(TEMPLATE_ID, "PTE", 1, "PTE", "ACTIVE", List.of(
+                        templateItem("MC_READING_SINGLE", "READING", 7, 42),
+                        templateItem("RE_ORDER_PARAGRAPHS", "READING", 0, 60))));
+        when(questionTypeService.findInstructionsByTaskTypeKeys(
+                Set.of("MC_READING_SINGLE", "RE_ORDER_PARAGRAPHS")))
+                .thenReturn(Map.of("MC_READING_SINGLE", "Select the correct response."));
+
+        SnapshotContentResponse content = new SnapshotContentResponse(UUID.randomUUID(), "Preview", 1,
+                TEMPLATE_ID, TENANT_ID, List.of(
+                        readingItem(0, "MC_READING_SINGLE"),
+                        readingItem(1, "MC_READING_SINGLE"),
+                        readingItem(2, "RE_ORDER_PARAGRAPHS")));
+
+        List<ResolvedExamItemResponse> resolved = resolver.resolve(content, 300, TENANT_ID);
+
+        assertThat(resolved).extracting(ResolvedExamItemResponse::taskTypeInstruction).containsExactly(
+                "Select the correct response.", "Select the correct response.", null);
+        verify(questionTypeService).findInstructionsByTaskTypeKeys(
+                Set.of("MC_READING_SINGLE", "RE_ORDER_PARAGRAPHS"));
+    }
+
+    private SnapshotContentResponse.Item readingItem(int orderIndex, String taskType) {
+        return new SnapshotContentResponse.Item(
+                orderIndex, "READING", taskType, "Question", "Prompt", null, null,
+                null, null, null, null, "[]", taskType, taskType, taskType, null, null, null,
+                UUID.randomUUID(), UUID.randomUUID());
     }
 
     private ExamDefinitionItemResponse templateItem(String taskType, String section, int prepSeconds,

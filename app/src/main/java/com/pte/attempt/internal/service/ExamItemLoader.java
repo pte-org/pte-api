@@ -7,6 +7,7 @@ import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.internal.config.TaskTimingConfig;
 import com.pte.assessment.internal.service.ExamItemRuntimeResolver;
 import com.pte.attempt.internal.service.cache.ExamItemView;
+import com.pte.itembank.QuestionTypeService;
 import com.pte.media.MediaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -35,9 +36,10 @@ class ExamItemLoader {
     /** Source-compatible constructor for focused loader tests. */
     ExamItemLoader(AssessmentService assessmentService, MediaService mediaService,
             TaskTimingConfig taskTimingConfig, ExamDefinitionService examDefinitionService,
-            Clock clock) {
+            QuestionTypeService questionTypeService, Clock clock) {
         this.assessmentService = assessmentService;
-        this.testResolver = new ExamItemRuntimeResolver(mediaService, taskTimingConfig, examDefinitionService, clock);
+        this.testResolver = new ExamItemRuntimeResolver(mediaService, taskTimingConfig, examDefinitionService,
+                questionTypeService, clock);
     }
 
     /** The exam version's own header, for callers that need its definition and version before the items. */
@@ -78,6 +80,7 @@ class ExamItemLoader {
                 item.runtime(),
                 item.runtimeMappingVersion(),
                 item.runtimeMappingStatus(),
-                item.taskTypeDisplayName());
+                item.taskTypeDisplayName(),
+                item.taskTypeInstruction());
     }
 }

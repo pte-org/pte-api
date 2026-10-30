@@ -32,6 +32,7 @@ import static org.mockito.Mockito.when;
 class SessionExamPreviewServiceTest {
 
     private static final UUID TENANT_ID = UUID.randomUUID();
+    private static final String INSTRUCTION = "Select the correct response.";
 
     @Mock
     private SessionLifecycleService sessionLifecycleService;
@@ -216,6 +217,7 @@ class SessionExamPreviewServiceTest {
                         null,
                         item.runtime(),
                         item.runtimeMappingVersion(),
-                        item.runtimeMappingStatus())).toList());
+                        item.runtimeMappingStatus(),
+                        INSTRUCTION)).toList());
     }
 }

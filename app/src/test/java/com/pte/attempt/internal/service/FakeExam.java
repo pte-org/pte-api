@@ -79,7 +79,7 @@ public final class FakeExam {
         return new ExamItemView(UUID.randomUUID(), orderIndex, section, taskType, "Title " + orderIndex,
                 "Prompt " + orderIndex, null, null, null, null, null, null, "[]", prepSeconds, responseSeconds, null,
                 null, null, null, null, taskType, null, TaskRuntimeContractConstants.MAPPING_VERSION_LEGACY,
-                TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_LEGACY, taskType);
+                TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_LEGACY, taskType, null);
     }
 
     public static ExamItemView withId(ExamItemView v, UUID id) {
@@ -92,7 +92,8 @@ public final class FakeExam {
                 v.audioPromptRef(), v.imagePromptRef(), v.referenceAnswerText(), v.correctAnswerText(),
                 v.minWordCount(), v.maxWordCount(), v.optionsJson(), v.prepSeconds(), v.responseSeconds(),
                 v.preListenSeconds(), v.preRecordSeconds(), v.imageUrl(), v.audioUrl(), v.audioUrlExpiresAt(),
-                v.taskTypeCode(), runtime, mappingVersion, mappingStatus, v.taskTypeDisplayName());
+                v.taskTypeCode(), runtime, mappingVersion, mappingStatus, v.taskTypeDisplayName(),
+                v.taskTypeInstruction());
     }
 
     public static ExamItemView withOrderIndex(ExamItemView v, int orderIndex) {
@@ -110,6 +111,6 @@ public final class FakeExam {
                 v.minWordCount(), v.maxWordCount(), v.optionsJson(), v.prepSeconds(), v.responseSeconds(),
                 v.preListenSeconds(), v.preRecordSeconds(), v.imageUrl(), audioUrl, audioUrlExpiresAt,
                 v.taskTypeCode(), v.runtime(), v.runtimeMappingVersion(), v.runtimeMappingStatus(),
-                v.taskTypeDisplayName());
+                v.taskTypeDisplayName(), v.taskTypeInstruction());
     }
 }
