@@ -3,9 +3,9 @@ package com.pte.reporting.internal.service;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.reporting.domain.enums.Skill;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.scoring.ScoringService;
 import com.pte.scoring.dto.response.ReportScoringAnswerView;
 import com.pte.scoring.dto.response.ScoredAnswerView;
@@ -43,13 +43,13 @@ class ScoreAggregationServiceTest {
     @Mock
     private AttemptService attemptService;
     @Mock
-    private ScoreTemplateService scoreTemplateService;
+    private ExamDefinitionService examDefinitionService;
 
     private ScoreAggregationService service;
 
     @BeforeEach
     void setUp() {
-        service = new ScoreAggregationService(scoringService, attemptService, scoreTemplateService);
+        service = new ScoreAggregationService(scoringService, attemptService, examDefinitionService);
     }
 
     private void stubTestedSections(String... sections) {
@@ -57,9 +57,9 @@ class ScoreAggregationServiceTest {
                 .thenReturn(new AttemptScoreContextView(TEMPLATE_ID, Set.of(sections)));
     }
 
-    private void stubTemplate(ScoreTemplateItemResponse... items) {
-        when(scoreTemplateService.getByPublicId(TEMPLATE_ID))
-                .thenReturn(new ScoreTemplateResponse(TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "ACTIVE", List.of(items)));
+    private void stubTemplate(ExamDefinitionItemResponse... items) {
+        when(examDefinitionService.getByPublicId(TEMPLATE_ID))
+                .thenReturn(new ExamDefinitionResponse(TEMPLATE_ID, "APEUNI_V5", 1, "APEUni V5", "ACTIVE", List.of(items)));
     }
 
     private void stubAnswers(ReportScoringAnswerView... answers) {
@@ -86,9 +86,9 @@ class ScoreAggregationServiceTest {
     }
 
     /** One row, only the given skill's weight column set to a non-zero value; every other weight column is 0. */
-    private ScoreTemplateItemResponse item(String taskType, BigDecimal overall, BigDecimal speaking,
+    private ExamDefinitionItemResponse item(String taskType, BigDecimal overall, BigDecimal speaking,
                                             BigDecimal writing, BigDecimal reading, BigDecimal listening) {
-        return new ScoreTemplateItemResponse(taskType, "SPEAKING", 0, 1, 1, 0, 0, "AI_SPEECH",
+        return new ExamDefinitionItemResponse(taskType, "SPEAKING", 0, 1, 1, 0, 0, "AI_SPEECH",
                 overall, speaking, writing, reading, listening);
     }
 

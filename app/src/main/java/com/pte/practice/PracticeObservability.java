@@ -4,33 +4,16 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Component;
 
-/** Bounded, payload-free metrics for practice auth and entitlement decisions. */
+/** Bounded, payload-free metrics for practice entitlement decisions. */
 @Component
 public class PracticeObservability {
 
-    private static final String AUTH_CHALLENGE = "practice.auth.challenge";
     private static final String ENTITLEMENT_DECISION = "practice.entitlement.decision";
 
     private final MeterRegistry meterRegistry;
 
     public PracticeObservability(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
-    }
-
-    public void challengeRequested() {
-        increment(AUTH_CHALLENGE, "outcome", "requested");
-    }
-
-    public void challengeRateLimited() {
-        increment(AUTH_CHALLENGE, "outcome", "rate_limited");
-    }
-
-    public void challengeRejected() {
-        increment(AUTH_CHALLENGE, "outcome", "rejected");
-    }
-
-    public void challengeVerified() {
-        increment(AUTH_CHALLENGE, "outcome", "verified");
     }
 
     public void entitlementEvaluated(PracticeEntitlementState state) {

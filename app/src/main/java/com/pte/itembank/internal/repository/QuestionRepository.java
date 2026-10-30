@@ -81,15 +81,38 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
               AND q.visibility = com.pte.itembank.domain.enums.Visibility.SHARED
               AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED
               AND q.current = true
-              AND q.pool = com.pte.itembank.domain.enums.QuestionPool.PRACTICE
+              AND (q.availableForPractice = true OR (q.availabilityFlagsExplicit = false
+                   AND q.pool = com.pte.itembank.domain.enums.QuestionPool.PRACTICE))
               AND q.taskTypeKey = :taskTypeKey
             ORDER BY q.publicId
             """)
     List<UUID> findPublishedPracticeQuestionIdsByTaskTypeKey(@Param("taskTypeKey") String taskTypeKey,
             Pageable pageable);
 
+    /** Number of practice-ready questions per task type key, same pool rule as {@link #findPublishedPracticeQuestionIdsByTaskTypeKey}. */
+    @Query("""
+            SELECT q.taskTypeKey, COUNT(q) FROM Question q
+            WHERE q.deleted = false
+              AND q.visibility = com.pte.itembank.domain.enums.Visibility.SHARED
+              AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED
+              AND q.current = true
+              AND (q.availableForPractice = true OR (q.availabilityFlagsExplicit = false
+                   AND q.pool = com.pte.itembank.domain.enums.QuestionPool.PRACTICE))
+              AND q.taskTypeKey IN :taskTypeKeys
+            GROUP BY q.taskTypeKey
+            """)
+    List<Object[]> countPublishedPracticeQuestionsByTaskTypeKeys(@Param("taskTypeKeys") Collection<String> taskTypeKeys);
+
+    @Query("""
+            select case when count(q) > 0 then true else false end from Question q
+             where q.deleted = false and q.visibility = :visibility and q.status = :status
+               and q.current = true
+               and (q.availableForPractice = true OR (q.availabilityFlagsExplicit = false and q.pool = :pool))
+               and q.taskTypeKey = :taskTypeKey
+            """)
     boolean existsByDeletedFalseAndVisibilityAndStatusAndCurrentTrueAndPoolAndTaskTypeKey(
-            Visibility visibility, QuestionStatus status, QuestionPool pool, String taskTypeKey);
+            @Param("visibility") Visibility visibility, @Param("status") QuestionStatus status,
+            @Param("pool") QuestionPool pool, @Param("taskTypeKey") String taskTypeKey);
 
     long countByDeletedFalseAndVisibility(Visibility visibility);
 
@@ -126,7 +149,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("SELECT q.pteTaskType, COUNT(q) FROM Question q "
             + "WHERE q.deleted = false AND q.visibility = :visibility "
             + "AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED "
-            + "AND q.current = true AND q.pool = com.pte.itembank.domain.enums.QuestionPool.EXAM "
+            + "AND q.current = true AND (q.availableForExam = true OR (q.availabilityFlagsExplicit = false AND q.pool = com.pte.itembank.domain.enums.QuestionPool.EXAM)) "
             + "AND q.pteTaskType IN :taskTypes GROUP BY q.pteTaskType")
     List<Object[]> countByVisibilityAndTaskTypeIn(@Param("visibility") Visibility visibility,
                                                     @Param("taskTypes") Set<PteTaskType> taskTypes);
@@ -134,7 +157,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("SELECT COUNT(q) FROM Question q WHERE q.deleted = false "
             + "AND q.visibility = com.pte.itembank.domain.enums.Visibility.SHARED "
             + "AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED "
-            + "AND q.current = true AND q.pool = com.pte.itembank.domain.enums.QuestionPool.EXAM "
+            + "AND q.current = true AND (q.availableForExam = true OR (q.availabilityFlagsExplicit = false AND q.pool = com.pte.itembank.domain.enums.QuestionPool.EXAM)) "
             + "AND q.pteTaskType = :taskType")
     long countAvailableByTaskType(@Param("taskType") PteTaskType taskType);
 
@@ -142,13 +165,15 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
      * Exam-generation pool count, grouped by task type. Literal
      * {@code visibility = 'SHARED'} — the generation pool never depends on
      * which tenant's host is asking (Plan B, 2026-09-17 platform-only decision).
-     * Every exam-generation query below also pins {@code pool = 'EXAM'} so
-     * PRACTICE questions never reach an exam.
+     * Every exam-generation query below pins the independent exam channel flag
+     * so practice-only revisions never reach an exam.
      */
     @Query(value = """
             SELECT pte_task_type AS taskType, COUNT(*) AS count
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pool = 'EXAM' AND pte_task_type IN (:taskTypes)
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+              AND (available_for_exam = true OR (availability_flags_explicit = false AND pool = 'EXAM'))
+              AND pte_task_type IN (:taskTypes)
             GROUP BY pte_task_type
             """, nativeQuery = true)
     List<TaskTypeCountProjection> countPublishedSharedGroupedByTaskType(@Param("taskTypes") Set<String> taskTypes);
@@ -157,7 +182,8 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pool = 'EXAM' AND pte_task_type = :taskType
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+              AND (available_for_exam = true OR (availability_flags_explicit = false AND pool = 'EXAM')) AND pte_task_type = :taskType
             ORDER BY random()
             LIMIT :n
             """, nativeQuery = true)
@@ -167,7 +193,8 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pool = 'EXAM' AND pte_task_type = :taskType
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+              AND (available_for_exam = true OR (availability_flags_explicit = false AND pool = 'EXAM')) AND pte_task_type = :taskType
             ORDER BY public_id
             """, nativeQuery = true)
     List<UUID> publishedSharedIdsByTaskType(@Param("taskType") String taskType);
@@ -175,7 +202,8 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT task_type_key AS taskType, COUNT(*) AS count
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pool = 'EXAM'
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+              AND (available_for_exam = true OR (availability_flags_explicit = false AND pool = 'EXAM'))
               AND task_type_key IN (:taskTypeKeys)
             GROUP BY task_type_key
             """, nativeQuery = true)
@@ -185,7 +213,8 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pool = 'EXAM'
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+              AND (available_for_exam = true OR (availability_flags_explicit = false AND pool = 'EXAM'))
               AND task_type_key = :taskTypeKey
             ORDER BY random()
             LIMIT :n
@@ -196,7 +225,8 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true AND pool = 'EXAM'
+            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+              AND (available_for_exam = true OR (availability_flags_explicit = false AND pool = 'EXAM'))
               AND task_type_key = :taskTypeKey
             ORDER BY public_id
             """, nativeQuery = true)

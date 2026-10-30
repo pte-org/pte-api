@@ -1,12 +1,11 @@
 package com.pte.billing.internal.service;
 
 import com.pte.billing.domain.PlatformSetting;
-import com.pte.billing.internal.dto.request.PlatformSettingRequest;
 import com.pte.billing.internal.dto.request.PlatformSettingBatchRequest;
 import com.pte.billing.internal.dto.request.PlatformSettingChangeRequest;
-import com.pte.billing.internal.exception.PlatformSettingInvalidException;
-import com.pte.billing.internal.exception.PlatformSettingNotFoundException;
-import com.pte.billing.internal.exception.PlatformSettingValidationException;
+import com.pte.billing.internal.exception.setting.PlatformSettingInvalidException;
+import com.pte.billing.internal.exception.setting.PlatformSettingNotFoundException;
+import com.pte.billing.internal.exception.setting.PlatformSettingValidationException;
 import com.pte.billing.internal.repository.PlatformSettingRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,14 +51,13 @@ class PlatformSettingServiceTest {
     void updateInvalidatesCacheAndReturnsTheNewValue() {
         PlatformSetting setting = setting("free_student_limit", "50");
         when(platformSettingRepository.findByKey("free_student_limit")).thenReturn(Optional.of(setting));
-        when(platformSettingRepository.saveAndFlush(any(PlatformSetting.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(platformSettingRepository.saveAllAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertThat(service.getInteger("free_student_limit")).isEqualTo(50);
-        service.update("free_student_limit", new PlatformSettingRequest("75", "Updated"));
+        service.updateBatch(new PlatformSettingBatchRequest(List.of(
+                new PlatformSettingChangeRequest("free_student_limit", "75"))), null);
 
         assertThat(service.getInteger("free_student_limit")).isEqualTo(75);
-        assertThat(setting.getDescription()).isEqualTo("Updated");
         verify(platformSettingRepository, times(3)).findByKey("free_student_limit");
     }
 
@@ -87,7 +85,8 @@ class PlatformSettingServiceTest {
         PlatformSetting setting = setting("free_student_limit", "50");
         when(platformSettingRepository.findByKey("free_student_limit")).thenReturn(Optional.of(setting));
 
-        assertThatThrownBy(() -> service.update("free_student_limit", new PlatformSettingRequest("-1", null)))
+        assertThatThrownBy(() -> service.updateBatch(new PlatformSettingBatchRequest(List.of(
+                new PlatformSettingChangeRequest("free_student_limit", "-1"))), null))
                 .isInstanceOf(PlatformSettingValidationException.class);
 
         verify(platformSettingRepository, org.mockito.Mockito.never()).saveAndFlush(any(PlatformSetting.class));

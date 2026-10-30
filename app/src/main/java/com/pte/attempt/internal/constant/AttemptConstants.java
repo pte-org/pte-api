@@ -19,24 +19,12 @@ public final class AttemptConstants {
     public static final String ANSWER_INTEGRITY_LEVEL_MISMATCH = "ANSWER_INTEGRITY_LEVEL_MISMATCH";
     public static final String MISSING_IMAGE_PROMPT = "MISSING_IMAGE_PROMPT";
     public static final String ANSWER_ALREADY_SUBMITTED = "ANSWER_ALREADY_SUBMITTED";
-    public static final String PINNED_SNAPSHOT_EMPTY = "PINNED_SNAPSHOT_EMPTY";
+    /** Wire code kept from the era when the exam was copied per attempt; clients match on it. */
+    public static final String EXAM_EMPTY = "PINNED_SNAPSHOT_EMPTY";
     public static final String EXAM_REQUIRES_APP_UPDATE = "EXAM_REQUIRES_APP_UPDATE";
     public static final String EXAM_CONFIGURATION_NOT_COMPATIBLE = "EXAM_CONFIGURATION_NOT_COMPATIBLE";
     public static final String CAPABILITY_MANIFEST_INVALID = "CAPABILITY_MANIFEST_INVALID";
     public static final String UNSUPPORTED_RUNTIME_CONTRACT = "UNSUPPORTED_RUNTIME_CONTRACT";
-    public static final String SECURITY_AUDIT_DISABLED = "SECURITY_AUDIT_DISABLED";
-    public static final String SECURITY_AUDIT_POLICY_UNRESOLVED = "SECURITY_AUDIT_POLICY_UNRESOLVED";
-    public static final String SECURITY_AUDIT_EVENT_CONFLICT = "SECURITY_AUDIT_EVENT_CONFLICT";
-    public static final String SECURITY_CLIENT_EVENT_ID_REQUIRED = "Client event ID is required";
-    public static final String SECURITY_CLIENT_EVENT_ID_TOO_LONG = "Client event ID must not exceed 128 characters";
-    public static final String SECURITY_VIOLATION_TYPE_REQUIRED = "Violation type is required";
-    public static final String SECURITY_DETAIL_TOO_LONG = "Security event detail must not exceed 2048 characters";
-    public static final String SECURITY_AUDIT_DISABLED_MESSAGE =
-            "Security audit is disabled for this attempt's policy.";
-    public static final String SECURITY_AUDIT_POLICY_UNRESOLVED_MESSAGE =
-            "The attempt security policy could not be resolved.";
-    public static final String SECURITY_AUDIT_EVENT_CONFLICT_MESSAGE =
-            "The client event ID was already used for a different security event.";
 
     public static final String EXAM_REQUIRES_APP_UPDATE_MESSAGE =
             "Please update the PTE Prep app before starting this exam. It requires capabilities that this app does not provide.";
@@ -60,18 +48,19 @@ public final class AttemptConstants {
     public static final String ENCRYPTION_KEYPAIR_NOT_CONFIGURED =
             "attempt encryption keypair is not configured (attempt.encryption.private-key-pem / public-key-pem) "
                     + "and active profile '%s' is not dev/local — refusing to start with an ephemeral keypair, "
-                    + "since a restart would invalidate every STRICT-pinned attempt's public key.";
+                    + "since a restart would invalidate every STRICT attempt's public key.";
     public static final String EPHEMERAL_KEYPAIR_GENERATION_FAILED = "Failed to generate ephemeral RSA encryption keypair";
     public static final String PRIVATE_KEY_PARSE_FAILED = "Failed to parse attempt encryption private key PEM";
     public static final String PUBLIC_KEY_PARSE_FAILED = "Failed to parse attempt encryption public key PEM";
     public static final String TASK_TIMING_LOAD_FAILED = "Failed to load task timing from %s";
-    public static final String PINNED_ITEM_OPTIONS_PARSE_FAILED = "Failed to parse pinned item optionsJson";
+    public static final String EXAM_ITEM_OPTIONS_PARSE_FAILED = "Failed to parse exam item optionsJson";
     public static final String MIXED_BLANK_INDEX_OPTIONS =
-            "Pinned item %s has a mix of blank-grouped and ungrouped options — "
+            "Exam item %s has a mix of blank-grouped and ungrouped options — "
                     + "every option must either carry a blankIndex or none may.";
-    public static final String MISSING_PINNED_ITEM_AT_INDEX = "Missing pinned item at index %s";
+    public static final String MISSING_ITEM_AT_INDEX = "Missing exam item at index %s";
+    public static final String MISSING_ITEM_FOR_ANSWER = "Exam item %s of a submitted answer is missing from its exam version";
     public static final String ATTEMPT_DISAPPEARED_MID_TRANSACTION = "Attempt disappeared mid-transaction: %s";
-    public static final String PINNED_SNAPSHOT_CACHE_SERIALIZATION_FAILED = "Failed to serialize pinned snapshot cache entry";
+    public static final String EXAM_CONTENT_CACHE_SERIALIZATION_FAILED = "Failed to serialize exam content cache entry";
     public static final String SNAPSHOT_TASK_TYPE_KEY_MISMATCH =
             "task type key does not match the frozen task type";
     public static final String SNAPSHOT_TASK_TYPE_SECTION_MISMATCH =
@@ -85,8 +74,12 @@ public final class AttemptConstants {
     public static final String SNAPSHOT_CUSTOM_RUNTIME_PROFILE_INCOMPLETE =
             "custom runtime profile is incomplete";
 
-    public static final String CACHE_KEY_PREFIX = "attempt:pinned-snapshot:";
-    public static final String LOCK_KEY_PREFIX = "attempt:lock:pinned-snapshot:";
+    public static final String CACHE_KEY_PREFIX = "attempt:exam-content:";
+    public static final String LOCK_KEY_PREFIX = "attempt:lock:exam-content:";
+    /** Margin added to the session window when presigning media at attempt start. */
+    public static final long MEDIA_URL_GRACE_SECONDS = 60;
+    /** Margin added to the attempt's remaining time when media is presigned again after a cache miss. */
+    public static final long MEDIA_URL_RELOAD_MARGIN_SECONDS = 600;
 
     private AttemptConstants() {
     }

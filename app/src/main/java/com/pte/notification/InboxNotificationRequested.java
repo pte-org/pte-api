@@ -44,7 +44,8 @@ public record InboxNotificationRequested(int schemaVersion, String eventKey, Inb
             case APPLICATION_SUBMITTED -> category == InboxCategory.APPLICATION && target == InboxTargetType.APPLICATION;
             case PLATFORM_ANNOUNCEMENT -> (category == InboxCategory.SYSTEM_NOTICE || category == InboxCategory.MAINTENANCE)
                     && target == InboxTargetType.ANNOUNCEMENT;
-            case SESSION_CLOSING_SOON, SESSION_GRADING_COMPLETED -> category == InboxCategory.SESSION && target == InboxTargetType.SESSION;
+            case SESSION_CLOSING_SOON, SESSION_GRADING_COMPLETED, SESSION_PREVIEW_READY ->
+                    category == InboxCategory.SESSION && target == InboxTargetType.SESSION;
             case COMMERCIAL_OUTCOME_CONFIRMED -> category == InboxCategory.BILLING &&
                     (target == InboxTargetType.ORDER || target == InboxTargetType.SUBSCRIPTION || target == InboxTargetType.QUOTA);
             case ORDER_EXPIRED -> category == InboxCategory.BILLING && target == InboxTargetType.ORDER;

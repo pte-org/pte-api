@@ -2,12 +2,12 @@ package com.pte.practice;
 
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
-import com.pte.practice.internal.domain.PracticeSessionItem;
-import com.pte.practice.internal.domain.enums.PracticeSessionItemStatus;
+import com.pte.practice.internal.domain.PracticeResponse;
+import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.exception.PracticeSessionNotFoundException;
-import com.pte.practice.internal.repository.PracticeSessionItemRepository;
+import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
 import com.pte.shared.practice.PracticeMediaBindingPort;
 import com.pte.shared.security.CurrentUser;
@@ -28,11 +28,11 @@ import java.util.UUID;
 public class PracticeMediaBindingService implements PracticeMediaBindingPort {
 
     private final PracticeSessionRepository sessionRepository;
-    private final PracticeSessionItemRepository itemRepository;
+    private final PracticeResponseRepository itemRepository;
     private final Clock clock;
 
     public PracticeMediaBindingService(PracticeSessionRepository sessionRepository,
-            PracticeSessionItemRepository itemRepository, Clock clock) {
+            PracticeResponseRepository itemRepository, Clock clock) {
         this.sessionRepository = sessionRepository;
         this.itemRepository = itemRepository;
         this.clock = clock;
@@ -61,7 +61,7 @@ public class PracticeMediaBindingService implements PracticeMediaBindingPort {
                     PracticeConstants.PRACTICE_MEDIA_SESSION_NOT_LIVE,
                     PracticeConstants.PRACTICE_MEDIA_SESSION_NOT_LIVE_MESSAGE);
         }
-        PracticeSessionItem item = itemRepository
+        PracticeResponse item = itemRepository
                 .findByPublicIdAndPracticeSessionIdAndDeletedFalse(itemPublicId, session.getId())
                 .orElseThrow(PracticeSessionNotFoundException::new);
         if (!PracticeConstants.PRACTICE_RECORDING_RENDERER_KEYS.contains(item.getRendererKey())) {
@@ -69,7 +69,8 @@ public class PracticeMediaBindingService implements PracticeMediaBindingPort {
                     PracticeConstants.PRACTICE_MEDIA_ITEM_NOT_RECORDABLE,
                     PracticeConstants.PRACTICE_MEDIA_ITEM_NOT_RECORDABLE_MESSAGE);
         }
-        if (item.getStatus() != PracticeSessionItemStatus.PENDING) {
+        if (item.getStatus() != PracticeResponseStatus.PENDING
+                && item.getStatus() != PracticeResponseStatus.SKIPPED) {
             throw new PracticeSessionException(HttpStatus.CONFLICT,
                     PracticeConstants.PRACTICE_SESSION_NOT_STARTABLE,
                     PracticeConstants.PRACTICE_SESSION_NOT_STARTABLE_MESSAGE);

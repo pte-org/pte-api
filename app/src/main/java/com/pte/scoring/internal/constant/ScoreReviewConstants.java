@@ -21,6 +21,11 @@ public final class ScoreReviewConstants {
     public static final String MANUAL_EXAMINER_SELECTION_PROHIBITED_MESSAGE =
             "Host score source selection and teacher scores are prohibited in MANUAL_EXAMINER sessions.";
 
+    public static final String AUDIT_AGGREGATE_TYPE = "SCORE_SOURCE_SELECTION";
+    public static final String AUDIT_ACTION = "SOURCE_SELECTED";
+    public static final String AUDIT_SUMMARY = "Selected %s as the score source for %d answers";
+    public static final String IDEMPOTENCY_KEY_PREFIX = "score-selection:";
+
     private ScoreReviewConstants() {
     }
 }

@@ -31,6 +31,6 @@ public class PracticeEntitlementController {
     public ApiResponse<PracticeEntitlementResponse> entitlement(
             @RequestParam(required = false) UUID organizationId) {
         return ApiResponse.success(entitlementService.getEntitlement(
-                CurrentUserContext.required().userId(), organizationId));
+                CurrentUserContext.required(), organizationId));
     }
 }

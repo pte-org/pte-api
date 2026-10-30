@@ -1,6 +1,6 @@
 package com.pte.scoring.internal.repository;
 
-import com.pte.scoring.domain.ExaminerAttemptAssignment;
+import com.pte.scoring.domain.GradingAssignment;
 import com.pte.scoring.dto.response.ExaminerQueueItemResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -74,7 +74,7 @@ class ExaminerWorkspaceReadRepositoryTest {
 
     private UUID assign(UUID tenantId, UUID sessionId, UUID examinerId, Instant assignedAt) {
         UUID attemptId = UUID.randomUUID();
-        entityManager.persist(new ExaminerAttemptAssignment(UUID.randomUUID(), tenantId, sessionId, attemptId,
+        entityManager.persist(new GradingAssignment(tenantId, sessionId, attemptId,
                 examinerId, 1, UUID.randomUUID(), assignedAt));
         return attemptId;
     }

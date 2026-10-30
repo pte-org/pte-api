@@ -31,7 +31,7 @@ class BlueprintServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new BlueprintService(blueprintRepository, new AssessmentAccessPolicy());
+        service = new BlueprintService(blueprintRepository, new AssessmentAccessPolicy(), null, null, null, null);
         platformCaller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
     }
 

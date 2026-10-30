@@ -1,17 +1,17 @@
 package com.pte.practice.internal.service;
 
 import com.pte.billing.BillingService;
-import com.pte.identity.PracticeIdentityService;
-import com.pte.identity.PracticeMembershipStatus;
+import com.pte.identity.IdentityService;
+import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
 import com.pte.practice.PracticeEntitlementState;
 import com.pte.practice.PracticeObservability;
 import com.pte.practice.internal.dto.response.PracticeEntitlementResponse;
 import com.pte.practice.internal.exception.PracticeNotEntitledException;
+import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.StudentQuota;
 import com.pte.tenancy.TenantOrganizationSummary;
 import com.pte.tenancy.TenancyService;
-import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,13 +27,14 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class PracticeEntitlementServiceTest {
 
     @Mock
-    private PracticeIdentityService practiceIdentityService;
+    private IdentityService identityService;
     @Mock
     private BillingService billingService;
     @Mock
@@ -42,133 +43,132 @@ class PracticeEntitlementServiceTest {
     private PracticeObservability observability;
 
     private PracticeEntitlementService service;
-    private UUID shellUserId;
+    private UUID studentId;
     private UUID tenantId;
+    private CurrentUser caller;
 
     @BeforeEach
     void setUp() {
         service = new PracticeEntitlementService(
-                practiceIdentityService, billingService, tenancyService, true, observability);
-        shellUserId = UUID.randomUUID();
+                identityService, billingService, tenancyService, true, observability, com.pte.TestClocks.fixed());
+        studentId = UUID.randomUUID();
         tenantId = UUID.randomUUID();
+        caller = new CurrentUser(studentId, tenantId, List.of("STUDENT"));
     }
 
     @Test
-    void activeImportedStudentWithExamPackageUnlocksPractice() {
-        givenMembership(tenantId, UserStatus.ACTIVE, PracticeMembershipStatus.ACTIVE);
+    void getEntitlement_activeStudentWithExamPackage_unlocksOwnOrganization() {
+        givenActiveStudentInActiveTenant();
         when(tenancyService.getStudentQuota(tenantId)).thenReturn(new StudentQuota(2, 10));
         when(billingService.hasActiveExamPackageSubscription(tenantId)).thenReturn(true);
 
-        PracticeEntitlementResponse result = service.getEntitlement(shellUserId, null);
+        PracticeEntitlementResponse result = service.getEntitlement(caller, null);
 
         assertThat(result.practice().state()).isEqualTo(PracticeEntitlementState.UNLOCKED);
         assertThat(result.organizationContext().publicId()).isEqualTo(tenantId);
+        assertThat(result.availableOrganizations()).hasSize(1);
+        assertThat(result.student().status()).isEqualTo("ACTIVE");
+        assertThat(result.refreshAt()).isEqualTo(com.pte.TestClocks.fixed().instant()
+                .plusSeconds(com.pte.practice.internal.constant.PracticeConstants.ENTITLEMENT_REFRESH_SECONDS));
     }
 
     @Test
-    void capacityOnlyOrMissingExamPackageRemainsLocked() {
-        givenMembership(tenantId, UserStatus.ACTIVE, PracticeMembershipStatus.ACTIVE);
+    void getEntitlement_missingExamPackage_remainsLocked() {
+        givenActiveStudentInActiveTenant();
         when(tenancyService.getStudentQuota(tenantId)).thenReturn(new StudentQuota(2, 10));
         when(billingService.hasActiveExamPackageSubscription(tenantId)).thenReturn(false);
 
-        PracticeEntitlementResponse result = service.getEntitlement(shellUserId, null);
+        PracticeEntitlementResponse result = service.getEntitlement(caller, null);
 
         assertThat(result.practice().state()).isEqualTo(PracticeEntitlementState.LOCKED);
     }
 
     @Test
-    void capacityOverrunRemainsLockedEvenWithExamPackage() {
-        givenMembership(tenantId, UserStatus.ACTIVE, PracticeMembershipStatus.ACTIVE);
+    void getEntitlement_capacityOverrun_remainsLockedEvenWithExamPackage() {
+        givenActiveStudentInActiveTenant();
         when(tenancyService.getStudentQuota(tenantId)).thenReturn(new StudentQuota(11, 10));
 
-        PracticeEntitlementResponse result = service.getEntitlement(shellUserId, null);
+        PracticeEntitlementResponse result = service.getEntitlement(caller, null);
 
         assertThat(result.practice().state()).isEqualTo(PracticeEntitlementState.LOCKED);
     }
 
     @Test
-    void inactiveImportedStudentIsUnavailable() {
-        givenMembership(tenantId, UserStatus.SUSPENDED, PracticeMembershipStatus.ACTIVE);
+    void getEntitlement_inactiveOrRemovedStudent_isUnavailable() {
+        when(identityService.findActiveStudentInTenant(studentId, tenantId)).thenReturn(Optional.empty());
 
-        PracticeEntitlementResponse result = service.getEntitlement(shellUserId, null);
-
-        assertThat(result.practice().state()).isEqualTo(PracticeEntitlementState.UNAVAILABLE);
-    }
-
-    @Test
-    void unknownShellIdentityIsUnavailable() {
-        when(practiceIdentityService.resolveForShellUser(shellUserId)).thenReturn(Optional.empty());
-
-        PracticeEntitlementResponse result = service.getEntitlement(shellUserId, null);
+        PracticeEntitlementResponse result = service.getEntitlement(caller, null);
 
         assertThat(result.practice().state()).isEqualTo(PracticeEntitlementState.UNAVAILABLE);
-    }
-
-    @Test
-    void multipleActiveOrganizationsRequireExplicitContext() {
-        UUID secondTenantId = UUID.randomUUID();
-        PracticeIdentityService.PracticeIdentityView view = new PracticeIdentityService.PracticeIdentityView(
-                UUID.randomUUID(), shellUserId, UserStatus.ACTIVE, List.of(
-                        membership(tenantId, UserStatus.ACTIVE, PracticeMembershipStatus.ACTIVE),
-                        membership(secondTenantId, UserStatus.ACTIVE, PracticeMembershipStatus.ACTIVE)));
-        when(practiceIdentityService.resolveForShellUser(shellUserId)).thenReturn(Optional.of(view));
-        when(tenancyService.findActiveTenantIds(anyCollection())).thenReturn(Set.of(tenantId, secondTenantId));
-        when(tenancyService.findTenantOrganizationSummaries(anyCollection())).thenReturn(Map.of(
-                tenantId, new TenantOrganizationSummary(tenantId, "School A", "School", false),
-                secondTenantId, new TenantOrganizationSummary(secondTenantId, "School B", "School", false)));
-
-        PracticeEntitlementResponse result = service.getEntitlement(shellUserId, null);
-
-        assertThat(result.practice().state()).isEqualTo(PracticeEntitlementState.AMBIGUOUS);
         assertThat(result.organizationContext()).isNull();
-        assertThat(result.availableOrganizations()).hasSize(2);
     }
 
     @Test
-    void crossOrganizationRequestCannotAuthorizeTheStudent() {
-        givenMembership(tenantId, UserStatus.ACTIVE, PracticeMembershipStatus.ACTIVE);
-        CurrentUser caller = new CurrentUser(shellUserId, null, List.of("STUDENT"));
+    void getEntitlement_suspendedOrganization_isUnavailable() {
+        when(identityService.findActiveStudentInTenant(studentId, tenantId)).thenReturn(Optional.of(student()));
+        when(tenancyService.findActiveTenantIds(anyCollection())).thenReturn(Set.of());
+
+        PracticeEntitlementResponse result = service.getEntitlement(caller, null);
+
+        assertThat(result.practice().state()).isEqualTo(PracticeEntitlementState.UNAVAILABLE);
+    }
+
+    @Test
+    void getEntitlement_tenantlessAccount_isUnavailableWithoutLookups() {
+        CurrentUser tenantless = new CurrentUser(studentId, null, List.of("STUDENT"));
+
+        PracticeEntitlementResponse result = service.getEntitlement(tenantless, null);
+
+        assertThat(result.practice().state()).isEqualTo(PracticeEntitlementState.UNAVAILABLE);
+        verifyNoInteractions(identityService, tenancyService, billingService);
+    }
+
+    @Test
+    void getEntitlement_nonStudentRole_isUnavailable() {
+        CurrentUser host = new CurrentUser(studentId, tenantId, List.of("HOST_ADMIN"));
+
+        PracticeEntitlementResponse result = service.getEntitlement(host, null);
+
+        assertThat(result.practice().state()).isEqualTo(PracticeEntitlementState.UNAVAILABLE);
+        verifyNoInteractions(identityService);
+    }
+
+    @Test
+    void getEntitlement_otherOrganizationRequested_staysLocked() {
+        givenActiveStudentInActiveTenant();
+
+        PracticeEntitlementResponse result = service.getEntitlement(caller, UUID.randomUUID());
+
+        assertThat(result.practice().state()).isEqualTo(PracticeEntitlementState.LOCKED);
+    }
+
+    @Test
+    void assertUnlocked_crossOrganizationRequest_cannotAuthorizeTheStudent() {
+        givenActiveStudentInActiveTenant();
 
         assertThatThrownBy(() -> service.assertUnlocked(caller, UUID.randomUUID()))
                 .isInstanceOf(PracticeNotEntitledException.class);
     }
 
     @Test
-    void disabledStrictEntitlementRemainsFailClosed() {
+    void assertUnlocked_disabledStrictEntitlement_remainsFailClosed() {
         PracticeEntitlementService disabledService = new PracticeEntitlementService(
-                practiceIdentityService, billingService, tenancyService, false, observability);
-        CurrentUser caller = new CurrentUser(shellUserId, null, List.of("STUDENT"));
+                identityService, billingService, tenancyService, false, observability, com.pte.TestClocks.fixed());
 
-        assertThatThrownBy(() -> disabledService.assertUnlocked(caller, null))
+        assertThatThrownBy(() -> disabledService.assertUnlocked(caller, tenantId))
                 .isInstanceOf(PracticeNotEntitledException.class);
     }
 
-    @Test
-    void removedMembershipDoesNotUnlockPractice() {
-        givenMembership(tenantId, UserStatus.ACTIVE, PracticeMembershipStatus.REMOVED);
-
-        PracticeEntitlementResponse result = service.getEntitlement(shellUserId, null);
-
-        assertThat(result.practice().state()).isEqualTo(PracticeEntitlementState.LOCKED);
+    private void givenActiveStudentInActiveTenant() {
+        when(identityService.findActiveStudentInTenant(studentId, tenantId)).thenReturn(Optional.of(student()));
+        when(tenancyService.findActiveTenantIds(anyCollection())).thenReturn(Set.of(tenantId));
+        when(tenancyService.findTenantOrganizationSummaries(anyCollection())).thenReturn(Map.of(
+                tenantId, new TenantOrganizationSummary(tenantId, "School A", "School", false)));
     }
 
-    private void givenMembership(UUID membershipTenantId, UserStatus userStatus,
-            PracticeMembershipStatus membershipStatus) {
-        PracticeIdentityService.PracticeIdentityView view = new PracticeIdentityService.PracticeIdentityView(
-                UUID.randomUUID(), shellUserId, UserStatus.ACTIVE,
-                List.of(membership(membershipTenantId, userStatus, membershipStatus)));
-        when(practiceIdentityService.resolveForShellUser(shellUserId)).thenReturn(Optional.of(view));
-        if (membershipStatus == PracticeMembershipStatus.ACTIVE && userStatus == UserStatus.ACTIVE) {
-            when(tenancyService.findActiveTenantIds(anyCollection())).thenReturn(Set.of(membershipTenantId));
-            when(tenancyService.findTenantOrganizationSummaries(anyCollection()))
-                    .thenReturn(Map.of(membershipTenantId,
-                            new TenantOrganizationSummary(membershipTenantId, "School A", "School", false)));
-        }
-    }
-
-    private PracticeIdentityService.PracticeMembershipView membership(UUID membershipTenantId,
-            UserStatus userStatus, PracticeMembershipStatus membershipStatus) {
-        return new PracticeIdentityService.PracticeMembershipView(
-                UUID.randomUUID(), membershipTenantId, membershipStatus, userStatus, true);
+    private User student() {
+        User user = new User();
+        user.setStatus(UserStatus.ACTIVE);
+        return user;
     }
 }

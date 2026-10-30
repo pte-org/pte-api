@@ -3,7 +3,6 @@ package com.pte.enrollment.internal.service;
 import com.pte.enrollment.internal.constant.EnrollmentConstants;
 import com.pte.tenancy.domain.Organization;
 import com.pte.enrollment.domain.Program;
-import com.pte.tenancy.domain.Tenant;
 import com.pte.tenancy.domain.enums.FacilityType;
 import com.pte.enrollment.domain.enums.ProgramStatus;
 import com.pte.enrollment.internal.exception.OrganizationNotFoundException;
@@ -17,7 +16,7 @@ import com.pte.enrollment.internal.dto.response.ProgramDashboardResponse;
 import com.pte.enrollment.internal.dto.response.ProgramResponse;
 import com.pte.tenancy.TenancyService;
 import com.pte.enrollment.internal.repository.ProgramRepository;
-import com.pte.enrollment.internal.repository.StudentClassRepository;
+import com.pte.enrollment.internal.repository.TrainingClassRepository;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,8 +48,7 @@ class ProgramServiceTest {
     private TenancyService tenancyService;
 
     @Mock
-    private StudentClassRepository studentClassRepository;
-
+    private TrainingClassRepository trainingClassRepository;
 
     @Mock
     private AuditLogService auditLogService;
@@ -59,23 +57,15 @@ class ProgramServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ProgramService(programRepository, tenancyService, studentClassRepository,
+        service = new ProgramService(programRepository, tenancyService, trainingClassRepository,
                 auditLogService);
     }
 
-    private Tenant tenantWithPublicId(UUID publicId) {
-        Tenant tenant = new Tenant();
-        tenant.setPublicId(publicId);
-        tenant.setName("Acme School");
-        return tenant;
-    }
-
-    private Organization organizationOf(UUID orgPublicId, Tenant tenant) {
+    private Organization organizationOf(UUID publicId) {
         Organization organization = new Organization();
-        organization.setPublicId(orgPublicId);
-        organization.setName("Downtown Branch");
-        organization.setFacilityType(FacilityType.BRANCH);
-        organization.setTenant(tenant);
+        organization.setPublicId(publicId);
+        organization.setName("Acme School");
+        organization.setFacilityType(FacilityType.MAIN);
         return organization;
     }
 
@@ -91,9 +81,8 @@ class ProgramServiceTest {
     @Test
     void create_savesProgramUnderOrganization() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        Tenant tenant = tenantWithPublicId(tenantPublicId);
-        Organization organization = organizationOf(organizationPublicId, tenant);
+        UUID organizationPublicId = tenantPublicId;
+        Organization organization = organizationOf(organizationPublicId);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
         CreateProgramRequest request = new CreateProgramRequest("Khối 12", "Grade 12", null, null);
 
@@ -121,8 +110,7 @@ class ProgramServiceTest {
     void create_organizationBelongsToDifferentTenant_throwsNotFoundWithoutSaving() {
         UUID callerTenantId = UUID.randomUUID();
         UUID otherTenantId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(otherTenantId));
+        UUID organizationPublicId = otherTenantId;
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
 
         when(tenancyService.findOrganizationOwned(organizationPublicId, caller.tenantId()))
@@ -137,8 +125,8 @@ class ProgramServiceTest {
     @Test
     void create_duplicateNameWithinSameOrganization_throwsWithoutSaving() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId));
+        UUID organizationPublicId = tenantPublicId;
+        Organization organization = organizationOf(organizationPublicId);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
 
         when(tenancyService.findOrganizationOwned(organizationPublicId, caller.tenantId())).thenReturn(organization);
@@ -154,9 +142,8 @@ class ProgramServiceTest {
     @Test
     void create_sameNameUnderDifferentOrganizationOfSameTenant_succeeds() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        Tenant tenant = tenantWithPublicId(tenantPublicId);
-        Organization organization = organizationOf(organizationPublicId, tenant);
+        UUID organizationPublicId = tenantPublicId;
+        Organization organization = organizationOf(organizationPublicId);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
 
         when(tenancyService.findOrganizationOwned(organizationPublicId, caller.tenantId())).thenReturn(organization);
@@ -179,8 +166,8 @@ class ProgramServiceTest {
     @Test
     void list_excludesArchivedPrograms() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId));
+        UUID organizationPublicId = tenantPublicId;
+        Organization organization = organizationOf(organizationPublicId);
         Program activeProgram = programOf(UUID.randomUUID(), organization);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
 
@@ -198,9 +185,9 @@ class ProgramServiceTest {
     void get_programBelongsToDifferentTenant_throwsNotFound() {
         UUID callerTenantId = UUID.randomUUID();
         UUID otherTenantId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
+        UUID organizationPublicId = otherTenantId;
         UUID programPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(otherTenantId));
+        Organization organization = organizationOf(organizationPublicId);
         Program program = programOf(programPublicId, organization);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
 
@@ -211,12 +198,11 @@ class ProgramServiceTest {
     }
 
     @Test
-    void get_programBelongsToDifferentOrganizationOfSameTenant_throwsNotFound() {
+    void get_requestedOrganizationDiffersFromTheProgramsOrganization_throwsNotFound() {
         UUID tenantPublicId = UUID.randomUUID();
-        Tenant tenant = tenantWithPublicId(tenantPublicId);
-        UUID actualOrganizationPublicId = UUID.randomUUID();
+        UUID actualOrganizationPublicId = tenantPublicId;
         UUID requestedOrganizationPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(actualOrganizationPublicId, tenant);
+        Organization organization = organizationOf(actualOrganizationPublicId);
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organization);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
@@ -230,8 +216,8 @@ class ProgramServiceTest {
     @Test
     void update_changesFields() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId));
+        UUID organizationPublicId = tenantPublicId;
+        Organization organization = organizationOf(organizationPublicId);
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organization);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
@@ -251,8 +237,8 @@ class ProgramServiceTest {
     @Test
     void suspend_activeProgram_transitions() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId));
+        UUID organizationPublicId = tenantPublicId;
+        Organization organization = organizationOf(organizationPublicId);
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organization);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
@@ -269,8 +255,8 @@ class ProgramServiceTest {
     @Test
     void suspend_alreadySuspended_isIdempotentNoOp() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId));
+        UUID organizationPublicId = tenantPublicId;
+        Organization organization = organizationOf(organizationPublicId);
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organization);
         program.setStatus(ProgramStatus.SUSPENDED);
@@ -287,8 +273,8 @@ class ProgramServiceTest {
     @Test
     void deactivate_activeProgram_transitionsToInactive() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId));
+        UUID organizationPublicId = tenantPublicId;
+        Organization organization = organizationOf(organizationPublicId);
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organization);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
@@ -303,8 +289,8 @@ class ProgramServiceTest {
     @Test
     void activate_inactiveProgram_transitionsBackToActive() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId));
+        UUID organizationPublicId = tenantPublicId;
+        Organization organization = organizationOf(organizationPublicId);
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organization);
         program.setStatus(ProgramStatus.INACTIVE);
@@ -320,8 +306,8 @@ class ProgramServiceTest {
     @Test
     void archive_activeProgram_marksDeletedButStaysFetchable() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId));
+        UUID organizationPublicId = tenantPublicId;
+        Organization organization = organizationOf(organizationPublicId);
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organization);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
@@ -343,8 +329,8 @@ class ProgramServiceTest {
     @Test
     void archive_alreadyArchived_isIdempotentNoOp() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId));
+        UUID organizationPublicId = tenantPublicId;
+        Organization organization = organizationOf(organizationPublicId);
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organization);
         program.setDeleted(true);
@@ -359,14 +345,14 @@ class ProgramServiceTest {
     @Test
     void archive_hasActiveClasses_throwsWithoutArchiving() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId));
+        UUID organizationPublicId = tenantPublicId;
+        Organization organization = organizationOf(organizationPublicId);
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organization);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
 
         when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
-        when(studentClassRepository.existsByProgram_PublicIdAndDeletedFalse(programPublicId)).thenReturn(true);
+        when(trainingClassRepository.existsByProgram_PublicIdAndDeletedFalse(programPublicId)).thenReturn(true);
 
         assertThatThrownBy(() -> service.archive(organizationPublicId, programPublicId, caller))
                 .isInstanceOf(ProgramHasActiveClassesException.class);
@@ -378,8 +364,8 @@ class ProgramServiceTest {
     @Test
     void getDashboard_returnsClassAndStudentCountsFromOneGroupedQuery() {
         UUID tenantPublicId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(tenantPublicId));
+        UUID organizationPublicId = tenantPublicId;
+        Organization organization = organizationOf(organizationPublicId);
         UUID programPublicId = UUID.randomUUID();
         Program program = programOf(programPublicId, organization);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantPublicId, List.of("HOST_ADMIN"));
@@ -390,7 +376,7 @@ class ProgramServiceTest {
                 new ClassStudentCountResponse(UUID.randomUUID(), "12A3", 0L));
 
         when(programRepository.findByPublicId(programPublicId)).thenReturn(Optional.of(program));
-        when(studentClassRepository.countStudentsByClassForProgram(programPublicId)).thenReturn(rows);
+        when(trainingClassRepository.countStudentsByClassForProgram(programPublicId)).thenReturn(rows);
 
         ProgramDashboardResponse response = service.getDashboard(organizationPublicId, programPublicId, caller);
 
@@ -404,9 +390,9 @@ class ProgramServiceTest {
     void getDashboard_programBelongsToDifferentTenant_throwsNotFound() {
         UUID callerTenantId = UUID.randomUUID();
         UUID otherTenantId = UUID.randomUUID();
-        UUID organizationPublicId = UUID.randomUUID();
+        UUID organizationPublicId = otherTenantId;
         UUID programPublicId = UUID.randomUUID();
-        Organization organization = organizationOf(organizationPublicId, tenantWithPublicId(otherTenantId));
+        Organization organization = organizationOf(organizationPublicId);
         Program program = programOf(programPublicId, organization);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
 
@@ -414,6 +400,6 @@ class ProgramServiceTest {
 
         assertThatThrownBy(() -> service.getDashboard(organizationPublicId, programPublicId, caller))
                 .isInstanceOf(ProgramNotFoundException.class);
-        verify(studentClassRepository, never()).countStudentsByClassForProgram(any());
+        verify(trainingClassRepository, never()).countStudentsByClassForProgram(any());
     }
 }

@@ -4,13 +4,20 @@ import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.web.ApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * Maps domain + validation errors to {@link ApiResponse} for the whole app.
@@ -69,6 +76,38 @@ public class GlobalExceptionHandler {
                         SharedConstants.MALFORMED_REQUEST_MESSAGE, SharedConstants.MALFORMED_REQUEST_MESSAGE));
     }
 
+    /** A missing or unparsable query/path parameter is the caller's fault, not a server error. */
+    @ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<ApiResponse<Void>> handleBadParameter(Exception ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(SharedConstants.MALFORMED_REQUEST,
+                        SharedConstants.MALFORMED_REQUEST_MESSAGE, SharedConstants.MALFORMED_REQUEST_MESSAGE));
+    }
+
+    /** A route that does not exist (or not for this verb) is a 404/405, not an internal error. */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnknownRoute(NoResourceFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(SharedConstants.NOT_FOUND, SharedConstants.NOT_FOUND, SharedConstants.NOT_FOUND));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotAllowed(HttpRequestMethodNotSupportedException ex) {
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED);
+        if (ex.getSupportedHttpMethods() != null) {
+            response.allow(ex.getSupportedHttpMethods().toArray(HttpMethod[]::new));
+        }
+        return response.body(ApiResponse.error(SharedConstants.METHOD_NOT_ALLOWED, SharedConstants.METHOD_NOT_ALLOWED,
+                SharedConstants.METHOD_NOT_ALLOWED));
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException ex) {
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .body(ApiResponse.error(SharedConstants.UNSUPPORTED_MEDIA_TYPE, SharedConstants.UNSUPPORTED_MEDIA_TYPE,
+                        SharedConstants.UNSUPPORTED_MEDIA_TYPE));
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
@@ -81,6 +120,22 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(
                 SharedConstants.RESOURCE_VERSION_CONFLICT, SharedConstants.RESOURCE_VERSION_CONFLICT_MESSAGE,
                 SharedConstants.RESOURCE_VERSION_CONFLICT_MESSAGE));
+    }
+
+    /**
+     * Services that still signal a business rejection with {@link ResponseStatusException} keep the status they chose
+     * (409 for a stale version, 404 for a missing row, ...) instead of surfacing as a server error.
+     * Stopgap: the {@code code} is only the HTTP status name; services should move to {@code DomainException}
+     * subclasses with stable codes.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiResponse<Void>> handleResponseStatus(ResponseStatusException ex) {
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        if (status == null || status.is5xxServerError()) {
+            return handleUnexpected(ex);
+        }
+        String message = ex.getReason() == null ? status.getReasonPhrase() : ex.getReason();
+        return ResponseEntity.status(status).body(ApiResponse.error(status.name(), message, message));
     }
 
     @ExceptionHandler(Exception.class)

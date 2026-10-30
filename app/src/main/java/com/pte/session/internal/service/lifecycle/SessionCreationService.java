@@ -8,8 +8,8 @@ import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.enums.ExamMode;
 import com.pte.session.internal.dto.request.CreateSessionRequest;
 import com.pte.session.internal.dto.response.SessionResponse;
-import com.pte.session.internal.exception.SessionCapacityInvalidException;
-import com.pte.session.internal.exception.SessionCapacityRequiredException;
+import com.pte.session.internal.exception.capacity.SessionCapacityInvalidException;
+import com.pte.session.internal.exception.capacity.SessionCapacityRequiredException;
 import com.pte.session.internal.mapper.SessionMapper;
 import com.pte.session.internal.policy.SessionPolicyResolver;
 import com.pte.session.internal.repository.ExamSessionRepository;
@@ -20,7 +20,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
-import com.pte.session.internal.service.SessionCodeGenerator;
+import com.pte.session.internal.service.draft.SessionCodeGenerator;
 
 /** Creates the assessment snapshot and session atomically after subscription validation. */
 @Service
@@ -83,15 +83,14 @@ public class SessionCreationService {
         session.setTenantId(tenantId);
         session.setSubscriptionId(subscription.publicId());
         session.setLicenseKey(subscription.licenseKey());
-        session.setSnapshotPublicId(snapshot.publicId());
-        session.setTemplatePublicId(snapshot.scoreTemplatePublicId());
-        session.setTemplateVersion(snapshot.scoreTemplateVersion());
+        session.setExamVersionPublicId(snapshot.publicId());
+        session.setExamDefinitionPublicId(snapshot.examDefinitionPublicId());
+        session.setExamDefinitionVersion(snapshot.examDefinitionVersion());
         session.setOpensAt(request.opensAt());
         session.setClosesAt(request.closesAt());
         session.setCapacity(request.capacity());
         ExamMode mode = request.examMode() != null ? request.examMode() : ExamMode.OFFICIAL_EXAM;
         session.setExamMode(mode);
-        session.setFormMode(com.pte.session.domain.enums.FormMode.SHARED_FORM);
         session.setReusePolicy(com.pte.session.domain.enums.ReusePolicy.ALLOW);
         ExamPolicy policy = ExamPolicy.realExamDefault();
         policy.setLockdownMode(SessionPolicyResolver.resolveForCreate(request.lockdownMode()));

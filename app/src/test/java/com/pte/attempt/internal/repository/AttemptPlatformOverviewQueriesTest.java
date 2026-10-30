@@ -35,6 +35,8 @@ class AttemptPlatformOverviewQueriesTest {
 
     private void attempt(UUID tenant, UUID student, AttemptStatus status, Instant startedAt, boolean deleted) {
         ExamAttempt attempt = new ExamAttempt();
+        attempt.setExamVersionPublicId(UUID.randomUUID());
+        attempt.setExamDefinitionPublicId(UUID.randomUUID());
         attempt.setTenantId(tenant);
         attempt.setSessionPublicId(UUID.randomUUID());
         attempt.setStudentPublicId(student);

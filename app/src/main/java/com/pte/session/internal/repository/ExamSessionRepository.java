@@ -133,4 +133,19 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, Long>,
             + "AND s.deleted = false ORDER BY s.publicId ASC")
     List<ExamSession> findWithLockBySubscriptionIdOrderByPublicIdAsc(
             @Param("subscriptionId") UUID subscriptionId);
+
+    /** Sessions whose grading is frozen and not yet complete, across tenants, for the reconciliation sweep. */
+    @Query("SELECT s FROM ExamSession s WHERE s.deleted = false "
+            + "AND s.gradingStatus = com.pte.session.domain.enums.SessionGradingStatus.FROZEN")
+    List<ExamSession> findFrozenGrading();
+
+    @Query("SELECT COUNT(s) FROM ExamSession s WHERE s.tenantId = :tenantId AND s.deleted = false "
+            + "AND s.gradingStatus = :status")
+    long countByTenantAndGradingStatus(@Param("tenantId") UUID tenantId,
+            @Param("status") com.pte.session.domain.enums.SessionGradingStatus status);
+
+    @Query("SELECT s FROM ExamSession s WHERE s.tenantId = :tenantId AND s.deleted = false "
+            + "AND s.publicId IN :publicIds")
+    List<ExamSession> findByTenantAndPublicIds(@Param("tenantId") UUID tenantId,
+            @Param("publicIds") java.util.Collection<UUID> publicIds);
 }

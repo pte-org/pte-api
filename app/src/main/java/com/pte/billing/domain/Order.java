@@ -2,17 +2,22 @@ package com.pte.billing.domain;
 
 import com.pte.billing.domain.enums.OrderStatus;
 import com.pte.shared.domain.BaseEntity;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Index;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /** A tenant's immutable price snapshot and payment lifecycle for one purchase. */
@@ -50,6 +55,11 @@ public class Order extends BaseEntity {
     @Column
     private Instant paidAt;
 
+    /** Verified payment notifications received for this order, oldest first. */
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL)
+    @OrderBy("receivedAt ASC")
+    private List<OrderPayment> payments = new ArrayList<>();
+
     private Order(UUID tenantId, UUID planId, Long orderCode, BigDecimal amount, String currency) {
         this.tenantId = tenantId;
         this.planId = planId;
@@ -65,6 +75,12 @@ public class Order extends BaseEntity {
 
     public void attachPaymentLink(String paymentLinkUrl) {
         this.paymentLinkUrl = paymentLinkUrl;
+    }
+
+    public OrderPayment receivePayment(String rawPayload, Instant receivedAt) {
+        OrderPayment payment = new OrderPayment(this, rawPayload, receivedAt);
+        payments.add(payment);
+        return payment;
     }
 
     public void markPaid(Instant paidAt) {

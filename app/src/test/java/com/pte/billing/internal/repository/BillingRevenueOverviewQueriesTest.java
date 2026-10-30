@@ -4,7 +4,7 @@ import com.pte.billing.BillingRevenueOverviewService;
 import com.pte.billing.BillingRevenueOverviewService.CurrencyPaidTotal;
 import com.pte.billing.domain.LicenseCode;
 import com.pte.billing.domain.Order;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.Subscription;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.OrderStatus;
@@ -49,7 +49,7 @@ class BillingRevenueOverviewQueriesTest {
     @Autowired
     private OrderRepository orders;
     @Autowired
-    private PlanRepository plans;
+    private ServicePlanRepository plans;
     @Autowired
     private SubscriptionRepository subscriptions;
     @Autowired
@@ -426,7 +426,7 @@ class BillingRevenueOverviewQueriesTest {
 
     @Test
     void licenseCodeActivationsAndSubscriptionsNeverContributeToRevenue() {
-        Plan plan = new Plan();
+        ServicePlan plan = new ServicePlan();
         plan.setName("Priced plan");
         plan.setType(PlanType.EXAM_PACKAGE);
         plan.setPrice(new BigDecimal("999999.00"));

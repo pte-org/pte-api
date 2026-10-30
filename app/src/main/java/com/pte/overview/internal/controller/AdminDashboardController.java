@@ -2,7 +2,7 @@ package com.pte.overview.internal.controller;
 
 import com.pte.overview.internal.constant.OverviewConstants;
 import com.pte.overview.internal.dto.response.AdminDashboardResponse;
-import com.pte.overview.internal.service.AdminDashboardService;
+import com.pte.overview.internal.service.admin.AdminDashboardService;
 import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;

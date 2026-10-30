@@ -1,10 +1,10 @@
 package com.pte.identity.internal.controller;
 
-import com.pte.identity.internal.dto.request.LoginRequest;
-import com.pte.identity.internal.dto.request.LoginOrganizationOptionsRequest;
-import com.pte.identity.internal.dto.request.RefreshRequest;
-import com.pte.identity.internal.dto.request.ChangePasswordRequest;
-import com.pte.identity.internal.dto.request.UpdateOwnProfileRequest;
+import com.pte.identity.internal.dto.request.auth.LoginRequest;
+import com.pte.identity.internal.dto.request.auth.LoginOrganizationOptionsRequest;
+import com.pte.identity.internal.dto.request.auth.RefreshRequest;
+import com.pte.identity.internal.dto.request.auth.ChangePasswordRequest;
+import com.pte.identity.internal.dto.request.profile.UpdateOwnProfileRequest;
 import com.pte.identity.internal.dto.response.TokenResponse;
 import com.pte.identity.internal.dto.response.LoginOrganizationOptionResponse;
 import com.pte.identity.internal.dto.response.UserResponse;

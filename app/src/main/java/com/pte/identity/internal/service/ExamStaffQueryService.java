@@ -1,12 +1,12 @@
 package com.pte.identity.internal.service;
 
+import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
-import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.InvalidExamStaffQueryException;
 import com.pte.identity.internal.mapper.UserMapper;
-import com.pte.identity.internal.repository.UserRepository;
+import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.web.PageMeta;
 import com.pte.shared.web.PagedResult;
@@ -31,10 +31,10 @@ public class ExamStaffQueryService {
     private static final int MAX_SIZE = 100;
     private static final Set<Role> STAFF_ROLES = EnumSet.of(Role.PROCTOR, Role.EXAMINER);
 
-    private final UserRepository userRepository;
+    private final OrganizationMemberRepository memberRepository;
 
-    public ExamStaffQueryService(UserRepository userRepository) {
-        this.userRepository = userRepository;
+    public ExamStaffQueryService(OrganizationMemberRepository memberRepository) {
+        this.memberRepository = memberRepository;
     }
 
     @Transactional(readOnly = true)
@@ -54,9 +54,9 @@ public class ExamStaffQueryService {
         String sortProperty = parseSort(sort);
         Pageable pageable = PageRequest.of(page, size,
                 Sort.by(normalizedDirection, sortProperty)
-                        .and(Sort.by(normalizedDirection, "publicId")));
+                        .and(Sort.by(normalizedDirection, "user.publicId")));
 
-        Page<User> result = userRepository.findPageForExamStaff(
+        Page<OrganizationMember> result = memberRepository.findPageForExamStaff(
                 tenantId, STAFF_ROLES, normalizedRole, normalizedStatus, normalizedSearch, pageable);
         return new PagedResult<>(result.map(UserMapper::toResponse).getContent(),
                 new PageMeta(result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages(),
@@ -92,8 +92,8 @@ public class ExamStaffQueryService {
         }
         return switch (value.trim().toUpperCase(Locale.ROOT)) {
             case "CREATED_AT" -> "createdAt";
-            case "FULL_NAME" -> "fullName";
-            case "EMAIL" -> "email";
+            case "FULL_NAME" -> "user.fullName";
+            case "EMAIL" -> "user.email";
             default -> throw new InvalidExamStaffQueryException();
         };
     }

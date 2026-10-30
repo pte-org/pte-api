@@ -2,8 +2,8 @@ package com.pte.session.internal.controller;
 
 import com.pte.session.internal.dto.request.AssignProctorRequest;
 import com.pte.session.internal.dto.request.UpdateProctorRoleRequest;
-import com.pte.session.internal.dto.response.ProctorAssignmentResponse;
-import com.pte.session.internal.service.EnrollmentService;
+import com.pte.session.internal.dto.response.proctor.ProctorAssignmentResponse;
+import com.pte.session.internal.service.staff.ProctorAssignmentService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -26,21 +26,21 @@ import java.util.UUID;
 @PreAuthorize("hasRole('HOST_ADMIN')")
 public class ProctorAssignmentController {
 
-    private final EnrollmentService enrollmentService;
+    private final ProctorAssignmentService proctorService;
 
-    public ProctorAssignmentController(EnrollmentService enrollmentService) {
-        this.enrollmentService = enrollmentService;
+    public ProctorAssignmentController(ProctorAssignmentService proctorService) {
+        this.proctorService = proctorService;
     }
 
     @PostMapping
     public ApiResponse<ProctorAssignmentResponse> assign(@PathVariable UUID sessionPublicId,
                                                           @Valid @RequestBody AssignProctorRequest request) {
-        return ApiResponse.success(enrollmentService.assignProctor(sessionPublicId, request, currentUser()));
+        return ApiResponse.success(proctorService.assignProctor(sessionPublicId, request, currentUser()));
     }
 
     @GetMapping
     public ApiResponse<List<ProctorAssignmentResponse>> list(@PathVariable UUID sessionPublicId) {
-        return ApiResponse.success(enrollmentService.listProctors(sessionPublicId, currentUser()));
+        return ApiResponse.success(proctorService.listProctors(sessionPublicId, currentUser()));
     }
 
     @PatchMapping("/{assignmentPublicId}")
@@ -48,12 +48,12 @@ public class ProctorAssignmentController {
                                                               @PathVariable UUID assignmentPublicId,
                                                               @Valid @RequestBody UpdateProctorRoleRequest request) {
         return ApiResponse.success(
-                enrollmentService.updateProctorRole(sessionPublicId, assignmentPublicId, request, currentUser()));
+                proctorService.updateProctorRole(sessionPublicId, assignmentPublicId, request, currentUser()));
     }
 
     @DeleteMapping("/{assignmentPublicId}")
     public ApiResponse<Void> unassign(@PathVariable UUID sessionPublicId, @PathVariable UUID assignmentPublicId) {
-        enrollmentService.unassignProctor(sessionPublicId, assignmentPublicId, currentUser());
+        proctorService.unassignProctor(sessionPublicId, assignmentPublicId, currentUser());
         return ApiResponse.success(null);
     }
 

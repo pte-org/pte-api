@@ -2,9 +2,9 @@ package com.pte.session.internal.controller;
 
 import com.pte.session.internal.dto.request.BulkEnrollRequest;
 import com.pte.session.internal.dto.request.EnrollStudentRequest;
-import com.pte.session.internal.dto.response.BulkEnrollResponse;
-import com.pte.session.internal.dto.response.EnrollmentResponse;
-import com.pte.session.internal.service.EnrollmentService;
+import com.pte.session.internal.dto.response.enrollment.BulkEnrollResponse;
+import com.pte.session.internal.dto.response.enrollment.EnrollmentResponse;
+import com.pte.session.internal.service.enrollment.EnrollmentService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;

@@ -1,22 +1,21 @@
 package com.pte.billing.internal.service;
 
-import com.pte.billing.domain.TenantApplication;
-import com.pte.billing.domain.enums.TenantApplicationStatus;
 import com.pte.billing.TenantApplicationApprovedEvent;
 import com.pte.billing.TenantApplicationRejectedEvent;
 import com.pte.billing.TenantApplicationSubmittedEvent;
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.dto.request.RejectApplicationRequest;
-import com.pte.billing.internal.dto.request.SubmitApplicationRequest;
+import com.pte.billing.internal.dto.request.application.DirectOnboardRequest;
+import com.pte.billing.internal.dto.request.application.RejectApplicationRequest;
+import com.pte.billing.internal.dto.response.DirectOnboardResponse;
+import com.pte.billing.internal.dto.request.application.SubmitApplicationRequest;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
-import com.pte.billing.internal.exception.ApplicationNotPendingException;
-import com.pte.billing.internal.exception.RequestedCodeAlreadyUsedException;
-import com.pte.billing.internal.exception.RequestedNameAlreadyUsedException;
-import com.pte.billing.internal.exception.RequestedTaxCodeAlreadyUsedException;
-import com.pte.billing.internal.exception.TenantApplicationNotFoundException;
-import com.pte.billing.internal.exception.TenantApplicationValidationException;
+import com.pte.billing.internal.exception.application.ApplicationNotPendingException;
+import com.pte.billing.internal.exception.license.RequestedCodeAlreadyUsedException;
+import com.pte.billing.internal.exception.application.RequestedNameAlreadyUsedException;
+import com.pte.billing.internal.exception.application.RequestedTaxCodeAlreadyUsedException;
+import com.pte.billing.internal.exception.application.TenantApplicationNotFoundException;
+import com.pte.billing.internal.exception.application.TenantApplicationValidationException;
 import com.pte.billing.internal.mapper.TenantApplicationMapper;
-import com.pte.billing.internal.repository.TenantApplicationRepository;
 import com.pte.identity.domain.HostAdminCreated;
 import com.pte.identity.IdentityService;
 import com.pte.shared.security.CurrentUser;
@@ -25,7 +24,7 @@ import com.pte.shared.security.PlatformOperationPolicy;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.constant.SharedConstants;
 import com.pte.tenancy.TenancyService;
-import com.pte.tenancy.domain.Tenant;
+import com.pte.tenancy.domain.Organization;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -42,7 +41,6 @@ import java.util.UUID;
 @Service
 public class TenantApplicationService {
 
-    private final TenantApplicationRepository applicationRepository;
     private final TenancyService tenancyService;
     private final IdentityService identityService;
     private final PlatformSettingService platformSettingService;
@@ -50,23 +48,15 @@ public class TenantApplicationService {
     private final AuditLogService auditLogService;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public TenantApplicationService(TenantApplicationRepository applicationRepository,
+    public TenantApplicationService(
             TenancyService tenancyService, IdentityService identityService,
             PlatformSettingService platformSettingService, ApplicationEventPublisher eventPublisher,
             AuditLogService auditLogService) {
-        this.applicationRepository = applicationRepository;
         this.tenancyService = tenancyService;
         this.identityService = identityService;
         this.platformSettingService = platformSettingService;
         this.eventPublisher = eventPublisher;
         this.auditLogService = auditLogService;
-    }
-
-    /** Compatibility constructor for existing focused tests and public submit wiring. */
-    public TenantApplicationService(TenantApplicationRepository applicationRepository,
-            TenancyService tenancyService, IdentityService identityService,
-            PlatformSettingService platformSettingService, ApplicationEventPublisher eventPublisher) {
-        this(applicationRepository, tenancyService, identityService, platformSettingService, eventPublisher, null);
     }
 
     /**
@@ -75,28 +65,16 @@ public class TenantApplicationService {
     @Transactional
     public void submit(SubmitApplicationRequest request) {
         String organizationName = request.orgName().trim();
-        if (tenancyService.existsByName(organizationName)
-                || applicationRepository.existsByOrgNameAndStatus(
-                        organizationName, TenantApplicationStatus.PENDING)) {
+        if (tenancyService.existsByName(organizationName)) {
             throw new RequestedNameAlreadyUsedException();
         }
-        if (tenancyService.existsByCode(request.requestedCode())
-                || applicationRepository.existsByRequestedCodeAndStatus(
-                        request.requestedCode(), TenantApplicationStatus.PENDING)) {
+        if (tenancyService.existsByCode(request.requestedCode())) {
             throw new RequestedCodeAlreadyUsedException();
         }
-
-        TenantApplication application = new TenantApplication();
-        application.setOrgName(organizationName);
-        application.setOrgType(request.orgType());
-        application.setRequestedCode(request.requestedCode());
-        application.setContactEmail(request.contactEmail());
-        application.setContactPhone(request.contactPhone());
-        application.setTaxCode(request.taxCode().trim());
-
-        TenantApplication saved = applicationRepository.saveAndFlush(application);
+        Organization saved = tenancyService.submitApplication(organizationName, request.orgType(),
+                request.requestedCode(), request.taxCode().trim(), request.contactEmail(), request.contactPhone());
         eventPublisher.publishEvent(new TenantApplicationSubmittedEvent(
-                saved.getPublicId(), saved.getOrgName(), saved.getRequestedCode(), saved.getContactEmail()));
+                saved.getPublicId(), saved.getName(), saved.getCode(), saved.getContactEmail()));
     }
 
     @Transactional(readOnly = true)
@@ -107,7 +85,7 @@ public class TenantApplicationService {
     @Transactional(readOnly = true)
     public List<TenantApplicationResponse> list(CurrentUser caller) {
         requireOperation(caller, PlatformOperation.APPLICATION_READ, BillingConstants.AUDIT_APPLICATION_READ);
-        return applicationRepository.findAllByOrderByCreatedAtDesc().stream()
+        return tenancyService.listApplications().stream()
                 .map(TenantApplicationMapper::toResponse)
                 .toList();
     }
@@ -120,7 +98,7 @@ public class TenantApplicationService {
     @Transactional(readOnly = true)
     public TenantApplicationResponse get(UUID applicationPublicId, CurrentUser caller) {
         requireOperation(caller, PlatformOperation.APPLICATION_READ, BillingConstants.AUDIT_APPLICATION_READ);
-        return applicationRepository.findByPublicId(applicationPublicId)
+        return tenancyService.findApplication(applicationPublicId)
                 .map(TenantApplicationMapper::toResponse)
                 .orElseThrow(TenantApplicationNotFoundException::new);
     }
@@ -133,22 +111,43 @@ public class TenantApplicationService {
     @Transactional
     public void approve(UUID applicationPublicId, CurrentUser caller) {
         requireOperation(caller, PlatformOperation.APPLICATION_REVIEW, BillingConstants.AUDIT_APPLICATION_REVIEW);
-        TenantApplication application = findPendingForUpdate(applicationPublicId);
+        approvePending(findPendingForUpdate(applicationPublicId), caller);
+    }
+
+    /**
+     * A platform operator creates an organization directly. It is recorded as an application and approved in the
+     * same transaction, so it follows the approval rules exactly: the free student limit from platform settings,
+     * a first HOST_ADMIN for the given email and the credentials email. Packages are granted separately.
+     */
+    @Transactional
+    public DirectOnboardResponse onboardDirect(DirectOnboardRequest request, CurrentUser caller) {
+        requireOperation(caller, PlatformOperation.TENANT_ONBOARD, BillingConstants.AUDIT_TENANT_DIRECT_ONBOARD);
+        String organizationName = request.name().trim();
+        if (tenancyService.existsByName(organizationName)) {
+            throw new RequestedNameAlreadyUsedException();
+        }
+        if (tenancyService.existsByCode(request.code())) {
+            throw new RequestedCodeAlreadyUsedException();
+        }
+        Organization application = tenancyService.submitApplication(organizationName, request.organizationType(),
+                request.code(), request.taxCode().trim(), request.hostEmail().trim(), null);
+        HostAdminCreated hostAdmin = approvePending(application, caller);
+        return new DirectOnboardResponse(application.getPublicId(), application.getCode(), application.getName(),
+                hostAdmin.user().getUsername());
+    }
+
+    private HostAdminCreated approvePending(Organization application, CurrentUser caller) {
         try {
             int freeStudentLimit = platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY);
-
-            Tenant tenant = tenancyService.createTenant(application.getOrgName(), application.getOrgType(),
-                    application.getRequestedCode(), application.getTaxCode(), freeStudentLimit);
+            Organization tenant = tenancyService.approveApplication(application, caller.userId(), freeStudentLimit);
             HostAdminCreated hostAdmin = identityService.createHostAdmin(
                     tenant.getPublicId(), application.getContactEmail());
-
-            application.approve(caller.userId());
-            applicationRepository.saveAndFlush(application);
             audit(caller, BillingConstants.AUDIT_APPLICATION_REVIEW, application.getPublicId(),
                     BillingConstants.AUDIT_APPLICATION_APPROVED_SUMMARY);
             eventPublisher.publishEvent(new TenantApplicationApprovedEvent(
-                    application.getPublicId(), tenant.getPublicId(), application.getOrgName(), tenant.getCode(),
+                    application.getPublicId(), tenant.getPublicId(), application.getName(), tenant.getCode(),
                     application.getContactEmail(), hostAdmin.user().getUsername(), hostAdmin.generatedPassword()));
+            return hostAdmin;
         } catch (DataIntegrityViolationException ex) {
             throw translateApprovalConflict(ex);
         }
@@ -162,22 +161,21 @@ public class TenantApplicationService {
     public TenantApplicationResponse reject(UUID applicationPublicId, RejectApplicationRequest request,
             CurrentUser caller) {
         requireOperation(caller, PlatformOperation.APPLICATION_REVIEW, BillingConstants.AUDIT_APPLICATION_REVIEW);
-        TenantApplication application = findPendingForUpdate(applicationPublicId);
+        Organization application = findPendingForUpdate(applicationPublicId);
         String reason = normalizeRejectReason(request);
-        application.reject(caller.userId(), reason);
-        applicationRepository.saveAndFlush(application);
+        tenancyService.rejectApplication(application, caller.userId(), reason);
         audit(caller, BillingConstants.AUDIT_APPLICATION_REVIEW, application.getPublicId(),
                 BillingConstants.AUDIT_APPLICATION_REJECTED_SUMMARY);
         eventPublisher.publishEvent(new TenantApplicationRejectedEvent(
-                application.getPublicId(), application.getOrgName(), application.getRequestedCode(),
+                application.getPublicId(), application.getName(), application.getCode(),
                 application.getContactEmail(), application.getRejectReason()));
         return TenantApplicationMapper.toResponse(application);
     }
 
-    private TenantApplication findPendingForUpdate(UUID applicationPublicId) {
-        TenantApplication application = applicationRepository.findByPublicIdForUpdate(applicationPublicId)
+    private Organization findPendingForUpdate(UUID applicationPublicId) {
+        Organization application = tenancyService.findApplicationForUpdate(applicationPublicId)
                 .orElseThrow(TenantApplicationNotFoundException::new);
-        if (application.getStatus() != TenantApplicationStatus.PENDING) {
+        if (!application.isPending()) {
             throw new ApplicationNotPendingException();
         }
         return application;
@@ -198,13 +196,13 @@ public class TenantApplicationService {
     }
 
     private RuntimeException translateApprovalConflict(DataIntegrityViolationException ex) {
-        if (containsConstraint(ex, "tenants_code_key") || containsConstraint(ex, "uk_tenants_code")) {
+        if (containsConstraint(ex, "uq_org_code_live")) {
             return new RequestedCodeAlreadyUsedException();
         }
-        if (containsConstraint(ex, "tenants_name_key") || containsConstraint(ex, "uk_tenants_name")) {
+        if (containsConstraint(ex, "uq_org_name_live")) {
             return new RequestedNameAlreadyUsedException();
         }
-        if (containsConstraint(ex, "uk_tenants_tax_code")) {
+        if (containsConstraint(ex, "uq_org_tax_code_approved")) {
             return new RequestedTaxCodeAlreadyUsedException();
         }
         return ex;

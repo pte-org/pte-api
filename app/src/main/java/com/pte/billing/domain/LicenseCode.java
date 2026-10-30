@@ -8,6 +8,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -18,12 +19,12 @@ import java.util.UUID;
 @Entity
 @Table(name = "license_codes", indexes = {
         @Index(name = "idx_license_codes_status_expiry", columnList = "status,code_expires_at")
-})
+}, uniqueConstraints = @UniqueConstraint(name = "uk_license_codes_code", columnNames = "code"))
 @Getter
 @NoArgsConstructor
 public class LicenseCode extends BaseEntity {
 
-    @Column(nullable = false, unique = true, length = 32, updatable = false)
+    @Column(nullable = false, length = 32, updatable = false)
     private String code;
 
     @Column(nullable = false)
@@ -52,6 +53,20 @@ public class LicenseCode extends BaseEntity {
     @Column(length = 255)
     private String revokeReason;
 
+    /** Organization an admin grant was issued for; null for a legacy bearer code. */
+    @Column(updatable = false)
+    private UUID boundTenantId;
+
+    /** Start the admin chose for the granted subscription; null means it started at redemption. */
+    @Column(updatable = false)
+    private Instant requestedStartsAt;
+
+    @Column(length = 64, updatable = false)
+    private String contractReference;
+
+    @Column(length = 500, updatable = false)
+    private String note;
+
     private LicenseCode(String code, UUID planId, UUID issuedBy, Instant issuedAt, Instant codeExpiresAt) {
         this.code = code;
         this.planId = planId;
@@ -63,6 +78,17 @@ public class LicenseCode extends BaseEntity {
     public static LicenseCode issue(String code, UUID planId, UUID issuedBy, Instant issuedAt,
             Instant codeExpiresAt) {
         return new LicenseCode(code, planId, issuedBy, issuedAt, codeExpiresAt);
+    }
+
+    /** A code issued for one organization under a contract; the caller redeems it in the same transaction. */
+    public static LicenseCode grant(String code, UUID planId, UUID issuedBy, Instant issuedAt, UUID boundTenantId,
+            Instant requestedStartsAt, String contractReference, String note) {
+        LicenseCode licenseCode = new LicenseCode(code, planId, issuedBy, issuedAt, null);
+        licenseCode.boundTenantId = boundTenantId;
+        licenseCode.requestedStartsAt = requestedStartsAt;
+        licenseCode.contractReference = contractReference;
+        licenseCode.note = note;
+        return licenseCode;
     }
 
     public void markRedeemed(UUID tenantId, Instant redeemedAt) {

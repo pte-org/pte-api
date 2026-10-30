@@ -2,7 +2,7 @@ package com.pte.scoring.internal.dto.response;
 
 /**
  * What shape a decoded answer payload takes, driven by data actually present
- * on {@code ScoringAnswer} (task type + whether {@code optionsJson} is
+ * on {@code SubmittedAnswerView} (task type + whether {@code optionsJson} is
  * populated) rather than a hardcoded switch over all 23 PTE task types — see
  * {@code AnswerPayloadDecoder}'s class doc for the full rationale.
  */

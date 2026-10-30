@@ -1,6 +1,6 @@
 package com.pte.scoring.dto.response;
 
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import java.util.List;
 import java.util.UUID;
 
@@ -11,7 +11,7 @@ public record ExaminerGuidelinesResponse(
         List<ExaminerTemplateGuidelineItem> templates
 ) {
     public record ExaminerTemplateGuidelineItem(
-            UUID scoreTemplatePublicId,
-            List<ScoreTemplateItemResponse> items
+            UUID examDefinitionPublicId,
+            List<ExamDefinitionItemResponse> items
     ) {}
 }

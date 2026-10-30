@@ -18,9 +18,9 @@ import com.pte.itembank.ItembankService;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.dto.response.QuestionFreezeView;
-import com.pte.scoretemplate.ScoreTemplateService;
-import com.pte.scoretemplate.dto.response.ScoreTemplateItemResponse;
-import com.pte.scoretemplate.dto.response.ScoreTemplateResponse;
+import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
+import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.SecurityRoles;
 import com.pte.shared.audit.AuditLogService;
@@ -43,31 +43,23 @@ import java.util.UUID;
 @Service
 public class BlueprintService {
 
-    private static final List<PteSection> SECTION_ORDER =
-            List.of(PteSection.SPEAKING, PteSection.WRITING, PteSection.READING, PteSection.LISTENING);
-
     private final ExamBlueprintRepository blueprintRepository;
     private final AssessmentAccessPolicy accessPolicy;
     private final ItembankService itembankService;
-    private final ScoreTemplateService scoreTemplateService;
+    private final ExamDefinitionService examDefinitionService;
     private final SnapshotPublishService snapshotPublishService;
     private final AuditLogService auditLogService;
 
     @Autowired
     public BlueprintService(ExamBlueprintRepository blueprintRepository, AssessmentAccessPolicy accessPolicy,
-            ItembankService itembankService, ScoreTemplateService scoreTemplateService,
+            ItembankService itembankService, ExamDefinitionService examDefinitionService,
             SnapshotPublishService snapshotPublishService, AuditLogService auditLogService) {
         this.blueprintRepository = blueprintRepository;
         this.accessPolicy = accessPolicy;
         this.itembankService = itembankService;
-        this.scoreTemplateService = scoreTemplateService;
+        this.examDefinitionService = examDefinitionService;
         this.snapshotPublishService = snapshotPublishService;
         this.auditLogService = auditLogService;
-    }
-
-    /** Compatibility constructor for read-only unit tests and audit callers. */
-    public BlueprintService(ExamBlueprintRepository blueprintRepository, AssessmentAccessPolicy accessPolicy) {
-        this(blueprintRepository, accessPolicy, null, null, null, null);
     }
 
     @Transactional
@@ -211,8 +203,8 @@ public class BlueprintService {
 
     private void replaceItems(ExamBlueprint blueprint, List<BlueprintItemRequest> requestedItems,
             boolean preserveOrder) {
-        ScoreTemplateResponse template = scoreTemplateService.getActive();
-        Map<String, ScoreTemplateItemResponse> templateByTaskType = new HashMap<>();
+        ExamDefinitionResponse template = examDefinitionService.getActive();
+        Map<String, ExamDefinitionItemResponse> templateByTaskType = new HashMap<>();
         template.items().forEach(item -> templateByTaskType.put(
                 TaskTypeCodeCompatibility.normalizeTaskTypeKey(
                         item.taskTypeKey() == null ? item.taskType() : item.taskTypeKey()), item));
@@ -228,7 +220,7 @@ public class BlueprintService {
             String taskTypeKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
                     question.taskTypeKey() == null && question.pteTaskType() != null
                             ? question.pteTaskType().name() : question.taskTypeKey());
-            ScoreTemplateItemResponse templateItem = templateByTaskType.get(taskTypeKey);
+            ExamDefinitionItemResponse templateItem = templateByTaskType.get(taskTypeKey);
             if (templateItem == null) {
                 throw new BlueprintValidationException(AssessmentConstants.BLUEPRINT_ITEM_INVALID);
             }
@@ -246,7 +238,7 @@ public class BlueprintService {
             normalized.sort(Comparator.comparingInt(SortableItem::requestedOrder)
                     .thenComparingInt(SortableItem::inputIndex));
         } else {
-            normalized.sort(Comparator.comparingInt((SortableItem item) -> SECTION_ORDER.indexOf(item.section()))
+            normalized.sort(Comparator.comparingInt((SortableItem item) -> AssessmentConstants.EXAM_SECTION_ORDER.indexOf(item.section()))
                     .thenComparingInt(SortableItem::templateSequence)
                     .thenComparingInt(SortableItem::requestedOrder)
                     .thenComparingInt(SortableItem::inputIndex));
@@ -275,8 +267,8 @@ public class BlueprintService {
                             ? question.pteTaskType().name() : question.taskTypeKey());
             counts.merge(taskTypeKey, 1, Integer::sum);
         });
-        ScoreTemplateResponse template = scoreTemplateService.getActive();
-        for (ScoreTemplateItemResponse templateItem : template.items()) {
+        ExamDefinitionResponse template = examDefinitionService.getActive();
+        for (ExamDefinitionItemResponse templateItem : template.items()) {
             String taskTypeKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(
                     templateItem.taskTypeKey() == null ? templateItem.taskType() : templateItem.taskTypeKey());
             int count = counts.getOrDefault(taskTypeKey, 0);

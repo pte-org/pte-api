@@ -9,7 +9,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -23,11 +22,6 @@ import java.util.UUID;
 public class PracticeAnswerValidationService {
 
     private final ObjectMapper objectMapper;
-
-    /** Kept for focused unit tests that exercise the validation boundary alone. */
-    public PracticeAnswerValidationService() {
-        this(JsonMapper.builder().build());
-    }
 
     @Autowired
     public PracticeAnswerValidationService(ObjectMapper objectMapper) {
@@ -52,7 +46,8 @@ public class PracticeAnswerValidationService {
 
     public void validate(String rendererKey, Integer answerSchemaVersion, String payload,
             ResponseConfidence confidence) {
-        validatePayload(rendererKey, answerSchemaVersion, payload, confidence, true);
+        // Practice no longer asks how confident the student is, so an answer never needs a confidence.
+        validatePayload(rendererKey, answerSchemaVersion, payload, confidence, false);
     }
 
     /** Validates a non-empty draft while allowing confidence to be selected later. */
@@ -74,11 +69,6 @@ public class PracticeAnswerValidationService {
                 || answerSchemaVersion == null || answerSchemaVersion != 1) {
             throw invalidPayload(PracticeConstants.PRACTICE_ANSWER_INVALID,
                     PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
-        }
-        if (!PracticeConstants.PRACTICE_CLIENT_SUPPORTED_RENDERER_KEYS.contains(rendererKey)) {
-            throw new PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME,
-                    PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME_MESSAGE);
         }
 
         JsonNode root;
@@ -108,6 +98,12 @@ public class PracticeAnswerValidationService {
         } else if ("FILL_IN_THE_BLANKS_DROPDOWN_V1".equals(rendererKey)) {
             requireOnlyFields(root, "selections");
             requireNonEmptyObject(root, "selections");
+        } else if ("FILL_IN_THE_BLANKS_TYPE_IN_V1".equals(rendererKey)) {
+            requireOnlyFields(root, "blanks");
+            requireTypeInBlanks(root);
+        } else if ("HIGHLIGHT_INCORRECT_WORDS_V1".equals(rendererKey)) {
+            requireOnlyFields(root, "selectedWordIndexes");
+            requireWordIndexes(root);
         } else if (isTextResponse(rendererKey)) {
             requireOnlyFields(root, "text");
             requireNonBlankText(root, "text");
@@ -123,16 +119,20 @@ public class PracticeAnswerValidationService {
     }
 
     private boolean isSingleChoice(String rendererKey) {
-        return "MC_READING_SINGLE_V1".equals(rendererKey);
+        return "MC_READING_SINGLE_V1".equals(rendererKey) || "MC_LISTENING_SINGLE_V1".equals(rendererKey)
+                || "SELECT_MISSING_WORD_V1".equals(rendererKey)
+                || "HIGHLIGHT_CORRECT_SUMMARY_V1".equals(rendererKey);
     }
 
     private boolean isMultipleChoice(String rendererKey) {
-        return "MC_READING_MULTIPLE_V1".equals(rendererKey);
+        return "MC_READING_MULTIPLE_V1".equals(rendererKey) || "MC_LISTENING_MULTIPLE_V1".equals(rendererKey);
     }
 
     private boolean isTextResponse(String rendererKey) {
         return "SUMMARIZE_WRITTEN_TEXT_V1".equals(rendererKey)
-                || "WRITE_ESSAY_V1".equals(rendererKey);
+                || "WRITE_ESSAY_V1".equals(rendererKey)
+                || "SUMMARIZE_SPOKEN_TEXT_V1".equals(rendererKey)
+                || "WRITE_FROM_DICTATION_V1".equals(rendererKey);
     }
 
     private boolean isRecordingResponse(String rendererKey) {
@@ -190,6 +190,42 @@ public class PracticeAnswerValidationService {
         }
         for (JsonNode entry : value) {
             if (!entry.isTextual() || entry.asText().isBlank()) {
+                throw invalidPayload(PracticeConstants.PRACTICE_ANSWER_INVALID,
+                        PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
+            }
+        }
+    }
+
+    /** Type-in blanks are positional, so empty entries are allowed but at least one must be filled. */
+    private void requireTypeInBlanks(JsonNode root) {
+        JsonNode value = root.path("blanks");
+        boolean anyFilled = false;
+        if (!value.isArray() || value.isEmpty() || value.size() > 100) {
+            throw invalidPayload(PracticeConstants.PRACTICE_ANSWER_INVALID,
+                    PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
+        }
+        for (JsonNode entry : value) {
+            // A comma would shift the comma-joined positions the scorer reads, so it is never valid input.
+            if (!entry.isTextual() || entry.asText().length() > 128 || entry.asText().contains(",")) {
+                throw invalidPayload(PracticeConstants.PRACTICE_ANSWER_INVALID,
+                        PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
+            }
+            anyFilled |= !entry.asText().isBlank();
+        }
+        if (!anyFilled) {
+            throw invalidPayload(PracticeConstants.PRACTICE_ANSWER_INVALID,
+                    PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
+        }
+    }
+
+    private void requireWordIndexes(JsonNode root) {
+        JsonNode value = root.path("selectedWordIndexes");
+        if (!value.isArray() || value.isEmpty() || value.size() > 500) {
+            throw invalidPayload(PracticeConstants.PRACTICE_ANSWER_INVALID,
+                    PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
+        }
+        for (JsonNode entry : value) {
+            if (!entry.isInt() || entry.asInt() < 0) {
                 throw invalidPayload(PracticeConstants.PRACTICE_ANSWER_INVALID,
                         PracticeConstants.PRACTICE_ANSWER_INVALID_MESSAGE);
             }

@@ -3,15 +3,19 @@ package com.pte.scoring.internal.messaging.consumer;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import com.pte.scoring.domain.ScoringAnswer;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
+import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.domain.enums.ScoringMethod;
+import com.pte.scoring.internal.service.objective.AnswerContentReader;
+import com.pte.scoring.support.EvaluationFixtures;
 import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.domain.enums.AiProviderCategory;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.internal.config.AiProviderProperties;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
-import com.pte.scoring.internal.repository.ScoringAnswerRepository;
-import com.pte.scoring.internal.service.AiScoringResultPersistenceService;
+import com.pte.scoring.internal.repository.AiEvaluationRepository;
+import com.pte.scoring.internal.service.ai.AiScoringResultPersistenceService;
 import com.pte.scoring.internal.vendor.AiAnswerScorer;
 import com.pte.scoring.internal.vendor.AiJobBudget;
 import com.pte.scoring.internal.vendor.AiProviderException;
@@ -44,6 +48,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -60,13 +65,15 @@ class AiScoringWorkerTest {
     private static final Instant NOW = Instant.parse("2026-10-11T10:00:00Z");
 
     @Mock
-    private ScoringAnswerRepository scoringAnswerRepository;
+    private AiEvaluationRepository scoringAnswerRepository;
     @Mock
     private SpeechScoringClient speechScoringClient;
     @Mock
     private EssayScoringClient essayScoringClient;
     @Mock
     private AiScoringResultPersistenceService resultPersistenceService;
+    @Mock
+    private AnswerContentReader contentReader;
 
     private AiScoringWorker worker;
 
@@ -77,7 +84,7 @@ class AiScoringWorkerTest {
 
     private AiScoringWorker workerWith(List<AiAnswerScorer> scorers) {
         return new AiScoringWorker(scoringAnswerRepository, speechScoringClient, essayScoringClient, scorers,
-                resultPersistenceService, Clock.fixed(NOW, ZoneOffset.UTC), new AiProviderProperties());
+                resultPersistenceService, Clock.fixed(NOW, ZoneOffset.UTC), new AiProviderProperties(), contentReader);
     }
 
     @Test
@@ -85,8 +92,8 @@ class AiScoringWorkerTest {
         AiAnswerScorer scorer = org.mockito.Mockito.mock(AiAnswerScorer.class);
         when(scorer.taskTypes()).thenReturn(Set.of(ScoringConstants.TASK_TYPE_READ_ALOUD));
         when(scorer.score(any(AiScoringRequest.class))).thenReturn(speechResult());
-        ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
-        answer.applyQuestionContent("the passage", null, null, null, null);
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        content(answer, "payload", "the passage");
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
 
@@ -110,7 +117,7 @@ class AiScoringWorkerTest {
         AiAnswerScorer scorer = org.mockito.Mockito.mock(AiAnswerScorer.class);
         when(scorer.taskTypes()).thenReturn(Set.of(ScoringConstants.TASK_TYPE_READ_ALOUD));
         stubSpeechClient();
-        ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_DESCRIBE_IMAGE);
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_DESCRIBE_IMAGE);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
 
@@ -125,7 +132,7 @@ class AiScoringWorkerTest {
         AiAnswerScorer scorer = org.mockito.Mockito.mock(AiAnswerScorer.class);
         when(scorer.taskTypes()).thenReturn(Set.of(ScoringConstants.TASK_TYPE_READ_ALOUD));
         when(scorer.score(any())).thenThrow(new AiProviderException(AiFailureReason.AUDIO_UNSUPPORTED, "bad audio"));
-        ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
 
@@ -151,7 +158,7 @@ class AiScoringWorkerTest {
     @Test
     void worker_aiSpeechJob_readsTheAnswerFromTheRowAndRoutesToSpeechClient() {
         stubSpeechClient();
-        ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_REPEAT_SENTENCE);
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_REPEAT_SENTENCE);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
 
@@ -167,7 +174,7 @@ class AiScoringWorkerTest {
     @Test
     void worker_aiTextJob_routesToEssayClient() {
         stubEssayClient();
-        ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
 
@@ -183,7 +190,7 @@ class AiScoringWorkerTest {
     @Test
     void worker_vendorCallRunsInsideTheJobBudget() {
         AtomicReference<Optional<Duration>> remainingDuringCall = new AtomicReference<>();
-        ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
         when(speechScoringClient.score(anyString(), anyString(), any(UUID.class))).thenAnswer(invocation -> {
@@ -200,7 +207,7 @@ class AiScoringWorkerTest {
 
     @Test
     void worker_vendorFailureMarksTheAnswerFailedWithItsReason() {
-        ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
         when(speechScoringClient.score(anyString(), anyString(), any(UUID.class)))
@@ -216,7 +223,7 @@ class AiScoringWorkerTest {
 
     @Test
     void worker_vendorFailureWithoutReasonIsRecordedAsInternalError() {
-        ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
         when(essayScoringClient.score(anyString(), anyString()))
@@ -231,7 +238,7 @@ class AiScoringWorkerTest {
 
     @Test
     void worker_rejectsUnknownScoringMethodWithoutCallingEitherClient() {
-        ScoringAnswer answer = dispatched("UNKNOWN");
+        AiEvaluation answer = dispatched("UNKNOWN");
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
 
@@ -244,7 +251,7 @@ class AiScoringWorkerTest {
 
     @Test
     void worker_supersededTokenDoesNotCallTheVendor() {
-        ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
         AiScoringJob oldJob = job(answer, "AI_SPEECH");
         answer.markAiDispatched(NOW.plusSeconds(1));
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
@@ -257,7 +264,7 @@ class AiScoringWorkerTest {
 
     @Test
     void worker_jobWithoutTokenIsIgnored() {
-        ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
 
         worker.onAiScoringJob(new AiScoringJob(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
                 answer.getSessionPublicId(), answer.getTenantId(), "AI_SPEECH", null));
@@ -268,9 +275,9 @@ class AiScoringWorkerTest {
 
     @Test
     void worker_redeliveredTerminalAnswer_doesNotCallVendorAgain() {
-        ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
         AiScoringJob job = job(answer, "AI_SPEECH");
-        answer.markScored(80);
+        answer.markScored(80, java.time.Instant.now());
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
 
@@ -282,7 +289,7 @@ class AiScoringWorkerTest {
 
     @Test
     void worker_doesNotWriteAiScoreAfterPublicationBarrier() {
-        ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
         when(resultPersistenceService.isPublicationLocked(answer.getTenantId(), answer.getSessionPublicId()))
@@ -297,7 +304,7 @@ class AiScoringWorkerTest {
 
     @Test
     void worker_deadLetterMarksTheDispatchFailedAsInternalError() {
-        ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
 
         worker.onDeadLettered(job(answer, "AI_SPEECH"));
 
@@ -317,9 +324,8 @@ class AiScoringWorkerTest {
             when(scorer.taskTypes()).thenReturn(Set.of(ScoringConstants.TASK_TYPE_READ_ALOUD));
             when(scorer.score(any())).thenThrow(new AiProviderException(AiFailureReason.AUDIO_UNSUPPORTED,
                     "transcript-secret-words"));
-            ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
-            answer.setPayload("candidate-audio-reference");
-            answer.applyQuestionContent("passage-secret-words", null, null, null, null);
+            AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
+            content(answer, "candidate-audio-reference", "passage-secret-words");
             when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                     .thenReturn(Optional.of(answer));
 
@@ -340,7 +346,7 @@ class AiScoringWorkerTest {
 
     @Test
     void worker_deadLetterWithoutTokenIsIgnored() {
-        ScoringAnswer answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
 
         worker.onDeadLettered(new AiScoringJob(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
                 answer.getSessionPublicId(), answer.getTenantId(), "AI_SPEECH", null));
@@ -348,21 +354,24 @@ class AiScoringWorkerTest {
         verifyNoInteractions(resultPersistenceService);
     }
 
-    private ScoringAnswer dispatched(String taskType) {
-        ScoringAnswer answer = new ScoringAnswer();
-        answer.setAnswerPublicId(UUID.randomUUID());
-        answer.setAttemptPublicId(UUID.randomUUID());
-        answer.setPinnedItemPublicId(UUID.randomUUID());
-        answer.setSessionPublicId(UUID.randomUUID());
-        answer.setTenantId(UUID.randomUUID());
-        answer.setTaskType(taskType);
-        answer.setPayload("payload");
-        answer.setCorrectAnswerText("reference");
+    private AiEvaluation dispatched(String taskType) {
+        AiEvaluation answer = EvaluationFixtures.ai(taskType, ScoringMethod.AI_SPEECH);
         answer.markAiDispatched(NOW);
+        content(answer, "payload", null);
         return answer;
     }
 
-    private AiScoringJob job(ScoringAnswer answer, String scoringMethod) {
+    /** What the attempt holds for this answer: the candidate's payload and the question's passage. */
+    private void content(AiEvaluation answer, String payload, String promptText) {
+        SubmittedAnswerView view = new SubmittedAnswerView(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
+                answer.getItemPublicId(), answer.getSessionPublicId(), answer.getTenantId(),
+                answer.getExamDefinitionPublicId(), answer.getTaskType(), payload, "reference", null, false,
+                promptText, null, null, null, null, answer.getSection(), null, null, null, null, null);
+        lenient().when(contentReader.one(answer.getAnswerPublicId(), answer.getTenantId()))
+                .thenReturn(Optional.of(view));
+    }
+
+    private AiScoringJob job(AiEvaluation answer, String scoringMethod) {
         return new AiScoringJob(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
                 answer.getSessionPublicId(), answer.getTenantId(), scoringMethod, answer.getDispatchToken());
     }

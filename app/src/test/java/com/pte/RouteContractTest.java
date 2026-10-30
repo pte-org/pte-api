@@ -156,10 +156,9 @@ class RouteContractTest {
     void billingRoutesUseTheVersionedResourceContract() {
         Set<String> expected = Set.of(
                 "/api/v1/applications",
-                "/api/v1/applications/{publicId}/approval",
-                "/api/v1/applications/{publicId}/rejection",
+                "/api/v1/applications/{publicId}/status",
                 "/api/v1/plans",
-                "/api/v1/plans/{publicId}/activation",
+                "/api/v1/plans/{publicId}/status",
                 "/api/v1/orders",
                 "/api/v1/orders/{publicId}",
                 "/api/v1/subscriptions",

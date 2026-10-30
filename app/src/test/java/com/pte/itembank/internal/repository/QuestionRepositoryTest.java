@@ -24,6 +24,9 @@ class QuestionRepositoryTest {
     @Autowired
     private QuestionRepository questionRepository;
 
+    @Autowired
+    private jakarta.persistence.EntityManager entityManager;
+
     @Test
     void pageQuery_filtersBeforePaginationAndSupportsPublicIdSearch() {
         Question matching = persist("Packet switching", "A network packet carries data", "READING",
@@ -113,6 +116,29 @@ class QuestionRepositoryTest {
         assertThat(questionRepository.existsByDeletedFalseAndVisibilityAndStatusAndCurrentTrueAndPoolAndTaskTypeKey(
                 Visibility.SHARED, QuestionStatus.APPROVED, QuestionPool.PRACTICE, "MC_READING_SINGLE"))
                 .isTrue();
+    }
+
+    @Test
+    void optionsAreAChildTableReloadedInAuthoredOrderWithStableIds() {
+        Question question = persist("Ordering", "prompt", "READING", QuestionStatus.APPROVED);
+        QuestionOption second = new QuestionOption();
+        second.setText("second");
+        second.setOrderIndex(1);
+        QuestionOption first = new QuestionOption();
+        first.setText("first");
+        first.setCorrect(true);
+        first.setOrderIndex(0);
+        question.addOption(second);
+        question.addOption(first);
+        questionRepository.saveAndFlush(question);
+        UUID firstId = first.getPublicId();
+        entityManager.clear();
+
+        Question reloaded = questionRepository.findWithOptionsByPublicId(question.getPublicId()).orElseThrow();
+
+        assertThat(reloaded.getOptions()).extracting(QuestionOption::getText).containsExactly("first", "second");
+        assertThat(reloaded.getOptions().get(0).getPublicId()).isEqualTo(firstId);
+        assertThat(reloaded.getOptions().get(0).isCorrect()).isTrue();
     }
 
     private Question persist(String title, String prompt, String section, QuestionStatus status) {

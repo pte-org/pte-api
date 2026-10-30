@@ -11,16 +11,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import javax.sql.DataSource;
-import java.sql.Connection;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -59,16 +55,7 @@ class InboxReadStorePostgresIntegrationTest {
         dataSource = new DriverManagerDataSource(url + (url.contains("?") ? "&" : "?")
                 + "currentSchema=" + schema, user, password);
         jdbc = new JdbcTemplate(dataSource);
-        jdbc.execute("CREATE TABLE users (public_id UUID PRIMARY KEY)");
-        jdbc.execute("CREATE TABLE tenants (public_id UUID PRIMARY KEY)");
-        jdbc.update("INSERT INTO users(public_id) VALUES (?)", host);
-        jdbc.update("INSERT INTO tenants(public_id) VALUES (?)", tenant);
-        try (Connection connection = dataSource.getConnection()) {
-            ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V72__notification_inbox_foundation.sql"));
-            ScriptUtils.executeSqlScript(connection,
-                    new ClassPathResource("db/migration/V73__notification_inbox_snapshots.sql"));
-        }
+        InboxTestSchema.load(dataSource, schema, host);
         transaction = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         deliveryStore = new InboxDeliveryStore(new NamedParameterJdbcTemplate(dataSource));
         readStore = new InboxReadStore(new NamedParameterJdbcTemplate(dataSource));

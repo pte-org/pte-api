@@ -104,6 +104,15 @@ public final class SessionConstants {
             "Only an unpublished exam draft can be deleted.";
     public static final String SESSION_WINDOW_OUTSIDE_SUBSCRIPTION_FRIENDLY =
             "The exam window must fit within the selected subscription period.";
+    public static final String SESSION_WINDOW_OUTSIDE_SUBSCRIPTION_RANGE_FRIENDLY =
+            "The exam window must fit within the selected subscription period (%s – %s).";
+    public static final String SESSION_SUBSCRIPTION_NOT_STARTED = "SESSION_SUBSCRIPTION_NOT_STARTED";
+    public static final String SESSION_SUBSCRIPTION_NOT_STARTED_FRIENDLY =
+            "This exam cannot open yet: its subscription starts on %s.";
+    /** Subscription dates are shown as VN calendar days. */
+    public static final java.time.format.DateTimeFormatter CONTRACT_DATE =
+            java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")
+                    .withZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
     public static final String SESSION_CAPACITY_EXCEEDS_SUBSCRIPTION_FRIENDLY =
             "The requested exam capacity is higher than the selected subscription limit.";
     public static final String SESSION_ENROLLMENTS_EXCEED_SUBSCRIPTION_FRIENDLY =
@@ -205,4 +214,10 @@ public final class SessionConstants {
 
     private SessionConstants() {
     }
+
+    /** Version tag of the seeded random exam generator, reported by the generation endpoint. */
+    public static final String EXAM_GENERATION_ALGORITHM = "PTE_SEEDED_V1";
+
+    public static final String GRADING_ALREADY_FROZEN = "Grading of this session is already frozen";
+    public static final String PUBLICATION_ALREADY_LOCKED = "Another publication already locked this session";
 }

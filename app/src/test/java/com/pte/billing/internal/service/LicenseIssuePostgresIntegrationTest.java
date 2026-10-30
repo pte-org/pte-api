@@ -1,13 +1,23 @@
 package com.pte.billing.internal.service;
 
+import com.pte.billing.internal.service.license.LicenseCodeGenerator;
+import com.pte.billing.internal.service.license.LicenseCodePersistenceService;
+import com.pte.billing.internal.service.license.LicenseCodeService;
+import com.pte.billing.internal.service.license.LicenseKeyGenerator;
+import com.pte.billing.internal.service.subscription.SubscriptionActivationService;
+import com.pte.billing.internal.service.subscription.SubscriptionPersistenceService;
+import com.pte.shared.idempotency.IdempotencyKeyService;
+import com.pte.shared.idempotency.domain.IdempotencyKey;
+import com.pte.shared.idempotency.domain.IdempotencyScope;
+import com.pte.shared.idempotency.internal.repository.IdempotencyKeyRepository;
 import com.pte.billing.domain.*;
 import com.pte.billing.domain.enums.*;
 import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.repository.*;
-import com.pte.billing.internal.exception.LicenseCodeException;
+import com.pte.billing.internal.exception.license.LicenseCodeException;
 import com.pte.billing.internal.exception.SubscriptionActivationException;
-import com.pte.billing.internal.dto.request.PlanTransitionRequest;
+import com.pte.billing.internal.dto.request.plan.PlanTransitionRequest;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.config.ClockConfig;
 import com.pte.shared.security.CurrentUser;
@@ -16,7 +26,9 @@ import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -43,7 +55,8 @@ import static org.mockito.Mockito.*;
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import({LicenseCodeService.class, LicenseCodePersistenceService.class, LicenseCodeGenerator.class,
         SubscriptionActivationService.class, SubscriptionPersistenceService.class, LicenseKeyGenerator.class,
-        ClockConfig.class, PlanService.class, AuditLogService.class})
+        ClockConfig.class, PlanService.class, AuditLogService.class, IdempotencyKeyService.class})
+@ImportAutoConfiguration(JacksonAutoConfiguration.class)
 @EnabledIfSystemProperty(named = "lifecycle.test.db.url", matches = ".+")
 @Timeout(120)
 class LicenseIssuePostgresIntegrationTest {
@@ -59,10 +72,10 @@ class LicenseIssuePostgresIntegrationTest {
     @Autowired LicenseCodeService service;
     @Autowired LicenseCodePersistenceService persistence;
     @Autowired LicenseCodeRepository codes;
-    @Autowired PlanRepository plans;
+    @Autowired ServicePlanRepository plans;
     @Autowired PlanService planService;
     @Autowired SubscriptionRepository subscriptions;
-    @MockitoSpyBean LicenseIssueIntentRepository intents;
+    @MockitoSpyBean IdempotencyKeyRepository idempotency;
     @MockitoSpyBean LicenseCodeGenerator generator;
     @MockitoSpyBean SubscriptionRepository subscriptionSpy;
     @MockitoBean TenancyService tenancy;
@@ -70,9 +83,9 @@ class LicenseIssuePostgresIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     private final CurrentUser admin = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
     private <T> T tx(Supplier<T> action) { return new TransactionTemplate(transactions).execute(status -> action.get()); }
-    private Plan plan(PlanType type) {
+    private ServicePlan plan(PlanType type) {
         return tx(() -> {
-            Plan plan = new Plan(); plan.setName("Phase04 fixture"); plan.setType(type);
+            ServicePlan plan = new ServicePlan(); plan.setName("Phase04 fixture"); plan.setType(type);
             plan.setPrice(BigDecimal.TEN); plan.setCurrency("VND"); plan.setStatus(PlanStatus.ACTIVE);
             if (type == PlanType.EXAM_PACKAGE) { plan.setDurationDays(30); plan.setMaxStudentsPerSession(20); }
             else plan.setExtraStudentSlots(10);
@@ -92,47 +105,68 @@ class LicenseIssuePostgresIntegrationTest {
         }
     }
 
+    private Optional<IdempotencyKey> claim(UUID key) {
+        return tx(() -> idempotency.findByScopeAndKey(IdempotencyScope.LICENSE_ISSUE,
+                admin.userId() + ":" + key, new UUID(0L, 0L)));
+    }
+
     @Test void tenSameIntentRacesCommitOneCodeAndReplayOriginalIdentity() throws Exception {
-        Plan plan = plan(PlanType.EXAM_PACKAGE);
+        ServicePlan plan = plan(PlanType.EXAM_PACKAGE);
         for (int i = 0; i < 10; i++) {
             UUID key = UUID.randomUUID();
             List<LicenseIssueReceipt> results = Collections.synchronizedList(new ArrayList<>());
             Runnable issue = () -> results.add(service.issue(plan.getPublicId(), null, key, admin));
-            assertThat(race(issue, issue)).containsOnlyNulls();
-            assertThat(results).hasSize(2);
-            assertThat(results.get(0).publicId()).isEqualTo(results.get(1).publicId());
-            LicenseIssueIntent intent = tx(() -> intents.findByActorPublicIdAndOperationAndIdempotencyKey(
-                    admin.userId(), "ISSUE_LICENSE_CODE", key).orElseThrow());
-            assertThat(tx(() -> codes.findByPublicId(intent.getLicenseCodePublicId()))).isPresent();
-            assertThat(service.issue(plan.getPublicId(), null, key, admin).publicId()).isEqualTo(intent.getLicenseCodePublicId());
+            // The loser of a same-key race is told to retry (409) instead of waiting for the receipt.
+            assertThat(race(issue, issue)).filteredOn(Objects::nonNull)
+                    .allSatisfy(failure -> assertThat(failure)
+                            .isInstanceOf(com.pte.shared.idempotency.internal.exception.IdempotencyKeyInFlightException.class));
+            assertThat(results).isNotEmpty();
+            UUID issuedId = UUID.fromString(tools.jackson.databind.json.JsonMapper.builder().build()
+                    .readTree(claim(key).orElseThrow().getResult()).path("licenseCodePublicId").asText());
+            assertThat(results).allSatisfy(receipt -> assertThat(receipt.publicId()).isEqualTo(issuedId));
+            assertThat(tx(() -> codes.findByPublicId(issuedId))).isPresent();
+            assertThat(service.issue(plan.getPublicId(), null, key, admin).publicId()).isEqualTo(issuedId);
         }
         assertThat(tx(() -> codes.findAll().stream().filter(c -> c.getPlanId().equals(plan.getPublicId())).count())).isEqualTo(10);
     }
 
     @Test void tenDifferentPayloadRacesRejectLoserWithoutOrphanCode() throws Exception {
         for (int i = 0; i < 10; i++) {
-            Plan one = plan(PlanType.EXAM_PACKAGE), two = plan(PlanType.EXAM_PACKAGE);
+            ServicePlan one = plan(PlanType.EXAM_PACKAGE), two = plan(PlanType.EXAM_PACKAGE);
             UUID key = UUID.randomUUID();
             List<Throwable> result = race(() -> service.issue(one.getPublicId(), null, key, admin),
                     () -> service.issue(two.getPublicId(), null, key, admin));
-            assertThat(result.stream().filter(Objects::nonNull).toList()).singleElement().isInstanceOf(LicenseCodeException.class);
+            // A racing loser cannot see the uncommitted winner, so it is told to retry; both answers are 409.
+            assertThat(result.stream().filter(Objects::nonNull).toList()).singleElement()
+                    .isInstanceOfAny(LicenseCodeException.class,
+                            com.pte.shared.idempotency.internal.exception.IdempotencyKeyInFlightException.class);
             assertThat(tx(() -> codes.findAll().stream().filter(c -> Set.of(one.getPublicId(), two.getPublicId()).contains(c.getPlanId())).count())).isEqualTo(1);
+            // Once the winner committed, reusing the key with the other payload is a key-reuse rejection.
+            List<Object> retries = new ArrayList<>();
+            for (ServicePlan plan : List.of(one, two)) {
+                try { retries.add(service.issue(plan.getPublicId(), null, key, admin)); }
+                catch (LicenseCodeException ex) { retries.add(ex.getMessage()); }
+            }
+            assertThat(retries).filteredOn(LicenseIssueReceipt.class::isInstance).singleElement()
+                    .satisfies(receipt -> assertThat(((LicenseIssueReceipt) receipt).replayed()).isTrue());
+            assertThat(retries).containsOnlyOnce(BillingConstants.LICENSE_CODE_IDEMPOTENCY_KEY_REUSED);
         }
     }
 
-    @Test void intentFailureAfterCodeInsertRollsBackBothRows() {
-        Plan plan = plan(PlanType.EXAM_PACKAGE); UUID key = UUID.randomUUID();
-        doThrow(new org.springframework.dao.DataIntegrityViolationException("injected intent failure"))
-                .when(intents).saveAndFlush(any(LicenseIssueIntent.class));
+    @Test void failureWhileClaimingTheKeyLeavesNeitherCodeNorClaim() {
+        ServicePlan plan = plan(PlanType.EXAM_PACKAGE); UUID key = UUID.randomUUID();
+        doThrow(new org.springframework.dao.DataIntegrityViolationException("injected claim failure"))
+                .when(idempotency).saveAndFlush(any(IdempotencyKey.class));
         try {
-            assertThatThrownBy(() -> service.issue(plan.getPublicId(), null, key, admin)).isInstanceOf(LicenseCodeException.class);
+            assertThatThrownBy(() -> service.issue(plan.getPublicId(), null, key, admin))
+                    .isInstanceOf(com.pte.shared.idempotency.internal.exception.IdempotencyKeyInFlightException.class);
             assertThat(tx(() -> codes.findAll().stream().filter(c -> c.getPlanId().equals(plan.getPublicId())).count())).isZero();
-            assertThat(tx(() -> intents.findByActorPublicIdAndOperationAndIdempotencyKey(admin.userId(), "ISSUE_LICENSE_CODE", key))).isEmpty();
-        } finally { reset(intents); }
+            assertThat(claim(key)).isEmpty();
+        } finally { reset(idempotency); }
     }
 
     @Test void replaySurvivesExpiryAndPlanArchive() {
-        Plan plan = plan(PlanType.EXAM_PACKAGE); UUID key = UUID.randomUUID();
+        ServicePlan plan = plan(PlanType.EXAM_PACKAGE); UUID key = UUID.randomUUID();
         LicenseIssueReceipt issued = service.issue(plan.getPublicId(), null, key, admin);
         tx(() -> { LicenseCode code = codes.findByPublicId(issued.publicId()).orElseThrow(); code.expire(); return codes.saveAndFlush(code); });
         planService.archive(plan.getPublicId(), new PlanTransitionRequest(plan.getVersion()));
@@ -142,12 +176,12 @@ class LicenseIssuePostgresIntegrationTest {
     }
 
     @Test void legacyIssuedCodeOnArchivedPlanFailsClosedAndRollsBackClaim() {
-        Plan plan = plan(PlanType.EXAM_PACKAGE);
+        ServicePlan plan = plan(PlanType.EXAM_PACKAGE);
         LicenseCode code = tx(() -> codes.saveAndFlush(LicenseCode.issue(
                 "ARCHIVE-" + UUID.randomUUID().toString().substring(0, 20).toUpperCase(Locale.ROOT),
                 plan.getPublicId(), admin.userId(), Instant.now(), null)));
         tx(() -> {
-            Plan archived = plans.findByPublicIdForUpdate(plan.getPublicId()).orElseThrow();
+            ServicePlan archived = plans.findByPublicIdForUpdate(plan.getPublicId()).orElseThrow();
             archived.setStatus(PlanStatus.ARCHIVED);
             return plans.saveAndFlush(archived);
         });
@@ -167,7 +201,7 @@ class LicenseIssuePostgresIntegrationTest {
     }
 
     @Test void capacityNewIssueIsBlockedButLegacyCodeStillGrantsQuota() {
-        Plan plan = plan(PlanType.STUDENT_CAPACITY);
+        ServicePlan plan = plan(PlanType.STUDENT_CAPACITY);
         assertThatThrownBy(() -> service.issue(plan.getPublicId(), null, UUID.randomUUID(), admin)).isInstanceOf(LicenseCodeException.class);
         UUID tenant = UUID.randomUUID(), grant = UUID.randomUUID();
         when(tenancy.grantQuota(eq(tenant), eq(10), anyString())).thenReturn(grant);
@@ -179,7 +213,7 @@ class LicenseIssuePostgresIntegrationTest {
     }
 
     @Test void tenTwoTenantRedemptionsHaveOneCommittedSubscription() throws Exception {
-        Plan plan = plan(PlanType.EXAM_PACKAGE);
+        ServicePlan plan = plan(PlanType.EXAM_PACKAGE);
         for (int i = 0; i < 10; i++) {
             LicenseIssueReceipt receipt = service.issue(plan.getPublicId(), null, UUID.randomUUID(), admin);
             LicenseCode code = tx(() -> codes.findByPublicId(receipt.publicId()).orElseThrow());
@@ -196,7 +230,7 @@ class LicenseIssuePostgresIntegrationTest {
 
     @Test void tenTokenCollisionsRetryAfterRollbackWithoutCreatingOrphanIntents() {
         for (int i = 0; i < 10; i++) {
-            Plan plan = plan(PlanType.EXAM_PACKAGE);
+            ServicePlan plan = plan(PlanType.EXAM_PACKAGE);
             LicenseIssueReceipt original = service.issue(plan.getPublicId(), null, UUID.randomUUID(), admin);
             String collision = tx(() -> codes.findByPublicId(original.publicId()).orElseThrow().getCode());
             String unique = "NEW-" + UUID.randomUUID().toString().substring(0, 20).toUpperCase(Locale.ROOT);
@@ -210,7 +244,7 @@ class LicenseIssuePostgresIntegrationTest {
     }
 
     @Test void linkageFailureRollsBackClaimAndInsertedSubscription() {
-        Plan plan = plan(PlanType.EXAM_PACKAGE);
+        ServicePlan plan = plan(PlanType.EXAM_PACKAGE);
         LicenseIssueReceipt receipt = service.issue(plan.getPublicId(), null, UUID.randomUUID(), admin);
         LicenseCode code = tx(() -> codes.findByPublicId(receipt.publicId()).orElseThrow());
         UUID tenant = UUID.randomUUID();
@@ -226,7 +260,7 @@ class LicenseIssuePostgresIntegrationTest {
     }
 
     @Test void databaseRedeemPredicateRejectsExpiryAtOrBeforeExactMicrosecondBoundary() {
-        Plan plan = plan(PlanType.EXAM_PACKAGE);
+        ServicePlan plan = plan(PlanType.EXAM_PACKAGE);
         Instant now = Instant.parse("2030-01-01T00:00:00Z");
         for (long offset : new long[]{-1, 0, 1}) {
             LicenseCode code = tx(() -> codes.saveAndFlush(LicenseCode.issue(
@@ -238,45 +272,5 @@ class LicenseIssuePostgresIntegrationTest {
             assertThat(tx(() -> codes.findByPublicId(code.getPublicId()).orElseThrow().getStatus()))
                     .isEqualTo(offset > 0 ? LicenseCodeStatus.REDEEMED : LicenseCodeStatus.ISSUED);
         }
-    }
-
-    @Test void failureAfterBothInsertsStillRollsBackSuccessfulIntentAndCode() {
-        Plan plan = plan(PlanType.EXAM_PACKAGE); UUID key = UUID.randomUUID();
-        jdbc.execute("""
-                create or replace function migration_clean.phase04_fail_intent_insert()
-                returns trigger language plpgsql as $$
-                begin
-                    raise exception 'phase04 injected failure after intent insert';
-                end;
-                $$
-                """);
-        jdbc.execute("""
-                create trigger phase04_fail_intent_insert_trigger
-                after insert on migration_clean.license_issue_intents
-                for each row execute function migration_clean.phase04_fail_intent_insert()
-                """);
-        try {
-            assertThatThrownBy(() -> service.issue(plan.getPublicId(), null, key, admin)).isInstanceOf(RuntimeException.class);
-            assertThat(tx(() -> codes.findAll().stream().filter(c -> c.getPlanId().equals(plan.getPublicId())).count())).isZero();
-            assertThat(tx(() -> intents.findByActorPublicIdAndOperationAndIdempotencyKey(admin.userId(), "ISSUE_LICENSE_CODE", key))).isEmpty();
-        } finally {
-            jdbc.execute("drop trigger if exists phase04_fail_intent_insert_trigger on migration_clean.license_issue_intents");
-            jdbc.execute("drop function if exists migration_clean.phase04_fail_intent_insert()");
-        }
-    }
-
-    @Test void migrationPreservesLegacyLicenseRowsAndAddsOnlyIntentStorage() {
-        String schema = "phase04_legacy_" + UUID.randomUUID().toString().replace("-", "");
-        Flyway.configure().dataSource(URL, "codex_lifecycle_test", "").schemas(schema)
-                .defaultSchema(schema).locations("classpath:db/migration").target("78").load().migrate();
-        var jdbc = new org.springframework.jdbc.core.JdbcTemplate(new org.springframework.jdbc.datasource.DriverManagerDataSource(
-                "jdbc:postgresql://127.0.0.1:55439/lifecycle_test?currentSchema=" + schema, "codex_lifecycle_test", ""));
-        UUID id = UUID.randomUUID();
-        jdbc.update("insert into license_codes(public_id,created_at,updated_at,code,plan_id,status,issued_by,issued_at) values (?,now(),now(),?,?,'ISSUED',?,now())",
-                id, "LEGACY-MIGRATION-FIXTURE", UUID.randomUUID(), admin.userId());
-        Flyway.configure().dataSource(URL, "codex_lifecycle_test", "").schemas(schema)
-                .defaultSchema(schema).locations("classpath:db/migration").load().migrate();
-        assertThat(jdbc.queryForObject("select count(*) from license_codes where public_id = ?", Long.class, id)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("select count(*) from license_issue_intents", Long.class)).isZero();
     }
 }

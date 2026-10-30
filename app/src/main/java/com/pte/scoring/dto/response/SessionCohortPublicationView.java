@@ -17,4 +17,9 @@ public record SessionCohortPublicationView(
         requiredAttemptPublicIds = requiredAttemptPublicIds == null ? List.of() : List.copyOf(requiredAttemptPublicIds);
         excludedAttemptPublicIds = excludedAttemptPublicIds == null ? List.of() : List.copyOf(excludedAttemptPublicIds);
     }
+
+    /** Whether the session is graded by assigned examiners, which adds session-level publication blockers. */
+    public boolean manualExaminer() {
+        return "MANUAL_EXAMINER".equals(markingMode);
+    }
 }

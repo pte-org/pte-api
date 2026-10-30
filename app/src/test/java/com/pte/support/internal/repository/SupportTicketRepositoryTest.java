@@ -2,7 +2,6 @@ package com.pte.support.internal.repository;
 
 import com.pte.support.domain.SupportTicket;
 import com.pte.support.domain.enums.TicketCategory;
-import com.pte.support.domain.enums.TicketStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;

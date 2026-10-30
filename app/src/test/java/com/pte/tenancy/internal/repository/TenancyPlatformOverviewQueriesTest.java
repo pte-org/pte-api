@@ -4,8 +4,8 @@ import com.pte.tenancy.PlatformTenantCounts;
 import com.pte.tenancy.RecentTenantView;
 import com.pte.tenancy.TenancyOverviewService;
 import com.pte.tenancy.TenantSeatLimit;
-import com.pte.tenancy.domain.Tenant;
-import com.pte.tenancy.domain.enums.TenantStatus;
+import com.pte.tenancy.domain.Organization;
+import com.pte.tenancy.domain.enums.OrganizationStatus;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
@@ -35,9 +35,6 @@ class TenancyPlatformOverviewQueriesTest {
     private static final Instant NOV_START = Instant.parse("2026-10-31T17:00:00Z");
 
     @Autowired
-    private TenantRepository tenants;
-
-    @Autowired
     private OrganizationRepository organizations;
 
     @Autowired
@@ -50,11 +47,11 @@ class TenancyPlatformOverviewQueriesTest {
 
     @BeforeEach
     void setUp() {
-        service = new TenancyOverviewService(tenants);
+        service = new TenancyOverviewService(organizations);
     }
 
-    private Tenant tenant(String name, String type, TenantStatus status, boolean deleted, int seats, Instant createdAt) {
-        Tenant tenant = new Tenant();
+    private Organization tenant(String name, String type, OrganizationStatus status, boolean deleted, int seats, Instant createdAt) {
+        Organization tenant = new Organization();
         tenant.setCode("c-" + UUID.randomUUID().toString().substring(0, 12));
         tenant.setName(name + "-" + UUID.randomUUID());
         tenant.setOrganizationType(type);
@@ -62,32 +59,32 @@ class TenancyPlatformOverviewQueriesTest {
         tenant.setStudentLimit(seats);
         tenant.setStatus(status);
         tenant.setDeleted(deleted);
-        tenants.saveAndFlush(tenant);
+        organizations.saveAndFlush(tenant);
         if (createdAt != null) {
             // createdAt is @CreationTimestamp and not updatable: rewrite it with a bulk update.
-            em.createQuery("update Tenant t set t.createdAt = :createdAt where t.id = :id")
+            em.createQuery("update Organization t set t.createdAt = :createdAt where t.id = :id")
                     .setParameter("createdAt", createdAt).setParameter("id", tenant.getId()).executeUpdate();
         }
         em.clear();
         return tenant;
     }
 
-    private Tenant active(String type, Instant createdAt) {
-        return tenant("t", type, TenantStatus.ACTIVE, false, 100, createdAt);
+    private Organization active(String type, Instant createdAt) {
+        return tenant("t", type, OrganizationStatus.ACTIVE, false, 100, createdAt);
     }
 
     // ---- platformTenantCounts ----
 
     @Test
     void countsSplitByStatusAndOrganizationTypeAndExcludeDeletedTenants() {
-        tenant("a", "SCHOOL", TenantStatus.ACTIVE, false, 10, null);
-        tenant("b", "SCHOOL", TenantStatus.ACTIVE, false, 10, null);
-        tenant("c", "CENTER", TenantStatus.ACTIVE, false, 10, null);
-        tenant("d", "SCHOOL", TenantStatus.SUSPENDED, false, 10, null);
-        tenant("e", "UNIVERSITY", TenantStatus.SUSPENDED, false, 10, null);
-        tenant("f", "SCHOOL", TenantStatus.ACTIVE, true, 10, null); // soft-deleted
-        tenant("g", "CENTER", TenantStatus.SUSPENDED, true, 10, null); // soft-deleted
-        tenant("h", "DELETED-ONLY-TYPE", TenantStatus.ACTIVE, true, 10, null); // soft-deleted type never listed
+        tenant("a", "SCHOOL", OrganizationStatus.ACTIVE, false, 10, null);
+        tenant("b", "SCHOOL", OrganizationStatus.ACTIVE, false, 10, null);
+        tenant("c", "CENTER", OrganizationStatus.ACTIVE, false, 10, null);
+        tenant("d", "SCHOOL", OrganizationStatus.SUSPENDED, false, 10, null);
+        tenant("e", "UNIVERSITY", OrganizationStatus.SUSPENDED, false, 10, null);
+        tenant("f", "SCHOOL", OrganizationStatus.ACTIVE, true, 10, null); // soft-deleted
+        tenant("g", "CENTER", OrganizationStatus.SUSPENDED, true, 10, null); // soft-deleted
+        tenant("h", "DELETED-ONLY-TYPE", OrganizationStatus.ACTIVE, true, 10, null); // soft-deleted type never listed
 
         PlatformTenantCounts counts = service.platformTenantCounts();
 
@@ -134,8 +131,8 @@ class TenancyPlatformOverviewQueriesTest {
         active("SCHOOL", Instant.parse("2026-09-20T00:00:00Z"));
         active("SCHOOL", to); // upper bound excluded
         active("SCHOOL", from.minusSeconds(1)); // before
-        tenant("x", "SCHOOL", TenantStatus.ACTIVE, true, 5, Instant.parse("2026-09-20T00:00:00Z")); // deleted
-        tenant("y", "SCHOOL", TenantStatus.SUSPENDED, false, 5, Instant.parse("2026-09-21T00:00:00Z")); // suspended counts
+        tenant("x", "SCHOOL", OrganizationStatus.ACTIVE, true, 5, Instant.parse("2026-09-20T00:00:00Z")); // deleted
+        tenant("y", "SCHOOL", OrganizationStatus.SUSPENDED, false, 5, Instant.parse("2026-09-21T00:00:00Z")); // suspended counts
 
         assertThat(service.countTenantsCreatedBetween(from, to)).isEqualTo(4);
     }
@@ -192,7 +189,7 @@ class TenancyPlatformOverviewQueriesTest {
 
     @Test
     void perRangeExcludesDeletedTenantsAndFewerThanTwoBoundariesIsEmpty() {
-        tenant("x", "SCHOOL", TenantStatus.ACTIVE, true, 5, OCT_START.plusSeconds(5));
+        tenant("x", "SCHOOL", OrganizationStatus.ACTIVE, true, 5, OCT_START.plusSeconds(5));
         active("SCHOOL", OCT_START.plusSeconds(5));
 
         assertThat(service.countTenantsCreatedPerRange(List.of(OCT_START, NOV_START))).containsExactly(1L);
@@ -205,10 +202,10 @@ class TenancyPlatformOverviewQueriesTest {
 
     @Test
     void recentTenantsAreNewestFirstBoundedAndSkipDeleted() {
-        Tenant oldest = active("SCHOOL", Instant.parse("2026-01-01T00:00:00Z"));
-        Tenant middle = active("CENTER", Instant.parse("2026-05-01T00:00:00Z"));
-        Tenant newest = active("SCHOOL", Instant.parse("2026-10-01T00:00:00Z"));
-        tenant("gone", "SCHOOL", TenantStatus.ACTIVE, true, 5, Instant.parse("2026-12-01T00:00:00Z")); // newer but deleted
+        Organization oldest = active("SCHOOL", Instant.parse("2026-01-01T00:00:00Z"));
+        Organization middle = active("CENTER", Instant.parse("2026-05-01T00:00:00Z"));
+        Organization newest = active("SCHOOL", Instant.parse("2026-10-01T00:00:00Z"));
+        tenant("gone", "SCHOOL", OrganizationStatus.ACTIVE, true, 5, Instant.parse("2026-12-01T00:00:00Z")); // newer but deleted
 
         List<RecentTenantView> two = service.recentTenants(2);
         List<RecentTenantView> all = service.recentTenants(10);
@@ -220,7 +217,7 @@ class TenancyPlatformOverviewQueriesTest {
 
     @Test
     void recentTenantsCarryTheFieldsTheDashboardNeedsAndTheStatusAsAString() {
-        Tenant suspended = tenant("s", "UNIVERSITY", TenantStatus.SUSPENDED, false, 321, Instant.parse("2026-10-01T00:00:00Z"));
+        Organization suspended = tenant("s", "UNIVERSITY", OrganizationStatus.SUSPENDED, false, 321, Instant.parse("2026-10-01T00:00:00Z"));
 
         RecentTenantView view = service.recentTenants(1).get(0);
 
@@ -236,9 +233,9 @@ class TenancyPlatformOverviewQueriesTest {
     @Test
     void tenantsCreatedAtTheSameInstantAreOrderedByIdDescendingForStability() {
         Instant same = Instant.parse("2026-10-01T00:00:00Z");
-        Tenant first = active("SCHOOL", same);
-        Tenant second = active("SCHOOL", same);
-        Tenant third = active("SCHOOL", same);
+        Organization first = active("SCHOOL", same);
+        Organization second = active("SCHOOL", same);
+        Organization third = active("SCHOOL", same);
 
         assertThat(service.recentTenants(3)).extracting(RecentTenantView::publicId)
                 .containsExactly(third.getPublicId(), second.getPublicId(), first.getPublicId());
@@ -273,9 +270,9 @@ class TenancyPlatformOverviewQueriesTest {
 
     @Test
     void seatLimitsListEveryLiveTenantOnceWithItsConfiguredLimit() {
-        Tenant a = tenant("a", "SCHOOL", TenantStatus.ACTIVE, false, 100, null);
-        Tenant b = tenant("b", "CENTER", TenantStatus.SUSPENDED, false, 0, null);
-        tenant("gone", "SCHOOL", TenantStatus.ACTIVE, true, 900, null);
+        Organization a = tenant("a", "SCHOOL", OrganizationStatus.ACTIVE, false, 100, null);
+        Organization b = tenant("b", "CENTER", OrganizationStatus.SUSPENDED, false, 0, null);
+        tenant("gone", "SCHOOL", OrganizationStatus.ACTIVE, true, 900, null);
 
         List<TenantSeatLimit> limits = service.seatLimits();
 

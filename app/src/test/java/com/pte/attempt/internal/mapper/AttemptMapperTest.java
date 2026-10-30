@@ -1,14 +1,12 @@
 package com.pte.attempt.internal.mapper;
 
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
-import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.dto.response.BlankGroupView;
 import com.pte.attempt.internal.dto.response.OptionView;
 import com.pte.attempt.internal.dto.response.TaskView;
-import com.pte.attempt.internal.service.cache.PinnedItemView;
+import com.pte.attempt.internal.service.cache.ExamItemView;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -28,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AttemptMapperTest {
 
     private final AttemptMapper mapper = new AttemptMapper(JsonMapper.builder().build());
-    private final UUID pinnedItemPublicId = UUID.randomUUID();
+    private final UUID itemPublicId = UUID.randomUUID();
 
     @Test
     void flatOptions_noBlankIndexKey_producesUnchangedFlatList() {
@@ -120,13 +118,13 @@ class AttemptMapperTest {
 
         assertThatThrownBy(() -> toTask(optionsJson))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining(pinnedItemPublicId.toString())
+                .hasMessageContaining(itemPublicId.toString())
                 .hasMessageContaining("mix of blank-grouped and ungrouped");
     }
 
     @Test
     void writingTask_summarizeWrittenText_carriesWordCountsAndTiming() {
-        PinnedItemView item = writingItem("SUMMARIZE_WRITTEN_TEXT", 5, 75, 0, 600);
+        ExamItemView item = writingItem("SUMMARIZE_WRITTEN_TEXT", 5, 75, 0, 600);
         TaskView task = toTaskFromItem(item);
 
         assertThat(task.taskType()).isEqualTo("SUMMARIZE_WRITTEN_TEXT");
@@ -140,7 +138,7 @@ class AttemptMapperTest {
 
     @Test
     void writingTask_writeEssay_carriesWordCountsAndTiming() {
-        PinnedItemView item = writingItem("WRITE_ESSAY", 200, 300, 0, 1200);
+        ExamItemView item = writingItem("WRITE_ESSAY", 200, 300, 0, 1200);
         TaskView task = toTaskFromItem(item);
 
         assertThat(task.taskType()).isEqualTo("WRITE_ESSAY");
@@ -154,55 +152,49 @@ class AttemptMapperTest {
 
     @Test
     void officialWritingTask_navigatesWithinSectionButNotBackIntoSpeaking() {
-        PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
-        snapshot.setExamMode("OFFICIAL_EXAM");
-        snapshot.addItem(pinnedItem(0, "SPEAKING"));
-        snapshot.addItem(pinnedItem(1, "WRITING"));
-        snapshot.addItem(pinnedItem(2, "WRITING"));
         ExamAttempt attempt = new ExamAttempt();
         attempt.setPublicId(UUID.randomUUID());
         attempt.setStatus(AttemptStatus.IN_PROGRESS);
-        attempt.setPinnedSnapshot(snapshot);
+        attempt.setExamMode("OFFICIAL_EXAM");
+        ExamItemView first = view(UUID.randomUUID(), 0, "SPEAKING", "READ_ALOUD", "Speaking", "Prompt",
+                null, null, null, null, null, null, null, 30, 40, null, null, null);
+        ExamItemView second = view(UUID.randomUUID(), 1, "WRITING", "WRITE_ESSAY", "Essay", "Prompt",
+                null, null, null, null, 200, 300, null, 0, 1200, null, null, null);
+        ExamItemView third = view(UUID.randomUUID(), 2, "WRITING", "WRITE_ESSAY", "Final task", "Prompt",
+                null, null, null, null, 200, 300, null, 0, 1200, null, null, null);
+        List<ExamItemView> all = List.of(first, second, third);
 
-        TaskView speaking = mapper.toTaskResponse(attempt, new PinnedItemView(
-                UUID.randomUUID(), 0, "SPEAKING", "READ_ALOUD", "Speaking", "Prompt",
-                null, null, null, null, null, null, null, 30, 40, null, null, null), 30, 40, 3).task();
+        TaskView speaking = mapper.toTaskResponse(attempt, first, 30, 40, all).task();
         assertThat(speaking.canNavigatePrevious()).isFalse();
         assertThat(speaking.canNavigateNext()).isFalse();
 
-        TaskView firstWriting = mapper.toTaskResponse(attempt, new PinnedItemView(
-                UUID.randomUUID(), 1, "WRITING", "WRITE_ESSAY", "Essay", "Prompt",
-                null, null, null, null, 200, 300, null, 0, 1200, null, null, null), 0, 1200, 3).task();
+        TaskView firstWriting = mapper.toTaskResponse(attempt, second, 0, 1200, all).task();
         assertThat(firstWriting.canNavigatePrevious()).isFalse();
         assertThat(firstWriting.canNavigateNext()).isTrue();
 
-        TaskView finalWriting = mapper.toTaskResponse(attempt, new PinnedItemView(
-                UUID.randomUUID(), 2, "WRITING", "WRITE_ESSAY", "Final task", "Prompt",
-                null, null, null, null, 200, 300, null, 0, 1200, null, null, null), 0, 1200, 3).task();
+        TaskView finalWriting = mapper.toTaskResponse(attempt, third, 0, 1200, all).task();
         assertThat(finalWriting.canNavigatePrevious()).isTrue();
         assertThat(finalWriting.canNavigateNext()).isTrue();
     }
 
     @Test
     void mockTestListeningTask_disallowsManualNavigation() {
-        PinnedExamSnapshot snapshot = new PinnedExamSnapshot();
-        snapshot.setExamMode("MOCK_TEST");
         ExamAttempt attempt = new ExamAttempt();
         attempt.setPublicId(UUID.randomUUID());
         attempt.setStatus(AttemptStatus.IN_PROGRESS);
-        attempt.setPinnedSnapshot(snapshot);
-        PinnedItemView item = new PinnedItemView(
+        attempt.setExamMode("MOCK_TEST");
+        ExamItemView item = view(
                 UUID.randomUUID(), 3, "LISTENING", "MC_LISTENING_SINGLE", "Listening", "Prompt",
                 null, null, null, null, null, null, null, 0, 60, null, null, null);
 
-        TaskView task = mapper.toTaskResponse(attempt, item, 0, 60, 5).task();
+        TaskView task = mapper.toTaskResponse(attempt, item, 0, 60, List.of(item)).task();
 
         assertThat(task.canNavigatePrevious()).isFalse();
         assertThat(task.canNavigateNext()).isFalse();
     }
 
     @Test
-    @DisplayName("preListenSeconds/preRecordSeconds flow through from PinnedItemView to TaskView unchanged")
+    @DisplayName("preListenSeconds/preRecordSeconds flow through from ExamItemView to TaskView unchanged")
     void preListenPreRecord_flowThroughToTaskView() {
         TaskView task = toTask("[]", 3, 3);
 
@@ -220,7 +212,7 @@ class AttemptMapperTest {
     }
 
     @Test
-    @DisplayName("imageUrl flows through from PinnedItemView to TaskView unchanged")
+    @DisplayName("imageUrl flows through from ExamItemView to TaskView unchanged")
     void imageUrl_flowsThroughToTaskView() {
         TaskView task = toTask("[]", null, null, "https://res.cloudinary.com/test/signed-image");
 
@@ -244,8 +236,8 @@ class AttemptMapperTest {
     }
 
     private TaskView toTask(String optionsJson, Integer preListenSeconds, Integer preRecordSeconds, String imageUrl) {
-        PinnedItemView item = new PinnedItemView(
-                pinnedItemPublicId, 0, "READING", "MC_READING_SINGLE", "Sample title", "Sample prompt",
+        ExamItemView item = view(
+                itemPublicId, 0, "READING", "MC_READING_SINGLE", "Sample title", "Sample prompt",
                 null, null, null, null, null, null, optionsJson, 30, 60, preListenSeconds, preRecordSeconds, imageUrl);
 
         ExamAttempt attempt = new ExamAttempt();
@@ -254,31 +246,34 @@ class AttemptMapperTest {
 
         // Mapper-level test: pass the item's own values directly as the "effective"
         // ones — section-scoped adjustment is TimerService's concern.
-        AttemptTaskResponse response = mapper.toTaskResponse(attempt, item, item.prepSeconds(), item.responseSeconds(), 5);
+        AttemptTaskResponse response = mapper.toTaskResponse(attempt, item, item.prepSeconds(), item.responseSeconds(), List.of(item));
         return response.task();
     }
 
-    private PinnedItemView writingItem(String taskType, int minWords, int maxWords, int prep, int response) {
-        return new PinnedItemView(
+    private ExamItemView writingItem(String taskType, int minWords, int maxWords, int prep, int response) {
+        return view(
                 UUID.randomUUID(), 0, "WRITING", taskType, "Writing title", "Writing prompt",
                 null, null, null, null, minWords, maxWords, null, prep, response,
                 null, null, null);
     }
 
-    private PinnedItem pinnedItem(int orderIndex, String section) {
-        PinnedItem item = new PinnedItem();
-        item.setPublicId(UUID.randomUUID());
-        item.setOrderIndex(orderIndex);
-        item.setSection(section);
-        return item;
+    private static ExamItemView view(UUID id, int orderIndex, String section, String taskType, String title,
+            String promptText, UUID audioPromptRef, UUID imagePromptRef, String referenceAnswerText,
+            String correctAnswerText, Integer minWordCount, Integer maxWordCount, String optionsJson,
+            int prepSeconds, int responseSeconds, Integer preListenSeconds, Integer preRecordSeconds,
+            String imageUrl) {
+        return new ExamItemView(id, orderIndex, section, taskType, title, promptText, audioPromptRef,
+                imagePromptRef, referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, optionsJson,
+                prepSeconds, responseSeconds, preListenSeconds, preRecordSeconds, imageUrl, null, null, taskType,
+                null, null, null, taskType, null);
     }
 
-    private TaskView toTaskFromItem(PinnedItemView item) {
+    private TaskView toTaskFromItem(ExamItemView item) {
         ExamAttempt attempt = new ExamAttempt();
         attempt.setPublicId(UUID.randomUUID());
         attempt.setStatus(AttemptStatus.IN_PROGRESS);
 
-        AttemptTaskResponse response = mapper.toTaskResponse(attempt, item, item.prepSeconds(), item.responseSeconds(), 5);
+        AttemptTaskResponse response = mapper.toTaskResponse(attempt, item, item.prepSeconds(), item.responseSeconds(), List.of(item));
         return response.task();
     }
 }

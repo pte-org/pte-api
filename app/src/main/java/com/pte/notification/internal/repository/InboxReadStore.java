@@ -78,8 +78,8 @@ public class InboxReadStore {
                 .addValue("offset", offset).addValue("limit", limit);
         long total = jdbc.queryForObject("""
                 SELECT count(*)
-                FROM notification_inbox_items i
-                JOIN notification_inbox_contents c ON c.public_id=i.content_public_id
+                FROM notification_recipients i
+                JOIN notifications c ON c.public_id=i.content_public_id
                 WHERE i.deleted=FALSE AND c.deleted=FALSE
                   AND i.recipient_user_public_id=:recipient
                   AND i.tenant_id IS NOT DISTINCT FROM CAST(:tenant AS UUID)
@@ -91,8 +91,8 @@ public class InboxReadStore {
                 SELECT i.public_id,i.content_public_id,i.recipient_user_public_id,i.tenant_id,i.sequence_no,
                        c.notification_type,c.category,c.importance,c.title,c.body,c.target_type,c.target_public_id,
                        i.delivered_at,i.read_at
-                FROM notification_inbox_items i
-                JOIN notification_inbox_contents c ON c.public_id=i.content_public_id
+                FROM notification_recipients i
+                JOIN notifications c ON c.public_id=i.content_public_id
                 WHERE i.deleted=FALSE AND c.deleted=FALSE
                   AND i.recipient_user_public_id=:recipient
                   AND i.tenant_id IS NOT DISTINCT FROM CAST(:tenant AS UUID)
@@ -109,9 +109,9 @@ public class InboxReadStore {
                 SELECT i.public_id,i.content_public_id,i.recipient_user_public_id,i.tenant_id,i.sequence_no,
                        c.notification_type,c.category,c.importance,c.title,c.body,c.target_type,c.target_public_id,
                        i.delivered_at,i.read_at
-                FROM notification_inbox_items i
-                JOIN notification_inbox_contents c ON c.public_id=i.content_public_id
-                WHERE i.public_id=:item AND i.deleted=FALSE AND c.deleted=FALSE
+                FROM notification_recipients i
+                JOIN notifications c ON c.public_id=i.content_public_id
+                WHERE i.public_id=:item AND i.sequence_no IS NOT NULL AND i.deleted=FALSE AND c.deleted=FALSE
                   AND i.recipient_user_public_id=:recipient
                   AND i.tenant_id IS NOT DISTINCT FROM CAST(:tenant AS UUID)
                 """, ownerParams(recipient, tenant).addValue("item", itemPublicId), this::mapRow)
@@ -121,9 +121,9 @@ public class InboxReadStore {
     public Optional<Row> markRead(UUID itemPublicId, UUID recipient, UUID tenant, Instant now) {
         Stream stream = lockOrCreateStream(recipient, tenant, true);
         int changed = jdbc.update("""
-                UPDATE notification_inbox_items
+                UPDATE notification_recipients
                 SET read_at=coalesce(read_at,:now),updated_at=:now
-                WHERE public_id=:item AND deleted=FALSE AND recipient_user_public_id=:recipient
+                WHERE public_id=:item AND sequence_no IS NOT NULL AND deleted=FALSE AND recipient_user_public_id=:recipient
                   AND tenant_id IS NOT DISTINCT FROM CAST(:tenant AS UUID) AND read_at IS NULL
                 """, ownerParams(recipient, tenant).addValue("item", itemPublicId).addValue("now", utc(now)));
         if (changed > 0) {
@@ -135,8 +135,8 @@ public class InboxReadStore {
     public UnreadSummary unreadCount(UUID recipient, UUID tenant) {
         Stream stream = lockOrCreateStream(recipient, tenant, true);
         long count = jdbc.queryForObject("""
-                SELECT count(*) FROM notification_inbox_items
-                WHERE deleted=FALSE AND recipient_user_public_id=:recipient
+                SELECT count(*) FROM notification_recipients
+                WHERE deleted=FALSE AND sequence_no IS NOT NULL AND recipient_user_public_id=:recipient
                   AND tenant_id IS NOT DISTINCT FROM CAST(:tenant AS UUID) AND read_at IS NULL
                 """, ownerParams(recipient, tenant), Long.class);
         return new UnreadSummary(count, stream.readRevision());
@@ -150,7 +150,7 @@ public class InboxReadStore {
         }
         long watermark = snapshot == null ? stream.lastSequence() : snapshot.upperSequence();
         int changed = jdbc.update("""
-                UPDATE notification_inbox_items
+                UPDATE notification_recipients
                 SET read_at=:now,updated_at=:now
                 WHERE deleted=FALSE AND recipient_user_public_id=:recipient
                   AND tenant_id IS NOT DISTINCT FROM CAST(:tenant AS UUID)
@@ -164,14 +164,14 @@ public class InboxReadStore {
 
     private Stream lockOrCreateStream(UUID recipient, UUID tenant, boolean lock) {
         jdbc.update("""
-                INSERT INTO notification_inbox_streams(public_id,recipient_user_public_id,tenant_id)
+                INSERT INTO notification_recipient_streams(public_id,recipient_user_public_id,tenant_id)
                 VALUES (:publicId,:recipient,:tenant)
                 ON CONFLICT (recipient_user_public_id) DO NOTHING
                 """, ownerParams(recipient, tenant).addValue("publicId", UUID.randomUUID()));
         String suffix = lock ? " FOR UPDATE" : "";
         List<Stream> streams = jdbc.query("""
                 SELECT tenant_id,last_sequence,read_revision
-                FROM notification_inbox_streams
+                FROM notification_recipient_streams
                 WHERE recipient_user_public_id=:recipient
                 """ + suffix, new MapSqlParameterSource().addValue("recipient", recipient), (rs, rowNum) ->
                 new Stream(rs.getObject("tenant_id", UUID.class), rs.getLong("last_sequence"),
@@ -184,14 +184,14 @@ public class InboxReadStore {
     }
 
     private long currentReadRevision(UUID recipient) {
-        return jdbc.query("SELECT read_revision FROM notification_inbox_streams WHERE recipient_user_public_id=:recipient",
+        return jdbc.query("SELECT read_revision FROM notification_recipient_streams WHERE recipient_user_public_id=:recipient",
                 new MapSqlParameterSource().addValue("recipient", recipient),
                 (rs, rowNum) -> rs.getLong("read_revision")).stream().findFirst().orElse(0L);
     }
 
     private void incrementReadRevision(UUID recipient) {
         jdbc.update("""
-                UPDATE notification_inbox_streams SET read_revision=read_revision+1,updated_at=CURRENT_TIMESTAMP
+                UPDATE notification_recipient_streams SET read_revision=read_revision+1,updated_at=CURRENT_TIMESTAMP
                 WHERE recipient_user_public_id=:recipient
                 """, new MapSqlParameterSource().addValue("recipient", recipient));
     }

@@ -51,6 +51,8 @@ services:
     ports: !reset []
     environment:
       <<: *jvm-env
+      # Hosted stack never runs the local-schema profile (Hibernate-owned schema + known-password dev seed).
+      SPRING_PROFILES_ACTIVE: ""
       # Same-origin routing in the Nginx config means the browser never sends a
       # cross-origin request; this stays set as the fallback for any client
       # that is not served from these two hosts (the Flutter app, curl, Postman).
@@ -105,6 +107,7 @@ services:
       dockerfile: ../pte-api/deploy/practice.Dockerfile
       args:
         NEXT_PUBLIC_API_BASE_URL: https://${PRACTICE_DOMAIN:-pte-practice.duckdns.org}
+        NEXT_PUBLIC_CHAT_ENABLED: ${NEXT_PUBLIC_CHAT_ENABLED:-false}
     mem_limit: 512m
     restart: unless-stopped
     healthcheck:

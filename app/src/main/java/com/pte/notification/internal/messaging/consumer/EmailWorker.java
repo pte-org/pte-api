@@ -13,6 +13,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.Optional;
 
 /**
@@ -28,12 +29,15 @@ public class EmailWorker {
     private final NotificationLogRepository notificationLogRepository;
     private final JavaMailSender mailSender;
     private final NotificationProperties notificationProperties;
+    private final Clock clock;
 
     public EmailWorker(NotificationLogRepository notificationLogRepository, JavaMailSender mailSender,
-            NotificationProperties notificationProperties) {
+            NotificationProperties notificationProperties,
+            Clock clock) {
         this.notificationLogRepository = notificationLogRepository;
         this.mailSender = mailSender;
         this.notificationProperties = notificationProperties;
+        this.clock = clock;
     }
 
     @RabbitListener(queues = NotificationConstants.EMAIL_QUEUE, containerFactory = "notificationRabbitListenerContainerFactory")
@@ -49,7 +53,7 @@ public class EmailWorker {
         }
 
         sendEmail(job);
-        log.markSent();
+        log.markSent(clock.instant());
         notificationLogRepository.save(log);
     }
 

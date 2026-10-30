@@ -1,16 +1,10 @@
 package com.pte.assessment.domain;
 
 import com.pte.itembank.domain.enums.PteSection;
-import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
+import jakarta.persistence.Embeddable;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.Index;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -22,18 +16,11 @@ import java.util.UUID;
  * {@code publicId} (not a FK — so publish can deep-copy content into an
  * immutable snapshot).
  */
-@Entity
-@Table(name = "blueprint_items", indexes = {
-        @Index(name = "idx_blueprint_items_blueprint", columnList = "blueprint_id")
-})
+@Embeddable
 @Getter
 @Setter
 @NoArgsConstructor
-public class BlueprintItem extends BaseEntity {
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "blueprint_id", nullable = false)
-    private ExamBlueprint blueprint;
+public class BlueprintItem {
 
     @Column(nullable = false)
     private UUID questionPublicId;

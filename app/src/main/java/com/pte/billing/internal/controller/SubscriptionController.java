@@ -2,10 +2,10 @@ package com.pte.billing.internal.controller;
 
 import com.pte.billing.BillingService;
 import com.pte.billing.SubscriptionView;
-import com.pte.billing.internal.dto.request.RevealLicenseKeyRequest;
+import com.pte.billing.internal.dto.request.license.RevealLicenseKeyRequest;
 import com.pte.billing.internal.dto.response.LicenseKeyResponse;
 import com.pte.billing.internal.dto.response.SubscriptionResponse;
-import com.pte.billing.internal.exception.InvalidLicenseKeyRevealPasswordException;
+import com.pte.billing.internal.exception.license.InvalidLicenseKeyRevealPasswordException;
 import com.pte.billing.internal.exception.SubscriptionNotFoundException;
 import com.pte.identity.IdentityService;
 import com.pte.shared.security.CurrentUser;
@@ -43,7 +43,8 @@ public class SubscriptionController {
         if (caller.tenantId() == null) {
             return ApiResponse.success(List.of());
         }
-        return ApiResponse.success(billingService.listActiveSubscriptions(caller.tenantId()).stream()
+        // Includes granted lanes that start later, so the host can see and schedule on them.
+        return ApiResponse.success(billingService.listSchedulableSubscriptions(caller.tenantId()).stream()
                 .map(SubscriptionResponse::from)
                 .toList());
     }
@@ -75,7 +76,7 @@ public class SubscriptionController {
         if (!identityService.verifyPassword(caller.userId(), request.password())) {
             throw new InvalidLicenseKeyRevealPasswordException();
         }
-        SubscriptionView subscription = billingService.getActiveSubscription(publicId, caller.tenantId())
+        SubscriptionView subscription = billingService.getSchedulableSubscription(publicId, caller.tenantId())
                 .orElseThrow(SubscriptionNotFoundException::new);
         return ApiResponse.success(new LicenseKeyResponse(subscription.licenseKey()));
     }

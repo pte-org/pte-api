@@ -3,14 +3,15 @@ package com.pte.reporting.internal.service;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.attempt.dto.response.AttemptSummaryView;
-import com.pte.reporting.domain.AttemptReport;
+import com.pte.reporting.domain.ExamResult;
 import com.pte.reporting.domain.enums.Skill;
 import com.pte.reporting.dto.event.AttemptPublishedEvent;
 import com.pte.reporting.internal.exception.ReportPublicationNotReadyException;
-import com.pte.reporting.internal.repository.AttemptReportRepository;
+import com.pte.reporting.internal.repository.ExamResultRepository;
 import com.pte.scoring.ScoringService;
 import com.pte.scoring.dto.response.ReportPublicationScoringView;
 import com.pte.scoring.dto.response.ReportScoringAnswerView;
+import com.pte.scoring.dto.response.SessionCohortPublicationView;
 import com.pte.session.SessionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,7 +49,7 @@ class ReportPublishServiceTest {
     @Mock
     private ReportSnapshotCodec snapshotCodec;
     @Mock
-    private AttemptReportRepository attemptReportRepository;
+    private ExamResultRepository examResultRepository;
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
@@ -57,7 +58,7 @@ class ReportPublishServiceTest {
     @BeforeEach
     void setUp() {
         service = new ReportPublishService(sessionService, attemptService, scoringService, aggregationService,
-                snapshotCodec, attemptReportRepository, eventPublisher);
+                snapshotCodec, examResultRepository, eventPublisher, com.pte.TestClocks.fixed());
     }
 
     @Test
@@ -70,24 +71,24 @@ class ReportPublishServiceTest {
         UUID answerId = UUID.randomUUID();
         UUID publicationId = UUID.randomUUID();
         UUID examSnapshotId = UUID.randomUUID();
-        UUID scoreTemplateId = UUID.randomUUID();
+        UUID examDefinitionId = UUID.randomUUID();
         int scoreTemplateVersion = 7;
         AttemptSummaryView attempt = new AttemptSummaryView(attemptId, sessionId, studentId, tenantId,
                 examSnapshotId);
         ReportScoringAnswerView input = input(answerId, attemptId, true, 84, null);
-        AttemptReport report = report(attempt, false);
+        ExamResult report = report(attempt, false);
         AttemptScoreSummary summary = summary(74);
 
         when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(List.of(attempt));
         when(scoringService.lockForReportPublication(eq(tenantId), eq(sessionId), any()))
                 .thenReturn(new ReportPublicationScoringView(publicationId, List.of(input)));
-        when(attemptReportRepository.findByAttemptPublicId(attemptId)).thenReturn(Optional.of(report));
+        when(examResultRepository.findByAttemptPublicId(attemptId)).thenReturn(Optional.of(report));
         when(aggregationService.aggregateBatchFromInputs(Set.of(attemptId), Map.of(attemptId, List.of(input))))
                 .thenReturn(Map.of(attemptId, new ReportScoreAggregation(
-                        new AttemptScoreContextView(scoreTemplateId, scoreTemplateVersion, Set.of("SPEAKING")),
+                        new AttemptScoreContextView(examDefinitionId, scoreTemplateVersion, Set.of("SPEAKING")),
                         summary)));
         when(snapshotCodec.encode(eq(publicationId), eq(actorId), any(), eq(1), eq(examSnapshotId),
-                eq(scoreTemplateId), eq(scoreTemplateVersion), eq(summary), eq(List.of(input))))
+                eq(examDefinitionId), eq(scoreTemplateVersion), eq(summary), eq(List.of(input))))
                 .thenReturn("immutable-snapshot");
 
         int published = service.publishSession(sessionId, tenantId, actorId);
@@ -98,9 +99,22 @@ class ReportPublishServiceTest {
         assertThat(report.getPublicationPublicId()).isEqualTo(publicationId);
         assertThat(report.getPublishedByPublicId()).isEqualTo(actorId);
         assertThat(report.getPublicationCohortSize()).isEqualTo(1);
+        assertThat(report.getOverallScore()).isEqualTo(74);
+        assertThat(report.getSpeakingScore()).isEqualTo(74);
+        assertThat(report.getListeningScore()).isNull();
+        assertThat(report.getReadingScore()).isNull();
+        assertThat(report.getWritingScore()).isNull();
         verify(sessionService).lockClosedForReportPublication(sessionId, tenantId);
-        verify(attemptReportRepository).save(report);
-        verify(eventPublisher).publishEvent(any(AttemptPublishedEvent.class));
+        verify(examResultRepository).save(report);
+        org.mockito.ArgumentCaptor<AttemptPublishedEvent> publishedEvent =
+                org.mockito.ArgumentCaptor.forClass(AttemptPublishedEvent.class);
+        verify(eventPublisher).publishEvent(publishedEvent.capture());
+        // The student's only copy of the score is the email built from this event.
+        assertThat(publishedEvent.getValue().overallScore()).isEqualTo(74);
+        assertThat(publishedEvent.getValue().speakingScore()).isEqualTo(74);
+        assertThat(publishedEvent.getValue().listeningScore()).isNull();
+        assertThat(publishedEvent.getValue().readingScore()).isNull();
+        assertThat(publishedEvent.getValue().writingScore()).isNull();
     }
 
     @Test
@@ -117,7 +131,7 @@ class ReportPublishServiceTest {
         assertThatThrownBy(() -> service.publishSession(sessionId, tenantId, UUID.randomUUID()))
                 .isInstanceOf(ReportPublicationNotReadyException.class);
 
-        verify(attemptReportRepository, never()).save(any());
+        verify(examResultRepository, never()).save(any());
         verify(eventPublisher, never()).publishEvent(any());
     }
 
@@ -142,6 +156,29 @@ class ReportPublishServiceTest {
     }
 
     @Test
+    void preflight_sessionLevelGradingBlockerDoesNotReduceTheReadyAttemptCount() {
+        UUID sessionId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        AttemptSummaryView attempt = new AttemptSummaryView(attemptId, sessionId, UUID.randomUUID(), tenantId);
+        ReportScoringAnswerView input = input(UUID.randomUUID(), attemptId, true, 70, null);
+        when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(List.of(attempt));
+        when(sessionService.isSessionClosed(sessionId, tenantId)).thenReturn(true);
+        when(scoringService.getReportScoringInputs(tenantId, sessionId)).thenReturn(List.of(input));
+        when(scoringService.getCohortPublicationView(sessionId, tenantId)).thenReturn(Optional.of(
+                new SessionCohortPublicationView(sessionId, "MANUAL_EXAMINER", "FROZEN", List.of(attemptId),
+                        List.of())));
+        when(scoringService.evaluateManualPublicationBlockers(sessionId, tenantId))
+                .thenReturn(Optional.of(List.of("GRADING_EXAMINER_SCORE_REQUIRED", "GRADING_EXAMINER_NOT_FINALIZED")));
+
+        var readiness = service.preflight(sessionId, tenantId);
+
+        assertThat(readiness.canPublish()).isFalse();
+        assertThat(readiness.blockerCount()).isEqualTo(2);
+        assertThat(readiness.readyAttemptCount()).isOne();
+    }
+
+    @Test
     void publishSession_emptySubmittedCohortDoesNotInstallPublicationLock() {
         UUID sessionId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
@@ -153,8 +190,8 @@ class ReportPublishServiceTest {
         verify(scoringService, never()).lockForReportPublication(eq(tenantId), eq(sessionId), any());
     }
 
-    private AttemptReport report(AttemptSummaryView attempt, boolean published) {
-        AttemptReport report = new AttemptReport();
+    private ExamResult report(AttemptSummaryView attempt, boolean published) {
+        ExamResult report = new ExamResult();
         report.setAttemptPublicId(attempt.attemptPublicId());
         report.setSessionPublicId(attempt.sessionPublicId());
         report.setStudentPublicId(attempt.studentPublicId());

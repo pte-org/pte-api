@@ -13,13 +13,14 @@ import com.pte.scoring.dto.response.ReportPublicationScoringView;
 import com.pte.scoring.dto.request.FinalizeGradingCohortRequest;
 import com.pte.scoring.dto.response.GradingCohortPreviewResponse;
 import com.pte.scoring.dto.response.GradingCohortResponse;
-import com.pte.scoring.internal.service.ExaminerWorkQueryService;
-import com.pte.scoring.internal.service.ScorePublicationLockService;
-import com.pte.scoring.internal.service.ScoreSourceSelectionService;
-import com.pte.scoring.internal.service.GradingCohortService;
-import com.pte.scoring.internal.service.ScoredAnswerQueryService;
-import com.pte.scoring.internal.service.ScoringEligibilityQueryService;
-import com.pte.scoring.internal.service.ScoringReviewReadQueryService;
+import com.pte.scoring.internal.service.examiner.ExaminerWorkQueryService;
+import com.pte.scoring.internal.service.selection.ScorePublicationLockService;
+import com.pte.scoring.internal.service.selection.ScoreSourceSelectionService;
+import com.pte.scoring.internal.service.grading.GradingCohortService;
+import com.pte.scoring.internal.service.selection.ScoredAnswerQueryService;
+import com.pte.scoring.internal.service.staff.ScoringEligibilityQueryService;
+import com.pte.scoring.internal.service.review.ScoringReviewReadQueryService;
+import com.pte.scoring.internal.service.ai.PracticeAiScoringService;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -47,6 +48,7 @@ public class ScoringService {
     private final ScoreSourceSelectionService scoreSourceSelectionService;
     private final ScorePublicationLockService scorePublicationLockService;
     private final GradingCohortService gradingCohortService;
+    private final PracticeAiScoringService practiceAiScoringService;
 
     @Autowired
     public ScoringService(ScoredAnswerQueryService scoredAnswerQueryService,
@@ -55,7 +57,8 @@ public class ScoringService {
             ScoringReviewReadQueryService scoringReviewReadQueryService,
             ScoreSourceSelectionService scoreSourceSelectionService,
             ScorePublicationLockService scorePublicationLockService,
-            GradingCohortService gradingCohortService) {
+            GradingCohortService gradingCohortService,
+            PracticeAiScoringService practiceAiScoringService) {
         this.scoredAnswerQueryService = scoredAnswerQueryService;
         this.scoringEligibilityQueryService = scoringEligibilityQueryService;
         this.examinerWorkQueryService = examinerWorkQueryService;
@@ -63,17 +66,28 @@ public class ScoringService {
         this.scoreSourceSelectionService = scoreSourceSelectionService;
         this.scorePublicationLockService = scorePublicationLockService;
         this.gradingCohortService = gradingCohortService;
+        this.practiceAiScoringService = practiceAiScoringService;
     }
 
-    /** Compatibility constructor for focused facade tests. */
-    public ScoringService(ScoredAnswerQueryService scoredAnswerQueryService,
-            ScoringEligibilityQueryService scoringEligibilityQueryService,
-            ExaminerWorkQueryService examinerWorkQueryService,
-            ScoringReviewReadQueryService scoringReviewReadQueryService,
-            ScoreSourceSelectionService scoreSourceSelectionService,
-            ScorePublicationLockService scorePublicationLockService) {
-        this(scoredAnswerQueryService, scoringEligibilityQueryService, examinerWorkQueryService,
-                scoringReviewReadQueryService, scoreSourceSelectionService, scorePublicationLockService, null);
+    /**
+     * Scores one practice answer on the exam's 0-100 scale through the same scorers
+     * the exam uses. Creates no exam attempt and writes no scoring rows.
+     *
+     * @throws PracticeScoringException with a public reason when it cannot be scored
+     */
+    public PracticeAiEvaluation scorePracticeAnswer(PracticeScoringRequest request) {
+        if (practiceAiScoringService == null) {
+            throw new PracticeScoringException(PracticeScoringFailure.INTERNAL);
+        }
+        return practiceAiScoringService.score(request);
+    }
+
+    /** How the exam would score this task type; unknown codes are {@link PracticeScoringRoute#UNSUPPORTED}. */
+    public PracticeScoringRoute practiceScoringRoute(String taskType) {
+        if (practiceAiScoringService == null) {
+            return PracticeScoringRoute.UNSUPPORTED;
+        }
+        return practiceAiScoringService.routeFor(taskType);
     }
 
     public List<ScoredAnswerView> getScoredAnswersForAttempt(UUID attemptPublicId, UUID tenantId) {

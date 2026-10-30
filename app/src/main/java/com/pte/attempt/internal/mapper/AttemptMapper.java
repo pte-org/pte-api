@@ -1,15 +1,13 @@
 package com.pte.attempt.internal.mapper;
 
 import com.pte.attempt.domain.ExamAttempt;
-import com.pte.attempt.domain.PinnedExamSnapshot;
-import com.pte.attempt.domain.PinnedItem;
 import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.dto.response.BlankGroupView;
 import com.pte.attempt.internal.dto.response.OptionView;
 import com.pte.attempt.internal.dto.response.TaskView;
 import com.pte.attempt.internal.policy.ManualNavigationPolicy;
-import com.pte.attempt.internal.service.cache.PinnedItemView;
+import com.pte.attempt.internal.service.cache.ExamItemView;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
@@ -23,7 +21,7 @@ import java.util.stream.Collectors;
 /**
  * Builds student-facing responses, stripping every answer-bearing field
  * ({@code correctAnswerText}, {@code referenceAnswerText}, options'
- * {@code correct} flag) — those exist in {@link PinnedItemView} for scoring
+ * {@code correct} flag) — those exist in {@link ExamItemView} for scoring
  * only and must never reach this mapper's output.
  */
 @Component
@@ -35,9 +33,9 @@ public class AttemptMapper {
         this.jsonMapper = jsonMapper;
     }
 
-    public AttemptTaskResponse toTaskResponse(ExamAttempt attempt, PinnedItemView item, int effectivePrepSeconds,
-            int effectiveResponseSeconds, int totalTasks) {
-        return toTaskResponse(attempt, item, effectivePrepSeconds, effectiveResponseSeconds, totalTasks, null);
+    public AttemptTaskResponse toTaskResponse(ExamAttempt attempt, ExamItemView item, int effectivePrepSeconds,
+            int effectiveResponseSeconds, List<ExamItemView> allItems) {
+        return toTaskResponse(attempt, item, effectivePrepSeconds, effectiveResponseSeconds, allItems, null);
     }
 
     /**
@@ -54,36 +52,36 @@ public class AttemptMapper {
      * responseDeadline/serverNow, since the client computes its own local
      * countdown entirely from these two ints.
      */
-    public AttemptTaskResponse toTaskResponse(ExamAttempt attempt, PinnedItemView item, int effectivePrepSeconds,
-            int effectiveResponseSeconds, int totalTasks, String encryptionPublicKey) {
+    public AttemptTaskResponse toTaskResponse(ExamAttempt attempt, ExamItemView item, int effectivePrepSeconds,
+            int effectiveResponseSeconds, List<ExamItemView> allItems, String encryptionPublicKey) {
+        int totalTasks = allItems.size();
         List<FrozenOption> parsedOptions = parseFrozenOptions(item.optionsJson());
         requireHomogeneousBlankIndex(item.publicId(), parsedOptions);
-        PinnedExamSnapshot pinned = attempt.getPinnedSnapshot();
-        boolean navigationAllowed = pinned != null && ManualNavigationPolicy.allowsSection(item.section());
+        boolean navigationAllowed = ManualNavigationPolicy.allowsSection(item.section());
         boolean canNavigatePrevious = navigationAllowed && item.orderIndex() > 0
-                && ManualNavigationPolicy.allowsSection(sectionAt(pinned, item.orderIndex() - 1));
+                && ManualNavigationPolicy.allowsSection(sectionAt(allItems, item.orderIndex() - 1));
         boolean hasNextItem = item.orderIndex() + 1 < totalTasks;
         boolean canNavigateNext = navigationAllowed
-                && (!hasNextItem || ManualNavigationPolicy.allowsSection(sectionAt(pinned, item.orderIndex() + 1)));
+                && (!hasNextItem || ManualNavigationPolicy.allowsSection(sectionAt(allItems, item.orderIndex() + 1)));
         TaskView task = new TaskView(
                 item.publicId(), item.orderIndex(), totalTasks, item.section(), item.taskType(), item.title(),
                 item.promptText(), item.audioPromptRef(), item.imagePromptRef(), item.minWordCount(),
                 item.maxWordCount(), toFlatOptions(parsedOptions), toBlankGroups(parsedOptions), effectivePrepSeconds,
                 effectiveResponseSeconds, attempt.getExamEndTime(), item.preListenSeconds(), item.preRecordSeconds(),
                 item.imageUrl(), item.audioUrl(), item.taskTypeCode() != null ? item.taskTypeCode() : item.taskType(),
-                item.runtime(), item.taskTypeDisplayName(), canNavigatePrevious, canNavigateNext);
-        // pinnedSnapshot is an optional lazy @OneToOne — null for an attempt whose pin row is
-        // absent. Null lockdownMode is the client's "no lockdown" contract, same as toCompletedResponse.
+                item.runtime(), item.taskTypeDisplayName(), canNavigatePrevious, canNavigateNext,
+                item.taskTypeInstruction());
+        // A null lockdownMode is the client's "no lockdown" contract, same as toCompletedResponse.
         return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey,
-                pinned != null ? pinned.getLockdownMode() : null, attempt.getAttemptNumber(),
+                attempt.getLockdownMode(), attempt.getAttemptNumber(),
                 remainingRetries(attempt), remainingRetries(attempt) > 0,
-                pinned != null ? pinned.getExamMode() : null);
+                attempt.getExamMode());
     }
 
-    private String sectionAt(PinnedExamSnapshot pinned, int orderIndex) {
-        return pinned.getItems().stream()
-                .filter(candidate -> candidate.getOrderIndex() == orderIndex)
-                .map(PinnedItem::getSection)
+    private String sectionAt(List<ExamItemView> allItems, int orderIndex) {
+        return allItems.stream()
+                .filter(candidate -> candidate.orderIndex() == orderIndex)
+                .map(ExamItemView::section)
                 .findFirst()
                 .orElse(null);
     }
@@ -106,7 +104,7 @@ public class AttemptMapper {
             return jsonMapper.readValue(optionsJson, new TypeReference<List<FrozenOption>>() {
             });
         } catch (JacksonException ex) {
-            throw new IllegalStateException(AttemptConstants.PINNED_ITEM_OPTIONS_PARSE_FAILED, ex);
+            throw new IllegalStateException(AttemptConstants.EXAM_ITEM_OPTIONS_PARSE_FAILED, ex);
         }
     }
 
@@ -119,12 +117,12 @@ public class AttemptMapper {
      * clear message rather than falling through to a confusing
      * {@link NullPointerException} deep in a grouping pipeline.
      */
-    private void requireHomogeneousBlankIndex(UUID pinnedItemPublicId, List<FrozenOption> parsed) {
+    private void requireHomogeneousBlankIndex(UUID itemPublicId, List<FrozenOption> parsed) {
         boolean anyGrouped = parsed.stream().anyMatch(o -> o.blankIndex() != null);
         boolean anyUngrouped = parsed.stream().anyMatch(o -> o.blankIndex() == null);
         if (anyGrouped && anyUngrouped) {
             throw new IllegalStateException(
-                    String.format(AttemptConstants.MIXED_BLANK_INDEX_OPTIONS, pinnedItemPublicId));
+                    String.format(AttemptConstants.MIXED_BLANK_INDEX_OPTIONS, itemPublicId));
         }
     }
 

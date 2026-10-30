@@ -7,14 +7,16 @@ import com.pte.billing.BillingOverviewService.PlanCounts;
 import com.pte.billing.BillingOverviewService.SubscriptionCounts;
 import com.pte.billing.BillingOverviewService.TenantPlanBrief;
 import com.pte.billing.domain.LicenseCode;
-import com.pte.billing.domain.Plan;
+import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.Subscription;
-import com.pte.billing.domain.TenantApplication;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.domain.enums.SubscriptionStatus;
-import com.pte.billing.domain.enums.TenantApplicationStatus;
+import com.pte.tenancy.TenancyService;
+import com.pte.tenancy.domain.Organization;
+import com.pte.tenancy.domain.enums.OrganizationStatus;
+import com.pte.tenancy.internal.repository.OrganizationRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
@@ -52,13 +54,13 @@ class BillingPlatformOverviewQueriesTest {
     @Autowired
     private SubscriptionRepository subscriptions;
     @Autowired
-    private PlanRepository plans;
+    private ServicePlanRepository plans;
     @Autowired
     private OrderRepository orders;
     @Autowired
     private LicenseCodeRepository licenseCodes;
     @Autowired
-    private TenantApplicationRepository applications;
+    private OrganizationRepository applications;
     @Autowired
     private EntityManager em;
     @Autowired
@@ -69,13 +71,14 @@ class BillingPlatformOverviewQueriesTest {
 
     @BeforeEach
     void setUp() {
-        service = new BillingOverviewService(subscriptions, plans, orders, licenseCodes, applications, CLOCK);
+        service = new BillingOverviewService(subscriptions, plans, orders, licenseCodes,
+                new TenancyService(applications, null, null, null), CLOCK);
     }
 
     // ---- builders ----
 
-    private Plan plan(String name, PlanType type, PlanStatus status, boolean deleted) {
-        Plan plan = new Plan();
+    private ServicePlan plan(String name, PlanType type, PlanStatus status, boolean deleted) {
+        ServicePlan plan = new ServicePlan();
         plan.setName(name);
         plan.setType(type);
         plan.setPrice(new BigDecimal("100000.00"));
@@ -85,7 +88,7 @@ class BillingPlatformOverviewQueriesTest {
         return plans.saveAndFlush(plan);
     }
 
-    private Plan plan(String name) {
+    private ServicePlan plan(String name) {
         return plan(name, PlanType.EXAM_PACKAGE, PlanStatus.ACTIVE, false);
     }
 
@@ -123,23 +126,23 @@ class BillingPlatformOverviewQueriesTest {
         return subscription;
     }
 
-    private Subscription usable(UUID tenant, Plan plan, Duration untilExpiry) {
+    private Subscription usable(UUID tenant, ServicePlan plan, Duration untilExpiry) {
         return subscription(tenant, plan.getPublicId(), NOW.minus(Duration.ofDays(100)), NOW.plus(untilExpiry),
                 SubscriptionStatus.ACTIVE, ActivationSource.LICENSE_CODE, false, null);
     }
 
-    private TenantApplication application(TenantApplicationStatus status, boolean deleted, Instant createdAt) {
-        TenantApplication application = new TenantApplication();
-        application.setOrgName("Org " + (++counter));
-        application.setOrgType("SCHOOL");
-        application.setRequestedCode("code" + counter + UUID.randomUUID().toString().substring(0, 6));
+    private Organization application(OrganizationStatus status, boolean deleted, Instant createdAt) {
+        Organization application = new Organization();
+        application.setName("Org " + (++counter));
+        application.setOrganizationType("SCHOOL");
+        application.setCode("code" + counter + UUID.randomUUID().toString().substring(0, 6));
         application.setContactEmail("secret-contact-" + counter + "@example.test");
         application.setContactPhone("0900000000");
         application.setTaxCode("TAX-SECRET-" + counter);
         application.setStatus(status);
         application.setDeleted(deleted);
         applications.saveAndFlush(application);
-        rewriteCreatedAt("TenantApplication", application.getId(), createdAt);
+        rewriteCreatedAt("Organization", application.getId(), createdAt);
         return application;
     }
 
@@ -281,7 +284,7 @@ class BillingPlatformOverviewQueriesTest {
 
     @Test
     void subscriptionCountsCoverEveryTenantAndOnlyUsableSubscriptions() {
-        Plan plan = plan("Pro");
+        ServicePlan plan = plan("Pro");
         UUID tenantA = UUID.randomUUID();
         UUID tenantB = UUID.randomUUID();
         usable(tenantA, plan, Duration.ofDays(90));
@@ -302,7 +305,7 @@ class BillingPlatformOverviewQueriesTest {
 
     @Test
     void theExpiringSoonThresholdIsThirtyDaysInclusive() {
-        Plan plan = plan("Pro");
+        ServicePlan plan = plan("Pro");
         UUID tenant = UUID.randomUUID();
         usable(tenant, plan, Duration.ofDays(30)); // exactly on the threshold: soon
         usable(tenant, plan, Duration.ofDays(30).plusSeconds(1)); // not soon
@@ -328,7 +331,7 @@ class BillingPlatformOverviewQueriesTest {
 
     @Test
     void activatedBySourceIsHalfOpenOnCreationTimeAndEverySourceIsPresent() {
-        Plan plan = plan("Pro");
+        ServicePlan plan = plan("Pro");
         UUID tenant = UUID.randomUUID();
         Instant from = NOW.minus(Duration.ofDays(30));
         Instant start = NOW.minus(Duration.ofDays(50));
@@ -394,11 +397,11 @@ class BillingPlatformOverviewQueriesTest {
 
     @Test
     void pendingCountIgnoresReviewedAndDeletedApplications() {
-        application(TenantApplicationStatus.PENDING, false, null);
-        application(TenantApplicationStatus.PENDING, false, null);
-        application(TenantApplicationStatus.APPROVED, false, null);
-        application(TenantApplicationStatus.REJECTED, false, null);
-        application(TenantApplicationStatus.PENDING, true, null);
+        application(OrganizationStatus.PENDING, false, null);
+        application(OrganizationStatus.PENDING, false, null);
+        application(OrganizationStatus.ACTIVE, false, null);
+        application(OrganizationStatus.REJECTED, false, null);
+        application(OrganizationStatus.PENDING, true, null);
 
         assertThat(service.pendingApplicationCount()).isEqualTo(2);
     }
@@ -406,24 +409,24 @@ class BillingPlatformOverviewQueriesTest {
     @Test
     void receivedInWindowIsHalfOpenCountsEveryStatusAndSkipsDeleted() {
         Instant from = NOW.minus(Duration.ofDays(30));
-        application(TenantApplicationStatus.PENDING, false, from); // lower bound included
-        application(TenantApplicationStatus.APPROVED, false, NOW.minusSeconds(1));
-        application(TenantApplicationStatus.REJECTED, false, NOW.minus(Duration.ofDays(3)));
-        application(TenantApplicationStatus.PENDING, false, NOW); // upper bound excluded
-        application(TenantApplicationStatus.PENDING, false, from.minusSeconds(1)); // before
-        application(TenantApplicationStatus.PENDING, true, NOW.minus(Duration.ofDays(3))); // deleted
+        application(OrganizationStatus.PENDING, false, from); // lower bound included
+        application(OrganizationStatus.ACTIVE, false, NOW.minusSeconds(1));
+        application(OrganizationStatus.REJECTED, false, NOW.minus(Duration.ofDays(3)));
+        application(OrganizationStatus.PENDING, false, NOW); // upper bound excluded
+        application(OrganizationStatus.PENDING, false, from.minusSeconds(1)); // before
+        application(OrganizationStatus.PENDING, true, NOW.minus(Duration.ofDays(3))); // deleted
 
         assertThat(service.countApplicationsReceivedBetween(from, NOW)).isEqualTo(3);
     }
 
     @Test
     void oldestPendingAreOldestFirstLimitedAndOnlyPending() {
-        TenantApplication newest = application(TenantApplicationStatus.PENDING, false, NOW.minus(Duration.ofDays(1)));
-        TenantApplication oldest = application(TenantApplicationStatus.PENDING, false, NOW.minus(Duration.ofDays(40)));
-        TenantApplication middle = application(TenantApplicationStatus.PENDING, false, NOW.minus(Duration.ofDays(10)));
-        application(TenantApplicationStatus.APPROVED, false, NOW.minus(Duration.ofDays(90)));
-        application(TenantApplicationStatus.REJECTED, false, NOW.minus(Duration.ofDays(80)));
-        application(TenantApplicationStatus.PENDING, true, NOW.minus(Duration.ofDays(70)));
+        Organization newest = application(OrganizationStatus.PENDING, false, NOW.minus(Duration.ofDays(1)));
+        Organization oldest = application(OrganizationStatus.PENDING, false, NOW.minus(Duration.ofDays(40)));
+        Organization middle = application(OrganizationStatus.PENDING, false, NOW.minus(Duration.ofDays(10)));
+        application(OrganizationStatus.ACTIVE, false, NOW.minus(Duration.ofDays(90)));
+        application(OrganizationStatus.REJECTED, false, NOW.minus(Duration.ofDays(80)));
+        application(OrganizationStatus.PENDING, true, NOW.minus(Duration.ofDays(70)));
 
         List<PendingApplicationView> two = service.oldestPendingApplications(2);
         List<PendingApplicationView> all = service.oldestPendingApplications(10);
@@ -436,14 +439,14 @@ class BillingPlatformOverviewQueriesTest {
 
     @Test
     void oldestPendingViewCarriesOnlyNonSensitiveFieldsAndTheReceivedTime() {
-        TenantApplication saved = application(TenantApplicationStatus.PENDING, false, NOW.minus(Duration.ofDays(2)));
+        Organization saved = application(OrganizationStatus.PENDING, false, NOW.minus(Duration.ofDays(2)));
 
         PendingApplicationView view = service.oldestPendingApplications(1).get(0);
 
         assertThat(view.publicId()).isEqualTo(saved.getPublicId());
-        assertThat(view.orgName()).isEqualTo(saved.getOrgName());
+        assertThat(view.orgName()).isEqualTo(saved.getName());
         assertThat(view.orgType()).isEqualTo("SCHOOL");
-        assertThat(view.requestedCode()).isEqualTo(saved.getRequestedCode());
+        assertThat(view.requestedCode()).isEqualTo(saved.getCode());
         assertThat(view.receivedAt()).isEqualTo(NOW.minus(Duration.ofDays(2)));
         assertThat(view.toString()).doesNotContain("secret-contact").doesNotContain("TAX-SECRET")
                 .doesNotContain("0900000000");
@@ -454,8 +457,8 @@ class BillingPlatformOverviewQueriesTest {
     @Test
     void applicationsCreatedAtTheSameInstantAreOrderedByInsertionOrderForStability() {
         Instant same = NOW.minus(Duration.ofDays(3));
-        TenantApplication first = application(TenantApplicationStatus.PENDING, false, same);
-        TenantApplication second = application(TenantApplicationStatus.PENDING, false, same);
+        Organization first = application(OrganizationStatus.PENDING, false, same);
+        Organization second = application(OrganizationStatus.PENDING, false, same);
 
         assertThat(service.oldestPendingApplications(5)).extracting(PendingApplicationView::publicId)
                 .containsExactly(first.getPublicId(), second.getPublicId());
@@ -463,7 +466,7 @@ class BillingPlatformOverviewQueriesTest {
 
     @Test
     void aNonPositiveLimitReturnsNothingWithoutQuerying() {
-        application(TenantApplicationStatus.PENDING, false, null);
+        application(OrganizationStatus.PENDING, false, null);
         Statistics statistics = emf.unwrap(SessionFactory.class).getStatistics();
         statistics.clear();
 
@@ -476,8 +479,8 @@ class BillingPlatformOverviewQueriesTest {
 
     @Test
     void eachTenantGetsItsSoonestExpiringUsableSubscriptionsPlanAndExpiry() {
-        Plan pro = plan("Pro Pack");
-        Plan lite = plan("Lite Pack");
+        ServicePlan pro = plan("Pro Pack");
+        ServicePlan lite = plan("Lite Pack");
         UUID tenantA = UUID.randomUUID();
         UUID tenantB = UUID.randomUUID();
         usable(tenantA, lite, Duration.ofDays(200));
@@ -493,7 +496,7 @@ class BillingPlatformOverviewQueriesTest {
 
     @Test
     void tenantsWithoutAUsableSubscriptionAreAbsentAndExpiredOrFutureOrDeletedOnesDoNotCount() {
-        Plan pro = plan("Pro Pack");
+        ServicePlan pro = plan("Pro Pack");
         UUID withNothing = UUID.randomUUID();
         UUID expiredOnly = UUID.randomUUID();
         UUID futureOnly = UUID.randomUUID();
@@ -517,7 +520,7 @@ class BillingPlatformOverviewQueriesTest {
 
     @Test
     void subscriptionsOfTenantsThatWereNotAskedForNeverAppear() {
-        Plan pro = plan("Pro Pack");
+        ServicePlan pro = plan("Pro Pack");
         UUID asked = UUID.randomUUID();
         UUID other = UUID.randomUUID();
         usable(asked, pro, Duration.ofDays(5));
@@ -550,9 +553,9 @@ class BillingPlatformOverviewQueriesTest {
 
     @Test
     void currentPlansForManyTenantsAreResolvedInTwoStatementsNotOnePerTenant() {
-        Plan planA = plan("Plan A");
-        Plan planB = plan("Plan B");
-        Plan planC = plan("Plan C");
+        ServicePlan planA = plan("Plan A");
+        ServicePlan planB = plan("Plan B");
+        ServicePlan planC = plan("Plan C");
         List<UUID> tenants = new java.util.ArrayList<>();
         for (int i = 0; i < 6; i++) {
             UUID tenant = UUID.randomUUID();

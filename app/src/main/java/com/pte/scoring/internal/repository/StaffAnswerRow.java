@@ -7,6 +7,7 @@ public interface StaffAnswerRow {
     UUID getAnswerPublicId();
     UUID getAttemptPublicId();
     UUID getSessionPublicId();
-    UUID getScoreTemplatePublicId();
+    UUID getExamDefinitionPublicId();
     String getTaskType();
+    com.pte.scoring.domain.enums.ScoringMethod getScoringMethod();
 }

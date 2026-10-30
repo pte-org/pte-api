@@ -17,7 +17,6 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
-import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -134,7 +133,7 @@ class AzureSpeechRestClientTest {
         server.enqueue(200, NESTED_SUCCESS);
         List<Duration> waits = new ArrayList<>();
         AzureSpeechRestClient guarded = new AzureSpeechRestClient(httpClient, JSON, server.uri(""), KEY,
-                Duration.ofSeconds(5), new ProviderGuard("Azure Speech", 3, 5, Clock.systemUTC(), waits::add));
+                Duration.ofSeconds(5), new ProviderGuard("Azure Speech", 3, 5, com.pte.TestClocks.fixed(), waits::add));
 
         SpeechSegmentResult result = guarded.assess(wav, "Good morning.");
 

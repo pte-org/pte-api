@@ -1,7 +1,9 @@
 package com.pte.practice.internal.domain;
 
+import com.pte.practice.internal.domain.enums.PracticeSessionKind;
 import com.pte.practice.internal.domain.enums.PracticeSessionSourceType;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
+import com.pte.practice.internal.domain.enums.PracticeTimingMode;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -34,9 +36,6 @@ public class PracticeSession extends BaseEntity {
 
     @Column(name = "student_public_id", nullable = false)
     private UUID studentPublicId;
-
-    @Column(name = "identity_public_id", nullable = false)
-    private UUID identityPublicId;
 
     @Column(name = "tenant_id", nullable = false)
     private UUID tenantId;
@@ -88,6 +87,36 @@ public class PracticeSession extends BaseEntity {
     @Column(name = "last_activity_at")
     private Instant lastActivityAt;
 
+    /** Null on sessions created before V3; read through {@link #effectiveTimingMode()}. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "timing_mode", length = 16)
+    private PracticeTimingMode timingMode;
+
+    /** Questions per task type the student asked for; null on sessions created before V3 (one per type). */
+    @Column(name = "question_count")
+    private Integer questionCount;
+
+    /** Null on sessions created before V4; read through {@link #effectiveKind()}. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "kind", length = 16)
+    private PracticeSessionKind kind;
+
+    /** The skill a SKILL session covers (SPEAKING, WRITING, READING, LISTENING); null otherwise. */
+    @Column(name = "skill_code", length = 16)
+    private String skillCode;
+
+    /** Internal id of the pinned mock test a MOCK_TEST session runs; null otherwise. */
+    @Column(name = "mock_test_id")
+    private Long mockTestId;
+
     @Version
     private Long version;
+
+    public PracticeSessionKind effectiveKind() {
+        return kind == null ? PracticeSessionKind.TASK : kind;
+    }
+
+    public PracticeTimingMode effectiveTimingMode() {
+        return timingMode == null ? PracticeTimingMode.UNTIMED : timingMode;
+    }
 }

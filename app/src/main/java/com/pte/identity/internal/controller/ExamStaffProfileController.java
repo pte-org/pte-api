@@ -1,7 +1,7 @@
 package com.pte.identity.internal.controller;
 
 import com.pte.identity.dto.response.ExamStaffAccountView;
-import com.pte.identity.internal.dto.request.UpdateExamStaffProfileRequest;
+import com.pte.identity.internal.dto.request.profile.UpdateExamStaffProfileRequest;
 import com.pte.identity.internal.service.ExamStaffAccountService;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;

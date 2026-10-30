@@ -1,9 +1,9 @@
 package com.pte.enrollment;
 
 import com.pte.enrollment.domain.enums.ProgramStatus;
-import com.pte.enrollment.internal.repository.ClassMembershipRepository;
+import com.pte.enrollment.internal.repository.ClassStudentRepository;
 import com.pte.enrollment.internal.repository.ProgramRepository;
-import com.pte.enrollment.internal.repository.StudentClassRepository;
+import com.pte.enrollment.internal.repository.TrainingClassRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,14 +18,14 @@ import java.util.UUID;
 public class EnrollmentOverviewService {
 
     private final ProgramRepository programRepository;
-    private final StudentClassRepository studentClassRepository;
-    private final ClassMembershipRepository classMembershipRepository;
+    private final TrainingClassRepository trainingClassRepository;
+    private final ClassStudentRepository classStudentRepository;
 
     public EnrollmentOverviewService(ProgramRepository programRepository,
-            StudentClassRepository studentClassRepository, ClassMembershipRepository classMembershipRepository) {
+            TrainingClassRepository trainingClassRepository, ClassStudentRepository classStudentRepository) {
         this.programRepository = programRepository;
-        this.studentClassRepository = studentClassRepository;
-        this.classMembershipRepository = classMembershipRepository;
+        this.trainingClassRepository = trainingClassRepository;
+        this.classStudentRepository = classStudentRepository;
     }
 
     /** Active programs and classes plus the number of learners placed in a class. */
@@ -35,9 +35,9 @@ public class EnrollmentOverviewService {
     @Transactional(readOnly = true)
     public AcademicCounts academicCounts(UUID tenantId) {
         return new AcademicCounts(
-                programRepository.countByOrganization_Tenant_PublicIdAndStatusAndDeletedFalse(
+                programRepository.countByOrganization_PublicIdAndStatusAndDeletedFalse(
                         tenantId, ProgramStatus.ACTIVE),
-                studentClassRepository.countActiveForTenant(tenantId),
-                classMembershipRepository.countAssignedForTenant(tenantId));
+                trainingClassRepository.countActiveForTenant(tenantId),
+                classStudentRepository.countAssignedForTenant(tenantId));
     }
 }

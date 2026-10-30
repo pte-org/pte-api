@@ -1,0 +1,15 @@
+# Postgres-only test profile (chat phase 1, Open Decision e). Activated with
+# @ActiveProfiles("postgres-test") on tests that run against a Testcontainers
+# Postgres; the JDBC URL / credentials are injected through @DynamicPropertySource,
+# so nothing here points at a real database.
+#
+# Overrides the H2 defaults in application.yml (Flyway off, create-drop): the real
+# migrations run and Hibernate must find the entities consistent with that DDL.
+spring:
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+  jpa:
+    hibernate:
+      ddl-auto: validate

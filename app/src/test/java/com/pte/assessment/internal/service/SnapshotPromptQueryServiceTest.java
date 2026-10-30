@@ -1,8 +1,8 @@
 package com.pte.assessment.internal.service;
 
-import com.pte.assessment.domain.SnapshotItem;
+import com.pte.assessment.domain.ExamVersionItem;
 import com.pte.assessment.dto.response.ExaminerQuestionPromptView;
-import com.pte.assessment.internal.repository.SnapshotItemRepository;
+import com.pte.assessment.internal.repository.ExamVersionRepository;
 import com.pte.itembank.domain.enums.PteSection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,7 +28,7 @@ class SnapshotPromptQueryServiceTest {
     private final JsonMapper jsonMapper = JsonMapper.builder().findAndAddModules().build();
 
     @Mock
-    private SnapshotItemRepository snapshotItemRepository;
+    private ExamVersionRepository snapshotItemRepository;
 
     private SnapshotPromptQueryService service;
 
@@ -41,7 +41,7 @@ class SnapshotPromptQueryServiceTest {
     void mapsTenantPinnedPromptButNeverProjectsReferenceOrCorrectAnswerFields() throws Exception {
         UUID itemId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        SnapshotItem item = new SnapshotItem();
+        ExamVersionItem item = new ExamVersionItem();
         item.setPublicId(itemId);
         item.setTaskTypeKey("FILL_BLANKS_READING");
         item.setSection(PteSection.READING);
@@ -53,7 +53,7 @@ class SnapshotPromptQueryServiceTest {
         item.setOptionsJson("[{\"text\":\"choice A\",\"correct\":true,\"orderIndex\":1,"
                 + "\"blankIndex\":0,\"correctGapIndex\":7},{\"text\":\"choice B\",\"correct\":false,"
                 + "\"orderIndex\":2,\"blankIndex\":0,\"correctGapIndex\":7}]");
-        when(snapshotItemRepository.findAllForTenant(List.of(itemId), tenantId)).thenReturn(List.of(item));
+        when(snapshotItemRepository.findItemsForTenant(List.of(itemId), tenantId)).thenReturn(List.of(item));
 
         Map<UUID, ExaminerQuestionPromptView> result = service.findForExaminer(List.of(itemId), tenantId);
 
@@ -68,7 +68,7 @@ class SnapshotPromptQueryServiceTest {
         String serialized = jsonMapper.writeValueAsString(prompt);
         assertThat(serialized).doesNotContain("correct", "correctGapIndex", "referenceAnswerText", "correctAnswerText",
                 "private reference answer", "private correct answer");
-        verify(snapshotItemRepository).findAllForTenant(List.of(itemId), tenantId);
+        verify(snapshotItemRepository).findItemsForTenant(List.of(itemId), tenantId);
     }
 
     @Test
@@ -76,9 +76,9 @@ class SnapshotPromptQueryServiceTest {
         UUID firstItemId = UUID.randomUUID();
         UUID secondItemId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        SnapshotItem firstItem = promptItem(firstItemId, 1, "READ_ALOUD");
-        SnapshotItem secondItem = promptItem(secondItemId, 2, "WRITE_ESSAY");
-        when(snapshotItemRepository.findAllForTenant(List.of(firstItemId, secondItemId), tenantId))
+        ExamVersionItem firstItem = promptItem(firstItemId, 1, "READ_ALOUD");
+        ExamVersionItem secondItem = promptItem(secondItemId, 2, "WRITE_ESSAY");
+        when(snapshotItemRepository.findItemsForTenant(List.of(firstItemId, secondItemId), tenantId))
                 .thenReturn(List.of(firstItem, secondItem));
 
         Map<UUID, ExaminerQuestionPromptView> prompts = service.findForExaminer(
@@ -87,7 +87,7 @@ class SnapshotPromptQueryServiceTest {
         assertThat(prompts).containsOnlyKeys(firstItemId, secondItemId);
         assertThat(prompts.get(firstItemId).taskType()).isEqualTo("READ_ALOUD");
         assertThat(prompts.get(secondItemId).taskType()).isEqualTo("WRITE_ESSAY");
-        verify(snapshotItemRepository, times(1)).findAllForTenant(List.of(firstItemId, secondItemId), tenantId);
+        verify(snapshotItemRepository, times(1)).findItemsForTenant(List.of(firstItemId, secondItemId), tenantId);
     }
 
     @Test
@@ -102,14 +102,14 @@ class SnapshotPromptQueryServiceTest {
 
     @Test
     void malformedPinnedOptionsFailClosedInsteadOfReturningAnIncompletePrompt() {
-        SnapshotItem item = new SnapshotItem();
+        ExamVersionItem item = new ExamVersionItem();
         item.setTaskTypeCode("WRITE_ESSAY");
         item.setSection(PteSection.WRITING);
         item.setOptionsJson("not-json");
         UUID itemId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         item.setPublicId(itemId);
-        when(snapshotItemRepository.findAllForTenant(List.of(itemId), tenantId)).thenReturn(List.of(item));
+        when(snapshotItemRepository.findItemsForTenant(List.of(itemId), tenantId)).thenReturn(List.of(item));
 
         assertThatThrownBy(() -> service.findForExaminer(List.of(itemId), tenantId))
                 .isInstanceOf(IllegalStateException.class)
@@ -117,12 +117,12 @@ class SnapshotPromptQueryServiceTest {
     }
 
     private void verifyNoPromptLookup() {
-        verify(snapshotItemRepository, never()).findAllForTenant(org.mockito.ArgumentMatchers.any(),
+        verify(snapshotItemRepository, never()).findItemsForTenant(org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any());
     }
 
-    private SnapshotItem promptItem(UUID itemId, int orderIndex, String taskType) {
-        SnapshotItem item = new SnapshotItem();
+    private ExamVersionItem promptItem(UUID itemId, int orderIndex, String taskType) {
+        ExamVersionItem item = new ExamVersionItem();
         item.setPublicId(itemId);
         item.setTaskTypeKey(taskType);
         item.setSection(PteSection.SPEAKING);

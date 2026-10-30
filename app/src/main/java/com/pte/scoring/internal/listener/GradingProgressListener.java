@@ -1,7 +1,7 @@
 package com.pte.scoring.internal.listener;
 
 import com.pte.scoring.ScoringProgressChangedEvent;
-import com.pte.scoring.internal.service.GradingCohortService;
+import com.pte.scoring.internal.service.grading.GradingCohortService;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;

@@ -1,5 +1,7 @@
 package com.pte.overview.internal.service;
 
+import com.pte.overview.internal.service.admin.AdminSection;
+import com.pte.overview.internal.service.admin.AdminVisibility;
 import com.pte.overview.internal.constant.OverviewConstants;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.PlatformOperation;

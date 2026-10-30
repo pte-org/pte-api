@@ -5,6 +5,8 @@ import com.pte.practice.internal.dto.request.PracticePreflightRequest;
 import com.pte.practice.internal.dto.response.PracticeCatalogResponse;
 import com.pte.practice.internal.dto.response.PracticePreflightResponse;
 import com.pte.practice.internal.service.PracticeCatalogService;
+import com.pte.practice.internal.service.catalog.PracticeSkillStatsService;
+import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -23,14 +25,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class PracticeCatalogController {
 
     private final PracticeCatalogService catalogService;
+    private final PracticeSkillStatsService skillStatsService;
 
-    public PracticeCatalogController(PracticeCatalogService catalogService) {
+    public PracticeCatalogController(PracticeCatalogService catalogService,
+            PracticeSkillStatsService skillStatsService) {
         this.catalogService = catalogService;
+        this.skillStatsService = skillStatsService;
     }
 
     @GetMapping
     public ApiResponse<PracticeCatalogResponse> catalog() {
-        return ApiResponse.success(catalogService.getCatalog());
+        return ApiResponse.success(skillStatsService.withCounts(
+                catalogService.getStudentCatalog(), CurrentUserContext.required().userId()));
     }
 
     @PostMapping("/preflight")

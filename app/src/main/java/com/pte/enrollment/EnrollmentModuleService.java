@@ -1,18 +1,19 @@
 package com.pte.enrollment;
 
-import com.pte.enrollment.domain.ClassMembership;
+import com.pte.enrollment.domain.ClassStudent;
 import com.pte.enrollment.domain.enums.ClassStatus;
 import com.pte.enrollment.domain.enums.ProgramStatus;
-import com.pte.enrollment.domain.StudentClass;
+import com.pte.enrollment.domain.TrainingClass;
 import com.pte.enrollment.internal.exception.ProgramNotFoundException;
 import com.pte.enrollment.internal.exception.StudentClassNotFoundException;
-import com.pte.enrollment.internal.repository.ClassMembershipRepository;
+import com.pte.enrollment.internal.repository.ClassStudentRepository;
 import com.pte.enrollment.internal.repository.ProgramRepository;
-import com.pte.enrollment.internal.repository.StudentClassRepository;
+import com.pte.enrollment.internal.repository.TrainingClassRepository;
 import com.pte.identity.IdentityService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.List;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -25,32 +26,23 @@ import java.util.UUID;
 @Service
 public class EnrollmentModuleService {
 
-    private final StudentClassRepository studentClassRepository;
-    private final ClassMembershipRepository classMembershipRepository;
+    private final TrainingClassRepository trainingClassRepository;
+    private final ClassStudentRepository classStudentRepository;
     private final ProgramRepository programRepository;
     private final IdentityService identityService;
+    private final Clock clock;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public EnrollmentModuleService(StudentClassRepository studentClassRepository,
-                                   ClassMembershipRepository classMembershipRepository,
+    public EnrollmentModuleService(TrainingClassRepository trainingClassRepository,
+                                   ClassStudentRepository classStudentRepository,
                                    ProgramRepository programRepository,
-                                   IdentityService identityService) {
-        this.studentClassRepository = studentClassRepository;
-        this.classMembershipRepository = classMembershipRepository;
+                                   IdentityService identityService,
+                                   Clock clock) {
+        this.clock = clock;
+        this.trainingClassRepository = trainingClassRepository;
+        this.classStudentRepository = classStudentRepository;
         this.programRepository = programRepository;
         this.identityService = identityService;
-    }
-
-    public EnrollmentModuleService(StudentClassRepository studentClassRepository,
-                                   ClassMembershipRepository classMembershipRepository,
-                                   ProgramRepository programRepository) {
-        this(studentClassRepository, classMembershipRepository, programRepository, null);
-    }
-
-    /** Compatibility constructor for focused enrollment facade unit tests. */
-    public EnrollmentModuleService(StudentClassRepository studentClassRepository,
-                                   ClassMembershipRepository classMembershipRepository) {
-        this(studentClassRepository, classMembershipRepository, null);
     }
 
     /** Returns only the student's current membership; it is not used for attempt history. */
@@ -59,13 +51,13 @@ public class EnrollmentModuleService {
         if (tenantId == null || studentPublicId == null) {
             return null;
         }
-        return classMembershipRepository.findByTenantIdAndStudentPublicId(tenantId, studentPublicId)
+        return classStudentRepository.findByOrganizationIdAndStudentPublicId(tenantId, studentPublicId)
                 .filter(membership -> !membership.isDeleted())
                 .map(membership -> new StudentAssignmentView(
-                        membership.getStudentClass().getPublicId(),
-                        membership.getStudentClass().getName(),
-                        membership.getStudentClass().getProgram().getPublicId(),
-                        membership.getStudentClass().getProgram().getName()))
+                        membership.getTrainingClass().getPublicId(),
+                        membership.getTrainingClass().getName(),
+                        membership.getTrainingClass().getProgram().getPublicId(),
+                        membership.getTrainingClass().getProgram().getName()))
                 .orElse(null);
     }
 
@@ -77,21 +69,21 @@ public class EnrollmentModuleService {
      */
     @Transactional(readOnly = true)
     public List<UUID> findActiveStudentPublicIds(UUID tenantId, UUID classPublicId) {
-        StudentClass studentClass = studentClassRepository.findByPublicId(classPublicId)
+        TrainingClass trainingClass = trainingClassRepository.findByPublicId(classPublicId)
                 .orElseThrow(StudentClassNotFoundException::new);
-        if (!studentClass.getProgram().getOrganization().getTenant().getPublicId().equals(tenantId)) {
+        if (!tenantId.equals(trainingClass.getOrganizationId())) {
             throw new StudentClassNotFoundException();
         }
-        if (studentClass.isDeleted() || studentClass.getStatus() != ClassStatus.ACTIVE
-                || studentClass.getProgram().isDeleted()
-                || studentClass.getProgram().getStatus() != ProgramStatus.ACTIVE
-                || !studentClass.getProgram().isCurrentlyActive(LocalDate.now())) {
+        if (trainingClass.isDeleted() || trainingClass.getStatus() != ClassStatus.ACTIVE
+                || trainingClass.getProgram().isDeleted()
+                || trainingClass.getProgram().getStatus() != ProgramStatus.ACTIVE
+                || !trainingClass.getProgram().isCurrentlyActive(LocalDate.now(clock))) {
             throw new StudentClassNotFoundException();
         }
-        List<UUID> studentPublicIds = classMembershipRepository
-                .findByTenantIdAndStudentClass_PublicId(tenantId, classPublicId).stream()
+        List<UUID> studentPublicIds = classStudentRepository
+                .findByOrganizationIdAndTrainingClass_PublicId(tenantId, classPublicId).stream()
                 .filter(membership -> !membership.isDeleted())
-                .map(ClassMembership::getStudentPublicId)
+                .map(ClassStudent::getStudentPublicId)
                 .toList();
         return filterActiveStudents(tenantId, studentPublicIds);
     }
@@ -99,12 +91,12 @@ public class EnrollmentModuleService {
     /** The program a tenant's class belongs to; a class of another tenant looks like not-found. */
     @Transactional(readOnly = true)
     public UUID findProgramPublicIdOfClass(UUID tenantId, UUID classPublicId) {
-        StudentClass studentClass = studentClassRepository.findByPublicId(classPublicId)
+        TrainingClass trainingClass = trainingClassRepository.findByPublicId(classPublicId)
                 .orElseThrow(StudentClassNotFoundException::new);
-        if (!studentClass.getProgram().getOrganization().getTenant().getPublicId().equals(tenantId)) {
+        if (!tenantId.equals(trainingClass.getOrganizationId())) {
             throw new StudentClassNotFoundException();
         }
-        return studentClass.getProgram().getPublicId();
+        return trainingClass.getProgram().getPublicId();
     }
 
     /** Resolves the union of current members in every non-archived class of a tenant program. */
@@ -113,17 +105,16 @@ public class EnrollmentModuleService {
         if (programRepository != null) {
             programRepository.findByPublicId(programPublicId)
                     .filter(program -> program.getOrganization() != null
-                            && program.getOrganization().getTenant() != null
-                            && tenantId.equals(program.getOrganization().getTenant().getPublicId()))
+                            && tenantId.equals(program.getOrganization().getPublicId()))
                     .filter(program -> !program.isDeleted()
                             && program.getStatus() == ProgramStatus.ACTIVE
-                            && program.isCurrentlyActive(LocalDate.now()))
+                            && program.isCurrentlyActive(LocalDate.now(clock)))
                     .orElseThrow(ProgramNotFoundException::new);
         }
-        List<UUID> studentPublicIds = classMembershipRepository
-                .findByStudentClass_Program_Organization_Tenant_PublicIdAndStudentClass_Program_PublicId(
+        List<UUID> studentPublicIds = classStudentRepository
+                .findByTrainingClass_Program_Organization_PublicIdAndTrainingClass_Program_PublicId(
                         tenantId, programPublicId).stream()
-                .map(ClassMembership::getStudentPublicId)
+                .map(ClassStudent::getStudentPublicId)
                 .distinct()
                 .toList();
         return filterActiveStudents(tenantId, studentPublicIds);

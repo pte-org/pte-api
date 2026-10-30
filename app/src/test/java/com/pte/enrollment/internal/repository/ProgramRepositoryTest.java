@@ -2,10 +2,9 @@ package com.pte.enrollment.internal.repository;
 
 import com.pte.tenancy.domain.Organization;
 import com.pte.enrollment.domain.Program;
-import com.pte.tenancy.domain.Tenant;
 import com.pte.tenancy.domain.enums.FacilityType;
+import com.pte.tenancy.domain.enums.OrganizationStatus;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
-import com.pte.tenancy.internal.repository.TenantRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -32,22 +31,15 @@ class ProgramRepositoryTest {
     @Autowired
     private OrganizationRepository organizationRepository;
 
-    @Autowired
-    private TenantRepository tenantRepository;
-
     private Organization persistOrganization() {
-        Tenant tenant = new Tenant();
-        tenant.setCode("acme-" + UUID.randomUUID());
-        tenant.setName("Acme School " + UUID.randomUUID());
-        tenant.setOrganizationType("SCHOOL");
-        tenant.setPackageName("starter");
-        tenant.setStudentLimit(500);
-        tenant = tenantRepository.save(tenant);
-
         Organization organization = new Organization();
-        organization.setName("Downtown Branch");
-        organization.setFacilityType(FacilityType.BRANCH);
-        organization.setTenant(tenant);
+        organization.setCode("acme-" + UUID.randomUUID());
+        organization.setName("Acme School " + UUID.randomUUID());
+        organization.setOrganizationType("SCHOOL");
+        organization.setPackageName("starter");
+        organization.setStudentLimit(500);
+        organization.setFacilityType(FacilityType.MAIN);
+        organization.setStatus(OrganizationStatus.ACTIVE);
         return organizationRepository.save(organization);
     }
 

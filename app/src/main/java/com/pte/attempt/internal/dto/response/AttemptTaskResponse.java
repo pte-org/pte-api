@@ -7,9 +7,9 @@ import java.util.UUID;
  * done/expired or the student explicitly submitted it; {@code task} is null
  * in that case.
  * {@code encryptionPublicKey} (Base64 X.509 SubjectPublicKeyInfo) is populated only on the
- * {@code startAttempt} response for a STRICT-pinned {@code answerIntegrityLevel}; null everywhere
- * else, including STANDARD-pinned attempts and every other response built off this same record.
- * {@code examMode} mirrors {@code PinnedExamSnapshot.examMode} — {@code "OFFICIAL_EXAM"};
+ * {@code startAttempt} response for a STRICT {@code answerIntegrityLevel}; null everywhere
+ * else, including STANDARD attempts and every other response built off this same record.
+ * {@code examMode} mirrors {@code ExamAttempt.examMode} — {@code "OFFICIAL_EXAM"};
  * null only for legacy attempts predating the field.
  */
 public record AttemptTaskResponse(UUID attemptPublicId, String attemptStatus, boolean completed, TaskView task,

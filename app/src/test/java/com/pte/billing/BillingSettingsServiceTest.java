@@ -1,7 +1,7 @@
 package com.pte.billing;
 
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.exception.PlatformSettingNotFoundException;
+import com.pte.billing.internal.exception.setting.PlatformSettingNotFoundException;
 import com.pte.billing.internal.service.PlatformSettingService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

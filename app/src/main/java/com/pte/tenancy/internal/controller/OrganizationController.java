@@ -1,54 +1,119 @@
 package com.pte.tenancy.internal.controller;
 
-import com.pte.tenancy.internal.dto.response.OrganizationResponse;
-import com.pte.tenancy.internal.service.OrganizationService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
+import com.pte.tenancy.TenantSuspensionImpact;
+import com.pte.tenancy.internal.dto.request.GrantQuotaRequest;
+import com.pte.tenancy.internal.dto.request.UpdateBrandingRequest;
+import com.pte.tenancy.internal.dto.request.UpdateOrganizationProfileRequest;
+import com.pte.tenancy.internal.dto.response.OrganizationResponse;
+import com.pte.tenancy.internal.dto.response.QuotaGrantResponse;
+import com.pte.tenancy.internal.service.OrganizationLifecycleService;
+import com.pte.tenancy.internal.service.OrganizationService;
+import com.pte.tenancy.internal.service.QuotaGrantService;
+import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import com.pte.tenancy.internal.dto.request.OrganizationStatusAction;
+import com.pte.tenancy.internal.dto.request.OrganizationStatusRequest;
+import com.pte.tenancy.internal.constant.TenancyConstants;
+import com.pte.shared.exception.StatusReasonRequiredException;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Platform-admin read/lifecycle endpoints for the single Organization owned by
- * a Tenant. Creation happens automatically during Tenant onboarding.
+ * Organizations (tenants). Platform operators govern them (onboard, suspend, branding, quota); a Host reads and
+ * edits only the organization in its token. Applications under review are served by billing's
+ * {@code /applications} endpoints, not here.
  */
 @RestController
-@RequestMapping("/api/v1/tenants/{tenantPublicId}/organizations")
-@PreAuthorize("hasRole('PLATFORM_ADMIN')")
+@RequestMapping("/api/v1/organizations")
 public class OrganizationController {
 
-    private final OrganizationService organizationService;
+    private static final String PLATFORM_OPERATORS = "hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER')";
+    private static final String PLATFORM_OPERATORS_OR_HOST =
+            "hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER','HOST_ADMIN')";
 
-    public OrganizationController(OrganizationService organizationService) {
+    private final OrganizationService organizationService;
+    private final OrganizationLifecycleService lifecycleService;
+    private final QuotaGrantService quotaGrantService;
+
+    public OrganizationController(OrganizationService organizationService,
+            OrganizationLifecycleService lifecycleService, QuotaGrantService quotaGrantService) {
         this.organizationService = organizationService;
+        this.lifecycleService = lifecycleService;
+        this.quotaGrantService = quotaGrantService;
     }
 
+    // Direct creation lives in billing (POST /api/v1/admin/organizations) so it follows the approval rules:
+    // free student limit, first host account, credentials email. There is no plan to pick at creation.
+
     @GetMapping
-    public ApiResponse<List<OrganizationResponse>> list(@PathVariable UUID tenantPublicId) {
-        return ApiResponse.success(organizationService.list(tenantPublicId, currentUser()));
+    @PreAuthorize(PLATFORM_OPERATORS_OR_HOST)
+    public ApiResponse<List<OrganizationResponse>> list(@RequestParam(required = false) String q) {
+        return ApiResponse.success(organizationService.list(currentUser(), q));
     }
 
     @GetMapping("/{publicId}")
-    public ApiResponse<OrganizationResponse> get(@PathVariable UUID tenantPublicId, @PathVariable UUID publicId) {
-        return ApiResponse.success(organizationService.get(tenantPublicId, publicId, currentUser()));
+    @PreAuthorize(PLATFORM_OPERATORS_OR_HOST)
+    public ApiResponse<OrganizationResponse> get(@PathVariable UUID publicId) {
+        return ApiResponse.success(organizationService.get(publicId, currentUser()));
     }
 
-    @PostMapping("/{publicId}/suspend")
-    public ApiResponse<OrganizationResponse> suspend(@PathVariable UUID tenantPublicId, @PathVariable UUID publicId) {
-        return ApiResponse.success(organizationService.suspend(tenantPublicId, publicId, currentUser()));
+    @PatchMapping("/{publicId}")
+    @PreAuthorize("hasRole('HOST_ADMIN')")
+    public ApiResponse<OrganizationResponse> updateProfile(@PathVariable UUID publicId,
+            @Valid @RequestBody UpdateOrganizationProfileRequest request) {
+        return ApiResponse.success(organizationService.updateProfile(publicId, request, currentUser()));
     }
 
-    @PostMapping("/{publicId}/reactivate")
-    public ApiResponse<OrganizationResponse> reactivate(@PathVariable UUID tenantPublicId,
-            @PathVariable UUID publicId) {
-        return ApiResponse.success(organizationService.reactivate(tenantPublicId, publicId, currentUser()));
+    @PatchMapping("/{publicId}/status")
+    @PreAuthorize(PLATFORM_OPERATORS)
+    public ApiResponse<OrganizationResponse> changeStatus(@PathVariable UUID publicId,
+            @Valid @RequestBody OrganizationStatusRequest request) {
+        CurrentUser caller = currentUser();
+        if (request.action() == OrganizationStatusAction.REACTIVATE) {
+            return ApiResponse.success(lifecycleService.reactivate(publicId, caller));
+        }
+        StatusReasonRequiredException.requireReason(request.impactDigest(),
+                TenancyConstants.TENANT_SUSPENSION_IMPACT_DIGEST_REQUIRED);
+        return ApiResponse.success(lifecycleService.suspendWithConfirmation(publicId, request.asSuspension(), caller));
+    }
+
+    @GetMapping("/{publicId}/suspension-impact")
+    @PreAuthorize(PLATFORM_OPERATORS)
+    public ApiResponse<TenantSuspensionImpact> suspensionImpact(@PathVariable UUID publicId,
+            @RequestParam(required = false) Integer days) {
+        return ApiResponse.success(lifecycleService.suspensionImpact(publicId, days));
+    }
+
+    @PostMapping("/{publicId}/branding")
+    @PreAuthorize(PLATFORM_OPERATORS)
+    public ApiResponse<OrganizationResponse> updateBranding(@PathVariable UUID publicId,
+            @Valid @RequestBody UpdateBrandingRequest request) {
+        return ApiResponse.success(lifecycleService.updateBranding(publicId, request, currentUser()));
+    }
+
+    @PostMapping("/{publicId}/quota-grants")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    public ApiResponse<QuotaGrantResponse> grantQuota(@PathVariable UUID publicId,
+            @Valid @RequestBody GrantQuotaRequest request) {
+        return ApiResponse.success(quotaGrantService.grant(publicId, request, currentUser()));
+    }
+
+    @GetMapping("/{publicId}/quota-grants")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    public ApiResponse<List<QuotaGrantResponse>> quotaHistory(@PathVariable UUID publicId) {
+        return ApiResponse.success(quotaGrantService.history(publicId));
     }
 
     private CurrentUser currentUser() {

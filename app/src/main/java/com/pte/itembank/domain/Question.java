@@ -5,14 +5,15 @@ import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.domain.enums.Visibility;
 import com.pte.shared.domain.BaseEntity;
-import jakarta.persistence.CascadeType;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
-import jakarta.persistence.OneToMany;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import lombok.Getter;
@@ -88,6 +89,18 @@ public class Question extends BaseEntity {
     @Column(name = "is_current", nullable = false)
     private boolean current = true;
 
+    /** Independent product-channel publication flags. They are revision-level and
+     * must not be inferred from the legacy mutually exclusive pool after migration. */
+    @Column(name = "available_for_practice", nullable = false)
+    private boolean availableForPractice;
+
+    @Column(name = "available_for_exam", nullable = false)
+    private boolean availableForExam;
+
+    /** True when the revision has an explicit channel decision, including both false. */
+    @Column(name = "availability_flags_explicit", nullable = false)
+    private boolean availabilityFlagsExplicit;
+
     @jakarta.persistence.Version
     @Column(nullable = false)
     private long version;
@@ -119,13 +132,14 @@ public class Question extends BaseEntity {
     @Column
     private Integer maxWordCount;
 
-    @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "question_options", joinColumns = @JoinColumn(name = "question_id"),
+            indexes = @jakarta.persistence.Index(name = "idx_options_question", columnList = "question_id"))
     @OrderBy("orderIndex ASC")
     private List<QuestionOption> options = new ArrayList<>();
 
-    /** Add an option, maintaining the back-reference invariant (no public collection setter). */
+    /** Add an option (no public collection setter). */
     public void addOption(QuestionOption option) {
-        option.setQuestion(this);
         options.add(option);
     }
 

@@ -3,6 +3,7 @@ package com.pte.proctoring.internal.config;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
@@ -28,10 +29,16 @@ public class ProctorConnectionRegistry {
 
     private final Map<String, ConnectionInfo> connections = new ConcurrentHashMap<>();
 
+    private final Clock clock;
+
+    public ProctorConnectionRegistry(Clock clock) {
+        this.clock = clock;
+    }
+
     public void register(String sessionId, CurrentUser user, Instant expiresAt) {
         if (sessionId == null) return;
         connections.put(sessionId, new ConnectionInfo(
-                sessionId, user, expiresAt, Instant.now(), new ConcurrentHashMap<>()));
+                sessionId, user, expiresAt, clock.instant(), new ConcurrentHashMap<>()));
     }
 
     public void addSubscription(String sessionId, String subscriptionId, String destination) {

@@ -11,8 +11,8 @@ public record SnapshotResponse(
         String name,
         int version,
         UUID sourceBlueprintPublicId,
-        UUID scoreTemplatePublicId,
-        int scoreTemplateVersion,
+        UUID examDefinitionPublicId,
+        int examDefinitionVersion,
         UUID tenantId,
         List<Item> items) {
 

@@ -1,10 +1,13 @@
 package com.pte.billing.internal.constant;
 
+import java.time.ZoneId;
+
 /** Error codes and validation messages owned by the billing module. */
 public final class BillingConstants {
 
-    public static final String LICENSE_ISSUE_OPERATION = "ISSUE_LICENSE_CODE";
-    public static final String LICENSE_ISSUE_INTENT_CONSTRAINT = "uk_license_issue_intents_actor_operation_key";
+    public static final String LICENSE_CODE_UNIQUE_CONSTRAINT = "uk_license_codes_code";
+    public static final String LICENSE_ISSUE_KEY_SEPARATOR = ":";
+    public static final String LICENSE_ISSUE_RESULT_FIELD = "licenseCodePublicId";
     public static final String LICENSE_CODE_IDEMPOTENCY_KEY_REQUIRED = "LICENSE_CODE_IDEMPOTENCY_KEY_REQUIRED";
     public static final String LICENSE_CODE_IDEMPOTENCY_KEY_INVALID = "LICENSE_CODE_IDEMPOTENCY_KEY_INVALID";
     public static final String LICENSE_CODE_IDEMPOTENCY_KEY_REQUIRED_MESSAGE = "Reload this page before issuing a license code.";
@@ -35,6 +38,7 @@ public final class BillingConstants {
     public static final String TENANT_APPLICATION_AGGREGATE = "TENANT_APPLICATION";
     public static final String AUDIT_APPLICATION_READ = "READ_APPLICATION";
     public static final String AUDIT_APPLICATION_REVIEW = "REVIEW_APPLICATION";
+    public static final String AUDIT_TENANT_DIRECT_ONBOARD = "TENANT_DIRECT_ONBOARD";
     public static final String AUDIT_APPLICATION_APPROVED_SUMMARY = "Approved tenant application";
     public static final String AUDIT_APPLICATION_REJECTED_SUMMARY = "Rejected tenant application";
     public static final String AUDIT_TENANT_LIFECYCLE = "TENANT_LIFECYCLE";
@@ -67,6 +71,19 @@ public final class BillingConstants {
     public static final String SUBSCRIPTION_EXAM_FIELDS_INVALID = "SUBSCRIPTION_EXAM_FIELDS_INVALID";
     public static final String SUBSCRIPTION_CAPACITY_FIELDS_INVALID = "SUBSCRIPTION_CAPACITY_FIELDS_INVALID";
     public static final String SUBSCRIPTION_NOT_FOUND = "SUBSCRIPTION_NOT_FOUND";
+    public static final String SUBSCRIPTION_START_OUT_OF_RANGE = "SUBSCRIPTION_START_OUT_OF_RANGE";
+    /** Contract start dates are calendar days in Vietnam. */
+    public static final ZoneId CONTRACT_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    public static final int GRANT_MAX_START_MONTHS = 6;
+    public static final String LICENSE_GRANT_KEY_PREFIX = "grant:";
+    public static final String LICENSE_GRANT_TENANT_REQUIRED = "LICENSE_GRANT_TENANT_REQUIRED";
+    public static final String LICENSE_GRANT_TENANT_NOT_ACTIVE = "LICENSE_GRANT_TENANT_NOT_ACTIVE";
+    public static final String LICENSE_GRANT_CONTRACT_REQUIRED = "LICENSE_GRANT_CONTRACT_REQUIRED";
+    public static final String LICENSE_GRANT_CONTRACT_TOO_LONG = "LICENSE_GRANT_CONTRACT_TOO_LONG";
+    public static final String LICENSE_GRANT_NOTE_TOO_LONG = "LICENSE_GRANT_NOTE_TOO_LONG";
+    public static final String AUDIT_LICENSE_GRANT = "LICENSE_GRANT";
+    /** Never includes the bearer code. */
+    public static final String LICENSE_GRANT_AUDIT_SUMMARY = "Granted plan %2$s to tenant %1$s under contract %3$s starting %4$s";
     public static final String LICENSE_KEY_REVEAL_INVALID_PASSWORD = "LICENSE_KEY_REVEAL_INVALID_PASSWORD";
     public static final String LICENSE_KEY_GENERATION_FAILED = "LICENSE_KEY_GENERATION_FAILED";
     public static final String ORDER_TENANT_REQUIRED = "ORDER_TENANT_REQUIRED";
@@ -122,8 +139,6 @@ public final class BillingConstants {
             "LICENSE_CODE_REVOKE_TENANT_MISMATCH";
     public static final String LICENSE_CODE_REVOKE_IMPACT_UNAVAILABLE =
             "LICENSE_CODE_REVOKE_IMPACT_UNAVAILABLE";
-    public static final String LICENSE_CODE_REVOKE_LEGACY_ENDPOINT =
-            "LICENSE_CODE_REVOKE_LEGACY_ENDPOINT";
     public static final String LICENSE_CODE_LEGACY_LIST_ENDPOINT =
             "LICENSE_CODE_LEGACY_LIST_ENDPOINT";
     public static final String LICENSE_CODE_LEGACY_LIST_ENDPOINT_MESSAGE =

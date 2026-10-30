@@ -7,6 +7,9 @@ COPY . .
 
 ARG NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+# Build-time flag that shows the AI chat panel; keep it false until the backend chat is enabled.
+ARG NEXT_PUBLIC_CHAT_ENABLED=false
+ENV NEXT_PUBLIC_CHAT_ENABLED=${NEXT_PUBLIC_CHAT_ENABLED}
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS=--max-old-space-size=2048
 RUN npm run build

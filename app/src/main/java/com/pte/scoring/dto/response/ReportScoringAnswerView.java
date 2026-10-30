@@ -10,7 +10,7 @@ import java.util.UUID;
 public record ReportScoringAnswerView(
         UUID answerPublicId,
         UUID attemptPublicId,
-        UUID scoreTemplatePublicId,
+        UUID examDefinitionPublicId,
         String taskType,
         String section,
         String scoringMethod,
@@ -27,12 +27,12 @@ public record ReportScoringAnswerView(
         long lockVersion,
         Integer provisionalScore) {
 
-    public ReportScoringAnswerView(UUID answerPublicId, UUID attemptPublicId, UUID scoreTemplatePublicId,
+    public ReportScoringAnswerView(UUID answerPublicId, UUID attemptPublicId, UUID examDefinitionPublicId,
             String taskType, String section, String scoringMethod, Integer aiRawScore, String aiProviderCategory,
             String aiProvider, String aiModel, String aiProviderVersion, Integer examinerScore,
             String selectedScoreSource, Integer selectedScore, boolean publishable, String blockingReason,
             long lockVersion) {
-        this(answerPublicId, attemptPublicId, scoreTemplatePublicId, taskType, section, scoringMethod, aiRawScore,
+        this(answerPublicId, attemptPublicId, examDefinitionPublicId, taskType, section, scoringMethod, aiRawScore,
                 aiProviderCategory, aiProvider, aiModel, aiProviderVersion, examinerScore, selectedScoreSource,
                 selectedScore, publishable, blockingReason, lockVersion, selectedScore);
     }

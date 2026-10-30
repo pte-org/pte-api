@@ -2,12 +2,8 @@ package com.pte.scoring.dto.response;
 
 import java.util.List;
 
+/** What the host sees of a session's examiner assignment: each examiner's load and how many attempts are assigned. */
 public record ExaminerAssignmentOverviewResponse(
-        List<ExaminerAssignmentBatchSummaryResponse> batches,
         List<ExaminerAssignmentLoadResponse> committedExaminerLoads,
-        long assignedAttemptCount,
-        int page,
-        int size,
-        long totalBatches,
-        int totalPages) {
+        long assignedAttemptCount) {
 }

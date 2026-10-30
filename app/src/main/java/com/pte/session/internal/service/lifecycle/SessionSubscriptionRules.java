@@ -2,14 +2,16 @@ package com.pte.session.internal.service.lifecycle;
 
 import com.pte.billing.BillingService;
 import com.pte.billing.SubscriptionView;
-import com.pte.session.internal.exception.InvalidSessionWindowException;
-import com.pte.session.internal.exception.SessionSubscriptionCapacityException;
-import com.pte.session.internal.exception.SessionSubscriptionNotFoundException;
-import com.pte.session.internal.exception.SessionTimeConflictException;
-import com.pte.session.internal.exception.SessionWindowOutsideSubscriptionException;
+import com.pte.session.internal.exception.capacity.InvalidSessionWindowException;
+import com.pte.session.internal.exception.capacity.SessionSubscriptionCapacityException;
+import com.pte.session.internal.exception.capacity.SessionSubscriptionNotFoundException;
+import com.pte.session.internal.exception.capacity.SessionSubscriptionNotStartedException;
+import com.pte.session.internal.exception.capacity.SessionTimeConflictException;
+import com.pte.session.internal.exception.capacity.SessionWindowOutsideSubscriptionException;
 import com.pte.session.internal.repository.ExamSessionRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -22,11 +24,14 @@ public class SessionSubscriptionRules {
 
     private final ExamSessionRepository sessionRepository;
     private final BillingService billingService;
+    private final Clock clock;
 
     public SessionSubscriptionRules(ExamSessionRepository sessionRepository,
-            BillingService billingService) {
+            BillingService billingService,
+            Clock clock) {
         this.sessionRepository = sessionRepository;
         this.billingService = billingService;
+        this.clock = clock;
     }
 
     public SubscriptionView lockedActiveSubscription(UUID subscriptionId, UUID tenantId) {
@@ -37,19 +42,33 @@ public class SessionSubscriptionRules {
         if (!locked.isEmpty()) {
             return locked.get(0);
         }
-        return billingService.getActiveSubscription(subscriptionId, tenantId)
+        return billingService.getSchedulableSubscription(subscriptionId, tenantId)
                 .orElseThrow(SessionSubscriptionNotFoundException::new);
     }
 
+    /** Scheduling check: a lane that starts later is accepted when the exam window fits inside it. */
     public void validateSubscriptionWindowAndCapacity(SubscriptionView subscription, Instant opensAt,
             Instant closesAt, long capacityOrEnrollmentCount, boolean enrollmentCount) {
-        Instant now = Instant.now();
+        validateSubscriptionWindowAndCapacity(subscription, opensAt, closesAt, capacityOrEnrollmentCount,
+                enrollmentCount, false);
+    }
+
+    /**
+     * {@code requireStarted} is true only when an exam opens: an exam on a not-yet-started lane can be scheduled
+     * and published, but must not open early, because attempts only check that the exam is OPEN.
+     */
+    public void validateSubscriptionWindowAndCapacity(SubscriptionView subscription, Instant opensAt,
+            Instant closesAt, long capacityOrEnrollmentCount, boolean enrollmentCount, boolean requireStarted) {
+        Instant now = clock.instant();
         if (subscription == null || subscription.status() == null || subscription.maxStudentsPerSession() == null
-                || subscription.maxStudentsPerSession() <= 0 || !subscription.isUsableAt(now)) {
+                || subscription.maxStudentsPerSession() <= 0 || !subscription.isSchedulableAt(now)) {
             throw new SessionSubscriptionNotFoundException();
         }
+        if (requireStarted && !subscription.isUsableAt(now)) {
+            throw new SessionSubscriptionNotStartedException(subscription.startsAt());
+        }
         if (opensAt.isBefore(subscription.startsAt()) || closesAt.isAfter(subscription.expiresAt())) {
-            throw new SessionWindowOutsideSubscriptionException();
+            throw new SessionWindowOutsideSubscriptionException(subscription.startsAt(), subscription.expiresAt());
         }
         if (enrollmentCount) {
             if (capacityOrEnrollmentCount > subscription.maxStudentsPerSession()) {
@@ -71,7 +90,7 @@ public class SessionSubscriptionRules {
     public void rejectOverlap(UUID subscriptionId, Instant opensAt, Instant closesAt, UUID excludedPublicId) {
         sessionRepository.findFirstOverlapping(subscriptionId, opensAt, closesAt, excludedPublicId)
                 .ifPresent(conflict -> {
-                    throw new SessionTimeConflictException(conflict.getPublicId());
+                    throw new SessionTimeConflictException(conflict.getPublicId(), conflict.getName());
                 });
     }
 

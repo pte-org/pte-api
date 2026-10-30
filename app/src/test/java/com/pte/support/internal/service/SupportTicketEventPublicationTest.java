@@ -7,7 +7,6 @@ import com.pte.support.domain.SupportTicketNote;
 import com.pte.support.domain.enums.TicketCategory;
 import com.pte.support.domain.enums.TicketStatus;
 import com.pte.support.dto.event.SupportTicketNoteAddedEvent;
-import com.pte.support.dto.event.SupportTicketStatusChangedEvent;
 import com.pte.support.dto.event.SupportTicketSubmittedEvent;
 import com.pte.support.internal.dto.request.AddNoteRequest;
 import com.pte.support.internal.dto.request.SubmitTicketRequest;

@@ -46,7 +46,6 @@ class StudentEnrollmentConflictNotificationListenerTest {
         UUID conflictingSessionId = UUID.randomUUID();
         User hostAdmin = new User();
         hostAdmin.setPublicId(UUID.randomUUID());
-        hostAdmin.setTenantId(tenantId);
         when(identityService.findActiveByTenantIdAndRole(tenantId, Role.HOST_ADMIN)).thenReturn(List.of(hostAdmin));
 
         listener.onStudentEnrollmentConflict(new StudentEnrollmentConflictEvent(sessionId, tenantId,

@@ -8,6 +8,8 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.util.UUID;
 
@@ -47,4 +49,20 @@ public class AuditLog extends BaseEntity {
 
     @Column(nullable = false, length = 500)
     private String summary;
+
+    /** Comma-joined roles the actor held when the event was written. */
+    @Column(name = "actor_role", length = 255)
+    private String actorRole;
+
+    /** Client request id, so a receipt or history lookup can be tied back to one command. */
+    @Column(name = "request_public_id")
+    private UUID requestPublicId;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "before_state")
+    private String beforeState;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "after_state")
+    private String afterState;
 }
