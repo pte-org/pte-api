@@ -68,6 +68,23 @@ class SessionExamPreviewServiceTest {
     }
 
     @Test
+    void preview_carriesTheResolvedTaskTypeInstruction() {
+        UUID sessionId = UUID.randomUUID();
+        UUID snapshotId = UUID.randomUUID();
+
+        ExamSession session = sessionWithSnapshot(snapshotId);
+        when(sessionLifecycleService.findOwned(sessionId, caller)).thenReturn(session);
+
+        SnapshotContentResponse snapshot = snapshotWithItem(snapshotId, UUID.randomUUID());
+        when(assessmentService.getFullContent(snapshotId)).thenReturn(snapshot);
+        stubResolvedItems(snapshot);
+
+        ExamPreviewResponse response = service.preview(sessionId, caller);
+
+        assertThat(response.items().get(0).taskTypeInstruction()).isEqualTo(INSTRUCTION);
+    }
+
+    @Test
     void preview_sourceQuestionPublicId_isPreservedAsNullWhenAbsent() {
         UUID sessionId = UUID.randomUUID();
         UUID snapshotId = UUID.randomUUID();

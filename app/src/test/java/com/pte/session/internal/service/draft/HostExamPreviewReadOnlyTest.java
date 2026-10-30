@@ -77,7 +77,7 @@ class HostExamPreviewReadOnlyTest {
                         "Multiple choice", "Question", "Prompt", null, null, null, null,
                         List.of(new ExamPreviewResponse.Option(0, null, "Option A")), null,
                         "MC_READING_SINGLE", null, "LEGACY", "RESOLVED_LEGACY", 7, 42,
-                        null, null, null, null, null)));
+                        null, null, null, null, null, "Select the correct response.")));
         when(previewService.preview(sessionId, host)).thenReturn(response);
 
         mvc.perform(get("/api/v1/sessions/{publicId}/exam-preview", sessionId))
@@ -87,6 +87,7 @@ class HostExamPreviewReadOnlyTest {
                 .andExpect(jsonPath("$.data.items[0].prepSeconds").value(7))
                 .andExpect(jsonPath("$.data.items[0].responseSeconds").value(42))
                 .andExpect(jsonPath("$.data.items[0].options[0].text").value("Option A"))
+                .andExpect(jsonPath("$.data.items[0].taskTypeInstruction").value("Select the correct response."))
                 .andExpect(content().string(not(containsString("correctAnswerText"))))
                 .andExpect(content().string(not(containsString("referenceAnswerText"))))
                 .andExpect(content().string(not(containsString("isCorrect"))));

@@ -78,7 +78,8 @@ public class SessionExamPreviewService {
                 item.preRecordSeconds(),
                 item.audioDurationSeconds(),
                 item.audioUrlExpiresAt(),
-                item.imageUrlExpiresAt());
+                item.imageUrlExpiresAt(),
+                item.taskTypeInstruction());
     }
 
     private List<ExamPreviewResponse.Option> parseOptions(String optionsJson) {

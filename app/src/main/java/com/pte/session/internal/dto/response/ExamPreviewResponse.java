@@ -38,7 +38,8 @@ public record ExamPreviewResponse(
             Integer preRecordSeconds,
             Integer audioDurationSeconds,
             Instant audioUrlExpiresAt,
-            Instant imageUrlExpiresAt) {
+            Instant imageUrlExpiresAt,
+            String taskTypeInstruction) {
 
         /** Source-compatible constructor for callers using the original answer-free shape. */
         public Item(int orderIndex, String section, String taskType, String taskTypeCode,
@@ -47,7 +48,7 @@ public record ExamPreviewResponse(
                 UUID sourceQuestionPublicId) {
             this(orderIndex, null, section, taskType, taskTypeCode, taskTypeDisplayName, title, promptText,
                     audioUrl, imageUrl, minWordCount, maxWordCount, options, sourceQuestionPublicId,
-                    null, null, null, null, 0, 0, null, null, null, null, null);
+                    null, null, null, null, 0, 0, null, null, null, null, null, null);
         }
     }
 
