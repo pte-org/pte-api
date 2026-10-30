@@ -4,6 +4,7 @@ import com.pte.billing.BillingService;
 import com.pte.identity.IdentityService;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
+import com.pte.practice.PracticeEntitlementGate;
 import com.pte.practice.PracticeEntitlementState;
 import com.pte.practice.PracticeObservability;
 import com.pte.practice.internal.constant.PracticeConstants;
@@ -32,7 +33,7 @@ import java.util.UUID;
  * organization to choose.
  */
 @Service
-public class PracticeEntitlementService {
+public class PracticeEntitlementService implements PracticeEntitlementGate {
 
     private static final String UNKNOWN_STATUS = "UNKNOWN";
 
@@ -92,6 +93,7 @@ public class PracticeEntitlementService {
     }
 
     /** Reusable server check for session/task/media/answer mutations. */
+    @Override
     @Transactional(readOnly = true)
     public void assertUnlocked(CurrentUser caller, UUID requestedOrganizationId) {
         // Rollback is fail-closed: disabling strict enforcement must not open practice mutations.
