@@ -330,6 +330,7 @@ function Ensure-ActivePlan {
 
 function Ensure-Subscription {
     param(
+        [string]$TenantId,
         [string]$PlanId,
         [string]$SeedKey
     )
@@ -347,53 +348,21 @@ function Ensure-Subscription {
         return $subscription
     }
 
-    $expires = $now.Date.AddDays(30).AddHours(23).AddMinutes(59).AddSeconds(59).ToString("yyyy-MM-ddTHH:mm:ssZ")
-    # The plan is owned by this SeedKey, so an outstanding code here represents
-    # an incomplete prior seed attempt and must be reused before issuing again.
-    $issuedPage = Invoke-SeedApi -Method GET -Path "/api/v1/admin/license-codes?planId=$PlanId&status=ISSUED&size=20" -Token $script:AdminToken
-    $issuedCode = if ($null -ne $issuedPage -and $issuedPage.PSObject.Properties.Name -contains "data") {
-        Get-Array $issuedPage.data |
-            Sort-Object { [DateTimeOffset]$_.issuedAt } -Descending |
-            Select-Object -First 1
-    }
-    else {
-        $null
-    }
-    if ($null -ne $issuedCode) {
-        $licensePublicId = $issuedCode.publicId
-    }
-    else {
-        $idempotencyKey = Get-DeterministicGuid -Value "PTE_LOCAL_LICENSE|$SeedKey|$PlanId|$expires"
-        $licenseReceipt = Invoke-SeedApi -Method POST -Path "/api/v1/license-codes" -Token $script:AdminToken -Body @{
-            planId        = $PlanId
-            codeExpiresAt = $expires
-        } -AdditionalHeaders @{ "Idempotency-Key" = $idempotencyKey }
-        $licensePublicId = $licenseReceipt.publicId
-    }
+    # One admin grant activates the plan for this organization immediately; no code is revealed or redeemed.
+    # The deterministic key makes a rerun of the same seed return the earlier grant instead of a second lane.
+    $idempotencyKey = Get-DeterministicGuid -Value "PTE_LOCAL_GRANT|$SeedKey|$TenantId|$PlanId|$($now.Date.ToString("yyyyMMdd"))"
+    $null = Invoke-SeedApi -Method POST -Path "/api/v1/admin/license-grants" -Token $script:AdminToken -Body @{
+        tenantId          = $TenantId
+        planId            = $PlanId
+        contractReference = "SEED-LOCAL"
+    } -AdditionalHeaders @{ "Idempotency-Key" = $idempotencyKey }
 
-    $licenseReveal = Invoke-SeedApi -Method POST -Path "/api/v1/admin/license-codes/$licensePublicId/reveal" -Token $script:AdminToken
-    if ([string]::IsNullOrWhiteSpace($licenseReveal.code)) {
-        throw "The issued license code could not be revealed for local redemption."
-    }
-    try {
-        $null = Invoke-SeedApi -Method POST -Path "/api/v1/license-code-redemptions" -Token $script:HostToken -Body @{ code = $licenseReveal.code }
-    }
-    catch {
-        $subscriptions = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/subscriptions" -Token $script:HostToken)
-        $subscription = $subscriptions |
-            Where-Object { $_.planId -eq $PlanId -and "$($_.status)".ToUpperInvariant() -eq "ACTIVE" } |
-            Select-Object -First 1
-        if ($null -eq $subscription) {
-            throw
-        }
-        return $subscription
-    }
     $subscriptions = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/subscriptions" -Token $script:HostToken)
     $subscription = $subscriptions |
         Where-Object { $_.planId -eq $PlanId -and "$($_.status)".ToUpperInvariant() -eq "ACTIVE" } |
         Select-Object -First 1
     if ($null -eq $subscription) {
-        throw "The license code was redeemed but no active subscription was returned."
+        throw "The package was granted but no active subscription was returned."
     }
     return $subscription
 }
@@ -434,14 +403,15 @@ $tenants = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/organizations" -
 $tenant = $tenants | Where-Object { $_.code -eq $tenantCode } | Select-Object -First 1
 if ($null -eq $tenant) {
     $taxCode = ("PTE-LOCAL-" + ($slug -replace "-", "")).ToUpperInvariant()
-    $tenant = Invoke-SeedApi -Method POST -Path "/api/v1/organizations" -Token $script:AdminToken -Body @{
+    # Direct creation approves at once and creates the first host for hostEmail (password reset below).
+    $created = Invoke-SeedApi -Method POST -Path "/api/v1/admin/organizations" -Token $script:AdminToken -Body @{
         code             = $tenantCode
         name             = $tenantName
         organizationType = "SCHOOL"
         taxCode          = $taxCode.Substring(0, [Math]::Min(64, $taxCode.Length))
-        packageName      = "STANDARD"
-        studentLimit     = 50
+        hostEmail        = $hostEmail
     }
+    $tenant = Invoke-SeedApi -Method GET -Path "/api/v1/organizations/$($created.publicId)" -Token $script:AdminToken
 }
 if ("$($tenant.status)".ToUpperInvariant() -ne "ACTIVE") {
     $tenant = Invoke-SeedApi -Method PATCH -Path "/api/v1/organizations/$($tenant.publicId)/status" -Body @{ action = "REACTIVATE" } -Token $script:AdminToken
@@ -464,7 +434,7 @@ $null = Ensure-ClassMembership -OrganizationId $script:OrganizationId -ProgramId
 
 Write-Host "== Creating or reusing active exam package =="
 $plan = Invoke-WithSeedMutex -Key $SeedKey -Action { Ensure-ActivePlan -Name $planName }
-$subscription = Ensure-Subscription -PlanId $plan.publicId -SeedKey $SeedKey
+$subscription = Ensure-Subscription -TenantId $tenant.publicId -PlanId $plan.publicId -SeedKey $SeedKey
 
 Write-Host "== Finding the active seeded template =="
 $templates = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/exam-definitions" -Token $script:AdminToken)
@@ -499,7 +469,7 @@ if ($null -eq $session) {
 
 $sessionStatus = "$($session.status)".ToUpperInvariant()
 if ($sessionStatus -eq "DRAFT") {
-    # A subscription starts when its license is redeemed. Keep the opening
+    # A granted subscription starts when the admin grants it (the default start). Keep the opening
     # time just ahead of the current instant so it remains inside that
     # subscription window; using a time in the past is rejected by the
     # subscription-window validation.
