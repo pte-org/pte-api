@@ -74,6 +74,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_orders_pending_tenant_plan ON public.orders
 @@
 CREATE UNIQUE INDEX IF NOT EXISTS ux_exam_definitions_single_active ON public.exam_definitions USING btree (status) WHERE ((status)::text = 'ACTIVE'::text)
 @@
+-- Repair exact copies from earlier boot-time seeds before enforcing task uniqueness.
+WITH copies AS (
+    SELECT ctid, row_number() OVER (PARTITION BY to_jsonb(item) ORDER BY ctid) AS copy_number
+    FROM public.exam_definition_items item
+)
+DELETE FROM public.exam_definition_items item
+USING copies
+WHERE item.ctid = copies.ctid AND copies.copy_number > 1
+@@
+CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_definition_items_task_key
+    ON public.exam_definition_items (exam_definition_id, task_type_key)
+@@
 CREATE UNIQUE INDEX IF NOT EXISTS uq_org_code_live ON public.organizations (code) WHERE status <> 'REJECTED'
 @@
 CREATE UNIQUE INDEX IF NOT EXISTS uq_org_name_live ON public.organizations (name) WHERE status <> 'REJECTED'
