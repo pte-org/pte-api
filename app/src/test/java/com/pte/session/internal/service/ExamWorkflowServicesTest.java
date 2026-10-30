@@ -714,7 +714,7 @@ class ExamWorkflowServicesTest {
                 .thenReturn(Optional.of(session));
         org.mockito.Mockito.lenient().when(billingService.lockSubscriptions(List.of(subscriptionId), tenantId))
                 .thenReturn(List.of(subscription));
-        when(billingService.getActiveSubscription(subscriptionId, tenantId))
+        when(billingService.getSchedulableSubscription(subscriptionId, tenantId))
                 .thenReturn(Optional.of(subscription));
         when(assessmentService.getTemplateFeasibility(session.getExamDefinitionPublicId(), session.getSelectedSkills()))
                 .thenReturn(new com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse(
