@@ -227,10 +227,11 @@ public class ExamDraftService {
 
     private void validateSubscriptionWindowAndCapacity(SubscriptionView subscription, Instant opensAt,
             Instant closesAt, int capacity) {
-        if (subscription == null || !subscription.isUsableAt(clock.instant()))
+        // A lane that starts later is schedulable; the window check keeps the exam inside its period.
+        if (subscription == null || !subscription.isSchedulableAt(clock.instant()))
             throw new SessionSubscriptionNotFoundException();
         if (opensAt.isBefore(subscription.startsAt()) || closesAt.isAfter(subscription.expiresAt()))
-            throw new SessionWindowOutsideSubscriptionException();
+            throw new SessionWindowOutsideSubscriptionException(subscription.startsAt(), subscription.expiresAt());
         if (capacity <= 0) throw new SessionCapacityInvalidException();
         if (capacity > subscription.maxStudentsPerSession())
             throw new SessionSubscriptionCapacityException(capacity, subscription.maxStudentsPerSession());

@@ -43,7 +43,8 @@ public class SubscriptionController {
         if (caller.tenantId() == null) {
             return ApiResponse.success(List.of());
         }
-        return ApiResponse.success(billingService.listActiveSubscriptions(caller.tenantId()).stream()
+        // Includes granted lanes that start later, so the host can see and schedule on them.
+        return ApiResponse.success(billingService.listSchedulableSubscriptions(caller.tenantId()).stream()
                 .map(SubscriptionResponse::from)
                 .toList());
     }
@@ -75,7 +76,7 @@ public class SubscriptionController {
         if (!identityService.verifyPassword(caller.userId(), request.password())) {
             throw new InvalidLicenseKeyRevealPasswordException();
         }
-        SubscriptionView subscription = billingService.getActiveSubscription(publicId, caller.tenantId())
+        SubscriptionView subscription = billingService.getSchedulableSubscription(publicId, caller.tenantId())
                 .orElseThrow(SubscriptionNotFoundException::new);
         return ApiResponse.success(new LicenseKeyResponse(subscription.licenseKey()));
     }

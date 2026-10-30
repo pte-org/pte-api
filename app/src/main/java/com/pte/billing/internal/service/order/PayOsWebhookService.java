@@ -107,7 +107,8 @@ public class PayOsWebhookService {
                 CommercialActivationSource.PAYMENT,
                 CommercialActivationTarget.ORDER,
                 order.getPublicId(),
-                activation.grantedStudentSlots()));
+                activation.grantedStudentSlots(),
+                activation.startsAt()));
         receipt.markProcessed();
     }
 

@@ -255,8 +255,8 @@ public class ExamPublishService {
     private ExamPreflightResponse preflightInternal(ExamSession session, boolean persistAudience) {
         ExamDefinitionFeasibilityResponse template = assessmentService
                 .getTemplateFeasibility(session.getExamDefinitionPublicId(), session.getSelectedSkills());
-        SubscriptionView subscription = billingService.getActiveSubscription(session.getSubscriptionId(), session.getTenantId())
-                .orElse(null);
+        SubscriptionView subscription = billingService.getSchedulableSubscription(session.getSubscriptionId(),
+                session.getTenantId()).orElse(null);
         boolean subscriptionReady = subscription != null;
         boolean windowReady = subscriptionReady && !session.getOpensAt().isBefore(subscription.startsAt())
                 && !session.getClosesAt().isAfter(subscription.expiresAt());
