@@ -13,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
 /** Students read immutable published snapshots; Hosts may still inspect live pre-publication scores. */
@@ -43,6 +42,10 @@ public class ReportService {
 
     @Transactional
     public ReportResponse getReport(UUID attemptPublicId, CurrentUser caller) {
+        // A student's only copy of a score is the email sent when the host publishes; no read path serves it.
+        if (caller == null || caller.hasRole(ROLE_STUDENT)) {
+            throw new ReportNotFoundException();
+        }
         ExamResult report = examResultRepository.findByAttemptPublicId(attemptPublicId).orElse(null);
         if (report == null) {
             AttemptSummaryView attempt = attemptService.getSubmittedAttempt(attemptPublicId);
@@ -59,25 +62,9 @@ public class ReportService {
         if (report.isPublished()) {
             return ReportMapper.toResponse(report, publishedSummary(report));
         }
-        if (caller.hasRole(ROLE_STUDENT)) {
-            throw new ReportNotFoundException();
-        }
         ProvisionalScoreSummary live = scoreAggregationService.aggregateProvisional(attemptPublicId,
                 report.getTenantId());
         return ReportMapper.toResponse(report, live.summary(), live.includesUnselectedAiScores());
-    }
-
-    @Transactional(readOnly = true)
-    public List<ReportResponse> getMyPublishedReports(CurrentUser caller) {
-        if (caller == null || !caller.hasRole(ROLE_STUDENT) || caller.tenantId() == null) {
-            return List.of();
-        }
-        return examResultRepository
-                .findByStudentPublicIdAndTenantIdAndPublishedTrueAndDeletedFalseOrderByPublishedAtDesc(
-                        caller.userId(), caller.tenantId())
-                .stream()
-                .map(report -> ReportMapper.toResponse(report, publishedSummary(report)))
-                .toList();
     }
 
     private AttemptScoreSummary publishedSummary(ExamResult report) {
@@ -98,18 +85,10 @@ public class ReportService {
     }
 
     private boolean canView(ExamResult report, CurrentUser caller) {
-        if (caller == null) {
-            return false;
-        }
-        if (caller.hasRole(ROLE_STUDENT)) {
-            return report.isPublished() && report.getStudentPublicId().equals(caller.userId())
-                    && report.getTenantId().equals(caller.tenantId());
-        }
         return caller.hasRole("PLATFORM_ADMIN") || report.getTenantId().equals(caller.tenantId());
     }
 
     private boolean canViewAttempt(AttemptSummaryView attempt, CurrentUser caller) {
-        return caller != null && !caller.hasRole(ROLE_STUDENT)
-                && (caller.hasRole("PLATFORM_ADMIN") || attempt.tenantId().equals(caller.tenantId()));
+        return caller.hasRole("PLATFORM_ADMIN") || attempt.tenantId().equals(caller.tenantId());
     }
 }

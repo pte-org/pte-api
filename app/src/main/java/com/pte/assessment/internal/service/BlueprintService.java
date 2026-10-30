@@ -43,9 +43,6 @@ import java.util.UUID;
 @Service
 public class BlueprintService {
 
-    private static final List<PteSection> SECTION_ORDER =
-            List.of(PteSection.SPEAKING, PteSection.WRITING, PteSection.READING, PteSection.LISTENING);
-
     private final ExamBlueprintRepository blueprintRepository;
     private final AssessmentAccessPolicy accessPolicy;
     private final ItembankService itembankService;
@@ -241,7 +238,7 @@ public class BlueprintService {
             normalized.sort(Comparator.comparingInt(SortableItem::requestedOrder)
                     .thenComparingInt(SortableItem::inputIndex));
         } else {
-            normalized.sort(Comparator.comparingInt((SortableItem item) -> SECTION_ORDER.indexOf(item.section()))
+            normalized.sort(Comparator.comparingInt((SortableItem item) -> AssessmentConstants.EXAM_SECTION_ORDER.indexOf(item.section()))
                     .thenComparingInt(SortableItem::templateSequence)
                     .thenComparingInt(SortableItem::requestedOrder)
                     .thenComparingInt(SortableItem::inputIndex));

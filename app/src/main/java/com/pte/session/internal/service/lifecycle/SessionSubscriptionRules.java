@@ -90,7 +90,7 @@ public class SessionSubscriptionRules {
     public void rejectOverlap(UUID subscriptionId, Instant opensAt, Instant closesAt, UUID excludedPublicId) {
         sessionRepository.findFirstOverlapping(subscriptionId, opensAt, closesAt, excludedPublicId)
                 .ifPresent(conflict -> {
-                    throw new SessionTimeConflictException(conflict.getPublicId());
+                    throw new SessionTimeConflictException(conflict.getPublicId(), conflict.getName());
                 });
     }
 

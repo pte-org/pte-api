@@ -14,5 +14,6 @@ public record CreateTaskTypeRequest(
         @NotBlank @Size(max = 96) String screenKey,
         @PositiveOrZero int contractVersion,
         @PositiveOrZero int displayOrder,
-        @NotNull Boolean active) {
+        @NotNull Boolean active,
+        @NotBlank @Size(max = 500) String instruction) {
 }

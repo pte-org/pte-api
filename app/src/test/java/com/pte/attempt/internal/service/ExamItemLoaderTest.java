@@ -1,9 +1,9 @@
 package com.pte.attempt.internal.service;
 
 import com.pte.assessment.AssessmentService;
+import com.pte.assessment.internal.config.TaskTimingConfig;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.attempt.internal.service.cache.ExamItemView;
-import com.pte.attempt.internal.config.TaskTimingConfig;
 import com.pte.attempt.internal.exception.content.MissingAudioDurationException;
 import com.pte.attempt.internal.exception.content.MissingAudioPromptException;
 import com.pte.attempt.internal.exception.content.MissingImagePromptException;
@@ -12,6 +12,7 @@ import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeContractConstants;
+import com.pte.itembank.QuestionTypeService;
 import com.pte.assessment.ExamDefinitionService;
 import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
@@ -25,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -79,6 +81,9 @@ class ExamItemLoaderTest {
     @Mock
     private ExamDefinitionService examDefinitionService;
 
+    @Mock
+    private QuestionTypeService questionTypeService;
+
     private ExamItemLoader service;
 
     @BeforeEach
@@ -95,7 +100,8 @@ class ExamItemLoaderTest {
         // so toView always falls back to taskTimingConfig — the exact
         // pre-Phase-3 behavior these regression tests were written against.
         stubTemplateItems();
-        service = new ExamItemLoader(assessmentService, mediaService, taskTimingConfig, examDefinitionService, com.pte.TestClocks.fixed());
+        service = new ExamItemLoader(assessmentService, mediaService, taskTimingConfig, examDefinitionService,
+                questionTypeService, com.pte.TestClocks.fixed());
     }
 
     @Test
@@ -139,6 +145,16 @@ class ExamItemLoaderTest {
         ExamItemView loaded = load().get(0);
         assertThat(loaded.audioUrl()).isEqualTo("https://cdn.example.com/lecture.mp3");
         assertThat(loaded.audioUrlExpiresAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("The live task-type instruction is carried into the attempt view")
+    void loadedItem_carriesTaskTypeInstruction() {
+        stubContent(item("SPEAKING", "READ_ALOUD", null));
+        when(questionTypeService.findInstructionsByTaskTypeKeys(any()))
+                .thenReturn(Map.of("READ_ALOUD", "Read the text aloud."));
+
+        assertThat(load().get(0).taskTypeInstruction()).isEqualTo("Read the text aloud.");
     }
 
     @Test

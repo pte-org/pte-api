@@ -76,7 +76,7 @@ class ReportServiceTest {
         }
         AttemptScoreSummary summary = new AttemptScoreSummary(SkillScore.of(50), skillScores);
         existingReport.setReportSnapshotJson(snapshotJson(summary));
-        CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
 
         when(examResultRepository.findByAttemptPublicId(attemptPublicId))
                 .thenReturn(Optional.of(existingReport));
@@ -153,57 +153,7 @@ class ReportServiceTest {
     }
 
     @Test
-    void getReport_studentCanSeeOwnPublishedReport() {
-        UUID attemptPublicId = UUID.randomUUID();
-        UUID sessionPublicId = UUID.randomUUID();
-
-        ExamResult report = new ExamResult();
-        report.setAttemptPublicId(attemptPublicId);
-        report.setSessionPublicId(sessionPublicId);
-        report.setStudentPublicId(studentPublicId);
-        report.setTenantId(tenantId);
-        report.setPublished(true);
-
-        Map<Skill, SkillScore> skillScores = new EnumMap<>(Skill.class);
-        for (Skill skill : Skill.values()) {
-            skillScores.put(skill, SkillScore.insufficientData());
-        }
-        AttemptScoreSummary summary = new AttemptScoreSummary(SkillScore.of(50), skillScores);
-        report.setReportSnapshotJson(snapshotJson(summary));
-        CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
-
-        when(examResultRepository.findByAttemptPublicId(attemptPublicId))
-                .thenReturn(Optional.of(report));
-        ReportResponse response = service.getReport(attemptPublicId, caller);
-
-        assertThat(response.published()).isTrue();
-        assertThat(response.overall().score()).isEqualTo(50);
-        verify(scoreAggregationService, never()).aggregateProvisional(attemptPublicId, tenantId);
-    }
-
-    @Test
-    void getReport_studentCannotSeeUnpublishedReport() {
-        UUID attemptPublicId = UUID.randomUUID();
-        UUID sessionPublicId = UUID.randomUUID();
-
-        ExamResult report = new ExamResult();
-        report.setAttemptPublicId(attemptPublicId);
-        report.setSessionPublicId(sessionPublicId);
-        report.setStudentPublicId(studentPublicId);
-        report.setTenantId(tenantId);
-        report.setPublished(false);
-
-        CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
-
-        when(examResultRepository.findByAttemptPublicId(attemptPublicId))
-                .thenReturn(Optional.of(report));
-
-        assertThatThrownBy(() -> service.getReport(attemptPublicId, caller))
-                .isInstanceOf(ReportNotFoundException.class);
-    }
-
-    @Test
-    void getReport_studentCanStillSeeLegacyPublishedReportWithoutSnapshot() {
+    void getReport_hostCanSeeLegacyPublishedReportWithoutSnapshot() {
         UUID attemptPublicId = UUID.randomUUID();
         ExamResult report = new ExamResult();
         report.setAttemptPublicId(attemptPublicId);
@@ -216,7 +166,7 @@ class ReportServiceTest {
         when(scoreAggregationService.aggregateLegacyPublished(attemptPublicId, tenantId)).thenReturn(legacySummary);
 
         ReportResponse response = service.getReport(attemptPublicId,
-                new CurrentUser(studentPublicId, tenantId, List.of("STUDENT")));
+                new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN")));
 
         assertThat(response.published()).isTrue();
         assertThat(response.immutableSnapshot()).isFalse();
@@ -224,57 +174,16 @@ class ReportServiceTest {
     }
 
     @Test
-    void getMyPublishedReports_readsSnapshotsAndPreservesLegacyPublishedReports() {
+    void getReport_aStudentNeverReadsAScoreNotEvenTheirOwnPublishedReport() {
         UUID attemptPublicId = UUID.randomUUID();
-        ExamResult report = new ExamResult();
-        report.setAttemptPublicId(attemptPublicId);
-        report.setSessionPublicId(UUID.randomUUID());
-        report.setStudentPublicId(studentPublicId);
-        report.setTenantId(tenantId);
-        report.setPublished(true);
-        report.setReportSnapshotJson(snapshotJson(new AttemptScoreSummary(SkillScore.of(72), Map.of())));
-        UUID legacyAttemptPublicId = UUID.randomUUID();
-        ExamResult legacyReport = new ExamResult();
-        legacyReport.setAttemptPublicId(legacyAttemptPublicId);
-        legacyReport.setSessionPublicId(UUID.randomUUID());
-        legacyReport.setStudentPublicId(studentPublicId);
-        legacyReport.setTenantId(tenantId);
-        legacyReport.setPublished(true);
-        CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
-        when(examResultRepository.findByStudentPublicIdAndTenantIdAndPublishedTrueAndDeletedFalseOrderByPublishedAtDesc(
-                studentPublicId, tenantId)).thenReturn(List.of(report, legacyReport));
-        when(scoreAggregationService.aggregateLegacyPublished(legacyAttemptPublicId, tenantId))
-                .thenReturn(new AttemptScoreSummary(SkillScore.of(64), Map.of()));
+        CurrentUser student = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
 
-        List<ReportResponse> reports = service.getMyPublishedReports(caller);
-
-        assertThat(reports).hasSize(2);
-        assertThat(reports.getFirst().overall().score()).isEqualTo(72);
-        assertThat(reports.getFirst().immutableSnapshot()).isTrue();
-        assertThat(reports.get(1).overall().score()).isEqualTo(64);
-        assertThat(reports.get(1).immutableSnapshot()).isFalse();
-    }
-
-    @Test
-    void getReport_studentCannotSeeOtherStudentsPublishedReport() {
-        UUID attemptPublicId = UUID.randomUUID();
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID otherStudentId = UUID.randomUUID();
-
-        ExamResult report = new ExamResult();
-        report.setAttemptPublicId(attemptPublicId);
-        report.setSessionPublicId(sessionPublicId);
-        report.setStudentPublicId(otherStudentId);
-        report.setTenantId(tenantId);
-        report.setPublished(true);
-
-        CurrentUser caller = new CurrentUser(studentPublicId, tenantId, List.of("STUDENT"));
-
-        when(examResultRepository.findByAttemptPublicId(attemptPublicId))
-                .thenReturn(Optional.of(report));
-
-        assertThatThrownBy(() -> service.getReport(attemptPublicId, caller))
+        assertThatThrownBy(() -> service.getReport(attemptPublicId, student))
                 .isInstanceOf(ReportNotFoundException.class);
+
+        verify(examResultRepository, never()).findByAttemptPublicId(any());
+        verify(scoreAggregationService, never()).aggregateProvisional(any(), any());
+        verify(scoreAggregationService, never()).aggregateLegacyPublished(any(), any());
     }
 
     @Test

@@ -19,6 +19,7 @@ public final class ItembankConstants {
     public static final String TASK_TYPE_DISPLAY_NAME_INVALID = "TASK_TYPE_DISPLAY_NAME_INVALID";
     public static final String TASK_TYPE_CAPABILITY_NOT_FOUND = "TASK_TYPE_CAPABILITY_NOT_FOUND";
     public static final String TASK_TYPE_RUNTIME_LOCKED = "TASK_TYPE_RUNTIME_LOCKED";
+    public static final String TASK_TYPE_STANDARD_RUNTIME_IMMUTABLE = "TASK_TYPE_STANDARD_RUNTIME_IMMUTABLE";
     public static final String TASK_TYPE_CUSTOM_CREATION_DISABLED = "TASK_TYPE_CUSTOM_CREATION_DISABLED";
     public static final String UNSUPPORTED_RUNTIME_CONTRACT = "UNSUPPORTED_RUNTIME_CONTRACT";
 
@@ -34,6 +35,8 @@ public final class ItembankConstants {
             "The selected task screen is no longer available for new configuration.";
     public static final String TASK_TYPE_RUNTIME_LOCKED_MESSAGE =
             "This task type is used by a published template, so its runtime contract is locked.";
+    public static final String TASK_TYPE_STANDARD_RUNTIME_IMMUTABLE_MESSAGE =
+            "Standard task types have a fixed screen, contract and section; only display metadata can be changed.";
     public static final String TASK_TYPE_CUSTOM_CREATION_DISABLED_MESSAGE =
             "Custom task types are temporarily unavailable while the platform rollout is being verified.";
 

@@ -17,9 +17,6 @@ public interface ExamResultRepository extends JpaRepository<ExamResult, Long>,
     /** Overview: reports of the tenant that exist but are not yet published (count only). */
     long countByTenantIdAndPublishedFalseAndDeletedFalse(UUID tenantId);
 
-    List<ExamResult> findByStudentPublicIdAndTenantIdAndPublishedTrueAndDeletedFalseOrderByPublishedAtDesc(
-            UUID studentPublicId, UUID tenantId);
-
     List<ExamResult> findByTenantIdAndStudentPublicIdAndDeletedFalseAndAttemptPublicIdIn(
             UUID tenantId, UUID studentPublicId, List<UUID> attemptPublicIds);
 

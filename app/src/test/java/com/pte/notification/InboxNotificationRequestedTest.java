@@ -136,6 +136,7 @@ class InboxNotificationRequestedTest {
                 new Object[]{InboxNotificationType.PLATFORM_ANNOUNCEMENT, InboxCategory.MAINTENANCE, InboxTargetType.ANNOUNCEMENT},
                 new Object[]{InboxNotificationType.SESSION_CLOSING_SOON, InboxCategory.SESSION, InboxTargetType.SESSION},
                 new Object[]{InboxNotificationType.SESSION_GRADING_COMPLETED, InboxCategory.SESSION, InboxTargetType.SESSION},
+                new Object[]{InboxNotificationType.SESSION_PREVIEW_READY, InboxCategory.SESSION, InboxTargetType.SESSION},
                 new Object[]{InboxNotificationType.COMMERCIAL_OUTCOME_CONFIRMED, InboxCategory.BILLING, InboxTargetType.SUBSCRIPTION},
                 new Object[]{InboxNotificationType.COMMERCIAL_OUTCOME_CONFIRMED, InboxCategory.BILLING, InboxTargetType.QUOTA},
                 new Object[]{InboxNotificationType.COMMERCIAL_OUTCOME_CONFIRMED, InboxCategory.BILLING, InboxTargetType.ORDER},
@@ -156,6 +157,8 @@ class InboxNotificationRequestedTest {
         assertInvalid(InboxNotificationType.SESSION_CLOSING_SOON, InboxCategory.BILLING, InboxImportance.INFO,
                 InboxTargetType.SESSION, TARGET, host());
         assertInvalid(InboxNotificationType.SESSION_GRADING_COMPLETED, InboxCategory.SESSION, InboxImportance.INFO,
+                InboxTargetType.ORDER, TARGET, host());
+        assertInvalid(InboxNotificationType.SESSION_PREVIEW_READY, InboxCategory.SESSION, InboxImportance.INFO,
                 InboxTargetType.ORDER, TARGET, host());
         assertInvalid(InboxNotificationType.ORDER_EXPIRED, InboxCategory.BILLING, InboxImportance.INFO,
                 InboxTargetType.SUBSCRIPTION, TARGET, host());

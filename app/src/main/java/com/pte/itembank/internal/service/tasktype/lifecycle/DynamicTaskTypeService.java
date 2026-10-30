@@ -18,6 +18,7 @@ import com.pte.itembank.internal.mapper.QuestionTypeMapper;
 import com.pte.itembank.internal.repository.QuestionTypeRepository;
 import com.pte.itembank.internal.service.tasktype.RuntimeContractResolver;
 import com.pte.itembank.TaskRuntimeContractDescriptor;
+import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.itembank.TaskTypeKeyNormalizer;
 import com.pte.itembank.TaskTypeObservability;
 import com.pte.shared.audit.AuditLogService;
@@ -81,6 +82,7 @@ public class DynamicTaskTypeService {
         definition.setDisplayName(TaskTypeKeyNormalizer.normalizeDisplayLabel(request.displayName()));
         definition.setNormalizedDisplayName(normalizedDisplayName);
         definition.setShortName(request.shortName().trim());
+        definition.setInstruction(request.instruction().trim());
         definition.setSection(section);
         definition.setScored(contract.scoringEnabled());
         boolean administratorOverride = caller != null && caller.hasRole(SecurityRoles.PLATFORM_ADMIN);
@@ -122,8 +124,13 @@ public class DynamicTaskTypeService {
             markDuplicate(caller, taskTypeKey);
             throw new TaskTypeDisplayNameAlreadyUsedException();
         }
-        boolean runtimeChange = request.screenKey() != null || request.contractVersion() != null
-                || request.section() != null;
+        boolean standardType = TaskTypeCodeCompatibility.isStandard(taskTypeKey);
+        if (standardType) {
+            StandardTaskTypeRuntimeGuard.rejectChange(definition, request);
+        }
+        // Unchanged runtime values on a standard type are a no-op, not a rebinding.
+        boolean runtimeChange = !standardType && (request.screenKey() != null
+                || request.contractVersion() != null || request.section() != null);
         if (runtimeChange && isRuntimeLocked(definition)) {
             auditRuntimeLockConflict(caller, publicId, taskTypeKey);
             throw new TaskTypeRuntimeLockedException(taskTypeKey);
@@ -135,6 +142,9 @@ public class DynamicTaskTypeService {
         definition.setDisplayName(TaskTypeKeyNormalizer.normalizeDisplayLabel(request.displayName()));
         definition.setNormalizedDisplayName(normalizedDisplayName);
         definition.setShortName(request.shortName().trim());
+        if (request.instruction() != null) {
+            definition.setInstruction(request.instruction().trim());
+        }
         definition.setDisplayOrder(request.displayOrder());
         boolean administratorOverride = caller != null && caller.hasRole(SecurityRoles.PLATFORM_ADMIN);
         definition.setActive(administratorOverride && Boolean.TRUE.equals(request.active()));

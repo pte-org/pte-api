@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -192,6 +193,12 @@ public class QuestionTypeService {
     @Transactional(readOnly = true)
     public Optional<String> findSectionByTaskTypeKey(String taskTypeKey) {
         return queryService.findSectionByTaskTypeKey(taskTypeKey);
+    }
+
+    /** Current instruction per canonical task-type key; read live so admin edits reach published exams. */
+    @Transactional(readOnly = true)
+    public Map<String, String> findInstructionsByTaskTypeKeys(Collection<String> taskTypeKeys) {
+        return queryService.findInstructionsByTaskTypeKeys(taskTypeKeys);
     }
 
     // ========== Runtime locking ==========

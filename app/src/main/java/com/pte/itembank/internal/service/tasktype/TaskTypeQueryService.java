@@ -17,10 +17,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Read-only queries over the persisted task-type catalog: standard types,
@@ -164,6 +168,22 @@ public class TaskTypeQueryService {
         return repository.findByTaskTypeKeyAndDeletedFalse(normalizedKey)
                 .map(QuestionType::getSection)
                 .map(Enum::name);
+    }
+
+    /** One query for a whole exam; keys without a non-blank instruction are absent from the result. */
+    @Transactional(readOnly = true)
+    public Map<String, String> findInstructionsByTaskTypeKeys(Collection<String> taskTypeKeys) {
+        Set<String> normalizedKeys = taskTypeKeys.stream()
+                .filter(Objects::nonNull)
+                .map(TaskTypeCodeCompatibility::normalizeTaskTypeKey)
+                .collect(Collectors.toSet());
+        if (normalizedKeys.isEmpty()) {
+            return Map.of();
+        }
+        return repository.findAllByTaskTypeKeyIn(normalizedKeys).stream()
+                .filter(definition -> definition.getInstruction() != null && !definition.getInstruction().isBlank())
+                .collect(Collectors.toMap(QuestionType::getTaskTypeKey, QuestionType::getInstruction,
+                        (first, second) -> first));
     }
 
     QuestionType findByPublicIdOrThrow(UUID publicId) {

@@ -1,10 +1,12 @@
 package com.pte.assessment;
 
 import com.pte.assessment.dto.response.ExaminerQuestionPromptView;
+import com.pte.assessment.dto.response.ResolvedExamItemResponse;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.dto.response.SnapshotResponse;
 import com.pte.assessment.internal.constant.AssessmentConstants;
 import com.pte.assessment.internal.service.ExamGenerationService;
+import com.pte.assessment.internal.service.ExamItemRuntimeResolver;
 import com.pte.assessment.internal.service.SnapshotPromptQueryService;
 import com.pte.assessment.internal.service.SnapshotPublishService;
 import com.pte.assessment.ExamDefinitionService;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -38,14 +41,23 @@ public class AssessmentService {
     private final ExamGenerationService examGenerationService;
     private final ExamDefinitionService examDefinitionService;
     private final SnapshotPromptQueryService snapshotPromptQueryService;
+    private final ExamItemRuntimeResolver examItemRuntimeResolver;
 
     @Autowired
     public AssessmentService(SnapshotPublishService snapshotPublishService, ExamGenerationService examGenerationService,
-            ExamDefinitionService examDefinitionService, SnapshotPromptQueryService snapshotPromptQueryService) {
+            ExamDefinitionService examDefinitionService, SnapshotPromptQueryService snapshotPromptQueryService,
+            ExamItemRuntimeResolver examItemRuntimeResolver) {
         this.snapshotPublishService = snapshotPublishService;
         this.examGenerationService = examGenerationService;
         this.examDefinitionService = examDefinitionService;
         this.snapshotPromptQueryService = snapshotPromptQueryService;
+        this.examItemRuntimeResolver = examItemRuntimeResolver;
+    }
+
+    /** Source-compatible constructor for focused tests that do not exercise item delivery. */
+    public AssessmentService(SnapshotPublishService snapshotPublishService, ExamGenerationService examGenerationService,
+            ExamDefinitionService examDefinitionService, SnapshotPromptQueryService snapshotPromptQueryService) {
+        this(snapshotPublishService, examGenerationService, examDefinitionService, snapshotPromptQueryService, null);
     }
 
     /** Answer-stripped summary - safe for {@code session} to validate composition against. */
@@ -56,6 +68,16 @@ public class AssessmentService {
     /** Full-fidelity content including answer keys - trusted application call only. */
     public SnapshotContentResponse getFullContent(UUID snapshotPublicId) {
         return snapshotPublishService.getContent(snapshotPublicId);
+    }
+
+    /** Resolves the same runtime/timing/media seam used by student delivery and host preview. */
+    @Transactional(readOnly = true)
+    public List<ResolvedExamItemResponse> resolveExamItems(SnapshotContentResponse content,
+            long mediaUrlTtlSeconds, UUID tenantId) {
+        if (examItemRuntimeResolver == null) {
+            throw new IllegalStateException("Exam item runtime resolver is not configured");
+        }
+        return examItemRuntimeResolver.resolve(content, mediaUrlTtlSeconds, tenantId);
     }
 
     /** Answer-key-free, batched prompt access after scoring verifies assignment ownership. */

@@ -69,7 +69,8 @@ public class AttemptMapper {
                 item.maxWordCount(), toFlatOptions(parsedOptions), toBlankGroups(parsedOptions), effectivePrepSeconds,
                 effectiveResponseSeconds, attempt.getExamEndTime(), item.preListenSeconds(), item.preRecordSeconds(),
                 item.imageUrl(), item.audioUrl(), item.taskTypeCode() != null ? item.taskTypeCode() : item.taskType(),
-                item.runtime(), item.taskTypeDisplayName(), canNavigatePrevious, canNavigateNext);
+                item.runtime(), item.taskTypeDisplayName(), canNavigatePrevious, canNavigateNext,
+                item.taskTypeInstruction());
         // A null lockdownMode is the client's "no lockdown" contract, same as toCompletedResponse.
         return new AttemptTaskResponse(attempt.getPublicId(), attempt.getStatus().name(), false, task, encryptionPublicKey,
                 attempt.getLockdownMode(), attempt.getAttemptNumber(),

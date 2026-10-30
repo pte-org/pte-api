@@ -120,6 +120,32 @@ class InboxDeliveryStorePostgresIntegrationTest {
     }
 
     @Test
+    void actualFlywayMigrationAllowsSessionPreviewReadyAndKeepsItsTenantRecipient() {
+        UUID tenant = UUID.randomUUID();
+        InboxNotificationRequested event = new InboxNotificationRequested(
+                InboxConstants.SCHEMA_VERSION,
+                "session:preview-ready",
+                InboxNotificationType.SESSION_PREVIEW_READY,
+                InboxCategory.SESSION,
+                InboxImportance.INFO,
+                "Exam preview ready",
+                "Log in to PTE App as a host to preview it.",
+                InboxTargetType.SESSION,
+                target,
+                List.of(new InboxRecipient(admin, tenant)));
+
+        tx(() -> {
+            store.append(event, NOW);
+            return null;
+        });
+
+        assertThat(jdbc.queryForObject("SELECT notification_type FROM notifications", String.class))
+                .isEqualTo("SESSION_PREVIEW_READY");
+        assertThat(jdbc.queryForObject("SELECT tenant_id FROM notification_recipients", UUID.class))
+                .isEqualTo(tenant);
+    }
+
+    @Test
     void beforeCommitListenerPersistsOnlyInsideCommittedOriginTransaction() {
         try (AnnotationConfigApplicationContext context = context()) {
             InboxAppendService appender = context.getBean(InboxAppendService.class);
