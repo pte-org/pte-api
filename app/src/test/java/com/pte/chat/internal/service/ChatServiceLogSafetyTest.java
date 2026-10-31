@@ -8,10 +8,7 @@ import ch.qos.logback.classic.spi.StackTraceElementProxy;
 import ch.qos.logback.core.read.ListAppender;
 import com.pte.chat.internal.client.ChatAiException;
 import com.pte.chat.internal.client.ChatAiFailureReason;
-import com.pte.chat.internal.domain.ChatMessage;
 import com.pte.chat.internal.exception.ChatBusyException;
-import com.pte.chat.internal.service.cache.ChatCacheKey;
-import com.pte.chat.internal.prompt.ChatPrompts;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,7 +19,6 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -31,8 +27,8 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 /**
- * A failing database or provider call can carry the failing row, which holds the student's question and the
- * answer. Nothing of that may reach the log: not the message, not an argument, not the stack trace.
+ * A failing database or provider call can carry the failing statement and its values, which may hold the
+ * student's question. Nothing of that may reach the log: not the message, not an argument, not the stack trace.
  */
 class ChatServiceLogSafetyTest extends ChatServiceTestSupport {
 
@@ -105,50 +101,6 @@ class ChatServiceLogSafetyTest extends ChatServiceTestSupport {
         assertThat(everythingLogged()).noneSatisfy(text -> assertThat(text).contains("Failing row"));
     }
 
-    // ---- the three save paths -----------------------------------------------------------------------------
-
-    @Test
-    void aFailingCachedAnswerSaveLogsNoStudentText() {
-        when(cacheService.find(ChatCacheKey.of(QUESTION, "en", null, ChatPrompts.VERSION)))
-                .thenReturn(Optional.of("cached answer " + SECRET));
-        when(messageRepository.save(any(ChatMessage.class))).thenThrow(leakyDatabaseError());
-
-        assertThatThrownBy(() -> service.send(caller, command(QUESTION))).isInstanceOf(ChatBusyException.class);
-
-        assertSomethingWasLoggedButNoSecrets();
-        assertThat(appender.list).anySatisfy(event -> assertThat(event.getFormattedMessage()).contains("23502"));
-    }
-
-    @Test
-    void aFailingOkSaveLogsNoStudentText() {
-        when(messageRepository.save(any(ChatMessage.class))).thenThrow(leakyDatabaseError());
-
-        assertThatThrownBy(() -> service.send(caller, command(QUESTION))).isInstanceOf(ChatBusyException.class);
-
-        assertSomethingWasLoggedButNoSecrets();
-    }
-
-    @Test
-    void aFailingRefusedSaveLogsNoStudentText() {
-        when(client.generate(any(), any(), any())).thenReturn(offTopicAnswer());
-        when(messageRepository.save(any(ChatMessage.class))).thenThrow(leakyDatabaseError());
-
-        service.send(caller, command(QUESTION));
-
-        assertSomethingWasLoggedButNoSecrets();
-    }
-
-    @Test
-    void aFailingFailedSaveAfterAProviderErrorLogsNoStudentText() {
-        when(client.generate(any(), any(), any()))
-                .thenThrow(new ChatAiException(ChatAiFailureReason.TIMEOUT, "provider failed"));
-        when(messageRepository.save(any(ChatMessage.class))).thenThrow(leakyDatabaseError());
-
-        assertThatThrownBy(() -> service.send(caller, command(QUESTION))).isInstanceOf(ChatBusyException.class);
-
-        assertSomethingWasLoggedButNoSecrets();
-    }
-
     // ---- other failure paths ------------------------------------------------------------------------------
 
     @Test
@@ -177,28 +129,9 @@ class ChatServiceLogSafetyTest extends ChatServiceTestSupport {
     }
 
     @Test
-    void anUnexpectedProviderExceptionWithAFailingFailedSaveLogsNoStudentText() {
-        when(client.generate(any(), any(), any())).thenThrow(leakyRuntimeError());
-        when(messageRepository.save(any(ChatMessage.class))).thenThrow(leakyDatabaseError());
-
-        assertThatThrownBy(() -> service.send(caller, command(QUESTION))).isInstanceOf(ChatBusyException.class);
-
-        assertSomethingWasLoggedButNoSecrets();
-    }
-
-    @Test
     void aFailingRefundLogsNoStudentText() {
-        when(messageRepository.save(any(ChatMessage.class))).thenThrow(leakyDatabaseError());
+        when(client.generate(any(), any(), any())).thenReturn(offTopicAnswer());
         doThrow(leakyDatabaseError()).when(quotaService).refundQuietly(any());
-
-        assertThatThrownBy(() -> service.send(caller, command(QUESTION))).isInstanceOf(ChatBusyException.class);
-
-        assertSomethingWasLoggedButNoSecrets();
-    }
-
-    @Test
-    void aFailingCacheWriteLogsNoStudentText() {
-        doThrow(leakyDatabaseError()).when(cacheService).storeQuietly(any(), any(), any());
 
         service.send(caller, command(QUESTION));
 

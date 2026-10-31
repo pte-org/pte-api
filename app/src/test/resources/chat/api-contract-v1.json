@@ -1,31 +1,21 @@
 {
-  "_comment": "The chat HTTP contract. pte-api's ChatApiContractTest checks the backend produces exactly this; pte-practice's chat-api-contract.test.ts checks the web client reads exactly this. Change a field name here and both tests show who must follow.",
-  "limits": { "exercisePromptMaxChars": 1500 },
+  "_comment": "The chat HTTP contract. pte-api's ChatApiContractTest checks the backend produces exactly this; pte-practice's chat-api-contract.test.ts checks the web client reads exactly this. Change a field name here and both tests show who must follow. Nothing a student typed or was answered is stored: the browser keeps the conversation and sends the earlier turns in `history`.",
+  "limits": {
+    "exercisePromptMaxChars": 1500,
+    "historyMaxItems": 100,
+    "historyItemMaxChars": 20000,
+    "historyTotalMaxChars": 24000
+  },
   "quota": { "used": 3, "remaining": 17, "limit": 20, "resetAt": "2026-10-29T17:00:00Z" },
   "reply": {
     "markdown": "Use **present perfect**.",
     "onTopic": true,
-    "fromCache": false,
     "remaining": 16,
     "limit": 20,
-    "resetAt": "2026-10-29T17:00:00Z",
-    "sessionId": "0b8f2c3e-6d4a-4f7e-9c1b-2a3d4e5f6a7b"
+    "resetAt": "2026-10-29T17:00:00Z"
   },
-  "latestSession": {
-    "sessionId": "0b8f2c3e-6d4a-4f7e-9c1b-2a3d4e5f6a7b",
-    "messages": [
-      { "question": "What is a gerund?", "answer": "A verb form ending in -ing.", "status": "OK", "createdAt": "2026-10-29T03:00:00Z" },
-      { "question": "Weather today?", "answer": "I can only help with English and PTE.", "status": "REFUSED", "createdAt": "2026-10-29T03:05:00Z" }
-    ]
-  },
-  "consentGranted": { "policyVersion": "2026-10-29", "consented": true, "consentedAt": "2026-10-29T10:00:00Z" },
-  "consentMissing": { "policyVersion": "2026-10-29", "consented": false },
   "quotaExceededError": {
     "code": "CHAT_QUOTA_EXCEEDED",
     "data": { "resetAt": "2026-10-29T17:00:00Z", "limit": 20, "remaining": 0 }
-  },
-  "consentRequiredError": {
-    "code": "CHAT_CONSENT_REQUIRED",
-    "data": { "policyVersion": "2026-10-29" }
   }
 }

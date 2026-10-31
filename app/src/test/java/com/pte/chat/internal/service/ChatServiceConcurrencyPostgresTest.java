@@ -3,9 +3,9 @@ package com.pte.chat.internal.service;
 import com.pte.chat.internal.exception.ChatBusyException;
 import com.pte.chat.internal.exception.ChatQuotaExceededException;
 import com.pte.chat.internal.exception.ChatRequestInFlightException;
-import com.pte.chat.support.ChatPostgresJpaTest;
 import com.pte.chat.support.GeminiResponses;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Time and overlap: one request per student at a time, a global cap on provider calls, and a day boundary that
  * passes while the provider is still thinking. A slow fake response keeps the first request in flight.
  */
-@ChatPostgresJpaTest
+@Testcontainers(disabledWithoutDocker = true)
 class ChatServiceConcurrencyPostgresTest extends ChatFlowPostgresBase {
 
     private static final LocalDate NEXT_DAY = LocalDate.of(2026, 10, 29);
@@ -57,18 +57,15 @@ class ChatServiceConcurrencyPostgresTest extends ChatFlowPostgresBase {
     void aSecondRequestWhileTheFirstIsRunningIsRejectedWithoutTouchingTheQuota() throws Exception {
         ChatFlowHarness h = start();
         h.server.enqueueDelayed(1_200, 200, GeminiResponses.onTopic("slow answer"));
-        Future<ChatReply> first = pool.submit(() -> h.send(alice, session, "slow question"));
+        Future<ChatReply> first = pool.submit(() -> h.send(alice, "slow question"));
         h.awaitProviderRequests(1);
-        UUID otherSession = UUID.randomUUID();
 
-        assertThatThrownBy(() -> h.send(alice, otherSession, "impatient question"))
+        assertThatThrownBy(() -> h.send(alice, "impatient question"))
                 .isInstanceOf(ChatRequestInFlightException.class);
 
         assertThat(result(first).markdown()).isEqualTo("slow answer");
         assertThat(h.used(alice)).isEqualTo(1);
         assertThat(h.server.requestCount()).isEqualTo(1);
-        assertThat(data.sessionRows(otherSession)).isZero();
-        assertThat(data.messageRows(otherSession)).isZero();
     }
 
     @Test
@@ -76,11 +73,11 @@ class ChatServiceConcurrencyPostgresTest extends ChatFlowPostgresBase {
         ChatFlowHarness h = start();
         h.server.enqueueDelayed(300, 200, GeminiResponses.onTopic("slow answer"));
         h.server.enqueue(200, GeminiResponses.onTopic("quick answer"));
-        Future<ChatReply> first = pool.submit(() -> h.send(alice, session, "slow question"));
+        Future<ChatReply> first = pool.submit(() -> h.send(alice, "slow question"));
         h.awaitProviderRequests(1);
         result(first);
 
-        assertThat(h.send(alice, session, "next question").markdown()).isEqualTo("quick answer");
+        assertThat(h.send(alice, "next question").markdown()).isEqualTo("quick answer");
     }
 
     @Test
@@ -92,11 +89,10 @@ class ChatServiceConcurrencyPostgresTest extends ChatFlowPostgresBase {
         CountDownLatch go = new CountDownLatch(1);
         List<Future<ChatReply>> futures = new ArrayList<>();
         for (int i = 0; i < threads; i++) {
-            UUID ownSession = UUID.randomUUID();
             futures.add(pool.submit((Callable<ChatReply>) () -> {
                 ready.countDown();
                 go.await();
-                return h.send(alice, ownSession, "simultaneous question");
+                return h.send(alice, "simultaneous question");
             }));
         }
         ready.await();
@@ -124,17 +120,14 @@ class ChatServiceConcurrencyPostgresTest extends ChatFlowPostgresBase {
     void whenEveryProviderSlotIsBusyAnotherStudentGetsBusyAndKeepsTheirQuota() throws Exception {
         ChatFlowHarness h = start(p -> p.setMaxConcurrent(1));
         h.server.enqueueDelayed(1_200, 200, GeminiResponses.onTopic("alice answer"));
-        Future<ChatReply> first = pool.submit(() -> h.send(alice, session, "alice question"));
+        Future<ChatReply> first = pool.submit(() -> h.send(alice, "alice question"));
         h.awaitProviderRequests(1);
-        UUID bobsSession = UUID.randomUUID();
 
-        assertThatThrownBy(() -> h.send(bob, bobsSession, "bob question")).isInstanceOf(ChatBusyException.class);
+        assertThatThrownBy(() -> h.send(bob, "bob question")).isInstanceOf(ChatBusyException.class);
 
         assertThat(result(first).markdown()).isEqualTo("alice answer");
         assertThat(h.used(bob)).isZero();
         assertThat(data.usageRows(bob)).isZero();
-        assertThat(data.sessionRows(bobsSession)).isZero();
-        assertThat(data.messageRowsForStudent(bob)).isZero();
         assertThat(h.server.requestCount()).isEqualTo(1);
     }
 
@@ -143,9 +136,9 @@ class ChatServiceConcurrencyPostgresTest extends ChatFlowPostgresBase {
         ChatFlowHarness h = start(p -> p.setMaxConcurrent(1));
         h.server.enqueue(200, GeminiResponses.onTopic("alice answer"));
         h.server.enqueue(200, GeminiResponses.onTopic("bob answer"));
-        h.send(alice, session, "alice question");
+        h.send(alice, "alice question");
 
-        assertThat(h.send(bob, UUID.randomUUID(), "bob question").markdown()).isEqualTo("bob answer");
+        assertThat(h.send(bob, "bob question").markdown()).isEqualTo("bob answer");
     }
 
     @Test
@@ -157,19 +150,16 @@ class ChatServiceConcurrencyPostgresTest extends ChatFlowPostgresBase {
             h.server.enqueueDelayed(700, 200, GeminiResponses.onTopic("answer " + i));
         }
         List<UUID> ids = new ArrayList<>();
-        List<UUID> sessions = new ArrayList<>();
         CountDownLatch ready = new CountDownLatch(students);
         CountDownLatch go = new CountDownLatch(1);
         List<Future<ChatReply>> futures = new ArrayList<>();
         for (int i = 0; i < students; i++) {
             UUID student = UUID.randomUUID();
-            UUID ownSession = UUID.randomUUID();
             ids.add(student);
-            sessions.add(ownSession);
             futures.add(pool.submit((Callable<ChatReply>) () -> {
                 ready.countDown();
                 go.await();
-                return h.send(student, ownSession, "question of " + student);
+                return h.send(student, "question of " + student);
             }));
         }
         ready.await();
@@ -184,7 +174,6 @@ class ChatServiceConcurrencyPostgresTest extends ChatFlowPostgresBase {
             } catch (ChatBusyException busy) {
                 assertThat(h.used(ids.get(i))).isZero();
                 assertThat(data.usageRows(ids.get(i))).isZero();
-                assertThat(data.sessionRows(sessions.get(i))).isZero();
             }
         }
 
@@ -200,7 +189,7 @@ class ChatServiceConcurrencyPostgresTest extends ChatFlowPostgresBase {
         ChatFlowHarness h = start();
         h.clock.set(Instant.parse("2026-10-28T16:59:59Z"));
         h.server.enqueueDelayed(800, 200, GeminiResponses.onTopic("late answer"));
-        Future<ChatReply> call = pool.submit(() -> h.send(alice, session, "question just before midnight"));
+        Future<ChatReply> call = pool.submit(() -> h.send(alice, "question just before midnight"));
         h.awaitProviderRequests(1);
         h.clock.set(PAST_MIDNIGHT);
 
@@ -223,7 +212,7 @@ class ChatServiceConcurrencyPostgresTest extends ChatFlowPostgresBase {
         h.clock.set(Instant.parse("2026-10-28T16:59:59Z"));
         data.setUsed(alice, ChatFlowHarness.DAY, 4);
         h.server.enqueueDelayed(800, 200, GeminiResponses.offTopic());
-        Future<ChatReply> call = pool.submit(() -> h.send(alice, session, "off topic just before midnight"));
+        Future<ChatReply> call = pool.submit(() -> h.send(alice, "off topic just before midnight"));
         h.awaitProviderRequests(1);
         h.clock.set(PAST_MIDNIGHT);
 
@@ -242,7 +231,7 @@ class ChatServiceConcurrencyPostgresTest extends ChatFlowPostgresBase {
         h.clock.set(Instant.parse("2026-10-28T16:59:59Z"));
         data.setUsed(alice, ChatFlowHarness.DAY, 7);
         h.server.enqueueDelayed(800, 500, "");
-        Future<ChatReply> call = pool.submit(() -> h.send(alice, session, "question just before midnight"));
+        Future<ChatReply> call = pool.submit(() -> h.send(alice, "question just before midnight"));
         h.awaitProviderRequests(1);
         h.clock.set(PAST_MIDNIGHT);
 
@@ -257,13 +246,13 @@ class ChatServiceConcurrencyPostgresTest extends ChatFlowPostgresBase {
         ChatFlowHarness h = start(p -> p.setDailyLimit(1));
         h.server.enqueue(200, GeminiResponses.onTopic("day one"));
         h.server.enqueue(200, GeminiResponses.onTopic("day two"));
-        h.send(alice, session, "first question");
-        assertThatThrownBy(() -> h.send(alice, session, "second question"))
+        h.send(alice, "first question");
+        assertThatThrownBy(() -> h.send(alice, "second question"))
                 .isInstanceOf(ChatQuotaExceededException.class);
 
         h.clock.set(PAST_MIDNIGHT);
 
-        assertThat(h.send(alice, session, "second question").quota().remaining()).isZero();
+        assertThat(h.send(alice, "second question").quota().remaining()).isZero();
         assertThat(data.used(alice, NEXT_DAY)).isEqualTo(1);
         assertThat(h.used(alice)).isEqualTo(1);
     }
