@@ -6,7 +6,9 @@ import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ScoringMethod;
+import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.internal.repository.AiEvaluationRepository;
+import com.pte.scoring.internal.service.objective.ObjectiveScoringService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,11 +38,15 @@ class ScoringIngestServiceTest {
     @Mock
     private AiEvaluationRepository evaluationRepository;
 
+    @Mock
+    private ObjectiveScoringService objectiveScoringService;
+
     private ScoringIngestService service;
 
     @BeforeEach
     void setUp() {
-        service = new ScoringIngestService(attemptService, evaluationRepository);
+        service = new ScoringIngestService(attemptService, evaluationRepository, objectiveScoringService,
+                com.pte.TestClocks.fixed());
     }
 
     @Test
@@ -87,6 +93,46 @@ class ScoringIngestServiceTest {
         assertThat(saved.getAllValues()).extracting(AiEvaluation::getScoringMethod).containsExactly(
                 ScoringMethod.AI_SPEECH, ScoringMethod.AI_TEXT, ScoringMethod.OBJECTIVE, ScoringMethod.UNSCORED,
                 null);
+    }
+
+    @Test
+    void ingestForSession_scoresObjectiveAnswersAsTheyAreOpened() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        SubmittedAnswerView objective = view(sessionPublicId, tenantId, "MC_READING_SINGLE");
+        SubmittedAnswerView speaking = view(sessionPublicId, tenantId, "READ_ALOUD");
+        when(attemptService.getSubmittedAnswersForSession(sessionPublicId, tenantId))
+                .thenReturn(List.of(objective, speaking));
+        when(evaluationRepository.findByAnswerPublicId(any())).thenReturn(Optional.empty());
+        when(objectiveScoringService.supports(ScoringMethod.OBJECTIVE)).thenReturn(true);
+        when(objectiveScoringService.score(objective)).thenReturn(100);
+        ArgumentCaptor<AiEvaluation> saved = ArgumentCaptor.forClass(AiEvaluation.class);
+
+        service.ingestForSession(sessionPublicId, tenantId);
+
+        verify(evaluationRepository, times(2)).save(saved.capture());
+        AiEvaluation scored = saved.getAllValues().get(0);
+        assertThat(scored.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
+        assertThat(scored.getScore()).isEqualTo(100);
+        assertThat(saved.getAllValues().get(1).getStatus()).isEqualTo(ScoringAnswerStatus.PENDING);
+        verify(objectiveScoringService, never()).score(speaking);
+    }
+
+    @Test
+    void ingestForSession_objectiveAnswerThatCannotBeScoredStaysPending() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        SubmittedAnswerView objective = view(sessionPublicId, tenantId, "MC_READING_SINGLE");
+        when(attemptService.getSubmittedAnswersForSession(sessionPublicId, tenantId)).thenReturn(List.of(objective));
+        when(evaluationRepository.findByAnswerPublicId(any())).thenReturn(Optional.empty());
+        when(objectiveScoringService.supports(ScoringMethod.OBJECTIVE)).thenReturn(true);
+        when(objectiveScoringService.score(objective)).thenThrow(new IllegalStateException("bad options"));
+        ArgumentCaptor<AiEvaluation> saved = ArgumentCaptor.forClass(AiEvaluation.class);
+
+        service.ingestForSession(sessionPublicId, tenantId);
+
+        verify(evaluationRepository).save(saved.capture());
+        assertThat(saved.getValue().getStatus()).isEqualTo(ScoringAnswerStatus.PENDING);
     }
 
     @Test

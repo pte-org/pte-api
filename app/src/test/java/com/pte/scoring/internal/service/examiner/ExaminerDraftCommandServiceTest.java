@@ -275,6 +275,43 @@ class ExaminerDraftCommandServiceTest {
         verify(evaluationRepository, never()).save(any());
     }
 
+    @Test
+    void finalizeIsRefusedWhileACarriedOverDraftIsUnconfirmed() {
+        stubFinalize();
+        ExaminerEvaluation carried = carriedOverDraft(70);
+        lenient().when(evaluationRepository.findByTenantIdAndAssignmentIdAndDeletedFalse(tenantId, 7L))
+                .thenReturn(List.of(carried));
+        lenient().when(evaluationRepository.findSubmittedByAttempt(tenantId, sessionId, attemptId))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.finalizeWork(sessionId, attemptId, finalizeRequest(1L), examiner))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+
+        assertThat(carried.getStatus()).isEqualTo(ExaminerAnswerScoreStatus.DRAFT);
+        verify(evaluationRepository, never()).save(any());
+    }
+
+    @Test
+    void savingACarriedOverDraftConfirmsItEvenWithTheSameScore() {
+        ExaminerEvaluation carried = carriedOverDraft(70);
+        when(evaluationRepository.findByAnswerWithLock(tenantId, answerId)).thenReturn(Optional.of(carried));
+
+        ExaminerCommandResponse response = service.saveDraft(sessionId, attemptId, answerId, draftRequest(1), examiner);
+
+        assertThat(carried.isCarriedOver()).isFalse();
+        assertThat(response.draft().carriedOver()).isFalse();
+        assertThat(response.draft().score()).isEqualTo(70);
+    }
+
+    private ExaminerEvaluation carriedOverDraft(int score) {
+        ExaminerEvaluation carried = ExaminerEvaluation.draft(tenantId, sessionId, attemptId, answerId,
+                UUID.randomUUID(), 7L, score, "n", ExaminerDecisionKind.MANUAL, "rv", null, NOW);
+        carried.carryOverTo(examinerId);
+        assertThat(carried.isCarriedOver()).isTrue();
+        return carried;
+    }
+
     private void stubFinalize() {
         when(gateway.grading(tenantId, sessionId)).thenReturn(Optional.of(new SessionGradingGateway.Grading(
                 sessionId, tenantId, GradingMarkingMode.MANUAL_EXAMINER, GradingCohortStatus.FROZEN, "preview-v1",

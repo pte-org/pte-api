@@ -9,7 +9,6 @@ import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.scoring.ScoringService;
 import com.pte.scoring.dto.response.ReportScoringAnswerView;
-import com.pte.scoring.dto.response.ScoredAnswerView;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -38,8 +37,11 @@ import java.util.stream.Collectors;
  * weight for that skill AND (b) have ≥1 SCORED answer for this attempt — a
  * weighted-but-not-yet-scored task type (e.g. AI grading still in flight)
  * is dropped from both numerator and denominator, never treated as {@code
- * avgRaw=0}. {@code Σw=0} (nothing scored yet for that skill) always
- * reports "insufficient data," never a division by zero.
+ * avgRaw=0}. An exam item the student left blank (no answer row at all) is the
+ * exception: it counts as raw 0 in its task type's average, and a task type
+ * whose items were all left blank stays in the formula at 0. {@code Σw=0}
+ * (nothing scored yet for that skill) always reports "insufficient data,"
+ * never a division by zero.
  *
  * <p>Only skills in {@code testedSections} (FR-19) appear in the result at
  * all — an untested skill isn't reported even as insufficient data. Overall
@@ -85,7 +87,9 @@ public class ScoreAggregationService {
         AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
         ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.examDefinitionPublicId());
         return aggregateWithScores(attemptPublicId,
-                averageScoresByTaskType(answers, ReportScoringAnswerView::selectedScore), context, template.items());
+                averageScoresByTaskType(answers, ReportScoringAnswerView::selectedScore,
+                        context.expectedItemsByTaskType()),
+                context, template.items());
     }
 
     /**
@@ -98,8 +102,9 @@ public class ScoreAggregationService {
         AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
         ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.examDefinitionPublicId());
         AttemptScoreSummary summary = aggregateWithScores(attemptPublicId,
-                averageScoresByTaskType(answers, ReportScoringAnswerView::provisionalScore), context,
-                template.items());
+                averageScoresByTaskType(answers, ReportScoringAnswerView::provisionalScore,
+                        context.expectedItemsByTaskType()),
+                context, template.items());
         boolean usesUnselected = answers.stream()
                 .anyMatch(answer -> answer.selectedScore() == null && answer.provisionalScore() != null);
         return new ProvisionalScoreSummary(summary, usesUnselected);
@@ -121,19 +126,11 @@ public class ScoreAggregationService {
             ExamDefinitionResponse template = templates.get(context.examDefinitionPublicId());
             AttemptScoreSummary summary = aggregateWithScores(attemptPublicId,
                     averageScoresByTaskType(answersByAttempt.getOrDefault(attemptPublicId, List.of()),
-                            ReportScoringAnswerView::selectedScore),
+                            ReportScoringAnswerView::selectedScore, context.expectedItemsByTaskType()),
                     context, template.items());
             results.put(attemptPublicId, new ReportScoreAggregation(context, summary));
         }
         return Map.copyOf(results);
-    }
-
-    /** Preserves the pre-snapshot scoring behavior for reports already published before this workflow. */
-    public AttemptScoreSummary aggregateLegacyPublished(UUID attemptPublicId, UUID tenantId) {
-        List<ScoredAnswerView> answers = scoringService.getScoredAnswersForAttempt(attemptPublicId, tenantId);
-        AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
-        ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.examDefinitionPublicId());
-        return aggregateWithScores(attemptPublicId, averageRawScoresByTaskType(answers), context, template.items());
     }
 
     private AttemptScoreSummary aggregateWithScores(UUID attemptPublicId, Map<String, BigDecimal> avgRawByTaskType,
@@ -154,36 +151,38 @@ public class ScoreAggregationService {
         return new AttemptScoreSummary(overall, skillScores);
     }
 
-    private Map<String, BigDecimal> averageRawScoresByTaskType(List<ScoredAnswerView> answers) {
-        Map<String, List<ScoredAnswerView>> byTaskType = answers.stream()
-                .collect(Collectors.groupingBy(answer ->
-                        TaskTypeCodeCompatibility.normalizeTaskTypeKey(answer.taskType())));
-        Map<String, BigDecimal> result = new HashMap<>();
-        byTaskType.forEach((taskType, group) -> {
-            BigDecimal sum = group.stream().map(answer -> BigDecimal.valueOf(answer.rawScore()))
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-            result.put(taskType, sum.divide(BigDecimal.valueOf(group.size()), MATH_CONTEXT));
-        });
-        return result;
-    }
-
     /**
      * Only answers with a score from {@code scoreOf} contribute — the selected publishable score for reports,
      * the provisional one for the Host's live view. Objective scores are supplied unchanged by scoring.
      */
     private Map<String, BigDecimal> averageScoresByTaskType(List<ReportScoringAnswerView> answers,
-            Function<ReportScoringAnswerView, Integer> scoreOf) {
-        Map<String, List<ReportScoringAnswerView>> byTaskType = answers.stream()
+            Function<ReportScoringAnswerView, Integer> scoreOf, Map<String, Integer> expectedItemsByTaskType) {
+        Map<String, Integer> expected = new HashMap<>();
+        expectedItemsByTaskType.forEach((taskType, count) ->
+                expected.merge(TaskTypeCodeCompatibility.normalizeTaskTypeKey(taskType), count, Integer::sum));
+        Map<String, Long> rowsByTaskType = answers.stream().collect(Collectors.groupingBy(
+                answer -> TaskTypeCodeCompatibility.normalizeTaskTypeKey(answer.taskType()), Collectors.counting()));
+        Map<String, List<ReportScoringAnswerView>> scoredByTaskType = answers.stream()
                 .filter(answer -> scoreOf.apply(answer) != null)
                 .collect(Collectors.groupingBy(answer ->
                         TaskTypeCodeCompatibility.normalizeTaskTypeKey(answer.taskType())));
+        Set<String> taskTypes = new java.util.HashSet<>(scoredByTaskType.keySet());
+        taskTypes.addAll(expected.keySet());
         Map<String, BigDecimal> result = new HashMap<>();
-        byTaskType.forEach((taskType, group) -> {
-            BigDecimal sum = group.stream()
+        for (String taskType : taskTypes) {
+            List<ReportScoringAnswerView> scored = scoredByTaskType.getOrDefault(taskType, List.of());
+            // An item with no answer row at all was left blank: it counts as 0. A row that exists but has no score
+            // (unscored task, AI still running) is not a blank and stays out of the average.
+            long blanks = Math.max(0, expected.getOrDefault(taskType, 0) - rowsByTaskType.getOrDefault(taskType, 0L));
+            long divisor = scored.size() + blanks;
+            if (divisor == 0) {
+                continue;
+            }
+            BigDecimal sum = scored.stream()
                     .map(a -> BigDecimal.valueOf(scoreOf.apply(a)))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
-            result.put(taskType, sum.divide(BigDecimal.valueOf(group.size()), MATH_CONTEXT));
-        });
+            result.put(taskType, sum.divide(BigDecimal.valueOf(divisor), MATH_CONTEXT));
+        }
         return result;
     }
 

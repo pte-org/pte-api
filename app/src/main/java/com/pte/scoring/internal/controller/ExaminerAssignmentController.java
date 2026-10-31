@@ -1,6 +1,7 @@
 package com.pte.scoring.internal.controller;
 
 import com.pte.scoring.dto.request.CommitExaminerAssignmentRequest;
+import com.pte.scoring.dto.request.ReassignExaminerRequest;
 import com.pte.scoring.dto.response.ExaminerAssignmentOverviewResponse;
 import com.pte.scoring.dto.response.ExaminerAssignmentRosterResponse;
 import com.pte.scoring.internal.service.examiner.ExaminerAssignmentService;
@@ -18,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-/** Host-only, per-session examiner assignment: read the roster, commit the full table once. */
+/** Host-only, per-session examiner assignment: read the roster, commit the full table once, reassign one attempt. */
 @RestController
 @RequestMapping("/api/v1/sessions/{sessionPublicId}/examiner-assignments")
 @PreAuthorize("hasRole('HOST_ADMIN')")
@@ -44,6 +45,13 @@ public class ExaminerAssignmentController {
     public ApiResponse<ExaminerAssignmentRosterResponse> commit(@PathVariable UUID sessionPublicId,
             @Valid @RequestBody CommitExaminerAssignmentRequest request) {
         return ApiResponse.success(assignmentService.commit(sessionPublicId, request, currentUser()));
+    }
+
+    /** Hands one not-yet-finalized attempt to another Examiner; the drafts go with it. */
+    @PostMapping("/attempts/{attemptPublicId}/reassign")
+    public ApiResponse<ExaminerAssignmentRosterResponse> reassign(@PathVariable UUID sessionPublicId,
+            @PathVariable UUID attemptPublicId, @Valid @RequestBody ReassignExaminerRequest request) {
+        return ApiResponse.success(assignmentService.reassign(sessionPublicId, attemptPublicId, request, currentUser()));
     }
 
     private CurrentUser currentUser() {
