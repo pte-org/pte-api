@@ -21,12 +21,19 @@ class ChatServiceExerciseContextTest extends ChatServiceTestSupport {
     void theProviderReceivesTheExerciseBeforeTheQuestion() {
         service.send(caller, withExercise(EXERCISE));
 
-        verify(client).generate(eq(ChatPrompts.systemInstruction()), any(), eq(ChatPrompts.userTurn(QUESTION, EXERCISE)));
+        verify(client).generate(eq(ChatPrompts.systemInstruction()), any(), eq(ChatPrompts.userTurn(QUESTION, EXERCISE, "WRITE_ESSAY")));
     }
 
     @Test
-    void withoutAnExerciseTheProviderGetsTheQuestionAsBefore() {
+    void withoutAnExerciseTheProviderGetsTheTaskTypeAndTheQuestion() {
         service.send(caller, withExercise(null));
+
+        verify(client).generate(eq(ChatPrompts.systemInstruction()), any(), eq(ChatPrompts.userTurn(QUESTION, null, "WRITE_ESSAY")));
+    }
+
+    @Test
+    void withoutAnExerciseOrATaskTypeTheProviderGetsTheQuestionAlone() {
+        service.send(caller, new ChatSendCommand(QUESTION, null, "en", null));
 
         verify(client).generate(eq(ChatPrompts.systemInstruction()), any(), eq(QUESTION));
     }

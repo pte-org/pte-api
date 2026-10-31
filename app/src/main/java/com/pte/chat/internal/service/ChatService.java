@@ -92,7 +92,7 @@ public class ChatService {
         ChatAiAnswer answer;
         try {
             answer = client.generate(ChatPrompts.systemInstruction(), input.history(),
-                    ChatPrompts.userTurn(input.message(), input.exercisePrompt()));
+                    ChatPrompts.userTurn(input.message(), input.exercisePrompt(), input.taskType()));
         } catch (ChatAiException ex) {
             // The reason and status come from fixed texts, never from the question, the answer or the key.
             log.warn("Chat provider call failed: reason={} detail={}", ex.reason(), ex.getMessage());

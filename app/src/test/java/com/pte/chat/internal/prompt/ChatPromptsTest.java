@@ -16,8 +16,36 @@ class ChatPromptsTest {
     }
 
     @Test
-    void theVersionWasBumpedWhenTheTaskWasNoLongerDoneForTheStudent() {
-        assertThat(ChatPrompts.VERSION).isEqualTo("v3");
+    void theVersionWasBumpedWhenTheTaskTypeJoinedThePrompt() {
+        assertThat(ChatPrompts.VERSION).isEqualTo("v4");
+    }
+
+    @Test
+    void theTaskTypeIsNamedBeforeTheQuestionEvenWhenThereIsNoExerciseText() {
+        String turn = ChatPrompts.userTurn("How do I do this one?", null, "REPEAT_SENTENCE");
+
+        assertThat(turn).contains("repeat sentence").doesNotContain("REPEAT_SENTENCE");
+        assertThat(turn.toLowerCase()).contains("not instructions");
+        assertThat(turn).endsWith("How do I do this one?");
+    }
+
+    @Test
+    void theTaskTypeComesFirstThenTheExerciseThenTheQuestion() {
+        String turn = ChatPrompts.userTurn("Help", "Technology makes us less social.", "WRITE_ESSAY");
+
+        assertThat(turn.indexOf("write essay")).isLessThan(turn.indexOf("Technology makes us less social."));
+        assertThat(turn.indexOf("Technology makes us less social.")).isLessThan(turn.indexOf("Help"));
+    }
+
+    @Test
+    void aMissingOrBlankTaskTypeChangesNothing() {
+        assertThat(ChatPrompts.userTurn("Q", null, " ")).isEqualTo("Q");
+        assertThat(ChatPrompts.userTurn("Q", null, null)).isEqualTo("Q");
+    }
+
+    @Test
+    void theSystemInstructionSaysWhatTheTaskTypeLineIsFor() {
+        assertThat(ChatPrompts.systemInstruction()).contains("Current task type").contains("this exercise");
     }
 
     @Test
