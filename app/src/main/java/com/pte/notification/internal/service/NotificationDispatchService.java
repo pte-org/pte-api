@@ -98,7 +98,14 @@ public class NotificationDispatchService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void dispatchExternal(NotificationType type, String recipientEmail, UUID tenantId, String dedupeKey,
             String subject, String body) {
-        dispatchExternal(type, recipientEmail, tenantId, dedupeKey, subject, body, body);
+        dispatchExternal(type, recipientEmail, tenantId, dedupeKey, subject, body, body, null);
+    }
+
+    /** As above, with an HTML card; {@code body} becomes its plain-text twin and is kept in history. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void dispatchExternal(NotificationType type, String recipientEmail, UUID tenantId, String dedupeKey,
+            String subject, String body, String htmlBody) {
+        dispatchExternal(type, recipientEmail, tenantId, dedupeKey, subject, body, body, htmlBody);
     }
 
     /**
@@ -109,11 +116,19 @@ public class NotificationDispatchService {
     public void dispatchExternalSensitive(NotificationType type, String recipientEmail, UUID tenantId,
             String dedupeKey, String subject, String body) {
         dispatchExternal(type, recipientEmail, tenantId, dedupeKey, subject, body,
-                NotificationConstants.SENSITIVE_EMAIL_BODY_REDACTED);
+                NotificationConstants.SENSITIVE_EMAIL_BODY_REDACTED, null);
+    }
+
+    /** As above, with an HTML card; {@code body} becomes its plain-text twin. Neither body is kept in history. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void dispatchExternalSensitive(NotificationType type, String recipientEmail, UUID tenantId,
+            String dedupeKey, String subject, String body, String htmlBody) {
+        dispatchExternal(type, recipientEmail, tenantId, dedupeKey, subject, body,
+                NotificationConstants.SENSITIVE_EMAIL_BODY_REDACTED, htmlBody);
     }
 
     private void dispatchExternal(NotificationType type, String recipientEmail, UUID tenantId, String dedupeKey,
-            String subject, String body, String logBody) {
+            String subject, String body, String logBody, String htmlBody) {
         if (notificationLogRepository.findByDedupeKey(dedupeKey).isPresent()) {
             return;
         }
@@ -128,6 +143,6 @@ public class NotificationDispatchService {
         NotificationLog saved = notificationLogRepository.save(notificationLog);
 
         rabbitTemplate.convertAndSend(NotificationConstants.EMAIL_EXCHANGE, NotificationConstants.EMAIL_ROUTING_KEY,
-                new EmailJob(saved.getPublicId(), recipientEmail, subject, body));
+                new EmailJob(saved.getPublicId(), recipientEmail, subject, body, htmlBody));
     }
 }
