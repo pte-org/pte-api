@@ -4,6 +4,7 @@ import com.pte.scoring.domain.enums.ExaminerDecisionKind;
 import java.time.Instant;
 import java.util.UUID;
 
+/** {@code carriedOver} marks a draft handed over by the previous examiner, which must be saved again before finalizing. */
 public record ExaminerDraftResponse(
         UUID answerPublicId,
         long draftVersion,
@@ -12,5 +13,6 @@ public record ExaminerDraftResponse(
         ExaminerDecisionKind decisionKind,
         String expectedReviewVersion,
         String reviewedAiVersion,
-        Instant savedAt
+        Instant savedAt,
+        boolean carriedOver
 ) {}

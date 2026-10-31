@@ -3,6 +3,7 @@ package com.pte.reporting.internal.service;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.attempt.dto.response.AttemptSummaryView;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.reporting.domain.ExamResult;
 import com.pte.reporting.domain.enums.Skill;
 import com.pte.reporting.dto.event.AttemptPublishedEvent;
@@ -176,6 +177,44 @@ class ReportPublishServiceTest {
         assertThat(readiness.canPublish()).isFalse();
         assertThat(readiness.blockerCount()).isEqualTo(2);
         assertThat(readiness.readyAttemptCount()).isOne();
+    }
+
+    @Test
+    void preflight_attemptWithNoAnswersAtAll_isReadyAndNotBlocked() {
+        UUID sessionId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        AttemptSummaryView attempt = new AttemptSummaryView(attemptId, sessionId, UUID.randomUUID(), tenantId);
+        when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(List.of(attempt));
+        when(attemptService.getSubmittedAnswersForSession(sessionId, tenantId)).thenReturn(List.of());
+        when(sessionService.isSessionClosed(sessionId, tenantId)).thenReturn(true);
+        when(scoringService.getReportScoringInputs(tenantId, sessionId)).thenReturn(List.of());
+
+        var readiness = service.preflight(sessionId, tenantId);
+
+        assertThat(readiness.canPublish()).isTrue();
+        assertThat(readiness.blockerCount()).isZero();
+        assertThat(readiness.readyAttemptCount()).isOne();
+    }
+
+    @Test
+    void preflight_answersThatNeverReachedScoring_stillBlockWithInputsMissing() {
+        UUID sessionId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        AttemptSummaryView attempt = new AttemptSummaryView(attemptId, sessionId, UUID.randomUUID(), tenantId);
+        SubmittedAnswerView answer = org.mockito.Mockito.mock(SubmittedAnswerView.class);
+        when(answer.attemptPublicId()).thenReturn(attemptId);
+        when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(List.of(attempt));
+        when(attemptService.getSubmittedAnswersForSession(sessionId, tenantId)).thenReturn(List.of(answer));
+        when(sessionService.isSessionClosed(sessionId, tenantId)).thenReturn(true);
+        when(scoringService.getReportScoringInputs(tenantId, sessionId)).thenReturn(List.of());
+
+        var readiness = service.preflight(sessionId, tenantId);
+
+        assertThat(readiness.canPublish()).isFalse();
+        assertThat(readiness.blockers()).singleElement()
+                .satisfies(blocker -> assertThat(blocker.reason()).isEqualTo("SCORING_INPUTS_MISSING"));
     }
 
     @Test

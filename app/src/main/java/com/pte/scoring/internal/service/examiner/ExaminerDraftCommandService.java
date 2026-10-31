@@ -249,6 +249,6 @@ public class ExaminerDraftCommandService {
     private static ExaminerDraftResponse toDraftResponse(ExaminerEvaluation draft) {
         return new ExaminerDraftResponse(draft.getAnswerPublicId(), draft.getDraftVersion(), draft.getScore(),
                 draft.getComment(), draft.getDecisionKind(), draft.getExpectedReviewVersion(),
-                draft.getReviewedAiVersion(), draft.getSavedAt());
+                draft.getReviewedAiVersion(), draft.getSavedAt(), draft.isCarriedOver());
     }
 }

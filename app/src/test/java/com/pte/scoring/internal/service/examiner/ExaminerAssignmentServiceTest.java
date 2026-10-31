@@ -10,12 +10,22 @@ import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.identity.IdentityService;
 import com.pte.identity.dto.response.ExaminerIdentityView;
 import com.pte.identity.dto.response.StudentDisplayNameView;
+import com.pte.scoring.domain.ExaminerEvaluation;
 import com.pte.scoring.domain.GradingAssignment;
+import com.pte.scoring.domain.GradingIssue;
+import com.pte.scoring.domain.enums.ExaminerDecisionKind;
+import com.pte.scoring.domain.enums.ExaminerGradingIssueStatus;
+import com.pte.scoring.domain.enums.ExaminerGradingIssueType;
+import com.pte.scoring.domain.enums.ExaminerGradingOperation;
+import com.pte.scoring.domain.enums.ExaminerWorkflowStatus;
 import com.pte.scoring.domain.enums.GradingCohortStatus;
 import com.pte.scoring.domain.enums.GradingMarkingMode;
 import com.pte.scoring.dto.request.CommitExaminerAssignmentRequest;
+import com.pte.scoring.dto.request.ReassignExaminerRequest;
 import com.pte.scoring.dto.response.AiEligibleAttemptView;
+import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
 import com.pte.scoring.internal.repository.GradingAssignmentRepository;
+import com.pte.scoring.internal.repository.GradingIssueRepository;
 import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,6 +64,9 @@ class ExaminerAssignmentServiceTest {
     @Mock private ScoringEligibilityQueryService eligibilityService;
     @Mock private IdentityService identityService;
     @Mock private GradingAssignmentRepository assignmentRepository;
+    @Mock private ExaminerEvaluationRepository evaluationRepository;
+    @Mock private GradingIssueRepository issueRepository;
+    @Mock private ExaminerWorkRecorder recorder;
     @Mock private ScorePublicationLockService publicationLockService;
     @Mock private SessionGradingGateway gateway;
     @Mock private GradingCohortService cohortService;
@@ -63,7 +76,8 @@ class ExaminerAssignmentServiceTest {
     @BeforeEach
     void setUp() {
         service = new ExaminerAssignmentService(sessionService, attemptService, eligibilityService, identityService,
-                assignmentRepository, publicationLockService, gateway, cohortService, com.pte.TestClocks.fixed());
+                assignmentRepository, evaluationRepository, issueRepository, recorder, publicationLockService, gateway,
+                cohortService, com.pte.TestClocks.fixed());
     }
 
     @Test
@@ -244,6 +258,128 @@ class ExaminerAssignmentServiceTest {
             assertThat(item.eligibleAnswerCount()).isEqualTo(7L);
         });
         verify(sessionService).verifyHostAccess(sessionId, tenantId);
+    }
+
+    @Test
+    void rosterMarksAnUnfinishedCommittedAttemptReassignableAndShowsItsDrafts() {
+        var attempt = new AttemptSummaryView(UUID.randomUUID(), sessionId, UUID.randomUUID(), tenantId);
+        GradingAssignment work = assignment(attempt.attemptPublicId(), examiner1);
+        when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(List.of(attempt));
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(List.of(work));
+        when(identityService.getStudentDisplayNames(any(), any())).thenReturn(Map.of());
+
+        var roster = service.roster(sessionId, host);
+
+        assertThat(roster.rows()).singleElement().satisfies(row -> {
+            assertThat(row.workStatus()).isEqualTo(ExaminerWorkflowStatus.PENDING);
+            assertThat(row.reassignable()).isTrue();
+        });
+    }
+
+    @Test
+    void rosterDoesNotOfferReassignmentOnceTheExaminerFinalizedOrScoresArePublished() {
+        var attempt = new AttemptSummaryView(UUID.randomUUID(), sessionId, UUID.randomUUID(), tenantId);
+        GradingAssignment work = assignment(attempt.attemptPublicId(), examiner1);
+        work.start(Instant.now());
+        work.finalizeGrading(Instant.now());
+        when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(List.of(attempt));
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(List.of(work));
+        when(identityService.getStudentDisplayNames(any(), any())).thenReturn(Map.of());
+
+        assertThat(service.roster(sessionId, host).rows()).singleElement()
+                .satisfies(row -> assertThat(row.reassignable()).isFalse());
+
+        GradingAssignment open = assignment(attempt.attemptPublicId(), examiner1);
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionId))
+                .thenReturn(List.of(open));
+        when(gateway.isPublished(tenantId, sessionId)).thenReturn(true);
+
+        assertThat(service.roster(sessionId, host).rows()).singleElement()
+                .satisfies(row -> assertThat(row.reassignable()).isFalse());
+    }
+
+    @Test
+    void reassignCarriesDraftsToTheNewExaminerRestartsTheWorkAndClosesOpenIssues() {
+        UUID attemptId = UUID.randomUUID();
+        GradingAssignment work = startedWork(attemptId, examiner1);
+        long versionBefore = work.getWorkVersion();
+        ExaminerEvaluation draft = draft(attemptId, examiner1, 70);
+        GradingIssue issue = new GradingIssue(tenantId, 5L, UUID.randomUUID(), ExaminerGradingIssueType.AUDIO_UNAVAILABLE,
+                "no audio", examiner1, Instant.now());
+        stubReassign(attemptId, work, List.of(draft));
+        when(issueRepository.findByTenantIdAndAssignmentIdAndDeletedFalseOrderByReportedAtAsc(any(), any()))
+                .thenReturn(List.of(issue));
+        when(identityService.lockActiveExaminers(eq(tenantId), any())).thenReturn(List.of(examiner(examiner2)));
+
+        service.reassign(sessionId, attemptId, new ReassignExaminerRequest(examiner2), host);
+
+        assertThat(work.getExaminerPublicId()).isEqualTo(examiner2);
+        assertThat(work.getStatus()).isEqualTo(ExaminerWorkflowStatus.PENDING);
+        assertThat(work.getStartedAt()).isNull();
+        assertThat(work.getWorkVersion()).isGreaterThan(versionBefore);
+        assertThat(draft.getExaminerPublicId()).isEqualTo(examiner2);
+        assertThat(draft.isCarriedOver()).isTrue();
+        assertThat(draft.getScore()).isEqualTo(70);
+        assertThat(issue.getStatus()).isEqualTo(ExaminerGradingIssueStatus.RESOLVED);
+        ArgumentCaptor<ExaminerWorkRecorder.Entry> entry = ArgumentCaptor.forClass(ExaminerWorkRecorder.Entry.class);
+        verify(recorder).record(eq(host), eq(work.getPublicId()), any(), any(), entry.capture());
+        assertThat(entry.getValue().operation()).isEqualTo(ExaminerGradingOperation.REASSIGN);
+        assertThat(entry.getValue().metadata().reason()).contains("1 drafts carried over", "70");
+        verify(sessionService).lockForScoreReviewMutation(sessionId, tenantId);
+    }
+
+    @Test
+    void reassignRefusesFinalizedWorkTheSameExaminerAndInactiveExaminers() {
+        UUID attemptId = UUID.randomUUID();
+        GradingAssignment finalized = startedWork(attemptId, examiner1);
+        finalized.finalizeGrading(Instant.now());
+        stubReassign(attemptId, finalized, List.of());
+        assertThatThrownBy(() -> service.reassign(sessionId, attemptId, new ReassignExaminerRequest(examiner2), host))
+                .hasMessageContaining("can no longer be reassigned");
+
+        GradingAssignment open = startedWork(attemptId, examiner1);
+        stubReassign(attemptId, open, List.of());
+        assertThatThrownBy(() -> service.reassign(sessionId, attemptId, new ReassignExaminerRequest(examiner1), host))
+                .hasMessageContaining("already assigned to this Examiner");
+
+        when(identityService.lockActiveExaminers(eq(tenantId), any())).thenReturn(List.of());
+        assertThatThrownBy(() -> service.reassign(sessionId, attemptId, new ReassignExaminerRequest(examiner2), host))
+                .hasMessage("Every selected Examiner must be active and belong to this tenant.");
+        assertThat(open.getExaminerPublicId()).isEqualTo(examiner1);
+        verify(recorder, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void reassignRefusesAnAttemptWithNoCommittedAssignmentAndNonHosts() {
+        UUID attemptId = UUID.randomUUID();
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndDeletedFalse(tenantId,
+                sessionId, attemptId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.reassign(sessionId, attemptId, new ReassignExaminerRequest(examiner2), host))
+                .hasMessage("This attempt has no Examiner assignment.");
+        CurrentUser student = new CurrentUser(UUID.randomUUID(), tenantId, List.of("STUDENT"));
+        assertThatThrownBy(() -> service.reassign(sessionId, attemptId, new ReassignExaminerRequest(examiner2), student))
+                .hasMessage("A tenant HOST_ADMIN is required.");
+    }
+
+    private void stubReassign(UUID attemptId, GradingAssignment work, List<ExaminerEvaluation> drafts) {
+        when(assignmentRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndDeletedFalse(tenantId,
+                sessionId, attemptId)).thenReturn(Optional.of(work));
+        when(assignmentRepository.findForUpdate(tenantId, work.getPublicId())).thenReturn(Optional.of(work));
+        when(evaluationRepository.findByTenantIdAndAssignmentIdAndDeletedFalse(any(), any())).thenReturn(drafts);
+    }
+
+    private GradingAssignment startedWork(UUID attemptId, UUID examinerId) {
+        GradingAssignment work = assignment(attemptId, examinerId);
+        work.start(Instant.now());
+        return work;
+    }
+
+    private ExaminerEvaluation draft(UUID attemptId, UUID examinerId, int score) {
+        return ExaminerEvaluation.draft(tenantId, sessionId, attemptId, UUID.randomUUID(), examinerId, 1L, score,
+                null, ExaminerDecisionKind.MANUAL, "rv", null, Instant.now());
     }
 
     private void stubRosterPool(List<AttemptSummaryView> attempts) {

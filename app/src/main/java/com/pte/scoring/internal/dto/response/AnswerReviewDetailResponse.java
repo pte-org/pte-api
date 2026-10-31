@@ -7,10 +7,11 @@ import java.util.UUID;
 
 /**
  * Full review detail for one answer — host's primary interface for inspecting what a student answered.
- * {@code ai} is the AI side (criteria, feedback, transcript); null for an answer with none.
+ * {@code ai} is the AI side (criteria, feedback, transcript); null for an answer with none. {@code unscored}
+ * marks a task type the exam never scores: its status stays {@code PENDING} but nothing is awaited.
  */
 public record AnswerReviewDetailResponse(UUID answerPublicId, UUID attemptPublicId, UUID sessionPublicId,
                                           String taskType, String status, Integer rawScore, Integer teacherScore,
                                           Instant createdAt, DecodedAnswerPayload payload,
-                                          AiScoreDetailResponse ai) {
+                                          AiScoreDetailResponse ai, boolean unscored) {
 }
