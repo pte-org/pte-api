@@ -1,4 +1,4 @@
--- Admin package grants: a license code bound to one organization and redeemed in the same transaction.
+-- Admin License Code: a license code bound to one organization and redeemed in the same transaction.
 -- Every column is nullable so legacy bearer codes keep their current meaning.
 ALTER TABLE license_codes
     ADD COLUMN bound_tenant_id uuid,
