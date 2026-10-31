@@ -44,6 +44,25 @@ class ChatPromptsTest {
     }
 
     @Test
+    void aVietnameseQuestionIsRefusedInVietnameseEvenWhenThePageIsEnglish() {
+        assertThat(ChatPrompts.refusal("en", "xin chào bạn hôm nay ăn gì")).isEqualTo(ChatPrompts.refusal("vi"));
+        assertThat(ChatPrompts.refusal("en", "Hôm nay trời đẹp quá")).isEqualTo(ChatPrompts.refusal("vi"));
+    }
+
+    @Test
+    void anEnglishQuestionKeepsThePageLanguage() {
+        assertThat(ChatPrompts.refusal("en", "who won the match")).isEqualTo(ChatPrompts.refusal("en"));
+        assertThat(ChatPrompts.refusal("vi", "who won the match")).isEqualTo(ChatPrompts.refusal("vi"));
+        assertThat(ChatPrompts.refusal("en", null)).isEqualTo(ChatPrompts.refusal("en"));
+    }
+
+    @Test
+    void accentsSharedWithOtherLanguagesDoNotCountAsVietnamese() {
+        assertThat(ChatPrompts.isVietnamese("café déjà vu, crème brûlée")).isFalse();
+        assertThat(ChatPrompts.isVietnamese("đ")).isTrue();
+    }
+
+    @Test
     void theSystemInstructionSaysWhatTheTaskTypeLineIsFor() {
         assertThat(ChatPrompts.systemInstruction()).contains("Current task type").contains("this exercise");
     }

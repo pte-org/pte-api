@@ -74,6 +74,29 @@ class ChatUsageDailyRepositoryPostgresTest {
     }
 
     @Test
+    void aFailedMessageIsCountedUnderItsReasonAndTheReasonsAddUpToTheFailures() {
+        for (ChatFailureBucket bucket : ChatFailureBucket.values()) {
+            repository.add(DAY, MODEL, ChatConstants.STATUS_FAILED, bucket, ChatAiUsage.NONE, BigDecimal.ZERO);
+        }
+        repository.add(DAY, MODEL, ChatConstants.STATUS_FAILED, ChatFailureBucket.TIMEOUT, ChatAiUsage.NONE,
+                BigDecimal.ZERO);
+
+        assertThat(rows()).singleElement().satisfies(row -> assertThat(row).containsEntry("failed", 7)
+                .containsEntry("failed_timeout", 2).containsEntry("failed_rate_limited", 1)
+                .containsEntry("failed_auth", 1).containsEntry("failed_unavailable", 1)
+                .containsEntry("failed_truncated", 1).containsEntry("failed_other", 1));
+    }
+
+    @Test
+    void aMessageThatDidNotFailNeverCountsAReason() {
+        repository.add(DAY, MODEL, ChatConstants.STATUS_OK, ChatFailureBucket.TIMEOUT, ChatAiUsage.NONE,
+                BigDecimal.ZERO);
+
+        assertThat(rows()).singleElement().satisfies(row -> assertThat(row).containsEntry("failed", 0)
+                .containsEntry("failed_timeout", 0).containsEntry("failed_other", 0));
+    }
+
+    @Test
     void anotherModelOrDayIsItsOwnRow() {
         repository.add(DAY, MODEL, ChatConstants.STATUS_OK, ChatAiUsage.NONE, BigDecimal.ZERO);
         repository.add(DAY, "gemini-2.5-flash-lite", ChatConstants.STATUS_OK, ChatAiUsage.NONE, BigDecimal.ZERO);

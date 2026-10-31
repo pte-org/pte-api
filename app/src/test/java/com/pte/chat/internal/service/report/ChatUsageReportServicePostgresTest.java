@@ -10,7 +10,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -42,11 +41,6 @@ class ChatUsageReportServicePostgresTest {
         jdbc.getJdbcOperations().update("INSERT INTO chat_usage_daily (usage_date, model, messages, ok, refused, failed, "
                         + "tokens_in, tokens_out, tokens_thinking, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::numeric)",
                 java.sql.Date.valueOf(day), model, ok + refused + failed, ok, refused, failed, in, out, thinking, cost);
-    }
-
-    private static void used(UUID student, LocalDate day, int count) {
-        jdbc.getJdbcOperations().update("INSERT INTO chat_usage (student_id, usage_date, used) VALUES (?, ?, ?)",
-                student, java.sql.Date.valueOf(day), count);
     }
 
     private static ChatUsageDay day(List<ChatUsageDay> report, LocalDate date) {
@@ -87,41 +81,21 @@ class ChatUsageReportServicePostgresTest {
     }
 
     @Test
+    void theFailuresOfADayAreSplitByReasonAndSummedOverModels() {
+        jdbc.getJdbcOperations().update("INSERT INTO chat_usage_daily (usage_date, model, messages, failed, "
+                + "failed_timeout, failed_rate_limited, failed_other) VALUES (?, 'a', 3, 3, 2, 1, 0), (?, 'b', 2, 2, 1, 0, 1)",
+                java.sql.Date.valueOf(D29), java.sql.Date.valueOf(D29));
+
+        ChatUsageDay report = day(service.report(D28, D30), D29);
+
+        assertThat(report.failed()).isEqualTo(5);
+        assertThat(report.failures()).isEqualTo(new ChatFailureCounts(3, 1, 0, 0, 0, 1));
+        assertThat(day(service.report(D28, D30), D28).failures()).isEqualTo(ChatFailureCounts.NONE);
+    }
+
+    @Test
     void aRangeThatEndsBeforeItStartsOrIsLongerThanAYearIsRejected() {
         assertThatThrownBy(() -> service.report(D30, D28)).isInstanceOf(ChatInvalidRequestException.class);
         assertThatThrownBy(() -> service.report(D28, D28.plusDays(400))).isInstanceOf(ChatInvalidRequestException.class);
-    }
-
-    @Test
-    void theBusiestStudentsComeFirstWithTheirMessageCountsOverTheRange() {
-        UUID busy = UUID.randomUUID();
-        UUID quiet = UUID.randomUUID();
-        UUID outside = UUID.randomUUID();
-        used(busy, D28, 20);
-        used(busy, D29, 15);
-        used(quiet, D29, 3);
-        used(outside, D30.plusDays(5), 99);
-
-        List<ChatStudentUsage> top = service.topStudents(D28, D30, 10);
-
-        assertThat(top).containsExactly(new ChatStudentUsage(busy, 35), new ChatStudentUsage(quiet, 3));
-    }
-
-    @Test
-    void theListIsCutAtTheRequestedSizeAndTheSizeIsBounded() {
-        for (int i = 0; i < 5; i++) {
-            used(UUID.randomUUID(), D29, i + 1);
-        }
-
-        assertThat(service.topStudents(D28, D30, 2)).hasSize(2);
-        assertThat(service.topStudents(D28, D30, 0)).hasSize(1);
-        assertThat(service.topStudents(D28, D30, 100_000)).hasSize(5);
-    }
-
-    @Test
-    void studentsWithNothingUsedAreNotListed() {
-        used(UUID.randomUUID(), D29, 0);
-
-        assertThat(service.topStudents(D28, D30, 10)).isEmpty();
     }
 }

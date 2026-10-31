@@ -1,5 +1,6 @@
 package com.pte.chat.internal.service.usage;
 
+import com.pte.chat.internal.client.ChatAiFailureReason;
 import com.pte.chat.internal.client.ChatAiUsage;
 import com.pte.chat.internal.config.ChatAiProperties;
 import com.pte.chat.internal.constant.ChatConstants;
@@ -42,9 +43,18 @@ public class ChatUsageRecorder {
     }
 
     public void record(String model, String status, ChatAiUsage usage) {
+        record(model, status, ChatFailureBucket.OTHER, usage);
+    }
+
+    /** Counts a failed message under the group its provider reason belongs to; a null reason means unknown. */
+    public void recordFailure(String model, ChatAiUsage usage, ChatAiFailureReason reason) {
+        record(model, ChatConstants.STATUS_FAILED, ChatFailureBucket.of(reason), usage);
+    }
+
+    private void record(String model, String status, ChatFailureBucket bucket, ChatAiUsage usage) {
         try {
             LocalDate day = LocalDate.ofInstant(clock.instant(), ChatConstants.ZONE);
-            repository.add(day, model, status, usage, cost(usage));
+            repository.add(day, model, status, bucket, usage, cost(usage));
             observability.messageCounted(status);
         } catch (RuntimeException ex) {
             log.error("Could not count a chat message: {}", ChatErrors.describe(ex));

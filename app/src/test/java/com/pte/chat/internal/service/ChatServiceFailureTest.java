@@ -61,7 +61,7 @@ class ChatServiceFailureTest extends ChatServiceTestSupport {
         verify(quotaService, times(1)).refundQuietly(ticket);
         verify(observability).providerFailed(reason);
         verify(observability).quotaRefunded(anyString());
-        verify(usageRecorder).record(MODEL, ChatConstants.STATUS_FAILED, ChatAiUsage.NONE);
+        verify(usageRecorder).recordFailure(MODEL, ChatAiUsage.NONE, reason);
         assertLeasesClosedAfterTheRefund();
         assertBothLeasesClosedOnce();
     }
@@ -75,7 +75,7 @@ class ChatServiceFailureTest extends ChatServiceTestSupport {
         assertThatThrownBy(() -> service.send(caller, command("  Question  ", "WRITE_ESSAY", "vi")))
                 .isInstanceOf(ChatBusyException.class);
 
-        verify(usageRecorder).record(MODEL, ChatConstants.STATUS_FAILED, usage);
+        verify(usageRecorder).recordFailure(MODEL, usage, ChatAiFailureReason.TRUNCATED);
     }
 
     @Test
@@ -107,7 +107,7 @@ class ChatServiceFailureTest extends ChatServiceTestSupport {
         verify(quotaService, times(1)).refundQuietly(ticket);
         verify(observability).quotaRefunded(anyString());
         verify(observability, never()).providerFailed(any());
-        verify(usageRecorder).record(MODEL, ChatConstants.STATUS_FAILED, ChatAiUsage.NONE);
+        verify(usageRecorder).recordFailure(MODEL, ChatAiUsage.NONE, null);
         assertLeasesClosedAfterTheRefund();
         assertBothLeasesClosedOnce();
     }

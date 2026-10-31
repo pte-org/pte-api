@@ -1,5 +1,6 @@
 package com.pte.chat.internal.service.usage;
 
+import com.pte.chat.internal.client.ChatAiFailureReason;
 import com.pte.chat.internal.client.ChatAiUsage;
 import com.pte.chat.internal.config.ChatAiProperties;
 import com.pte.chat.internal.constant.ChatConstants;
@@ -36,20 +37,34 @@ class ChatUsageRecorderTest {
 
         // 1M in * 0.10 + (0.5M out + 0.5M thinking) * 0.40
         verify(repository).add(eq(LocalDate.of(2026, 10, 29)), eq("gemini-3.5-flash-lite"), eq(ChatConstants.STATUS_OK),
-                any(ChatAiUsage.class), eq(new BigDecimal("0.500000")));
+                eq(ChatFailureBucket.OTHER), any(ChatAiUsage.class), eq(new BigDecimal("0.500000")));
     }
 
     @Test
     void aFailedCallWithNoTokensCostsNothing() {
         recorder.record("m", ChatConstants.STATUS_FAILED, ChatAiUsage.NONE);
 
-        verify(repository).add(any(), eq("m"), eq(ChatConstants.STATUS_FAILED), eq(ChatAiUsage.NONE),
-                eq(new BigDecimal("0.000000")));
+        verify(repository).add(any(), eq("m"), eq(ChatConstants.STATUS_FAILED), eq(ChatFailureBucket.OTHER),
+                eq(ChatAiUsage.NONE), eq(new BigDecimal("0.000000")));
+    }
+
+    @Test
+    void aFailedCallIsCountedUnderTheGroupOfItsReason() {
+        recorder.recordFailure("m", ChatAiUsage.NONE, ChatAiFailureReason.TIMEOUT);
+        recorder.recordFailure("m", ChatAiUsage.NONE, ChatAiFailureReason.RATE_LIMITED);
+        recorder.recordFailure("m", ChatAiUsage.NONE, null);
+
+        verify(repository).add(any(), eq("m"), eq(ChatConstants.STATUS_FAILED), eq(ChatFailureBucket.TIMEOUT),
+                any(ChatAiUsage.class), any());
+        verify(repository).add(any(), eq("m"), eq(ChatConstants.STATUS_FAILED), eq(ChatFailureBucket.RATE_LIMITED),
+                any(ChatAiUsage.class), any());
+        verify(repository).add(any(), eq("m"), eq(ChatConstants.STATUS_FAILED), eq(ChatFailureBucket.OTHER),
+                any(ChatAiUsage.class), any());
     }
 
     @Test
     void aBrokenCounterNeverStopsTheAnswer() {
-        doThrow(new IllegalStateException("db down")).when(repository).add(any(), any(), any(), any(), any());
+        doThrow(new IllegalStateException("db down")).when(repository).add(any(), any(), any(), any(), any(), any());
 
         assertThatCode(() -> recorder.record("m", ChatConstants.STATUS_OK, ChatAiUsage.NONE)).doesNotThrowAnyException();
         verify(observability).usageRecordFailed();
