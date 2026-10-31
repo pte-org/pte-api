@@ -46,23 +46,23 @@ class ChatObservabilityTest {
     }
 
     @Test
-    void messageCountedByStatus() {
-        observability.messageCounted("OK");
-        observability.messageCounted("OK");
-        observability.messageCounted("REFUSED");
-        observability.messageCounted("FAILED");
+    void messageStoredCountsByStatusAndCacheOrigin() {
+        observability.messageStored("OK", false);
+        observability.messageStored("OK", true);
+        observability.messageStored("REFUSED", false);
+        observability.messageStored("FAILED", false);
 
         assertThat(total()).isEqualTo(4.0);
-        assertThat(registry.getMeters()).hasSize(3);
+        assertThat(registry.getMeters()).hasSize(4);
         assertThat(names()).allMatch(name -> name.startsWith("chat."));
         assertThat(tagValues()).contains("OK", "REFUSED", "FAILED");
     }
 
     @Test
     void repeatedEventsAddUpOnTheSameCounter() {
-        observability.messageCounted("OK");
-        observability.messageCounted("OK");
-        observability.messageCounted("OK");
+        observability.messageStored("OK", false);
+        observability.messageStored("OK", false);
+        observability.messageStored("OK", false);
 
         assertThat(registry.getMeters()).hasSize(1);
         assertThat(total()).isEqualTo(3.0);
@@ -81,12 +81,12 @@ class ChatObservabilityTest {
     }
 
     @Test
-    void refundFailedSlotRejectedInFlightRejectedAndUsageRecordFailedEachHaveTheirOwnCounter() {
+    void refundFailedSlotRejectedInFlightRejectedAndCacheStoreFailedEachHaveTheirOwnCounter() {
         observability.refundFailed();
         observability.slotRejected();
         observability.slotRejected();
         observability.inFlightRejected();
-        observability.usageRecordFailed();
+        observability.cacheStoreFailed();
 
         assertThat(total()).isEqualTo(5.0);
         assertThat(registry.getMeters()).hasSize(4);
@@ -113,13 +113,13 @@ class ChatObservabilityTest {
 
     @Test
     void differentEventsNeverShareAMeterId() {
-        observability.messageCounted("OK");
+        observability.messageStored("OK", false);
         observability.quotaRefunded("off_topic");
         observability.refundFailed();
         observability.providerFailed(ChatAiFailureReason.TIMEOUT);
         observability.slotRejected();
         observability.inFlightRejected();
-        observability.usageRecordFailed();
+        observability.cacheStoreFailed();
 
         List<Meter.Id> ids = registry.getMeters().stream().map(Meter::getId).toList();
         assertThat(ids).doesNotHaveDuplicates().hasSize(7);

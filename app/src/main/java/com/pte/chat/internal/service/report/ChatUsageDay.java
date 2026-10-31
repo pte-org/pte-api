@@ -4,8 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * One Vietnam day of chat traffic. It carries counts and tokens only: nothing that names a student or what was
- * asked, so it is safe to show to anyone who may see cost.
+ * One Vietnam day of chat traffic. It carries counts and tokens only: nothing that names a student, a session
+ * or what was asked, so it is safe to show to anyone who may see cost.
  */
 public record ChatUsageDay(
         LocalDate date,
@@ -13,7 +13,7 @@ public record ChatUsageDay(
         int ok,
         int refused,
         int failed,
-        ChatFailureCounts failures,
+        int cacheHits,
         long tokensIn,
         long tokensOut,
         long tokensThinking,

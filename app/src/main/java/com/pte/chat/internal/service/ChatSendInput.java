@@ -1,16 +1,14 @@
 package com.pte.chat.internal.service;
 
-import com.pte.chat.internal.client.ChatTurn;
-
-import java.util.List;
+import java.util.UUID;
 
 /**
- * A send request after validation: trimmed message, whitelisted task type (or null), a known language, the cleaned
- * exercise text (or null) and the earlier turns, already alternating and capped.
+ * A send request after validation: trimmed message, whitelisted task type (or null), a known language and the
+ * cleaned exercise text (or null).
  */
-record ChatSendInput(String message, String taskType, String language, String exercisePrompt, List<ChatTurn> history) {
+record ChatSendInput(UUID sessionId, String message, String taskType, String language, String exercisePrompt) {
 
-    ChatSendInput(String message, String taskType, String language) {
-        this(message, taskType, language, null, List.of());
+    ChatSendInput(UUID sessionId, String message, String taskType, String language) {
+        this(sessionId, message, taskType, language, null);
     }
 }

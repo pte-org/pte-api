@@ -1,14 +1,11 @@
 package com.pte.chat.internal.service;
 
-import com.pte.chat.internal.client.ChatTurn;
 import com.pte.chat.internal.config.ChatAiProperties;
 import com.pte.chat.internal.constant.ChatConstants;
 import com.pte.chat.internal.constant.ChatTaskTypes;
 import com.pte.chat.internal.exception.ChatInvalidRequestException;
 import com.pte.chat.internal.service.privacy.ChatContactDetails;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 
 /**
@@ -24,66 +21,11 @@ final class ChatSendValidator {
     }
 
     ChatSendInput validate(ChatSendCommand command) {
-        return new ChatSendInput(message(command.message()), taskType(command.taskType()),
-                language(command.language()), exercisePrompt(command.exercisePrompt()), history(command.history()));
-    }
-
-    private List<ChatTurn> history(List<ChatHistoryEntry> entries) {
-        if (entries == null || entries.isEmpty()) {
-            return List.of();
+        if (command.sessionId() == null || command.sessionId().version() != 4) {
+            throw new ChatInvalidRequestException(ChatConstants.DETAIL_SESSION_ID_INVALID);
         }
-        List<ChatTurn> turns = new ArrayList<>();
-        for (ChatHistoryEntry entry : entries) {
-            ChatTurn turn = historyTurn(entry);
-            if (turn == null) {
-                continue;
-            }
-            if (!turns.isEmpty() && turns.getLast().role().equals(turn.role())) {
-                turns.removeLast();
-            }
-            turns.add(turn);
-        }
-        int keep = Math.max(properties.getHistorySize(), 0) * 2;
-        while (turns.size() > keep) {
-            turns.removeFirst();
-        }
-        while (!turns.isEmpty() && (isModel(turns.getFirst()) || totalChars(turns) > ChatConstants.HISTORY_TOTAL_MAX_CHARS)) {
-            turns.removeFirst();
-        }
-        if (!turns.isEmpty() && !isModel(turns.getLast())) {
-            turns.removeLast();
-        }
-        return List.copyOf(turns);
-    }
-
-    private static ChatTurn historyTurn(ChatHistoryEntry entry) {
-        if (entry == null || entry.role() == null) {
-            throw new ChatInvalidRequestException(ChatConstants.DETAIL_HISTORY_INVALID);
-        }
-        String role = entry.role().strip().toLowerCase(Locale.ROOT);
-        boolean fromStudent = ChatConstants.HISTORY_ROLE_USER.equals(role);
-        if (!fromStudent && !ChatConstants.HISTORY_ROLE_ASSISTANT.equals(role)) {
-            throw new ChatInvalidRequestException(ChatConstants.DETAIL_HISTORY_INVALID);
-        }
-        String raw = entry.text() == null ? "" : entry.text();
-        if (raw.length() > ChatConstants.HISTORY_ITEM_MAX_CHARS) {
-            throw new ChatInvalidRequestException(ChatConstants.DETAIL_HISTORY_INVALID);
-        }
-        StringBuilder cleaned = new StringBuilder(raw.length());
-        raw.chars().forEach(c -> cleaned.append(isUnsupportedControl(c) ? ' ' : (char) c));
-        String text = cleaned.toString().strip();
-        if (text.isEmpty()) {
-            return null;
-        }
-        return fromStudent ? ChatTurn.user(ChatContactDetails.mask(text)) : ChatTurn.model(ChatContactDetails.mask(text));
-    }
-
-    private static boolean isModel(ChatTurn turn) {
-        return ChatTurn.model("").role().equals(turn.role());
-    }
-
-    private static int totalChars(List<ChatTurn> turns) {
-        return turns.stream().mapToInt(turn -> turn.text().length()).sum();
+        return new ChatSendInput(command.sessionId(), message(command.message()), taskType(command.taskType()),
+                language(command.language()), exercisePrompt(command.exercisePrompt()));
     }
 
     /**
