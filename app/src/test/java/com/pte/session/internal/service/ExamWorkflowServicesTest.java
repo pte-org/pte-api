@@ -180,7 +180,7 @@ class ExamWorkflowServicesTest {
 
     @Test
     void createDraft_partialSkillSelection_isRejected() {
-        when(examDefinitionService.findActiveByPublicId(templateId)).thenReturn(Optional.of(
+        when(examDefinitionService.findActiveForTenant(templateId, tenantId)).thenReturn(Optional.of(
                 twoSkillTemplateResponse()));
         stubSubscriptionForDraft();
 
@@ -748,7 +748,7 @@ class ExamWorkflowServicesTest {
     }
 
     private void stubTemplateAndSubscription() {
-        when(examDefinitionService.findActiveByPublicId(templateId)).thenReturn(Optional.of(
+        when(examDefinitionService.findActiveForTenant(templateId, tenantId)).thenReturn(Optional.of(
                 templateResponse()));
         when(billingService.getActiveSubscription(subscriptionId, tenantId)).thenReturn(Optional.of(
                 new SubscriptionView(subscriptionId, tenantId, UUID.randomUUID(), "LIC-TEST",

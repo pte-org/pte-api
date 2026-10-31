@@ -81,6 +81,12 @@ public class QuestionTypeService {
         return queryService.getDynamic(publicId);
     }
 
+    /** Keys of every active task type; a platform default template must contain all of them. */
+    @Transactional(readOnly = true)
+    public List<String> listActiveTaskTypeKeys() {
+        return queryService.listActiveTaskTypeKeys();
+    }
+
     // ========== Capability queries ==========
 
     @Transactional(readOnly = true)

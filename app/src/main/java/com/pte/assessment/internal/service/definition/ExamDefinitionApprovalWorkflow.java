@@ -53,6 +53,7 @@ class ExamDefinitionApprovalWorkflow {
         requireDraftModification(caller, template);
         try {
             validator.validateCatalog(template, true);
+            validator.validateIncludesWholeCatalog(template);
             ExamDefinitionActivationValidator.validate(template);
             validator.validateQuestionBank(template);
         } catch (ExamDefinitionValidationException ex) {
@@ -73,6 +74,7 @@ class ExamDefinitionApprovalWorkflow {
         requirePendingApproval(template);
         try {
             validator.validateCatalog(template, true);
+            validator.validateIncludesWholeCatalog(template);
             ExamDefinitionActivationValidator.validate(template);
             validator.validateQuestionBank(template);
         } catch (ExamDefinitionValidationException ex) {
@@ -101,10 +103,11 @@ class ExamDefinitionApprovalWorkflow {
 
     /** Activates approved draft, retires previous active version. */
     ExamDefinitionResponse activate(ExamDefinition target, CurrentUser caller) {
-        requireDraft(target);
+        requireActivatable(target);
         requirePublish(caller, target);
         try {
             validator.validateCatalog(target, true);
+            validator.validateIncludesWholeCatalog(target);
             ExamDefinitionActivationValidator.validate(target);
             validator.validateQuestionBank(target);
         } catch (ExamDefinitionValidationException ex) {
@@ -113,7 +116,7 @@ class ExamDefinitionApprovalWorkflow {
         }
 
         repository.findAllByCodeForUpdate(target.getCode());
-        repository.findWithItemsByStatus(ExamDefinitionStatus.ACTIVE)
+        repository.findWithItemsByStatusAndTenantIdIsNull(ExamDefinitionStatus.ACTIVE)
                 .filter(active -> !active.getPublicId().equals(target.getPublicId()))
                 .ifPresent(active -> {
                     active.setStatus(ExamDefinitionStatus.RETIRED);
@@ -139,6 +142,14 @@ class ExamDefinitionApprovalWorkflow {
 
     private void requireDraft(ExamDefinition template) {
         if (template.getStatus() != ExamDefinitionStatus.DRAFT) {
+            throw new ExamDefinitionNotDraftException();
+        }
+    }
+
+    /** A DRAFT goes live, or a RETIRED version is switched back on; ACTIVE and PENDING_APPROVAL are not activatable. */
+    private void requireActivatable(ExamDefinition template) {
+        if (template.getStatus() != ExamDefinitionStatus.DRAFT
+                && template.getStatus() != ExamDefinitionStatus.RETIRED) {
             throw new ExamDefinitionNotDraftException();
         }
     }

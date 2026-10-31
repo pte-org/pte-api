@@ -10,9 +10,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * FR-05: structural soundness, plus an exact-100 check on each of the 4
@@ -205,21 +207,21 @@ public final class ExamDefinitionActivationValidator {
             errors.add(ExamDefinitionConstants.TEMPLATE_NO_SCORED_TASKS);
             return;
         }
-        Map<String, Function<ExamDefinitionItem, BigDecimal>> columns = SKILL_WEIGHT_COLUMNS;
-        columns.forEach((skill, accessor) -> {
+        // A section that still has items must be fully weighted. A skill with no section items may stay
+        // 0, but weight carried by tasks of other sections (e.g. Writing tasks scoring Reading) must total 100.
+        Set<String> sectionsWithItems = items.stream()
+                .map(item -> item.getSection() == null ? "" : item.getSection().trim().toUpperCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        SKILL_WEIGHT_COLUMNS.forEach((skill, accessor) -> {
             BigDecimal total = items.stream()
                     .filter(item -> item.pinnedRuntimeProfile() != null
                             && item.pinnedRuntimeProfile().scoringEnabled())
                     .map(accessor).map(value -> value == null ? BigDecimal.ZERO : value)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
-            boolean represented = items.stream()
-                    .filter(item -> item.pinnedRuntimeProfile() != null
-                            && item.pinnedRuntimeProfile().scoringEnabled())
-                    .map(accessor).anyMatch(value -> value != null && value.signum() > 0);
-            if (represented && total.compareTo(REQUIRED_SKILL_TOTAL) != 0) {
-                errors.add(ExamDefinitionConstants.SKILL_WEIGHT_NOT_100 + skill + " (current total: " + total + ")");
-            } else if (!represented && total.signum() != 0) {
-                errors.add(ExamDefinitionConstants.SKILL_WITH_NO_WEIGHT + skill);
+            boolean mustBeWeighted = sectionsWithItems.contains(skill);
+            if (total.compareTo(REQUIRED_SKILL_TOTAL) != 0 && (mustBeWeighted || total.signum() != 0)) {
+                errors.add(ExamDefinitionConstants.SKILL_WEIGHT_NOT_100 + skill
+                        + " (current total: " + total + ")");
             }
         });
         BigDecimal overall = sum(items, ExamDefinitionItem::getOverallWeight);
