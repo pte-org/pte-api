@@ -3,6 +3,7 @@ package com.pte.assessment.internal.controller;
 import com.pte.assessment.dto.request.CreateHostExamTemplateRequest;
 import com.pte.assessment.dto.request.NormalizeSkillWeightsRequest;
 import com.pte.assessment.dto.request.ReplaceExamDefinitionItemsRequest;
+import com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.dto.response.SkillWeightSuggestionResponse;
 import com.pte.assessment.internal.service.definition.HostExamTemplateService;
@@ -53,6 +54,12 @@ public class HostExamTemplateController {
     @GetMapping("/{publicId}")
     public ApiResponse<ExamDefinitionResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(service.get(publicId, CurrentUserContext.required()));
+    }
+
+    /** Question-bank coverage per task type, so the editor can show what is missing before activation. */
+    @GetMapping("/{publicId}/feasibility")
+    public ApiResponse<ExamDefinitionFeasibilityResponse> feasibility(@PathVariable UUID publicId) {
+        return ApiResponse.success(service.feasibility(publicId, CurrentUserContext.required()));
     }
 
     /** Stateless preview of the 3 redistribution modes for the editor's unsaved rows. */

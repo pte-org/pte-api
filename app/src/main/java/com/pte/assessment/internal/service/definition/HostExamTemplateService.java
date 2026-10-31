@@ -1,5 +1,6 @@
 package com.pte.assessment.internal.service.definition;
 
+import com.pte.assessment.ExamDefinitionService;
 import com.pte.assessment.domain.ExamDefinition;
 import com.pte.assessment.domain.ExamDefinitionItem;
 import com.pte.assessment.domain.enums.ExamDefinitionStatus;
@@ -7,6 +8,7 @@ import com.pte.assessment.domain.enums.TemplatePolicy;
 import com.pte.assessment.dto.request.CreateHostExamTemplateRequest;
 import com.pte.assessment.dto.request.NormalizeSkillWeightsRequest;
 import com.pte.assessment.dto.request.ReplaceExamDefinitionItemsRequest;
+import com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.dto.response.SkillWeightSuggestionResponse;
 import com.pte.assessment.internal.constant.ExamDefinitionConstants;
@@ -46,6 +48,7 @@ public class HostExamTemplateService {
     private static final String CODE_PREFIX = "HOST_";
 
     private final ExamDefinitionRepository repository;
+    private final ExamDefinitionService examDefinitionService;
     private final QuestionTypeService questionTypeService;
     private final AuditLogService auditLogService;
     private final Clock clock;
@@ -55,8 +58,9 @@ public class HostExamTemplateService {
     @Autowired
     public HostExamTemplateService(ExamDefinitionRepository repository, QuestionTypeService questionTypeService,
             TaskRuntimeProfileService runtimeProfileService, ItembankService itembankService,
-            AuditLogService auditLogService, Clock clock) {
+            AuditLogService auditLogService, Clock clock, ExamDefinitionService examDefinitionService) {
         this.repository = repository;
+        this.examDefinitionService = examDefinitionService;
         this.questionTypeService = questionTypeService;
         this.auditLogService = auditLogService;
         this.clock = clock;
@@ -73,6 +77,13 @@ public class HostExamTemplateService {
     @Transactional(readOnly = true)
     public ExamDefinitionResponse get(UUID publicId, CurrentUser caller) {
         return ExamDefinitionMapper.toResponse(findOwned(publicId, caller));
+    }
+
+    /** Per task type: how many published questions exist against how many the template needs. */
+    @Transactional(readOnly = true)
+    public ExamDefinitionFeasibilityResponse feasibility(UUID publicId, CurrentUser caller) {
+        findOwned(publicId, caller);
+        return examDefinitionService.getTemplateFeasibility(publicId);
     }
 
     /** Suggests how to rebalance skill columns for the host's unsaved rows; computes only, writes nothing. */

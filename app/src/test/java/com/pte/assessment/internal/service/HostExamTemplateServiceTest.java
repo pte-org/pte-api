@@ -51,7 +51,7 @@ class HostExamTemplateServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new HostExamTemplateService(repository, null, null, null, null, com.pte.TestClocks.fixed());
+        service = new HostExamTemplateService(repository, null, null, null, null, com.pte.TestClocks.fixed(), null);
         host = new CurrentUser(UUID.randomUUID(), TENANT, List.of("HOST_ADMIN"));
     }
 
@@ -100,6 +100,7 @@ class HostExamTemplateServiceTest {
         assertThatThrownBy(() -> service.get(id, host)).isInstanceOf(ExamDefinitionNotFoundException.class);
         assertThatThrownBy(() -> service.activate(id, host)).isInstanceOf(ExamDefinitionNotFoundException.class);
         assertThatThrownBy(() -> service.deleteDraft(id, host)).isInstanceOf(ExamDefinitionNotFoundException.class);
+        assertThatThrownBy(() -> service.feasibility(id, host)).isInstanceOf(ExamDefinitionNotFoundException.class);
     }
 
     @Test
