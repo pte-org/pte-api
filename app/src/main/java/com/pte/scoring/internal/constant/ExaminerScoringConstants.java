@@ -36,6 +36,9 @@ public final class ExaminerScoringConstants {
     public static final String WORK_NOT_STARTED_FOR_FINALIZE = "Work must be started before finalization";
     public static final String WORK_ALREADY_FINALIZED = "Work is already finalized";
     public static final String BLOCKING_ISSUES_OPEN = "Unresolved blocking issues exist";
+    public static final String CARRIED_OVER_DRAFTS_BLOCKING_REASON = "CARRIED_OVER_DRAFTS_UNCONFIRMED";
+    public static final String CARRIED_OVER_DRAFTS_UNCONFIRMED =
+            "Drafts handed over from the previous examiner must be saved again before finalizing";
     public static final String ELIGIBLE_POOL_EMPTY = "Eligible answer pool is empty";
     public static final String MANIFEST_POOL_MISMATCH = "Finalize manifest does not match eligible answer pool exactly";
     public static final String ASSIGNMENT_NOT_FOUND = "Assignment not found or unauthorized";
