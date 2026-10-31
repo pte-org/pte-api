@@ -65,7 +65,13 @@ public class QuestionLifecycleService {
 
     @Transactional
     public QuestionResponse createRevision(UUID publicId, CurrentUser caller) {
-        Question source = loadForPlatformWrite(publicId, caller);
+        // The source is published content, not anyone's draft: any academic author may open a revision.
+        // The new draft is owned by the caller, so later edits and review keep the ownership rules.
+        Question source = questionRepository.findWithOptionsByPublicId(publicId)
+                .orElseThrow(QuestionNotFoundException::new);
+        if (!accessPolicy.canWrite(caller)) {
+            deny(caller, publicId, ItembankConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
+        }
         if (source.getStatus() != QuestionStatus.APPROVED || !source.isCurrent()) {
             throw new InvalidQuestionStatusTransitionException();
         }

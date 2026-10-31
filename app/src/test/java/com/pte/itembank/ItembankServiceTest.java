@@ -610,6 +610,42 @@ class ItembankServiceTest {
     }
 
     @Test
+    void createRevision_byAnotherAcademicAuthor_succeedsAndOwnsTheDraft() {
+        UUID publicId = UUID.randomUUID();
+        Question source = publishedSource(publicId);
+        when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(source));
+        when(questionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.createRevision(publicId, platformCaller);
+
+        ArgumentCaptor<Question> saved = ArgumentCaptor.forClass(Question.class);
+        org.mockito.Mockito.verify(questionRepository).save(saved.capture());
+        assertThat(saved.getValue().getAuthorUserPublicId()).isEqualTo(platformCaller.userId());
+        assertThat(saved.getValue().getStatus()).isEqualTo(QuestionStatus.DRAFT);
+    }
+
+    @Test
+    void createRevision_byHostCaller_forbidden() {
+        UUID publicId = UUID.randomUUID();
+        when(questionRepository.findWithOptionsByPublicId(publicId))
+                .thenReturn(Optional.of(publishedSource(publicId)));
+
+        assertThatThrownBy(() -> service.createRevision(publicId, hostCaller))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    private Question publishedSource(UUID publicId) {
+        Question source = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        source.setPublicId(publicId);
+        source.setCurrent(true);
+        source.setTaskTypeKey("READ_ALOUD");
+        source.setTaskTypeSection("SPEAKING");
+        source.setRevisionGroupPublicId(UUID.randomUUID());
+        source.setAuthorUserPublicId(UUID.randomUUID());
+        return source;
+    }
+
+    @Test
     void update_draftAvailabilityFlags_movesQuestionBetweenExamAndPractice() {
         UUID publicId = UUID.randomUUID();
         Question draft = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
