@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
 import java.util.UUID;
 
 /** Students read immutable published snapshots; Hosts may still inspect live pre-publication scores. */
@@ -69,7 +70,7 @@ public class ReportService {
 
     private AttemptScoreSummary publishedSummary(ExamResult report) {
         if (report.getReportSnapshotJson() == null) {
-            return scoreAggregationService.aggregateLegacyPublished(report.getAttemptPublicId(), report.getTenantId());
+            return new AttemptScoreSummary(null, Map.of());
         }
         return snapshotCodec.decode(report.getReportSnapshotJson()).scoreSummary();
     }

@@ -82,6 +82,24 @@ class GradingCompletionEvaluatorTest {
         assertThat(pending.blockingReasons()).contains(GradingConstants.AI_SCORE_REQUIRED);
     }
 
+    @Test
+    void anItemTheStudentLeftBlankDoesNotBlockCompletion() {
+        var member = new AttemptGradingCandidateView(attemptId, studentId,
+                "SUBMITTED", "v1", false, null);
+        var coverage = new AttemptGradingCoverageView(attemptId, List.of(
+                new AttemptGradingItemView(itemId, templateId, "SUMMARIZE_WRITTEN_TEXT"),
+                new AttemptGradingItemView(UUID.randomUUID(), templateId, "SUMMARIZE_WRITTEN_TEXT")));
+
+        GradingEvaluation result = evaluator.evaluate(GradingMarkingMode.AI_ONLY, List.of(member),
+                Map.of(attemptId, coverage), List.of(answer(ScoringAnswerStatus.SCORED, "SUMMARIZE_WRITTEN_TEXT")),
+                List.of(), List.of(), Map.of());
+
+        assertThat(result.complete()).isTrue();
+        assertThat(result.blockingReasons()).isEmpty();
+        assertThat(result.expectedItemCount()).isEqualTo(2);
+        assertThat(result.satisfiedItemCount()).isEqualTo(2);
+    }
+
     private AiEvaluation answer(ScoringAnswerStatus status, String taskType) {
         AiEvaluation answer = new AiEvaluation(tenantId, sessionId, attemptId, answerId, itemId, templateId,
                 taskType, "WRITING", ScoringMethod.AI_TEXT);

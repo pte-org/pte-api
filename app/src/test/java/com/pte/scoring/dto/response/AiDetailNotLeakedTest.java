@@ -29,7 +29,6 @@ class AiDetailNotLeakedTest {
             "com.pte.reporting.internal.dto.response.ReportPublicationSummaryResponse",
             "com.pte.scoring.dto.response.ReportScoringAnswerView",
             "com.pte.scoring.dto.response.ReportPublicationScoringView",
-            "com.pte.scoring.dto.response.ScoredAnswerView",
             "com.pte.scoring.dto.response.ExaminerScoringWorkItemView",
             "com.pte.scoring.dto.response.ExaminerQueueItemResponse",
             "com.pte.attempt.dto.response.AttemptSummaryView"})

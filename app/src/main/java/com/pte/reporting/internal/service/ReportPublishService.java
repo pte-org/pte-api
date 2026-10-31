@@ -2,6 +2,7 @@ package com.pte.reporting.internal.service;
 
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptSummaryView;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.reporting.domain.ExamResult;
 import com.pte.reporting.domain.enums.Skill;
 import com.pte.reporting.dto.event.AttemptPublishedEvent;
@@ -67,7 +68,7 @@ public class ReportPublishService {
         List<ReportPublicationBlockerResponse> blockers = new ArrayList<>();
         List<AttemptSummaryView> attempts = resolveCohortAttempts(sessionPublicId, tenantId, blockers);
         List<ReportScoringAnswerView> inputs = scoringService.getReportScoringInputs(tenantId, sessionPublicId);
-        return readiness(sessionPublicId, closed, attempts, inputs, blockers);
+        return readiness(sessionPublicId, tenantId, closed, attempts, inputs, blockers);
     }
 
     @Transactional(readOnly = true)
@@ -95,13 +96,13 @@ public class ReportPublishService {
                 return 0;
             }
             ReportPublicationReadinessResponse readiness =
-                    readiness(sessionPublicId, true, attempts, List.of(), blockers);
+                    readiness(sessionPublicId, tenantId, true, attempts, List.of(), blockers);
             throw new ReportPublicationNotReadyException(readiness.blockers());
         }
 
         ReportPublicationScoringView locked = scoringService.lockForReportPublication(tenantId, sessionPublicId,
                 UUID.randomUUID());
-        ReportPublicationReadinessResponse readiness = readiness(sessionPublicId, true, attempts, locked.answers(), blockers);
+        ReportPublicationReadinessResponse readiness = readiness(sessionPublicId, tenantId, true, attempts, locked.answers(), blockers);
         if (!readiness.canPublish()) {
             throw new ReportPublicationNotReadyException(readiness.blockers());
         }
@@ -155,12 +156,7 @@ public class ReportPublishService {
         return score == null || !score.sufficientData() ? null : score.score();
     }
 
-    private ReportPublicationReadinessResponse readiness(UUID sessionPublicId, boolean closed,
-            List<AttemptSummaryView> attempts, List<ReportScoringAnswerView> inputs) {
-        return readiness(sessionPublicId, closed, attempts, inputs, List.of());
-    }
-
-    private ReportPublicationReadinessResponse readiness(UUID sessionPublicId, boolean closed,
+    private ReportPublicationReadinessResponse readiness(UUID sessionPublicId, UUID tenantId, boolean closed,
             List<AttemptSummaryView> attempts, List<ReportScoringAnswerView> inputs,
             List<ReportPublicationBlockerResponse> initialBlockers) {
         Set<UUID> attemptIds = attempts.stream().map(AttemptSummaryView::attemptPublicId).collect(Collectors.toSet());
@@ -173,9 +169,15 @@ public class ReportPublishService {
         for (ReportPublicationBlockerResponse initialBlocker : initialBlockers) {
             blockedAttemptIds.add(initialBlocker.attemptPublicId());
         }
+        Set<UUID> attemptsWithoutInputs = attemptIds.stream()
+                .filter(id -> inputsByAttempt.getOrDefault(id, List.of()).isEmpty()).collect(Collectors.toSet());
+        Set<UUID> attemptsWithAnswers = attemptsWithoutInputs.isEmpty() ? Set.of()
+                : answeredAttemptIds(sessionPublicId, tenantId, attemptsWithoutInputs);
         for (UUID attemptId : attemptIds) {
             List<ReportScoringAnswerView> attemptInputs = inputsByAttempt.getOrDefault(attemptId, List.of());
-            if (attemptInputs.isEmpty()) {
+            // A student who answered nothing is publishable (every skill scores the 10 floor); only answers that
+            // never reached scoring are a missing input.
+            if (attemptInputs.isEmpty() && attemptsWithAnswers.contains(attemptId)) {
                 blockers.add(new ReportPublicationBlockerResponse(attemptId, null, null, null,
                         ReportingConstants.REASON_SCORING_INPUTS_MISSING));
                 blockedAttemptIds.add(attemptId);
@@ -195,6 +197,11 @@ public class ReportPublishService {
         boolean canPublish = closed && !attemptIds.isEmpty() && blockers.isEmpty();
         return new ReportPublicationReadinessResponse(sessionPublicId, closed, attempts.size(), readyAttempts,
                 blockers.size(), canPublish, blockers);
+    }
+
+    private Set<UUID> answeredAttemptIds(UUID sessionPublicId, UUID tenantId, Set<UUID> candidates) {
+        return attemptService.getSubmittedAnswersForSession(sessionPublicId, tenantId).stream()
+                .map(SubmittedAnswerView::attemptPublicId).filter(candidates::contains).collect(Collectors.toSet());
     }
 
     private List<AttemptSummaryView> resolveCohortAttempts(UUID sessionPublicId, UUID tenantId,

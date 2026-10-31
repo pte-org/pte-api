@@ -3,6 +3,7 @@ package com.pte.scoring.internal.service.review;
 import com.pte.scoring.internal.service.examiner.AttemptExaminerProgressReader;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptOwnerView;
+import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.identity.IdentityService;
 import com.pte.scoring.domain.enums.ExaminerWorkflowStatus;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
@@ -24,7 +25,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -120,11 +120,30 @@ class ScoringAttemptReviewServiceTest {
     }
 
     @Test
-    void listAttempts_noIngestedAnswers_returnsEmptyWithoutTouchingAttempts() {
+    void listAttempts_noSubmittedAttempts_returnsEmpty() {
         when(scoringAnswerRepository.countByAttemptAndStatus(tenantId, sessionId)).thenReturn(List.of());
 
         assertThat(service.listAttempts(sessionId, host)).isEmpty();
-        verifyNoInteractions(attemptService);
+    }
+
+    @Test
+    void listAttempts_submittedAttemptWithoutAiAnswers_stillListedWithZeroCounts() {
+        UUID blank = UUID.randomUUID();
+        UUID student = UUID.randomUUID();
+        when(scoringAnswerRepository.countByAttemptAndStatus(tenantId, sessionId)).thenReturn(List.of());
+        when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId))
+                .thenReturn(List.of(new AttemptSummaryView(blank, sessionId, student, tenantId, UUID.randomUUID())));
+        when(attemptService.getAttemptOwners(sessionId, tenantId, List.of(blank))).thenReturn(Map.of(
+                blank, new AttemptOwnerView(blank, student, 1, java.time.Instant.parse("2026-10-14T09:30:00Z"))));
+        when(identityService.findFullNames(org.mockito.ArgumentMatchers.eq(tenantId), org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(Map.of(student, "Cao Van"));
+
+        assertThat(service.listAttempts(sessionId, host)).singleElement().satisfies(item -> {
+            assertThat(item.studentName()).isEqualTo("Cao Van");
+            assertThat(item.answerCount()).isZero();
+            assertThat(item.scoredCount()).isZero();
+            assertThat(item.pendingCount()).isZero();
+        });
     }
 
     @Test

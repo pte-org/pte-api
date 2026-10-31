@@ -82,22 +82,28 @@ public interface AiEvaluationRepository extends JpaRepository<AiEvaluation, Long
 
     /**
      * Host review list — tenantId is always required (a host is always
-     * tenant-scoped). sessionPublicId/status are optional narrowing filters.
+     * tenant-scoped). sessionPublicId/status are optional narrowing filters. {@code awaitingOnly} drops the
+     * answers of a task type the exam never scores: they stay PENDING but nothing is awaited for them.
      */
     @Query("SELECT s FROM AiEvaluation s WHERE s.tenantId = :tenantId "
             + "AND (:sessionPublicId IS NULL OR s.sessionPublicId = :sessionPublicId) "
             + "AND (:attemptPublicId IS NULL OR s.attemptPublicId = :attemptPublicId) "
             + "AND (:status IS NULL OR s.status = :status) "
+            + "AND (:awaitingOnly = false OR (s.scoringMethod IS NOT NULL "
+            + "AND s.scoringMethod <> com.pte.scoring.domain.enums.ScoringMethod.UNSCORED)) "
             + "ORDER BY s.createdAt DESC")
     Page<AiEvaluation> findForReview(@Param("tenantId") UUID tenantId,
             @Param("sessionPublicId") UUID sessionPublicId, @Param("attemptPublicId") UUID attemptPublicId,
-            @Param("status") ScoringAnswerStatus status, Pageable pageable);
+            @Param("status") ScoringAnswerStatus status, @Param("awaitingOnly") boolean awaitingOnly,
+            Pageable pageable);
 
     @Query("""
             SELECT s FROM AiEvaluation s WHERE s.tenantId = :tenantId
               AND (:sessionPublicId IS NULL OR s.sessionPublicId = :sessionPublicId)
               AND (:attemptPublicId IS NULL OR s.attemptPublicId = :attemptPublicId)
               AND (:status IS NULL OR s.status = :status)
+              AND (:awaitingOnly = false OR (s.scoringMethod IS NOT NULL
+                   AND s.scoringMethod <> com.pte.scoring.domain.enums.ScoringMethod.UNSCORED))
               AND (:search IS NULL
                    OR lower(s.taskType) like lower(concat('%', :search, '%'))
                    OR (:searchStatus IS NOT NULL AND s.status = :searchStatus)
@@ -107,13 +113,19 @@ public interface AiEvaluationRepository extends JpaRepository<AiEvaluation, Long
             """)
     Page<AiEvaluation> findForReviewWithSearch(@Param("tenantId") UUID tenantId,
             @Param("sessionPublicId") UUID sessionPublicId, @Param("attemptPublicId") UUID attemptPublicId,
-            @Param("status") ScoringAnswerStatus status, @Param("search") String search,
+            @Param("status") ScoringAnswerStatus status, @Param("awaitingOnly") boolean awaitingOnly,
+            @Param("search") String search,
             @Param("searchStatus") ScoringAnswerStatus searchStatus, @Param("searchUuid") UUID searchUuid,
             Pageable pageable);
 
-    /** Answer counts per attempt and status for one session — the host's per-attempt submissions list. */
+    /**
+     * AI-scored answer counts (speech and text) per attempt and status for one session — the host's per-attempt
+     * submissions list. Objective and unscored answers are left out: they never wait on the AI.
+     */
     @Query("SELECT new com.pte.scoring.internal.repository.AttemptStatusCount(s.attemptPublicId, s.status, COUNT(s)) "
             + "FROM AiEvaluation s WHERE s.tenantId = :tenantId AND s.sessionPublicId = :sessionPublicId "
+            + "AND s.scoringMethod IN (com.pte.scoring.domain.enums.ScoringMethod.AI_SPEECH, "
+            + "com.pte.scoring.domain.enums.ScoringMethod.AI_TEXT) "
             + "GROUP BY s.attemptPublicId, s.status")
     List<AttemptStatusCount> countByAttemptAndStatus(@Param("tenantId") UUID tenantId,
             @Param("sessionPublicId") UUID sessionPublicId);

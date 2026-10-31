@@ -214,6 +214,9 @@ class ExaminerAssignmentDatabaseIntegrationTest {
     private ExaminerAssignmentService newService(Dependencies dependencies) {
         return new ExaminerAssignmentService(dependencies.sessionService(), dependencies.attemptService(),
                 dependencies.eligibilityService(), dependencies.identityService(), assignmentRepository,
+                mock(com.pte.scoring.internal.repository.ExaminerEvaluationRepository.class),
+                mock(com.pte.scoring.internal.repository.GradingIssueRepository.class),
+                mock(com.pte.scoring.internal.service.examiner.ExaminerWorkRecorder.class),
                 mock(ScorePublicationLockService.class), dependencies.gateway(), dependencies.cohortService(), com.pte.TestClocks.fixed());
     }
 

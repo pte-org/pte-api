@@ -53,6 +53,11 @@ class ExaminerFinalizeSubmitter {
                 .stream()
                 .collect(Collectors.toMap(ExaminerEvaluation::getAnswerPublicId, Function.identity()));
 
+        if (draftsByAnswer.values().stream().anyMatch(ExaminerEvaluation::isCarriedOver)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    ExaminerScoringConstants.CARRIED_OVER_DRAFTS_UNCONFIRMED);
+        }
+
         Map<UUID, ExaminerEvaluation> existingScores = evaluationRepository
                 .findSubmittedByAttempt(user.tenantId(), sessionPublicId, attemptPublicId)
                 .stream()

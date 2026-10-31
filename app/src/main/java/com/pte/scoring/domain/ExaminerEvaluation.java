@@ -74,6 +74,10 @@ public class ExaminerEvaluation extends AnswerEvaluation {
     @Column(name = "saved_at")
     private Instant savedAt;
 
+    /** Set while this draft was handed over from another examiner and the new one has not saved it yet. */
+    @Column(name = "carried_over_from_examiner_public_id")
+    private UUID carriedOverFromExaminerPublicId;
+
     @Transient
     private boolean loadedSubmitted;
 
@@ -118,6 +122,22 @@ public class ExaminerEvaluation extends AnswerEvaluation {
         requireDraft();
         applyDraft(score, comment, decisionKind, expectedReviewVersion, reviewedAiVersion, savedAt);
         this.draftVersion++;
+        this.carriedOverFromExaminerPublicId = null;
+    }
+
+    /** Hands this draft to the examiner who takes the work over; it stays flagged until that examiner saves it. */
+    public void carryOverTo(UUID newExaminerPublicId) {
+        requireDraft();
+        Objects.requireNonNull(newExaminerPublicId, ScoringDomainConstants.EXAMINER_SCORE_EXAMINER_REQUIRED);
+        if (newExaminerPublicId.equals(examinerPublicId)) {
+            return;
+        }
+        this.carriedOverFromExaminerPublicId = examinerPublicId;
+        this.examinerPublicId = newExaminerPublicId;
+    }
+
+    public boolean isCarriedOver() {
+        return carriedOverFromExaminerPublicId != null;
     }
 
     /** Turns this row into the final score. Validation matches a directly submitted score. */

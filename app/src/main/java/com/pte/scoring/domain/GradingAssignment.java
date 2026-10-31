@@ -17,9 +17,9 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * One examiner's grading of one submitted attempt: who owns it (fixed when the host commits the assignments) and how
- * far the examiner got (not started, in progress, finalized), with the version the examiner's commands are checked
- * against. The owner never changes; only the progress fields do.
+ * One examiner's grading of one submitted attempt: who owns it (set when the host commits the assignments, changed only
+ * by the host's reassignment) and how far the examiner got (not started, in progress, finalized), with the version
+ * the examiner's commands are checked against.
  */
 @Entity
 @Table(name = "grading_assignments",
@@ -45,7 +45,7 @@ public class GradingAssignment extends BaseEntity {
     @Column(nullable = false, updatable = false)
     private UUID attemptPublicId;
 
-    @Column(nullable = false, updatable = false)
+    @Column(nullable = false)
     private UUID examinerPublicId;
 
     @Column(nullable = false, updatable = false)
@@ -113,6 +113,20 @@ public class GradingAssignment extends BaseEntity {
     public void reopen(Instant reopenedAt) {
         this.status = ExaminerWorkflowStatus.IN_PROGRESS;
         this.workVersion++;
+    }
+
+    /** The host hands the work to another examiner: progress restarts, and commands of the old version go stale. */
+    public void reassign(UUID newExaminerPublicId) {
+        if (status == ExaminerWorkflowStatus.COMPLETED) {
+            throw new IllegalStateException(ScoringDomainConstants.ASSIGNMENT_FINALIZED_NOT_REASSIGNABLE);
+        }
+        this.examinerPublicId = Objects.requireNonNull(newExaminerPublicId,
+                ScoringDomainConstants.ASSIGNMENT_EXAMINER_REQUIRED);
+        this.status = ExaminerWorkflowStatus.PENDING;
+        this.startedAt = null;
+        if (isStarted()) {
+            this.workVersion++;
+        }
     }
 
     public void incrementVersion() {

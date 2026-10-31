@@ -1,6 +1,5 @@
 package com.pte.scoring;
 
-import com.pte.scoring.dto.response.ScoredAnswerView;
 import com.pte.scoring.dto.response.AiEligibleAttemptView;
 import com.pte.scoring.dto.response.ExaminerScoringWorkItemView;
 import com.pte.scoring.dto.request.SelectScoreSourceRequest;
@@ -17,7 +16,6 @@ import com.pte.scoring.internal.service.examiner.ExaminerWorkQueryService;
 import com.pte.scoring.internal.service.selection.ScorePublicationLockService;
 import com.pte.scoring.internal.service.selection.ScoreSourceSelectionService;
 import com.pte.scoring.internal.service.grading.GradingCohortService;
-import com.pte.scoring.internal.service.selection.ScoredAnswerQueryService;
 import com.pte.scoring.internal.service.staff.ScoringEligibilityQueryService;
 import com.pte.scoring.internal.service.review.ScoringReviewReadQueryService;
 import com.pte.scoring.internal.service.ai.PracticeAiScoringService;
@@ -41,7 +39,6 @@ import java.util.UUID;
 @Service
 public class ScoringService {
 
-    private final ScoredAnswerQueryService scoredAnswerQueryService;
     private final ScoringEligibilityQueryService scoringEligibilityQueryService;
     private final ExaminerWorkQueryService examinerWorkQueryService;
     private final ScoringReviewReadQueryService scoringReviewReadQueryService;
@@ -51,15 +48,13 @@ public class ScoringService {
     private final PracticeAiScoringService practiceAiScoringService;
 
     @Autowired
-    public ScoringService(ScoredAnswerQueryService scoredAnswerQueryService,
-            ScoringEligibilityQueryService scoringEligibilityQueryService,
+    public ScoringService(ScoringEligibilityQueryService scoringEligibilityQueryService,
             ExaminerWorkQueryService examinerWorkQueryService,
             ScoringReviewReadQueryService scoringReviewReadQueryService,
             ScoreSourceSelectionService scoreSourceSelectionService,
             ScorePublicationLockService scorePublicationLockService,
             GradingCohortService gradingCohortService,
             PracticeAiScoringService practiceAiScoringService) {
-        this.scoredAnswerQueryService = scoredAnswerQueryService;
         this.scoringEligibilityQueryService = scoringEligibilityQueryService;
         this.examinerWorkQueryService = examinerWorkQueryService;
         this.scoringReviewReadQueryService = scoringReviewReadQueryService;
@@ -88,10 +83,6 @@ public class ScoringService {
             return PracticeScoringRoute.UNSUPPORTED;
         }
         return practiceAiScoringService.routeFor(taskType);
-    }
-
-    public List<ScoredAnswerView> getScoredAnswersForAttempt(UUID attemptPublicId, UUID tenantId) {
-        return scoredAnswerQueryService.findScoredForAttempt(attemptPublicId, tenantId);
     }
 
     /** Candidate attempt counts are derived from each answer's pinned template; null filter means the whole session. */

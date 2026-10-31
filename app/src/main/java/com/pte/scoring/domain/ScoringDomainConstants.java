@@ -26,6 +26,7 @@ public final class ScoringDomainConstants {
     public static final String ASSIGNMENT_ANSWER_COUNT_NEGATIVE = "eligibleAnswerCount cannot be negative";
     public static final String ASSIGNMENT_ATTEMPT_REQUIRED = "attemptPublicId is required";
     public static final String ASSIGNMENT_EXAMINER_REQUIRED = "examinerPublicId is required";
+    public static final String ASSIGNMENT_FINALIZED_NOT_REASSIGNABLE = "A finalized grading cannot be reassigned";
     public static final String ASSIGNMENT_ACTOR_REQUIRED = "assignedByPublicId is required";
     public static final String ASSIGNMENT_TIME_REQUIRED = "assignedAt is required";
     public static final String AI_SCORE_PROVIDER_REQUIRED =

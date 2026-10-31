@@ -10,15 +10,26 @@ import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.identity.IdentityService;
 import com.pte.identity.dto.response.ExaminerIdentityView;
 import com.pte.identity.dto.response.StudentDisplayNameView;
+import com.pte.scoring.domain.ExaminerEvaluation;
 import com.pte.scoring.domain.GradingAssignment;
+import com.pte.scoring.domain.GradingIssue;
+import com.pte.scoring.domain.enums.ExaminerGradingIssueStatus;
+import com.pte.scoring.domain.enums.ExaminerGradingOperation;
+import com.pte.scoring.domain.enums.ExaminerWorkflowStatus;
 import com.pte.scoring.domain.enums.GradingMarkingMode;
 import com.pte.scoring.dto.request.CommitExaminerAssignmentRequest;
+import com.pte.scoring.dto.request.ReassignExaminerRequest;
 import com.pte.scoring.dto.response.ExaminerAssignmentLoadResponse;
 import com.pte.scoring.dto.response.ExaminerAssignmentOverviewResponse;
 import com.pte.scoring.dto.response.ExaminerAssignmentRosterResponse;
+import com.pte.scoring.dto.response.ExaminerGradingAuditMetadata;
 import com.pte.scoring.internal.constant.ExaminerAssignmentConstants;
 import com.pte.scoring.internal.exception.examiner.InvalidExaminerAssignmentException;
+import com.pte.scoring.internal.repository.AttemptScoreCount;
+import com.pte.scoring.internal.repository.DraftCount;
+import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
 import com.pte.scoring.internal.repository.GradingAssignmentRepository;
+import com.pte.scoring.internal.repository.GradingIssueRepository;
 import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
@@ -38,7 +49,8 @@ import java.util.stream.Collectors;
 /**
  * The host's examiner assignment of a closed session: one table, attempt to examiner, committed in one request that
  * covers every eligible submitted attempt. Committing creates a grading assignment per attempt and freezes the
- * session for manual marking. There is no preview or second step, and a committed table is never edited.
+ * session for manual marking. After that the table changes one attempt at a time: the Host may hand an attempt that
+ * is not finalized to another Examiner, who inherits the drafts.
  */
 @Service
 public class ExaminerAssignmentService {
@@ -48,6 +60,9 @@ public class ExaminerAssignmentService {
     private final ScoringEligibilityQueryService eligibilityQueryService;
     private final IdentityService identityService;
     private final GradingAssignmentRepository assignmentRepository;
+    private final ExaminerEvaluationRepository evaluationRepository;
+    private final GradingIssueRepository issueRepository;
+    private final ExaminerWorkRecorder recorder;
     private final ScorePublicationLockService publicationLockService;
     private final SessionGradingGateway gateway;
     private final GradingCohortService cohortService;
@@ -55,7 +70,9 @@ public class ExaminerAssignmentService {
 
     public ExaminerAssignmentService(SessionService sessionService, AttemptService attemptService,
             ScoringEligibilityQueryService eligibilityQueryService, IdentityService identityService,
-            GradingAssignmentRepository assignmentRepository, ScorePublicationLockService publicationLockService,
+            GradingAssignmentRepository assignmentRepository, ExaminerEvaluationRepository evaluationRepository,
+            GradingIssueRepository issueRepository, ExaminerWorkRecorder recorder,
+            ScorePublicationLockService publicationLockService,
             SessionGradingGateway gateway, GradingCohortService cohortService,
             Clock clock) {
         this.sessionService = sessionService;
@@ -63,6 +80,9 @@ public class ExaminerAssignmentService {
         this.eligibilityQueryService = eligibilityQueryService;
         this.identityService = identityService;
         this.assignmentRepository = assignmentRepository;
+        this.evaluationRepository = evaluationRepository;
+        this.issueRepository = issueRepository;
+        this.recorder = recorder;
         this.publicationLockService = publicationLockService;
         this.gateway = gateway;
         this.cohortService = cohortService;
@@ -77,6 +97,14 @@ public class ExaminerAssignmentService {
         List<GradingAssignment> committed =
                 assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId);
         Map<UUID, AttemptSummaryView> submitted = submittedAttempts(sessionPublicId, tenantId);
+        Map<UUID, GradingAssignment> committedByAttempt = committed.stream()
+                .collect(Collectors.toMap(GradingAssignment::getAttemptPublicId, row -> row, (left, right) -> left));
+        Map<Long, Integer> draftCounts = draftCounts(tenantId, committed);
+        Set<UUID> attemptsWithScores = committed.isEmpty() ? Set.of()
+                : evaluationRepository.countBySessionAndAttempt(tenantId, sessionPublicId).stream()
+                        .filter(count -> count.count() > 0)
+                        .map(AttemptScoreCount::attemptPublicId).collect(Collectors.toSet());
+        boolean published = !committed.isEmpty() && gateway.isPublished(tenantId, sessionPublicId);
         Map<UUID, UUID> examinerByAttempt = new LinkedHashMap<>();
         if (committed.isEmpty()) {
             eligibleAttemptCounts(sessionPublicId, tenantId, submitted)
@@ -91,9 +119,15 @@ public class ExaminerAssignmentService {
                 .map(entry -> {
                     UUID studentId = submitted.get(entry.getKey()).studentPublicId();
                     StudentDisplayNameView student = students.get(studentId);
+                    GradingAssignment work = committedByAttempt.get(entry.getKey());
+                    boolean reassignable = work != null && !published
+                            && work.getStatus() != ExaminerWorkflowStatus.COMPLETED
+                            && !attemptsWithScores.contains(entry.getKey());
                     return new ExaminerAssignmentRosterResponse.Row(entry.getKey(), studentId,
                             student == null ? null : student.displayName(),
-                            student == null ? null : student.email(), entry.getValue());
+                            student == null ? null : student.email(), entry.getValue(),
+                            work == null ? null : work.getStatus(),
+                            work == null ? 0 : draftCounts.getOrDefault(work.getId(), 0), reassignable);
                 })
                 .sorted(Comparator
                         .comparing((ExaminerAssignmentRosterResponse.Row row) -> row.studentName() == null
@@ -151,6 +185,70 @@ public class ExaminerAssignmentService {
         return roster(sessionPublicId, caller);
     }
 
+    /**
+     * Hands one attempt to another Examiner while it is not finalized. The drafts the previous Examiner saved go
+     * with it, flagged until the new Examiner saves them again; the work restarts as not started and any open
+     * issue is closed, since it was addressed to the previous Examiner's work.
+     */
+    @Transactional
+    public ExaminerAssignmentRosterResponse reassign(UUID sessionPublicId, UUID attemptPublicId,
+            ReassignExaminerRequest request, CurrentUser caller) {
+        UUID tenantId = requireHost(caller);
+        sessionService.verifyHostAccess(sessionPublicId, tenantId);
+        sessionService.lockForScoreReviewMutation(sessionPublicId, tenantId);
+        publicationLockService.assertNotPublished(tenantId, sessionPublicId);
+
+        GradingAssignment found = assignmentRepository
+                .findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndDeletedFalse(tenantId, sessionPublicId,
+                        attemptPublicId)
+                .orElseThrow(() -> new InvalidExaminerAssignmentException(
+                        ExaminerAssignmentConstants.ATTEMPT_NOT_ASSIGNED));
+        GradingAssignment work = assignmentRepository.findForUpdate(tenantId, found.getPublicId())
+                .orElseThrow(() -> new InvalidExaminerAssignmentException(
+                        ExaminerAssignmentConstants.ATTEMPT_NOT_ASSIGNED));
+        UUID previousExaminer = work.getExaminerPublicId();
+        UUID newExaminer = request.examinerPublicId();
+        if (newExaminer.equals(previousExaminer)) {
+            throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.SAME_EXAMINER);
+        }
+        List<ExaminerEvaluation> drafts = evaluationRepository
+                .findByTenantIdAndAssignmentIdAndDeletedFalse(tenantId, work.getId());
+        boolean finalized = work.getStatus() == ExaminerWorkflowStatus.COMPLETED
+                || drafts.stream().anyMatch(ExaminerEvaluation::isSubmitted)
+                || !evaluationRepository.findSubmittedByAttempt(tenantId, sessionPublicId, attemptPublicId).isEmpty();
+        if (finalized) {
+            throw new InvalidExaminerAssignmentException(ExaminerAssignmentConstants.GRADING_ALREADY_FINALIZED);
+        }
+        if (!validateExaminerLocks(tenantId, List.of(newExaminer))) {
+            throw new InvalidExaminerAssignmentException(
+                    ExaminerAssignmentConstants.EXAMINERS_MUST_BE_ACTIVE_AND_TENANT_SCOPED);
+        }
+
+        Instant now = clock.instant();
+        drafts.forEach(draft -> draft.carryOverTo(newExaminer));
+        evaluationRepository.saveAll(drafts);
+        List<GradingIssue> openIssues = issueRepository
+                .findByTenantIdAndAssignmentIdAndDeletedFalseOrderByReportedAtAsc(tenantId, work.getId()).stream()
+                .filter(issue -> issue.getStatus() == ExaminerGradingIssueStatus.OPEN).toList();
+        openIssues.forEach(issue -> issue.resolve(caller.userId(),
+                ExaminerAssignmentConstants.REASSIGN_ISSUE_RESOLUTION, now));
+        issueRepository.saveAll(openIssues);
+        work.reassign(newExaminer);
+        assignmentRepository.save(work);
+
+        String scores = drafts.stream().map(draft -> String.valueOf(draft.getScore()))
+                .collect(Collectors.joining(","));
+        recorder.record(caller, work.getPublicId(), UUID.randomUUID(),
+                ExaminerAssignmentConstants.AUDIT_REASSIGN_SUMMARY_FORMAT.formatted(caller.userId(), attemptPublicId,
+                        previousExaminer, newExaminer, drafts.size()),
+                new ExaminerWorkRecorder.Entry(null, ExaminerGradingOperation.REASSIGN, work.getWorkVersion(), null,
+                        new ExaminerGradingAuditMetadata(caller.userId(), ExaminerAssignmentConstants.HOST_ROLE,
+                                work.getPublicId(), null, null, null,
+                                ExaminerAssignmentConstants.AUDIT_REASSIGN_REASON_FORMAT.formatted(previousExaminer,
+                                        newExaminer, drafts.size(), scores, openIssues.size()))));
+        return roster(sessionPublicId, caller);
+    }
+
     /** What each examiner has been given so far in this session. */
     @Transactional(readOnly = true)
     public ExaminerAssignmentOverviewResponse overview(UUID sessionPublicId, CurrentUser caller) {
@@ -163,6 +261,14 @@ public class ExaminerAssignmentService {
         long assignedAttemptCount = assignmentRepository
                 .countByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId);
         return new ExaminerAssignmentOverviewResponse(loads, assignedAttemptCount);
+    }
+
+    private Map<Long, Integer> draftCounts(UUID tenantId, List<GradingAssignment> committed) {
+        if (committed.isEmpty()) {
+            return Map.of();
+        }
+        return evaluationRepository.countByAssignment(tenantId, committed.stream().map(GradingAssignment::getId).toList())
+                .stream().collect(Collectors.toMap(DraftCount::assignmentId, count -> (int) count.count()));
     }
 
     private Map<UUID, AttemptSummaryView> submittedAttempts(UUID sessionPublicId, UUID tenantId) {
