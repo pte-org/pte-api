@@ -2,23 +2,19 @@ package com.pte.chat.internal.dto.request;
 
 import com.pte.chat.internal.constant.ChatConstants;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.NotNull;
 
-import java.util.List;
+import java.util.UUID;
 
-/**
- * {@code exercisePrompt} is the text of the exercise on screen, optional context for the answer. {@code history}
- * is the earlier part of the open conversation: the browser keeps it, the server stores nothing.
- */
+/** {@code exercisePrompt} is the text of the exercise on screen, optional context for the answer. */
 public record ChatMessageRequest(
+        @NotNull(message = ChatConstants.SESSION_ID_REQUIRED_MESSAGE) UUID sessionId,
         @NotBlank(message = ChatConstants.MESSAGE_REQUIRED_MESSAGE) String message,
         String taskType,
         String language,
-        String exercisePrompt,
-        @Size(max = ChatConstants.HISTORY_MAX_ITEMS, message = ChatConstants.HISTORY_TOO_LONG_MESSAGE)
-        List<ChatHistoryItem> history) {
+        String exercisePrompt) {
 
-    public ChatMessageRequest(String message, String taskType, String language) {
-        this(message, taskType, language, null, null);
+    public ChatMessageRequest(UUID sessionId, String message, String taskType, String language) {
+        this(sessionId, message, taskType, language, null);
     }
 }

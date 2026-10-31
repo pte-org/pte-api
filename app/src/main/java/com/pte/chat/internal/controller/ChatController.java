@@ -2,9 +2,11 @@ package com.pte.chat.internal.controller;
 
 import com.pte.chat.internal.constant.ChatConstants;
 import com.pte.chat.internal.dto.request.ChatMessageRequest;
+import com.pte.chat.internal.dto.response.ChatMessageItem;
 import com.pte.chat.internal.dto.response.ChatMessageResponse;
 import com.pte.chat.internal.dto.response.ChatQuotaResponse;
-import com.pte.chat.internal.service.ChatHistoryEntry;
+import com.pte.chat.internal.dto.response.ChatSessionResponse;
+import com.pte.chat.internal.service.ChatLatestSession;
 import com.pte.chat.internal.service.ChatReply;
 import com.pte.chat.internal.service.ChatSendCommand;
 import com.pte.chat.internal.service.ChatService;
@@ -13,7 +15,6 @@ import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
 import jakarta.validation.Valid;
-import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,12 +38,11 @@ public class ChatController {
     @PostMapping(ChatConstants.MESSAGES_PATH)
     public ApiResponse<ChatMessageResponse> send(@Valid @RequestBody ChatMessageRequest request) {
         CurrentUser caller = CurrentUserContext.required();
-        List<ChatHistoryEntry> history = request.history() == null ? null : request.history().stream()
-                .map(item -> item == null ? null : new ChatHistoryEntry(item.role(), item.text())).toList();
-        ChatReply reply = chatService.send(caller, new ChatSendCommand(request.message(), request.taskType(),
-                request.language(), request.exercisePrompt(), history));
-        return ApiResponse.success(new ChatMessageResponse(reply.markdown(), reply.onTopic(),
-                reply.quota().remaining(), reply.quota().limit(), reply.quota().resetAt()));
+        ChatReply reply = chatService.send(caller,
+                new ChatSendCommand(request.sessionId(), request.message(), request.taskType(), request.language(),
+                        request.exercisePrompt()));
+        return ApiResponse.success(new ChatMessageResponse(reply.markdown(), reply.onTopic(), reply.fromCache(),
+                reply.quota().remaining(), reply.quota().limit(), reply.quota().resetAt(), reply.sessionId()));
     }
 
     @GetMapping(ChatConstants.QUOTA_PATH)
@@ -50,5 +50,13 @@ public class ChatController {
         ChatQuotaSnapshot snapshot = chatService.quota(CurrentUserContext.required());
         return ApiResponse.success(new ChatQuotaResponse(snapshot.used(), snapshot.remaining(), snapshot.limit(),
                 snapshot.resetAt()));
+    }
+
+    @GetMapping(ChatConstants.LATEST_SESSION_PATH)
+    public ApiResponse<ChatSessionResponse> latestSession() {
+        ChatLatestSession latest = chatService.latestSession(CurrentUserContext.required());
+        return ApiResponse.success(new ChatSessionResponse(latest.sessionId(), latest.messages().stream()
+                .map(m -> new ChatMessageItem(m.getQuestion(), m.getAnswer(), m.getStatus(), m.getCreatedAt()))
+                .toList()));
     }
 }

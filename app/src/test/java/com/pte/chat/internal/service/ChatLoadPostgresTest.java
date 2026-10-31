@@ -5,8 +5,8 @@ import com.pte.chat.internal.exception.ChatQuotaExceededException;
 import com.pte.chat.internal.exception.ChatRequestInFlightException;
 import com.pte.chat.internal.prompt.ChatPrompts;
 import com.pte.chat.internal.service.session.ChatConcurrencyGate.Lease;
+import com.pte.chat.support.ChatPostgresJpaTest;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 
 import java.io.IOException;
@@ -55,7 +55,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * The observed counts are printed as one {@code CHAT-LOAD-RESULT} line and written to
  * {@code target/chat-load-test-result.txt}.
  */
-@Testcontainers(disabledWithoutDocker = true)
+@ChatPostgresJpaTest
 class ChatLoadPostgresTest extends ChatFlowPostgresBase {
 
     private static final int SLOTS = 4;
@@ -79,13 +79,15 @@ class ChatLoadPostgresTest extends ChatFlowPostgresBase {
     private final List<String> unexpected = new CopyOnWriteArrayList<>();
     private final List<String> badReplies = new CopyOnWriteArrayList<>();
     private final List<UUID> ids = new ArrayList<>();
+    private final List<UUID> sessions = new ArrayList<>();
 
     @Test
     void sixtyStudentsThreeHundredSendsKeepQuotaExactAndTheGateLeakFree() throws Exception {
-        try (ChatLoadStack stack = new ChatLoadStack(jdbc,
+        try (ChatLoadStack stack = new ChatLoadStack(sessionRepository, messageRepository, cacheRepository, jdbc,
                 p -> { p.setMaxConcurrent(SLOTS); p.setDailyLimit(LIMIT); }, LATENCY_MS, SCRIPT_LENGTH)) {
             for (int i = 0; i < STUDENTS; i++) {
                 ids.add(UUID.randomUUID());
+                sessions.add(UUID.randomUUID());
             }
             for (int i = 0; i < AT_LIMIT_STUDENTS; i++) {
                 data.setUsed(ids.get(i), ChatFlowHarness.DAY, LIMIT);
@@ -181,7 +183,8 @@ class ChatLoadPostgresTest extends ChatFlowPostgresBase {
         Outcome outcome;
         try {
             ChatReply reply = stack.service.send(ChatFlowHarness.student(ids.get(student)),
-                    new ChatSendCommand("load question " + tag + " of student " + student, null, "en"));
+                    new ChatSendCommand(sessions.get(student), "load question " + tag + " of student " + student,
+                            null, "en"));
             outcome = reply.onTopic() ? Outcome.OK : Outcome.REFUSED;
             checkReply(reply, outcome);
         } catch (ChatRequestInFlightException ex) {
@@ -199,6 +202,9 @@ class ChatLoadPostgresTest extends ChatFlowPostgresBase {
     }
 
     private void checkReply(ChatReply reply, Outcome outcome) {
+        if (reply.fromCache()) {
+            badReplies.add("unexpected cache hit");
+        }
         if (reply.quota().used() > LIMIT || reply.quota().used() < 0 || reply.quota().remaining() < 0
                 || reply.quota().limit() != LIMIT) {
             badReplies.add("quota out of range: " + reply.quota());
@@ -232,15 +238,18 @@ class ChatLoadPostgresTest extends ChatFlowPostgresBase {
         long gate503 = Math.round(stack.meter("chat.slot.rejected"));
 
         // Provider: one call per charged send that got past the gate, no retries; script never ran out.
-        Map<String, Object> counted = stack.data.dailyTotals(ChatFlowHarness.DAY);
-        long okRows = ((Number) counted.get("ok")).longValue();
-        long refusedRows = ((Number) counted.get("refused")).longValue();
-        long failedRows = ((Number) counted.get("failed")).longValue();
-        assertThat(okRows).as("counted OK == successful replies").isEqualTo(ok);
-        assertThat(refusedRows).as("counted REFUSED == off-topic replies").isEqualTo(refused);
+        List<Map<String, Object>> byStatus = jdbc.queryForList(
+                "SELECT status, count(*) AS n FROM chat_message GROUP BY status", new MapSqlParameterSource());
+        Map<String, Long> rows = byStatus.stream().collect(Collectors.toMap(r -> (String) r.get("status"),
+                r -> ((Number) r.get("n")).longValue()));
+        long okRows = rows.getOrDefault("OK", 0L);
+        long refusedRows = rows.getOrDefault("REFUSED", 0L);
+        long failedRows = rows.getOrDefault("FAILED", 0L);
+        assertThat(okRows).as("OK rows == successful replies").isEqualTo(ok);
+        assertThat(refusedRows).as("REFUSED rows == off-topic replies").isEqualTo(refused);
         long gateRefusals = gate503;
         long providerFailures = busy - gateRefusals;
-        assertThat(failedRows).as("counted FAILED == 503 that were not the gate").isEqualTo(providerFailures);
+        assertThat(failedRows).as("FAILED rows == 503 that were not the gate").isEqualTo(providerFailures);
         assertThat(stack.providerCalls.get()).as("provider calls == OK + REFUSED + FAILED (no retries)")
                 .isEqualTo((int) (ok + refused + failedRows));
         assertThat(stack.server.requestCount()).isEqualTo(stack.providerCalls.get());
@@ -263,6 +272,8 @@ class ChatLoadPostgresTest extends ChatFlowPostgresBase {
                 assertThat(usageRows).as("student %d chat_usage rows", s).isEqualTo(1);
             }
             assertThat(stack.data.usageRows(ids.get(s), ChatFlowHarness.DAY)).isEqualTo(usageRows);
+            UUID self = ids.get(s);
+            stack.data.sessionOwner(sessions.get(s)).ifPresent(owner -> assertThat(owner).isEqualTo(self));
         }
         Integer strayDays = jdbc.queryForObject("SELECT count(*) FROM chat_usage WHERE usage_date <> :d",
                 new MapSqlParameterSource("d", ChatFlowHarness.DAY), Integer.class);

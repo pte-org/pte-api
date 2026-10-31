@@ -13,6 +13,12 @@ class ChatEndpointConstantsTest {
         assertThat(ChatConstants.CHAT_PATH).isEqualTo("/api/v1/student/chat");
         assertThat(ChatConstants.MESSAGES_PATH).isEqualTo("/messages");
         assertThat(ChatConstants.QUOTA_PATH).isEqualTo("/quota");
+        assertThat(ChatConstants.LATEST_SESSION_PATH).isEqualTo("/sessions/latest");
+    }
+
+    @Test
+    void displayLimitIsFifty() {
+        assertThat(ChatConstants.DISPLAY_MESSAGE_LIMIT).isEqualTo(50);
     }
 
     @Test
@@ -20,6 +26,7 @@ class ChatEndpointConstantsTest {
         assertThat(ChatConstants.ERR_QUOTA_EXCEEDED).isEqualTo("CHAT_QUOTA_EXCEEDED");
         assertThat(ChatConstants.ERR_REQUEST_IN_FLIGHT).isEqualTo("CHAT_REQUEST_IN_FLIGHT");
         assertThat(ChatConstants.ERR_BUSY).isEqualTo("CHAT_BUSY");
+        assertThat(ChatConstants.ERR_SESSION_NOT_FOUND).isEqualTo("CHAT_SESSION_NOT_FOUND");
         assertThat(ChatConstants.ERR_INVALID_REQUEST).isEqualTo("CHAT_INVALID_REQUEST");
     }
 }

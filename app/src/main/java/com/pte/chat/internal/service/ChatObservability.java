@@ -22,12 +22,8 @@ public class ChatObservability {
         this.meterRegistry = meterRegistry;
     }
 
-    public void messageCounted(String status) {
-        count("chat.message.counted", "status", status);
-    }
-
-    public void usageRecordFailed() {
-        count("chat.usage.record.failed");
+    public void messageStored(String status, boolean fromCache) {
+        count("chat.message.stored", "status", status, "from_cache", String.valueOf(fromCache));
     }
 
     public void quotaRefunded(String cause) {
@@ -48,6 +44,10 @@ public class ChatObservability {
 
     public void inFlightRejected() {
         count("chat.inflight.rejected");
+    }
+
+    public void cacheStoreFailed() {
+        count("chat.cache.store.failed");
     }
 
     private void count(String name, String... tags) {

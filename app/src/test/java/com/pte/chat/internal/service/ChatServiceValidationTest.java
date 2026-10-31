@@ -2,6 +2,7 @@ package com.pte.chat.internal.service;
 
 import com.pte.chat.internal.constant.ChatConstants;
 import com.pte.chat.internal.constant.ChatTaskTypes;
+import com.pte.chat.internal.domain.ChatMessage;
 import com.pte.chat.internal.exception.ChatInvalidRequestException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -10,6 +11,7 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.security.access.AccessDeniedException;
 
+import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -17,7 +19,6 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
@@ -33,7 +34,8 @@ class ChatServiceValidationTest extends ChatServiceTestSupport {
         assertThatThrownBy(() -> service.send(caller, bad)).isInstanceOf(ChatInvalidRequestException.class);
 
         verify(entitlementGate).assertUnlocked(caller, null);
-        verifyNoInteractions(gate, quotaService, client, usageRecorder, studentLease, slotLease);
+        verifyNoInteractions(sessionService, gate, quotaService, cacheService, client, messageRepository,
+                studentLease, slotLease);
     }
 
     // ---- message ------------------------------------------------------------------------------------------
@@ -60,7 +62,7 @@ class ChatServiceValidationTest extends ChatServiceTestSupport {
         String padded = " \n " + "a".repeat(1000) + "\t  ";
 
         assertThatCode(() -> service.send(caller, command(padded))).doesNotThrowAnyException();
-        verify(client).generate(any(), any(), org.mockito.ArgumentMatchers.eq("a".repeat(1000)));
+        assertThat(savedMessage().getQuestion()).isEqualTo("a".repeat(1000));
     }
 
     @Test
@@ -75,6 +77,38 @@ class ChatServiceValidationTest extends ChatServiceTestSupport {
     @Test
     void aVeryLongMessageIsRejectedWithoutBeingProcessed() {
         assertRejectedBeforeAnyWork(command("word ".repeat(100_000)));
+    }
+
+    // ---- session id ----------------------------------------------------------------------------------------
+
+    @Test
+    void aMissingSessionIdIsRejected() {
+        assertRejectedBeforeAnyWork(new ChatSendCommand(null, "Question", null, "en"));
+    }
+
+    static Stream<String> notVersionFourUuids() {
+        return Stream.of(
+                "00000000-0000-0000-0000-000000000000",
+                "c232ab00-9414-11ec-b3c8-9f6bdeced846",
+                "01890a5d-ac96-774b-bcce-b302099a8057",
+                "6fa459ea-ee8a-3ca4-894e-db77e160355e",
+                "886313e1-3b8a-5372-9b90-0c9aee199e5d",
+                "ffffffff-ffff-ffff-ffff-ffffffffffff");
+    }
+
+    @ParameterizedTest
+    @MethodSource("notVersionFourUuids")
+    void aSessionIdThatIsNotAVersionFourUuidIsRejected(String value) {
+        assertRejectedBeforeAnyWork(new ChatSendCommand(UUID.fromString(value), "Question", null, "en"));
+    }
+
+    @Test
+    void aRandomVersionFourSessionIdIsAccepted() {
+        UUID random = UUID.randomUUID();
+        assertThat(random.version()).isEqualTo(4);
+
+        assertThatCode(() -> service.send(caller, new ChatSendCommand(random, "Question", null, "en")))
+                .doesNotThrowAnyException();
     }
 
     // ---- task type -----------------------------------------------------------------------------------------
@@ -119,12 +153,10 @@ class ChatServiceValidationTest extends ChatServiceTestSupport {
     }
 
     @Test
-    void theLanguageIsReadInAnyCase() {
-        org.mockito.Mockito.when(client.generate(any(), any(), any())).thenReturn(offTopicAnswer());
+    void theStoredLanguageIsLowerCase() {
+        service.send(caller, command("Question", null, "VI"));
 
-        ChatReply reply = service.send(caller, command("Question", null, "VI"));
-
-        assertThat(reply.markdown()).isEqualTo(com.pte.chat.internal.prompt.ChatPrompts.refusal("vi"));
+        assertThat(savedMessage().getLanguage()).isEqualTo("vi");
     }
 
     // ---- what the error says -------------------------------------------------------------------------------
@@ -163,7 +195,7 @@ class ChatServiceValidationTest extends ChatServiceTestSupport {
 
         assertThatThrownBy(() -> service.send(caller, command("Question"))).isSameAs(denied);
 
-        verifyNoInteractions(gate, quotaService, client, usageRecorder);
+        verifyNoInteractions(sessionService, gate, quotaService, cacheService, client, messageRepository);
     }
 
     @Test
@@ -176,22 +208,23 @@ class ChatServiceValidationTest extends ChatServiceTestSupport {
     }
 
     @Test
-    void anEntitlementFailureStopsTheQuotaReadToo() {
+    void anEntitlementFailureStopsQuotaAndLatestSessionToo() {
         AccessDeniedException denied = new AccessDeniedException("locked");
         doThrow(denied).when(entitlementGate).assertUnlocked(caller, null);
 
         assertThatThrownBy(() -> service.quota(caller)).isSameAs(denied);
+        assertThatThrownBy(() -> service.latestSession(caller)).isSameAs(denied);
 
-        verifyNoInteractions(gate, quotaService, client, usageRecorder);
+        verifyNoInteractions(sessionService, gate, quotaService, cacheService, client, messageRepository);
     }
 
     @Test
-    void validationHappensAfterTheEntitlementCheckAndBeforeTheLock() {
+    void validationHappensAfterTheEntitlementCheckAndBeforeTheOwnerCheck() {
         assertThatCode(() -> service.send(caller, command("Question"))).doesNotThrowAnyException();
 
-        var order = inOrder(entitlementGate, gate);
+        var order = inOrder(entitlementGate, sessionService);
         order.verify(entitlementGate).assertUnlocked(caller, null);
-        order.verify(gate).lockStudent(STUDENT);
-        verify(quotaService, never()).refundQuietly(any());
+        order.verify(sessionService).requireNotOwnedByOther(sessionId, STUDENT);
+        verify(messageRepository).save(any(ChatMessage.class));
     }
 }
