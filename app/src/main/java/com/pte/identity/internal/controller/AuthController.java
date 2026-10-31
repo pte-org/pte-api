@@ -4,6 +4,11 @@ import com.pte.identity.internal.dto.request.auth.LoginRequest;
 import com.pte.identity.internal.dto.request.auth.LoginOrganizationOptionsRequest;
 import com.pte.identity.internal.dto.request.auth.RefreshRequest;
 import com.pte.identity.internal.dto.request.auth.ChangePasswordRequest;
+import com.pte.identity.internal.dto.request.auth.PasswordResetConfirmRequest;
+import com.pte.identity.internal.dto.request.auth.PasswordResetRequest;
+import com.pte.identity.internal.service.PasswordResetDispatcher;
+import com.pte.identity.internal.service.PasswordResetService;
+import jakarta.servlet.http.HttpServletRequest;
 import com.pte.identity.internal.dto.request.profile.UpdateOwnProfileRequest;
 import com.pte.identity.internal.dto.response.TokenResponse;
 import com.pte.identity.internal.dto.response.LoginOrganizationOptionResponse;
@@ -11,6 +16,7 @@ import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.service.AuthService;
 import com.pte.identity.internal.service.UserService;
 import com.pte.identity.internal.service.UserProfileService;
+import com.pte.identity.internal.util.ClientAddress;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -32,11 +38,16 @@ public class AuthController {
     private final AuthService authService;
     private final UserService userService;
     private final UserProfileService userProfileService;
+    private final PasswordResetService passwordResetService;
+    private final PasswordResetDispatcher passwordResetDispatcher;
 
-    public AuthController(AuthService authService, UserService userService, UserProfileService userProfileService) {
+    public AuthController(AuthService authService, UserService userService, UserProfileService userProfileService,
+            PasswordResetService passwordResetService, PasswordResetDispatcher passwordResetDispatcher) {
         this.authService = authService;
         this.userService = userService;
         this.userProfileService = userProfileService;
+        this.passwordResetService = passwordResetService;
+        this.passwordResetDispatcher = passwordResetDispatcher;
     }
 
     @PostMapping("/login")
@@ -70,6 +81,24 @@ public class AuthController {
     @PostMapping("/logout")
     public ApiResponse<Void> logout(@Valid @RequestBody RefreshRequest request) {
         authService.logout(request);
+        return ApiResponse.success(null);
+    }
+
+    /**
+     * Answers at once and does the work afterwards, so neither the body nor the response time reveals whether the
+     * address has an account.
+     */
+    @PostMapping("/password-reset/request")
+    public ApiResponse<Void> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request,
+            HttpServletRequest http) {
+        passwordResetDispatcher.requestAsync(request.email(),
+                ClientAddress.resolve(http.getHeader("X-Forwarded-For"), http.getRemoteAddr()));
+        return ApiResponse.success(null);
+    }
+
+    @PostMapping("/password-reset/confirm")
+    public ApiResponse<Void> confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmRequest request) {
+        passwordResetService.confirm(request.token(), request.newPassword());
         return ApiResponse.success(null);
     }
 
