@@ -46,6 +46,8 @@ import java.util.UUID;
 public class HostExamTemplateService {
 
     private static final String CODE_PREFIX = "HOST_";
+    /** Matches the limit on {@code CreateHostExamTemplateRequest.name}. */
+    private static final int MAX_NAME_LENGTH = 255;
 
     private final ExamDefinitionRepository repository;
     private final ExamDefinitionService examDefinitionService;
@@ -108,17 +110,18 @@ public class HostExamTemplateService {
         return ExamDefinitionMapper.toResponse(saved);
     }
 
-    /** Copies one of the host's own templates into a new DRAFT one version ahead of its family. */
+    /**
+     * Copies one of the host's own templates into an independent DRAFT with its own code, so activating the copy
+     * never retires the original.
+     */
     @Transactional
     public ExamDefinitionResponse cloneToDraft(UUID publicId, CurrentUser caller) {
         ExamDefinition source = findOwned(publicId, caller);
-        repository.findAllByCodeForUpdate(source.getCode());
-        int nextVersion = repository.findMaxVersionByCode(source.getCode()) + 1;
 
         ExamDefinition draft = new ExamDefinition();
-        draft.setCode(source.getCode());
-        draft.setVersion(nextVersion);
-        draft.setName(source.getName());
+        draft.setCode(generateCode(source.getTenantId()));
+        draft.setVersion(1);
+        draft.setName(copyName(source.getName()));
         draft.setStatus(ExamDefinitionStatus.DRAFT);
         draft.setTemplatePolicy(TemplatePolicy.CUSTOM);
         draft.setTenantId(source.getTenantId());
@@ -126,8 +129,17 @@ public class HostExamTemplateService {
         draft.setAuthorUserPublicId(caller.userId());
         source.getItems().forEach(item -> draft.addItem(itemMapper.copyItem(item)));
         ExamDefinition saved = save(draft);
-        audit(caller, ExamDefinitionConstants.AUDIT_CLONED, saved, "Cloned from version " + source.getVersion());
+        audit(caller, ExamDefinitionConstants.AUDIT_CLONED, saved, "Cloned from template '" + source.getName()
+                + "' version " + source.getVersion());
         return ExamDefinitionMapper.toResponse(saved);
+    }
+
+    private static String copyName(String sourceName) {
+        String suffix = " (copy)";
+        String base = sourceName.length() + suffix.length() > MAX_NAME_LENGTH
+                ? sourceName.substring(0, MAX_NAME_LENGTH - suffix.length())
+                : sourceName;
+        return base + suffix;
     }
 
     /** Replaces a DRAFT's name and items; every task type must exist in the template's base default. */

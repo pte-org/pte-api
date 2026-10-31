@@ -74,6 +74,29 @@ class HostExamTemplateServiceTest {
     }
 
     @Test
+    void cloneToDraft_createsAnIndependentTemplateWithItsOwnCode() {
+        ExamDefinition base = defaultTemplate();
+        ExamDefinition source = hostTemplate(base, ExamDefinitionStatus.ACTIVE, "HOST_A");
+        source.setName("Reading only");
+        source.setVersion(3);
+        stubOwned(source);
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ExamDefinitionResponse response = service.cloneToDraft(source.getPublicId(), host);
+
+        assertThat(response.code()).startsWith("HOST_").isNotEqualTo("HOST_A");
+        assertThat(response.version()).isEqualTo(1);
+        assertThat(response.name()).isEqualTo("Reading only (copy)");
+        assertThat(response.status()).isEqualTo("DRAFT");
+        assertThat(response.tenantId()).isEqualTo(TENANT);
+        assertThat(response.baseDefinitionPublicId()).isEqualTo(base.getPublicId());
+        assertThat(response.items()).hasSize(source.getItems().size());
+        // A new family never needs the sibling lock or version lookup, so the original is left untouched.
+        verify(repository, never()).findAllByCodeForUpdate(any());
+        assertThat(source.getStatus()).isEqualTo(ExamDefinitionStatus.ACTIVE);
+    }
+
+    @Test
     void createFromDefault_withoutActiveDefault_isRejected() {
         when(repository.findWithItemsByStatusAndTenantIdIsNull(ExamDefinitionStatus.ACTIVE))
                 .thenReturn(Optional.empty());
