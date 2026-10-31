@@ -93,11 +93,10 @@ services:
       PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:?set PAYOS_CHECKSUM_KEY in the env file}
       PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:?set PAYOS_RETURN_URL in the env file}
       PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:?set PAYOS_CANCEL_URL in the env file}
-      # Task-type contract rollout switches. Keep the safe defaults for local
+      # Task-type contract rollout switch. Keep the safe default for local
       # and hosted environments; enable explicitly through the env file when
       # the authenticated walkthrough is approved.
       TASK_TYPES_CUSTOM_CREATION_ENABLED: ${TASK_TYPES_CUSTOM_CREATION_ENABLED:-false}
-      TASK_TYPES_CUSTOM_TEMPLATE_ACTIVATION_ENABLED: ${TASK_TYPES_CUSTOM_TEMPLATE_ACTIVATION_ENABLED:-false}
       # com.pte.scoring AI provider. stub (default) needs nothing; azure-gemini
       # refuses to start unless AZURE_SPEECH_KEY, AZURE_SPEECH_REGION and
       # GEMINI_API_KEY are set in the env file.
