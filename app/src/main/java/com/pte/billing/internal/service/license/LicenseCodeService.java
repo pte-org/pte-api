@@ -54,7 +54,8 @@ public class LicenseCodeService {
         this.accessPolicy = new LicenseCodeAccessPolicy(auditLogService, tenancyService);
         this.issuer = new LicenseCodeIssuer(licenseCodePersistenceService, licenseCodeGenerator, auditLogService,
                 clock);
-        this.adminQuery = new LicenseCodeAdminQuery(licenseCodeRepository, planRepository, tenancyService, clock);
+        this.adminQuery = new LicenseCodeAdminQuery(licenseCodeRepository, planRepository, subscriptionRepository,
+                tenancyService, clock);
         this.revoker = new LicenseCodeRevoker(licenseCodeRepository, subscriptionRepository, eventPublisher,
                 new LicenseRevokeScopeResolver(licenseCodeRepository, planRepository, subscriptionRepository,
                         eventPublisher, clock),

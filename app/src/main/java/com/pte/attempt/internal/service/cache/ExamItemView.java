@@ -37,5 +37,6 @@ public record ExamItemView(
         TaskRuntimeProfileDescriptor runtime,
         String runtimeMappingVersion,
         String runtimeMappingStatus,
-        String taskTypeDisplayName) {
+        String taskTypeDisplayName,
+        String taskTypeInstruction) {
 }

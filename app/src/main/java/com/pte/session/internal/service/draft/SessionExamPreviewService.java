@@ -1,13 +1,13 @@
 package com.pte.session.internal.service.draft;
 
-import com.pte.session.internal.service.SessionLifecycleService;
 import com.pte.assessment.AssessmentService;
+import com.pte.assessment.dto.response.ResolvedExamItemResponse;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
-import com.pte.media.MediaService;
 import com.pte.session.domain.ExamSession;
-import com.pte.session.internal.dto.response.ExamPreviewResponse;
 import com.pte.session.internal.constant.SessionConstants;
+import com.pte.session.internal.dto.response.ExamPreviewResponse;
 import com.pte.session.internal.exception.draft.GenerationNotReadyException;
+import com.pte.session.internal.service.SessionLifecycleService;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,12 +16,10 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
-/** Builds a tenant-scoped host preview without exposing snapshot answer keys. */
+/** Builds a tenant-scoped, answer-free host preview from the shared runtime seam. */
 @Service
 public class SessionExamPreviewService {
 
@@ -29,14 +27,12 @@ public class SessionExamPreviewService {
 
     private final SessionLifecycleService sessionLifecycleService;
     private final AssessmentService assessmentService;
-    private final MediaService mediaService;
     private final JsonMapper jsonMapper;
 
     public SessionExamPreviewService(SessionLifecycleService sessionLifecycleService,
-            AssessmentService assessmentService, MediaService mediaService, JsonMapper jsonMapper) {
+            AssessmentService assessmentService, JsonMapper jsonMapper) {
         this.sessionLifecycleService = sessionLifecycleService;
         this.assessmentService = assessmentService;
-        this.mediaService = mediaService;
         this.jsonMapper = jsonMapper;
     }
 
@@ -48,37 +44,42 @@ public class SessionExamPreviewService {
         }
 
         SnapshotContentResponse snapshot = assessmentService.getFullContent(session.getExamVersionPublicId());
-        Map<UUID, String> mediaUrls = new HashMap<>();
-        List<ExamPreviewResponse.Item> items = snapshot.items().stream()
-                .map(item -> toPreviewItem(item, session.getTenantId(), mediaUrls))
+        List<ExamPreviewResponse.Item> items = assessmentService
+                .resolveExamItems(snapshot, MEDIA_URL_TTL_SECONDS, session.getTenantId())
+                .stream()
+                .map(this::toPreviewItem)
                 .toList();
         return new ExamPreviewResponse(snapshot.publicId(), snapshot.name(), snapshot.version(), items);
     }
 
-    private ExamPreviewResponse.Item toPreviewItem(SnapshotContentResponse.Item item, UUID tenantId,
-            Map<UUID, String> mediaUrls) {
+    private ExamPreviewResponse.Item toPreviewItem(ResolvedExamItemResponse item) {
         return new ExamPreviewResponse.Item(
                 item.orderIndex(),
+                item.snapshotItemPublicId(),
                 item.section(),
                 item.taskType(),
                 item.taskTypeCode(),
                 item.taskTypeDisplayName(),
                 item.title(),
                 item.promptText(),
-                resolveMedia(item.audioPromptRef(), tenantId, mediaUrls),
-                resolveMedia(item.imagePromptRef(), tenantId, mediaUrls),
+                item.audioUrl(),
+                item.imageUrl(),
                 item.minWordCount(),
                 item.maxWordCount(),
                 parseOptions(item.optionsJson()),
-                item.sourceQuestionPublicId());
-    }
-
-    private String resolveMedia(UUID mediaPublicId, UUID tenantId, Map<UUID, String> cache) {
-        if (mediaPublicId == null) {
-            return null;
-        }
-        return cache.computeIfAbsent(mediaPublicId,
-                id -> mediaService.presignGet(id, MEDIA_URL_TTL_SECONDS, tenantId).url());
+                item.sourceQuestionPublicId(),
+                item.taskTypeKey(),
+                item.runtime(),
+                item.runtimeMappingVersion(),
+                item.runtimeMappingStatus(),
+                item.prepSeconds(),
+                item.responseSeconds(),
+                item.preListenSeconds(),
+                item.preRecordSeconds(),
+                item.audioDurationSeconds(),
+                item.audioUrlExpiresAt(),
+                item.imageUrlExpiresAt(),
+                item.taskTypeInstruction());
     }
 
     private List<ExamPreviewResponse.Option> parseOptions(String optionsJson) {

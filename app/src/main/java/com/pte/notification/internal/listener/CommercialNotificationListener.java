@@ -20,6 +20,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -52,7 +53,7 @@ public class CommercialNotificationListener {
             return;
         }
         String body = event.outcomeType() == CommercialOutcomeType.EXAM_PACKAGE
-                ? InboxConstants.COMMERCIAL_EXAM_BODY.formatted(event.activationSource().name())
+                ? InboxConstants.COMMERCIAL_EXAM_BODY.formatted(startDate(event))
                 : InboxConstants.COMMERCIAL_CAPACITY_BODY.formatted(
                         event.grantedStudentSlots() == null ? 0 : event.grantedStudentSlots(),
                         event.activationSource().name());
@@ -108,6 +109,16 @@ public class CommercialNotificationListener {
                 targetType,
                 targetPublicId,
                 recipients));
+    }
+
+    /** The subscription start as a VN calendar date; the source name only when an older event carries no date. */
+    private String startDate(CommercialOutcomeConfirmedEvent event) {
+        if (event.startsAt() == null) {
+            return event.activationSource().name();
+        }
+        return DateTimeFormatter.ofPattern(InboxConstants.COMMERCIAL_DATE_PATTERN)
+                .withZone(InboxConstants.COMMERCIAL_DATE_ZONE)
+                .format(event.startsAt());
     }
 
     private InboxTargetType mapTarget(CommercialActivationTarget target) {

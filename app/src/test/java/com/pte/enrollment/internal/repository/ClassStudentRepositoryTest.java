@@ -4,13 +4,20 @@ import com.pte.enrollment.domain.ClassStudent;
 import com.pte.tenancy.domain.Organization;
 import com.pte.enrollment.domain.Program;
 import com.pte.enrollment.domain.TrainingClass;
+import com.pte.enrollment.domain.enums.ClassStatus;
+import com.pte.enrollment.domain.enums.ProgramStatus;
 import com.pte.tenancy.domain.enums.FacilityType;
 import com.pte.tenancy.domain.enums.OrganizationStatus;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,6 +45,9 @@ class ClassStudentRepositoryTest {
 
     @Autowired
     private OrganizationRepository organizationRepository;
+
+    @Autowired
+    private EntityManager entityManager;
 
     private TrainingClass persistClassUnderNewTenant(String tenantName, String programName, String className) {
         Organization organization = new Organization();
@@ -83,6 +93,8 @@ class ClassStudentRepositoryTest {
 
         assertThat(results).extracting(ClassStudent::getPublicId)
                 .containsExactly(tenantAMembership.getPublicId());
+        assertThat(classStudentRepository.findManagementMemberships(tenantAPublicId, null))
+                .extracting(ClassStudent::getPublicId).containsExactly(tenantAMembership.getPublicId());
     }
 
     @Test
@@ -109,6 +121,9 @@ class ClassStudentRepositoryTest {
 
         assertThat(results).extracting(ClassStudent::getPublicId)
                 .containsExactly(program1Membership.getPublicId());
+        assertThat(classStudentRepository.findManagementMemberships(
+                tenantAPublicId, tenantAProgram1Class.getProgram().getPublicId()))
+                .extracting(ClassStudent::getPublicId).containsExactly(program1Membership.getPublicId());
     }
 
     @Test
@@ -127,5 +142,89 @@ class ClassStudentRepositoryTest {
                         tenantAPublicId, tenantBProgramPublicId);
 
         assertThat(results).isEmpty();
+        assertThat(classStudentRepository.findManagementMemberships(tenantAPublicId, tenantBProgramPublicId))
+                .isEmpty();
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "ACTIVE, ACTIVE, 1, 30",
+            "ACTIVE, ACTIVE, -30, -1",
+            "ACTIVE, INACTIVE, -1, 1",
+            "ACTIVE, SUSPENDED, -1, 1",
+            "INACTIVE, ACTIVE, -1, 1",
+            "SUSPENDED, ACTIVE, -1, 1"
+    })
+    void managementRoster_includesIneligibleAssignmentsWhileAudienceExcludesThem(
+            ClassStatus classStatus, ProgramStatus programStatus, int startOffset, int endOffset) {
+        TrainingClass trainingClass = persistClassUnderNewTenant("Tenant A", "Program", "Prep01");
+        Program program = trainingClass.getProgram();
+        UUID tenantId = trainingClass.getOrganizationId();
+        // Align the fixture with the database clock used by the eligibility queries.
+        LocalDate databaseToday = entityManager.createQuery("select current_date from Program", java.sql.Date.class)
+                .setMaxResults(1).getSingleResult().toLocalDate();
+        program.setStartDate(databaseToday.plusDays(startOffset));
+        program.setEndDate(databaseToday.plusDays(endOffset));
+        program.setStatus(programStatus);
+        trainingClass.setStatus(classStatus);
+        ClassStudent membership = persistMembership(trainingClass, tenantId);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(classStudentRepository.findManagementMemberships(tenantId, null))
+                .extracting(ClassStudent::getPublicId).containsExactly(membership.getPublicId());
+        assertThat(classStudentRepository.findManagementMemberships(tenantId, program.getPublicId()))
+                .extracting(ClassStudent::getPublicId).containsExactly(membership.getPublicId());
+        assertThat(classStudentRepository.findManagementMemberships(tenantId, UUID.randomUUID())).isEmpty();
+        assertThat(classStudentRepository.findByTrainingClass_Program_Organization_PublicId(tenantId)).isEmpty();
+        assertThat(classStudentRepository
+                .findByTrainingClass_Program_Organization_PublicIdAndTrainingClass_Program_PublicId(
+                        tenantId, program.getPublicId())).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"membership", "class", "program"})
+    void managementRoster_excludesDeletedRowsAtEveryLevel(String deletedLevel) {
+        TrainingClass trainingClass = persistClassUnderNewTenant("Tenant A", "Program", "Prep01");
+        Program program = trainingClass.getProgram();
+        UUID tenantId = trainingClass.getOrganizationId();
+        ClassStudent membership = persistMembership(trainingClass, tenantId);
+        switch (deletedLevel) {
+            case "membership" -> membership.setDeleted(true);
+            case "class" -> trainingClass.setDeleted(true);
+            case "program" -> program.setDeleted(true);
+            default -> throw new IllegalArgumentException(deletedLevel);
+        }
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(classStudentRepository.findManagementMemberships(tenantId, null)).isEmpty();
+        assertThat(classStudentRepository.findManagementMemberships(tenantId, program.getPublicId())).isEmpty();
+    }
+
+    @Test
+    void managementRoster_requiresMembershipClassAndProgramToBelongToCallerTenant() {
+        TrainingClass tenantAClass = persistClassUnderNewTenant("Tenant A", "Program A", "Prep01");
+        TrainingClass tenantBClass = persistClassUnderNewTenant("Tenant B", "Program B", "Prep02");
+        UUID tenantAId = tenantAClass.getOrganizationId();
+        UUID tenantBId = tenantBClass.getOrganizationId();
+        ClassStudent validMembership = persistMembership(tenantAClass, tenantAId);
+        persistMembership(tenantBClass, tenantAId);
+        persistMembership(tenantAClass, tenantBId);
+        TrainingClass mismatchedClass = new TrainingClass();
+        mismatchedClass.setName("Mismatched");
+        mismatchedClass.setProgram(tenantBClass.getProgram());
+        mismatchedClass.setOrganizationId(tenantAId);
+        mismatchedClass = trainingClassRepository.save(mismatchedClass);
+        persistMembership(mismatchedClass, tenantAId);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(classStudentRepository.findManagementMemberships(tenantAId, null))
+                .extracting(ClassStudent::getPublicId).containsExactly(validMembership.getPublicId());
+        assertThat(classStudentRepository.findManagementMemberships(tenantAId, tenantAClass.getProgram().getPublicId()))
+                .extracting(ClassStudent::getPublicId).containsExactly(validMembership.getPublicId());
+        assertThat(classStudentRepository.findManagementMemberships(tenantAId, tenantBClass.getProgram().getPublicId()))
+                .isEmpty();
     }
 }

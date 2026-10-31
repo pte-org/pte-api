@@ -15,6 +15,7 @@ import com.pte.session.domain.enums.AudienceMemberStatus;
 import com.pte.session.domain.enums.GenerationJobStatus;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.response.SlotConflict;
+import com.pte.session.dto.event.ExamPreviewReadyEvent;
 import com.pte.session.dto.event.SessionCancelledEvent;
 import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.dto.request.BulkEnrollRequest;
@@ -130,6 +131,8 @@ public class ExamPublishService {
         session.setStatus(SessionStatus.READY);
         sessionRepository.save(session);
         access.recordExamAudit(caller, session, SessionConstants.EVENT_EXAM_GENERATED, session.getName());
+        eventPublisher.publishEvent(new ExamPreviewReadyEvent(session.getPublicId(), session.getTenantId(),
+                exam.publicId(), session.getSessionCode(), session.getName(), caller.userId(), clock.instant()));
         return generationOf(session);
     }
 
@@ -252,8 +255,8 @@ public class ExamPublishService {
     private ExamPreflightResponse preflightInternal(ExamSession session, boolean persistAudience) {
         ExamDefinitionFeasibilityResponse template = assessmentService
                 .getTemplateFeasibility(session.getExamDefinitionPublicId(), session.getSelectedSkills());
-        SubscriptionView subscription = billingService.getActiveSubscription(session.getSubscriptionId(), session.getTenantId())
-                .orElse(null);
+        SubscriptionView subscription = billingService.getSchedulableSubscription(session.getSubscriptionId(),
+                session.getTenantId()).orElse(null);
         boolean subscriptionReady = subscription != null;
         boolean windowReady = subscriptionReady && !session.getOpensAt().isBefore(subscription.startsAt())
                 && !session.getClosesAt().isAfter(subscription.expiresAt());

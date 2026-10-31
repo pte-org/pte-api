@@ -2,8 +2,8 @@ package com.pte.session.internal.service.draft;
 
 import com.pte.session.internal.service.SessionLifecycleService;
 import com.pte.assessment.AssessmentService;
+import com.pte.assessment.dto.response.ResolvedExamItemResponse;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
-import com.pte.media.MediaService;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.internal.dto.response.ExamPreviewResponse;
 import com.pte.session.internal.exception.draft.GenerationNotReadyException;
@@ -32,22 +32,19 @@ import static org.mockito.Mockito.when;
 class SessionExamPreviewServiceTest {
 
     private static final UUID TENANT_ID = UUID.randomUUID();
+    private static final String INSTRUCTION = "Select the correct response.";
 
     @Mock
     private SessionLifecycleService sessionLifecycleService;
     @Mock
     private AssessmentService assessmentService;
-    @Mock
-    private MediaService mediaService;
-
     private SessionExamPreviewService service;
     private CurrentUser caller;
 
     @BeforeEach
     void setUp() {
         service = new SessionExamPreviewService(
-                sessionLifecycleService, assessmentService, mediaService,
-                JsonMapper.builder().build());
+                sessionLifecycleService, assessmentService, JsonMapper.builder().build());
         caller = new CurrentUser(UUID.randomUUID(), TENANT_ID, List.of("HOST_ADMIN"));
     }
 
@@ -62,11 +59,29 @@ class SessionExamPreviewServiceTest {
 
         SnapshotContentResponse snapshot = snapshotWithItem(snapshotId, questionId);
         when(assessmentService.getFullContent(snapshotId)).thenReturn(snapshot);
+        stubResolvedItems(snapshot);
 
         ExamPreviewResponse response = service.preview(sessionId, caller);
 
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).sourceQuestionPublicId()).isEqualTo(questionId);
+    }
+
+    @Test
+    void preview_carriesTheResolvedTaskTypeInstruction() {
+        UUID sessionId = UUID.randomUUID();
+        UUID snapshotId = UUID.randomUUID();
+
+        ExamSession session = sessionWithSnapshot(snapshotId);
+        when(sessionLifecycleService.findOwned(sessionId, caller)).thenReturn(session);
+
+        SnapshotContentResponse snapshot = snapshotWithItem(snapshotId, UUID.randomUUID());
+        when(assessmentService.getFullContent(snapshotId)).thenReturn(snapshot);
+        stubResolvedItems(snapshot);
+
+        ExamPreviewResponse response = service.preview(sessionId, caller);
+
+        assertThat(response.items().get(0).taskTypeInstruction()).isEqualTo(INSTRUCTION);
     }
 
     @Test
@@ -79,6 +94,7 @@ class SessionExamPreviewServiceTest {
 
         SnapshotContentResponse snapshot = snapshotWithItem(snapshotId, null);
         when(assessmentService.getFullContent(snapshotId)).thenReturn(snapshot);
+        stubResolvedItems(snapshot);
 
         ExamPreviewResponse response = service.preview(sessionId, caller);
 
@@ -102,6 +118,7 @@ class SessionExamPreviewServiceTest {
                         buildContentItem(0, firstQuestionId),
                         buildContentItem(1, secondQuestionId)));
         when(assessmentService.getFullContent(snapshotId)).thenReturn(snapshot);
+        stubResolvedItems(snapshot);
 
         ExamPreviewResponse response = service.preview(sessionId, caller);
 
@@ -125,6 +142,7 @@ class SessionExamPreviewServiceTest {
                         buildContentItem(0, presentId),
                         buildContentItem(1, null)));
         when(assessmentService.getFullContent(snapshotId)).thenReturn(snapshot);
+        stubResolvedItems(snapshot);
 
         ExamPreviewResponse response = service.preview(sessionId, caller);
 
@@ -183,5 +201,40 @@ class SessionExamPreviewServiceTest {
                 null,   // runtimeMappingStatus
                 sourceQuestionPublicId,
                 UUID.randomUUID()); // itemPublicId
+    }
+
+    private void stubResolvedItems(SnapshotContentResponse snapshot) {
+        when(assessmentService.resolveExamItems(snapshot, 300L, TENANT_ID))
+                .thenReturn(snapshot.items().stream().map(item -> new ResolvedExamItemResponse(
+                        item.itemPublicId(),
+                        item.sourceQuestionPublicId(),
+                        item.orderIndex(),
+                        item.section(),
+                        item.taskType(),
+                        item.taskTypeKey(),
+                        item.taskTypeCode(),
+                        item.taskTypeDisplayName(),
+                        item.title(),
+                        item.promptText(),
+                        item.audioPromptRef(),
+                        item.imagePromptRef(),
+                        item.referenceAnswerText(),
+                        item.correctAnswerText(),
+                        item.minWordCount(),
+                        item.maxWordCount(),
+                        item.optionsJson(),
+                        0,
+                        0,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        item.runtime(),
+                        item.runtimeMappingVersion(),
+                        item.runtimeMappingStatus(),
+                        INSTRUCTION)).toList());
     }
 }

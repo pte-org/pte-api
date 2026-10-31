@@ -2,6 +2,7 @@ package com.pte.billing.internal.dto.response;
 
 import com.pte.billing.domain.LicenseCode;
 import com.pte.billing.domain.ServicePlan;
+import com.pte.billing.domain.Subscription;
 import com.pte.billing.domain.enums.LicenseCodeStatus;
 import com.pte.tenancy.TenantSummary;
 
@@ -26,10 +27,14 @@ public record AdminLicenseCodeSummary(
         Instant redeemedAt,
         UUID recipientPublicId,
         String recipientName,
-        UUID subscriptionPublicId) {
+        UUID subscriptionPublicId,
+        UUID boundTenantId,
+        String contractReference,
+        Instant subscriptionStartsAt,
+        Instant subscriptionExpiresAt) {
 
     public static AdminLicenseCodeSummary from(LicenseCode licenseCode,
-            LicenseCodeStatus effectiveStatus, ServicePlan plan, TenantSummary recipient) {
+            LicenseCodeStatus effectiveStatus, ServicePlan plan, TenantSummary recipient, Subscription subscription) {
         boolean planAvailable = plan != null && !plan.isDeleted();
         boolean recipientAvailable = recipient != null && !recipient.deleted();
         return new AdminLicenseCodeSummary(
@@ -47,7 +52,11 @@ public record AdminLicenseCodeSummary(
                 licenseCode.getRedeemedByTenantId() == null
                         ? null
                         : recipientAvailable ? recipient.name() : "Unavailable tenant",
-                licenseCode.getSubscriptionId());
+                licenseCode.getSubscriptionId(),
+                licenseCode.getBoundTenantId(),
+                licenseCode.getContractReference(),
+                subscription == null ? null : subscription.getStartsAt(),
+                subscription == null ? null : subscription.getExpiresAt());
     }
 
     private static String mask(String code) {

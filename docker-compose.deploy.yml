@@ -107,6 +107,7 @@ services:
       dockerfile: ../pte-api/deploy/practice.Dockerfile
       args:
         NEXT_PUBLIC_API_BASE_URL: https://${PRACTICE_DOMAIN:-pte-practice.duckdns.org}
+        NEXT_PUBLIC_CHAT_ENABLED: ${NEXT_PUBLIC_CHAT_ENABLED:-false}
     mem_limit: 512m
     restart: unless-stopped
     healthcheck:

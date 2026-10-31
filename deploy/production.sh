@@ -93,4 +93,9 @@ while true; do
   sleep 10
 done
 
+# Recreated upstream containers may have new IPs while Nginx is still running.
+# Reload only after health checks pass so static upstream names resolve again.
+compose exec -T nginx nginx -t
+compose exec -T nginx nginx -s reload
+
 compose ps

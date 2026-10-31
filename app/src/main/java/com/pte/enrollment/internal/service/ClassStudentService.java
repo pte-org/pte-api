@@ -63,10 +63,11 @@ public class ClassStudentService {
             AssignStudentRequest request, CurrentUser caller) {
         TrainingClass trainingClass = classService.findOwned(organizationPublicId, programPublicId, classPublicId, caller);
         assertStudentBelongsToTenant(request.studentPublicId(), caller.tenantId());
-        if (classStudentRepository.existsByStudentPublicIdAndOrganizationId(
-                request.studentPublicId(), caller.tenantId())) {
-            throw new StudentAlreadyInClassException();
-        }
+        classStudentRepository.findByOrganizationIdAndStudentPublicId(caller.tenantId(), request.studentPublicId())
+                .ifPresent(existingMembership -> {
+                    UUID existingClassPublicId = existingMembership.getTrainingClass().getPublicId();
+                    throw new StudentAlreadyInClassException(existingClassPublicId);
+                });
 
         ClassStudent membership = new ClassStudent();
         membership.setTrainingClass(trainingClass);
@@ -170,19 +171,13 @@ public class ClassStudentService {
     }
 
     /**
-     * Tenant-wide roster, optionally filtered by Program â€” the shared data
-     * source Phase 7/10/13 reuse. {@code caller.tenantId()} is always forwarded
-     * into the repository query, never checked separately from the program
-     * filter (Design Constraint â€” a decoupled check here would be a
-     * cross-tenant leak, not just an N+1 problem).
+     * Management roster, optionally filtered by program. Assignment visibility
+     * is independent of the active/date eligibility rules used by exam audiences.
      */
     @Transactional(readOnly = true)
     public List<ClassMembershipResponse> listMemberships(UUID programPublicId, CurrentUser caller) {
-        List<ClassStudent> memberships = programPublicId != null
-                ? classStudentRepository
-                        .findByTrainingClass_Program_Organization_PublicIdAndTrainingClass_Program_PublicId(
-                                caller.tenantId(), programPublicId)
-                : classStudentRepository.findByTrainingClass_Program_Organization_PublicId(caller.tenantId());
+        List<ClassStudent> memberships = classStudentRepository
+                .findManagementMemberships(caller.tenantId(), programPublicId);
         return memberships.stream().map(ClassStudentMapper::toResponse).toList();
     }
 

@@ -57,7 +57,9 @@ public record TaskView(
         TaskRuntimeProfileDescriptor runtime,
         String taskTypeDisplayName,
         boolean canNavigatePrevious,
-        boolean canNavigateNext) {
+        boolean canNavigateNext,
+        /** Admin-editable task-type instruction; null means the client shows its built-in default. */
+        String taskTypeInstruction) {
 
     public TaskView(UUID pinnedItemPublicId, int orderIndex, int totalTasks, String section,
             String taskType, String title, String promptText, UUID audioPromptRef, UUID imagePromptRef,
@@ -66,7 +68,7 @@ public record TaskView(
             Integer preListenSeconds, Integer preRecordSeconds, String imageUrl) {
         this(pinnedItemPublicId, orderIndex, totalTasks, section, taskType, title, promptText, audioPromptRef,
                 imagePromptRef, minWordCount, maxWordCount, options, blankGroups, prepSeconds, responseSeconds,
-                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, null, taskType, null, title, false, false);
+                examEndTime, preListenSeconds, preRecordSeconds, imageUrl, null, taskType, null, title, false, false, null);
     }
 
     public TaskView(UUID pinnedItemPublicId, int orderIndex, int totalTasks, String section,
@@ -78,7 +80,7 @@ public record TaskView(
         this(pinnedItemPublicId, orderIndex, totalTasks, section, taskType, title, promptText, audioPromptRef,
                 imagePromptRef, minWordCount, maxWordCount, options, blankGroups, prepSeconds, responseSeconds,
                 examEndTime, preListenSeconds, preRecordSeconds, imageUrl, null, taskTypeCode, runtime, title,
-                false, false);
+                false, false, null);
     }
 
     public TaskView(UUID pinnedItemPublicId, int orderIndex, int totalTasks, String section,
@@ -90,6 +92,6 @@ public record TaskView(
         this(pinnedItemPublicId, orderIndex, totalTasks, section, taskType, title, promptText, audioPromptRef,
                 imagePromptRef, minWordCount, maxWordCount, options, blankGroups, prepSeconds, responseSeconds,
                 examEndTime, preListenSeconds, preRecordSeconds, imageUrl, null, taskTypeCode, runtime,
-                taskTypeDisplayName, false, false);
+                taskTypeDisplayName, false, false, null);
     }
 }

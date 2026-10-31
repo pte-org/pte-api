@@ -142,7 +142,7 @@ class SessionLifecycleServiceTest {
 
     @Test
     void create_rejectsUnknownOrInactiveSubscription_asNotFound() {
-        when(billingService.getActiveSubscription(subscriptionId, tenantId)).thenReturn(Optional.empty());
+        when(billingService.getSchedulableSubscription(subscriptionId, tenantId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.create(request(100, futureWindow()), hostAdmin))
                 .isInstanceOf(SessionSubscriptionNotFoundException.class);
@@ -153,7 +153,7 @@ class SessionLifecycleServiceTest {
     void create_rejectsWindowOutsideSubscription_asUnprocessable() {
         Instant startsAt = com.pte.TestClocks.fixed().instant().minusSeconds(60);
         SubscriptionView subscription = subscription(startsAt, com.pte.TestClocks.fixed().instant().plusSeconds(100), 200);
-        when(billingService.getActiveSubscription(subscriptionId, tenantId)).thenReturn(Optional.of(subscription));
+        when(billingService.getSchedulableSubscription(subscriptionId, tenantId)).thenReturn(Optional.of(subscription));
 
         assertThatThrownBy(() -> service.create(request(100,
                 new Window(com.pte.TestClocks.fixed().instant().plusSeconds(200), com.pte.TestClocks.fixed().instant().plusSeconds(300))), hostAdmin))
@@ -216,7 +216,7 @@ class SessionLifecycleServiceTest {
     void create_allowsSameWindowForDifferentSubscription() {
         UUID secondSubscriptionId = UUID.randomUUID();
         stubActiveSubscription(200);
-        when(billingService.getActiveSubscription(secondSubscriptionId, tenantId))
+        when(billingService.getSchedulableSubscription(secondSubscriptionId, tenantId))
                 .thenReturn(Optional.of(subscription(secondSubscriptionId, 200)));
         when(sessionRepository.findFirstOverlapping(any(), any(), any(), any())).thenReturn(Optional.empty());
         when(assessmentService.generateAndPublish(any(), any(), any()))
@@ -658,7 +658,7 @@ class SessionLifecycleServiceTest {
     // ------------------------------------------------------------------
 
     private void stubActiveSubscription(int maxCapacity) {
-        when(billingService.getActiveSubscription(subscriptionId, tenantId))
+        when(billingService.getSchedulableSubscription(subscriptionId, tenantId))
                 .thenReturn(Optional.of(subscription(maxCapacity)));
     }
 

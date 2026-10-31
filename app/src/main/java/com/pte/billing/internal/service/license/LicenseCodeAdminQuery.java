@@ -2,12 +2,14 @@ package com.pte.billing.internal.service.license;
 
 import com.pte.billing.domain.LicenseCode;
 import com.pte.billing.domain.ServicePlan;
+import com.pte.billing.domain.Subscription;
 import com.pte.billing.domain.enums.LicenseCodeStatus;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.dto.response.AdminLicenseCodeSummary;
 import com.pte.billing.internal.exception.license.LicenseCodeException;
 import com.pte.billing.internal.repository.LicenseCodeRepository;
 import com.pte.billing.internal.repository.ServicePlanRepository;
+import com.pte.billing.internal.repository.SubscriptionRepository;
 import com.pte.shared.web.PageMeta;
 import com.pte.shared.web.PagedResult;
 import com.pte.tenancy.TenancyService;
@@ -36,13 +38,15 @@ class LicenseCodeAdminQuery {
 
     private final LicenseCodeRepository licenseCodeRepository;
     private final ServicePlanRepository planRepository;
+    private final SubscriptionRepository subscriptionRepository;
     private final TenancyService tenancyService;
     private final Clock clock;
 
     LicenseCodeAdminQuery(LicenseCodeRepository licenseCodeRepository, ServicePlanRepository planRepository,
-            TenancyService tenancyService, Clock clock) {
+            SubscriptionRepository subscriptionRepository, TenancyService tenancyService, Clock clock) {
         this.licenseCodeRepository = licenseCodeRepository;
         this.planRepository = planRepository;
+        this.subscriptionRepository = subscriptionRepository;
         this.tenancyService = tenancyService;
         this.clock = clock;
     }
@@ -125,13 +129,19 @@ class LicenseCodeAdminQuery {
         Set<UUID> tenantIds = codes.stream().map(LicenseCode::getRedeemedByTenantId)
                 .filter(Objects::nonNull).collect(Collectors.toSet());
         Map<UUID, TenantSummary> recipients = tenancyService.findTenantSummaries(tenantIds);
+        Set<UUID> subscriptionIds = codes.stream().map(LicenseCode::getSubscriptionId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<UUID, Subscription> subscriptions = subscriptionIds.isEmpty() ? Map.of()
+                : subscriptionRepository.findByPublicIdIn(subscriptionIds).stream()
+                        .collect(Collectors.toUnmodifiableMap(Subscription::getPublicId, Function.identity()));
         return codes.stream()
                 .map(code -> {
                     UUID recipientId = code.getRedeemedByTenantId();
                     return AdminLicenseCodeSummary.from(code,
                             LicenseCodeStateResolver.resolve(code, now),
                             plans.get(code.getPlanId()),
-                            recipientId == null ? null : recipients.get(recipientId));
+                            recipientId == null ? null : recipients.get(recipientId),
+                            code.getSubscriptionId() == null ? null : subscriptions.get(code.getSubscriptionId()));
                 })
                 .toList();
     }

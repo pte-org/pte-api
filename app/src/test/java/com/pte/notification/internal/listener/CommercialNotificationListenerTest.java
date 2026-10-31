@@ -22,6 +22,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -67,7 +68,8 @@ class CommercialNotificationListenerTest {
 
         listener.onCommercialOutcomeConfirmed(new CommercialOutcomeConfirmedEvent(
                 tenantId, UUID.randomUUID(), CommercialOutcomeType.EXAM_PACKAGE,
-                CommercialActivationSource.PAYMENT, CommercialActivationTarget.ORDER, orderId, null));
+                CommercialActivationSource.PAYMENT, CommercialActivationTarget.ORDER, orderId, null,
+                Instant.parse("2026-12-01T00:00:00Z")));
 
         InboxNotificationRequested request = capturedRequest();
         assertThat(request.type()).isEqualTo(InboxNotificationType.COMMERCIAL_OUTCOME_CONFIRMED);
@@ -75,6 +77,7 @@ class CommercialNotificationListenerTest {
         assertThat(request.targetType()).isEqualTo(InboxTargetType.ORDER);
         assertThat(request.targetPublicId()).isEqualTo(orderId);
         assertThat(request.recipients()).extracting("userPublicId").containsExactly(hostId);
+        assertThat(request.body()).contains("01/12/2026");
     }
 
     @Test
@@ -85,7 +88,7 @@ class CommercialNotificationListenerTest {
 
         listener.onCommercialOutcomeConfirmed(new CommercialOutcomeConfirmedEvent(
                 tenantId, UUID.randomUUID(), CommercialOutcomeType.STUDENT_CAPACITY,
-                CommercialActivationSource.LICENSE_CODE, CommercialActivationTarget.QUOTA, quotaId, 40));
+                CommercialActivationSource.LICENSE_CODE, CommercialActivationTarget.QUOTA, quotaId, 40, null));
 
         InboxNotificationRequested request = capturedRequest();
         assertThat(request.targetType()).isEqualTo(InboxTargetType.QUOTA);
@@ -100,7 +103,7 @@ class CommercialNotificationListenerTest {
 
         listener.onCommercialOutcomeConfirmed(new CommercialOutcomeConfirmedEvent(
                 tenantId, UUID.randomUUID(), CommercialOutcomeType.EXAM_PACKAGE,
-                CommercialActivationSource.PAYMENT, CommercialActivationTarget.ORDER, UUID.randomUUID(), null));
+                CommercialActivationSource.PAYMENT, CommercialActivationTarget.ORDER, UUID.randomUUID(), null, null));
 
         verify(identity, never()).findActiveRoleMembers(any(), any());
         verify(appender, never()).append(any());
@@ -143,7 +146,7 @@ class CommercialNotificationListenerTest {
         listener.onCommercialOutcomeConfirmed(new CommercialOutcomeConfirmedEvent(
                 tenantId, UUID.randomUUID(), CommercialOutcomeType.STUDENT_CAPACITY,
                 CommercialActivationSource.PAYMENT, CommercialActivationTarget.ORDER,
-                UUID.randomUUID(), 0));
+                UUID.randomUUID(), 0, null));
 
         verify(appender, never()).append(any());
     }

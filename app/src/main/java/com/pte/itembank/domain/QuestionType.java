@@ -49,6 +49,10 @@ public class QuestionType extends BaseEntity {
     @Column(name = "short_name", nullable = false, length = 32)
     private String shortName;
 
+    /** Student-facing display text; not part of the runtime contract, so it stays editable after locking. */
+    @Column(name = "instruction", length = 500)
+    private String instruction;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private PteSection section;

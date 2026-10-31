@@ -26,6 +26,22 @@ public final class NotificationConstants {
     public static final String STUDENT_ENROLLMENT_CONFLICT_DEDUPE_KEY =
             "student-enrollment-conflict:%s:%s:%s";
 
+    public static final String ATTEMPT_RESULT_SUBJECT = "Your exam results";
+    public static final String ATTEMPT_RESULT_GREETING_NAMED = "Hello %s,";
+    public static final String ATTEMPT_RESULT_GREETING_ANONYMOUS = "Hello,";
+    public static final String ATTEMPT_RESULT_INTRO = "Your exam results have been published.";
+    public static final String ATTEMPT_RESULT_LINE = "%s: %s";
+    public static final String ATTEMPT_RESULT_OVERALL_LABEL = "Overall score";
+    public static final String ATTEMPT_RESULT_LISTENING_LABEL = "Listening";
+    public static final String ATTEMPT_RESULT_READING_LABEL = "Reading";
+    public static final String ATTEMPT_RESULT_SPEAKING_LABEL = "Speaking";
+    public static final String ATTEMPT_RESULT_WRITING_LABEL = "Writing";
+    public static final String ATTEMPT_RESULT_INSUFFICIENT_DATA = "Not enough data";
+    public static final String ATTEMPT_RESULT_FOOTER = "Please keep this email for your records.";
+    public static final String ATTEMPT_RESULT_DEDUPE_KEY = "attempt-published:%s";
+    public static final String ATTEMPT_RESULT_NO_RECIPIENT_EMAIL =
+            "Skipping results email for attempt {} (tenantId={}): the student has no email address";
+
     private NotificationConstants() {
     }
 }

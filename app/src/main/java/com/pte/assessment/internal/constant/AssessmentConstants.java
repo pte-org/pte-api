@@ -1,7 +1,14 @@
 package com.pte.assessment.internal.constant;
 
+import com.pte.itembank.domain.enums.PteSection;
+import java.util.List;
+
 /** Centralized codes/labels for assessment. */
 public final class AssessmentConstants {
+
+    /** Part 1 combines Speaking and Writing, followed by Reading and Listening. */
+    public static final List<PteSection> EXAM_SECTION_ORDER =
+            List.of(PteSection.SPEAKING, PteSection.WRITING, PteSection.READING, PteSection.LISTENING);
 
     public static final String BLUEPRINT_NOT_FOUND = "BLUEPRINT_NOT_FOUND";
     public static final String EMPTY_BLUEPRINT = "EMPTY_BLUEPRINT";
@@ -9,7 +16,7 @@ public final class AssessmentConstants {
     public static final String INSUFFICIENT_QUESTION_BANK = "INSUFFICIENT_QUESTION_BANK";
     public static final String INVALID_SKILL_SELECTION = "INVALID_SKILL_SELECTION";
     public static final String TEMPLATE_NOT_ACTIVE = "TEMPLATE_NOT_ACTIVE";
-    public static final String DETERMINISTIC_ALGORITHM_VERSION = "PTE_SEEDED_V1";
+    public static final String DETERMINISTIC_ALGORITHM_VERSION = "PTE_SEEDED_V2";
 
     public static final String QUESTION_REFERENCE_REQUIRED = "Question reference is required";
     public static final String SECTION_REQUIRED = "Section is required";
@@ -41,6 +48,8 @@ public final class AssessmentConstants {
     public static final String SNAPSHOT_RUNTIME_CONTRACT_INVALID = "EXAM_CONFIGURATION_NOT_COMPATIBLE";
     public static final String SNAPSHOT_RUNTIME_CONTRACT_MESSAGE =
             "This exam is not currently compatible with the configured task runtime. Please ask an administrator to review the exam configuration.";
+    public static final String TASK_TIMING_NOT_CONFIGURED = "TASK_TIMING_NOT_CONFIGURED";
+    public static final String TASK_TIMING_LOAD_FAILED = "Failed to load task timing from %s";
     public static final String AUDIT_AGGREGATE_SNAPSHOT = "EXAM_SNAPSHOT";
     public static final String AUDIT_RUNTIME_MAPPING_REJECTED = "RUNTIME_MAPPING_REJECTED";
 

@@ -133,7 +133,9 @@ public class ReportPublishService {
             examResultRepository.save(report);
             if (newlyPublished) {
                 eventPublisher.publishEvent(new AttemptPublishedEvent(report.getAttemptPublicId(),
-                        report.getSessionPublicId(), report.getStudentPublicId(), report.getTenantId()));
+                        report.getSessionPublicId(), report.getStudentPublicId(), report.getTenantId(),
+                        report.getOverallScore(), report.getListeningScore(), report.getReadingScore(),
+                        report.getSpeakingScore(), report.getWritingScore()));
             }
         }
         return cohortSize;

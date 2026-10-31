@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /** The single write path that can create a Subscription. */
@@ -52,6 +53,16 @@ public class SubscriptionActivationService {
      */
     @Transactional
     public SubscriptionActivationResponse activate(UUID tenantId, ServicePlan plan, ActivationSource source) {
+        return activate(tenantId, plan, source, null);
+    }
+
+    /**
+     * Same single write path with an optional contract start. Payment callers pass null and start now; an admin
+     * grant may start later so a renewal continues the previous lane. Student capacity ignores the start.
+     */
+    @Transactional
+    public SubscriptionActivationResponse activate(UUID tenantId, ServicePlan plan, ActivationSource source,
+            Instant requestedStartsAt) {
         validateRequest(tenantId, plan, source);
 
         if (plan.getType() == PlanType.STUDENT_CAPACITY) {
@@ -62,7 +73,7 @@ public class SubscriptionActivationService {
                     quotaGrantId);
         }
 
-        Instant startsAt = clock.instant();
+        Instant startsAt = resolveStart(requestedStartsAt);
         Subscription subscription = saveWithUniqueLicenseKey(tenantId, plan, source, startsAt);
         return SubscriptionActivationResponse.fromSubscription(
                 subscription.getTenantId(),
@@ -74,6 +85,39 @@ public class SubscriptionActivationService {
                 subscription.getStatus().name(),
                 subscription.getActivationSource().name(),
                 subscription.getPublicId());
+    }
+
+    /**
+     * Default start for a new lane of {@code planId}: right after the latest still-active lane of the same plan
+     * (paid or granted, running or pending), otherwise now. The caller must hold the tenant row lock so two
+     * grants for one tenant cannot both read "no lane" and overlap.
+     */
+    @Transactional(readOnly = true)
+    public Instant resolveDefaultStart(UUID tenantId, UUID planId) {
+        Instant now = clock.instant();
+        return subscriptionRepository.findRenewableForPlan(tenantId, planId, SubscriptionStatus.ACTIVE, now)
+                .stream()
+                .map(Subscription::getExpiresAt)
+                .findFirst()
+                .filter(expiresAt -> expiresAt.isAfter(now))
+                .orElse(now);
+    }
+
+    /** Effective start for a requested contract date, or 422 when it is in the past or over six months ahead. */
+    public Instant resolveStart(Instant requestedStartsAt) {
+        Instant now = clock.instant();
+        if (requestedStartsAt == null) {
+            return now;
+        }
+        // Contract dates are VN calendar days: today is allowed, the past is not, and at most six months ahead.
+        LocalDate today = LocalDate.ofInstant(now, BillingConstants.CONTRACT_ZONE);
+        Instant earliest = today.atStartOfDay(BillingConstants.CONTRACT_ZONE).toInstant();
+        Instant latest = today.plusMonths(BillingConstants.GRANT_MAX_START_MONTHS).plusDays(1)
+                .atStartOfDay(BillingConstants.CONTRACT_ZONE).toInstant();
+        if (requestedStartsAt.isBefore(earliest) || !requestedStartsAt.isBefore(latest)) {
+            throw invalid(BillingConstants.SUBSCRIPTION_START_OUT_OF_RANGE);
+        }
+        return requestedStartsAt.isBefore(now) ? now : requestedStartsAt;
     }
 
     private Subscription saveWithUniqueLicenseKey(UUID tenantId, ServicePlan plan, ActivationSource source,

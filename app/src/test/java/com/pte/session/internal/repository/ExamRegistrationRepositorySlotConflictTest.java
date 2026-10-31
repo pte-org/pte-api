@@ -5,6 +5,8 @@ import com.pte.session.domain.enums.AudienceMemberStatus;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.enums.SessionStatus;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 
@@ -61,6 +63,18 @@ class ExamRegistrationRepositorySlotConflictTest {
         assertThat(registrationRepository.findConflictingEnrollments(otherTenantId, List.of(studentId),
                 Instant.parse("2026-10-17T09:00:00Z"), Instant.parse("2026-10-17T11:00:00Z")))
                 .isEmpty();
+    }
+
+    @ParameterizedTest
+    @EnumSource(SessionStatus.class)
+    void onlyScheduledAndOpenSessionsBlockAStudent(SessionStatus status) {
+        UUID tenantId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        enroll(saveSession(tenantId, "Earlier exam", status,
+                "2026-10-17T08:00:00Z", "2026-10-17T10:00:00Z"), tenantId, studentId);
+        var conflicts = registrationRepository.findConflictingEnrollments(tenantId, List.of(studentId),
+                Instant.parse("2026-10-17T09:00:00Z"), Instant.parse("2026-10-17T11:00:00Z"));
+        assertThat(conflicts).hasSize(status == SessionStatus.SCHEDULED || status == SessionStatus.OPEN ? 1 : 0);
     }
 
     private ExamSession saveSession(UUID tenantId, String name, SessionStatus status,

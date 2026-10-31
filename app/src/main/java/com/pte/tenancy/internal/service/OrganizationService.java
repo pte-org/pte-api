@@ -12,10 +12,12 @@ import com.pte.tenancy.internal.exception.TenantNameAlreadyUsedException;
 import com.pte.tenancy.internal.mapper.OrganizationMapper;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -25,6 +27,8 @@ import java.util.UUID;
  */
 @Service
 public class OrganizationService {
+
+    private static final int SEARCH_LIMIT = 20;
 
     private final OrganizationRepository organizationRepository;
     private final AuditLogService auditLogService;
@@ -49,6 +53,22 @@ public class OrganizationService {
     /** Platform callers (no organization in the token) get every approved organization; others get their own. */
     @Transactional(readOnly = true)
     public List<OrganizationResponse> list(CurrentUser caller) {
+        return list(caller, null);
+    }
+
+    /**
+     * Same, with an optional platform-only lookup by code or tax-code prefix or exact contact email, capped at
+     * {@value #SEARCH_LIMIT} rows. A host's {@code q} is ignored: it only ever sees its own organization.
+     */
+    @Transactional(readOnly = true)
+    public List<OrganizationResponse> list(CurrentUser caller, String q) {
+        String term = q == null ? "" : q.trim().toLowerCase(Locale.ROOT);
+        if (caller.isPlatformUser() && !term.isEmpty()) {
+            // Wildcards are stripped so a typed % or _ cannot widen the prefix match.
+            String prefix = term.replace("%", "").replace("_", "").replace("\\", "") + "%";
+            return organizationRepository.searchApproved(prefix, term, PageRequest.of(0, SEARCH_LIMIT)).stream()
+                    .map(OrganizationMapper::toResponse).toList();
+        }
         if (caller.isPlatformUser()) {
             return organizationRepository.findAllApproved().stream().map(OrganizationMapper::toResponse).toList();
         }

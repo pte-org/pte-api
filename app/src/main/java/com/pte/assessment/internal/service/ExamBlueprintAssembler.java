@@ -2,6 +2,7 @@ package com.pte.assessment.internal.service;
 
 import com.pte.assessment.domain.BlueprintItem;
 import com.pte.assessment.domain.ExamBlueprint;
+import com.pte.assessment.internal.constant.AssessmentConstants;
 import com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse;
 import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
@@ -31,10 +32,6 @@ import java.util.stream.Collectors;
  * generation modes, with TOCTOU-safe stock checking.
  */
 class ExamBlueprintAssembler {
-
-    /** Fixed section draw order. */
-    private static final List<PteSection> SECTION_ORDER =
-            List.of(PteSection.SPEAKING, PteSection.LISTENING, PteSection.READING, PteSection.WRITING);
 
     private final ItembankService itembankService;
 
@@ -113,7 +110,7 @@ class ExamBlueprintAssembler {
                 .collect(Collectors.groupingBy(i -> PteSection.valueOf(i.section())));
 
         List<Requirement> requirements = new ArrayList<>();
-        for (PteSection section : SECTION_ORDER) {
+        for (PteSection section : AssessmentConstants.EXAM_SECTION_ORDER) {
             if (!selectedSections.contains(section)) {
                 continue;
             }

@@ -94,7 +94,8 @@ public class OrderPersistenceService {
                 activation.kind() == SubscriptionActivationResponse.ActivationKind.SUBSCRIPTION
                         ? CommercialActivationTarget.SUBSCRIPTION : CommercialActivationTarget.QUOTA,
                 activation.targetPublicId(),
-                activation.grantedStudentSlots()));
+                activation.grantedStudentSlots(),
+                activation.startsAt()));
         return order;
     }
 

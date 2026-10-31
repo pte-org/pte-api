@@ -106,7 +106,15 @@ class ReportPublishServiceTest {
         assertThat(report.getWritingScore()).isNull();
         verify(sessionService).lockClosedForReportPublication(sessionId, tenantId);
         verify(examResultRepository).save(report);
-        verify(eventPublisher).publishEvent(any(AttemptPublishedEvent.class));
+        org.mockito.ArgumentCaptor<AttemptPublishedEvent> publishedEvent =
+                org.mockito.ArgumentCaptor.forClass(AttemptPublishedEvent.class);
+        verify(eventPublisher).publishEvent(publishedEvent.capture());
+        // The student's only copy of the score is the email built from this event.
+        assertThat(publishedEvent.getValue().overallScore()).isEqualTo(74);
+        assertThat(publishedEvent.getValue().speakingScore()).isEqualTo(74);
+        assertThat(publishedEvent.getValue().listeningScore()).isNull();
+        assertThat(publishedEvent.getValue().readingScore()).isNull();
+        assertThat(publishedEvent.getValue().writingScore()).isNull();
     }
 
     @Test

@@ -1,6 +1,8 @@
 package com.pte.billing.internal.controller;
 
+import com.pte.billing.internal.dto.request.application.DirectOnboardRequest;
 import com.pte.billing.internal.dto.request.application.RejectApplicationRequest;
+import com.pte.billing.internal.dto.response.DirectOnboardResponse;
 import com.pte.billing.internal.dto.request.application.SubmitApplicationRequest;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.service.TenantApplicationService;
@@ -46,6 +48,13 @@ public class TenantApplicationController {
     public ApiResponse<Void> submit(@Valid @RequestBody SubmitApplicationRequest request) {
         applicationService.submit(request);
         return ApiResponse.success(null);
+    }
+
+    /** Platform operator creates an organization: recorded and approved at once, with its first host. */
+    @PostMapping("/admin/organizations")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER')")
+    public ApiResponse<DirectOnboardResponse> onboardDirect(@Valid @RequestBody DirectOnboardRequest request) {
+        return ApiResponse.success(applicationService.onboardDirect(request, currentUser()));
     }
 
     @GetMapping("/applications")

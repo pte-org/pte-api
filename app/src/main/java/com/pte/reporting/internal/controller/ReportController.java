@@ -13,17 +13,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
-import java.util.List;
 
 /**
- * Student sees a report only once published (and only their own); host sees
- * any time within their tenant (review-before-publish). Role guard here is
- * broad (any authenticated actor with one of these roles); the fine-grained
- * ownership/publish check lives in {@link ReportService}.
+ * Host sees a report any time within their tenant (review-before-publish). Students have no report access at
+ * all: they receive their scores only by email when the host publishes. Role guard here is broad (any
+ * authenticated actor with one of these roles); the fine-grained tenant check lives in {@link ReportService}.
  */
 @RestController
 @RequestMapping("/api/v1/reports")
-@PreAuthorize("hasAnyRole('STUDENT','HOST_ADMIN','PLATFORM_ADMIN')")
+@PreAuthorize("hasAnyRole('HOST_ADMIN','PLATFORM_ADMIN')")
 public class ReportController {
 
     private final ReportService reportService;
@@ -35,12 +33,6 @@ public class ReportController {
     @GetMapping("/attempts/{attemptPublicId}")
     public ApiResponse<ReportResponse> getReport(@PathVariable UUID attemptPublicId) {
         return ApiResponse.success(reportService.getReport(attemptPublicId, currentUser()));
-    }
-
-    @GetMapping
-    @PreAuthorize("hasRole('STUDENT')")
-    public ApiResponse<List<ReportResponse>> listMyReports() {
-        return ApiResponse.success(reportService.getMyPublishedReports(currentUser()));
     }
 
     private CurrentUser currentUser() {

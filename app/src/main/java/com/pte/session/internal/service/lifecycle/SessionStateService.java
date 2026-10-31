@@ -70,8 +70,9 @@ public class SessionStateService {
         if (!java.util.Objects.equals(subscriptionId, session.getSubscriptionId())) {
             throw new SessionSubscriptionConflictException();
         }
+        // Opening is the one step that consumes the lane, so it must have started (a granted lane may start later).
         subscriptions.validateSubscriptionWindowAndCapacity(subscription, session.getOpensAt(), session.getClosesAt(),
-                session.getCapacity(), false);
+                session.getCapacity(), false, true);
         session.open();
         return SessionMapper.toResponse(session);
     }
@@ -119,7 +120,7 @@ public class SessionStateService {
         SubscriptionView subscription = subscriptions.lockedActiveSubscription(
                 session.getSubscriptionId(), session.getTenantId());
         subscriptions.validateSubscriptionWindowAndCapacity(subscription, session.getOpensAt(),
-                session.getClosesAt(), session.getCapacity(), false);
+                session.getClosesAt(), session.getCapacity(), false, true);
         session.open();
         recordExamAudit(systemCaller, session, SessionConstants.EVENT_EXAM_AUTO_OPENED,
                 "%s (%s -> %s)".formatted(session.getName(), SessionStatus.SCHEDULED, SessionStatus.OPEN));

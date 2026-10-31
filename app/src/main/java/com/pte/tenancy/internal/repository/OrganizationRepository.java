@@ -50,6 +50,18 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
             + "com.pte.tenancy.domain.enums.OrganizationStatus.SUSPENDED) order by o.createdAt desc")
     List<Organization> findAllApproved();
 
+    /**
+     * Platform lookup of approved organizations by code or tax-code prefix, or exact contact email, all
+     * case-insensitive; {@code prefix} already ends with {@code %}.
+     */
+    @Query("select o from Organization o where o.deleted = false and o.status in "
+            + "(com.pte.tenancy.domain.enums.OrganizationStatus.ACTIVE, "
+            + "com.pte.tenancy.domain.enums.OrganizationStatus.SUSPENDED) and ("
+            + "lower(o.code) like :prefix or lower(o.taxCode) like :prefix or lower(o.contactEmail) = :exact) "
+            + "order by o.name asc")
+    List<Organization> searchApproved(@Param("prefix") String prefix, @Param("exact") String exact,
+            Pageable pageable);
+
     /** Overview: non-deleted approved organizations grouped by status (counts only). */
     @Query("select o.status, count(o) from Organization o where o.deleted = false and o.status in "
             + "(com.pte.tenancy.domain.enums.OrganizationStatus.ACTIVE, "

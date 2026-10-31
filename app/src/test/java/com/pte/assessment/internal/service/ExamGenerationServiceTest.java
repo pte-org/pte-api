@@ -188,7 +188,7 @@ class ExamGenerationServiceTest {
     }
 
     @Test
-    void generate_orderIsSpeakingListeningReadingWriting_thenBySequence_summarizeSpokenTextClosesListening() {
+    void generate_orderIsSpeakingWritingReadingListening_thenBySequence_summarizeSpokenTextOpensListening() {
         stubUnlimitedStock();
         // Reverse the fixture so sequence ordering is checked independently of input order.
         ExamDefinitionResponse template = v5Template();
@@ -204,8 +204,8 @@ class ExamGenerationServiceTest {
         org.mockito.ArgumentCaptor<ExamBlueprint> captor = org.mockito.ArgumentCaptor.forClass(ExamBlueprint.class);
         verify(blueprintRepository).save(captor.capture());
         List<String> sections = captor.getValue().getItems().stream().map(i -> i.getSection().name()).toList();
-        // Generation flow changed explicitly in 1e8fe99 and 3f5329a; V5 sequences apply within sections.
-        List<String> order = List.of("SPEAKING", "LISTENING", "READING", "WRITING");
+        // Speaking and Writing are consecutive in Part 1; template sequence stays local to each section.
+        List<String> order = List.of("SPEAKING", "WRITING", "READING", "LISTENING");
         assertThat(sections.stream().distinct().toList()).containsExactlyElementsOf(order);
         int lastRank = -1;
         for (String section : sections) {
@@ -220,15 +220,17 @@ class ExamGenerationServiceTest {
         expectedTaskTypes.add(PteTaskType.PERSONAL_INTRODUCTION);
         V5_ROWS.stream()
                 .sorted(java.util.Comparator.comparingInt((Row row) -> order.indexOf(row.section()))
-                        .thenComparingInt(row -> "SUMMARIZE_SPOKEN_TEXT".equals(row.taskType())
-                                ? Integer.MAX_VALUE : row.sequence()))
+                        .thenComparingInt(Row::sequence))
                 .map(row -> PteTaskType.valueOf(row.taskType()))
                 .forEach(expectedTaskTypes::add);
         assertThat(taskTypeCaptor.getAllValues()).containsExactlyElementsOf(expectedTaskTypes);
         List<PteTaskType> drawn = taskTypeCaptor.getAllValues();
         assertThat(drawn.indexOf(PteTaskType.SUMMARIZE_SPOKEN_TEXT))
-                .isEqualTo(drawn.indexOf(PteTaskType.WRITE_FROM_DICTATION) + 1);
-        assertThat(drawn.get(drawn.indexOf(PteTaskType.SUMMARIZE_SPOKEN_TEXT) + 1))
+                .isEqualTo(drawn.indexOf(PteTaskType.MC_READING_SINGLE) + 1);
+        assertThat(drawn.get(drawn.size() - 1)).isEqualTo(PteTaskType.WRITE_FROM_DICTATION);
+        assertThat(drawn.get(drawn.indexOf(PteTaskType.RESPOND_TO_A_SITUATION) + 1))
+                .isEqualTo(PteTaskType.SUMMARIZE_WRITTEN_TEXT);
+        assertThat(drawn.get(drawn.indexOf(PteTaskType.WRITE_ESSAY) + 1))
                 .isEqualTo(PteTaskType.FILL_IN_THE_BLANKS_DROPDOWN);
         // orderIndex is sequential starting at 0.
         for (int i = 0; i < captor.getValue().getItems().size(); i++) {
@@ -414,7 +416,7 @@ class ExamGenerationServiceTest {
                 .map(BlueprintItem::getQuestionPublicId).toList();
         assertThat(first).containsExactlyElementsOf(second);
         verify(snapshotPublishService, org.mockito.Mockito.times(2)).publish(any(UUID.class), any(CurrentUser.class),
-                eq(template), eq(seed), eq("PTE_SEEDED_V1"), eq(templateId + ":4"));
+                eq(template), eq(seed), eq("PTE_SEEDED_V2"), eq(templateId + ":4"));
         verify(itembankService, org.mockito.Mockito.never())
                 .publishedQuestionIds(PteTaskType.PERSONAL_INTRODUCTION);
     }

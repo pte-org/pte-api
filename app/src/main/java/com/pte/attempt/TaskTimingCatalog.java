@@ -1,6 +1,6 @@
 package com.pte.attempt;
 
-import com.pte.attempt.internal.config.TaskTimingConfig;
+import com.pte.assessment.internal.config.TaskTimingConfig;
 import org.springframework.stereotype.Service;
 
 import java.util.OptionalInt;

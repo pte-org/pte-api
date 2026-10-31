@@ -173,8 +173,9 @@ public class AudienceResolver {
     }
 
     private boolean overlaps(ExamSession left, ExamSession right) {
-        return left.getOpensAt().isBefore(right.getClosesAt()) && right.getOpensAt().isBefore(left.getClosesAt())
-                && right.getStatus() != SessionStatus.CANCELLED;
+        return (right.getStatus() == SessionStatus.SCHEDULED || right.getStatus() == SessionStatus.OPEN)
+                && left.getOpensAt().isBefore(right.getClosesAt())
+                && right.getOpensAt().isBefore(left.getClosesAt());
     }
 
     private AudienceMemberResponse toMemberResponse(ExamRegistration member) {

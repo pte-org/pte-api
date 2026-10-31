@@ -47,13 +47,14 @@ public interface ExamRegistrationRepository extends JpaRepository<ExamRegistrati
             + "and r.status = com.pte.session.domain.enums.AudienceMemberStatus.ENROLLED group by r.session.id")
     List<Object[]> countEnrolledGroupedBySessionIds(@Param("sessionIds") List<Long> sessionIds);
 
-    /** Finds tenant-wide slot conflicts in one query; cancelled sessions are not blockers. */
+    /** Only scheduled/open exams occupy a student's slot; terminal sessions retain history only. */
     @Query("select r.studentPublicId as studentPublicId, s.publicId as conflictingSessionPublicId, "
             + "s.name as conflictingSessionName from ExamRegistration r join r.session s "
             + "where r.tenantId = :tenantId and s.tenantId = :tenantId "
             + "and r.studentPublicId in :studentPublicIds and r.deleted = false and s.deleted = false "
             + "and r.status = com.pte.session.domain.enums.AudienceMemberStatus.ENROLLED "
-            + "and s.status <> com.pte.session.domain.enums.SessionStatus.CANCELLED "
+            + "and s.status in (com.pte.session.domain.enums.SessionStatus.SCHEDULED, "
+            + "com.pte.session.domain.enums.SessionStatus.OPEN) "
             + "and s.opensAt < :closesAt and s.closesAt > :opensAt "
             + "order by r.studentPublicId, s.opensAt, s.id")
     List<SlotConflictProjection> findConflictingEnrollments(@Param("tenantId") UUID tenantId,

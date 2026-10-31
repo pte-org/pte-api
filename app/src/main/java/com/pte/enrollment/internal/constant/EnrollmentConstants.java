@@ -13,6 +13,9 @@ public final class EnrollmentConstants {
     public static final String CLASS_NAME_ALREADY_USED = "CLASS_NAME_ALREADY_USED";
     public static final String CLASS_HAS_ACTIVE_MEMBERS = "CLASS_HAS_ACTIVE_MEMBERS";
     public static final String STUDENT_ALREADY_IN_CLASS = "STUDENT_ALREADY_IN_CLASS";
+    public static final String STUDENT_ALREADY_IN_CLASS_FRIENDLY =
+            "This student is already assigned to a class.";
+    public static final String DATA_EXISTING_CLASS_PUBLIC_ID = "existingClassPublicId";
     public static final String CLASS_MEMBERSHIP_NOT_FOUND = "CLASS_MEMBERSHIP_NOT_FOUND";
     public static final String INVALID_STUDENT_ROSTER_QUERY = "INVALID_STUDENT_ROSTER_QUERY";
     public static final String STUDENT_NOT_FOUND = "STUDENT_NOT_FOUND";
