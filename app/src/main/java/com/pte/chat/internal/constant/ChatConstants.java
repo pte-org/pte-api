@@ -39,7 +39,6 @@ public final class ChatConstants {
     public static final String MESSAGES_PATH = "/messages";
     public static final String QUOTA_PATH = "/quota";
     public static final String ADMIN_USAGE_PATH = "/api/v1/admin/chat/usage";
-    public static final String ADMIN_STUDENTS_PATH = "/students";
 
 
 

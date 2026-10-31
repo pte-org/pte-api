@@ -1,7 +1,6 @@
 package com.pte.chat.internal.controller;
 
 import com.pte.chat.internal.constant.ChatConstants;
-import com.pte.chat.internal.service.report.ChatStudentUsage;
 import com.pte.chat.internal.service.report.ChatUsageDay;
 import com.pte.chat.internal.service.report.ChatUsageReportService;
 import com.pte.shared.web.ApiResponse;
@@ -34,14 +33,5 @@ public class ChatAdminUsageController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return ApiResponse.success(reportService.report(from, to));
-    }
-
-    /** The students with the most messages in the range: ids and counts only, so abuse can be spotted. */
-    @GetMapping(ChatConstants.ADMIN_STUDENTS_PATH)
-    public ApiResponse<List<ChatStudentUsage>> students(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(defaultValue = "20") int limit) {
-        return ApiResponse.success(reportService.topStudents(from, to, limit));
     }
 }

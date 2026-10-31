@@ -79,6 +79,9 @@ public final class ChatPrompts {
             "I can only help with English and PTE preparation. Please ask about vocabulary, grammar, "
                     + "pronunciation or how to approach a PTE task.";
 
+    private static final String VIETNAMESE_ONLY_LETTERS =
+            "ăắằẳẵặấầẩẫậếềểễệốồổỗộơớờởỡợưứừửữựạảãẹẻẽịỉĩọỏõụủũỳỵỷỹđ";
+
     private ChatPrompts() {
     }
 
@@ -121,6 +124,27 @@ public final class ChatPrompts {
     }
 
     /** Fixed text for an off-topic question; only "vi" (any case) selects Vietnamese, everything else English. */
+    public static String refusal(String language, String question) {
+        return refusal(isVietnamese(question) ? ChatConstants.LANGUAGE_VI : language);
+    }
+
+    /**
+     * True when the text has a letter only Vietnamese uses (such as ă, ơ, ư, đ or a dot or hook under or over a
+     * vowel), so a Vietnamese question is refused in Vietnamese even when the page is set to English. Vietnamese
+     * typed without accents is not detected and follows the page language.
+     */
+    static boolean isVietnamese(String text) {
+        if (text == null) {
+            return false;
+        }
+        for (int i = 0; i < text.length(); i++) {
+            if (VIETNAMESE_ONLY_LETTERS.indexOf(Character.toLowerCase(text.charAt(i))) >= 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static String refusal(String language) {
         return ChatConstants.LANGUAGE_VI.equalsIgnoreCase(language) ? REFUSAL_VI : REFUSAL_EN;
     }

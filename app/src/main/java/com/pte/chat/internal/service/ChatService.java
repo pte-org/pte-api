@@ -2,6 +2,7 @@ package com.pte.chat.internal.service;
 
 import com.pte.chat.internal.client.ChatAiAnswer;
 import com.pte.chat.internal.client.ChatAiException;
+import com.pte.chat.internal.client.ChatAiFailureReason;
 import com.pte.chat.internal.client.ChatAiUsage;
 import com.pte.chat.internal.client.GeminiChatClient;
 import com.pte.chat.internal.config.ChatAiProperties;
@@ -97,23 +98,23 @@ public class ChatService {
             // The reason and status come from fixed texts, never from the question, the answer or the key.
             log.warn("Chat provider call failed: reason={} detail={}", ex.reason(), ex.getMessage());
             observability.providerFailed(ex.reason());
-            return failed(ticket, ex.usage());
+            return failed(ticket, ex.usage(), ex.reason());
         } catch (RuntimeException ex) {
             log.error("Chat provider call failed unexpectedly: {}", ChatErrors.describe(ex));
-            return failed(ticket, ChatAiUsage.NONE);
+            return failed(ticket, ChatAiUsage.NONE, null);
         }
         if (!answer.onTopic()) {
             refund(ticket, CAUSE_OFF_TOPIC);
             usageRecorder.record(answer.model(), ChatConstants.STATUS_REFUSED, answer.usage());
-            return new ChatReply(ChatPrompts.refusal(input.language()), false, quotaService.snapshot(ticket));
+            return new ChatReply(ChatPrompts.refusal(input.language(), input.message()), false, quotaService.snapshot(ticket));
         }
         usageRecorder.record(answer.model(), ChatConstants.STATUS_OK, answer.usage());
         return new ChatReply(answer.markdown(), true, quotaService.snapshot(ticket));
     }
 
-    private ChatReply failed(ChatQuotaTicket ticket, ChatAiUsage usage) {
+    private ChatReply failed(ChatQuotaTicket ticket, ChatAiUsage usage, ChatAiFailureReason reason) {
         refund(ticket, CAUSE_PROVIDER);
-        usageRecorder.record(properties.getModel(), ChatConstants.STATUS_FAILED, usage);
+        usageRecorder.recordFailure(properties.getModel(), usage, reason);
         throw new ChatBusyException();
     }
 
