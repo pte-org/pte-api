@@ -5,24 +5,16 @@ import com.pte.chat.internal.config.ChatAiConfig;
 import com.pte.chat.internal.config.ChatAiProperties;
 import com.pte.chat.internal.config.ChatGeminiConfig;
 import com.pte.chat.internal.constant.ChatConstants;
-import com.pte.chat.internal.controller.ChatConsentController;
 import com.pte.chat.internal.controller.ChatController;
 import com.pte.chat.internal.controller.ChatAdminUsageController;
-import com.pte.chat.internal.controller.ChatHistoryController;
 import com.pte.chat.internal.service.report.ChatUsageReportService;
-import com.pte.chat.internal.service.privacy.ChatStudentDataService;
-import com.pte.chat.internal.repository.ChatAnswerCacheRepository;
-import com.pte.chat.internal.repository.ChatMessageRepository;
-import com.pte.chat.internal.repository.ChatSessionRepository;
+import com.pte.chat.internal.service.usage.ChatUsageDailyRepository;
+import com.pte.chat.internal.service.usage.ChatUsageRecorder;
 import com.pte.chat.internal.service.ChatObservability;
 import com.pte.chat.internal.service.ChatService;
-import com.pte.chat.internal.service.cache.ChatAnswerCacheService;
-import com.pte.chat.internal.service.consent.ChatConsentService;
-import com.pte.chat.internal.service.retention.ChatRetentionService;
 import com.pte.chat.internal.service.quota.ChatQuotaRepository;
 import com.pte.chat.internal.service.quota.ChatQuotaService;
 import com.pte.chat.internal.service.session.ChatConcurrencyGate;
-import com.pte.chat.internal.service.session.ChatSessionService;
 import com.pte.practice.PracticeEntitlementGate;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -43,8 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 /**
- * Plan AD-11: with {@code chat.ai.enabled} off, no chat bean exists and the app boots without a key. JPA
- * repositories and entities are exempt (V7 always exists and Hibernate validates the schema).
+ * Plan AD-11: with {@code chat.ai.enabled} off, no chat bean exists and the app boots without a key.
  */
 class ChatBeanGatingTest {
 
@@ -52,18 +43,13 @@ class ChatBeanGatingTest {
             ChatQuotaRepository.class,
             ChatQuotaService.class,
             ChatObservability.class,
-            ChatSessionService.class,
             ChatConcurrencyGate.class,
-            ChatAnswerCacheService.class,
-            ChatConsentService.class,
-            ChatRetentionService.class,
-            ChatStudentDataService.class,
+            ChatUsageDailyRepository.class,
+            ChatUsageRecorder.class,
             ChatUsageReportService.class,
             ChatAdminUsageController.class,
-            ChatHistoryController.class,
             ChatService.class,
-            ChatController.class,
-            ChatConsentController.class);
+            ChatController.class);
 
     static List<Class<?>> gatedBeans() {
         return GATED_BEANS;
@@ -82,15 +68,12 @@ class ChatBeanGatingTest {
                 .withBean(Clock.class, Clock::systemUTC)
                 .withBean(MeterRegistry.class, SimpleMeterRegistry::new)
                 .withBean(PracticeEntitlementGate.class, () -> mock(PracticeEntitlementGate.class))
-                .withBean(NamedParameterJdbcTemplate.class, () -> mock(NamedParameterJdbcTemplate.class))
-                .withBean(ChatSessionRepository.class, () -> mock(ChatSessionRepository.class))
-                .withBean(ChatMessageRepository.class, () -> mock(ChatMessageRepository.class))
-                .withBean(ChatAnswerCacheRepository.class, () -> mock(ChatAnswerCacheRepository.class));
+                .withBean(NamedParameterJdbcTemplate.class, () -> mock(NamedParameterJdbcTemplate.class));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("gatedBeans")
-    void everyNonJpaChatBeanIsConditionalOnTheEnabledSwitch(Class<?> type) {
+    void everyChatBeanIsConditionalOnTheEnabledSwitch(Class<?> type) {
         ConditionalOnProperty condition = type.getAnnotation(ConditionalOnProperty.class);
 
         assertThat(condition).as("@ConditionalOnProperty on %s", type.getSimpleName()).isNotNull();

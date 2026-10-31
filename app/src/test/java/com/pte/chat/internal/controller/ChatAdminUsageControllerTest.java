@@ -78,14 +78,14 @@ class ChatAdminUsageControllerTest {
     @Test
     void returnsTheDaysForTheRequestedRange() throws Exception {
         when(reportService.report(FROM, TO)).thenReturn(List.of(
-                new ChatUsageDay(FROM, 6, 5, 1, 0, 2, 1000, 2000, 0, new BigDecimal("0.0012"))));
+                new ChatUsageDay(FROM, 6, 5, 1, 0, 1000, 2000, 0, new BigDecimal("0.0012"))));
 
         mvc.perform(get(USAGE).param("from", "2026-10-28").param("to", "2026-10-29"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].date").value("2026-10-28"))
                 .andExpect(jsonPath("$.data[0].messages").value(6))
                 .andExpect(jsonPath("$.data[0].ok").value(5))
-                .andExpect(jsonPath("$.data[0].cacheHits").value(2))
+                .andExpect(jsonPath("$.data[0].cacheHits").doesNotExist())
                 .andExpect(jsonPath("$.data[0].tokensIn").value(1000))
                 .andExpect(jsonPath("$.data[0].estimatedCostUsd").value(0.0012));
         verify(reportService).report(FROM, TO);
