@@ -101,7 +101,7 @@ class ScoringReviewAiDetailTest {
         AiEvaluation low = answer(tenantId);
         AiEvaluation normal = answer(tenantId);
         Page<AiEvaluation> page = new PageImpl<>(List.of(low, normal), PageRequest.of(0, 20), 2);
-        when(answerRepository.findForReview(tenantId, low.getSessionPublicId(), null, null, PageRequest.of(0, 20)))
+        when(answerRepository.findForReview(tenantId, low.getSessionPublicId(), null, null, false, PageRequest.of(0, 20)))
                 .thenReturn(page);
         when(aiDetails.findFlags(tenantId, List.of(low.getAnswerPublicId(), normal.getAnswerPublicId())))
                 .thenReturn(Map.of(low.getAnswerPublicId(), new AiDetailFlags(low.getAnswerPublicId(), true, null)));
@@ -116,8 +116,9 @@ class ScoringReviewAiDetailTest {
     void listCanBeNarrowedToOneAttempt() {
         AiEvaluation mine = answer(tenantId);
         UUID attemptId = mine.getAttemptPublicId();
-        when(answerRepository.findForReview(tenantId, mine.getSessionPublicId(), attemptId, null,
-                PageRequest.of(0, 20))).thenReturn(new PageImpl<>(List.of(mine), PageRequest.of(0, 20), 1));
+        when(answerRepository.findForReview(tenantId, mine.getSessionPublicId(), attemptId, null, false,
+                org.springframework.data.domain.Pageable.unpaged()))
+                .thenReturn(new PageImpl<>(List.of(mine), PageRequest.of(0, 20), 1));
         when(aiDetails.findFlags(tenantId, List.of(mine.getAnswerPublicId()))).thenReturn(Map.of());
 
         var items = service.listAnswers(mine.getSessionPublicId(), attemptId, null, PageRequest.of(0, 20), host)
@@ -132,7 +133,7 @@ class ScoringReviewAiDetailTest {
         AiEvaluation spoken = answer(tenantId);
         AiEvaluation objective = answer(tenantId);
         Page<AiEvaluation> page = new PageImpl<>(List.of(spoken, objective), PageRequest.of(0, 20), 2);
-        when(answerRepository.findForReview(tenantId, spoken.getSessionPublicId(), null, null, PageRequest.of(0, 20)))
+        when(answerRepository.findForReview(tenantId, spoken.getSessionPublicId(), null, null, false, PageRequest.of(0, 20)))
                 .thenReturn(page);
         when(aiDetails.findFlags(tenantId, List.of(spoken.getAnswerPublicId(), objective.getAnswerPublicId())))
                 .thenReturn(Map.of());
@@ -143,6 +144,104 @@ class ScoringReviewAiDetailTest {
 
         assertThat(items.get(0).aiScored()).isTrue();
         assertThat(items.get(1).aiScored()).isFalse();
+    }
+
+    @Test
+    void listRowsFlagUnscoredAnswersAndPendingFilterDropsThem() {
+        AiEvaluation unscored = EvaluationFixtures.ai(tenantId, UUID.randomUUID(), "PERSONAL_INTRODUCTION",
+                ScoringMethod.UNSCORED);
+        AiEvaluation spoken = EvaluationFixtures.ai(tenantId, unscored.getSessionPublicId(), "READ_ALOUD",
+                ScoringMethod.AI_SPEECH);
+        when(answerRepository.findForReview(tenantId, unscored.getSessionPublicId(), null, null, false,
+                PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(unscored, spoken), PageRequest.of(0, 20), 2));
+        when(answerRepository.findForReview(tenantId, unscored.getSessionPublicId(), null,
+                com.pte.scoring.domain.enums.ScoringAnswerStatus.PENDING, true, PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(spoken), PageRequest.of(0, 20), 1));
+        when(aiDetails.findFlags(org.mockito.ArgumentMatchers.eq(tenantId), org.mockito.ArgumentMatchers.anyList()))
+                .thenReturn(Map.of());
+
+        var all = service.listAnswers(unscored.getSessionPublicId(), null, null, PageRequest.of(0, 20), host).items();
+        var pending = service.listAnswers(unscored.getSessionPublicId(), null, "PENDING", PageRequest.of(0, 20), host)
+                .items();
+
+        assertThat(all.get(0).unscored()).isTrue();
+        assertThat(all.get(1).unscored()).isFalse();
+        assertThat(pending).extracting("unscored").containsExactly(false);
+    }
+
+    @Test
+    void listOfOneAttemptReportsHowManyExpectedItemsWereLeftBlank() {
+        com.pte.attempt.AttemptService attempts = org.mockito.Mockito.mock(com.pte.attempt.AttemptService.class);
+        service = new ScoringReviewService(answerRepository, decoder, mediaService, null, null, attempts, aiDetails,
+                eligibility, null, contentReader, com.pte.TestClocks.fixed());
+        AiEvaluation mine = answer(tenantId);
+        UUID sessionId = mine.getSessionPublicId();
+        UUID attemptId = mine.getAttemptPublicId();
+        var expected = List.of(
+                new com.pte.attempt.dto.response.AttemptGradingItemView(mine.getItemPublicId(), UUID.randomUUID(), "DESCRIBE_IMAGE", 2),
+                new com.pte.attempt.dto.response.AttemptGradingItemView(UUID.randomUUID(), UUID.randomUUID(), "READ_ALOUD"),
+                new com.pte.attempt.dto.response.AttemptGradingItemView(UUID.randomUUID(), UUID.randomUUID(), "RETELL_LECTURE"));
+        when(answerRepository.findForReview(tenantId, sessionId, attemptId, null, false,
+                org.springframework.data.domain.Pageable.unpaged()))
+                .thenReturn(new PageImpl<>(List.of(mine), PageRequest.of(0, 20), 1));
+        when(aiDetails.findFlags(tenantId, List.of(mine.getAnswerPublicId()))).thenReturn(Map.of());
+        when(attempts.getGradingCoverage(List.of(attemptId), sessionId, tenantId)).thenReturn(
+                Map.of(attemptId, new com.pte.attempt.dto.response.AttemptGradingCoverageView(attemptId, expected)));
+        when(answerRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndDeletedFalse(tenantId, sessionId,
+                attemptId)).thenReturn(List.of(mine));
+
+        var response = service.listAnswers(sessionId, attemptId, null, PageRequest.of(0, 20), host);
+
+        assertThat(response.expectedCount()).isEqualTo(3);
+        assertThat(response.answeredCount()).isEqualTo(1);
+        assertThat(response.items()).singleElement().extracting(item -> item.questionNumber()).isEqualTo(3);
+    }
+
+    @Test
+    void listOfOneAttemptIsOrderedByQuestionNumberAcrossPages() {
+        com.pte.attempt.AttemptService attempts = org.mockito.Mockito.mock(com.pte.attempt.AttemptService.class);
+        service = new ScoringReviewService(answerRepository, decoder, mediaService, null, null, attempts, aiDetails,
+                eligibility, null, contentReader, com.pte.TestClocks.fixed());
+        AiEvaluation third = answer(tenantId);
+        AiEvaluation first = EvaluationFixtures.ai(tenantId, third.getSessionPublicId(), "READ_ALOUD",
+                ScoringMethod.AI_SPEECH);
+        UUID sessionId = third.getSessionPublicId();
+        UUID attemptId = third.getAttemptPublicId();
+        var expected = List.of(
+                new com.pte.attempt.dto.response.AttemptGradingItemView(first.getItemPublicId(), UUID.randomUUID(), "READ_ALOUD", 0),
+                new com.pte.attempt.dto.response.AttemptGradingItemView(third.getItemPublicId(), UUID.randomUUID(), "DESCRIBE_IMAGE", 2));
+        // Repository order is newest first; the host still sees question 1 before question 3, on page one.
+        when(answerRepository.findForReview(tenantId, sessionId, attemptId, null, false,
+                org.springframework.data.domain.Pageable.unpaged()))
+                .thenReturn(new PageImpl<>(List.of(third, first)));
+        when(aiDetails.findFlags(org.mockito.ArgumentMatchers.eq(tenantId), org.mockito.ArgumentMatchers.anyList()))
+                .thenReturn(Map.of());
+        when(attempts.getGradingCoverage(List.of(attemptId), sessionId, tenantId)).thenReturn(
+                Map.of(attemptId, new com.pte.attempt.dto.response.AttemptGradingCoverageView(attemptId, expected)));
+        when(answerRepository.findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndDeletedFalse(tenantId, sessionId,
+                attemptId)).thenReturn(List.of(third, first));
+
+        var firstPage = service.listAnswers(sessionId, attemptId, null, PageRequest.of(0, 1), host);
+        var secondPage = service.listAnswers(sessionId, attemptId, null, PageRequest.of(1, 1), host);
+
+        assertThat(firstPage.items()).extracting(item -> item.questionNumber()).containsExactly(1);
+        assertThat(secondPage.items()).extracting(item -> item.questionNumber()).containsExactly(3);
+        assertThat(firstPage.totalElements()).isEqualTo(2);
+    }
+
+    @Test
+    void listAcrossTheWholeSessionHasNoCoverageCounts() {
+        AiEvaluation mine = answer(tenantId);
+        when(answerRepository.findForReview(tenantId, mine.getSessionPublicId(), null, null, false,
+                PageRequest.of(0, 20))).thenReturn(new PageImpl<>(List.of(mine), PageRequest.of(0, 20), 1));
+        when(aiDetails.findFlags(tenantId, List.of(mine.getAnswerPublicId()))).thenReturn(Map.of());
+
+        var response = service.listAnswers(mine.getSessionPublicId(), null, null, PageRequest.of(0, 20), host);
+
+        assertThat(response.expectedCount()).isNull();
+        assertThat(response.answeredCount()).isNull();
+        assertThat(response.items()).singleElement().extracting(item -> item.questionNumber()).isNull();
     }
 
     private AiEvaluation answer(UUID answerTenantId) {
