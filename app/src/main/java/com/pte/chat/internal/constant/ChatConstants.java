@@ -38,35 +38,19 @@ public final class ChatConstants {
     public static final String CHAT_PATH = "/api/v1/student/chat";
     public static final String MESSAGES_PATH = "/messages";
     public static final String QUOTA_PATH = "/quota";
-    public static final String LATEST_SESSION_PATH = "/sessions/latest";
-    public static final String CONSENT_PATH = "/consent";
-    public static final String HISTORY_PATH = "/history";
     public static final String ADMIN_USAGE_PATH = "/api/v1/admin/chat/usage";
+    public static final String ADMIN_STUDENTS_PATH = "/students";
 
-    /**
-     * The privacy text a student agrees to before using chat. Bump it whenever that text changes in a way the
-     * student should see again; everyone is then asked once more. Kept in step with the web app's consent copy.
-     */
-    public static final String CONSENT_POLICY_VERSION = "2026-10-29";
 
-    /** Most messages the "latest session" endpoint returns, so a very long conversation cannot bloat a reload. */
-    public static final int DISPLAY_MESSAGE_LIMIT = 50;
 
     /** Stable machine codes the web client maps to its own copy; the English user messages are only a fallback. */
     public static final String ERR_QUOTA_EXCEEDED = "CHAT_QUOTA_EXCEEDED";
     public static final String ERR_REQUEST_IN_FLIGHT = "CHAT_REQUEST_IN_FLIGHT";
     public static final String ERR_BUSY = "CHAT_BUSY";
-    public static final String ERR_SESSION_NOT_FOUND = "CHAT_SESSION_NOT_FOUND";
     public static final String ERR_INVALID_REQUEST = "CHAT_INVALID_REQUEST";
-    public static final String ERR_CONSENT_REQUIRED = "CHAT_CONSENT_REQUIRED";
 
     /** Defaults for {@code chat.ai.retention-*}; the privacy hand-off fixes 12 months of text and 30 days of cache. */
     public static final String DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com";
-    public static final int DEFAULT_CACHE_MAX_QUESTION_CHARS = 300;
-    public static final int DEFAULT_RETENTION_CONTENT_MONTHS = 12;
-    public static final int DEFAULT_RETENTION_CACHE_DAYS = 30;
-    public static final int DEFAULT_RETENTION_BATCH_SIZE = 1_000;
-    public static final String RETENTION_CRON_PROPERTY = "${chat.ai.retention-cron:0 30 3 * * *}";
 
     /** Student-facing error messages; the code above is what the web client keys on. */
     public static final String BUSY_MESSAGE =
@@ -75,32 +59,32 @@ public final class ChatConstants {
             "You have used all of today's chat messages. Please come back after the reset time.";
     public static final String REQUEST_IN_FLIGHT_MESSAGE =
             "Your previous question is still being answered. Please wait for it to finish.";
-    public static final String CONSENT_REQUIRED_MESSAGE =
-            "Please read and accept the chat privacy notice before you use the assistant.";
-    public static final String SESSION_NOT_FOUND_MESSAGE ="This chat could not be found. Please start a new chat.";
     /** Takes the field detail below, never the value: the value may be a student's private text. */
     public static final String INVALID_REQUEST_MESSAGE_TEMPLATE = "Your message could not be sent: %s.";
 
-    public static final String DETAIL_SESSION_ID_INVALID = "session id is invalid";
     public static final String DETAIL_MESSAGE_EMPTY = "message is empty";
     public static final String DETAIL_MESSAGE_TOO_LONG = "message is too long";
     public static final String DETAIL_MESSAGE_UNSUPPORTED_CHARS = "message has unsupported characters";
     public static final String DETAIL_TASK_TYPE_UNSUPPORTED = "task type is not supported";
     /** Longest exercise text sent as context; the web client cuts at the same length (shared contract file). */
     public static final int EXERCISE_PROMPT_MAX_CHARS = 1500;
+    public static final String DETAIL_HISTORY_INVALID = "history is invalid";
+    public static final String HISTORY_ROLE_USER = "user";
+    public static final String HISTORY_ROLE_ASSISTANT = "assistant";
+    /** One earlier turn: as long as an answer may be, so a real answer can always be sent back as context. */
+    public static final int HISTORY_ITEM_MAX_CHARS = MAX_ANSWER_CHARS;
+    /** All earlier turns together, so a long conversation cannot grow the provider bill without limit. */
+    public static final int HISTORY_TOTAL_MAX_CHARS = 24000;
     public static final String DETAIL_LANGUAGE_UNSUPPORTED = "language is not supported";
-    public static final String DETAIL_CONSENT_VERSION_MISMATCH = "the privacy notice has changed, please read it again";
     public static final String DETAIL_REPORT_RANGE_INVALID = "the date range must start before it ends and cover at most a year";
-    public static final String DETAIL_AGE_NOT_CONFIRMED ="age or guardian consent is not confirmed";
 
     /** Bean validation messages for the request body. */
-    public static final String SESSION_ID_REQUIRED_MESSAGE = "sessionId is required";
     public static final String MESSAGE_REQUIRED_MESSAGE = "message is required";
-    public static final String POLICY_VERSION_REQUIRED_MESSAGE = "policyVersion is required";
-    public static final String AGE_CONFIRMED_REQUIRED_MESSAGE = "ageConfirmed is required";
+    public static final String HISTORY_TOO_LONG_MESSAGE = "history has too many messages";
+    /** Most entries the request body may carry; the validator then keeps only the newest few. */
+    public static final int HISTORY_MAX_ITEMS = 100;
 
     /** Keys of the {@code data} object sent with a quota-exceeded error. */
-    public static final String DATA_POLICY_VERSION = "policyVersion";
     public static final String DATA_RESET_AT = "resetAt";
     public static final String DATA_LIMIT = "limit";
     public static final String DATA_REMAINING = "remaining";
@@ -140,13 +124,10 @@ public final class ChatConstants {
     public static final String CONFIG_NOT_NEGATIVE_TEMPLATE ="%s must be set and not negative";
     public static final String CONFIG_AT_LEAST_ONE_TEMPLATE ="%s must be at least 1 (was %d)";
     public static final String CONFIG_TEMPERATURE_TEMPLATE = "chat.ai.temperature must be between %s and %s";
-    public static final String CONFIG_RETENTION_MONTHS_MAX_TEMPLATE =
-            "chat.ai.retention-content-months must be at most %d (the published privacy notice says at most that long)";
     public static final String CONFIG_MAX_INPUT_TEMPLATE =
             "chat.ai.max-input-chars must be at most %d (the question column length)";
     public static final String CONFIG_MODEL_UNSUPPORTED_TEMPLATE =
             "chat.ai.model '%s' is not supported: only these families are verified (thinking off or minimal): %s";
-    public static final String SHA256_UNAVAILABLE_MESSAGE = "SHA-256 is always available";
 
     private ChatConstants() {
     }
