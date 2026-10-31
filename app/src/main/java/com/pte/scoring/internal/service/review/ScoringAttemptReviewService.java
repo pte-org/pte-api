@@ -3,6 +3,7 @@ package com.pte.scoring.internal.service.review;
 import com.pte.scoring.internal.service.examiner.AttemptExaminerProgressReader;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptOwnerView;
+import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.identity.IdentityService;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.internal.dto.response.AttemptExaminerProgress;
@@ -48,6 +49,12 @@ public class ScoringAttemptReviewService {
                 sessionPublicId)) {
             countsByAttempt.computeIfAbsent(row.attemptPublicId(), id -> new EnumMap<>(ScoringAnswerStatus.class))
                     .put(row.status(), (int) row.count());
+        }
+        // An attempt that answered nothing (or only non-AI items) has no AI rows but is still a submission.
+        for (AttemptSummaryView submitted : attemptService.getSubmittedAttemptsForSession(sessionPublicId,
+                caller.tenantId())) {
+            countsByAttempt.computeIfAbsent(submitted.attemptPublicId(),
+                    id -> new EnumMap<>(ScoringAnswerStatus.class));
         }
         if (countsByAttempt.isEmpty()) {
             return List.of();
