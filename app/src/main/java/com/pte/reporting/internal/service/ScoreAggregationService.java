@@ -85,7 +85,7 @@ public class ScoreAggregationService {
         AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
         ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.examDefinitionPublicId());
         return aggregateWithScores(attemptPublicId,
-                averageScoresByTaskType(answers, ReportScoringAnswerView::selectedScore), context, template.items());
+                averageScoresByTaskType(answers, ReportScoringAnswerView::selectedScore), context, template);
     }
 
     /**
@@ -99,7 +99,7 @@ public class ScoreAggregationService {
         ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.examDefinitionPublicId());
         AttemptScoreSummary summary = aggregateWithScores(attemptPublicId,
                 averageScoresByTaskType(answers, ReportScoringAnswerView::provisionalScore), context,
-                template.items());
+                template);
         boolean usesUnselected = answers.stream()
                 .anyMatch(answer -> answer.selectedScore() == null && answer.provisionalScore() != null);
         return new ProvisionalScoreSummary(summary, usesUnselected);
@@ -122,7 +122,7 @@ public class ScoreAggregationService {
             AttemptScoreSummary summary = aggregateWithScores(attemptPublicId,
                     averageScoresByTaskType(answersByAttempt.getOrDefault(attemptPublicId, List.of()),
                             ReportScoringAnswerView::selectedScore),
-                    context, template.items());
+                    context, template);
             results.put(attemptPublicId, new ReportScoreAggregation(context, summary));
         }
         return Map.copyOf(results);
@@ -133,25 +133,49 @@ public class ScoreAggregationService {
         List<ScoredAnswerView> answers = scoringService.getScoredAnswersForAttempt(attemptPublicId, tenantId);
         AttemptScoreContextView context = attemptService.getScoreContext(attemptPublicId);
         ExamDefinitionResponse template = examDefinitionService.getByPublicId(context.examDefinitionPublicId());
-        return aggregateWithScores(attemptPublicId, averageRawScoresByTaskType(answers), context, template.items());
+        return aggregateWithScores(attemptPublicId, averageRawScoresByTaskType(answers), context, template);
     }
 
     private AttemptScoreSummary aggregateWithScores(UUID attemptPublicId, Map<String, BigDecimal> avgRawByTaskType,
-            AttemptScoreContextView context, List<ExamDefinitionItemResponse> templateItems) {
+            AttemptScoreContextView context, ExamDefinitionResponse template) {
+        List<ExamDefinitionItemResponse> templateItems = template.items();
+        Set<String> testedSkills = "CUSTOM".equalsIgnoreCase(template.templatePolicy())
+                ? testedSkills(context.testedSections(), templateItems)
+                : context.testedSections();
         Map<Skill, SkillScore> skillScores = new EnumMap<>(Skill.class);
         for (Skill skill : Skill.values()) {
-            if (context.testedSections().contains(skill.name())) {
+            if (testedSkills.contains(skill.name())) {
                 skillScores.put(skill, computeWeighted(templateItems, avgRawByTaskType, SKILL_WEIGHT_ACCESSORS.get(skill)));
             }
         }
 
-        boolean allFourSkillsTested = Set.of("SPEAKING", "WRITING", "READING", "LISTENING")
-                .stream().allMatch(section -> context.testedSections().contains(section));
+        boolean allFourSkillsTested = testedSkills.containsAll(
+                Set.of("SPEAKING", "WRITING", "READING", "LISTENING"));
         SkillScore overall = allFourSkillsTested
                 ? computeWeighted(templateItems, avgRawByTaskType, ExamDefinitionItemResponse::overallWeight)
                 : null;
 
         return new AttemptScoreSummary(overall, skillScores);
+    }
+
+    /**
+     * Custom templates only: a skill is tested when the exam has a section of that name, or when a task in a
+     * tested section carries weight for it — a host may drop every Reading task yet keep Reading weight on
+     * Writing tasks. Standard templates keep the plain section rule.
+     */
+    private Set<String> testedSkills(Set<String> testedSections, List<ExamDefinitionItemResponse> templateItems) {
+        Set<String> tested = new java.util.HashSet<>(testedSections);
+        for (Skill skill : Skill.values()) {
+            Function<ExamDefinitionItemResponse, BigDecimal> weightOf = SKILL_WEIGHT_ACCESSORS.get(skill);
+            boolean weighted = templateItems.stream()
+                    .filter(item -> testedSections.contains(item.section()))
+                    .map(weightOf)
+                    .anyMatch(weight -> weight != null && weight.signum() > 0);
+            if (weighted) {
+                tested.add(skill.name());
+            }
+        }
+        return tested;
     }
 
     private Map<String, BigDecimal> averageRawScoresByTaskType(List<ScoredAnswerView> answers) {
