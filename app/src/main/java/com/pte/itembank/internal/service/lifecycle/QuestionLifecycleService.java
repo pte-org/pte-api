@@ -96,7 +96,7 @@ public class QuestionLifecycleService {
                         .toList());
         Question saved = questionRepository.save(revision);
         audit(caller, ItembankConstants.AUDIT_REVISION_CREATED, saved,
-                "Created question revision " + saved.getRevisionNumber());
+                String.format(ItembankConstants.AUDIT_SUMMARY_REVISION_CREATED, saved.getRevisionNumber()));
         return toResponse(saved);
     }
 
@@ -134,7 +134,8 @@ public class QuestionLifecycleService {
         if (question.getStatus() == QuestionStatus.APPROVED) question.setEverPublished(true);
         question.setStatus(QuestionStatus.ARCHIVED);
         question.setCurrent(false);
-        audit(caller, ItembankConstants.AUDIT_ARCHIVED, question, "Archived question");
+        audit(caller, ItembankConstants.AUDIT_ARCHIVED, question,
+                ItembankConstants.AUDIT_SUMMARY_ARCHIVED);
         return toResponse(question);
     }
 
@@ -155,7 +156,8 @@ public class QuestionLifecycleService {
                 .existsByRevisionGroupPublicIdAndCurrentTrueAndPublicIdNot(
                         question.getRevisionGroupPublicId(), question.getPublicId());
         question.setCurrent(!groupHasCurrentElsewhere);
-        audit(caller, ItembankConstants.AUDIT_UNARCHIVED, question, "Restored question to draft");
+        audit(caller, ItembankConstants.AUDIT_UNARCHIVED, question,
+                ItembankConstants.AUDIT_SUMMARY_UNARCHIVED);
         return toResponse(question);
     }
 
@@ -171,6 +173,8 @@ public class QuestionLifecycleService {
         applyContent(question, request.title(), request.promptText(), request.audioPromptRef(),
                 request.imagePromptRef(), request.referenceAnswerText(), request.correctAnswerText(),
                 request.minWordCount(), request.maxWordCount(), request.options());
+        boolean wasForExam = question.isAvailableForExam();
+        boolean wasForPractice = question.isAvailableForPractice();
         if (request.availableForPractice() != null) {
             question.setAvailableForPractice(request.availableForPractice());
         }
@@ -182,7 +186,13 @@ public class QuestionLifecycleService {
         }
         validationHelper.validate(question);
         mediaValidator.validate(question, caller);
-        audit(caller, ItembankConstants.AUDIT_UPDATED, question, "Updated question draft");
+        String summary = ItembankConstants.AUDIT_SUMMARY_UPDATED;
+        if (wasForExam != question.isAvailableForExam() || wasForPractice != question.isAvailableForPractice()) {
+            // Moving between exam and practice is a leak-risk decision; keep it visible in the audit trail.
+            summary += String.format(ItembankConstants.AUDIT_SUMMARY_AVAILABILITY_CHANGED, wasForExam,
+                    question.isAvailableForExam(), wasForPractice, question.isAvailableForPractice());
+        }
+        audit(caller, ItembankConstants.AUDIT_UPDATED, question, summary);
         return toResponse(question);
     }
 
@@ -242,13 +252,14 @@ public class QuestionLifecycleService {
         String text = summary == null ? "" : summary;
         auditLogService.record(caller, ItembankConstants.QUESTION_AGGREGATE,
                 String.valueOf(question.getPublicId()), action,
-                text.length() <= 500 ? text : text.substring(0, 500));
+                text.length() <= ItembankConstants.AUDIT_SUMMARY_MAX_LENGTH ? text
+                        : text.substring(0, ItembankConstants.AUDIT_SUMMARY_MAX_LENGTH));
     }
 
     private void deny(CurrentUser caller, UUID aggregateId, String message) {
         if (auditLogService != null && caller != null) {
             auditLogService.recordFailure(caller, ItembankConstants.QUESTION_AGGREGATE,
-                    aggregateId == null ? "unknown" : aggregateId.toString(),
+                    aggregateId == null ? ItembankConstants.AUDIT_UNKNOWN_AGGREGATE : aggregateId.toString(),
                     SharedConstants.AUDIT_AUTHORIZATION_DENIED, message);
         }
         throw new AccessDeniedException(message);

@@ -31,5 +31,7 @@ public record QuestionResponse(
         String deleteBlockReason,
         String pool,
         boolean availableForPractice,
-        boolean availableForExam) {
+        boolean availableForExam,
+        /** True when this question or an earlier revision in its group was ever published. */
+        boolean previouslyPublished) {
 }

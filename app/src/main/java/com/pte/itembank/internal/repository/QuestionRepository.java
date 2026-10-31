@@ -46,7 +46,12 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
               AND (:taskTypeKey IS NULL OR q.taskTypeKey = :taskTypeKey)
               AND (:section IS NULL OR q.taskTypeSection = :section)
               AND (:status IS NULL OR q.status = :status)
-              AND (:pool IS NULL OR q.pool = :pool)
+              AND (:pool IS NULL
+                   OR q.availabilityFlagsExplicit = false AND q.pool = :pool
+                   OR q.availabilityFlagsExplicit = true
+                      AND (:pool = com.pte.itembank.domain.enums.QuestionPool.EXAM AND q.availableForExam = true
+                           OR :pool = com.pte.itembank.domain.enums.QuestionPool.PRACTICE
+                              AND q.availableForPractice = true))
               AND (:query = ''
                    OR q.title IS NOT NULL AND LOWER(q.title) LIKE CONCAT('%', :query, '%')
                    OR q.promptText IS NOT NULL AND LOWER(q.promptText) LIKE CONCAT('%', :query, '%')
@@ -60,7 +65,12 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
               AND (:taskTypeKey IS NULL OR q.taskTypeKey = :taskTypeKey)
               AND (:section IS NULL OR q.taskTypeSection = :section)
               AND (:status IS NULL OR q.status = :status)
-              AND (:pool IS NULL OR q.pool = :pool)
+              AND (:pool IS NULL
+                   OR q.availabilityFlagsExplicit = false AND q.pool = :pool
+                   OR q.availabilityFlagsExplicit = true
+                      AND (:pool = com.pte.itembank.domain.enums.QuestionPool.EXAM AND q.availableForExam = true
+                           OR :pool = com.pte.itembank.domain.enums.QuestionPool.PRACTICE
+                              AND q.availableForPractice = true))
               AND (:query = ''
                    OR q.title IS NOT NULL AND LOWER(q.title) LIKE CONCAT('%', :query, '%')
                    OR q.promptText IS NOT NULL AND LOWER(q.promptText) LIKE CONCAT('%', :query, '%')

@@ -78,6 +78,23 @@ class QuestionRepositoryTest {
     }
 
     @Test
+    void pageQuery_poolFilterFollowsExplicitAvailabilityFlags() {
+        Question movedToPractice = persist("Created as exam", "prompt", "READING", QuestionStatus.DRAFT);
+        movedToPractice.setAvailabilityFlagsExplicit(true);
+        movedToPractice.setAvailableForExam(false);
+        movedToPractice.setAvailableForPractice(true);
+        questionRepository.saveAndFlush(movedToPractice);
+
+        Page<UUID> practiceOnly = questionRepository.findPagePublicIds(
+                null, null, null, QuestionPool.PRACTICE, "", null, PageRequest.of(0, 10));
+        Page<UUID> examOnly = questionRepository.findPagePublicIds(
+                null, null, null, QuestionPool.EXAM, "", null, PageRequest.of(0, 10));
+
+        assertThat(practiceOnly.getContent()).containsExactly(movedToPractice.getPublicId());
+        assertThat(examOnly.getContent()).isEmpty();
+    }
+
+    @Test
     void examGenerationQueries_ignorePracticeQuestions() {
         persist("Exam item", "prompt", "READING", QuestionStatus.APPROVED);
         persist("Practice item", "prompt", "READING", QuestionStatus.APPROVED, QuestionPool.PRACTICE);

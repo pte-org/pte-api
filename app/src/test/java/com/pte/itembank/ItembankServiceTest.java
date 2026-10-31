@@ -7,6 +7,7 @@ import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.request.CreateQuestionRequest;
+import com.pte.itembank.dto.request.UpdateQuestionRequest;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.dto.response.QuestionResponse;
 import com.pte.itembank.dto.response.QuestionStatsResponse;
@@ -605,6 +606,42 @@ class ItembankServiceTest {
         QuestionResponse revision = service.createRevision(publicId, platformAdminCaller);
 
         assertThat(revision.pool()).isEqualTo("PRACTICE");
+        assertThat(revision.previouslyPublished()).isTrue();
+    }
+
+    @Test
+    void update_draftAvailabilityFlags_movesQuestionBetweenExamAndPractice() {
+        UUID publicId = UUID.randomUUID();
+        Question draft = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        draft.setPublicId(publicId);
+        draft.setStatus(QuestionStatus.DRAFT);
+        draft.setEverPublished(false);
+        draft.setAvailableForExam(true);
+        draft.setAuthorUserPublicId(platformAdminCaller.userId());
+        when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(draft));
+
+        QuestionResponse response = service.update(publicId, new UpdateQuestionRequest(
+                "title", "prompt", null, null, null, null, null, null, List.of(), null, true, false),
+                platformAdminCaller);
+
+        assertThat(response.availableForPractice()).isTrue();
+        assertThat(response.availableForExam()).isFalse();
+        assertThat(response.pool()).isEqualTo("EXAM");
+        assertThat(response.previouslyPublished()).isFalse();
+        assertThat(draft.isAvailabilityFlagsExplicit()).isTrue();
+    }
+
+    @Test
+    void update_approvedQuestionAvailability_rejected() {
+        UUID publicId = UUID.randomUUID();
+        Question approved = questionWithOptions(PteTaskType.READ_ALOUD, Visibility.SHARED, null, 0);
+        approved.setPublicId(publicId);
+        approved.setAuthorUserPublicId(platformAdminCaller.userId());
+        when(questionRepository.findWithOptionsByPublicId(publicId)).thenReturn(Optional.of(approved));
+
+        assertThatThrownBy(() -> service.update(publicId, new UpdateQuestionRequest(
+                "title", "prompt", null, null, null, null, null, null, List.of(), null, true, false),
+                platformAdminCaller)).isInstanceOf(InvalidQuestionStatusTransitionException.class);
     }
 
     @Test

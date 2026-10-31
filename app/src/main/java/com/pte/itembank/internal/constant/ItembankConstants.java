@@ -85,6 +85,21 @@ public final class ItembankConstants {
     public static final String AUDIT_ARCHIVED = "ARCHIVED";
     public static final String AUDIT_UNARCHIVED = "UNARCHIVED";
 
+    /** Audit trail summaries for question lifecycle actions (stored, not shown to end users). */
+    public static final String AUDIT_SUMMARY_CREATED = "Created question draft";
+    public static final String AUDIT_SUMMARY_UPDATED = "Updated question draft";
+    public static final String AUDIT_SUMMARY_AVAILABILITY_CHANGED =
+            "; availability exam %s->%s, practice %s->%s";
+    public static final String AUDIT_SUMMARY_REVISION_CREATED = "Created question revision %d";
+    public static final String AUDIT_SUMMARY_SUBMITTED = "Submitted question for approval";
+    public static final String AUDIT_SUMMARY_APPROVED = "Approved question";
+    public static final String AUDIT_SUMMARY_REJECTED = "Rejected question: %s";
+    public static final String AUDIT_SUMMARY_PUBLISHED = "Published question";
+    public static final String AUDIT_SUMMARY_ARCHIVED = "Archived question";
+    public static final String AUDIT_SUMMARY_UNARCHIVED = "Restored question to draft";
+    public static final String AUDIT_UNKNOWN_AGGREGATE = "unknown";
+    public static final int AUDIT_SUMMARY_MAX_LENGTH = 500;
+
     public static final String OPTION_TEXT_REQUIRED = "Option text is required";
     public static final String TASK_TYPE_REQUIRED = "Task type is required";
     public static final String TITLE_REQUIRED = "Title is required";

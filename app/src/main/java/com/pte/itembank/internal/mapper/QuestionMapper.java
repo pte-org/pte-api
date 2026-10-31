@@ -48,7 +48,8 @@ public final class QuestionMapper {
                 QuestionLifecyclePolicy.canArchive(question),
                 QuestionLifecyclePolicy.canDeleteDraft(question) ? null : ItembankConstants.QUESTION_DELETE_NOT_ALLOWED,
                 question.getPool().name(),
-                question.isAvailableForPractice(), question.isAvailableForExam());
+                question.isAvailableForPractice(), question.isAvailableForExam(),
+                Boolean.TRUE.equals(question.getEverPublished()) || question.getSupersedesPublicId() != null);
     }
 
     private static OptionResponse toOption(QuestionOption option) {
