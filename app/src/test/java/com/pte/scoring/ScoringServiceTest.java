@@ -1,14 +1,12 @@
 package com.pte.scoring;
 
 import com.pte.scoring.dto.response.AiEligibleAttemptView;
-import com.pte.scoring.dto.response.ScoredAnswerView;
 import com.pte.scoring.internal.service.examiner.ExaminerWorkQueryService;
 import com.pte.scoring.internal.service.ai.PracticeAiScoringService;
 import com.pte.scoring.internal.service.selection.ScorePublicationLockService;
 import com.pte.scoring.internal.service.selection.ScoreSourceSelectionService;
 import com.pte.scoring.internal.service.staff.ScoringEligibilityQueryService;
 import com.pte.scoring.internal.service.review.ScoringReviewReadQueryService;
-import com.pte.scoring.internal.service.selection.ScoredAnswerQueryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,9 +28,6 @@ import static org.mockito.Mockito.when;
 class ScoringServiceTest {
 
     @Mock
-    private ScoredAnswerQueryService scoredAnswerQueryService;
-
-    @Mock
     private ScoringEligibilityQueryService scoringEligibilityQueryService;
 
     @Mock
@@ -51,52 +46,7 @@ class ScoringServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ScoringService(scoredAnswerQueryService, scoringEligibilityQueryService, examinerWorkQueryService, scoringReviewReadQueryService, scoreSourceSelectionService, scorePublicationLockService, null, null);
-    }
-
-    @Test
-    void getScoredAnswersForAttempt_delegatesToQueryService() {
-        UUID attemptPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-
-        ScoredAnswerView answer1 = new ScoredAnswerView("MC_READING_SINGLE", 85);
-        ScoredAnswerView answer2 = new ScoredAnswerView("READ_ALOUD", 75);
-
-        when(scoredAnswerQueryService.findScoredForAttempt(attemptPublicId, tenantId))
-                .thenReturn(List.of(answer1, answer2));
-
-        List<ScoredAnswerView> results = service.getScoredAnswersForAttempt(attemptPublicId, tenantId);
-
-        assertThat(results).hasSize(2);
-        assertThat(results.get(0)).isEqualTo(answer1);
-        assertThat(results.get(1)).isEqualTo(answer2);
-        verify(scoredAnswerQueryService).findScoredForAttempt(attemptPublicId, tenantId);
-    }
-
-    @Test
-    void getScoredAnswersForAttempt_returnsEmptyList() {
-        UUID attemptPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-
-        when(scoredAnswerQueryService.findScoredForAttempt(attemptPublicId, tenantId))
-                .thenReturn(List.of());
-
-        List<ScoredAnswerView> results = service.getScoredAnswersForAttempt(attemptPublicId, tenantId);
-
-        assertThat(results).isEmpty();
-    }
-
-    @Test
-    void getScoredAnswersForAttempt_passesArgumentsUnchanged() {
-        UUID attemptPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-
-        when(scoredAnswerQueryService.findScoredForAttempt(attemptPublicId, tenantId))
-                .thenReturn(List.of());
-
-        service.getScoredAnswersForAttempt(attemptPublicId, tenantId);
-
-        verify(scoredAnswerQueryService).findScoredForAttempt(attemptPublicId, tenantId);
+        service = new ScoringService(scoringEligibilityQueryService, examinerWorkQueryService, scoringReviewReadQueryService, scoreSourceSelectionService, scorePublicationLockService, null, null);
     }
 
     @Test
@@ -146,7 +96,7 @@ class ScoringServiceTest {
     }
 
     private ScoringService serviceWith(PracticeAiScoringService practice) {
-        return new ScoringService(scoredAnswerQueryService, scoringEligibilityQueryService,
+        return new ScoringService(scoringEligibilityQueryService,
                 examinerWorkQueryService, scoringReviewReadQueryService, scoreSourceSelectionService,
                 scorePublicationLockService, null, practice);
     }
