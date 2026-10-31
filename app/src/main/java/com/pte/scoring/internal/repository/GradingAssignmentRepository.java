@@ -27,6 +27,9 @@ public interface GradingAssignmentRepository extends JpaRepository<GradingAssign
     List<GradingAssignment> findByTenantIdAndSessionPublicIdAndExaminerPublicId(
             UUID tenantId, UUID sessionPublicId, UUID examinerPublicId);
 
+    java.util.Optional<GradingAssignment> findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndDeletedFalse(
+            UUID tenantId, UUID sessionPublicId, UUID attemptPublicId);
+
     List<GradingAssignment> findByTenantIdAndSessionPublicIdAndDeletedFalse(UUID tenantId,
             UUID sessionPublicId);
 

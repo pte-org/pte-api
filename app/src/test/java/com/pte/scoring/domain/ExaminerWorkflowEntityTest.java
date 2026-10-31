@@ -55,6 +55,62 @@ class ExaminerWorkflowEntityTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    void aCarriedOverDraftBelongsToTheNewExaminerAndStaysFlaggedUntilItIsSavedAgain() {
+        UUID previous = UUID.randomUUID();
+        UUID next = UUID.randomUUID();
+        Instant now = Instant.parse("2026-09-23T10:00:00Z");
+        ExaminerEvaluation draft = ExaminerEvaluation.draft(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), previous, 9L, 55, null, ExaminerDecisionKind.MANUAL, "rv-1", null, now);
+
+        draft.carryOverTo(next);
+
+        assertThat(draft.getExaminerPublicId()).isEqualTo(next);
+        assertThat(draft.getCarriedOverFromExaminerPublicId()).isEqualTo(previous);
+        assertThat(draft.isCarriedOver()).isTrue();
+        assertThat(draft.getScore()).isEqualTo(55);
+
+        draft.updateDraft(55, null, ExaminerDecisionKind.MANUAL, "rv-1", null, now.plusSeconds(5));
+
+        assertThat(draft.isCarriedOver()).isFalse();
+        assertThat(draft.getDraftVersion()).isEqualTo(2L);
+    }
+
+    @Test
+    void aSubmittedScoreCannotBeCarriedOver() {
+        ExaminerEvaluation submitted = score(80, UUID.randomUUID());
+
+        assertThatThrownBy(() -> submitted.carryOverTo(UUID.randomUUID())).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void reassigningAssignmentRestartsItsProgressAndRefusesFinalizedWork() {
+        UUID previous = UUID.randomUUID();
+        UUID next = UUID.randomUUID();
+        GradingAssignment fresh = assignment(previous);
+        fresh.reassign(next);
+        assertThat(fresh.getExaminerPublicId()).isEqualTo(next);
+        assertThat(fresh.isStarted()).isFalse();
+
+        GradingAssignment started = assignment(previous);
+        started.start(Instant.now());
+        long version = started.getWorkVersion();
+        started.reassign(next);
+        assertThat(started.getStatus()).isEqualTo(com.pte.scoring.domain.enums.ExaminerWorkflowStatus.PENDING);
+        assertThat(started.getStartedAt()).isNull();
+        assertThat(started.getWorkVersion()).isGreaterThan(version);
+
+        GradingAssignment finalized = assignment(previous);
+        finalized.start(Instant.now());
+        finalized.finalizeGrading(Instant.now());
+        assertThatThrownBy(() -> finalized.reassign(next)).isInstanceOf(IllegalStateException.class);
+    }
+
+    private GradingAssignment assignment(UUID examiner) {
+        return new GradingAssignment(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), examiner, 2,
+                UUID.randomUUID(), Instant.now());
+    }
+
     private ExaminerEvaluation score(int score, UUID examiner) {
         return ExaminerEvaluation.submittedDirectly(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 UUID.randomUUID(), examiner, score, Instant.now(), null, null, null, null, null, null);
