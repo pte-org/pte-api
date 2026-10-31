@@ -6,6 +6,8 @@ import com.pte.identity.internal.dto.request.auth.RefreshRequest;
 import com.pte.identity.internal.dto.request.auth.ChangePasswordRequest;
 import com.pte.identity.internal.dto.request.auth.PasswordResetConfirmRequest;
 import com.pte.identity.internal.dto.request.auth.PasswordResetRequest;
+import com.pte.identity.internal.dto.request.auth.PasswordResetValidateRequest;
+import com.pte.identity.internal.dto.response.PasswordResetTokenStatus;
 import com.pte.identity.internal.service.PasswordResetDispatcher;
 import com.pte.identity.internal.service.PasswordResetService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -94,6 +96,13 @@ public class AuthController {
         passwordResetDispatcher.requestAsync(request.email(),
                 ClientAddress.resolve(http.getHeader("X-Forwarded-For"), http.getRemoteAddr()));
         return ApiResponse.success(null);
+    }
+
+    /** Read-only check, so the reset page can warn about a spent or expired link before anything is typed. */
+    @PostMapping("/password-reset/validate")
+    public ApiResponse<PasswordResetTokenStatus> validatePasswordReset(
+            @Valid @RequestBody PasswordResetValidateRequest request) {
+        return ApiResponse.success(new PasswordResetTokenStatus(passwordResetService.isUsable(request.token())));
     }
 
     @PostMapping("/password-reset/confirm")

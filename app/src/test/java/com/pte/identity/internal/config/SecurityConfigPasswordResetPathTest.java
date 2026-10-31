@@ -24,6 +24,7 @@ class SecurityConfigPasswordResetPathTest {
 
         assertThat(publicPaths()).anyMatch(p -> matcher.match(p, "/api/v1/auth/password-reset/request"));
         assertThat(publicPaths()).anyMatch(p -> matcher.match(p, "/api/v1/auth/password-reset/confirm"));
+        assertThat(publicPaths()).anyMatch(p -> matcher.match(p, "/api/v1/auth/password-reset/validate"));
     }
 
     @Test

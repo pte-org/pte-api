@@ -2,6 +2,7 @@ package com.pte.identity.internal.controller;
 
 import com.pte.identity.internal.dto.request.auth.PasswordResetConfirmRequest;
 import com.pte.identity.internal.dto.request.auth.PasswordResetRequest;
+import com.pte.identity.internal.dto.request.auth.PasswordResetValidateRequest;
 import com.pte.identity.internal.service.AuthService;
 import com.pte.identity.internal.service.PasswordResetDispatcher;
 import com.pte.identity.internal.service.PasswordResetService;
@@ -17,6 +18,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 /** Asking for a reset link is acknowledged at once and handed off; spending a link is handled in the request. */
@@ -70,6 +72,17 @@ class AuthControllerPasswordResetTest {
         controller.confirmPasswordReset(new PasswordResetConfirmRequest("raw", "NewPassword456"));
 
         verify(passwordResetService).confirm("raw", "NewPassword456");
+        verifyNoInteractions(passwordResetDispatcher);
+    }
+
+    @Test
+    void validate_tellsWhetherALinkCanStillBeUsed_withoutSpendingIt() {
+        when(passwordResetService.isUsable("raw")).thenReturn(true);
+        when(passwordResetService.isUsable("spent")).thenReturn(false);
+
+        assertThat(controller.validatePasswordReset(new PasswordResetValidateRequest("raw")).data().valid()).isTrue();
+        assertThat(controller.validatePasswordReset(new PasswordResetValidateRequest("spent")).data().valid()).isFalse();
+
         verifyNoInteractions(passwordResetDispatcher);
     }
 }

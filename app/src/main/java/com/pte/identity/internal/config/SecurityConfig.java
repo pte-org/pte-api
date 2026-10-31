@@ -53,6 +53,7 @@ public class SecurityConfig {
             "/api/v1/auth/login", "/api/v1/auth/login-options",
             "/api/v1/auth/refresh", "/api/v1/auth/logout",
             "/api/v1/auth/password-reset/request", "/api/v1/auth/password-reset/confirm",
+            "/api/v1/auth/password-reset/validate",
             "/actuator/health", "/actuator/health/**", "/ws/**",
             "/api/v1/applications", "/api/v1/plans", "/api/v1/webhooks/payos");
 

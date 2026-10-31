@@ -290,6 +290,61 @@ class PasswordResetServiceTest {
         verify(userRepository, never()).save(any());
     }
 
+    // ---- isUsable: lets the page tell a spent or expired link before anyone types a password ----
+
+    @Test
+    void isUsable_aValidLink_isTrueAndChangesNothing() {
+        User host = account(1L, "host@x.vn");
+        stubMember(host, Role.HOST_ADMIN);
+        tokenFor("raw-token", 1L, NOW.plusSeconds(60));
+        when(userRepository.findByIdAndDeletedFalse(1L)).thenReturn(Optional.of(host));
+
+        assertThat(service.isUsable("raw-token")).isTrue();
+
+        verify(tokenRepository, never()).markUsed(anyLong(), any());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void isUsable_aLinkAlreadySpent_isFalse() {
+        PasswordResetToken token = tokenFor("spent-token", 1L, NOW.plusSeconds(60));
+        token.setUsedAt(NOW.minusSeconds(5));
+
+        assertThat(service.isUsable("spent-token")).isFalse();
+    }
+
+    @Test
+    void isUsable_anExpiredLink_isFalse() {
+        tokenFor("old-token", 1L, NOW.minusSeconds(1));
+
+        assertThat(service.isUsable("old-token")).isFalse();
+    }
+
+    @Test
+    void isUsable_anUnknownLink_isFalse() {
+        when(tokenRepository.findByTokenHash(tokenHasher.hash("nope"))).thenReturn(Optional.empty());
+
+        assertThat(service.isUsable("nope")).isFalse();
+    }
+
+    @Test
+    void isUsable_whenTheAccountCanNoLongerSignIn_isFalse() {
+        User suspended = account(1L, "host@x.vn");
+        suspended.setStatus(UserStatus.SUSPENDED);
+        tokenFor("late-token", 1L, NOW.plusSeconds(60));
+        when(userRepository.findByIdAndDeletedFalse(1L)).thenReturn(Optional.of(suspended));
+
+        assertThat(service.isUsable("late-token")).isFalse();
+    }
+
+    @Test
+    void isUsable_aBlankOrMissingToken_isFalseWithoutLookingAnythingUp() {
+        assertThat(service.isUsable("   ")).isFalse();
+        assertThat(service.isUsable(null)).isFalse();
+
+        verify(tokenRepository, never()).findByTokenHash(anyString());
+    }
+
     // ---- helpers ----
 
     private PasswordResetEmailRequestedEvent capturedEvent() {

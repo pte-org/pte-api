@@ -92,8 +92,26 @@ public class PasswordResetService {
             }
         }
         if (!links.isEmpty()) {
-            eventPublisher.publishEvent(new PasswordResetEmailRequestedEvent(UUID.randomUUID(), normalized, links));
+            eventPublisher.publishEvent(new PasswordResetEmailRequestedEvent(UUID.randomUUID(), normalized, links,
+                    (int) tokenTtl.toMinutes()));
         }
+    }
+
+    /**
+     * Whether a link can still be used, without spending it: lets the page say so as soon as it opens instead of
+     * after someone has typed a new password. A spent, expired, unknown or orphaned link all answer the same.
+     */
+    @Transactional(readOnly = true)
+    public boolean isUsable(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            return false;
+        }
+        Instant now = clock.instant();
+        return tokenRepository.findByTokenHash(tokenHasher.hash(rawToken))
+                .filter(found -> found.getUsedAt() == null && found.getExpiresAt().isAfter(now))
+                .flatMap(found -> userRepository.findByIdAndDeletedFalse(found.getUserId()))
+                .filter(found -> isEligible(found, rolesOf(found)))
+                .isPresent();
     }
 
     @Transactional
