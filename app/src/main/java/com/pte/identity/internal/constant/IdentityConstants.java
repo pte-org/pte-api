@@ -19,7 +19,7 @@ public final class IdentityConstants {
     public static final String EMAIL_ALREADY_USED = "EMAIL_ALREADY_USED";
     public static final String HOST_CONTACT_IS_PLATFORM_ACCOUNT = "HOST_CONTACT_IS_PLATFORM_ACCOUNT";
     public static final String USER_EMAIL_REQUIRED = "USER_EMAIL_REQUIRED";
-    public static final String STUDENT_CREDENTIAL_EMAIL_NOT_ALLOWED = "STUDENT_CREDENTIAL_EMAIL_NOT_ALLOWED";
+    public static final String STUDENT_ATTEMPT_IN_PROGRESS = "STUDENT_ATTEMPT_IN_PROGRESS";
     public static final String INVALID_REFRESH_TOKEN = "INVALID_REFRESH_TOKEN";
     public static final String FORBIDDEN_ROLE_ASSIGNMENT = "FORBIDDEN_ROLE_ASSIGNMENT";
     public static final String FORBIDDEN_USER_MANAGEMENT = "FORBIDDEN_USER_MANAGEMENT";
@@ -49,6 +49,10 @@ public final class IdentityConstants {
     public static final String USER_AGGREGATE = "User";
     public static final String USER_PASSWORD_RESET = "UserPasswordReset";
     public static final String USER_PASSWORD_RESET_SUMMARY = "Authorized administrator reset the password.";
+    public static final String USER_CREDENTIALS_EMAILED = "UserCredentialsEmailed";
+    public static final String USER_CREDENTIALS_EMAILED_SUMMARY = "Authorized administrator e-mailed a temporary password.";
+    public static final String USER_PASSWORD_CHANGED_SELF = "UserPasswordChangedSelf";
+    public static final String USER_PASSWORD_CHANGED_SELF_SUMMARY = "User changed their own password.";
     public static final String USER_PROFILE_UPDATED = "UserProfileUpdated";
     public static final String USER_PROFILE_UPDATED_SUMMARY = "User updated their profile.";
     public static final String INVALID_EXAM_STAFF_QUERY = "INVALID_EXAM_STAFF_QUERY";

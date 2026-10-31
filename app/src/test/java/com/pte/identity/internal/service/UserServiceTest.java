@@ -17,10 +17,10 @@ import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.DuplicateEmailInBatchException;
 import com.pte.identity.internal.exception.EmailAlreadyUsedException;
 import com.pte.identity.internal.exception.ForbiddenPasswordResetException;
-import com.pte.identity.internal.exception.StudentCredentialEmailNotAllowedException;
 import com.pte.identity.internal.exception.UserNotFoundException;
 import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
+import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
@@ -85,6 +85,9 @@ class UserServiceTest {
     @Mock
     private RefreshTokenService refreshTokenService;
 
+    @Mock
+    private StartedAttemptLookup startedAttemptLookup;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private UserService userService;
 
@@ -92,7 +95,7 @@ class UserServiceTest {
     void setUp() {
         userService = new UserService(userRepository, memberRepository, memberDirectory, passwordEncoder,
                 provisioningHelper, bulkCreateWriter, tenancyService, eventPublisher, auditLogService,
-                refreshTokenService);
+                refreshTokenService, startedAttemptLookup);
     }
 
     private User account(Long id, UUID publicId, String oldPassword) {
@@ -549,29 +552,6 @@ class UserServiceTest {
 
         assertThatThrownBy(() -> userService.sendGeneratedCredentials(userPublicId, caller))
                 .isInstanceOf(com.pte.identity.internal.exception.UserEmailRequiredException.class);
-
-        assertThat(user.getCredentialHash()).isEqualTo(hashBefore);
-        verify(userRepository, never()).save(any());
-        verify(eventPublisher, never()).publishEvent(any());
-    }
-
-    @Test
-    void sendGeneratedCredentials_student_isRejectedBeforeHashChange() {
-        UUID userPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-        User user = account(1L, userPublicId, "OldPassword123");
-        String hashBefore = user.getCredentialHash();
-        user.setUsername("tenant.student");
-        user.setEmail("student@tenant.example");
-        OrganizationMember student = memberOf(user, tenantId, Role.STUDENT);
-        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(student);
-
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
-        when(provisioningHelper.canManageTarget(caller, student.getRoles())).thenReturn(true);
-        when(memberDirectory.isExclusivelyOwned(student)).thenReturn(true);
-
-        assertThatThrownBy(() -> userService.sendGeneratedCredentials(userPublicId, caller))
-                .isInstanceOf(StudentCredentialEmailNotAllowedException.class);
 
         assertThat(user.getCredentialHash()).isEqualTo(hashBefore);
         verify(userRepository, never()).save(any());

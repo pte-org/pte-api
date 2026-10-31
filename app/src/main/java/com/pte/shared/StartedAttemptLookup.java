@@ -14,4 +14,7 @@ public interface StartedAttemptLookup {
 
     Set<UUID> findStartedStudentPublicIds(UUID tenantId, List<UUID> sessionPublicIds,
             List<UUID> studentPublicIds);
+
+    /** Whether the Student is taking an exam right now, in any organization. */
+    boolean hasInProgressAttempt(UUID studentPublicId);
 }
