@@ -73,11 +73,15 @@ public class AttemptSummaryQueryService {
     }
 
     private AttemptScoreContextView scoreContext(ExamAttempt attempt) {
-        Set<String> testedSections = contentService.outline(attempt.getExamVersionPublicId()).stream()
+        List<ExamContentService.ExamItemOutline> outline = contentService.outline(attempt.getExamVersionPublicId());
+        Set<String> testedSections = outline.stream()
                 .map(ExamContentService.ExamItemOutline::section)
                 .collect(Collectors.toSet());
+        Map<String, Integer> expectedItemsByTaskType = outline.stream()
+                .filter(item -> item.taskType() != null)
+                .collect(Collectors.toMap(ExamContentService.ExamItemOutline::taskType, item -> 1, Integer::sum));
         return new AttemptScoreContextView(attempt.getExamDefinitionPublicId(), attempt.getExamDefinitionVersion(),
-                testedSections);
+                testedSections, expectedItemsByTaskType);
     }
 
     private static AttemptSummaryView toView(ExamAttempt attempt) {
