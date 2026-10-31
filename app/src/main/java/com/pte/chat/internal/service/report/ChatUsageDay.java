@@ -13,6 +13,7 @@ public record ChatUsageDay(
         int ok,
         int refused,
         int failed,
+        ChatFailureCounts failures,
         long tokensIn,
         long tokensOut,
         long tokensThinking,
