@@ -22,7 +22,6 @@ class ChatExceptionsTest {
                 new ChatQuotaExceededException(new ChatQuotaSnapshot(20, 0, 20, RESET_AT)),
                 new ChatRequestInFlightException(),
                 new ChatBusyException(),
-                new ChatSessionNotFoundException(),
                 new ChatInvalidRequestException("message is too long"));
     }
 
@@ -74,15 +73,6 @@ class ChatExceptionsTest {
 
         assertThat(ex.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
         assertThat(ex.getCode()).isEqualTo(ChatConstants.ERR_BUSY);
-        assertThat(ex.getData()).isNull();
-    }
-
-    @Test
-    void sessionNotFoundIs404() {
-        DomainException ex = new ChatSessionNotFoundException();
-
-        assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(ex.getCode()).isEqualTo(ChatConstants.ERR_SESSION_NOT_FOUND);
         assertThat(ex.getData()).isNull();
     }
 

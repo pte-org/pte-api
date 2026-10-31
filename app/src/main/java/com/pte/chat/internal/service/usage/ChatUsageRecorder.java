@@ -43,7 +43,7 @@ public class ChatUsageRecorder {
 
     public void record(String model, String status, ChatAiUsage usage) {
         try {
-            LocalDate day = LocalDate.now(clock.withZone(ChatConstants.ZONE));
+            LocalDate day = LocalDate.ofInstant(clock.instant(), ChatConstants.ZONE);
             repository.add(day, model, status, usage, cost(usage));
             observability.messageCounted(status);
         } catch (RuntimeException ex) {
