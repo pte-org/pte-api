@@ -1,7 +1,6 @@
 package com.pte.assessment.internal.service.definition;
 
 import com.pte.assessment.domain.ExamDefinition;
-import com.pte.assessment.domain.enums.TemplatePolicy;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskRuntimeProfileService;
@@ -70,17 +69,12 @@ public class ExamDefinitionAdminService {
 
     @Transactional(readOnly = true)
     public List<ExamDefinitionResponse> listAll() {
-        return repository.findAllByOrderByCodeAscVersionDesc().stream().map(ExamDefinitionMapper::toResponse).toList();
+        return repository.findAllByTenantIdIsNullOrderByCodeAscVersionDesc().stream().map(ExamDefinitionMapper::toResponse).toList();
     }
 
     @Transactional(readOnly = true)
     public ExamDefinitionResponse getForEdit(UUID publicId) {
         return ExamDefinitionMapper.toResponse(findByPublicId(publicId));
-    }
-
-    @Transactional(readOnly = true)
-    public boolean isCustomTemplate(UUID publicId) {
-        return findByPublicId(publicId).getTemplatePolicy() == TemplatePolicy.CUSTOM;
     }
 
     /** Creates an empty DRAFT in the next version of a template code family. */
@@ -185,6 +179,6 @@ public class ExamDefinitionAdminService {
     }
 
     private ExamDefinition findByPublicId(UUID publicId) {
-        return repository.findWithItemsByPublicId(publicId).orElseThrow(ExamDefinitionNotFoundException::new);
+        return repository.findWithItemsByPublicIdAndTenantIdIsNull(publicId).orElseThrow(ExamDefinitionNotFoundException::new);
     }
 }

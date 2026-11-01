@@ -260,6 +260,46 @@ class ScoreAggregationServiceTest {
     }
 
     @Test
+    void aggregate_customTemplateKeepsSkillWeightedByTasksOfOtherSections() {
+        // A host dropped every READING task, but the WRITING task still carries all of the Reading weight.
+        stubTestedSections("SPEAKING", "WRITING", "LISTENING");
+        when(examDefinitionService.getByPublicId(TEMPLATE_ID)).thenReturn(new ExamDefinitionResponse(TEMPLATE_ID,
+                "HOST_X", 1, "Host", "ACTIVE", null, List.of(
+                        sectionItem("READ_ALOUD", "SPEAKING", 10, 100, 0, 0, 0),
+                        sectionItem("WRITE_ESSAY", "WRITING", 10, 0, 100, 100, 0),
+                        sectionItem("SUMMARIZE_SPOKEN_TEXT", "LISTENING", 10, 0, 0, 0, 100)),
+                "CUSTOM", UUID.randomUUID(), UUID.randomUUID()));
+        stubAnswers(answer("WRITE_ESSAY", 60));
+
+        AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
+
+        assertThat(summary.skillScores()).containsKey(Skill.READING);
+        assertThat(summary.skillScores().get(Skill.READING).sufficientData()).isTrue();
+        assertThat(summary.overall()).isNotNull();
+    }
+
+    @Test
+    void aggregate_standardTemplateDoesNotReportSkillWithoutItsSection() {
+        stubTestedSections("SPEAKING", "WRITING", "LISTENING");
+        when(examDefinitionService.getByPublicId(TEMPLATE_ID)).thenReturn(new ExamDefinitionResponse(TEMPLATE_ID,
+                "APEUNI_V5", 1, "APEUni", "ACTIVE", null, List.of(
+                        sectionItem("WRITE_ESSAY", "WRITING", 10, 0, 100, 100, 0)),
+                "STANDARD_PTE", null, null));
+        stubAnswers(answer("WRITE_ESSAY", 60));
+
+        AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
+
+        assertThat(summary.skillScores()).doesNotContainKey(Skill.READING);
+        assertThat(summary.overall()).isNull();
+    }
+
+    private ExamDefinitionItemResponse sectionItem(String taskType, String section, int overall, int speaking,
+            int writing, int reading, int listening) {
+        return new ExamDefinitionItemResponse(taskType, section, 0, 1, 1, 0, 0, "AI_SPEECH",
+                bd(overall), bd(speaking), bd(writing), bd(reading), bd(listening));
+    }
+
+    @Test
     void aggregate_allFourSkillsTested_overallUsesOverallWeight() {
         stubTestedSections("SPEAKING", "WRITING", "READING", "LISTENING");
         stubTemplate(item("READ_ALOUD", bd(4), bd(9), bd(0), bd(0), bd(0)));

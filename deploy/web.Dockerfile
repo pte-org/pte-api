@@ -13,7 +13,15 @@ WORKDIR /workspace
 RUN corepack enable
 
 COPY . .
-RUN pnpm install --frozen-lockfile
+# The pnpm store lives in a BuildKit cache mount, so a slow or failed registry
+# download is not lost: the next attempt only fetches what is still missing.
+# Few parallel connections and long timeouts keep the large packages (next, swc,
+# turbo) from timing out on a weak link.
+ENV npm_config_fetch_timeout=600000 \
+    npm_config_fetch_retries=5 \
+    npm_config_fetch_retry_maxtimeout=120000
+RUN --mount=type=cache,target=/pnpm/store \
+    pnpm install --frozen-lockfile --store-dir /pnpm/store --network-concurrency=4
 
 # NEXT_PUBLIC_* is inlined into the client bundle at BUILD time, not read at
 # runtime — passing it as a compose `environment` entry would silently leave the

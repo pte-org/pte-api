@@ -39,7 +39,7 @@ class ExamDefinitionServiceTest {
 
     @Test
     void getActive_noActiveTemplate_throws() {
-        when(repository.findWithItemsByStatus(ExamDefinitionStatus.ACTIVE)).thenReturn(Optional.empty());
+        when(repository.findWithItemsByStatusAndTenantIdIsNull(ExamDefinitionStatus.ACTIVE)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getActive()).isInstanceOf(NoActiveExamDefinitionException.class);
     }
@@ -52,7 +52,7 @@ class ExamDefinitionServiceTest {
         active.setVersion(1);
         active.setName("APEUni V5");
         active.setStatus(ExamDefinitionStatus.ACTIVE);
-        when(repository.findWithItemsByStatus(ExamDefinitionStatus.ACTIVE)).thenReturn(Optional.of(active));
+        when(repository.findWithItemsByStatusAndTenantIdIsNull(ExamDefinitionStatus.ACTIVE)).thenReturn(Optional.of(active));
 
         ExamDefinitionResponse response = service.getActive();
 
@@ -82,5 +82,46 @@ class ExamDefinitionServiceTest {
         ExamDefinitionResponse response = service.getByPublicId(publicId);
 
         assertThat(response.status()).isEqualTo("RETIRED");
+    }
+
+    @Test
+    void findActiveForTenant_returnsPlatformDefaultAndOwnTemplate() {
+        UUID tenantId = UUID.randomUUID();
+        ExamDefinition platform = activeTemplate(null);
+        ExamDefinition own = activeTemplate(tenantId);
+        when(repository.findWithItemsByPublicId(platform.getPublicId())).thenReturn(Optional.of(platform));
+        when(repository.findWithItemsByPublicId(own.getPublicId())).thenReturn(Optional.of(own));
+
+        assertThat(service.findActiveForTenant(platform.getPublicId(), tenantId)).isPresent();
+        assertThat(service.findActiveForTenant(own.getPublicId(), tenantId)).isPresent();
+    }
+
+    @Test
+    void findActiveForTenant_hidesAnotherTenantsTemplate() {
+        ExamDefinition foreign = activeTemplate(UUID.randomUUID());
+        when(repository.findWithItemsByPublicId(foreign.getPublicId())).thenReturn(Optional.of(foreign));
+
+        assertThat(service.findActiveForTenant(foreign.getPublicId(), UUID.randomUUID())).isEmpty();
+    }
+
+    @Test
+    void findActiveForTenant_ignoresTemplatesThatAreNotActive() {
+        UUID tenantId = UUID.randomUUID();
+        ExamDefinition retired = activeTemplate(tenantId);
+        retired.setStatus(ExamDefinitionStatus.RETIRED);
+        when(repository.findWithItemsByPublicId(retired.getPublicId())).thenReturn(Optional.of(retired));
+
+        assertThat(service.findActiveForTenant(retired.getPublicId(), tenantId)).isEmpty();
+    }
+
+    private ExamDefinition activeTemplate(UUID tenantId) {
+        ExamDefinition template = new ExamDefinition();
+        template.setPublicId(UUID.randomUUID());
+        template.setCode("T");
+        template.setVersion(1);
+        template.setName("T");
+        template.setStatus(ExamDefinitionStatus.ACTIVE);
+        template.setTenantId(tenantId);
+        return template;
     }
 }
