@@ -21,6 +21,8 @@ public final class ExamDefinitionConstants {
     public static final String UNKNOWN_TASK_TYPE = "UNKNOWN_TASK_TYPE";
     public static final String MISSING_TASK_TYPE_KEY = "missing task type key";
     public static final String UNKNOWN_TEMPLATE_POLICY = "Unknown template policy: ";
+    public static final String PLATFORM_TEMPLATE_POLICY_NOT_CUSTOM =
+            "A platform template must cover the whole task-type catalog, so it cannot use the CUSTOM policy";
     public static final String TEMPLATE_FEASIBILITY_DEPENDENCIES_NOT_CONFIGURED =
             "Template feasibility dependencies are not configured";
     public static final String TEMPLATE_READ_SERVICE_NOT_CONFIGURED = "Score template read service is not configured";

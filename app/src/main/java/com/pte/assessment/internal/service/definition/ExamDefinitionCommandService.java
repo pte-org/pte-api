@@ -50,7 +50,7 @@ class ExamDefinitionCommandService {
         draft.setVersion(nextVersion);
         draft.setName(request.name().trim());
         draft.setStatus(ExamDefinitionStatus.DRAFT);
-        draft.setTemplatePolicy(parsePolicy(request.templatePolicy()));
+        draft.setTemplatePolicy(parsePlatformPolicy(request.templatePolicy()));
         draft.setAuthorUserPublicId(caller == null ? null : caller.userId());
 
         ExamDefinition saved = saveOrTranslateConflict(draft);
@@ -88,7 +88,7 @@ class ExamDefinitionCommandService {
         try {
             template.setName(request.name());
             if (request.templatePolicy() != null) {
-                template.setTemplatePolicy(parsePolicy(request.templatePolicy()));
+                template.setTemplatePolicy(parsePlatformPolicy(request.templatePolicy()));
             }
             template.getItems().clear();
             request.items().forEach(itemRequest -> template.addItem(itemMapper.toEntity(itemRequest)));
@@ -179,6 +179,15 @@ class ExamDefinitionCommandService {
         } catch (DataIntegrityViolationException | org.springframework.dao.OptimisticLockingFailureException ex) {
             throw new com.pte.assessment.internal.exception.ExamDefinitionConcurrentModificationException();
         }
+    }
+
+    /** Admin templates are platform templates, which must hold the whole catalog; CUSTOM is host-only. */
+    private com.pte.assessment.domain.enums.TemplatePolicy parsePlatformPolicy(String raw) {
+        com.pte.assessment.domain.enums.TemplatePolicy policy = parsePolicy(raw);
+        if (policy == com.pte.assessment.domain.enums.TemplatePolicy.CUSTOM) {
+            throw new ExamDefinitionValidationException(ExamDefinitionConstants.PLATFORM_TEMPLATE_POLICY_NOT_CUSTOM);
+        }
+        return policy;
     }
 
     private com.pte.assessment.domain.enums.TemplatePolicy parsePolicy(String raw) {

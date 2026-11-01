@@ -287,6 +287,38 @@ class ExamDefinitionAdminServiceTest {
     }
 
     @Test
+    void createDraft_rejectsTheCustomPolicyForPlatformTemplates() {
+        assertThatThrownBy(() -> service.createDraft(
+                new CreateExamDefinitionRequest("PTE_FULL", "Partial template", "CUSTOM")))
+                .isInstanceOf(ExamDefinitionValidationException.class)
+                .hasMessageContaining("cannot use the CUSTOM policy");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createDraft_acceptsTheStandardPolicyExplicitly() {
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ExamDefinitionResponse response = service.createDraft(
+                new CreateExamDefinitionRequest("PTE_FULL", "Full template", "STANDARD_PTE"));
+
+        assertThat(response.templatePolicy()).isEqualTo("STANDARD_PTE");
+    }
+
+    @Test
+    void replaceItems_rejectsSwitchingAPlatformDraftToTheCustomPolicy() {
+        UUID publicId = UUID.randomUUID();
+        ExamDefinition draft = fullyValidTemplate(publicId, "PTE_FULL", 1, ExamDefinitionStatus.DRAFT);
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(publicId)).thenReturn(Optional.of(draft));
+
+        assertThatThrownBy(() -> service.replaceItems(
+                publicId, new ReplaceExamDefinitionItemsRequest("Partial", List.of(), "CUSTOM")))
+                .isInstanceOf(ExamDefinitionValidationException.class)
+                .hasMessageContaining("cannot use the CUSTOM policy");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
     void deleteDraft_removesOnlyDraftTemplates() {
         UUID publicId = UUID.randomUUID();
         ExamDefinition draft = fullyValidTemplate(publicId, "CUSTOM", 1, ExamDefinitionStatus.DRAFT);
