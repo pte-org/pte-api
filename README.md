@@ -62,7 +62,7 @@ running (`PTE_BASE_URL` defaults to `http://localhost:8080`; use `http://localho
 ```powershell
 $env:PTE_ADMIN_PASSWORD = '<local-admin-password>'
 $env:PTE_SEED_PASSWORD  = '<local-seed-password>'
-.\scripts\seed-local-template-and-question-bank.ps1 -SeedKey PTE_LOCAL
+node scripts/seed-local-doc-question-bank.mjs            # imports approved questions for every task type
 .\scripts\seed-local-exam-ready.ps1 -SeedKey PTE_LOCAL   # creates the tenant, host, student and an open exam
 .\scripts\seed-local-platform-roles.ps1                  # optional: platform manager/support accounts
 ```
