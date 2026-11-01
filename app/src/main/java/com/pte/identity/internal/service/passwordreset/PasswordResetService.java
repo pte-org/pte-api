@@ -5,6 +5,8 @@ import com.pte.identity.PasswordResetEmailRequestedEvent;
 import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
+import com.pte.identity.internal.config.PasswordResetProperties;
+import com.pte.identity.internal.config.WebAppProperties;
 import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.identity.internal.domain.PasswordResetToken;
 import com.pte.identity.internal.exception.InvalidPasswordResetTokenException;
@@ -15,7 +17,6 @@ import com.pte.identity.internal.security.TokenHasher;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.SecurityRoles;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -41,7 +42,6 @@ import java.util.UUID;
 public class PasswordResetService {
 
     private static final int TOKEN_BYTES = 32;
-    private static final String RESET_PATH = "/reset-password?token=";
 
     private final UserRepository userRepository;
     private final OrganizationMemberRepository memberRepository;
@@ -62,8 +62,7 @@ public class PasswordResetService {
             PasswordResetTokenRepository tokenRepository, TokenHasher tokenHasher, PasswordEncoder passwordEncoder,
             RefreshTokenService refreshTokenService, AuditLogService auditLogService,
             ApplicationEventPublisher eventPublisher, PasswordResetThrottle throttle, Clock clock,
-            @Value("${app.web.tenant-url:http://localhost:3000}") String tenantUrl, @Value("${app.web.admin-url:http://localhost:3001}") String adminUrl,
-            @Value("${app.password-reset.token-ttl-minutes:30}") long tokenTtlMinutes) {
+            WebAppProperties webProperties, PasswordResetProperties properties) {
         this.userRepository = userRepository;
         this.memberRepository = memberRepository;
         this.tokenRepository = tokenRepository;
@@ -74,9 +73,9 @@ public class PasswordResetService {
         this.eventPublisher = eventPublisher;
         this.throttle = throttle;
         this.clock = clock;
-        this.tenantUrl = stripTrailingSlash(tenantUrl);
-        this.adminUrl = stripTrailingSlash(adminUrl);
-        this.tokenTtl = Duration.ofMinutes(tokenTtlMinutes);
+        this.tenantUrl = stripTrailingSlash(webProperties.getTenantUrl());
+        this.adminUrl = stripTrailingSlash(webProperties.getAdminUrl());
+        this.tokenTtl = Duration.ofMinutes(properties.getTokenTtlMinutes());
     }
 
     @Transactional
@@ -108,7 +107,7 @@ public class PasswordResetService {
             return false;
         }
         Instant now = clock.instant();
-        return tokenRepository.findByTokenHash(tokenHasher.hash(rawToken))
+        return tokenRepository.findByTokenHashAndDeletedFalse(tokenHasher.hash(rawToken))
                 .filter(found -> found.getUsedAt() == null && found.getExpiresAt().isAfter(now))
                 .flatMap(found -> userRepository.findByIdAndDeletedFalse(found.getUserId()))
                 .filter(found -> isEligible(found, rolesOf(found)))
@@ -118,7 +117,7 @@ public class PasswordResetService {
     @Transactional
     public void confirm(String rawToken, String newPassword) {
         Instant now = clock.instant();
-        PasswordResetToken token = tokenRepository.findByTokenHash(tokenHasher.hash(rawToken))
+        PasswordResetToken token = tokenRepository.findByTokenHashAndDeletedFalse(tokenHasher.hash(rawToken))
                 .filter(found -> found.getUsedAt() == null && found.getExpiresAt().isAfter(now))
                 .orElseThrow(InvalidPasswordResetTokenException::new);
         if (tokenRepository.markUsed(token.getId(), now) != 1) {
@@ -150,7 +149,7 @@ public class PasswordResetService {
         tokenRepository.save(token);
 
         String base = roles.stream().map(Role::name).anyMatch(SecurityRoles::isPlatformRole) ? adminUrl : tenantUrl;
-        return new PasswordResetEmailRequestedEvent.Link(user.getUsername(), base + RESET_PATH + raw);
+        return new PasswordResetEmailRequestedEvent.Link(user.getUsername(), base + IdentityConstants.PASSWORD_RESET_PATH + raw);
     }
 
     /** An account may reset by e-mail when it can sign in, holds a role, and holds no Student role anywhere. */

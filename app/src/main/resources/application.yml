@@ -15,6 +15,7 @@ app:
     admin-url: ${APP_WEB_ADMIN_URL:http://localhost:3001}
   password-reset:
     token-ttl-minutes: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:30}
+    retention-days: ${PASSWORD_RESET_RETENTION_DAYS:7}
 
 rate-limit:
   per-second: ${RATE_LIMIT_PER_SECOND:40}

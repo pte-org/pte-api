@@ -21,6 +21,7 @@ public final class IdentityConstants {
     public static final String USER_EMAIL_REQUIRED = "USER_EMAIL_REQUIRED";
     public static final String STUDENT_ATTEMPT_IN_PROGRESS = "STUDENT_ATTEMPT_IN_PROGRESS";
     public static final String INVALID_PASSWORD_RESET_TOKEN = "INVALID_PASSWORD_RESET_TOKEN";
+    public static final String PASSWORD_RESET_PATH = "/reset-password?token=";
     public static final String INVALID_REFRESH_TOKEN = "INVALID_REFRESH_TOKEN";
     public static final String FORBIDDEN_ROLE_ASSIGNMENT = "FORBIDDEN_ROLE_ASSIGNMENT";
     public static final String FORBIDDEN_USER_MANAGEMENT = "FORBIDDEN_USER_MANAGEMENT";

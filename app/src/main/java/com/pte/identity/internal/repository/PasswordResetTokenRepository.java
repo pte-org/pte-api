@@ -11,7 +11,12 @@ import java.util.Optional;
 
 public interface PasswordResetTokenRepository extends JpaRepository<PasswordResetToken, Long> {
 
-    Optional<PasswordResetToken> findByTokenHash(String tokenHash);
+    Optional<PasswordResetToken> findByTokenHashAndDeletedFalse(String tokenHash);
+
+    /** Removes links that expired before the cutoff; returns how many rows went. */
+    @Modifying
+    @Query("delete from PasswordResetToken token where token.expiresAt < :cutoff")
+    int deleteExpiredBefore(@Param("cutoff") Instant cutoff);
 
     /** Atomically spends a link: returns 1 for the one caller that wins, 0 for everyone presenting it afterwards. */
     @Modifying

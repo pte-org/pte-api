@@ -32,7 +32,7 @@ class PasswordResetTokenRepositoryTest {
 
         entityManager.flush();
         entityManager.clear();
-        assertThat(tokenRepository.findByTokenHash("hash-a")).get()
+        assertThat(tokenRepository.findByTokenHashAndDeletedFalse("hash-a")).get()
                 .extracting(PasswordResetToken::getUsedAt).isEqualTo(NOW);
     }
 
@@ -53,11 +53,35 @@ class PasswordResetTokenRepositoryTest {
     }
 
     @Test
-    void findByTokenHash_findsTheStoredRowAndNothingForAnUnknownHash() {
+    void findByTokenHashAndDeletedFalse_findsTheStoredRowAndNothingForAnUnknownHash() {
         save(1L, "hash-known");
 
-        assertThat(tokenRepository.findByTokenHash("hash-known")).isPresent();
-        assertThat(tokenRepository.findByTokenHash("hash-unknown")).isEmpty();
+        assertThat(tokenRepository.findByTokenHashAndDeletedFalse("hash-known")).isPresent();
+        assertThat(tokenRepository.findByTokenHashAndDeletedFalse("hash-unknown")).isEmpty();
+    }
+
+    @Test
+    void findByTokenHashAndDeletedFalse_ignoresASoftDeletedRow() {
+        PasswordResetToken token = save(1L, "hash-deleted");
+        token.setDeleted(true);
+        tokenRepository.saveAndFlush(token);
+
+        assertThat(tokenRepository.findByTokenHashAndDeletedFalse("hash-deleted")).isEmpty();
+    }
+
+    @Test
+    void deleteExpiredBefore_removesOnlyLinksThatExpiredBeforeTheCutoff() {
+        PasswordResetToken stale = save(1L, "hash-stale");
+        stale.setExpiresAt(NOW.minusSeconds(86_400));
+        tokenRepository.saveAndFlush(stale);
+        save(2L, "hash-live");
+
+        int removed = tokenRepository.deleteExpiredBefore(NOW);
+        entityManager.clear();
+
+        assertThat(removed).isEqualTo(1);
+        assertThat(tokenRepository.findByTokenHashAndDeletedFalse("hash-stale")).isEmpty();
+        assertThat(tokenRepository.findByTokenHashAndDeletedFalse("hash-live")).isPresent();
     }
 
     private PasswordResetToken save(Long userId, String hash) {
