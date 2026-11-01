@@ -20,7 +20,6 @@ import com.pte.scoring.internal.dto.response.AnswerReviewDetailResponse;
 import com.pte.scoring.internal.dto.response.DecodedAnswerPayload;
 import com.pte.scoring.internal.dto.response.ScoringAnswerResponse;
 import com.pte.scoring.internal.exception.AnswerNotFoundException;
-import com.pte.scoring.internal.exception.InvalidAnswerStatusException;
 import com.pte.scoring.internal.exception.ScoreSourceSelectionException;
 import com.pte.scoring.internal.constant.ScoreReviewConstants;
 import com.pte.scoring.internal.mapper.ScoringAnswerMapper;
@@ -107,7 +106,7 @@ public class ScoringReviewService {
     @Transactional(readOnly = true)
     public AnswerListResponse listAnswers(UUID sessionPublicId, UUID attemptPublicId, String statusFilter,
             String search, Pageable pageable, CurrentUser caller) {
-        ScoringAnswerStatus status = parseStatus(statusFilter);
+        ScoringAnswerStatus status = AnswerFilterParser.status(statusFilter);
         String normalizedSearch = search == null ? null : search.trim().toLowerCase(java.util.Locale.ROOT);
         if (normalizedSearch != null && normalizedSearch.isBlank()) {
             normalizedSearch = null;
@@ -123,8 +122,8 @@ public class ScoringReviewService {
                 ? evaluationRepository.findForReview(caller.tenantId(), sessionPublicId, attemptPublicId, status,
                         awaitingOnly, queryPage)
                 : evaluationRepository.findForReviewWithSearch(caller.tenantId(), sessionPublicId,
-                        attemptPublicId, status, awaitingOnly, normalizedSearch, parseSearchStatus(normalizedSearch),
-                        parseUuid(normalizedSearch), queryPage);
+                        attemptPublicId, status, awaitingOnly, normalizedSearch, AnswerFilterParser.searchStatus(normalizedSearch),
+                        AnswerFilterParser.uuid(normalizedSearch), queryPage);
         Page<AiEvaluation> page = attemptPublicId == null ? found
                 : byQuestionNumber(found.getContent(), questionNumbers, pageable);
         log.debug("Host {} listed answers (tenantId={}, sessionPublicId={}, status={}) -> {} results",
@@ -263,39 +262,6 @@ public class ScoringReviewService {
 
     private static boolean isFallback(AiDetailFlags flags) {
         return flags != null && flags.fallback();
-    }
-
-    private ScoringAnswerStatus parseStatus(String statusFilter) {
-        if (statusFilter == null || statusFilter.isBlank()) {
-            return null;
-        }
-        try {
-            return ScoringAnswerStatus.valueOf(statusFilter.toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            throw new InvalidAnswerStatusException();
-        }
-    }
-
-    private ScoringAnswerStatus parseSearchStatus(String search) {
-        if (search == null) {
-            return null;
-        }
-        try {
-            return ScoringAnswerStatus.valueOf(search.toUpperCase(java.util.Locale.ROOT));
-        } catch (IllegalArgumentException ex) {
-            return null;
-        }
-    }
-
-    private UUID parseUuid(String value) {
-        if (value == null) {
-            return null;
-        }
-        try {
-            return UUID.fromString(value);
-        } catch (IllegalArgumentException ex) {
-            return null;
-        }
     }
 
     private AiEvaluation findOwned(UUID answerPublicId, CurrentUser caller) {
