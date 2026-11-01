@@ -52,16 +52,17 @@ public class ExamDefinitionService {
         this.runtimeProfileService = runtimeProfileService;
     }
 
-    /** Optional active definition for practice timing and mock-test generation. */
+    /** Optional active platform default for practice timing and mock-test generation. */
     @Transactional(readOnly = true)
     public Optional<ExamDefinitionResponse> findActive() {
-        return repository.findWithItemsByStatus(ExamDefinitionStatus.ACTIVE).map(ExamDefinitionMapper::toResponse);
+        return repository.findWithItemsByStatusAndTenantIdIsNull(ExamDefinitionStatus.ACTIVE)
+                .map(ExamDefinitionMapper::toResponse);
     }
 
     /** Used by {@code assessment.SnapshotPublishService} to pin the scoring scheme at exam-publish time. */
     @Transactional(readOnly = true)
     public ExamDefinitionResponse getActive() {
-        ExamDefinition active = repository.findWithItemsByStatus(ExamDefinitionStatus.ACTIVE)
+        ExamDefinition active = repository.findWithItemsByStatusAndTenantIdIsNull(ExamDefinitionStatus.ACTIVE)
                 .orElseThrow(NoActiveExamDefinitionException::new);
         return ExamDefinitionMapper.toResponse(active);
     }
@@ -101,6 +102,18 @@ public class ExamDefinitionService {
     public Optional<ExamDefinitionResponse> findActiveByPublicId(UUID publicId) {
         return repository.findWithItemsByPublicId(publicId)
                 .filter(template -> template.getStatus() == ExamDefinitionStatus.ACTIVE)
+                .map(ExamDefinitionMapper::toResponse);
+    }
+
+    /**
+     * ACTIVE template a host may build an exam from: a platform default or one of its own templates, never
+     * another tenant's. Empty (not forbidden) for foreign templates so their existence is not revealed.
+     */
+    @Transactional(readOnly = true)
+    public Optional<ExamDefinitionResponse> findActiveForTenant(UUID publicId, UUID tenantId) {
+        return repository.findWithItemsByPublicId(publicId)
+                .filter(template -> template.getStatus() == ExamDefinitionStatus.ACTIVE)
+                .filter(template -> template.getTenantId() == null || template.getTenantId().equals(tenantId))
                 .map(ExamDefinitionMapper::toResponse);
     }
 

@@ -8,7 +8,6 @@ import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.scoring.ScoringService;
 import com.pte.scoring.dto.response.ReportScoringAnswerView;
-import com.pte.scoring.dto.response.ScoredAnswerView;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -143,6 +143,63 @@ class ScoreAggregationServiceTest {
         assertThat(summary.skillScores().get(Skill.READING).score()).isEqualTo(50);
     }
 
+    private void stubExpectedItems(Map<String, Integer> expectedByTaskType, String... sections) {
+        when(attemptService.getScoreContext(ATTEMPT_ID)).thenReturn(
+                new AttemptScoreContextView(TEMPLATE_ID, 1, Set.of(sections), expectedByTaskType));
+    }
+
+    @Test
+    void aggregate_blankItemsCountAsZeroInTheirTaskTypeAverage() {
+        // 5 items expected, 2 answered with 80 and 60 -> (80+60+0+0+0)/5 = 28 -> 10 + 80*0.28 = 32
+        stubExpectedItems(Map.of("MC_READING_SINGLE", 5), "READING");
+        stubTemplate(item("MC_READING_SINGLE", bd(0), bd(0), bd(0), bd(10), bd(0)));
+        stubAnswers(answer("MC_READING_SINGLE", 80), answer("MC_READING_SINGLE", 60));
+
+        AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
+
+        assertThat(summary.skillScores().get(Skill.READING).score()).isEqualTo(32);
+    }
+
+    @Test
+    void aggregate_taskTypeLeftEntirelyBlankStaysInTheFormulaAtZero() {
+        // A is fully answered (100), B (same weight) is entirely blank -> ratio 0.5 -> 50, not 90.
+        stubExpectedItems(Map.of("MC_READING_SINGLE", 1, "MC_READING_MULTIPLE", 2), "READING");
+        stubTemplate(
+                item("MC_READING_SINGLE", bd(0), bd(0), bd(0), bd(10), bd(0)),
+                item("MC_READING_MULTIPLE", bd(0), bd(0), bd(0), bd(10), bd(0)));
+        stubAnswers(answer("MC_READING_SINGLE", 100));
+
+        AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
+
+        assertThat(summary.skillScores().get(Skill.READING).score()).isEqualTo(50);
+    }
+
+    @Test
+    void aggregate_skillLeftEntirelyBlankScoresTheScaleFloor() {
+        stubExpectedItems(Map.of("MC_READING_SINGLE", 3), "READING");
+        stubTemplate(item("MC_READING_SINGLE", bd(0), bd(0), bd(0), bd(10), bd(0)));
+        stubAnswers();
+
+        SkillScore reading = service.aggregate(ATTEMPT_ID, TENANT_ID).skillScores().get(Skill.READING);
+
+        assertThat(reading.sufficientData()).isTrue();
+        assertThat(reading.score()).isEqualTo(10);
+    }
+
+    @Test
+    void aggregate_unscoredAnswerRowIsNotABlank() {
+        // The row exists (AI still running, no score): it is neither averaged in nor counted as a blank.
+        stubExpectedItems(Map.of("MC_READING_SINGLE", 2), "READING");
+        stubTemplate(item("MC_READING_SINGLE", bd(0), bd(0), bd(0), bd(10), bd(0)));
+        stubAnswers(answer("MC_READING_SINGLE", 80),
+                unselectedAiAnswer("MC_READING_SINGLE", 70));
+
+        AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
+
+        // Only the 80 is averaged: 10 + 80*0.8 = 74.
+        assertThat(summary.skillScores().get(Skill.READING).score()).isEqualTo(74);
+    }
+
     @Test
     void aggregate_skillTestedButNoContributingTaskTypeScoredYet_insufficientDataNoException() {
         // Simulates AI grading still in flight for every weighted task type of this skill.
@@ -200,6 +257,46 @@ class ScoreAggregationServiceTest {
         AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
 
         assertThat(summary.skillScores()).containsOnlyKeys(Skill.SPEAKING, Skill.READING);
+    }
+
+    @Test
+    void aggregate_customTemplateKeepsSkillWeightedByTasksOfOtherSections() {
+        // A host dropped every READING task, but the WRITING task still carries all of the Reading weight.
+        stubTestedSections("SPEAKING", "WRITING", "LISTENING");
+        when(examDefinitionService.getByPublicId(TEMPLATE_ID)).thenReturn(new ExamDefinitionResponse(TEMPLATE_ID,
+                "HOST_X", 1, "Host", "ACTIVE", null, List.of(
+                        sectionItem("READ_ALOUD", "SPEAKING", 10, 100, 0, 0, 0),
+                        sectionItem("WRITE_ESSAY", "WRITING", 10, 0, 100, 100, 0),
+                        sectionItem("SUMMARIZE_SPOKEN_TEXT", "LISTENING", 10, 0, 0, 0, 100)),
+                "CUSTOM", UUID.randomUUID(), UUID.randomUUID()));
+        stubAnswers(answer("WRITE_ESSAY", 60));
+
+        AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
+
+        assertThat(summary.skillScores()).containsKey(Skill.READING);
+        assertThat(summary.skillScores().get(Skill.READING).sufficientData()).isTrue();
+        assertThat(summary.overall()).isNotNull();
+    }
+
+    @Test
+    void aggregate_standardTemplateDoesNotReportSkillWithoutItsSection() {
+        stubTestedSections("SPEAKING", "WRITING", "LISTENING");
+        when(examDefinitionService.getByPublicId(TEMPLATE_ID)).thenReturn(new ExamDefinitionResponse(TEMPLATE_ID,
+                "APEUNI_V5", 1, "APEUni", "ACTIVE", null, List.of(
+                        sectionItem("WRITE_ESSAY", "WRITING", 10, 0, 100, 100, 0)),
+                "STANDARD_PTE", null, null));
+        stubAnswers(answer("WRITE_ESSAY", 60));
+
+        AttemptScoreSummary summary = service.aggregate(ATTEMPT_ID, TENANT_ID);
+
+        assertThat(summary.skillScores()).doesNotContainKey(Skill.READING);
+        assertThat(summary.overall()).isNull();
+    }
+
+    private ExamDefinitionItemResponse sectionItem(String taskType, String section, int overall, int speaking,
+            int writing, int reading, int listening) {
+        return new ExamDefinitionItemResponse(taskType, section, 0, 1, 1, 0, 0, "AI_SPEECH",
+                bd(overall), bd(speaking), bd(writing), bd(reading), bd(listening));
     }
 
     @Test
@@ -331,18 +428,6 @@ class ScoreAggregationServiceTest {
 
         assertThat(provisional.summary().skillScores().get(Skill.SPEAKING).score()).isEqualTo(10);
         assertThat(provisional.includesUnselectedAiScores()).isFalse();
-    }
-
-    @Test
-    void aggregateLegacyPublished_usesPreSelectionRawScores() {
-        stubTestedSections("READING");
-        stubTemplate(item("FILL_IN_THE_BLANKS_DRAG_AND_DROP", bd(0), bd(0), bd(0), bd(100), bd(0)));
-        when(scoringService.getScoredAnswersForAttempt(ATTEMPT_ID, TENANT_ID))
-                .thenReturn(List.of(new ScoredAnswerView("FILL_BLANKS_READING", 80)));
-
-        AttemptScoreSummary summary = service.aggregateLegacyPublished(ATTEMPT_ID, TENANT_ID);
-
-        assertThat(summary.skillScores().get(Skill.READING).score()).isEqualTo(74);
     }
 
 }

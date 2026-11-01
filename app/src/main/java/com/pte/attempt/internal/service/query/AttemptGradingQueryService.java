@@ -65,7 +65,7 @@ public class AttemptGradingQueryService {
             }
             List<AttemptGradingItemView> items = contentService.outline(attempt.getExamVersionPublicId()).stream()
                     .map(item -> new AttemptGradingItemView(item.publicId(), attempt.getExamDefinitionPublicId(),
-                            item.taskType()))
+                            item.taskType(), item.orderIndex()))
                     .toList();
             result.put(attempt.getPublicId(), new AttemptGradingCoverageView(attempt.getPublicId(), items));
         }

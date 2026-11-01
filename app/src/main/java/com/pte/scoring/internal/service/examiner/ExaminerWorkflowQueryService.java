@@ -118,7 +118,8 @@ public class ExaminerWorkflowQueryService {
                             d.getDecisionKind(),
                             d.getExpectedReviewVersion(),
                             d.getReviewedAiVersion(),
-                            d.getSavedAt()))
+                            d.getSavedAt(),
+                            d.isCarriedOver()))
                     .toList();
         } else {
             // Derived legacy state
@@ -131,6 +132,10 @@ public class ExaminerWorkflowQueryService {
             } else {
                 status = ExaminerWorkflowStatus.COMPLETED;
             }
+        }
+
+        if (blockingReason == null && drafts.stream().anyMatch(ExaminerDraftResponse::carriedOver)) {
+            blockingReason = ExaminerScoringConstants.CARRIED_OVER_DRAFTS_BLOCKING_REASON;
         }
 
         boolean readOnly = isPublished || status == ExaminerWorkflowStatus.COMPLETED;

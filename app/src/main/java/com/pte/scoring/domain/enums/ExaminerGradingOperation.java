@@ -8,5 +8,6 @@ public enum ExaminerGradingOperation {
     REOPEN,
     REGRADE,
     REPORT_ISSUE,
-    RESOLVE_ISSUE
+    RESOLVE_ISSUE,
+    REASSIGN
 }

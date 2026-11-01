@@ -239,7 +239,6 @@ identity:
 
 task-types:
   rollout:
-    # Standard compatibility/read paths remain on. Enable custom creation and
-    # activation only after the authenticated walkthrough and metrics review.
+    # Standard compatibility/read paths remain on. Enable custom creation
+    # only after the authenticated walkthrough and metrics review.
     custom-creation-enabled: ${TASK_TYPES_CUSTOM_CREATION_ENABLED:false}
-    custom-template-activation-enabled: ${TASK_TYPES_CUSTOM_TEMPLATE_ACTIVATION_ENABLED:false}

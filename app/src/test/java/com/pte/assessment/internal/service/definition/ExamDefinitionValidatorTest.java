@@ -1,5 +1,7 @@
 package com.pte.assessment.internal.service.definition;
 
+import com.pte.assessment.domain.ExamDefinition;
+import com.pte.assessment.domain.ExamDefinitionItem;
 import com.pte.assessment.internal.exception.ExamDefinitionValidationException;
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskAuthoringRequirements;
@@ -10,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -48,5 +51,57 @@ class ExamDefinitionValidatorTest {
                 .resolveActiveProfile("READ_ALOUD");
 
         assertThat(profile.taskTypeCode()).isEqualTo("READ_ALOUD");
+    }
+
+    @Test
+    void aDefaultTemplateMissingACatalogTaskTypeIsRejected() {
+        when(questionTypeService.listActiveTaskTypeKeys()).thenReturn(List.of("READ_ALOUD", "WRITE_ESSAY"));
+
+        assertThatThrownBy(() -> new ExamDefinitionValidator(questionTypeService, null, null)
+                .validateIncludesWholeCatalog(template(false, "READ_ALOUD")))
+                .isInstanceOf(ExamDefinitionValidationException.class)
+                .hasMessageContaining("WRITE_ESSAY");
+    }
+
+    @Test
+    void aDefaultTemplateHoldingTheWholeCatalogIsAccepted() {
+        when(questionTypeService.listActiveTaskTypeKeys()).thenReturn(List.of("READ_ALOUD", "WRITE_ESSAY"));
+
+        assertThatCode(() -> new ExamDefinitionValidator(questionTypeService, null, null)
+                .validateIncludesWholeCatalog(template(false, "READ_ALOUD", "WRITE_ESSAY")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void aHostTemplateMayOmitCatalogTaskTypes() {
+        assertThatCode(() -> new ExamDefinitionValidator(questionTypeService, null, null)
+                .validateIncludesWholeCatalog(template(true, "READ_ALOUD")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void aHostTemplateCannotUseATaskTypeOutsideItsBase() {
+        ExamDefinitionValidator validator = new ExamDefinitionValidator(questionTypeService, null, null);
+
+        assertThatThrownBy(() -> validator.validateWithinBase(template(true, "READ_ALOUD", "WRITE_ESSAY"),
+                template(false, "READ_ALOUD")))
+                .isInstanceOf(ExamDefinitionValidationException.class)
+                .hasMessageContaining("WRITE_ESSAY");
+        assertThatCode(() -> validator.validateWithinBase(template(true, "READ_ALOUD"),
+                template(false, "READ_ALOUD", "WRITE_ESSAY"))).doesNotThrowAnyException();
+    }
+
+    private ExamDefinition template(boolean hostOwned, String... taskTypes) {
+        ExamDefinition template = new ExamDefinition();
+        if (hostOwned) {
+            template.setTenantId(java.util.UUID.randomUUID());
+        }
+        for (int i = 0; i < taskTypes.length; i++) {
+            ExamDefinitionItem item = new ExamDefinitionItem();
+            item.setTaskType(taskTypes[i]);
+            item.setSequence(i);
+            template.addItem(item);
+        }
+        return template;
     }
 }
