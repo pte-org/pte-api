@@ -4,14 +4,11 @@ import com.pte.chat.internal.client.ChatAiAnswer;
 import com.pte.chat.internal.client.ChatTurn;
 import com.pte.chat.internal.client.GeminiChatClient;
 import com.pte.chat.internal.config.ChatAiProperties;
-import com.pte.chat.internal.repository.ChatAnswerCacheRepository;
-import com.pte.chat.internal.repository.ChatMessageRepository;
-import com.pte.chat.internal.repository.ChatSessionRepository;
-import com.pte.chat.internal.service.cache.ChatAnswerCacheService;
 import com.pte.chat.internal.service.quota.ChatQuotaRepository;
 import com.pte.chat.internal.service.quota.ChatQuotaService;
 import com.pte.chat.internal.service.session.ChatConcurrencyGate;
-import com.pte.chat.internal.service.session.ChatSessionService;
+import com.pte.chat.internal.service.usage.ChatUsageDailyRepository;
+import com.pte.chat.internal.service.usage.ChatUsageRecorder;
 import com.pte.chat.support.ChatTestData;
 import com.pte.chat.support.FakeGeminiServer;
 import com.pte.chat.support.GeminiResponses;
@@ -29,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /**
- * The chat stack of {@link ChatFlowHarness} (real repositories and SQL, the real {@link GeminiChatClient} over
+ * The chat stack of {@link ChatFlowHarness} (real SQL, the real {@link GeminiChatClient} over
  * HTTP to a loopback fake provider) with the pieces a load test must look at exposed: the concurrency gate,
  * the meters, and a client wrapper that counts provider calls and the most calls ever in flight at once.
  *
@@ -52,8 +49,7 @@ final class ChatLoadStack implements AutoCloseable {
     final AtomicInteger providerCalls = new AtomicInteger();
     final AtomicInteger maxProviderCallsInFlight = new AtomicInteger();
 
-    ChatLoadStack(ChatSessionRepository sessions, ChatMessageRepository messages, ChatAnswerCacheRepository cache,
-                  NamedParameterJdbcTemplate jdbc, Consumer<ChatAiProperties> tuning, long latencyMs,
+    ChatLoadStack(NamedParameterJdbcTemplate jdbc, Consumer<ChatAiProperties> tuning, long latencyMs,
                   int scriptLength) throws IOException {
         server = FakeGeminiServer.start();
         script(latencyMs, scriptLength);
@@ -69,10 +65,9 @@ final class ChatLoadStack implements AutoCloseable {
                 properties, Duration.ofSeconds(10));
         gate = new ChatConcurrencyGate(properties, observability);
         service = new ChatService((caller, organization) -> { }, properties,
-                new ChatQuotaService(new ChatQuotaRepository(jdbc), properties, clock, observability),
-                new ChatSessionService(sessions, messages, jdbc), gate,
-                new ChatAnswerCacheService(cache, jdbc, clock, properties), client, messages, observability, clock,
-                studentId -> { });
+                new ChatQuotaService(new ChatQuotaRepository(jdbc), properties, clock, observability), gate, client,
+                new ChatUsageRecorder(new ChatUsageDailyRepository(jdbc), properties, clock, observability),
+                observability);
     }
 
     private void script(long latencyMs, int length) {

@@ -53,18 +53,8 @@ public final class ChatAiPropertiesValidator {
         requireAtLeastOne(problems, "chat.ai.max-tokens", properties.getMaxTokens());
         requireAtLeastOne(problems, "chat.ai.history-size", properties.getHistorySize());
         requireAtLeastOne(problems, "chat.ai.max-concurrent", properties.getMaxConcurrent());
-        requireAtLeastOne(problems, "chat.ai.max-cache-hits-per-day", properties.getMaxCacheHitsPerDay());
-        requireAtLeastOne(problems, "chat.ai.cache-max-question-chars", properties.getCacheMaxQuestionChars());
-        requireAtLeastOne(problems, "chat.ai.retention-content-months", properties.getRetentionContentMonths());
         requireNotNegative(problems, "chat.ai.price-input-per-million-usd", properties.getPriceInputPerMillionUsd());
         requireNotNegative(problems, "chat.ai.price-output-per-million-usd", properties.getPriceOutputPerMillionUsd());
-        // The privacy notice promises "at most 12 months": the setting may shorten it but never outgrow the text.
-        if (properties.getRetentionContentMonths() > ChatConstants.DEFAULT_RETENTION_CONTENT_MONTHS) {
-            problems.add(ChatConstants.CONFIG_RETENTION_MONTHS_MAX_TEMPLATE.formatted(
-                    ChatConstants.DEFAULT_RETENTION_CONTENT_MONTHS));
-        }
-        requireAtLeastOne(problems, "chat.ai.retention-cache-days", properties.getRetentionCacheDays());
-        requireAtLeastOne(problems, "chat.ai.retention-batch-size", properties.getRetentionBatchSize());
         // A zero timeout can mean "wait forever" to an HTTP client, which would pin a request thread.
         requireAtLeastOne(problems, "chat.ai.connect-timeout-ms", properties.getConnectTimeoutMs());
         requireAtLeastOne(problems, "chat.ai.read-timeout-ms", properties.getReadTimeoutMs());
