@@ -1,5 +1,6 @@
-package com.pte.identity.internal.service;
+package com.pte.identity.internal.service.passwordreset;
 
+import com.pte.identity.internal.service.RefreshTokenService;
 import com.pte.identity.PasswordResetEmailRequestedEvent;
 import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;

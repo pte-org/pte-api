@@ -1,4 +1,4 @@
-package com.pte.identity.internal.service;
+package com.pte.identity.internal.service.passwordreset;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

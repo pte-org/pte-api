@@ -1,4 +1,4 @@
-package com.pte.identity.internal.service;
+package com.pte.identity.internal.service.passwordreset;
 
 import com.pte.identity.internal.security.TokenHasher;
 import io.github.bucket4j.Bandwidth;

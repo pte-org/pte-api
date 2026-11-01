@@ -1,4 +1,4 @@
-package com.pte.identity.internal.service;
+package com.pte.identity.internal.service.passwordreset;
 
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
