@@ -77,7 +77,7 @@ public class ExamDraftService {
         validateWindow(request.opensAt(), request.closesAt());
         SubscriptionView subscription = access.lockedActiveSubscription(request.subscriptionPublicId(), tenantId);
         validateSubscriptionWindowAndCapacity(subscription, request.opensAt(), request.closesAt(), request.capacity());
-        var template = examDefinitionService.findActiveByPublicId(request.examDefinitionPublicId())
+        var template = examDefinitionService.findActiveForTenant(request.examDefinitionPublicId(), tenantId)
                 .orElseThrow(() -> new ExamDraftConfigurationException(SessionConstants.EXAM_TEMPLATE_ACTIVE_REQUIRED));
 
         ExamMode mode = request.examMode() == null ? ExamMode.OFFICIAL_EXAM : request.examMode();
@@ -159,7 +159,7 @@ public class ExamDraftService {
             session.setName(request.name().trim());
         }
         if (request.examDefinitionPublicId() != null) {
-            selectedTemplate = examDefinitionService.findActiveByPublicId(request.examDefinitionPublicId())
+            selectedTemplate = examDefinitionService.findActiveForTenant(request.examDefinitionPublicId(), tenantId)
                     .orElseThrow(() -> new ExamDraftConfigurationException(SessionConstants.EXAM_TEMPLATE_ACTIVE_REQUIRED));
             session.setExamDefinitionPublicId(selectedTemplate.publicId());
             session.setExamDefinitionVersion(selectedTemplate.version());

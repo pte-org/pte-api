@@ -64,6 +64,14 @@ public class ExamDefinition extends BaseEntity {
     @Column(name = "template_policy", nullable = false, length = 16)
     private TemplatePolicy templatePolicy = TemplatePolicy.STANDARD_PTE;
 
+    /** Owning host tenant; null = platform default template managed by admins. */
+    @Column(name = "tenant_id")
+    private java.util.UUID tenantId;
+
+    /** Default template a host template was cloned from; bounds the task types the host may keep. */
+    @Column(name = "base_definition_public_id")
+    private java.util.UUID baseDefinitionPublicId;
+
     @Column(name = "rejection_reason", length = 1000)
     private String rejectionReason;
 
@@ -79,5 +87,9 @@ public class ExamDefinition extends BaseEntity {
 
     public void addItem(ExamDefinitionItem item) {
         items.add(item);
+    }
+
+    public boolean isHostOwned() {
+        return tenantId != null;
     }
 }

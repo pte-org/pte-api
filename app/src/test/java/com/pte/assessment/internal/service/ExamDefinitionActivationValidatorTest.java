@@ -4,7 +4,9 @@ import com.pte.assessment.internal.service.definition.ExamDefinitionActivationVa
 import com.pte.assessment.domain.ExamDefinition;
 import com.pte.assessment.domain.ExamDefinitionItem;
 import com.pte.assessment.domain.enums.ScoringMethod;
+import com.pte.assessment.domain.enums.TemplatePolicy;
 import com.pte.assessment.internal.exception.ExamDefinitionValidationException;
+import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -175,6 +177,94 @@ class ExamDefinitionActivationValidatorTest {
         template.getItems().get(0).setOverallWeight(BigDecimal.valueOf(3));
 
         assertThatCode(() -> ExamDefinitionActivationValidator.validate(template)).doesNotThrowAnyException();
+    }
+
+    /**
+     * Four scored task types, one per section, no need for the full catalog. Weights cross sections the way real
+     * task types do (the speaking item also feeds reading), and every skill totals 100.
+     */
+    private ExamDefinition customTemplate() {
+        ExamDefinition template = new ExamDefinition();
+        template.setCode("CUSTOM_TEST");
+        template.setVersion(1);
+        template.setName("Custom template");
+        template.setTemplatePolicy(TemplatePolicy.CUSTOM);
+        template.addItem(customItem("CUSTOM_A", 0, "SPEAKING", "60", "0", "50", "0"));
+        template.addItem(customItem("CUSTOM_B", 1, "WRITING", "40", "100", "0", "0"));
+        template.addItem(customItem("CUSTOM_C", 2, "READING", "0", "0", "50", "0"));
+        template.addItem(customItem("CUSTOM_D", 3, "LISTENING", "0", "0", "0", "100"));
+        return template;
+    }
+
+    private ExamDefinitionItem customItem(String taskType, int sequence, String section, String speaking,
+            String writing, String reading, String listening) {
+        ExamDefinitionItem item = item(taskType, sequence, 1, 2, BigDecimal.ZERO);
+        item.setSection(section);
+        item.setSpeakingWeight(new BigDecimal(speaking));
+        item.setWritingWeight(new BigDecimal(writing));
+        item.setReadingWeight(new BigDecimal(reading));
+        item.setListeningWeight(new BigDecimal(listening));
+        item.setOverallWeight(new BigDecimal("25"));
+        item.pinRuntimeProfile(new TaskRuntimeProfileDescriptor(taskType, "PROFILE", 1, "BEHAVIOR", "RENDERER", 1,
+                "SCORING", 1, List.of(), "ACTIVE"));
+        return item;
+    }
+
+    @Test
+    void validate_customTemplateWithoutAll22TaskTypes_doesNotThrow() {
+        assertThatCode(() -> ExamDefinitionActivationValidator.validate(customTemplate())).doesNotThrowAnyException();
+    }
+
+    @Test
+    void validate_customTemplateWithoutASkillSection_doesNotThrow() {
+        ExamDefinition template = customTemplate();
+        template.getItems().removeIf(item -> "LISTENING".equals(item.getSection()));
+
+        assertThatCode(() -> ExamDefinitionActivationValidator.validate(template)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void validate_customSkillWithItemsButNoWeight_throws() {
+        ExamDefinition template = customTemplate();
+        template.getItems().forEach(item -> item.setListeningWeight(BigDecimal.ZERO));
+
+        assertThatThrownBy(() -> ExamDefinitionActivationValidator.validate(template))
+                .isInstanceOf(ExamDefinitionValidationException.class)
+                .hasMessageContaining("LISTENING")
+                .hasMessageContaining("current total: 0");
+    }
+
+    @Test
+    void validate_customPartialWeightForSkillWithoutItems_throws() {
+        ExamDefinition template = customTemplate();
+        template.getItems().removeIf(item -> "LISTENING".equals(item.getSection()));
+        template.getItems().get(0).setListeningWeight(new BigDecimal("10"));
+
+        assertThatThrownBy(() -> ExamDefinitionActivationValidator.validate(template))
+                .isInstanceOf(ExamDefinitionValidationException.class)
+                .hasMessageContaining("LISTENING")
+                .hasMessageContaining("current total: 10");
+    }
+
+    @Test
+    void validate_customFullWeightForSkillWithoutItems_doesNotThrow() {
+        ExamDefinition template = customTemplate();
+        template.getItems().removeIf(item -> "LISTENING".equals(item.getSection()));
+        template.getItems().get(0).setListeningWeight(new BigDecimal("60"));
+        template.getItems().get(2).setListeningWeight(new BigDecimal("40"));
+
+        assertThatCode(() -> ExamDefinitionActivationValidator.validate(template)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void validate_customSkillTotalNot100_throws() {
+        ExamDefinition template = customTemplate();
+        template.getItems().get(0).setSpeakingWeight(new BigDecimal("55"));
+
+        assertThatThrownBy(() -> ExamDefinitionActivationValidator.validate(template))
+                .isInstanceOf(ExamDefinitionValidationException.class)
+                .hasMessageContaining("SPEAKING")
+                .hasMessageContaining("current total: 95");
     }
 
     @Test

@@ -7,7 +7,6 @@ import com.pte.assessment.internal.dto.response.BlueprintResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.internal.service.BlueprintService;
 import com.pte.assessment.internal.service.definition.ExamDefinitionAdminService;
-import com.pte.itembank.TaskTypeRolloutProperties;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.web.StatusEndpointHarness;
 import org.junit.jupiter.api.Test;
@@ -33,7 +32,7 @@ class ApprovalStatusEndpointTest {
     }
 
     private ExamDefinitionController definitions(ExamDefinitionAdminService service) {
-        return new ExamDefinitionController(service, mock(ExamDefinitionService.class), new TaskTypeRolloutProperties());
+        return new ExamDefinitionController(service, mock(ExamDefinitionService.class));
     }
 
     @Test
@@ -90,34 +89,7 @@ class ApprovalStatusEndpointTest {
     }
 
     @Test
-    void activatingACustomTemplateIsRefusedWhileTheRolloutFlagIsOff() throws Exception {
-        ExamDefinitionAdminService service = mock(ExamDefinitionAdminService.class);
-        when(service.isCustomTemplate(id)).thenReturn(true);
-        try (StatusEndpointHarness harness = StatusEndpointHarness.of(definitions(service)).as(manager)) {
-            harness.patchStatus("/api/v1/exam-definitions/{id}/status", "{\"action\":\"ACTIVATE\"}", id)
-                    .andExpect(status().isConflict());
-        }
-        org.mockito.Mockito.verify(service, org.mockito.Mockito.never()).activate(any(), any());
-    }
-
-    @Test
-    void activatingACustomTemplateIsAllowedOnceTheRolloutFlagIsOn() throws Exception {
-        ExamDefinitionAdminService service = mock(ExamDefinitionAdminService.class);
-        when(service.isCustomTemplate(id)).thenReturn(true);
-        when(service.activate(id, manager)).thenReturn(mock(ExamDefinitionResponse.class));
-        TaskTypeRolloutProperties rollout = new TaskTypeRolloutProperties();
-        rollout.setCustomTemplateActivationEnabled(true);
-        ExamDefinitionController controller = new ExamDefinitionController(service,
-                mock(ExamDefinitionService.class), rollout);
-        try (StatusEndpointHarness harness = StatusEndpointHarness.of(controller).as(manager)) {
-            harness.patchStatus("/api/v1/exam-definitions/{id}/status", "{\"action\":\"ACTIVATE\"}", id)
-                    .andExpect(status().isOk());
-        }
-        verify(service).activate(id, manager);
-    }
-
-    @Test
-    void activatingAStandardTemplateDoesNotNeedTheRolloutFlag() throws Exception {
+    void aManagerMayActivateATemplate() throws Exception {
         ExamDefinitionAdminService service = mock(ExamDefinitionAdminService.class);
         when(service.activate(id, manager)).thenReturn(mock(ExamDefinitionResponse.class));
         try (StatusEndpointHarness harness = StatusEndpointHarness.of(definitions(service)).as(manager)) {

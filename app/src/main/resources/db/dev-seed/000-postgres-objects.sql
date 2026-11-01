@@ -72,7 +72,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_questions_current_revision_group ON public.
 @@
 CREATE UNIQUE INDEX IF NOT EXISTS ux_orders_pending_tenant_plan ON public.orders USING btree (tenant_id, plan_id) WHERE (((status)::text = 'PENDING'::text) AND (deleted = false))
 @@
-CREATE UNIQUE INDEX IF NOT EXISTS ux_exam_definitions_single_active ON public.exam_definitions USING btree (status) WHERE ((status)::text = 'ACTIVE'::text)
+CREATE UNIQUE INDEX IF NOT EXISTS ux_exam_definitions_single_active ON public.exam_definitions USING btree (status) WHERE ((status)::text = 'ACTIVE'::text AND tenant_id IS NULL)
 @@
 -- Repair exact copies from earlier boot-time seeds before enforcing task uniqueness.
 WITH copies AS (

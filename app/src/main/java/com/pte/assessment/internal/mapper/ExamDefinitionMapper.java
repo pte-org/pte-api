@@ -20,7 +20,9 @@ public final class ExamDefinitionMapper {
                 template.getStatus().name(),
                 template.getRejectionReason(),
                 template.getItems().stream().map(ExamDefinitionMapper::toItemResponse).toList(),
-                template.getTemplatePolicy() == null ? "STANDARD_PTE" : template.getTemplatePolicy().name());
+                template.getTemplatePolicy() == null ? "STANDARD_PTE" : template.getTemplatePolicy().name(),
+                template.getTenantId(),
+                template.getBaseDefinitionPublicId());
     }
 
     private static ExamDefinitionItemResponse toItemResponse(ExamDefinitionItem item) {

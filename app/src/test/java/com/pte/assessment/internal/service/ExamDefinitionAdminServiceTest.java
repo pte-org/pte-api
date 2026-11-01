@@ -116,9 +116,9 @@ class ExamDefinitionAdminServiceTest {
         UUID targetId = UUID.randomUUID();
         ExamDefinition oldActive = fullyValidTemplate(oldActiveId, "APEUNI_V5", 1, ExamDefinitionStatus.ACTIVE);
         ExamDefinition target = fullyValidTemplate(targetId, "APEUNI_V5", 2, ExamDefinitionStatus.DRAFT);
-        when(repository.findWithItemsByPublicId(targetId)).thenReturn(Optional.of(target));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(targetId)).thenReturn(Optional.of(target));
         when(repository.findAllByCodeForUpdate("APEUNI_V5")).thenReturn(List.of(oldActive, target));
-        when(repository.findWithItemsByStatus(ExamDefinitionStatus.ACTIVE)).thenReturn(Optional.of(oldActive));
+        when(repository.findWithItemsByStatusAndTenantIdIsNull(ExamDefinitionStatus.ACTIVE)).thenReturn(Optional.of(oldActive));
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ExamDefinitionResponse response = service.activate(targetId);
@@ -137,7 +137,7 @@ class ExamDefinitionAdminServiceTest {
         invalid.setVersion(2);
         invalid.setName("broken");
         invalid.setStatus(ExamDefinitionStatus.DRAFT);
-        when(repository.findWithItemsByPublicId(targetId)).thenReturn(Optional.of(invalid));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(targetId)).thenReturn(Optional.of(invalid));
 
         assertThatThrownBy(() -> service.activate(targetId)).isInstanceOf(ExamDefinitionValidationException.class);
 
@@ -149,9 +149,9 @@ class ExamDefinitionAdminServiceTest {
     void activate_repositoryRaceViolation_translatesTo409() {
         UUID targetId = UUID.randomUUID();
         ExamDefinition target = fullyValidTemplate(targetId, "APEUNI_V5", 2, ExamDefinitionStatus.DRAFT);
-        when(repository.findWithItemsByPublicId(targetId)).thenReturn(Optional.of(target));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(targetId)).thenReturn(Optional.of(target));
         when(repository.findAllByCodeForUpdate("APEUNI_V5")).thenReturn(List.of(target));
-        when(repository.findWithItemsByStatus(ExamDefinitionStatus.ACTIVE)).thenReturn(Optional.empty());
+        when(repository.findWithItemsByStatusAndTenantIdIsNull(ExamDefinitionStatus.ACTIVE)).thenReturn(Optional.empty());
         when(repository.save(any())).thenThrow(new DataIntegrityViolationException("dup"));
 
         assertThatThrownBy(() -> service.activate(targetId))
@@ -162,7 +162,7 @@ class ExamDefinitionAdminServiceTest {
     void replaceItems_onNonDraftTemplate_throwsNotDraft() {
         UUID publicId = UUID.randomUUID();
         ExamDefinition active = fullyValidTemplate(publicId, "APEUNI_V5", 1, ExamDefinitionStatus.ACTIVE);
-        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(active));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(publicId)).thenReturn(Optional.of(active));
 
         var request = new ReplaceExamDefinitionItemsRequest("new name", List.of(sampleItemRequest()));
 
@@ -182,7 +182,7 @@ class ExamDefinitionAdminServiceTest {
     void replaceItems_allowsEmptyDraftWhileItIsBeingBuilt() {
         UUID publicId = UUID.randomUUID();
         ExamDefinition draft = fullyValidTemplate(publicId, "CUSTOM", 1, ExamDefinitionStatus.DRAFT);
-        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(publicId)).thenReturn(Optional.of(draft));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         ExamDefinitionResponse response = service.replaceItems(
@@ -209,7 +209,7 @@ class ExamDefinitionAdminServiceTest {
     void replaceItems_derivesScoringMethodFromTaskType_notFromRequest() {
         UUID publicId = UUID.randomUUID();
         ExamDefinition draft = fullyValidTemplate(publicId, "CUSTOM", 1, ExamDefinitionStatus.DRAFT);
-        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(publicId)).thenReturn(Optional.of(draft));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         // sampleItemRequest(): speaking=9, writing/reading/listening=0 — padded to 100 per column.
         var padding = paddingItemRequest("WRITE_ESSAY", BigDecimal.valueOf(91), BigDecimal.valueOf(100),
@@ -230,7 +230,7 @@ class ExamDefinitionAdminServiceTest {
     void replaceItems_computesOverallWeightAsMeanOfFourSkillWeights_notFromRequest() {
         UUID publicId = UUID.randomUUID();
         ExamDefinition draft = fullyValidTemplate(publicId, "CUSTOM", 1, ExamDefinitionStatus.DRAFT);
-        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(publicId)).thenReturn(Optional.of(draft));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         var request = new ExamDefinitionItemRequest("SUMMARIZE_SPOKEN_TEXT", "LISTENING", 0, 1, 1, 0, 600,
                 BigDecimal.ZERO, BigDecimal.valueOf(23), BigDecimal.ZERO, BigDecimal.valueOf(10));
@@ -249,7 +249,7 @@ class ExamDefinitionAdminServiceTest {
     void replaceItems_skillWeightsNotSummingTo100_throws() {
         UUID publicId = UUID.randomUUID();
         ExamDefinition draft = fullyValidTemplate(publicId, "CUSTOM", 1, ExamDefinitionStatus.DRAFT);
-        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(publicId)).thenReturn(Optional.of(draft));
 
         assertThatThrownBy(() -> service.replaceItems(
                 publicId, new ReplaceExamDefinitionItemsRequest("Custom", List.of(sampleItemRequest()))))
@@ -262,7 +262,7 @@ class ExamDefinitionAdminServiceTest {
     void replaceItems_unknownTaskType_throwsValidationException() {
         UUID publicId = UUID.randomUUID();
         ExamDefinition draft = fullyValidTemplate(publicId, "CUSTOM", 1, ExamDefinitionStatus.DRAFT);
-        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(publicId)).thenReturn(Optional.of(draft));
         var badRequest = new ExamDefinitionItemRequest("NOT_A_REAL_TASK_TYPE", "SPEAKING", 0, 1, 1, 0, 30,
                 BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
 
@@ -290,7 +290,7 @@ class ExamDefinitionAdminServiceTest {
     void deleteDraft_removesOnlyDraftTemplates() {
         UUID publicId = UUID.randomUUID();
         ExamDefinition draft = fullyValidTemplate(publicId, "CUSTOM", 1, ExamDefinitionStatus.DRAFT);
-        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(draft));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(publicId)).thenReturn(Optional.of(draft));
 
         service.deleteDraft(publicId);
 
@@ -301,7 +301,7 @@ class ExamDefinitionAdminServiceTest {
     void deleteDraft_onActiveTemplate_throwsNotDraft() {
         UUID publicId = UUID.randomUUID();
         ExamDefinition active = fullyValidTemplate(publicId, "CUSTOM", 1, ExamDefinitionStatus.ACTIVE);
-        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(active));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(publicId)).thenReturn(Optional.of(active));
 
         assertThatThrownBy(() -> service.deleteDraft(publicId))
                 .isInstanceOf(ExamDefinitionNotDraftException.class);
@@ -312,7 +312,7 @@ class ExamDefinitionAdminServiceTest {
     void cloneToDraft_copiesAllItemsAndIncrementsVersion() {
         UUID sourceId = UUID.randomUUID();
         ExamDefinition source = fullyValidTemplate(sourceId, "APEUNI_V5", 3, ExamDefinitionStatus.ACTIVE);
-        when(repository.findWithItemsByPublicId(sourceId)).thenReturn(Optional.of(source));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(sourceId)).thenReturn(Optional.of(source));
         when(repository.findAllByCodeForUpdate("APEUNI_V5")).thenReturn(List.of(source));
         when(repository.findMaxVersionByCode("APEUNI_V5")).thenReturn(3);
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -328,7 +328,7 @@ class ExamDefinitionAdminServiceTest {
     void cloneToDraft_repositoryRaceViolation_translatesTo409() {
         UUID sourceId = UUID.randomUUID();
         ExamDefinition source = fullyValidTemplate(sourceId, "APEUNI_V5", 3, ExamDefinitionStatus.ACTIVE);
-        when(repository.findWithItemsByPublicId(sourceId)).thenReturn(Optional.of(source));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(sourceId)).thenReturn(Optional.of(source));
         when(repository.findAllByCodeForUpdate("APEUNI_V5")).thenReturn(List.of(source));
         when(repository.findMaxVersionByCode("APEUNI_V5")).thenReturn(3);
         when(repository.save(any())).thenThrow(new DataIntegrityViolationException("dup"));
@@ -343,7 +343,7 @@ class ExamDefinitionAdminServiceTest {
         ExamDefinition template = fullyValidTemplate(publicId, "CUSTOM", 1, ExamDefinitionStatus.DRAFT);
         template.getItems().forEach(item -> item.setSection(PteTaskType.valueOf(item.getTaskType()).getSection().name()));
         when(questionTypeService.isActive(any())).thenReturn(true);
-        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(template));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(publicId)).thenReturn(Optional.of(template));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         service = new ExamDefinitionAdminService(repository, questionTypeService, null, null, null, null, null, com.pte.TestClocks.fixed());
@@ -367,7 +367,7 @@ class ExamDefinitionAdminServiceTest {
         invalid.setVersion(1);
         invalid.setName("Broken");
         invalid.setStatus(ExamDefinitionStatus.DRAFT);
-        when(repository.findWithItemsByPublicId(publicId)).thenReturn(Optional.of(invalid));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(publicId)).thenReturn(Optional.of(invalid));
         service = new ExamDefinitionAdminService(repository, questionTypeService, null, auditLogService, null, null, null, com.pte.TestClocks.fixed());
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
 
@@ -383,7 +383,7 @@ class ExamDefinitionAdminServiceTest {
     void clone_recordsPlatformAuditEvent() {
         UUID sourceId = UUID.randomUUID();
         ExamDefinition source = fullyValidTemplate(sourceId, "APEUNI_V5", 3, ExamDefinitionStatus.ACTIVE);
-        when(repository.findWithItemsByPublicId(sourceId)).thenReturn(Optional.of(source));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(sourceId)).thenReturn(Optional.of(source));
         when(repository.findAllByCodeForUpdate("APEUNI_V5")).thenReturn(List.of(source));
         when(repository.findMaxVersionByCode("APEUNI_V5")).thenReturn(3);
         when(repository.save(any())).thenAnswer(inv -> {
@@ -423,7 +423,7 @@ class ExamDefinitionAdminServiceTest {
         UUID staffId = UUID.randomUUID();
         ExamDefinition template = fullyValidTemplate(templateId, "CUSTOM", 1, ExamDefinitionStatus.DRAFT);
         template.setAuthorUserPublicId(staffId);
-        when(repository.findWithItemsByPublicId(templateId)).thenReturn(Optional.of(template));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(templateId)).thenReturn(Optional.of(template));
         CurrentUser staff = new CurrentUser(staffId, null, List.of("ACADEMIC_STAFF"));
 
         assertThatThrownBy(() -> service.activate(templateId, staff))
@@ -436,7 +436,7 @@ class ExamDefinitionAdminServiceTest {
         UUID managerId = UUID.randomUUID();
         ExamDefinition template = fullyValidTemplate(templateId, "CUSTOM", 1, ExamDefinitionStatus.PENDING_APPROVAL);
         template.setAuthorUserPublicId(managerId);
-        when(repository.findWithItemsByPublicId(templateId)).thenReturn(Optional.of(template));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(templateId)).thenReturn(Optional.of(template));
         CurrentUser manager = new CurrentUser(managerId, null, List.of("ACADEMIC_MANAGER"));
 
         assertThatThrownBy(() -> service.approve(templateId, manager))
@@ -452,7 +452,7 @@ class ExamDefinitionAdminServiceTest {
         template.setAuthorUserPublicId(staffId);
         template.getItems().forEach(item -> item.setSection(
                 PteTaskType.valueOf(item.getTaskType()).getSection().name()));
-        when(repository.findWithItemsByPublicId(templateId)).thenReturn(Optional.of(template));
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(templateId)).thenReturn(Optional.of(template));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         ExamDefinitionResponse approved = service.approve(templateId, manager);
@@ -460,10 +460,40 @@ class ExamDefinitionAdminServiceTest {
 
         template.setStatus(ExamDefinitionStatus.DRAFT);
         when(repository.findAllByCodeForUpdate("CUSTOM")).thenReturn(List.of(template));
-        when(repository.findWithItemsByStatus(ExamDefinitionStatus.ACTIVE)).thenReturn(Optional.empty());
+        when(repository.findWithItemsByStatusAndTenantIdIsNull(ExamDefinitionStatus.ACTIVE)).thenReturn(Optional.empty());
         ExamDefinitionResponse active = service.activate(templateId, manager);
 
         assertThat(active.status()).isEqualTo("ACTIVE");
+    }
+
+    @Test
+    void activate_retiredVersion_switchesBackOnAndRetiresTheCurrentActive() {
+        CurrentUser manager = new CurrentUser(UUID.randomUUID(), null, List.of("ACADEMIC_MANAGER"));
+        UUID retiredId = UUID.randomUUID();
+        ExamDefinition retired = fullyValidTemplate(retiredId, "CUSTOM", 1, ExamDefinitionStatus.RETIRED);
+        retired.setAuthorUserPublicId(UUID.randomUUID());
+        retired.getItems().forEach(item -> item.setSection(
+                PteTaskType.valueOf(item.getTaskType()).getSection().name()));
+        ExamDefinition current = fullyValidTemplate(UUID.randomUUID(), "CUSTOM", 2, ExamDefinitionStatus.ACTIVE);
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(retiredId)).thenReturn(Optional.of(retired));
+        when(repository.findAllByCodeForUpdate("CUSTOM")).thenReturn(List.of(retired, current));
+        when(repository.findWithItemsByStatusAndTenantIdIsNull(ExamDefinitionStatus.ACTIVE)).thenReturn(Optional.of(current));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ExamDefinitionResponse response = service.activate(retiredId, manager);
+
+        assertThat(response.status()).isEqualTo("ACTIVE");
+        assertThat(current.getStatus()).isEqualTo(ExamDefinitionStatus.RETIRED);
+    }
+
+    @Test
+    void activate_alreadyActiveVersion_throwsNotDraft() {
+        UUID activeId = UUID.randomUUID();
+        ExamDefinition active = fullyValidTemplate(activeId, "CUSTOM", 1, ExamDefinitionStatus.ACTIVE);
+        when(repository.findWithItemsByPublicIdAndTenantIdIsNull(activeId)).thenReturn(Optional.of(active));
+
+        assertThatThrownBy(() -> service.activate(activeId))
+                .isInstanceOf(ExamDefinitionNotDraftException.class);
     }
 
     private ExamDefinitionItemRequest sampleItemRequest() {

@@ -106,6 +106,15 @@ public class TaskTypeQueryService {
         return new TaskTypePageResponse(responses, nextCursor);
     }
 
+    /** Task type keys of every active catalog entry, standard and custom. */
+    @Transactional(readOnly = true)
+    public List<String> listActiveTaskTypeKeys() {
+        return repository.findAllByDeletedFalseAndActiveTrueOrderByDisplayOrderAscCodeAsc().stream()
+                .map(definition -> TaskTypeCodeCompatibility.normalizeTaskTypeKey(
+                        definition.getTaskTypeKey() == null ? definition.getCode() : definition.getTaskTypeKey()))
+                .toList();
+    }
+
     /**
      * Get a single task type from the canonical dynamic catalog.
      */

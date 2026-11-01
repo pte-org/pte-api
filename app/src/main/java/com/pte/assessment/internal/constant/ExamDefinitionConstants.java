@@ -40,6 +40,14 @@ public final class ExamDefinitionConstants {
     public static final String NEGATIVE_WEIGHT = "Weight cannot be negative for task type ";
     public static final String SKILL_WITH_NO_WEIGHT = "No task type contributes any weight to skill ";
     public static final String SKILL_WEIGHT_NOT_100 = "Skill weight column must total exactly 100 for ";
+    public static final String MISSING_CATALOG_TASK_TYPES =
+            "A default template must contain every active task type. Missing: ";
+    public static final String HOST_TASK_TYPE_OUTSIDE_BASE =
+            "Task type is not part of the default template this template was created from: ";
+    public static final String HOST_TEMPLATE_NO_BASE =
+            "The default template this template was created from is no longer available";
+    public static final String HOST_TEMPLATE_NOT_ACTIVE = "Only an active template can be retired";
+    public static final String HOST_TEMPLATE_TENANT_REQUIRED = "Only a tenant host can manage its own score templates";
     public static final String DUPLICATE_TASK_TYPES = "Duplicate task types: ";
     public static final String DUPLICATE_SEQUENCES = "Duplicate template sequence values: ";
     public static final String INVALID_SEQUENCE = "Template sequence must be non-negative: ";
@@ -49,9 +57,6 @@ public final class ExamDefinitionConstants {
     public static final String TEMPLATE_NO_SCORED_TASKS = "TEMPLATE_NO_SCORED_TASKS";
     public static final String TEMPLATE_QUESTION_BANK_INSUFFICIENT =
             "Not enough approved questions are available for task type: ";
-    public static final String CUSTOM_TEMPLATE_ACTIVATION_DISABLED = "CUSTOM_TEMPLATE_ACTIVATION_DISABLED";
-    public static final String CUSTOM_TEMPLATE_ACTIVATION_DISABLED_MESSAGE =
-            "Custom exam templates are temporarily unavailable while the platform rollout is being verified.";
     public static final String TEMPLATE_UNSCORED_WEIGHT = "Unscored task must have zero weight: ";
     public static final String TEMPLATE_WEIGHT_OUT_OF_RANGE = "Weight must be between 0 and 100: ";
     public static final String TEMPLATE_WEIGHT_PRECISION = "Weight can have at most two decimal places: ";

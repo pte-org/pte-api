@@ -8,8 +8,6 @@ import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.internal.service.definition.ExamDefinitionAdminService;
 import com.pte.assessment.internal.constant.ExamDefinitionConstants;
 import com.pte.assessment.ExamDefinitionService;
-import com.pte.itembank.TaskTypeRolloutProperties;
-import com.pte.assessment.internal.exception.CustomTemplateActivationDisabledException;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -44,14 +42,12 @@ public class ExamDefinitionController {
 
     private final ExamDefinitionAdminService adminService;
     private final ExamDefinitionService examDefinitionService;
-    private final TaskTypeRolloutProperties rolloutProperties;
 
     @Autowired
     public ExamDefinitionController(ExamDefinitionAdminService adminService,
-            ExamDefinitionService examDefinitionService, TaskTypeRolloutProperties rolloutProperties) {
+            ExamDefinitionService examDefinitionService) {
         this.adminService = adminService;
         this.examDefinitionService = examDefinitionService;
-        this.rolloutProperties = rolloutProperties;
     }
 
     @GetMapping
@@ -116,7 +112,7 @@ public class ExamDefinitionController {
             case REJECT -> adminService.reject(publicId, new RejectExamDefinitionRequest(
                     StatusReasonRequiredException.requireReason(request.reason(),
                             ExamDefinitionConstants.TEMPLATE_APPROVAL_REASON_REQUIRED)), caller);
-            case ACTIVATE -> activate(publicId, caller);
+            case ACTIVATE -> adminService.activate(publicId, caller);
         });
     }
 
@@ -124,13 +120,6 @@ public class ExamDefinitionController {
     @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
     public ApiResponse<ExamDefinitionFeasibilityResponse> feasibility(@PathVariable UUID publicId) {
         return ApiResponse.success(examDefinitionService.getTemplateFeasibility(publicId));
-    }
-
-    private ExamDefinitionResponse activate(UUID publicId, CurrentUser caller) {
-        if (!rolloutProperties.isCustomTemplateActivationEnabled() && adminService.isCustomTemplate(publicId)) {
-            throw new CustomTemplateActivationDisabledException();
-        }
-        return adminService.activate(publicId, caller);
     }
 
     private CurrentUser currentUser() {
