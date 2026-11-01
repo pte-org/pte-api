@@ -66,6 +66,25 @@ public class RefreshTokenService {
         refreshTokenRepository.revokeAllActiveByUserIdAndOrganizationId(userId, organizationId);
     }
 
+    /**
+     * Signs every other device out after the user changed their own password. The session presenting
+     * {@code keepRawToken} survives only when that token is the user's own and still active; any other value
+     * revokes everything rather than trusting a token it cannot vouch for.
+     */
+    @Transactional
+    public void revokeAllOthers(Long userId, String keepRawToken) {
+        Long keepId = keepRawToken == null || keepRawToken.isBlank() ? null
+                : refreshTokenRepository.findByTokenHash(tokenHasher.hash(keepRawToken))
+                        .filter(token -> token.getUserId().equals(userId) && token.isActive(clock.instant()))
+                        .map(RefreshToken::getId)
+                        .orElse(null);
+        if (keepId == null) {
+            refreshTokenRepository.revokeAllActiveByUserId(userId);
+        } else {
+            refreshTokenRepository.revokeAllActiveByUserIdExceptId(userId, keepId);
+        }
+    }
+
     /** Revokes every active refresh token when a user loses account access. */
     @Transactional
     public void revokeAllForUser(Long userId) {

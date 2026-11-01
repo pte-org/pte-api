@@ -6,11 +6,11 @@ import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.dto.response.ResolvedExamItemResponse;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.assessment.internal.config.TaskTimingConfig;
-import com.pte.attempt.internal.constant.AttemptConstants;
-import com.pte.attempt.internal.exception.ExamCapabilityException;
-import com.pte.attempt.internal.exception.content.MissingAudioDurationException;
-import com.pte.attempt.internal.exception.content.MissingAudioPromptException;
-import com.pte.attempt.internal.exception.content.MissingImagePromptException;
+import com.pte.assessment.internal.constant.AssessmentConstants;
+import com.pte.shared.exception.exam.ExamCapabilityException;
+import com.pte.shared.exception.exam.MissingAudioDurationException;
+import com.pte.shared.exception.exam.MissingAudioPromptException;
+import com.pte.shared.exception.exam.MissingImagePromptException;
 import com.pte.assessment.internal.exception.content.TaskTimingNotConfiguredException;
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskRuntimeContractConstants;
@@ -175,15 +175,15 @@ public class ExamItemRuntimeResolver {
         try {
             try {
                 if (!TaskTypeCodeCompatibility.parse(taskTypeCode).getSection().name().equals(source.section())) {
-                    throw new IllegalArgumentException(AttemptConstants.SNAPSHOT_TASK_TYPE_SECTION_MISMATCH);
+                    throw new IllegalArgumentException(AssessmentConstants.SNAPSHOT_TASK_TYPE_SECTION_MISMATCH);
                 }
             } catch (RuntimeException customKey) {
                 if (source.section() == null || source.section().isBlank()) {
-                    throw new IllegalArgumentException(AttemptConstants.SNAPSHOT_CUSTOM_TASK_TYPE_SECTION_REQUIRED);
+                    throw new IllegalArgumentException(AssessmentConstants.SNAPSHOT_CUSTOM_TASK_TYPE_SECTION_REQUIRED);
                 }
             }
         } catch (RuntimeException ex) {
-            throw new ExamCapabilityException(AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE, List.of());
+            throw new ExamCapabilityException(AssessmentConstants.SNAPSHOT_RUNTIME_CONTRACT_INVALID, List.of());
         }
         return taskTypeCode;
     }
@@ -198,30 +198,30 @@ public class ExamItemRuntimeResolver {
             boolean unknownVersion = source.runtimeMappingVersion() != null
                     && !TaskRuntimeContractConstants.MAPPING_VERSION_LEGACY.equals(source.runtimeMappingVersion());
             if (unknownStatus || unknownVersion) {
-                throw new ExamCapabilityException(AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE, List.of());
+                throw new ExamCapabilityException(AssessmentConstants.SNAPSHOT_RUNTIME_CONTRACT_INVALID, List.of());
             }
             return null;
         }
         if (!TaskRuntimeContractConstants.MAPPING_STATUS_RESOLVED_CANONICAL.equals(source.runtimeMappingStatus())
                 || !TaskRuntimeContractConstants.MAPPING_VERSION_CANONICAL.equals(source.runtimeMappingVersion())) {
-            throw new ExamCapabilityException(AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE, List.of());
+            throw new ExamCapabilityException(AssessmentConstants.SNAPSHOT_RUNTIME_CONTRACT_INVALID, List.of());
         }
         try {
             if (!taskTypeCode.equals(runtime.taskTypeCode())) {
-                throw new IllegalArgumentException(AttemptConstants.SNAPSHOT_RUNTIME_PROFILE_NOT_ALLOWLISTED);
+                throw new IllegalArgumentException(AssessmentConstants.SNAPSHOT_RUNTIME_PROFILE_NOT_ALLOWLISTED);
             }
             if (TaskTypeCodeCompatibility.isStandard(taskTypeCode)) {
                 if (!TaskRuntimeProfileRegistry.isAllowlistedContract(runtime)) {
-                    throw new IllegalArgumentException(AttemptConstants.SNAPSHOT_STANDARD_RUNTIME_PROFILE_MISMATCH);
+                    throw new IllegalArgumentException(AssessmentConstants.SNAPSHOT_STANDARD_RUNTIME_PROFILE_MISMATCH);
                 }
             } else if (!("ACTIVE".equals(runtime.status()) || "RETIRED".equals(runtime.status()))
                     || runtime.screenKey() == null || runtime.contractVersion() < 1
                     || runtime.answerSchemaVersion() < 1 || runtime.scoringProfileKey() == null
                     || runtime.scoringMode() == null) {
-                throw new IllegalArgumentException(AttemptConstants.SNAPSHOT_CUSTOM_RUNTIME_PROFILE_INCOMPLETE);
+                throw new IllegalArgumentException(AssessmentConstants.SNAPSHOT_CUSTOM_RUNTIME_PROFILE_INCOMPLETE);
             }
         } catch (RuntimeException ex) {
-            throw new ExamCapabilityException(AttemptConstants.EXAM_CONFIGURATION_NOT_COMPATIBLE, List.of());
+            throw new ExamCapabilityException(AssessmentConstants.SNAPSHOT_RUNTIME_CONTRACT_INVALID, List.of());
         }
         return runtime;
     }

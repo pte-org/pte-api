@@ -11,7 +11,7 @@ import com.pte.attempt.internal.dto.request.AttemptPreflightRequest;
 import com.pte.attempt.internal.dto.request.ClientCapabilityManifest;
 import com.pte.attempt.internal.dto.response.AttemptPreflightResponse;
 import com.pte.attempt.internal.exception.AttemptNotFoundException;
-import com.pte.attempt.internal.exception.ExamCapabilityException;
+import com.pte.shared.exception.exam.ExamCapabilityException;
 import com.pte.itembank.TaskTypeObservability;
 import com.pte.session.SessionService;
 import com.pte.shared.audit.AuditLogService;

@@ -4,8 +4,8 @@ import com.pte.scoring.internal.service.grading.GradingCohortService;
 import com.pte.scoring.internal.service.grading.SessionGradingGateway;
 import com.pte.scoring.internal.service.selection.ScorePublicationLockService;
 import com.pte.scoring.internal.service.staff.ScoringEligibilityQueryService;
+import com.pte.scoring.internal.service.staff.SubmittedAttemptReader;
 import com.pte.attempt.AttemptService;
-import com.pte.attempt.dto.response.AttemptGradingCandidateView;
 import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.identity.IdentityService;
 import com.pte.identity.dto.response.ExaminerIdentityView;
@@ -56,8 +56,7 @@ import java.util.stream.Collectors;
 public class ExaminerAssignmentService {
 
     private final SessionService sessionService;
-    private final AttemptService attemptService;
-    private final ScoringEligibilityQueryService eligibilityQueryService;
+    private final SubmittedAttemptReader reader;
     private final IdentityService identityService;
     private final GradingAssignmentRepository assignmentRepository;
     private final ExaminerEvaluationRepository evaluationRepository;
@@ -76,8 +75,7 @@ public class ExaminerAssignmentService {
             SessionGradingGateway gateway, GradingCohortService cohortService,
             Clock clock) {
         this.sessionService = sessionService;
-        this.attemptService = attemptService;
-        this.eligibilityQueryService = eligibilityQueryService;
+        this.reader = new SubmittedAttemptReader(attemptService, eligibilityQueryService);
         this.identityService = identityService;
         this.assignmentRepository = assignmentRepository;
         this.evaluationRepository = evaluationRepository;
@@ -96,7 +94,7 @@ public class ExaminerAssignmentService {
         sessionService.verifyHostAccess(sessionPublicId, tenantId);
         List<GradingAssignment> committed =
                 assignmentRepository.findByTenantIdAndSessionPublicIdAndDeletedFalse(tenantId, sessionPublicId);
-        Map<UUID, AttemptSummaryView> submitted = submittedAttempts(sessionPublicId, tenantId);
+        Map<UUID, AttemptSummaryView> submitted = reader.submitted(sessionPublicId, tenantId);
         Map<UUID, GradingAssignment> committedByAttempt = committed.stream()
                 .collect(Collectors.toMap(GradingAssignment::getAttemptPublicId, row -> row, (left, right) -> left));
         Map<Long, Integer> draftCounts = draftCounts(tenantId, committed);
@@ -107,7 +105,7 @@ public class ExaminerAssignmentService {
         boolean published = !committed.isEmpty() && gateway.isPublished(tenantId, sessionPublicId);
         Map<UUID, UUID> examinerByAttempt = new LinkedHashMap<>();
         if (committed.isEmpty()) {
-            eligibleAttemptCounts(sessionPublicId, tenantId, submitted)
+            reader.eligibleCounts(sessionPublicId, tenantId, submitted)
                     .keySet().forEach(attemptId -> examinerByAttempt.put(attemptId, null));
         } else {
             committed.forEach(row -> examinerByAttempt.put(row.getAttemptPublicId(), row.getExaminerPublicId()));
@@ -162,8 +160,8 @@ public class ExaminerAssignmentService {
                         ExaminerAssignmentConstants.ASSIGNMENT_MUST_COVER_EVERY_ATTEMPT);
             }
         }
-        Map<UUID, Integer> eligible = eligibleAttemptCounts(sessionPublicId, tenantId,
-                submittedAttempts(sessionPublicId, tenantId));
+        Map<UUID, Integer> eligible = reader.eligibleCounts(sessionPublicId, tenantId,
+                reader.submitted(sessionPublicId, tenantId));
         if (!eligible.keySet().equals(examinerByAttempt.keySet())) {
             throw new InvalidExaminerAssignmentException(
                     ExaminerAssignmentConstants.ASSIGNMENT_MUST_COVER_EVERY_ATTEMPT);
@@ -269,24 +267,6 @@ public class ExaminerAssignmentService {
         }
         return evaluationRepository.countByAssignment(tenantId, committed.stream().map(GradingAssignment::getId).toList())
                 .stream().collect(Collectors.toMap(DraftCount::assignmentId, count -> (int) count.count()));
-    }
-
-    private Map<UUID, AttemptSummaryView> submittedAttempts(UUID sessionPublicId, UUID tenantId) {
-        return attemptService.getSubmittedAttemptsForSession(sessionPublicId, tenantId).stream()
-                .collect(Collectors.toMap(AttemptSummaryView::attemptPublicId, attempt -> attempt,
-                        (left, right) -> left, LinkedHashMap::new));
-    }
-
-    /** Submitted attempts that carry at least one AI-eligible answer and are not excluded from the grading. */
-    private Map<UUID, Integer> eligibleAttemptCounts(UUID sessionPublicId, UUID tenantId,
-            Map<UUID, AttemptSummaryView> submitted) {
-        Set<UUID> excluded = attemptService.getGradingCandidatesForSession(sessionPublicId, tenantId).stream()
-                .filter(AttemptGradingCandidateView::excluded)
-                .map(AttemptGradingCandidateView::attemptPublicId).collect(Collectors.toSet());
-        List<UUID> candidates = submitted.keySet().stream().filter(id -> !excluded.contains(id)).toList();
-        return eligibilityQueryService.findEligibleAttempts(sessionPublicId, tenantId, candidates).stream()
-                .collect(Collectors.toMap(view -> view.attemptPublicId(), view -> view.eligibleAnswerCount(),
-                        (left, right) -> left, LinkedHashMap::new));
     }
 
     private void assertGradingAllowsExaminers(UUID tenantId, UUID sessionPublicId) {

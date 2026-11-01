@@ -216,6 +216,12 @@ public class AttemptService implements StartedAttemptLookup {
         return examAttemptRepository.existsByPublicIdAndTenantId(attemptPublicId, tenantId);
     }
 
+    @Override
+    public boolean hasInProgressAttempt(UUID studentPublicId) {
+        return examAttemptRepository.existsByStudentPublicIdAndStatusAndDeletedFalse(
+                studentPublicId, AttemptStatus.IN_PROGRESS);
+    }
+
     /** Batch conflict read for session publish; no attempt content crosses the module boundary. */
     @Override
     public Set<UUID> findStartedStudentPublicIds(UUID tenantId, List<UUID> sessionPublicIds,

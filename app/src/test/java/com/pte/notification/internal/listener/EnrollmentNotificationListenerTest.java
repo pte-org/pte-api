@@ -17,6 +17,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,7 +34,7 @@ class EnrollmentNotificationListenerTest {
 
     @BeforeEach
     void setUp() {
-        listener = new EnrollmentNotificationListener(identityService, dispatchService);
+        listener = new EnrollmentNotificationListener(identityService, dispatchService, com.pte.TestClocks.fixed());
     }
 
     @Test
@@ -56,7 +57,7 @@ class EnrollmentNotificationListenerTest {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
 
         verify(dispatchService).dispatch(typeCaptor.capture(), userCaptor.capture(), any(UUID.class),
-                any(String.class), any(String.class));
+                any(String.class), any(String.class), isNull(), any(String.class));
 
         assertThat(typeCaptor.getValue()).isEqualTo(NotificationType.STUDENT_ENROLLED);
         assertThat(userCaptor.getValue()).isEqualTo(student);
@@ -78,7 +79,7 @@ class EnrollmentNotificationListenerTest {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
 
         verify(dispatchService).dispatch(typeCaptor.capture(), userCaptor.capture(), any(UUID.class),
-                any(String.class), any(String.class));
+                any(String.class), any(String.class), isNull(), any(String.class));
 
         assertThat(typeCaptor.getValue()).isEqualTo(NotificationType.STUDENT_ENROLLED);
         assertThat(userCaptor.getValue()).isNull();

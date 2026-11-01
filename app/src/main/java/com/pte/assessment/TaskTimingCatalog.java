@@ -1,4 +1,4 @@
-package com.pte.attempt;
+package com.pte.assessment;
 
 import com.pte.assessment.internal.config.TaskTimingConfig;
 import org.springframework.stereotype.Service;

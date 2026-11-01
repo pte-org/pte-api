@@ -52,7 +52,7 @@ public class HostExamTemplateService {
     private final ExamDefinitionRepository repository;
     private final ExamDefinitionService examDefinitionService;
     private final QuestionTypeService questionTypeService;
-    private final AuditLogService auditLogService;
+    private final HostExamTemplateAudit audit;
     private final Clock clock;
     private final ExamDefinitionValidator validator;
     private final ExamDefinitionItemMapper itemMapper;
@@ -64,7 +64,7 @@ public class HostExamTemplateService {
         this.repository = repository;
         this.examDefinitionService = examDefinitionService;
         this.questionTypeService = questionTypeService;
-        this.auditLogService = auditLogService;
+        this.audit = new HostExamTemplateAudit(auditLogService);
         this.clock = clock;
         this.validator = new ExamDefinitionValidator(questionTypeService, runtimeProfileService, itembankService);
         this.itemMapper = new ExamDefinitionItemMapper(validator);
@@ -105,7 +105,7 @@ public class HostExamTemplateService {
         ExamDefinition draft = newDraft(tenantId, base, generateCode(tenantId), 1, request.name().trim(), caller);
         base.getItems().forEach(item -> draft.addItem(itemMapper.copyItem(item)));
         ExamDefinition saved = save(draft);
-        audit(caller, ExamDefinitionConstants.AUDIT_CREATED, saved, "Created host template from default version "
+        audit.record(caller, ExamDefinitionConstants.AUDIT_CREATED, saved, "Created host template from default version "
                 + base.getVersion());
         return ExamDefinitionMapper.toResponse(saved);
     }
@@ -129,7 +129,7 @@ public class HostExamTemplateService {
         draft.setAuthorUserPublicId(caller.userId());
         source.getItems().forEach(item -> draft.addItem(itemMapper.copyItem(item)));
         ExamDefinition saved = save(draft);
-        audit(caller, ExamDefinitionConstants.AUDIT_CLONED, saved, "Cloned from template '" + source.getName()
+        audit.record(caller, ExamDefinitionConstants.AUDIT_CLONED, saved, "Cloned from template '" + source.getName()
                 + "' version " + source.getVersion());
         return ExamDefinitionMapper.toResponse(saved);
     }
@@ -155,11 +155,11 @@ public class HostExamTemplateService {
             validator.validateCatalog(template, false);
             validator.validateWithinBase(template, requireBase(template));
         } catch (ExamDefinitionValidationException ex) {
-            auditFailure(caller, template, ex);
+            audit.failure(caller, template, ex);
             throw ex;
         }
         ExamDefinition saved = repository.save(template);
-        audit(caller, ExamDefinitionConstants.AUDIT_UPDATED, saved, "Updated draft version " + saved.getVersion());
+        audit.record(caller, ExamDefinitionConstants.AUDIT_UPDATED, saved, "Updated draft version " + saved.getVersion());
         return ExamDefinitionMapper.toResponse(saved);
     }
 
@@ -167,7 +167,7 @@ public class HostExamTemplateService {
     public void deleteDraft(UUID publicId, CurrentUser caller) {
         ExamDefinition template = findOwned(publicId, caller);
         requireDraft(template);
-        audit(caller, ExamDefinitionConstants.AUDIT_DELETED, template, "Deleted draft version " + template.getVersion());
+        audit.record(caller, ExamDefinitionConstants.AUDIT_DELETED, template, "Deleted draft version " + template.getVersion());
         repository.delete(template);
     }
 
@@ -187,7 +187,7 @@ public class HostExamTemplateService {
             ExamDefinitionActivationValidator.validate(target);
             validator.validateQuestionBank(target);
         } catch (ExamDefinitionValidationException ex) {
-            auditFailure(caller, target, ex);
+            audit.failure(caller, target, ex);
             throw ex;
         }
 
@@ -198,7 +198,7 @@ public class HostExamTemplateService {
                 .forEach(active -> {
                     active.setStatus(ExamDefinitionStatus.RETIRED);
                     repository.saveAndFlush(active);
-                    audit(caller, ExamDefinitionConstants.AUDIT_RETIRED, active, "Retired version "
+                    audit.record(caller, ExamDefinitionConstants.AUDIT_RETIRED, active, "Retired version "
                             + active.getVersion() + " after activating version " + target.getVersion());
                 });
         target.setStatus(ExamDefinitionStatus.ACTIVE);
@@ -207,7 +207,7 @@ public class HostExamTemplateService {
             questionTypeService.recordPublishedUse(
                     saved.getItems().stream().map(this::logicalTaskKey).distinct().toList(), clock.instant());
         }
-        audit(caller, ExamDefinitionConstants.AUDIT_ACTIVATED, saved, "Activated version " + saved.getVersion());
+        audit.record(caller, ExamDefinitionConstants.AUDIT_ACTIVATED, saved, "Activated version " + saved.getVersion());
         return ExamDefinitionMapper.toResponse(saved);
     }
 
@@ -220,7 +220,7 @@ public class HostExamTemplateService {
         }
         template.setStatus(ExamDefinitionStatus.RETIRED);
         ExamDefinition saved = save(template);
-        audit(caller, ExamDefinitionConstants.AUDIT_RETIRED, saved, "Retired version " + saved.getVersion());
+        audit.record(caller, ExamDefinitionConstants.AUDIT_RETIRED, saved, "Retired version " + saved.getVersion());
         return ExamDefinitionMapper.toResponse(saved);
     }
 
@@ -283,24 +283,5 @@ public class HostExamTemplateService {
     private String logicalTaskKey(ExamDefinitionItem item) {
         return item.getTaskTypeKey() == null ? TaskTypeCodeCompatibility.normalizeForLookup(item.getTaskType())
                 : TaskTypeCodeCompatibility.normalizeTaskTypeKey(item.getTaskTypeKey());
-    }
-
-    private void audit(CurrentUser caller, String action, ExamDefinition template, String summary) {
-        if (auditLogService != null && caller != null) {
-            auditLogService.record(caller, ExamDefinitionConstants.AUDIT_AGGREGATE_TYPE,
-                    String.valueOf(template.getPublicId()), action, truncate(summary));
-        }
-    }
-
-    private void auditFailure(CurrentUser caller, ExamDefinition template, ExamDefinitionValidationException ex) {
-        if (auditLogService != null && caller != null) {
-            auditLogService.recordFailure(caller, ExamDefinitionConstants.AUDIT_AGGREGATE_TYPE,
-                    String.valueOf(template.getPublicId()), ExamDefinitionConstants.AUDIT_VALIDATION_FAILED,
-                    truncate(ex.getMessage()));
-        }
-    }
-
-    private String truncate(String summary) {
-        return summary == null ? "" : summary.length() <= 500 ? summary : summary.substring(0, 500);
     }
 }

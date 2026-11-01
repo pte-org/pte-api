@@ -27,9 +27,9 @@ public final class AttemptConstants {
     public static final String UNSUPPORTED_RUNTIME_CONTRACT = "UNSUPPORTED_RUNTIME_CONTRACT";
 
     public static final String EXAM_REQUIRES_APP_UPDATE_MESSAGE =
-            "Please update the PTE Prep app before starting this exam. It requires capabilities that this app does not provide.";
+            com.pte.shared.exception.exam.ExamCapabilityException.REQUIRES_APP_UPDATE_MESSAGE;
     public static final String EXAM_CONFIGURATION_NOT_COMPATIBLE_MESSAGE =
-            "This exam is not currently compatible with the configured task runtime. Please ask an administrator to review the exam configuration.";
+            com.pte.shared.exception.exam.ExamCapabilityException.NOT_COMPATIBLE_MESSAGE;
     public static final String CAPABILITY_MANIFEST_INVALID_MESSAGE =
             "The app capability manifest is invalid. Please update the app and try again.";
     public static final String UNSUPPORTED_RUNTIME_CONTRACT_MESSAGE =
@@ -63,16 +63,6 @@ public final class AttemptConstants {
     public static final String EXAM_CONTENT_CACHE_SERIALIZATION_FAILED = "Failed to serialize exam content cache entry";
     public static final String SNAPSHOT_TASK_TYPE_KEY_MISMATCH =
             "task type key does not match the frozen task type";
-    public static final String SNAPSHOT_TASK_TYPE_SECTION_MISMATCH =
-            "task type section does not match the frozen snapshot section";
-    public static final String SNAPSHOT_CUSTOM_TASK_TYPE_SECTION_REQUIRED =
-            "custom task type section is missing";
-    public static final String SNAPSHOT_RUNTIME_PROFILE_NOT_ALLOWLISTED =
-            "runtime profile is not an allowlisted match";
-    public static final String SNAPSHOT_STANDARD_RUNTIME_PROFILE_MISMATCH =
-            "standard runtime profile differs from the allowlisted match";
-    public static final String SNAPSHOT_CUSTOM_RUNTIME_PROFILE_INCOMPLETE =
-            "custom runtime profile is incomplete";
 
     public static final String CACHE_KEY_PREFIX = "attempt:exam-content:";
     public static final String LOCK_KEY_PREFIX = "attempt:lock:exam-content:";

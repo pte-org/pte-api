@@ -9,6 +9,13 @@ server:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001}
 
+app:
+  web:
+    tenant-url: ${APP_WEB_TENANT_URL:http://localhost:3000}
+    admin-url: ${APP_WEB_ADMIN_URL:http://localhost:3001}
+  password-reset:
+    token-ttl-minutes: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:30}
+
 rate-limit:
   per-second: ${RATE_LIMIT_PER_SECOND:40}
   redeem-per-second: ${REDEEM_RATE_LIMIT_PER_SECOND:5}

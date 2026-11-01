@@ -29,6 +29,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByUsernameAndDeletedFalse(String username);
 
+    List<User> findAllByEmailIgnoreCaseAndDeletedFalse(String email);
+
     /** Kept for the password-recovery flow only; login excludes archived users. */
     List<User> findByEmailIgnoreCaseAndDeletedFalse(String email);
 
