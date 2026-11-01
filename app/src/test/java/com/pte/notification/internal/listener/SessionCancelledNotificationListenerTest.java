@@ -21,6 +21,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -64,7 +65,8 @@ class SessionCancelledNotificationListenerTest {
                 .onSessionCancelled(new SessionCancelledEvent(sessionId, tenantId, "Exam A", Instant.now()));
 
         ArgumentCaptor<NotificationType> types = ArgumentCaptor.forClass(NotificationType.class);
-        verify(dispatchService, times(2)).dispatch(types.capture(), any(), any(), any(), any(), any());
+        verify(dispatchService, times(2)).dispatch(types.capture(), any(), any(), any(), any(), any(),
+                anyString());
         assertThat(types.getAllValues()).containsOnly(NotificationType.SESSION_CANCELLED);
     }
 }

@@ -1,6 +1,6 @@
 package com.pte.practice.internal.service.timing;
 
-import com.pte.attempt.TaskTimingCatalog;
+import com.pte.assessment.TaskTimingCatalog;
 import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.assessment.ExamDefinitionService;
 import com.pte.assessment.dto.response.ExamDefinitionItemResponse;

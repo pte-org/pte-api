@@ -86,6 +86,8 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long>,
     long countSubmittedBetween(@Param("tenantId") UUID tenantId, @Param("from") Instant from,
             @Param("to") Instant to);
 
+    boolean existsByStudentPublicIdAndStatusAndDeletedFalse(UUID studentPublicId, AttemptStatus status);
+
     /** Overview: attempts currently in progress for the tenant. */
     @Query("SELECT COUNT(a) FROM ExamAttempt a WHERE a.tenantId = :tenantId AND a.deleted = false "
             + "AND a.status = com.pte.attempt.domain.enums.AttemptStatus.IN_PROGRESS")

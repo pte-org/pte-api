@@ -19,6 +19,9 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.Mockito.times;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,7 +38,7 @@ class ViolationNotificationListenerTest {
 
         @BeforeEach
         void setUp() {
-                listener = new ViolationNotificationListener(identityService, dispatchService);
+                listener = new ViolationNotificationListener(identityService, dispatchService, com.pte.TestClocks.fixed());
         }
 
         @Test
@@ -55,7 +58,7 @@ class ViolationNotificationListenerTest {
                 listener.onViolationDetected(event);
 
                 verify(dispatchService, times(0)).dispatchTo(
-                                NotificationType.VIOLATION_DETECTED, null, tenantId, null, null);
+                                NotificationType.VIOLATION_DETECTED, null, tenantId, null, null, null, null);
         }
 
         @Test
@@ -83,8 +86,8 @@ class ViolationNotificationListenerTest {
                 String expectedBody = "A proctor flagged attempt " + attemptPublicId + " in session " + sessionPublicId
                                 + " for " + ViolationType.TAB_SWITCH + " — " + violationDetail + ".";
 
-                verify(dispatchService).dispatchTo(NotificationType.VIOLATION_DETECTED, hostAdmin, tenantId,
-                                expectedSubject, expectedBody);
+                verify(dispatchService).dispatchTo(eq(NotificationType.VIOLATION_DETECTED), eq(hostAdmin), eq(tenantId),
+                                eq(expectedSubject), eq(expectedBody), isNull(), anyString());
         }
 
         @Test
@@ -120,12 +123,12 @@ class ViolationNotificationListenerTest {
                 String expectedBody = "A proctor flagged attempt " + attemptPublicId + " in session " + sessionPublicId
                                 + " for " + ViolationType.SUSPICIOUS_AUDIO + " — " + violationDetail + ".";
 
-                verify(dispatchService).dispatchTo(NotificationType.VIOLATION_DETECTED, hostAdmin1, tenantId,
-                                expectedSubject, expectedBody);
-                verify(dispatchService).dispatchTo(NotificationType.VIOLATION_DETECTED, hostAdmin2, tenantId,
-                                expectedSubject, expectedBody);
-                verify(dispatchService).dispatchTo(NotificationType.VIOLATION_DETECTED, hostAdmin3, tenantId,
-                                expectedSubject, expectedBody);
+                verify(dispatchService).dispatchTo(eq(NotificationType.VIOLATION_DETECTED), eq(hostAdmin1), eq(tenantId),
+                                eq(expectedSubject), eq(expectedBody), isNull(), anyString());
+                verify(dispatchService).dispatchTo(eq(NotificationType.VIOLATION_DETECTED), eq(hostAdmin2), eq(tenantId),
+                                eq(expectedSubject), eq(expectedBody), isNull(), anyString());
+                verify(dispatchService).dispatchTo(eq(NotificationType.VIOLATION_DETECTED), eq(hostAdmin3), eq(tenantId),
+                                eq(expectedSubject), eq(expectedBody), isNull(), anyString());
         }
 
         @Test
@@ -152,7 +155,7 @@ class ViolationNotificationListenerTest {
                 String expectedBody = "A proctor flagged attempt " + attemptPublicId + " in session " + sessionPublicId
                                 + " for " + ViolationType.TECHNICAL_ISSUE + ".";
 
-                verify(dispatchService).dispatchTo(NotificationType.VIOLATION_DETECTED, hostAdmin, tenantId,
-                                expectedSubject, expectedBody);
+                verify(dispatchService).dispatchTo(eq(NotificationType.VIOLATION_DETECTED), eq(hostAdmin), eq(tenantId),
+                                eq(expectedSubject), eq(expectedBody), isNull(), anyString());
         }
 }

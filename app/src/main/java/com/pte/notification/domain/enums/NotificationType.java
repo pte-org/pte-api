@@ -10,6 +10,7 @@ public enum NotificationType {
     TENANT_APPLICATION_APPROVED,
     TENANT_APPLICATION_REJECTED,
     USER_CREDENTIALS_SENT,
+    PASSWORD_RESET_LINK_SENT,
     /** No longer sent (practice signs in with roster passwords); kept so historical log rows still load. */
     PRACTICE_EMAIL_CHALLENGE
 }

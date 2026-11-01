@@ -1,6 +1,6 @@
 package com.pte.practice.internal.service.timing;
 
-import com.pte.attempt.TaskTimingCatalog;
+import com.pte.assessment.TaskTimingCatalog;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.exception.PracticeSessionException;

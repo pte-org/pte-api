@@ -22,6 +22,7 @@ import com.pte.identity.internal.service.user.ManagedUserResolver;
 import com.pte.identity.internal.service.user.ManagedUserResolver.Target;
 import com.pte.identity.internal.service.user.UserAccountProvisioner;
 import com.pte.identity.internal.service.user.UserCredentialRotation;
+import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
@@ -56,7 +57,8 @@ public class UserService {
                        OrganizationMemberDirectory memberDirectory, PasswordEncoder passwordEncoder,
                        UserProvisioningHelper provisioningHelper, UserBulkCreateWriter bulkCreateWriter,
                        TenancyService tenancyService, ApplicationEventPublisher eventPublisher,
-                       AuditLogService auditLogService, RefreshTokenService refreshTokenService) {
+                       AuditLogService auditLogService, RefreshTokenService refreshTokenService,
+                       StartedAttemptLookup startedAttemptLookup) {
         this.userRepository = userRepository;
         this.memberRepository = memberRepository;
         this.memberDirectory = memberDirectory;
@@ -68,7 +70,8 @@ public class UserService {
         this.accountProvisioner = new UserAccountProvisioner(userRepository, memberRepository, passwordEncoder,
                 provisioningHelper, bulkCreateWriter, tenancyService);
         this.credentialRotation = new UserCredentialRotation(userRepository, memberDirectory, passwordEncoder,
-                provisioningHelper, targetResolver, eventPublisher, auditLogService);
+                provisioningHelper, targetResolver, eventPublisher, auditLogService, refreshTokenService,
+                startedAttemptLookup);
     }
 
     @Transactional

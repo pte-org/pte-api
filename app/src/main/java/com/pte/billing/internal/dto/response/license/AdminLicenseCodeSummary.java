@@ -1,4 +1,4 @@
-package com.pte.billing.internal.dto.response;
+package com.pte.billing.internal.dto.response.license;
 
 import com.pte.billing.domain.LicenseCode;
 import com.pte.billing.domain.ServicePlan;

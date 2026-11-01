@@ -35,7 +35,8 @@ class StudentEnrollmentConflictNotificationListenerTest {
 
     @BeforeEach
     void setUp() {
-        listener = new StudentEnrollmentConflictNotificationListener(identityService, dispatchService);
+        listener = new StudentEnrollmentConflictNotificationListener(identityService, dispatchService,
+                com.pte.TestClocks.fixed());
     }
 
     @Test
@@ -53,9 +54,11 @@ class StudentEnrollmentConflictNotificationListenerTest {
 
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> dedupeKey = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> html = ArgumentCaptor.forClass(String.class);
         verify(dispatchService).dispatchTo(eq(NotificationType.STUDENT_ENROLLMENT_CONFLICT), eq(hostAdmin),
                 eq(tenantId), eq("Students skipped because of exam time conflicts"), body.capture(),
-                dedupeKey.capture());
+                dedupeKey.capture(), html.capture());
+        assertThat(html.getValue()).contains("October exam", studentId.toString(), "Earlier exam");
         assertThat(body.getValue()).contains("October exam", studentId.toString(), "Earlier exam");
         assertThat(dedupeKey.getValue()).isEqualTo("student-enrollment-conflict:%s:%s:%s".formatted(
                 sessionId, hostAdmin.getPublicId(), (studentId + " -> Earlier exam").hashCode()));

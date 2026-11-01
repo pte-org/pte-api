@@ -5,7 +5,7 @@ import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.Subscription;
 import com.pte.billing.domain.enums.LicenseCodeStatus;
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.dto.response.AdminLicenseCodeSummary;
+import com.pte.billing.internal.dto.response.license.AdminLicenseCodeSummary;
 import com.pte.billing.internal.exception.license.LicenseCodeException;
 import com.pte.billing.internal.repository.LicenseCodeRepository;
 import com.pte.billing.internal.repository.ServicePlanRepository;
