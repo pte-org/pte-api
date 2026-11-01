@@ -1,4 +1,4 @@
-package com.pte.billing.internal.dto.response;
+package com.pte.billing.internal.dto.response.license;
 
 import java.time.Instant;
 import java.util.UUID;

@@ -2,7 +2,7 @@ package com.pte.billing.internal.service.license;
 
 import com.pte.billing.domain.LicenseCode;
 import com.pte.billing.internal.constant.BillingConstants;
-import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
+import com.pte.billing.internal.dto.response.license.LicenseIssueReceipt;
 import com.pte.billing.internal.exception.license.LicenseCodeException;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;

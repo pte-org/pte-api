@@ -30,8 +30,9 @@ class PlatformManagerControllerSecurityTest {
         assertMethod(TenantApplicationController.class, "list", MANAGER);
         assertMethod(TenantApplicationController.class, "get", MANAGER);
         assertMethod(TenantApplicationController.class, "changeStatus", MANAGER);
+        assertMethod(TenantApplicationController.class, "onboardDirect", MANAGER);
         // The merged controller has no class-level rule: every platform governance operation carries it per method.
-        for (String operation : new String[] {"onboard", "changeStatus", "suspensionImpact",
+        for (String operation : new String[] {"changeStatus", "suspensionImpact",
                 "updateBranding"}) {
             assertMethod(OrganizationController.class, operation, MANAGER);
         }

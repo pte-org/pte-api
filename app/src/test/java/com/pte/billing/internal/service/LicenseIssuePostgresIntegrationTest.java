@@ -12,7 +12,7 @@ import com.pte.shared.idempotency.domain.IdempotencyScope;
 import com.pte.shared.idempotency.internal.repository.IdempotencyKeyRepository;
 import com.pte.billing.domain.*;
 import com.pte.billing.domain.enums.*;
-import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
+import com.pte.billing.internal.dto.response.license.LicenseIssueReceipt;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.repository.*;
 import com.pte.billing.internal.exception.license.LicenseCodeException;
