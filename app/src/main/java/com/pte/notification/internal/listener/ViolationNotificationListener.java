@@ -1,5 +1,6 @@
 package com.pte.notification.internal.listener;
 
+import com.pte.notification.internal.template.NotificationEmailTemplate;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.IdentityService;
@@ -21,10 +22,13 @@ public class ViolationNotificationListener {
 
     private final IdentityService identityService;
     private final NotificationDispatchService dispatchService;
+    private final java.time.Clock clock;
 
-    public ViolationNotificationListener(IdentityService identityService, NotificationDispatchService dispatchService) {
+    public ViolationNotificationListener(IdentityService identityService, NotificationDispatchService dispatchService,
+            java.time.Clock clock) {
         this.identityService = identityService;
         this.dispatchService = dispatchService;
+        this.clock = clock;
     }
 
     @TransactionalEventListener
@@ -33,9 +37,14 @@ public class ViolationNotificationListener {
         String body = "A proctor flagged attempt " + event.attemptPublicId() + " in session " + event.sessionPublicId()
                 + " for " + event.violationType() + (event.detail() == null ? "" : (" — " + event.detail())) + ".";
 
+        String html = NotificationEmailTemplate.violationFlagged(String.valueOf(event.violationType()),
+                String.valueOf(event.attemptPublicId()), String.valueOf(event.sessionPublicId()), event.detail(),
+                java.time.Year.now(clock).getValue());
+
         for (User hostAdmin : identityService.findActiveByTenantIdAndRole(event.tenantId(),
                 Role.valueOf(NotificationConstants.ROLE_HOST_ADMIN))) {
-            dispatchService.dispatchTo(NotificationType.VIOLATION_DETECTED, hostAdmin, event.tenantId(), subject, body);
+            dispatchService.dispatchTo(NotificationType.VIOLATION_DETECTED, hostAdmin, event.tenantId(), subject, body,
+                    null, html);
         }
     }
 }

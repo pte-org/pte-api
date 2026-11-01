@@ -1,5 +1,6 @@
 package com.pte.notification.internal.listener;
 
+import com.pte.notification.internal.template.NotificationEmailTemplate;
 import com.pte.identity.IdentityService;
 import com.pte.identity.domain.User;
 import com.pte.notification.domain.enums.NotificationType;
@@ -23,11 +24,13 @@ public class AttemptPublishedNotificationListener {
 
     private final IdentityService identityService;
     private final NotificationDispatchService dispatchService;
+    private final java.time.Clock clock;
 
     public AttemptPublishedNotificationListener(IdentityService identityService,
-            NotificationDispatchService dispatchService) {
+            NotificationDispatchService dispatchService, java.time.Clock clock) {
         this.identityService = identityService;
         this.dispatchService = dispatchService;
+        this.clock = clock;
     }
 
     @TransactionalEventListener
@@ -42,7 +45,10 @@ public class AttemptPublishedNotificationListener {
         dispatchService.dispatchExternalSensitive(NotificationType.ATTEMPT_PUBLISHED, student.getEmail(),
                 event.tenantId(), String.format(NotificationConstants.ATTEMPT_RESULT_DEDUPE_KEY,
                         event.attemptPublicId()),
-                NotificationConstants.ATTEMPT_RESULT_SUBJECT, body(student, event));
+                NotificationConstants.ATTEMPT_RESULT_SUBJECT, body(student, event),
+                NotificationEmailTemplate.attemptPublished(student.getFullName(), event.overallScore(),
+                        event.listeningScore(), event.readingScore(), event.speakingScore(), event.writingScore(),
+                        java.time.Year.now(clock).getValue()));
     }
 
     private static String body(User student, AttemptPublishedEvent event) {

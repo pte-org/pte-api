@@ -1,5 +1,6 @@
 package com.pte.notification.internal.listener;
 
+import com.pte.notification.internal.template.NotificationEmailTemplate;
 import com.pte.identity.IdentityService;
 import com.pte.notification.domain.enums.NotificationType;
 import com.pte.notification.internal.service.NotificationDispatchService;
@@ -18,11 +19,13 @@ public class EnrollmentNotificationListener {
 
     private final IdentityService identityService;
     private final NotificationDispatchService dispatchService;
+    private final java.time.Clock clock;
 
     public EnrollmentNotificationListener(IdentityService identityService,
-            NotificationDispatchService dispatchService) {
+            NotificationDispatchService dispatchService, java.time.Clock clock) {
         this.identityService = identityService;
         this.dispatchService = dispatchService;
+        this.clock = clock;
     }
 
     @TransactionalEventListener
@@ -30,6 +33,8 @@ public class EnrollmentNotificationListener {
         dispatchService.dispatch(NotificationType.STUDENT_ENROLLED,
                 identityService.findById(event.studentPublicId()).orElse(null),
                 event.tenantId(), "You've been enrolled in an exam session",
-                "You've been enrolled in exam session " + event.sessionPublicId() + ". Log in to view your schedule.");
+                "You've been enrolled in exam session " + event.sessionPublicId() + ". Log in to view your schedule.",
+                null, NotificationEmailTemplate.studentEnrolled(String.valueOf(event.sessionPublicId()),
+                        java.time.Year.now(clock).getValue()));
     }
 }

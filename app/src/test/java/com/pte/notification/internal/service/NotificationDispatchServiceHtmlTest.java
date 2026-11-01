@@ -90,4 +90,35 @@ class NotificationDispatchServiceHtmlTest {
                 eq(NotificationConstants.EMAIL_ROUTING_KEY), job.capture());
         assertThat(job.getValue().htmlBody()).isNull();
     }
+
+    @Test
+    void registeredRecipientHtml_isQueuedWithBothBodies_andTheHistoryKeepsThePlainText() {
+        UUID logId = UUID.randomUUID();
+        when(notificationLogRepository.save(any(NotificationLog.class))).thenAnswer(call -> {
+            NotificationLog saved = call.getArgument(0);
+            saved.setPublicId(logId);
+            return saved;
+        });
+        com.pte.identity.domain.User user = new com.pte.identity.domain.User();
+        user.setEmail("host@b.vn");
+
+        service.dispatchTo(NotificationType.VIOLATION_DETECTED, user, UUID.randomUUID(), "subject", "plain twin", null,
+                "<p>card</p>");
+
+        ArgumentCaptor<NotificationLog> history = ArgumentCaptor.forClass(NotificationLog.class);
+        verify(notificationLogRepository).save(history.capture());
+        assertThat(history.getValue().getBody()).isEqualTo("plain twin");
+        ArgumentCaptor<EmailJob> job = ArgumentCaptor.forClass(EmailJob.class);
+        verify(rabbitTemplate).convertAndSend(eq(NotificationConstants.EMAIL_EXCHANGE),
+                eq(NotificationConstants.EMAIL_ROUTING_KEY), job.capture());
+        assertThat(job.getValue().recipientEmail()).isEqualTo("host@b.vn");
+        assertThat(job.getValue().htmlBody()).isEqualTo("<p>card</p>");
+    }
+
+    @Test
+    void dispatchWithHtml_toAMissingRecipient_sendsNothing() {
+        service.dispatch(NotificationType.STUDENT_ENROLLED, null, UUID.randomUUID(), "s", "b", null, "<p>h</p>");
+
+        verify(rabbitTemplate, never()).convertAndSend(any(String.class), any(String.class), any(Object.class));
+    }
 }

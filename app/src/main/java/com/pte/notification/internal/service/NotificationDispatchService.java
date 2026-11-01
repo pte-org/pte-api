@@ -57,11 +57,18 @@ public class NotificationDispatchService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void dispatch(NotificationType type, User recipient, UUID tenantId, String subject, String body,
             String dedupeKey) {
+        dispatch(type, recipient, tenantId, subject, body, dedupeKey, null);
+    }
+
+    /** As above, with an HTML card; {@code body} is its plain-text twin and what the history keeps. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void dispatch(NotificationType type, User recipient, UUID tenantId, String subject, String body,
+            String dedupeKey, String htmlBody) {
         if (recipient == null) {
             log.warn("Skipping {} notification (tenantId={}): recipient not found in identity", type, tenantId);
             return;
         }
-        dispatchTo(type, recipient, tenantId, subject, body, dedupeKey);
+        dispatchTo(type, recipient, tenantId, subject, body, dedupeKey, htmlBody);
     }
 
     /** Same as {@link #dispatch} but for a caller fanning out to N already-loaded recipients — avoids a redundant lookup per recipient. */
@@ -73,6 +80,13 @@ public class NotificationDispatchService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void dispatchTo(NotificationType type, User recipient, UUID tenantId, String subject, String body,
             String dedupeKey) {
+        dispatchTo(type, recipient, tenantId, subject, body, dedupeKey, null);
+    }
+
+    /** As above, with an HTML card; {@code body} is its plain-text twin and what the history keeps. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void dispatchTo(NotificationType type, User recipient, UUID tenantId, String subject, String body,
+            String dedupeKey, String htmlBody) {
         if (dedupeKey != null && notificationLogRepository.findByDedupeKey(dedupeKey).isPresent()) {
             return;
         }
@@ -87,7 +101,7 @@ public class NotificationDispatchService {
         NotificationLog saved = notificationLogRepository.save(notificationLog);
 
         rabbitTemplate.convertAndSend(NotificationConstants.EMAIL_EXCHANGE, NotificationConstants.EMAIL_ROUTING_KEY,
-                new EmailJob(saved.getPublicId(), recipient.getEmail(), subject, body));
+                new EmailJob(saved.getPublicId(), recipient.getEmail(), subject, body, htmlBody));
     }
 
     /**

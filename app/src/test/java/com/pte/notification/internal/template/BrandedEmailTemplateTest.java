@@ -117,7 +117,7 @@ class BrandedEmailTemplateTest {
     void credentials_putsEachValueInItsOwnSelectableBlockAndStopsMailAutoLinking() {
         String html = BrandedEmailTemplate.temporaryCredentials("An", "a@b.vn", "ABCD-2345", 2026).html();
 
-        assertThat(html).contains("user-select:all", "a<span>@</span>b.vn").doesNotContain("a@b.vn");
+        assertThat(html).contains("user-select:all", "a<span>@</span>b<span>.</span>vn").doesNotContain("a@b.vn");
         assertThat(occurrences(html, "-webkit-user-select:all")).isEqualTo(2);
     }
 

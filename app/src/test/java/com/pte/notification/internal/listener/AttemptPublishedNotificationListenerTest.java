@@ -40,7 +40,7 @@ class AttemptPublishedNotificationListenerTest {
 
     @BeforeEach
     void setUp() {
-        listener = new AttemptPublishedNotificationListener(identityService, dispatchService);
+        listener = new AttemptPublishedNotificationListener(identityService, dispatchService, com.pte.TestClocks.fixed());
     }
 
     @Test
@@ -50,9 +50,12 @@ class AttemptPublishedNotificationListenerTest {
         listener.onAttemptPublished(event(72, 70, 75, 68, 74));
 
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> html = ArgumentCaptor.forClass(String.class);
         verify(dispatchService).dispatchExternalSensitive(eq(NotificationType.ATTEMPT_PUBLISHED),
                 eq("a@example.com"), eq(tenantId), eq("attempt-published:" + attemptPublicId),
-                eq("Your exam results"), body.capture());
+                eq("Your exam results"), body.capture(), html.capture());
+        assertThat(html.getValue()).contains("Hello Nguyen Van A,", "Overall score", ">72<", ">70<", ">75<",
+                ">68<", ">74<", "cid:pte-logo").doesNotContain("<script");
         assertThat(body.getValue()).startsWith("Hello Nguyen Van A,").contains(
                 "Overall score: 72", "Listening: 70", "Reading: 75", "Speaking: 68", "Writing: 74");
         assertThat(body.getValue().toLowerCase()).doesNotContain("log in").doesNotContain("login");
@@ -65,8 +68,10 @@ class AttemptPublishedNotificationListenerTest {
         listener.onAttemptPublished(event(74, null, null, 74, null));
 
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> html = ArgumentCaptor.forClass(String.class);
         verify(dispatchService).dispatchExternalSensitive(any(), anyString(), any(), anyString(), anyString(),
-                body.capture());
+                body.capture(), html.capture());
+        assertThat(html.getValue()).contains("Not enough data").doesNotContain(">0<");
         assertThat(body.getValue()).startsWith("Hello,").contains("Overall score: 74", "Speaking: 74",
                 "Listening: Not enough data", "Reading: Not enough data", "Writing: Not enough data");
         assertThat(body.getValue()).doesNotContain(": 0");
@@ -80,7 +85,7 @@ class AttemptPublishedNotificationListenerTest {
         when(identityService.findById(studentPublicId)).thenReturn(Optional.of(student("No Mail", " ")));
         listener.onAttemptPublished(event(72, 70, 75, 68, 74));
 
-        verify(dispatchService, never()).dispatchExternalSensitive(any(), any(), any(), any(), any(), any());
+        verify(dispatchService, never()).dispatchExternalSensitive(any(), any(), any(), any(), any(), any(), any());
         verify(dispatchService, never()).dispatch(any(), any(), any(), any(), any());
     }
 
