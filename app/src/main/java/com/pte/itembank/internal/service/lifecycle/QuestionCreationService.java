@@ -8,7 +8,6 @@ import com.pte.itembank.domain.QuestionOption;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
-import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.request.CreateQuestionRequest;
 import com.pte.itembank.dto.request.OptionRequest;
 import com.pte.itembank.dto.response.QuestionResponse;
@@ -72,7 +71,6 @@ public class QuestionCreationService {
         question.setPteTaskType(taskType);
         question.setTaskTypeKey(taskTypeKey);
         question.setTaskTypeSection(resolveTaskTypeSection(taskTypeKey, taskType));
-        question.setVisibility(Visibility.SHARED);
         QuestionPool pool = parsePool(request.pool());
         question.setPool(pool);
         boolean hasExplicitFlags = request.availableForPractice() != null || request.availableForExam() != null;
@@ -88,7 +86,6 @@ public class QuestionCreationService {
         question.setRevisionGroupPublicId(UUID.randomUUID());
         question.setRevisionNumber(1);
         question.setCurrent(true);
-        question.setTitle(request.title());
         question.setPromptText(request.promptText());
         question.setAudioPromptRef(request.audioPromptRef());
         question.setImagePromptRef(request.imagePromptRef());

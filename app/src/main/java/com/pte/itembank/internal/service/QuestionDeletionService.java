@@ -42,7 +42,7 @@ public class QuestionDeletionService {
             }
             throw new AccessDeniedException(ItembankConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
         }
-        if (question.getTenantId() != null || question.getVisibility() != com.pte.itembank.domain.enums.Visibility.SHARED) {
+        if (question.getTenantId() != null) {
             throw new QuestionNotFoundException();
         }
         if (question.isDeleted()) return;

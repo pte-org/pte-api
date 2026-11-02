@@ -20,7 +20,6 @@ class QuestionValidationHelperTest {
     void reorderParagraphs_usesOrderIndexAsCorrectPosition_notCorrectFlag() {
         Question question = new Question();
         question.setPteTaskType(PteTaskType.RE_ORDER_PARAGRAPHS);
-        question.setTitle("Re-order paragraphs fixture");
         for (int index = 0; index < 4; index++) {
             QuestionOption option = new QuestionOption();
             option.setText("Paragraph " + index);
@@ -36,7 +35,6 @@ class QuestionValidationHelperTest {
     void readAloud_missingPromptText_throws() {
         Question question = new Question();
         question.setPteTaskType(PteTaskType.READ_ALOUD);
-        question.setTitle("Read aloud fixture");
 
         assertThatThrownBy(() -> helper.validate(question)).isInstanceOf(QuestionValidationException.class);
     }
@@ -45,7 +43,6 @@ class QuestionValidationHelperTest {
     void mcReadingSingle_noCorrectOption_throws() {
         Question question = new Question();
         question.setPteTaskType(PteTaskType.MC_READING_SINGLE);
-        question.setTitle("MC fixture");
         question.setPromptText("Passage text");
         QuestionOption option = new QuestionOption();
         option.setText("A");
@@ -60,7 +57,6 @@ class QuestionValidationHelperTest {
     void describeImage_missingImagePromptRef_throws() {
         Question question = new Question();
         question.setPteTaskType(PteTaskType.DESCRIBE_IMAGE);
-        question.setTitle("Describe image fixture");
 
         assertThatThrownBy(() -> helper.validate(question)).isInstanceOf(QuestionValidationException.class);
     }
@@ -69,7 +65,6 @@ class QuestionValidationHelperTest {
     void writeEssay_missingWordCount_throws() {
         Question question = new Question();
         question.setPteTaskType(PteTaskType.WRITE_ESSAY);
-        question.setTitle("Essay fixture");
         question.setPromptText("Essay prompt");
         question.setCorrectAnswerText("N/A");
 
@@ -121,7 +116,6 @@ class QuestionValidationHelperTest {
     private static Question summarizeSpokenText(String promptText) {
         Question question = new Question();
         question.setPteTaskType(PteTaskType.SUMMARIZE_SPOKEN_TEXT);
-        question.setTitle("Summarize spoken text fixture");
         question.setAudioPromptRef(UUID.randomUUID());
         question.setMinWordCount(50);
         question.setMaxWordCount(70);
@@ -132,7 +126,6 @@ class QuestionValidationHelperTest {
     private static Question repeatSentence(String referenceAnswerText) {
         Question question = new Question();
         question.setPteTaskType(PteTaskType.REPEAT_SENTENCE);
-        question.setTitle("Repeat sentence fixture");
         question.setAudioPromptRef(UUID.randomUUID());
         question.setReferenceAnswerText(referenceAnswerText);
         return question;

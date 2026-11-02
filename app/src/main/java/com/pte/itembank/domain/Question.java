@@ -3,7 +3,6 @@ package com.pte.itembank.domain;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
-import com.pte.itembank.domain.enums.Visibility;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -33,7 +32,6 @@ import java.util.UUID;
 @Entity
 @Table(name = "questions", indexes = {
         @Index(name = "idx_questions_tenant", columnList = "tenant_id"),
-        @Index(name = "idx_questions_visibility", columnList = "visibility"),
         @Index(name = "idx_questions_task_type", columnList = "pte_task_type")
 })
 @Getter
@@ -51,10 +49,6 @@ public class Question extends BaseEntity {
 
     @Column(name = "task_type_section", nullable = false, length = 16)
     private String taskTypeSection;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Visibility visibility;
 
     /** Immutable after insert: a question belongs to exactly one pool for its whole life. */
     @Enumerated(EnumType.STRING)
@@ -108,9 +102,6 @@ public class Question extends BaseEntity {
     @Column(name = "rejection_reason", length = 500)
     private String rejectionReason;
 
-    @Column(nullable = false)
-    private String title;
-
     @Column(columnDefinition = "text")
     private String promptText;
 
@@ -141,9 +132,5 @@ public class Question extends BaseEntity {
     /** Add an option (no public collection setter). */
     public void addOption(QuestionOption option) {
         options.add(option);
-    }
-
-    public boolean isShared() {
-        return visibility == Visibility.SHARED;
     }
 }

@@ -7,7 +7,6 @@ import java.util.UUID;
 
 /** Mutable content payload accepted only while a question revision is DRAFT. */
 public record UpdateQuestionRequest(
-        String title,
         String promptText,
         UUID audioPromptRef,
         UUID imagePromptRef,

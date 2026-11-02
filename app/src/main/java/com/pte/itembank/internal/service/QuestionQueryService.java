@@ -4,7 +4,6 @@ import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
-import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.dto.response.QuestionResponse;
@@ -83,7 +82,6 @@ public class QuestionQueryService {
                                 ? q.getPteTaskType().getSection().name() : q.getTaskTypeSection()))
                 .filter(q -> requestedStatus == null || q.getStatus() == requestedStatus)
                 .filter(q -> normalizedQuery.isBlank()
-                        || q.getTitle().toLowerCase().contains(normalizedQuery)
                         || (q.getPromptText() != null && q.getPromptText().toLowerCase().contains(normalizedQuery)))
                 .map(this::toResponse)
                 .toList();
@@ -138,13 +136,13 @@ public class QuestionQueryService {
 
     @Transactional(readOnly = true)
     public QuestionStatsResponse stats(CurrentUser caller) {
-        Map<String, Long> sectionCounts = questionRepository.countBySectionAndVisibility(Visibility.SHARED).stream()
+        Map<String, Long> sectionCounts = questionRepository.countBySection().stream()
                 .collect(Collectors.toMap(row -> (String) row[0], row -> ((Number) row[1]).longValue()));
-        Map<QuestionStatus, Long> statusCounts = questionRepository.countByStatusAndVisibility(Visibility.SHARED)
+        Map<QuestionStatus, Long> statusCounts = questionRepository.countByStatus()
                 .stream()
                 .collect(Collectors.toMap(row -> (QuestionStatus) row[0], row -> ((Number) row[1]).longValue()));
         return new QuestionStatsResponse(
-                questionRepository.countByDeletedFalseAndVisibility(Visibility.SHARED),
+                questionRepository.countByDeletedFalse(),
                 sectionCounts.getOrDefault(PteSection.LISTENING.name(), 0L),
                 sectionCounts.getOrDefault(PteSection.READING.name(), 0L),
                 sectionCounts.getOrDefault(PteSection.WRITING.name(), 0L),

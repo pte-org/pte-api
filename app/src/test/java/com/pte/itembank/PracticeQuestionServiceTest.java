@@ -4,7 +4,6 @@ import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.QuestionOption;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
-import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.internal.repository.QuestionRepository;
 import org.junit.jupiter.api.Test;
 
@@ -54,12 +53,12 @@ class PracticeQuestionServiceTest {
 
     @Test
     void checksOnlyThePublishedPracticePool() {
-        when(repository.existsByDeletedFalseAndVisibilityAndStatusAndCurrentTrueAndPoolAndTaskTypeKey(
-                Visibility.SHARED, QuestionStatus.APPROVED, QuestionPool.PRACTICE, "READ_ALOUD"))
+        when(repository.existsByDeletedFalseAndStatusAndCurrentTrueAndPoolAndTaskTypeKey(
+                QuestionStatus.APPROVED, QuestionPool.PRACTICE, "READ_ALOUD"))
                 .thenReturn(true);
 
         assertThat(service.hasPublishedQuestion("read_aloud")).isTrue();
-        verify(repository).existsByDeletedFalseAndVisibilityAndStatusAndCurrentTrueAndPoolAndTaskTypeKey(
-                Visibility.SHARED, QuestionStatus.APPROVED, QuestionPool.PRACTICE, "READ_ALOUD");
+        verify(repository).existsByDeletedFalseAndStatusAndCurrentTrueAndPoolAndTaskTypeKey(
+                QuestionStatus.APPROVED, QuestionPool.PRACTICE, "READ_ALOUD");
     }
 }

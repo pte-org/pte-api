@@ -24,10 +24,8 @@ public final class QuestionMapper {
                 question.getPteTaskType() == null ? null : question.getPteTaskType().name(),
                 question.getPteTaskType() == null ? question.getTaskTypeSection()
                         : question.getPteTaskType().getSection().name(),
-                question.getVisibility().name(),
                 question.getTenantId(),
                 question.getStatus().name(),
-                question.getTitle(),
                 question.getPromptText(),
                 question.getAudioPromptRef(),
                 question.getImagePromptRef(),

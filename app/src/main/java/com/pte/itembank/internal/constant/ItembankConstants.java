@@ -102,7 +102,6 @@ public final class ItembankConstants {
 
     public static final String OPTION_TEXT_REQUIRED = "Option text is required";
     public static final String TASK_TYPE_REQUIRED = "Task type is required";
-    public static final String TITLE_REQUIRED = "Title is required";
     public static final String TASK_SKILL_MAPPING_LOAD_FAILED = "Failed to load task-skill mapping from %s";
 
     private ItembankConstants() {

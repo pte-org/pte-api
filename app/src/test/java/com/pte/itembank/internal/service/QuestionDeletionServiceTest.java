@@ -26,7 +26,6 @@ class QuestionDeletionServiceTest {
         question.setRevisionGroupPublicId(UUID.randomUUID());
         question.setStatus(QuestionStatus.DRAFT);
         question.setEverPublished(false);
-        question.setVisibility(com.pte.itembank.domain.enums.Visibility.SHARED);
         when(repository.findByPublicIdForUpdate(question.getPublicId())).thenReturn(Optional.of(question));
         return question;
     }

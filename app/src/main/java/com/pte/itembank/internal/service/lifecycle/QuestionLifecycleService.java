@@ -81,7 +81,6 @@ public class QuestionLifecycleService {
                 ? source.getPteTaskType().name() : source.getTaskTypeKey());
         revision.setTaskTypeSection(source.getTaskTypeSection() == null && source.getPteTaskType() != null
                 ? source.getPteTaskType().getSection().name() : source.getTaskTypeSection());
-        revision.setVisibility(source.getVisibility());
         revision.setPool(source.getPool());
         revision.setAvailableForPractice(source.isAvailableForPractice());
         revision.setAvailableForExam(source.isAvailableForExam());
@@ -94,7 +93,7 @@ public class QuestionLifecycleService {
         revision.setRevisionNumber(source.getRevisionNumber() + 1);
         revision.setSupersedesPublicId(source.getPublicId());
         revision.setCurrent(false);
-        applyContent(revision, source.getTitle(), source.getPromptText(), source.getAudioPromptRef(),
+        applyContent(revision, source.getPromptText(), source.getAudioPromptRef(),
                 source.getImagePromptRef(), source.getReferenceAnswerText(), source.getCorrectAnswerText(),
                 source.getMinWordCount(), source.getMaxWordCount(), source.getOptions().stream()
                         .map(o -> new OptionRequest(o.getText(), o.isCorrect(), o.getOrderIndex(),
@@ -176,7 +175,7 @@ public class QuestionLifecycleService {
         if (request.version() != null && request.version() != question.getVersion()) {
             throw new QuestionVersionConflictException();
         }
-        applyContent(question, request.title(), request.promptText(), request.audioPromptRef(),
+        applyContent(question, request.promptText(), request.audioPromptRef(),
                 request.imagePromptRef(), request.referenceAnswerText(), request.correctAnswerText(),
                 request.minWordCount(), request.maxWordCount(), request.options());
         boolean wasForExam = question.isAvailableForExam();
@@ -225,10 +224,9 @@ public class QuestionLifecycleService {
         deny(caller, null, ItembankConstants.ACADEMIC_PUBLISH_REQUIRED);
     }
 
-    private void applyContent(Question question, String title, String promptText, UUID audioPromptRef,
+    private void applyContent(Question question, String promptText, UUID audioPromptRef,
             UUID imagePromptRef, String referenceAnswerText, String correctAnswerText, Integer minWordCount,
             Integer maxWordCount, List<OptionRequest> options) {
-        question.setTitle(title);
         question.setPromptText(promptText);
         question.setAudioPromptRef(audioPromptRef);
         question.setImagePromptRef(imagePromptRef);
