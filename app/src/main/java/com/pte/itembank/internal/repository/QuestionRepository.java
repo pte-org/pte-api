@@ -30,7 +30,8 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("select q from Question q where q.publicId = :publicId")
     Optional<Question> findByPublicIdForUpdate(@Param("publicId") UUID publicId);
 
-    boolean existsByRevisionGroupPublicIdAndPublicIdNot(UUID revisionGroupPublicId, UUID publicId);
+    /** True when another question was opened as a revision of this one. */
+    boolean existsBySupersedesPublicId(UUID supersedesPublicId);
 
     @EntityGraph(attributePaths = "options")
     @Query("SELECT q FROM Question q WHERE q.deleted = false")

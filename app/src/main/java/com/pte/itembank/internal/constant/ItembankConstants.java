@@ -4,7 +4,7 @@ package com.pte.itembank.internal.constant;
 public final class ItembankConstants {
 
     public static final String QUESTION_DELETE_NOT_ALLOWED = "QUESTION_DELETE_NOT_ALLOWED";
-    public static final String QUESTION_DELETE_NOT_ALLOWED_MESSAGE = "Only a new, never-published draft without revision history can be deleted. Legacy drafts with unknown history are protected.";
+    public static final String QUESTION_DELETE_NOT_ALLOWED_MESSAGE = "Only a draft that has never been published can be deleted. Legacy drafts with unknown history are protected.";
     public static final String QUESTION_AGGREGATE = "Question";
     public static final String QUESTION_DRAFT_DELETED = "QuestionDraftDeleted";
     public static final String QUESTION_DRAFT_DELETED_SUMMARY = "Unused question draft removed.";

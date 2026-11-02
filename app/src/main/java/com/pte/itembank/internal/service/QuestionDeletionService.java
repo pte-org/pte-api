@@ -46,8 +46,7 @@ public class QuestionDeletionService {
             throw new QuestionNotFoundException();
         }
         if (question.isDeleted()) return;
-        if (!QuestionLifecyclePolicy.canDeleteDraft(question)
-                || questions.existsByRevisionGroupPublicIdAndPublicIdNot(question.getRevisionGroupPublicId(), publicId)) {
+        if (!QuestionLifecyclePolicy.canDeleteDraft(question) || questions.existsBySupersedesPublicId(publicId)) {
             throw new QuestionDeletionException();
         }
         question.setDeleted(true);

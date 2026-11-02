@@ -59,11 +59,29 @@ class QuestionDeletionServiceTest {
         verifyNoInteractions(audit);
     }
 
-    @Test void siblingRevisionBlocksDeletion() {
+    @Test void draftAnotherRevisionWasOpenedFromBlocksDeletion() {
         Question question = draft();
-        when(repository.existsByRevisionGroupPublicIdAndPublicIdNot(question.getRevisionGroupPublicId(), question.getPublicId())).thenReturn(true);
+        when(repository.existsBySupersedesPublicId(question.getPublicId())).thenReturn(true);
         assertThatThrownBy(() -> service.deleteDraft(question.getPublicId(), author)).isInstanceOf(QuestionDeletionException.class);
         verifyNoInteractions(audit);
+    }
+
+    @Test void unpublishedRevisionLeavesItsPublishedSourceUntouched() {
+        Question source = new Question();
+        source.setPublicId(UUID.randomUUID());
+        source.setStatus(QuestionStatus.APPROVED);
+        source.setCurrent(true);
+        Question revision = draft();
+        revision.setSupersedesPublicId(source.getPublicId());
+        revision.setRevisionGroupPublicId(source.getRevisionGroupPublicId());
+        revision.setRevisionNumber(2);
+
+        service.deleteDraft(revision.getPublicId(), author);
+
+        assertThat(revision.isDeleted()).isTrue();
+        assertThat(source.isDeleted()).isFalse();
+        assertThat(source.isCurrent()).isTrue();
+        verify(repository, never()).delete(any());
     }
 
     @Test void platformAuthorCannotDeleteTenantQuestionEvenWhenAlreadyDeleted() {
