@@ -8,6 +8,8 @@ import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.internal.service.definition.ExamDefinitionAdminService;
 import com.pte.assessment.internal.constant.ExamDefinitionConstants;
 import com.pte.assessment.ExamDefinitionService;
+import com.pte.identity.IdentityService;
+import com.pte.identity.domain.User;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -42,12 +44,14 @@ public class ExamDefinitionController {
 
     private final ExamDefinitionAdminService adminService;
     private final ExamDefinitionService examDefinitionService;
+    private final IdentityService identityService;
 
     @Autowired
     public ExamDefinitionController(ExamDefinitionAdminService adminService,
-            ExamDefinitionService examDefinitionService) {
+            ExamDefinitionService examDefinitionService, IdentityService identityService) {
         this.adminService = adminService;
         this.examDefinitionService = examDefinitionService;
+        this.identityService = identityService;
     }
 
     @GetMapping
@@ -66,7 +70,10 @@ public class ExamDefinitionController {
     @GetMapping("/{publicId}")
     @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
     public ApiResponse<ExamDefinitionResponse> get(@PathVariable UUID publicId) {
-        return ApiResponse.success(adminService.getForEdit(publicId));
+        ExamDefinitionResponse template = adminService.getForEdit(publicId);
+        String authorName = template.authorUserPublicId() == null ? null
+                : identityService.findById(template.authorUserPublicId()).map(User::getFullName).orElse(null);
+        return ApiResponse.success(template.withAuthorName(authorName));
     }
 
     @PostMapping("/{publicId}/clone")

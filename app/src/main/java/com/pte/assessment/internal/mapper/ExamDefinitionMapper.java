@@ -22,7 +22,11 @@ public final class ExamDefinitionMapper {
                 template.getItems().stream().map(ExamDefinitionMapper::toItemResponse).toList(),
                 template.getTemplatePolicy() == null ? "STANDARD_PTE" : template.getTemplatePolicy().name(),
                 template.getTenantId(),
-                template.getBaseDefinitionPublicId());
+                template.getBaseDefinitionPublicId(),
+                template.getCreatedAt(),
+                template.getUpdatedAt(),
+                template.getAuthorUserPublicId(),
+                null);
     }
 
     private static ExamDefinitionItemResponse toItemResponse(ExamDefinitionItem item) {

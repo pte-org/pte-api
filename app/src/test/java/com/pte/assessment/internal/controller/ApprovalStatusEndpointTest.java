@@ -32,7 +32,7 @@ class ApprovalStatusEndpointTest {
     }
 
     private ExamDefinitionController definitions(ExamDefinitionAdminService service) {
-        return new ExamDefinitionController(service, mock(ExamDefinitionService.class));
+        return new ExamDefinitionController(service, mock(ExamDefinitionService.class), mock(com.pte.identity.IdentityService.class));
     }
 
     @Test
