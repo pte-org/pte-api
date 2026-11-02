@@ -41,7 +41,9 @@ class ExamDefinitionCommandService {
     /** Creates an empty DRAFT in the next version of a template code family. */
     ExamDefinitionResponse createDraft(CreateExamDefinitionRequest request, CurrentUser caller) {
         requireDraftCreate(caller);
-        String code = request.code().trim();
+        String code = request.code() == null || request.code().isBlank()
+                ? ExamDefinitionCodes.fromName(request.name(), taken -> repository.findMaxVersionByCode(taken) > 0)
+                : request.code().trim();
         repository.findAllByCodeForUpdate(code);
         int nextVersion = repository.findMaxVersionByCode(code) + 1;
 
