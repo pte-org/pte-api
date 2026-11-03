@@ -83,6 +83,15 @@ public class SnapshotPublishService {
     public SnapshotResponse publish(UUID blueprintPublicId, CurrentUser caller,
             ExamDefinitionResponse requestedTemplate, Long generationSeed,
             String generationAlgorithmVersion, String poolPolicyFingerprint) {
+        return publish(blueprintPublicId, caller, requestedTemplate, generationSeed, generationAlgorithmVersion,
+                poolPolicyFingerprint, null);
+    }
+
+    /** Publishes with provenance and the report of how the exam's question counts were decided. */
+    @Transactional
+    public SnapshotResponse publish(UUID blueprintPublicId, CurrentUser caller,
+            ExamDefinitionResponse requestedTemplate, Long generationSeed,
+            String generationAlgorithmVersion, String poolPolicyFingerprint, String assemblyReport) {
         ExamBlueprint blueprint = blueprintRepository.findWithItemsByPublicId(blueprintPublicId)
                 .orElseThrow(BlueprintNotFoundException::new);
         if (!accessPolicy.canRead(blueprint.getTenantId(), blueprint.getTenantId() == null, caller)) {
@@ -108,6 +117,7 @@ public class SnapshotPublishService {
         snapshot.setGenerationSeed(generationSeed);
         snapshot.setGenerationAlgorithmVersion(generationAlgorithmVersion);
         snapshot.setPoolPolicyFingerprint(poolPolicyFingerprint);
+        snapshot.setAssemblyReport(assemblyReport);
         snapshot.setTenantId(blueprint.getTenantId());
         java.util.Map<String, ExamDefinitionItemResponse> templateItemsByTaskType = activeTemplate.items().stream()
                 .collect(java.util.stream.Collectors.toMap(item -> TaskTypeCodeCompatibility

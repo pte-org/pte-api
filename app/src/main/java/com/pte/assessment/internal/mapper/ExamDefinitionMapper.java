@@ -3,8 +3,11 @@ package com.pte.assessment.internal.mapper;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.assessment.domain.ExamDefinition;
 import com.pte.assessment.domain.ExamDefinitionItem;
+import com.pte.assessment.domain.ExamTimeFrame;
+import com.pte.assessment.dto.response.CefrTargetResponse;
 import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
+import com.pte.assessment.dto.response.ExamTimeFrameResponse;
 
 public final class ExamDefinitionMapper {
 
@@ -26,7 +29,21 @@ public final class ExamDefinitionMapper {
                 template.getCreatedAt(),
                 template.getUpdatedAt(),
                 template.getAuthorUserPublicId(),
-                null);
+                null,
+                toTimeFrameResponse(template.getTimeFrame()),
+                null,
+                java.util.List.of(),
+                template.getCefrTargets().stream()
+                        .map(target -> new CefrTargetResponse(target.level(), target.percent())).toList());
+    }
+
+    private static ExamTimeFrameResponse toTimeFrameResponse(ExamTimeFrame frame) {
+        if (frame == null) {
+            return null;
+        }
+        return new ExamTimeFrameResponse(frame.speakingWritingMinSeconds(), frame.speakingWritingMaxSeconds(),
+                frame.readingMinSeconds(), frame.readingMaxSeconds(), frame.listeningMinSeconds(),
+                frame.listeningMaxSeconds(), frame.totalMaxSeconds());
     }
 
     private static ExamDefinitionItemResponse toItemResponse(ExamDefinitionItem item) {

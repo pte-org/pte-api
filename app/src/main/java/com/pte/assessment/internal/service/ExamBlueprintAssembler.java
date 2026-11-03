@@ -4,11 +4,21 @@ import com.pte.assessment.domain.BlueprintItem;
 import com.pte.assessment.domain.ExamBlueprint;
 import com.pte.assessment.internal.constant.AssessmentConstants;
 import com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse;
+import com.pte.assessment.dto.response.CefrTargetResponse;
 import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.dto.response.ExamDefinitionSlotFeasibilityResponse;
 import com.pte.assessment.internal.exception.InsufficientQuestionBankException;
+import com.pte.assessment.internal.service.assembly.AssemblyReport;
+import com.pte.assessment.internal.service.assembly.CountSelection;
+import com.pte.assessment.internal.service.assembly.CefrMix;
+import com.pte.assessment.internal.service.assembly.CountSelector;
+import com.pte.assessment.internal.service.assembly.StratifiedQuestionPicker.Need;
+import com.pte.assessment.internal.service.assembly.StratifiedQuestionPicker.Picked;
+import com.pte.itembank.ExamCandidateService;
+import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.ItembankService;
+import com.pte.itembank.TaskTypeStimulusService;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.domain.enums.PteTaskType;
@@ -34,19 +44,27 @@ import java.util.stream.Collectors;
 class ExamBlueprintAssembler {
 
     private final ItembankService itembankService;
+    private final CountSelector countSelector;
+    private final StratifiedDraw stratifiedDraw;
 
     ExamBlueprintAssembler(ItembankService itembankService) {
-        this.itembankService = itembankService;
+        this(itembankService, null);
     }
 
-    /**
-     * Validates skill input before template lookup. Throws exception if empty or invalid.
-     */
+    ExamBlueprintAssembler(ItembankService itembankService, TaskTypeStimulusService stimulusService) {
+        this(itembankService, stimulusService, null);
+    }
+
+    ExamBlueprintAssembler(ItembankService itembankService, TaskTypeStimulusService stimulusService,
+            ExamCandidateService candidateService) {
+        this.stratifiedDraw = new StratifiedDraw(candidateService);
+        this.itembankService = itembankService;
+        this.countSelector = new CountSelector(stimulusService);
+    }
+
+    /** Validates skill input before template lookup. Throws exception if empty or invalid. */
     void validateSkills(Set<String> skills) {
-        if (skills == null || skills.isEmpty() || skills.size() > 4) {
-            throw new com.pte.assessment.internal.exception.InvalidSkillSelectionException();
-        }
-        skills.forEach(this::parseSection);
+        SkillSelection.validate(skills);
     }
 
     /**
@@ -55,7 +73,7 @@ class ExamBlueprintAssembler {
      */
     ExamBlueprint assembleRandomBlueprint(String name, Set<String> skills,
             ExamDefinitionResponse template, CurrentUser caller) {
-        Set<PteSection> selectedSections = parseSkills(skills);
+        Set<PteSection> selectedSections = SkillSelection.parse(skills);
         List<Requirement> requirements = buildRequirements(template, selectedSections, true);
         List<RolledRequirement> rolled = requirements.stream().map(this::roll).toList();
 
@@ -65,26 +83,49 @@ class ExamBlueprintAssembler {
         return createBlueprint(name, picked, caller);
     }
 
-    /**
-     * Builds exam blueprint with deterministic generation using a fixed seed.
-     */
+    /** Builds an exam blueprint with deterministic generation using a fixed seed. */
     ExamBlueprint assembleDeterministicBlueprint(String name, UUID templatePublicId, long seed,
             CurrentUser caller, ExamDefinitionResponse template, Set<String> selectedSkills) {
-        Set<PteSection> selectedSections = resolveSelectedSections(template, selectedSkills);
+        return assembleWithReport(name, seed, caller, template, selectedSkills).blueprint();
+    }
+
+    /** Deterministic generation that also reports how the counts were decided. */
+    AssembledBlueprint assembleWithReport(String name, long seed, CurrentUser caller,
+            ExamDefinitionResponse template, Set<String> selectedSkills) {
+        return assembleWithReport(name, seed, caller, template, selectedSkills, null);
+    }
+
+    /** As above; a non-empty {@code cefrOverride} replaces the template's CEFR mix for this exam. */
+    AssembledBlueprint assembleWithReport(String name, long seed, CurrentUser caller,
+            ExamDefinitionResponse template, Set<String> selectedSkills, List<CefrTargetResponse> cefrOverride) {
+        Set<PteSection> selectedSections = SkillSelection.resolve(template, selectedSkills);
         List<Requirement> requirements = buildRequirements(template, selectedSections,
                 !"CUSTOM".equalsIgnoreCase(template.templatePolicy()));
+        CountSelection selection = countSelector.select(template, selectedSections, seed);
         List<RolledRequirement> rolled = requirements.stream()
-                .map(requirement -> roll(requirement, new java.util.Random(seed ^ requirement.taskTypeKey().hashCode())))
+                .map(requirement -> selection.isPlanned()
+                        ? new RolledRequirement(requirement.taskTypeKey(), requirement.standardTaskType(),
+                                requirement.section(),
+                                selection.counts().getOrDefault(requirement.taskTypeKey(), requirement.minCount()))
+                        : roll(requirement, new java.util.Random(seed ^ requirement.taskTypeKey().hashCode())))
                 .toList();
         checkStockOrThrow(rolled);
-        List<PickedItem> picked = drawDeterministic(rolled, seed);
-
-        return createBlueprint(name, picked, caller);
+        Map<CefrLevel, Integer> mix = CefrMix.of(cefrOverride == null || cefrOverride.isEmpty() ? template.cefrTargets() : cefrOverride);
+        List<Need> needs = rolled.stream().map(r -> new Need(r.taskTypeKey(), r.section().name(), r.n())).toList();
+        Picked stratified = mix.isEmpty() || !stratifiedDraw.isAvailable() ? null
+                : stratifiedDraw.draw(needs, mix, seed);
+        List<PickedItem> picked = stratified == null ? drawDeterministic(rolled, seed)
+                : stratifiedDraw.toItems(needs, stratified);
+        Map<String, Integer> finalCounts = rolled.stream()
+                .collect(Collectors.toMap(RolledRequirement::taskTypeKey, RolledRequirement::n, Integer::sum));
+        AssemblyReport report = selection.report(seed, finalCounts);
+        return new AssembledBlueprint(createBlueprint(name, picked, caller),
+                stratified == null ? report : report.withCefr(stratified.report()));
     }
 
     /** Scope-aware host readiness using the exact same requirement resolver as deterministic generation. */
     ExamDefinitionFeasibilityResponse templateFeasibility(ExamDefinitionResponse template, Set<String> selectedSkills) {
-        Set<PteSection> selectedSections = resolveSelectedSections(template, selectedSkills);
+        Set<PteSection> selectedSections = SkillSelection.resolve(template, selectedSkills);
         List<Requirement> requirements = buildRequirements(template, selectedSections,
                 !"CUSTOM".equalsIgnoreCase(template.templatePolicy()));
         List<RolledRequirement> required = requirements.stream()
@@ -227,44 +268,6 @@ class ExamBlueprintAssembler {
                 .map(RolledRequirement::taskTypeKey).collect(Collectors.toSet()));
     }
 
-    private Set<PteSection> resolveSelectedSections(ExamDefinitionResponse template, Set<String> requestedSkills) {
-        Set<PteSection> available = template.items().stream()
-                .map(item -> parseSection(item.section()))
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        if (available.isEmpty()) {
-            throw new com.pte.assessment.internal.exception.InvalidSkillSelectionException();
-        }
-        if (requestedSkills == null || requestedSkills.isEmpty()) {
-            return available;
-        }
-        Set<PteSection> selected = requestedSkills.stream()
-                .map(skill -> skill == null ? null : skill.trim().toUpperCase(Locale.ROOT))
-                .map(this::parseSection)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        if (!available.containsAll(selected)) {
-            throw new com.pte.assessment.internal.exception.InvalidSkillSelectionException();
-        }
-        return selected;
-    }
-
-    private Set<PteSection> parseSkills(Set<String> skills) {
-        if (skills == null || skills.isEmpty() || skills.size() > 4) {
-            throw new com.pte.assessment.internal.exception.InvalidSkillSelectionException();
-        }
-        return skills.stream().map(this::parseSection).collect(Collectors.toSet());
-    }
-
-    private PteSection parseSection(String value) {
-        if (value == null || value.isBlank()) {
-            throw new com.pte.assessment.internal.exception.InvalidSectionException();
-        }
-        try {
-            return PteSection.valueOf(value);
-        } catch (IllegalArgumentException ex) {
-            throw new com.pte.assessment.internal.exception.InvalidSectionException();
-        }
-    }
-
     private ExamBlueprint createBlueprint(String name, List<PickedItem> picked, CurrentUser caller) {
         ExamBlueprint blueprint = new ExamBlueprint();
         blueprint.setName(name);
@@ -288,5 +291,8 @@ class ExamBlueprintAssembler {
     }
 
     record PickedItem(UUID questionPublicId, PteSection section) {
+    }
+
+    record AssembledBlueprint(ExamBlueprint blueprint, AssemblyReport report) {
     }
 }

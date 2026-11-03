@@ -1,18 +1,25 @@
 package com.pte.assessment.internal.service;
 
 import com.pte.assessment.domain.ExamBlueprint;
+import com.pte.assessment.dto.response.CefrTargetResponse;
 import com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse;
 import com.pte.assessment.dto.response.SnapshotResponse;
 import com.pte.assessment.internal.constant.AssessmentConstants;
 import com.pte.assessment.internal.exception.TemplateNotActiveException;
 import com.pte.assessment.internal.repository.ExamBlueprintRepository;
+import com.pte.itembank.ExamCandidateService;
 import com.pte.itembank.ItembankService;
+import com.pte.itembank.TaskTypeStimulusService;
 import com.pte.assessment.ExamDefinitionService;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -32,15 +39,34 @@ public class ExamGenerationService {
     private final ExamBlueprintRepository blueprintRepository;
     private final SnapshotPublishService snapshotPublishService;
     private final ExamBlueprintAssembler assembler;
+    private final JsonMapper reportWriter;
 
+    /** Compatibility constructor for callers that do not plan durations. */
     public ExamGenerationService(ExamDefinitionService examDefinitionService, ItembankService itembankService,
                                  ExamBlueprintRepository blueprintRepository,
                                  SnapshotPublishService snapshotPublishService) {
+        this(examDefinitionService, itembankService, blueprintRepository, snapshotPublishService, null);
+    }
+
+    public ExamGenerationService(ExamDefinitionService examDefinitionService, ItembankService itembankService,
+                                 ExamBlueprintRepository blueprintRepository,
+                                 SnapshotPublishService snapshotPublishService,
+                                 TaskTypeStimulusService stimulusService) {
+        this(examDefinitionService, itembankService, blueprintRepository, snapshotPublishService, stimulusService,
+                null);
+    }
+
+    @Autowired
+    public ExamGenerationService(ExamDefinitionService examDefinitionService, ItembankService itembankService,
+                                 ExamBlueprintRepository blueprintRepository,
+                                 SnapshotPublishService snapshotPublishService,
+                                 TaskTypeStimulusService stimulusService, ExamCandidateService candidateService) {
         this.examDefinitionService = examDefinitionService;
         this.itembankService = itembankService;
         this.blueprintRepository = blueprintRepository;
         this.snapshotPublishService = snapshotPublishService;
-        this.assembler = new ExamBlueprintAssembler(itembankService);
+        this.assembler = new ExamBlueprintAssembler(itembankService, stimulusService, candidateService);
+        this.reportWriter = JsonMapper.builder().build();
     }
 
     @Transactional
@@ -63,13 +89,21 @@ public class ExamGenerationService {
     @Transactional
     public SnapshotResponse generateDeterministic(String name, UUID templatePublicId, long seed,
             CurrentUser caller, Set<String> selectedSkills) {
+        return generateDeterministic(name, templatePublicId, seed, caller, selectedSkills, null);
+    }
+
+    /** As above, with a CEFR mix chosen for this exam that overrides the template's. */
+    @Transactional
+    public SnapshotResponse generateDeterministic(String name, UUID templatePublicId, long seed,
+            CurrentUser caller, Set<String> selectedSkills, List<CefrTargetResponse> cefrOverride) {
         ExamDefinitionResponse template = examDefinitionService.findActiveByPublicId(templatePublicId)
                 .orElseThrow(TemplateNotActiveException::new);
-        ExamBlueprint blueprint = assembler.assembleDeterministicBlueprint(name, templatePublicId, seed, caller, template, selectedSkills);
-        ExamBlueprint saved = blueprintRepository.save(blueprint);
+        ExamBlueprintAssembler.AssembledBlueprint assembled =
+                assembler.assembleWithReport(name, seed, caller, template, selectedSkills, cefrOverride);
+        ExamBlueprint saved = blueprintRepository.save(assembled.blueprint());
         return snapshotPublishService.publish(saved.getPublicId(), caller, template, seed,
-                AssessmentConstants.DETERMINISTIC_ALGORITHM_VERSION,
-                template.publicId() + ":" + template.version());
+                assembled.report().algorithmVersion(), template.publicId() + ":" + template.version(),
+                reportWriter.writeValueAsString(assembled.report()));
     }
 
     /** Scope-aware feasibility check for template generation. */

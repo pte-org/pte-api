@@ -5,11 +5,15 @@ import com.pte.assessment.domain.ExamDefinition;
 import com.pte.assessment.domain.enums.ExamDefinitionStatus;
 import com.pte.assessment.dto.request.CreateExamDefinitionRequest;
 import com.pte.assessment.dto.request.ReplaceExamDefinitionItemsRequest;
+import com.pte.assessment.dto.request.UpdateCefrTargetsRequest;
+import com.pte.assessment.dto.request.UpdateExamTimeFrameRequest;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.internal.constant.ExamDefinitionConstants;
 import com.pte.assessment.internal.exception.ExamDefinitionValidationException;
 import com.pte.assessment.internal.mapper.ExamDefinitionMapper;
 import com.pte.assessment.internal.repository.ExamDefinitionRepository;
+import com.pte.assessment.internal.service.assembly.CefrTargetRules;
+import com.pte.assessment.internal.service.timing.ExamTimeFrameRules;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.security.CurrentUser;
@@ -74,11 +78,47 @@ class ExamDefinitionCommandService {
         draft.setStatus(ExamDefinitionStatus.DRAFT);
         draft.setTemplatePolicy(source.getTemplatePolicy());
         draft.setAuthorUserPublicId(caller == null ? null : caller.userId());
+        draft.setTimeFrame(source.getTimeFrame());
+        draft.setCefrTargets(new java.util.ArrayList<>(source.getCefrTargets()));
         source.getItems().forEach(item -> draft.addItem(itemMapper.copyItem(item)));
 
         ExamDefinition saved = saveOrTranslateConflict(draft);
         audit(caller, ExamDefinitionConstants.AUDIT_CLONED, saved,
                 "Cloned from version " + source.getVersion());
+        return ExamDefinitionMapper.toResponse(saved);
+    }
+
+    /** Sets the CEFR mix of a DRAFT. */
+    ExamDefinitionResponse updateCefrTargets(ExamDefinition template, UpdateCefrTargetsRequest request,
+            CurrentUser caller) {
+        requireDraft(template);
+        requireDraftModification(caller, template);
+        try {
+            template.setCefrTargets(new java.util.ArrayList<>(CefrTargetRules.fromRequest(request)));
+        } catch (ExamDefinitionValidationException ex) {
+            auditValidationFailure(caller, template, ex);
+            throw ex;
+        }
+        ExamDefinition saved = repository.save(template);
+        audit(caller, ExamDefinitionConstants.AUDIT_CEFR_TARGETS_UPDATED, saved,
+                "Updated CEFR mix of draft version " + saved.getVersion());
+        return ExamDefinitionMapper.toResponse(saved);
+    }
+
+    /** Sets the Pearson time window of a DRAFT. */
+    ExamDefinitionResponse updateTimeFrame(ExamDefinition template, UpdateExamTimeFrameRequest request,
+            CurrentUser caller) {
+        requireDraft(template);
+        requireDraftModification(caller, template);
+        try {
+            template.setTimeFrame(ExamTimeFrameRules.fromRequest(request));
+        } catch (ExamDefinitionValidationException ex) {
+            auditValidationFailure(caller, template, ex);
+            throw ex;
+        }
+        ExamDefinition saved = repository.save(template);
+        audit(caller, ExamDefinitionConstants.AUDIT_TIME_FRAME_UPDATED, saved,
+                "Updated time frame of draft version " + saved.getVersion());
         return ExamDefinitionMapper.toResponse(saved);
     }
 

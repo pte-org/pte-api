@@ -56,6 +56,10 @@ public class ExamVersion extends BaseEntity {
     @Column(name = "generation_seed")
     private Long generationSeed;
 
+    /** JSON report of how the exam's question counts were decided; null for exams built before it existed. */
+    @Column(name = "assembly_report", columnDefinition = "text")
+    private String assemblyReport;
+
     @Column(name = "pool_policy_fingerprint", length = 128)
     private String poolPolicyFingerprint;
 

@@ -19,7 +19,9 @@ import com.pte.assessment.internal.exception.ExamDefinitionValidationException;
 import com.pte.assessment.internal.exception.NoActiveExamDefinitionException;
 import com.pte.assessment.internal.mapper.ExamDefinitionMapper;
 import com.pte.assessment.internal.repository.ExamDefinitionRepository;
+import com.pte.assessment.internal.service.standard.HostTemplateLabeler;
 import com.pte.itembank.ItembankService;
+import com.pte.itembank.TaskTypeStimulusService;
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskRuntimeProfileService;
 import com.pte.itembank.TaskTypeCodeCompatibility;
@@ -50,6 +52,7 @@ public class HostExamTemplateService {
     private static final int MAX_NAME_LENGTH = 255;
 
     private final ExamDefinitionRepository repository;
+    private final HostTemplateLabeler labeler;
     private final ExamDefinitionService examDefinitionService;
     private final QuestionTypeService questionTypeService;
     private final HostExamTemplateAudit audit;
@@ -57,10 +60,20 @@ public class HostExamTemplateService {
     private final ExamDefinitionValidator validator;
     private final ExamDefinitionItemMapper itemMapper;
 
-    @Autowired
+    /** Compatibility constructor for callers that do not label templates against audio lengths. */
     public HostExamTemplateService(ExamDefinitionRepository repository, QuestionTypeService questionTypeService,
             TaskRuntimeProfileService runtimeProfileService, ItembankService itembankService,
             AuditLogService auditLogService, Clock clock, ExamDefinitionService examDefinitionService) {
+        this(repository, questionTypeService, runtimeProfileService, itembankService, auditLogService, clock,
+                examDefinitionService, null);
+    }
+
+    @Autowired
+    public HostExamTemplateService(ExamDefinitionRepository repository, QuestionTypeService questionTypeService,
+            TaskRuntimeProfileService runtimeProfileService, ItembankService itembankService,
+            AuditLogService auditLogService, Clock clock, ExamDefinitionService examDefinitionService,
+            TaskTypeStimulusService stimulusService) {
+        this.labeler = new HostTemplateLabeler(repository, stimulusService);
         this.repository = repository;
         this.examDefinitionService = examDefinitionService;
         this.questionTypeService = questionTypeService;
@@ -72,13 +85,12 @@ public class HostExamTemplateService {
 
     @Transactional(readOnly = true)
     public List<ExamDefinitionResponse> list(CurrentUser caller) {
-        return repository.findAllByTenantIdOrderByCodeAscVersionDesc(requireTenant(caller)).stream()
-                .map(ExamDefinitionMapper::toResponse).toList();
+        return labeler.label(repository.findAllByTenantIdOrderByCodeAscVersionDesc(requireTenant(caller)));
     }
 
     @Transactional(readOnly = true)
     public ExamDefinitionResponse get(UUID publicId, CurrentUser caller) {
-        return ExamDefinitionMapper.toResponse(findOwned(publicId, caller));
+        return labeler.label(List.of(findOwned(publicId, caller))).get(0);
     }
 
     /** Per task type: how many published questions exist against how many the template needs. */
@@ -110,10 +122,7 @@ public class HostExamTemplateService {
         return ExamDefinitionMapper.toResponse(saved);
     }
 
-    /**
-     * Copies one of the host's own templates into an independent DRAFT with its own code, so activating the copy
-     * never retires the original.
-     */
+    /** Copies one of the host's own templates into a DRAFT with its own code, so activating it never retires the original. */
     @Transactional
     public ExamDefinitionResponse cloneToDraft(UUID publicId, CurrentUser caller) {
         ExamDefinition source = findOwned(publicId, caller);
@@ -127,6 +136,7 @@ public class HostExamTemplateService {
         draft.setTenantId(source.getTenantId());
         draft.setBaseDefinitionPublicId(source.getBaseDefinitionPublicId());
         draft.setAuthorUserPublicId(caller.userId());
+        draft.setCefrTargets(new java.util.ArrayList<>(source.getCefrTargets()));
         source.getItems().forEach(item -> draft.addItem(itemMapper.copyItem(item)));
         ExamDefinition saved = save(draft);
         audit.record(caller, ExamDefinitionConstants.AUDIT_CLONED, saved, "Cloned from template '" + source.getName()
@@ -235,6 +245,7 @@ public class HostExamTemplateService {
         draft.setTenantId(tenantId);
         draft.setBaseDefinitionPublicId(base.getPublicId());
         draft.setAuthorUserPublicId(caller.userId());
+        draft.setCefrTargets(new java.util.ArrayList<>(base.getCefrTargets()));
         return draft;
     }
 

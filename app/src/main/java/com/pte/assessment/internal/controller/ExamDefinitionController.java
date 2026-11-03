@@ -3,6 +3,8 @@ package com.pte.assessment.internal.controller;
 import com.pte.assessment.dto.request.CreateExamDefinitionRequest;
 import com.pte.assessment.dto.request.RejectExamDefinitionRequest;
 import com.pte.assessment.dto.request.ReplaceExamDefinitionItemsRequest;
+import com.pte.assessment.dto.request.UpdateCefrTargetsRequest;
+import com.pte.assessment.dto.request.UpdateExamTimeFrameRequest;
 import com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.internal.service.definition.ExamDefinitionAdminService;
@@ -103,6 +105,20 @@ public class ExamDefinitionController {
             throw new IllegalStateException(ExamDefinitionConstants.TEMPLATE_READ_SERVICE_NOT_CONFIGURED);
         }
         return ApiResponse.success(examDefinitionService.getActive());
+    }
+
+    @PutMapping("/{publicId}/cefr-targets")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
+    public ApiResponse<ExamDefinitionResponse> updateCefrTargets(@PathVariable UUID publicId,
+            @Valid @RequestBody UpdateCefrTargetsRequest request) {
+        return ApiResponse.success(adminService.updateCefrTargets(publicId, request, currentUser()));
+    }
+
+    @PutMapping("/{publicId}/time-frame")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
+    public ApiResponse<ExamDefinitionResponse> updateTimeFrame(@PathVariable UUID publicId,
+            @Valid @RequestBody UpdateExamTimeFrameRequest request) {
+        return ApiResponse.success(adminService.updateTimeFrame(publicId, request, currentUser()));
     }
 
     @PatchMapping("/{publicId}/status")
