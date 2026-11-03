@@ -1,5 +1,6 @@
 package com.pte.itembank.domain;
 
+import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
@@ -44,6 +45,11 @@ public class Question extends BaseEntity {
     private PteTaskType pteTaskType;
 
     /** Canonical identity for standard and custom authored questions. */
+    /** CEFR level the question is written for; null means not yet classified. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cefr_level", length = 2)
+    private CefrLevel cefrLevel;
+
     @Column(name = "task_type_key", nullable = false, length = 64)
     private String taskTypeKey;
 

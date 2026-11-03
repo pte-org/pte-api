@@ -42,6 +42,14 @@ public class MediaService {
     }
 
     /**
+     * Measured audio length of each given media object that has one. Lengths are not sensitive, but callers must
+     * only pass references they already read from content they are allowed to see.
+     */
+    public Map<UUID, Integer> durationSeconds(Collection<UUID> mediaPublicIds) {
+        return cloudinaryMediaService.durationSeconds(mediaPublicIds);
+    }
+
+    /**
      * Playback link for a student's own saved practice recording. The caller must already have verified that the
      * session and item belong to the student; this checks the media's owner, purpose, session/item binding and
      * upload state, and answers {@code MediaNotFoundException} for anything else. Works for any session state.

@@ -13,6 +13,8 @@ public final class ItembankConstants {
     public static final String INVALID_QUESTION_FIELDS = "INVALID_QUESTION_FIELDS";
     public static final String INVALID_QUESTION_TYPE = "INVALID_QUESTION_TYPE";
     public static final String UNKNOWN_TASK_TYPE = "UNKNOWN_TASK_TYPE";
+    public static final String INVALID_CEFR_LEVEL = "CEFR level must be one of A1, A2, B1, B2, C1, C2";
+    public static final String CEFR_LEVEL_REQUIRED = "An exam question needs a CEFR level before it is submitted for approval";
     public static final String TASK_TYPE_KEY_INVALID = "TASK_TYPE_KEY_INVALID";
     public static final String TASK_TYPE_KEY_ALREADY_USED = "TASK_TYPE_KEY_ALREADY_USED";
     public static final String TASK_TYPE_DISPLAY_NAME_ALREADY_USED = "TASK_TYPE_DISPLAY_NAME_ALREADY_USED";

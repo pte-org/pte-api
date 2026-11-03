@@ -34,5 +34,7 @@ public record QuestionResponse(
         /** True when this question or an earlier revision in its group was ever published. */
         boolean previouslyPublished,
         /** When the question last changed; tracking screens show how long a question has waited. */
-        Instant updatedAt) {
+        Instant updatedAt,
+        /** CEFR level (A1 to C2) the question is written for; null when not yet classified. */
+        String cefrLevel) {
 }

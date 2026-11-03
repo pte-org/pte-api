@@ -48,7 +48,8 @@ public final class QuestionMapper {
                 question.getPool().name(),
                 question.isAvailableForPractice(), question.isAvailableForExam(),
                 Boolean.TRUE.equals(question.getEverPublished()) || question.getSupersedesPublicId() != null,
-                question.getUpdatedAt());
+                question.getUpdatedAt(),
+                question.getCefrLevel() == null ? null : question.getCefrLevel().name());
     }
 
     private static OptionResponse toOption(QuestionOption option) {

@@ -149,6 +149,20 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
             + "AND q.createdAt >= :from AND q.createdAt < :to")
     long countCreatedBetween(@Param("from") Instant from,
             @Param("to") Instant to);
+    /** Every exam-ready question of a task type with its CEFR level, as {@code [publicId, cefrLevel]}, in a fixed order. */
+    @Query("SELECT q.publicId, q.cefrLevel FROM Question q WHERE q.deleted = false "
+            + "AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED "
+            + "AND q.current = true AND (q.availableForExam = true OR (q.availabilityFlagsExplicit = false AND q.pool = com.pte.itembank.domain.enums.QuestionPool.EXAM)) "
+            + "AND q.taskTypeKey = :taskTypeKey ORDER BY q.publicId")
+    List<Object[]> findExamCandidatesByTaskTypeKey(@Param("taskTypeKey") String taskTypeKey);
+
+    /** Audio prompt of every exam-ready question of the given task types, as {@code [taskTypeKey, audioPromptRef]}. */
+    @Query("SELECT q.taskTypeKey, q.audioPromptRef FROM Question q WHERE q.deleted = false "
+            + "AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED "
+            + "AND q.current = true AND (q.availableForExam = true OR (q.availabilityFlagsExplicit = false AND q.pool = com.pte.itembank.domain.enums.QuestionPool.EXAM)) "
+            + "AND q.audioPromptRef IS NOT NULL AND q.taskTypeKey IN :taskTypeKeys")
+    List<Object[]> findExamAudioPromptRefsByTaskTypeKeys(@Param("taskTypeKeys") Collection<String> taskTypeKeys);
+
     @Query("SELECT q.pteTaskType, COUNT(q) FROM Question q "
             + "WHERE q.deleted = false "
             + "AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED "

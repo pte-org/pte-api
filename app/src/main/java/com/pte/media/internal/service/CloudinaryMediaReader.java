@@ -69,6 +69,18 @@ class CloudinaryMediaReader {
         return Map.copyOf(resolved);
     }
 
+    Map<UUID, Integer> durationSeconds(Collection<UUID> mediaPublicIds) {
+        List<UUID> requestedIds = mediaPublicIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (requestedIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, Integer> durations = new HashMap<>();
+        for (Object[] row : repository.findDurationsByPublicIds(requestedIds)) {
+            durations.put((UUID) row[0], (Integer) row[1]);
+        }
+        return Map.copyOf(durations);
+    }
+
     private PresignedDownloadResponse toTrustedDownloadResponse(
             MediaAsset media, long requestedTtlSeconds, UUID tenantId) {
         if (media.getCloudinaryPublicId() == null) {

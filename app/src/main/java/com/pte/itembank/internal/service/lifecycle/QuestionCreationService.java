@@ -86,6 +86,7 @@ public class QuestionCreationService {
         question.setRevisionGroupPublicId(UUID.randomUUID());
         question.setRevisionNumber(1);
         question.setCurrent(true);
+        question.setCefrLevel(CefrLevels.parse(request.cefrLevel()));
         question.setPromptText(request.promptText());
         question.setAudioPromptRef(request.audioPromptRef());
         question.setImagePromptRef(request.imagePromptRef());

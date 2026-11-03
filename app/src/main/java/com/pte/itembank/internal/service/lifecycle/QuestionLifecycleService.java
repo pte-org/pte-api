@@ -85,6 +85,7 @@ public class QuestionLifecycleService {
         revision.setAvailableForPractice(source.isAvailableForPractice());
         revision.setAvailableForExam(source.isAvailableForExam());
         revision.setAvailabilityFlagsExplicit(source.isAvailabilityFlagsExplicit());
+        revision.setCefrLevel(source.getCefrLevel());
         revision.setTenantId(source.getTenantId());
         revision.setAuthorUserPublicId(caller.userId());
         revision.setStatus(QuestionStatus.DRAFT);
@@ -178,6 +179,9 @@ public class QuestionLifecycleService {
         applyContent(question, request.promptText(), request.audioPromptRef(),
                 request.imagePromptRef(), request.referenceAnswerText(), request.correctAnswerText(),
                 request.minWordCount(), request.maxWordCount(), request.options());
+        if (request.cefrLevel() != null) {
+            question.setCefrLevel(CefrLevels.parse(request.cefrLevel()));
+        }
         boolean wasForExam = question.isAvailableForExam();
         boolean wasForPractice = question.isAvailableForPractice();
         if (request.availableForPractice() != null) {

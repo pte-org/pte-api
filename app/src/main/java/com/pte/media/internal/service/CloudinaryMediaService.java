@@ -86,6 +86,12 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
         return mediaReader.resolveForTrustedCallers(mediaPublicIds, requestedTtlSeconds, tenantId);
     }
 
+    /** Measured length of each given media object that has one, from one repository query. */
+    @Transactional(readOnly = true)
+    public Map<UUID, Integer> durationSeconds(Collection<UUID> mediaPublicIds) {
+        return mediaReader.durationSeconds(mediaPublicIds);
+    }
+
     public void validateAuthoringMedia(UUID mediaPublicId, String assetKind, CurrentUser caller) {
         uploadVerifier.validateAuthoringMedia(mediaPublicId, assetKind, caller);
     }

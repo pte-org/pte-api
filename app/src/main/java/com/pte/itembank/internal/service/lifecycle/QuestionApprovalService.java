@@ -1,5 +1,6 @@
 package com.pte.itembank.internal.service.lifecycle;
 
+import com.pte.itembank.internal.exception.QuestionValidationException;
 import com.pte.itembank.internal.service.QuestionMediaReferenceValidator;
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.enums.QuestionStatus;
@@ -50,6 +51,9 @@ public class QuestionApprovalService {
         Question question = loadForPlatformWrite(publicId, caller);
         if (question.getStatus() != QuestionStatus.DRAFT) {
             throw new InvalidQuestionStatusTransitionException();
+        }
+        if (question.isAvailableForExam() && question.getCefrLevel() == null) {
+            throw new QuestionValidationException(ItembankConstants.CEFR_LEVEL_REQUIRED);
         }
         validationHelper.validate(question);
         mediaValidator.validate(question, caller);

@@ -25,7 +25,18 @@ public record CreateQuestionRequest(
         @Valid List<OptionRequest> options,
         String pool,
         Boolean availableForPractice,
-        Boolean availableForExam) {
+        Boolean availableForExam,
+        String cefrLevel) {
+
+    /** Constructor for callers that predate the CEFR level. */
+    public CreateQuestionRequest(String pteTaskType, String taskTypeKey, String promptText,
+            UUID audioPromptRef, UUID imagePromptRef, String referenceAnswerText,
+            String correctAnswerText, Integer minWordCount, Integer maxWordCount,
+            List<OptionRequest> options, String pool, Boolean availableForPractice, Boolean availableForExam) {
+        this(pteTaskType, taskTypeKey, promptText, audioPromptRef, imagePromptRef, referenceAnswerText,
+                correctAnswerText, minWordCount, maxWordCount, options, pool, availableForPractice,
+                availableForExam, null);
+    }
 
     /** Compatibility constructor for callers that predate the question pool (defaults to EXAM). */
     public CreateQuestionRequest(String pteTaskType, String taskTypeKey, String promptText,
