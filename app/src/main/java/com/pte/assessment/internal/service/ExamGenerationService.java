@@ -7,6 +7,7 @@ import com.pte.assessment.dto.response.SnapshotResponse;
 import com.pte.assessment.internal.constant.AssessmentConstants;
 import com.pte.assessment.internal.exception.TemplateNotActiveException;
 import com.pte.assessment.internal.repository.ExamBlueprintRepository;
+import com.pte.assessment.internal.service.assembly.FreshQuestions;
 import com.pte.itembank.ExamCandidateService;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.TaskTypeStimulusService;
@@ -96,10 +97,21 @@ public class ExamGenerationService {
     @Transactional
     public SnapshotResponse generateDeterministic(String name, UUID templatePublicId, long seed,
             CurrentUser caller, Set<String> selectedSkills, List<CefrTargetResponse> cefrOverride) {
+        return generateDeterministic(name, templatePublicId, seed, caller, selectedSkills, cefrOverride, false);
+    }
+
+    /** As above; {@code avoidRepeats} prefers questions the caller's centre has not used in earlier exams. */
+    @Transactional
+    public SnapshotResponse generateDeterministic(String name, UUID templatePublicId, long seed,
+            CurrentUser caller, Set<String> selectedSkills, List<CefrTargetResponse> cefrOverride,
+            boolean avoidRepeats) {
+        FreshQuestions fresh = avoidRepeats
+                ? FreshQuestions.avoiding(snapshotPublishService.usedQuestionIds(caller.tenantId()))
+                : FreshQuestions.none();
         ExamDefinitionResponse template = examDefinitionService.findActiveByPublicId(templatePublicId)
                 .orElseThrow(TemplateNotActiveException::new);
         ExamBlueprintAssembler.AssembledBlueprint assembled =
-                assembler.assembleWithReport(name, seed, caller, template, selectedSkills, cefrOverride);
+                assembler.assembleWithReport(name, seed, caller, template, selectedSkills, cefrOverride, fresh);
         ExamBlueprint saved = blueprintRepository.save(assembled.blueprint());
         return snapshotPublishService.publish(saved.getPublicId(), caller, template, seed,
                 assembled.report().algorithmVersion(), template.publicId() + ":" + template.version(),

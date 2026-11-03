@@ -11,6 +11,7 @@ import com.pte.assessment.dto.response.CefrTargetResponse;
 import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.internal.service.ExamBlueprintAssembler.AssembledBlueprint;
+import com.pte.assessment.internal.service.assembly.FreshQuestions;
 import com.pte.itembank.ExamCandidateService;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.domain.enums.PteSection;
@@ -121,5 +122,42 @@ class ExamBlueprintAssemblerCefrTest {
 
         assertThat(assembled.report().cefr()).isNull();
         assertThat(assembled.blueprint().getItems()).isNotEmpty();
+    }
+
+    private static Set<UUID> idsOf(AssembledBlueprint assembled) {
+        return assembled.blueprint().getItems().stream()
+                .map(item -> item.getQuestionPublicId()).collect(java.util.stream.Collectors.toSet());
+    }
+
+    private AssembledBlueprint assembleAvoiding(Set<UUID> used) {
+        return new ExamBlueprintAssembler(bank, null, candidates).assembleWithReport("Exam", 11L, HOST,
+                template(evenMix()), null, null, FreshQuestions.avoiding(used));
+    }
+
+    @Test
+    void anExamThatAvoidsRepeatsSharesNoQuestionWithTheEarlierOneWhenTheBankIsLargeEnough() {
+        Set<UUID> earlier = idsOf(assemble(template(evenMix()), candidates));
+
+        AssembledBlueprint next = assembleAvoiding(earlier);
+
+        assertThat(idsOf(next)).doesNotContainAnyElementsOf(earlier);
+        assertThat(next.report().repeatedQuestions()).isZero();
+    }
+
+    @Test
+    void anExamThatAvoidsRepeatsReusesQuestionsOnlyWhenTheUnusedOnesRunOut() {
+        // 20 questions per task type exist and the exam needs 4, so using 18 leaves only 2 unused.
+        Set<UUID> used = candidates.candidates("MC_READING_SINGLE").stream()
+                .limit(18).map(candidate -> candidate.publicId()).collect(java.util.stream.Collectors.toSet());
+
+        AssembledBlueprint next = assembleAvoiding(used);
+
+        assertThat(next.blueprint().getItems()).hasSize(8);
+        assertThat(next.report().repeatedQuestions()).isNotNull();
+    }
+
+    @Test
+    void anExamWithoutThePreferenceDoesNotReportRepeats() {
+        assertThat(assemble(template(evenMix()), candidates).report().repeatedQuestions()).isNull();
     }
 }

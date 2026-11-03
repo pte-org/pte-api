@@ -13,6 +13,7 @@ import com.pte.assessment.internal.service.assembly.AssemblyReport;
 import com.pte.assessment.internal.service.assembly.CountSelection;
 import com.pte.assessment.internal.service.assembly.CefrMix;
 import com.pte.assessment.internal.service.assembly.CountSelector;
+import com.pte.assessment.internal.service.assembly.FreshQuestions;
 import com.pte.assessment.internal.service.assembly.StratifiedQuestionPicker.Need;
 import com.pte.assessment.internal.service.assembly.StratifiedQuestionPicker.Picked;
 import com.pte.itembank.ExamCandidateService;
@@ -78,9 +79,7 @@ class ExamBlueprintAssembler {
         List<RolledRequirement> rolled = requirements.stream().map(this::roll).toList();
 
         checkStockOrThrow(rolled);
-        List<PickedItem> picked = drawOrThrow(rolled);
-
-        return createBlueprint(name, picked, caller);
+        return createBlueprint(name, drawOrThrow(rolled), caller);
     }
 
     /** Builds an exam blueprint with deterministic generation using a fixed seed. */
@@ -92,12 +91,13 @@ class ExamBlueprintAssembler {
     /** Deterministic generation that also reports how the counts were decided. */
     AssembledBlueprint assembleWithReport(String name, long seed, CurrentUser caller,
             ExamDefinitionResponse template, Set<String> selectedSkills) {
-        return assembleWithReport(name, seed, caller, template, selectedSkills, null);
+        return assembleWithReport(name, seed, caller, template, selectedSkills, null, FreshQuestions.none());
     }
 
-    /** As above; a non-empty {@code cefrOverride} replaces the template's CEFR mix for this exam. */
+    /** A non-empty {@code cefrOverride} replaces the template's CEFR mix; an active {@code fresh} prefers unused ones. */
     AssembledBlueprint assembleWithReport(String name, long seed, CurrentUser caller,
-            ExamDefinitionResponse template, Set<String> selectedSkills, List<CefrTargetResponse> cefrOverride) {
+            ExamDefinitionResponse template, Set<String> selectedSkills, List<CefrTargetResponse> cefrOverride,
+            FreshQuestions fresh) {
         Set<PteSection> selectedSections = SkillSelection.resolve(template, selectedSkills);
         List<Requirement> requirements = buildRequirements(template, selectedSections,
                 !"CUSTOM".equalsIgnoreCase(template.templatePolicy()));
@@ -113,12 +113,13 @@ class ExamBlueprintAssembler {
         Map<CefrLevel, Integer> mix = CefrMix.of(cefrOverride == null || cefrOverride.isEmpty() ? template.cefrTargets() : cefrOverride);
         List<Need> needs = rolled.stream().map(r -> new Need(r.taskTypeKey(), r.section().name(), r.n())).toList();
         Picked stratified = mix.isEmpty() || !stratifiedDraw.isAvailable() ? null
-                : stratifiedDraw.draw(needs, mix, seed);
-        List<PickedItem> picked = stratified == null ? drawDeterministic(rolled, seed)
+                : stratifiedDraw.draw(needs, mix, seed, fresh);
+        List<PickedItem> picked = stratified == null ? drawDeterministic(rolled, seed, fresh)
                 : stratifiedDraw.toItems(needs, stratified);
         Map<String, Integer> finalCounts = rolled.stream()
                 .collect(Collectors.toMap(RolledRequirement::taskTypeKey, RolledRequirement::n, Integer::sum));
-        AssemblyReport report = selection.report(seed, finalCounts);
+        AssemblyReport report = selection.report(seed, finalCounts)
+                .withRepeated(fresh.repeatedIn(picked.stream().map(PickedItem::questionPublicId).toList()));
         return new AssembledBlueprint(createBlueprint(name, picked, caller),
                 stratified == null ? report : report.withCefr(stratified.report()));
     }
@@ -187,12 +188,13 @@ class ExamBlueprintAssembler {
                 requirement.section(), n);
     }
 
-    private List<PickedItem> drawDeterministic(List<RolledRequirement> rolled, long seed) {
+    private List<PickedItem> drawDeterministic(List<RolledRequirement> rolled, long seed, FreshQuestions fresh) {
         List<PickedItem> picked = new ArrayList<>();
         Set<UUID> used = new HashSet<>();
         List<InsufficientQuestionBankException.Shortage> shortages = new ArrayList<>();
         for (RolledRequirement requirement : rolled) {
-            List<UUID> candidates = new ArrayList<>(publishedQuestionIds(requirement));
+            List<UUID> candidates = new ArrayList<>(
+                    fresh.prefer(publishedQuestionIds(requirement), id -> id, requirement.n()));
             Collections.shuffle(candidates, new java.util.Random(seed ^ requirement.taskTypeKey().hashCode()
                     ^ requirement.section().name().hashCode()));
             int selected = 0;

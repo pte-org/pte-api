@@ -187,4 +187,10 @@ public class SnapshotPublishService {
         return SnapshotMapper.toResponse(snapshot);
     }
 
+
+    /** The questions the tenant has already used in its exams. */
+    @Transactional(readOnly = true)
+    public java.util.Set<UUID> usedQuestionIds(UUID tenantId) {
+        return tenantId == null ? java.util.Set.of() : new java.util.HashSet<>(snapshotRepository.findUsedQuestionIds(tenantId));
+    }
 }

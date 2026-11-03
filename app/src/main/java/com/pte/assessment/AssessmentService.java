@@ -118,6 +118,14 @@ public class AssessmentService {
                 cefrOverride);
     }
 
+    /** As above; {@code avoidRepeats} prefers questions the centre has not used in its earlier exams. */
+    public SnapshotResponse generateDeterministic(String name, UUID templatePublicId, long seed,
+            CurrentUser caller, Set<String> selectedSkills, java.util.List<CefrTargetResponse> cefrOverride,
+            boolean avoidRepeats) {
+        return examGenerationService.generateDeterministic(name, templatePublicId, seed, caller, selectedSkills,
+                cefrOverride, avoidRepeats);
+    }
+
     /** Answer-free feasibility for the exact sections that deterministic generation will include. */
     @Transactional(readOnly = true)
     public ExamDefinitionFeasibilityResponse getTemplateFeasibility(UUID templatePublicId,

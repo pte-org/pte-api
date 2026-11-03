@@ -18,7 +18,16 @@ public record AssemblyReport(
         long candidateCombinations,
         Boolean totalCeilingMet,
         String fallbackReason,
-        CefrReport cefr) {
+        CefrReport cefr,
+        Integer repeatedQuestions) {
+
+    /** Shape of a report that does not say how many questions repeat an earlier exam. */
+    public AssemblyReport(String algorithmVersion, long seed, String method, Map<String, Integer> counts,
+            Map<String, Long> partSeconds, long totalSeconds, long candidateCombinations, Boolean totalCeilingMet,
+            String fallbackReason, CefrReport cefr) {
+        this(algorithmVersion, seed, method, counts, partSeconds, totalSeconds, candidateCombinations,
+                totalCeilingMet, fallbackReason, cefr, null);
+    }
 
     public static final String METHOD_BALANCED = "BALANCED";
     public static final String METHOD_INDEPENDENT = "INDEPENDENT";
@@ -31,6 +40,12 @@ public record AssemblyReport(
 
     public AssemblyReport withCefr(CefrReport cefrReport) {
         return new AssemblyReport(algorithmVersion, seed, method, counts, partSeconds, totalSeconds,
-                candidateCombinations, totalCeilingMet, fallbackReason, cefrReport);
+                candidateCombinations, totalCeilingMet, fallbackReason, cefrReport, repeatedQuestions);
+    }
+
+    /** The same report with how many of the exam's questions were already used in an earlier exam. */
+    public AssemblyReport withRepeated(Integer repeated) {
+        return new AssemblyReport(algorithmVersion, seed, method, counts, partSeconds, totalSeconds,
+                candidateCombinations, totalCeilingMet, fallbackReason, cefr, repeated);
     }
 }

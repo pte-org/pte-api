@@ -1,5 +1,6 @@
 package com.pte.assessment.internal.service;
 
+import com.pte.assessment.internal.service.assembly.FreshQuestions;
 import com.pte.assessment.internal.service.assembly.StratifiedQuestionPicker;
 import com.pte.assessment.internal.service.assembly.StratifiedQuestionPicker.Candidate;
 import com.pte.assessment.internal.service.assembly.StratifiedQuestionPicker.Need;
@@ -28,12 +29,12 @@ final class StratifiedDraw {
         return candidateService != null;
     }
 
-    Picked draw(List<Need> needs, Map<CefrLevel, Integer> mix, long seed) {
+    Picked draw(List<Need> needs, Map<CefrLevel, Integer> mix, long seed, FreshQuestions fresh) {
         Map<String, List<Candidate>> pool = new HashMap<>();
         for (Need need : needs) {
-            pool.computeIfAbsent(need.taskTypeKey(), key -> candidateService.candidates(key).stream()
+            pool.computeIfAbsent(need.taskTypeKey(), key -> fresh.prefer(candidateService.candidates(key).stream()
                     .map(candidate -> new Candidate(candidate.publicId(), CefrLevel.parseOrNull(candidate.cefrLevel())))
-                    .toList());
+                    .toList(), Candidate::publicId, need.count()));
         }
         return StratifiedQuestionPicker.pick(needs, pool, mix, seed);
     }
