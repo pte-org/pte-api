@@ -98,6 +98,7 @@ public class ExamDraftService {
         Set<String> templateSkills = skills.resolveTemplateSkills(template);
         session.setSelectedSkills(skills.resolveSelectedSkills(request.selectedSkills(), templateSkills));
         session.setMaxRetriesPerStudent(skills.resolveRetryCount(request.maxRetriesPerStudent()));
+        session.setCefrTargets(ExamCefrOverride.parse(request.cefrTargets()));
         session.setOpensAt(request.opensAt());
         session.setClosesAt(request.closesAt());
         session.setCapacity(request.capacity());
@@ -204,6 +205,9 @@ public class ExamDraftService {
         session.setSelectedSkills(skills.resolveSelectedSkills(requestedSkills, templateSkills));
         if (request.maxRetriesPerStudent() != null) {
             session.setMaxRetriesPerStudent(skills.resolveRetryCount(request.maxRetriesPerStudent()));
+        }
+        if (request.cefrTargets() != null) {
+            session.setCefrTargets(ExamCefrOverride.parse(request.cefrTargets()));
         }
         validateWindow(session.getOpensAt(), session.getClosesAt());
         validateConfiguration(session.getReusePolicy(), session.getSeriesKey());

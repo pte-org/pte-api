@@ -625,7 +625,7 @@ class ExamWorkflowServicesTest {
         var snapshot = new com.pte.assessment.dto.response.SnapshotResponse(examVersionId, "Draft", 1,
                 UUID.randomUUID(), templateId, 3, tenantId, List.of());
         when(assessmentService.generateDeterministic(eq(session.getName()), eq(templateId), anyLong(), eq(hostAdmin),
-                any())).thenReturn(snapshot);
+                any(), any())).thenReturn(snapshot);
 
         var response = publishService.generate(session.getPublicId(), "key-1", hostAdmin);
 

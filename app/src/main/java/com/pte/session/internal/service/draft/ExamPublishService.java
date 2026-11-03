@@ -126,7 +126,8 @@ public class ExamPublishService {
             throw new ExamPublishBlockedException(preflight);
         }
         SnapshotResponse exam = assessmentService.generateDeterministic(session.getName(),
-                session.getExamDefinitionPublicId(), secureRandom.nextLong(), caller, session.getSelectedSkills());
+                session.getExamDefinitionPublicId(), secureRandom.nextLong(), caller, session.getSelectedSkills(),
+                SessionMapper.cefrTargetsOf(session));
         session.setExamVersionPublicId(exam.publicId());
         session.setStatus(SessionStatus.READY);
         sessionRepository.save(session);

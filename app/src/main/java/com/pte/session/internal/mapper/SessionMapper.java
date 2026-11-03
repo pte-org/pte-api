@@ -36,7 +36,20 @@ public final class SessionMapper {
                 session.getDraftVersion() == null ? 0L : session.getDraftVersion(),
                 session.getSelectedSkills() == null || session.getSelectedSkills().isEmpty()
                         ? null : java.util.Set.copyOf(session.getSelectedSkills()),
-                session.getMaxRetriesPerStudent());
+                session.getMaxRetriesPerStudent(),
+                cefrTargetsOf(session));
+    }
+
+    /** The CEFR mix chosen for an exam; empty when it follows its template's. */
+    public static java.util.List<com.pte.assessment.dto.response.CefrTargetResponse> cefrTargetsOf(
+            ExamSession session) {
+        if (session.getCefrTargets() == null) {
+            return java.util.List.of();
+        }
+        return session.getCefrTargets().stream()
+                .map(target -> new com.pte.assessment.dto.response.CefrTargetResponse(target.level(),
+                        target.percent()))
+                .toList();
     }
 
     /**
