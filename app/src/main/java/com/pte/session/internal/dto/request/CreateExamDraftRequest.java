@@ -30,7 +30,18 @@ public record CreateExamDraftRequest(
         @Min(value = 0, message = SessionConstants.RETRY_COUNT_INVALID)
         @Max(value = 9, message = SessionConstants.RETRY_COUNT_INVALID) Integer maxRetriesPerStudent,
         LockdownMode lockdownMode,
-        @jakarta.validation.Valid List<CefrTargetRequest> cefrTargets) {
+        @jakarta.validation.Valid List<CefrTargetRequest> cefrTargets,
+        /** Prefer questions the centre has not used in its earlier exams; null means no preference. */
+        Boolean avoidRepeatedQuestions) {
+
+    /** Constructor for callers that predate the repeat preference. */
+    public CreateExamDraftRequest(String name, UUID examDefinitionPublicId, UUID subscriptionPublicId,
+            Instant opensAt, Instant closesAt, ExamMode examMode, ReusePolicy reusePolicy, String seriesKey,
+            Integer capacity, List<String> selectedSkills, Integer maxRetriesPerStudent,
+            LockdownMode lockdownMode, List<CefrTargetRequest> cefrTargets) {
+        this(name, examDefinitionPublicId, subscriptionPublicId, opensAt, closesAt, examMode, reusePolicy,
+                seriesKey, capacity, selectedSkills, maxRetriesPerStudent, lockdownMode, cefrTargets, null);
+    }
 
     /** One level of the CEFR mix a centre picks for an exam; shared with {@link PatchExamDraftRequest}. */
     public record CefrTargetRequest(@jakarta.validation.constraints.NotNull String level,

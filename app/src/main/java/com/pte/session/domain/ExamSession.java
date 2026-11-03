@@ -103,6 +103,10 @@ public class ExamSession extends BaseEntity {
     @CollectionTable(name = "exam_session_cefr_targets", joinColumns = @JoinColumn(name = "session_id"))
     private List<SessionCefrTarget> cefrTargets = new ArrayList<>();
 
+    /** Prefer questions the centre has not used in its earlier exams when the exam is generated. */
+    @Column(name = "avoid_repeated_questions", nullable = false)
+    private boolean avoidRepeatedQuestions = false;
+
     /** Additional submissions allowed after the initial attempt. */
     @Column(name = "max_retries_per_student", nullable = false)
     private int maxRetriesPerStudent = 0;

@@ -99,6 +99,7 @@ public class ExamDraftService {
         session.setSelectedSkills(skills.resolveSelectedSkills(request.selectedSkills(), templateSkills));
         session.setMaxRetriesPerStudent(skills.resolveRetryCount(request.maxRetriesPerStudent()));
         session.setCefrTargets(ExamCefrOverride.parse(request.cefrTargets()));
+        session.setAvoidRepeatedQuestions(Boolean.TRUE.equals(request.avoidRepeatedQuestions()));
         session.setOpensAt(request.opensAt());
         session.setClosesAt(request.closesAt());
         session.setCapacity(request.capacity());
@@ -208,6 +209,9 @@ public class ExamDraftService {
         }
         if (request.cefrTargets() != null) {
             session.setCefrTargets(ExamCefrOverride.parse(request.cefrTargets()));
+        }
+        if (request.avoidRepeatedQuestions() != null) {
+            session.setAvoidRepeatedQuestions(request.avoidRepeatedQuestions());
         }
         validateWindow(session.getOpensAt(), session.getClosesAt());
         validateConfiguration(session.getReusePolicy(), session.getSeriesKey());

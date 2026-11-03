@@ -37,7 +37,8 @@ public final class SessionMapper {
                 session.getSelectedSkills() == null || session.getSelectedSkills().isEmpty()
                         ? null : java.util.Set.copyOf(session.getSelectedSkills()),
                 session.getMaxRetriesPerStudent(),
-                cefrTargetsOf(session));
+                cefrTargetsOf(session),
+                session.isAvoidRepeatedQuestions());
     }
 
     /** The CEFR mix chosen for an exam; empty when it follows its template's. */

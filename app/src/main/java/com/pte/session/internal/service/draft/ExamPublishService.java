@@ -127,7 +127,7 @@ public class ExamPublishService {
         }
         SnapshotResponse exam = assessmentService.generateDeterministic(session.getName(),
                 session.getExamDefinitionPublicId(), secureRandom.nextLong(), caller, session.getSelectedSkills(),
-                SessionMapper.cefrTargetsOf(session));
+                SessionMapper.cefrTargetsOf(session), session.isAvoidRepeatedQuestions());
         session.setExamVersionPublicId(exam.publicId());
         session.setStatus(SessionStatus.READY);
         sessionRepository.save(session);
