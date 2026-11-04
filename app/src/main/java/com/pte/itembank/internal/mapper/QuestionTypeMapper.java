@@ -46,7 +46,7 @@ public final class QuestionTypeMapper {
                         ? runtimeProfile == null ? null : runtimeProfile.contractVersion()
                         : definition.getRuntimeProfileVersion(),
                 readiness(definition, runtimeProfile), editability(definition), definition.getLifecycleStatus(),
-                definition.isRequiresReferenceAnswer(), definition.getInstruction());
+                definition.isRequiresReferenceAnswer(), definition.getInstruction(), definition.getUpdatedAt());
     }
 
     public static QuestionTypeResponse toResponse(QuestionType definition,
@@ -70,7 +70,8 @@ public final class QuestionTypeMapper {
                         contract == null ? "UNAVAILABLE" : "MANIFEST_REQUIRED", List.of()),
                 new TaskTypeEditabilityResponse(false, !locked, true,
                         locked ? "This task type is used by a published template, so its runtime contract is locked." : null),
-                response.lifecycleStatus(), response.requiresReferenceAnswer(), response.instruction());
+                response.lifecycleStatus(), response.requiresReferenceAnswer(), response.instruction(),
+                response.updatedAt());
     }
 
     private static TaskTypeReadinessResponse readiness(QuestionType definition,
