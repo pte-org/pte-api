@@ -68,9 +68,10 @@ public class QuestionController {
             @RequestParam(required = false) String section,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String q,
-            @RequestParam(required = false) String pool) {
+            @RequestParam(required = false) String pool,
+            @RequestParam(required = false) String cefrLevel) {
         return ApiResponse.success(itembankService.listAccessible(currentUser(), page, size, taskType, section, status,
-                q, pool));
+                q, pool, cefrLevel));
     }
 
     @GetMapping("/stats")

@@ -2,6 +2,7 @@ package com.pte.itembank.internal.service;
 
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.domain.enums.PteSection;
@@ -96,6 +97,14 @@ public class QuestionQueryService {
     @Transactional(readOnly = true)
     public PagedResult<QuestionResponse> listAccessible(CurrentUser caller, int requestedPage, int requestedSize,
             String taskType, String section, String status, String query, String pool) {
+        return listAccessible(caller, requestedPage, requestedSize, taskType, section, status, query, pool, null);
+    }
+
+    /** As above, narrowed to one CEFR level when {@code cefrLevel} is given. */
+    @Transactional(readOnly = true)
+    public PagedResult<QuestionResponse> listAccessible(CurrentUser caller, int requestedPage, int requestedSize,
+            String taskType, String section, String status, String query, String pool, String cefrLevel) {
+        CefrLevel requestedCefr = parseOptionalCefr(cefrLevel);
         int page = normalizePage(requestedPage);
         int size = normalizePageSize(requestedSize);
         String requestedTaskTypeKey = parseOptionalTaskTypeKey(taskType);
@@ -107,14 +116,12 @@ public class QuestionQueryService {
         Pageable pageable = PageRequest.of(page, size,
                 Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
 
-        Page<UUID> questionPage = questionRepository.findPagePublicIds(
-                requestedTaskTypeKey,
-                requestedSection == null ? null : requestedSection.name(),
-                requestedStatus,
-                requestedPool,
-                normalizedQuery,
-                publicIdQuery,
-                pageable);
+        String sectionName = requestedSection == null ? null : requestedSection.name();
+        Page<UUID> questionPage = requestedCefr == null
+                ? questionRepository.findPagePublicIds(requestedTaskTypeKey, sectionName, requestedStatus,
+                        requestedPool, normalizedQuery, publicIdQuery, pageable)
+                : questionRepository.findPagePublicIdsByCefr(requestedTaskTypeKey, sectionName, requestedStatus,
+                        requestedPool, normalizedQuery, publicIdQuery, requestedCefr, pageable);
 
         List<UUID> publicIds = questionPage.getContent();
         Map<UUID, Question> questionsByPublicId = publicIds.isEmpty()
@@ -227,6 +234,15 @@ public class QuestionQueryService {
             return QuestionStatus.valueOf(value.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             throw new QuestionValidationException(ItembankConstants.INVALID_QUESTION_FIELDS);
+        }
+    }
+
+    private CefrLevel parseOptionalCefr(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return CefrLevel.valueOf(value.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new QuestionValidationException(ItembankConstants.INVALID_CEFR_LEVEL);
         }
     }
 

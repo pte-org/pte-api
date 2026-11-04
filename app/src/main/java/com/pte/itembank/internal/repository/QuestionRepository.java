@@ -2,6 +2,7 @@ package com.pte.itembank.internal.repository;
 
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -44,6 +45,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
               AND (:taskTypeKey IS NULL OR q.taskTypeKey = :taskTypeKey)
               AND (:section IS NULL OR q.taskTypeSection = :section)
               AND (:status IS NULL OR q.status = :status)
+              AND (:cefrLevel IS NULL OR q.cefrLevel = :cefrLevel)
               AND (:pool IS NULL
                    OR q.availabilityFlagsExplicit = false AND q.pool = :pool
                    OR q.availabilityFlagsExplicit = true
@@ -61,6 +63,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
               AND (:taskTypeKey IS NULL OR q.taskTypeKey = :taskTypeKey)
               AND (:section IS NULL OR q.taskTypeSection = :section)
               AND (:status IS NULL OR q.status = :status)
+              AND (:cefrLevel IS NULL OR q.cefrLevel = :cefrLevel)
               AND (:pool IS NULL
                    OR q.availabilityFlagsExplicit = false AND q.pool = :pool
                    OR q.availabilityFlagsExplicit = true
@@ -71,10 +74,17 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
                    OR q.promptText IS NOT NULL AND LOWER(q.promptText) LIKE CONCAT('%', :query, '%')
                    OR :publicIdQuery IS NOT NULL AND q.publicId = :publicIdQuery)
             """)
-    Page<UUID> findPagePublicIds(@Param("taskTypeKey") String taskTypeKey,
+    Page<UUID> findPagePublicIdsByCefr(@Param("taskTypeKey") String taskTypeKey,
             @Param("section") String section, @Param("status") QuestionStatus status,
             @Param("pool") QuestionPool pool, @Param("query") String query,
-            @Param("publicIdQuery") UUID publicIdQuery, Pageable pageable);
+            @Param("publicIdQuery") UUID publicIdQuery, @Param("cefrLevel") CefrLevel cefrLevel,
+            Pageable pageable);
+
+    /** The same page without a CEFR filter. */
+    default Page<UUID> findPagePublicIds(String taskTypeKey, String section, QuestionStatus status,
+            QuestionPool pool, String query, UUID publicIdQuery, Pageable pageable) {
+        return findPagePublicIdsByCefr(taskTypeKey, section, status, pool, query, publicIdQuery, null, pageable);
+    }
 
     @EntityGraph(attributePaths = "options")
     @Query("SELECT DISTINCT q FROM Question q WHERE q.deleted = false AND q.publicId IN :publicIds")

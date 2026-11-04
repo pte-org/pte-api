@@ -2,6 +2,7 @@ package com.pte.itembank.internal.repository;
 
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.QuestionOption;
+import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
@@ -42,6 +43,26 @@ class QuestionRepositoryTest {
         assertThat(byText.getContent()).containsExactly(matching.getPublicId());
         assertThat(byText.getTotalElements()).isEqualTo(1);
         assertThat(byPublicId.getContent()).containsExactly(matching.getPublicId());
+    }
+
+    @Test
+    void pageQuery_canNarrowToOneCefrLevelAndCountsOnlyThatLevel() {
+        Question b2 = persist("First prompt", "READING", QuestionStatus.APPROVED);
+        b2.setCefrLevel(CefrLevel.B2);
+        questionRepository.saveAndFlush(b2);
+        Question c1 = persist("Second prompt", "READING", QuestionStatus.APPROVED);
+        c1.setCefrLevel(CefrLevel.C1);
+        questionRepository.saveAndFlush(c1);
+        persist("Unclassified prompt", "READING", QuestionStatus.APPROVED);
+
+        Page<UUID> onlyB2 = questionRepository.findPagePublicIdsByCefr(
+                null, null, null, null, "", null, CefrLevel.B2, PageRequest.of(0, 10));
+        Page<UUID> any = questionRepository.findPagePublicIds(
+                null, null, null, null, "", null, PageRequest.of(0, 10));
+
+        assertThat(onlyB2.getContent()).containsExactly(b2.getPublicId());
+        assertThat(onlyB2.getTotalElements()).isEqualTo(1);
+        assertThat(any.getTotalElements()).isEqualTo(3);
     }
 
     @Test

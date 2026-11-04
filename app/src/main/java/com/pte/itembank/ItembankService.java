@@ -85,6 +85,13 @@ public class ItembankService {
     }
 
     @Transactional(readOnly = true)
+    public PagedResult<QuestionResponse> listAccessible(CurrentUser caller, int requestedPage, int requestedSize,
+            String taskType, String section, String status, String query, String pool, String cefrLevel) {
+        return queryService.listAccessible(caller, requestedPage, requestedSize, taskType, section, status, query,
+                pool, cefrLevel);
+    }
+
+    @Transactional(readOnly = true)
     public QuestionStatsResponse stats(CurrentUser caller) {
         return queryService.stats(caller);
     }
