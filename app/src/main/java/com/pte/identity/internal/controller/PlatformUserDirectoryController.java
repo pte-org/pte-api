@@ -11,10 +11,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** Read-only platform-user directory used to resolve vendor audit actors. */
+/** Read-only platform-user directory (id and name only) used to resolve audit actors and authors on the vendor side. */
 @RestController
 @RequestMapping("/api/v1/platform-users")
-@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER','ACADEMIC_MANAGER','ACADEMIC_STAFF')")
 public class PlatformUserDirectoryController {
 
     private final PlatformUserService platformUserService;

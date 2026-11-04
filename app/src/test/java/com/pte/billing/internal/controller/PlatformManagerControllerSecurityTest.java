@@ -44,7 +44,9 @@ class PlatformManagerControllerSecurityTest {
         assertMethod(AnnouncementController.class, null, MANAGER);
         assertMethod(AdminSupportTicketController.class, null, MANAGER);
         assertMethod(PlatformAuditLogController.class, null, MANAGER);
-        assertMethod(PlatformUserDirectoryController.class, null, MANAGER);
+        // The directory holds only ids and names, so the academic roles can read it to see who wrote what.
+        assertMethod(PlatformUserDirectoryController.class, null,
+                "hasAnyRole('PLATFORM_ADMIN','PLATFORM_MANAGER','ACADEMIC_MANAGER','ACADEMIC_STAFF')");
     }
 
     @Test
