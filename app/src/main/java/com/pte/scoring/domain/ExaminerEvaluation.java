@@ -78,6 +78,9 @@ public class ExaminerEvaluation extends AnswerEvaluation {
     @Column(name = "carried_over_from_examiner_public_id")
     private UUID carriedOverFromExaminerPublicId;
 
+    @Column(name = "trait_scores_json", columnDefinition = "text")
+    private String traitScoresJson;
+
     @Transient
     private boolean loadedSubmitted;
 
@@ -115,6 +118,12 @@ public class ExaminerEvaluation extends AnswerEvaluation {
         evaluation.submit(score, submittedAt, decisionKind, reviewedAiScore, reviewedAiVersion,
                 expectedReviewVersion, requestPublicId, requestFingerprint);
         return evaluation;
+    }
+
+    public void recordTraitScores(String traitsJson, UUID rubricVersionPublicId) {
+        requireDraft();
+        this.traitScoresJson = traitsJson;
+        recordRubricVersion(rubricVersionPublicId);
     }
 
     public void updateDraft(Integer score, String comment, ExaminerDecisionKind decisionKind,
