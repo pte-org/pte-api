@@ -15,6 +15,9 @@ import com.pte.scoring.internal.config.AiProviderProperties;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
 import com.pte.scoring.internal.repository.AiEvaluationRepository;
+import com.pte.scoring.internal.rubric.catalog.RubricCatalogImpl;
+import com.pte.scoring.internal.rubric.service.ResolvedRubric;
+import com.pte.scoring.internal.rubric.service.RubricResolver;
 import com.pte.scoring.internal.service.ai.AiScoringResultPersistenceService;
 import com.pte.scoring.internal.vendor.AiAnswerScorer;
 import com.pte.scoring.internal.vendor.AiJobBudget;
@@ -23,6 +26,12 @@ import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.AiScoringRequest;
 import com.pte.scoring.internal.vendor.EssayScoringClient;
 import com.pte.scoring.internal.vendor.SpeechScoringClient;
+import com.pte.scoring.internal.vendor.gemini.GeminiResponse;
+import com.pte.scoring.internal.vendor.gemini.GeminiRestClient;
+import com.pte.scoring.internal.vendor.gemini.scorer.WriteEssayScorer;
+import com.pte.scoring.rubric.EffectiveRubric;
+import com.pte.scoring.rubric.RubricCatalog;
+import com.pte.shared.exception.DomainException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +39,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -49,7 +60,9 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -63,6 +76,12 @@ import static org.mockito.Mockito.when;
 class AiScoringWorkerTest {
 
     private static final Instant NOW = Instant.parse("2026-10-11T10:00:00Z");
+    private static final RubricCatalog CATALOG = new RubricCatalogImpl();
+    private static final UUID PINNED_VERSION = UUID.fromString("00000000-0000-0000-0000-0000000000b2");
+    /** A text task type outside the rubric catalog: the only kind the generic essay client still scores. */
+    private static final String CUSTOM_TEXT_TASK = "CUSTOM_TEXT";
+    /** A speaking task type outside the rubric catalog: since phase 5 the only kind the generic speech client scores. */
+    private static final String CUSTOM_SPEECH_TASK = "CUSTOM_SPEECH";
 
     @Mock
     private AiEvaluationRepository scoringAnswerRepository;
@@ -74,6 +93,8 @@ class AiScoringWorkerTest {
     private AiScoringResultPersistenceService resultPersistenceService;
     @Mock
     private AnswerContentReader contentReader;
+    @Mock
+    private RubricResolver rubricResolver;
 
     private AiScoringWorker worker;
 
@@ -84,7 +105,8 @@ class AiScoringWorkerTest {
 
     private AiScoringWorker workerWith(List<AiAnswerScorer> scorers) {
         return new AiScoringWorker(scoringAnswerRepository, speechScoringClient, essayScoringClient, scorers,
-                resultPersistenceService, Clock.fixed(NOW, ZoneOffset.UTC), new AiProviderProperties(), contentReader);
+                resultPersistenceService, Clock.fixed(NOW, ZoneOffset.UTC), new AiProviderProperties(), contentReader,
+                rubricResolver);
     }
 
     @Test
@@ -117,7 +139,7 @@ class AiScoringWorkerTest {
         AiAnswerScorer scorer = org.mockito.Mockito.mock(AiAnswerScorer.class);
         when(scorer.taskTypes()).thenReturn(Set.of(ScoringConstants.TASK_TYPE_READ_ALOUD));
         stubSpeechClient();
-        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_DESCRIBE_IMAGE);
+        AiEvaluation answer = dispatched(CUSTOM_SPEECH_TASK);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
 
@@ -158,7 +180,7 @@ class AiScoringWorkerTest {
     @Test
     void worker_aiSpeechJob_readsTheAnswerFromTheRowAndRoutesToSpeechClient() {
         stubSpeechClient();
-        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_REPEAT_SENTENCE);
+        AiEvaluation answer = dispatched(CUSTOM_SPEECH_TASK);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
 
@@ -172,9 +194,9 @@ class AiScoringWorkerTest {
     }
 
     @Test
-    void worker_aiTextJob_routesToEssayClient() {
+    void worker_aiTextJobOutsideTheRubricCatalog_routesToEssayClient() {
         stubEssayClient();
-        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
+        AiEvaluation answer = dispatched(CUSTOM_TEXT_TASK);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
 
@@ -190,7 +212,7 @@ class AiScoringWorkerTest {
     @Test
     void worker_vendorCallRunsInsideTheJobBudget() {
         AtomicReference<Optional<Duration>> remainingDuringCall = new AtomicReference<>();
-        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = dispatched(CUSTOM_SPEECH_TASK);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
         when(speechScoringClient.score(anyString(), anyString(), any(UUID.class))).thenAnswer(invocation -> {
@@ -207,7 +229,7 @@ class AiScoringWorkerTest {
 
     @Test
     void worker_vendorFailureMarksTheAnswerFailedWithItsReason() {
-        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        AiEvaluation answer = dispatched(CUSTOM_SPEECH_TASK);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
         when(speechScoringClient.score(anyString(), anyString(), any(UUID.class)))
@@ -223,7 +245,7 @@ class AiScoringWorkerTest {
 
     @Test
     void worker_vendorFailureWithoutReasonIsRecordedAsInternalError() {
-        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
+        AiEvaluation answer = dispatched(CUSTOM_TEXT_TASK);
         when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
                 .thenReturn(Optional.of(answer));
         when(essayScoringClient.score(anyString(), anyString()))
@@ -352,6 +374,110 @@ class AiScoringWorkerTest {
                 answer.getSessionPublicId(), answer.getTenantId(), "AI_SPEECH", null));
 
         verifyNoInteractions(resultPersistenceService);
+    }
+
+    // ---- rubric-scored writing task types ----
+
+    @Test
+    void worker_rubricTaskType_resolvesThePinnedRubricOfTheExamDefinitionWhenTheJobRuns() {
+        AiAnswerScorer scorer = mock(AiAnswerScorer.class);
+        when(scorer.taskTypes()).thenReturn(Set.of(ScoringConstants.TASK_TYPE_WRITE_ESSAY));
+        when(scorer.score(any(AiScoringRequest.class))).thenReturn(speechResult());
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
+        when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
+                .thenReturn(Optional.of(answer));
+        EffectiveRubric pinned = rubric(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
+        when(rubricResolver.resolveForExamDefinition(answer.getExamDefinitionPublicId(),
+                ScoringConstants.TASK_TYPE_WRITE_ESSAY)).thenReturn(new ResolvedRubric(PINNED_VERSION, pinned));
+
+        workerWith(List.of(scorer)).onAiScoringJob(job(answer, "AI_TEXT"));
+
+        ArgumentCaptor<AiScoringRequest> request = ArgumentCaptor.forClass(AiScoringRequest.class);
+        verify(scorer).score(request.capture());
+        assertThat(request.getValue().rubric()).isSameAs(pinned);
+        assertThat(request.getValue().rubricVersionPublicId()).isEqualTo(PINNED_VERSION);
+        assertThat(request.getValue().toString()).doesNotContain("payload");
+        verify(resultPersistenceService).persistAiScore(eq(answer.getAnswerPublicId()), eq(answer.getAttemptPublicId()),
+                eq(answer.getTenantId()), eq(answer.getSessionPublicId()), eq(answer.getDispatchToken()),
+                any(AiScoreResult.class));
+    }
+
+    @Test
+    void worker_nonRubricTaskType_isScoredWithoutResolvingARubric() {
+        AiAnswerScorer scorer = mock(AiAnswerScorer.class);
+        when(scorer.taskTypes()).thenReturn(Set.of(CUSTOM_SPEECH_TASK));
+        when(scorer.score(any(AiScoringRequest.class))).thenReturn(speechResult());
+        AiEvaluation answer = dispatched(CUSTOM_SPEECH_TASK);
+        when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
+                .thenReturn(Optional.of(answer));
+
+        workerWith(List.of(scorer)).onAiScoringJob(job(answer, "AI_SPEECH"));
+
+        ArgumentCaptor<AiScoringRequest> request = ArgumentCaptor.forClass(AiScoringRequest.class);
+        verify(scorer).score(request.capture());
+        assertThat(request.getValue().rubric()).isNull();
+        verifyNoInteractions(rubricResolver);
+    }
+
+    @Test
+    void worker_rubricThatCannotBeResolved_failsTheAnswerWithoutCallingTheScorer() {
+        AiAnswerScorer scorer = mock(AiAnswerScorer.class);
+        when(scorer.taskTypes()).thenReturn(Set.of(ScoringConstants.TASK_TYPE_WRITE_ESSAY));
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
+        when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
+                .thenReturn(Optional.of(answer));
+        when(rubricResolver.resolveForExamDefinition(any(), any()))
+                .thenThrow(new DomainException(HttpStatus.NOT_FOUND, "RUBRIC_VERSION_NOT_FOUND") { });
+
+        workerWith(List.of(scorer)).onAiScoringJob(job(answer, "AI_TEXT"));
+
+        verify(scorer, never()).score(any());
+        verify(resultPersistenceService).markScoringFailed(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
+                answer.getTenantId(), answer.getSessionPublicId(), answer.getDispatchToken(),
+                AiFailureReason.INTERNAL_ERROR);
+    }
+
+    /** Until phase 4 decides, a provider with no rubric scorer must not let its generic client invent a score. */
+    @Test
+    void worker_rubricTaskTypeWithoutARubricScorer_failsClearlyInsteadOfUsingTheGenericEssayClient() {
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
+        when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
+                .thenReturn(Optional.of(answer));
+
+        worker.onAiScoringJob(job(answer, "AI_TEXT"));
+
+        verifyNoInteractions(essayScoringClient, speechScoringClient, rubricResolver);
+        verify(resultPersistenceService).markScoringFailed(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
+                answer.getTenantId(), answer.getSessionPublicId(), answer.getDispatchToken(),
+                AiFailureReason.INTERNAL_ERROR);
+    }
+
+    @Test
+    void worker_modelThatKeepsBreakingTheSchema_isAskedThreeTimesThenTheAnswerIsScoringFailed() {
+        GeminiRestClient gemini = mock(GeminiRestClient.class);
+        when(gemini.generate(any())).thenReturn(new GeminiResponse(JsonMapper.builder().build().readTree(
+                "{\"CONTENT\": 7, \"DEVELOPMENT_STRUCTURE_COHERENCE\": 3.5, \"GRAMMAR\": 2, "
+                        + "\"GENERAL_LINGUISTIC_RANGE\": 4, \"VOCABULARY_RANGE\": 1, \"feedback\": \"\", "
+                        + "\"errors\": []}"), "gemini-test"));
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
+        content(answer, "word word word word word word word word word word.", "Should cities ban cars?");
+        when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
+                .thenReturn(Optional.of(answer));
+        when(rubricResolver.resolveForExamDefinition(any(), any())).thenReturn(
+                new ResolvedRubric(PINNED_VERSION, rubric(ScoringConstants.TASK_TYPE_WRITE_ESSAY)));
+
+        workerWith(List.of(new WriteEssayScorer(gemini, JsonMapper.builder().build())))
+                .onAiScoringJob(job(answer, "AI_TEXT"));
+
+        verify(gemini, times(3)).generate(any());
+        verify(resultPersistenceService).markScoringFailed(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
+                answer.getTenantId(), answer.getSessionPublicId(), answer.getDispatchToken(),
+                AiFailureReason.PROVIDER_RESPONSE_INVALID);
+        verify(resultPersistenceService, never()).persistAiScore(any(), any(), any(), any(), anyLong(), any());
+    }
+
+    private static EffectiveRubric rubric(String taskType) {
+        return new EffectiveRubric(CATALOG.find(taskType).orElseThrow(), CATALOG.defaultParameters(taskType));
     }
 
     private AiEvaluation dispatched(String taskType) {
