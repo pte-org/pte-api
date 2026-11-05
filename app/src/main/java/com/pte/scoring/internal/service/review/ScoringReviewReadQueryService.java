@@ -42,6 +42,7 @@ public class ScoringReviewReadQueryService {
     private final ScoreSelectionReader selectionReader;
     private final AiScoreDetailQueryService aiDetails;
     private final AiScoringDispatcher aiScoringDispatcher;
+    private final ReportTraitReader traitReader;
 
     public ScoringReviewReadQueryService(AiEvaluationRepository scoringAnswerRepository,
             ExaminerEvaluationRepository examinerEvaluationRepository,
@@ -49,7 +50,8 @@ public class ScoringReviewReadQueryService {
             SessionGradingGateway gateway,
             ScoreSelectionReader selectionReader,
             AiScoreDetailQueryService aiDetails,
-            AiScoringDispatcher aiScoringDispatcher) {
+            AiScoringDispatcher aiScoringDispatcher,
+            ReportTraitReader traitReader) {
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.examinerEvaluationRepository = examinerEvaluationRepository;
         this.assignmentRepository = assignmentRepository;
@@ -57,6 +59,7 @@ public class ScoringReviewReadQueryService {
         this.selectionReader = selectionReader;
         this.aiDetails = aiDetails;
         this.aiScoringDispatcher = aiScoringDispatcher;
+        this.traitReader = traitReader;
     }
 
     @Transactional(readOnly = true)
@@ -157,6 +160,8 @@ public class ScoringReviewReadQueryService {
         String section = answer.getSection();
         Integer selectedScore = selectedScore(answer, examinerScore, selection, markingMode);
         String block = blockingReason(answer, examinerScore, selection, method, selectedScore, markingMode);
+        ReportTraitReader.StoredTraits traits = selection != null && selection.source() == ScoreSource.EXAMINER
+                ? traitReader.readExaminer(examinerScore, answer) : traitReader.read(answer);
         return new ReportScoringAnswerView(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
                 answer.getExamDefinitionPublicId(), answer.getTaskType(), section,
                 method == null ? null : method.name(), answer.getRawScore(), name(answer.getAiProviderCategory()),
@@ -164,7 +169,8 @@ public class ScoringReviewReadQueryService {
                 examinerScore == null ? null : examinerScore.getScore(),
                 selection == null ? null : selection.source().name(),
                 selectedScore, block == null, block, answer.getLockVersion(),
-                provisionalScore(answer, method, selection, selectedScore));
+                provisionalScore(answer, method, selection, selectedScore), traits.traits(),
+                traits.rubricVersionPublicId(), traits.wordCount());
     }
 
     /** Until a source is chosen, an AI-scored answer's own AI score stands in; a chosen source always wins. */
