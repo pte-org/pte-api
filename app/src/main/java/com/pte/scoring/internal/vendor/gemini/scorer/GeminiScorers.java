@@ -1,6 +1,5 @@
 package com.pte.scoring.internal.vendor.gemini.scorer;
 
-import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.domain.enums.AiProviderCategory;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.vendor.AiProviderException;
@@ -13,6 +12,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /** What the Gemini-backed scorers share: the prompt guard, response schemas, field checks and the result envelope. */
 final class GeminiScorers {
@@ -45,16 +45,6 @@ final class GeminiScorers {
         return text;
     }
 
-    /** A 0–100 score the model returned; anything else means the model broke the schema. */
-    static int score(JsonNode content, String field) {
-        JsonNode value = content.get(field);
-        if (value == null || !value.isNumber() || value.asDouble() < 0 || value.asDouble() > 100) {
-            throw new AiProviderException(AiFailureReason.PROVIDER_RESPONSE_INVALID,
-                    String.format(ScoringConstants.GEMINI_FIELD_INVALID, field));
-        }
-        return (int) Math.round(value.asDouble());
-    }
-
     static String text(JsonNode content, String field) {
         JsonNode value = content.get(field);
         return value != null && value.isString() ? value.asText("").strip() : "";
@@ -75,14 +65,6 @@ final class GeminiScorers {
         return model.length() > MODEL_MAX_LENGTH ? model.substring(0, MODEL_MAX_LENGTH) : model;
     }
 
-    static Map<String, Object> score() {
-        Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("type", "NUMBER");
-        schema.put("minimum", 0);
-        schema.put("maximum", 100);
-        return schema;
-    }
-
     static Map<String, Object> string() {
         return Map.of("type", "STRING");
     }
@@ -95,12 +77,18 @@ final class GeminiScorers {
         return Map.of("type", "ARRAY", "items", items);
     }
 
-    /** Every field is required: the scorers read them all and would rather fail than guess. */
-    static Map<String, Object> object(Object... namesAndSchemas) {
+    /** Field names and their schemas, in the given order. */
+    static Map<String, Object> fields(Object... namesAndSchemas) {
         Map<String, Object> properties = new LinkedHashMap<>();
         for (int i = 0; i < namesAndSchemas.length; i += 2) {
             properties.put((String) namesAndSchemas[i], namesAndSchemas[i + 1]);
         }
+        return properties;
+    }
+
+    /** Every field is required: the scorers read them all and would rather fail than guess. */
+    static Map<String, Object> object(Object... namesAndSchemas) {
+        Map<String, Object> properties = fields(namesAndSchemas);
         List<String> names = new ArrayList<>(properties.keySet());
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "OBJECT");
@@ -110,9 +98,10 @@ final class GeminiScorers {
         return schema;
     }
 
+    /** {@code rubricVersionPublicId} set means {@code subScores} are Pearson trait scores of that rubric version. */
     static AiScoreResult result(JsonMapper json, String provider, String model, int rawScore,
                                 Map<String, Integer> subScores, String feedback, String transcript,
-                                Map<String, Object> detail, boolean fallback) {
+                                Map<String, Object> detail, boolean fallback, UUID rubricVersionPublicId) {
         String detailJson;
         try {
             detailJson = json.writeValueAsString(detail);
@@ -120,6 +109,6 @@ final class GeminiScorers {
             throw new AiProviderException(ScoringConstants.AI_DETAIL_SERIALIZATION_FAILED, ex);
         }
         return new AiScoreResult(rawScore, subScores, feedback, AiProviderCategory.REAL, provider, model, null,
-                transcript, detailJson, fallback);
+                transcript, detailJson, fallback, rubricVersionPublicId);
     }
 }

@@ -17,29 +17,6 @@ class GeminiScorersTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     @Test
-    void aScoreIsReadAndRoundedToWholePoints() {
-        JsonNode content = json("{\"content\": 72.6, \"zero\": 0, \"top\": 100}");
-
-        assertThat(GeminiScorers.score(content, "content")).isEqualTo(73);
-        assertThat(GeminiScorers.score(content, "zero")).isZero();
-        assertThat(GeminiScorers.score(content, "top")).isEqualTo(100);
-    }
-
-    @Test
-    void aMissingNonNumericOrOutOfRangeScoreIsAnInvalidResponse() {
-        JsonNode content = json("{\"text\": \"high\", \"over\": 101, \"under\": -1}");
-
-        for (String field : List.of("absent", "text", "over", "under")) {
-            assertThatThrownBy(() -> GeminiScorers.score(content, field))
-                    .isInstanceOfSatisfying(AiProviderException.class, ex -> {
-                        assertThat(ex.getReason()).isEqualTo(AiFailureReason.PROVIDER_RESPONSE_INVALID);
-                        assertThat(ex.isTransient()).isFalse();
-                        assertThat(ex.getMessage()).contains(field);
-                    });
-        }
-    }
-
-    @Test
     void textIsEmptyWhenAbsentOrNotAString() {
         JsonNode content = json("{\"feedback\": \" Good summary. \", \"n\": 4}");
 
@@ -79,7 +56,7 @@ class GeminiScorersTest {
     @Test
     void anObjectSchemaRequiresEveryFieldAndKeepsTheirOrder() {
         Map<String, Object> schema = GeminiScorers.object(
-                "content", GeminiScorers.score(), "feedback", GeminiScorers.string(),
+                "content", GeminiScorers.string(), "feedback", GeminiScorers.string(),
                 "missed_points", GeminiScorers.strings());
 
         assertThat(schema).containsEntry("type", "OBJECT");
@@ -88,8 +65,16 @@ class GeminiScorersTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> properties = (Map<String, Object>) schema.get("properties");
         assertThat(properties.keySet()).containsExactly("content", "feedback", "missed_points");
-        assertThat(properties.get("content")).isEqualTo(Map.of("type", "NUMBER", "minimum", 0, "maximum", 100));
+        assertThat(properties.get("content")).isEqualTo(Map.of("type", "STRING"));
         assertThat(properties.get("missed_points")).isEqualTo(Map.of("type", "ARRAY", "items", Map.of("type", "STRING")));
+    }
+
+    @Test
+    void fieldsKeepTheirOrderWithoutBecomingAnObjectSchema() {
+        Map<String, Object> fields = GeminiScorers.fields("b", GeminiScorers.string(), "a", GeminiScorers.strings());
+
+        assertThat(fields.keySet()).containsExactly("b", "a");
+        assertThat(fields).doesNotContainKey("type");
     }
 
     @Test
