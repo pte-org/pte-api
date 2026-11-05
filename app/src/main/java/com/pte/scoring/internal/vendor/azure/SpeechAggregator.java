@@ -49,7 +49,8 @@ public final class SpeechAggregator {
                 .map(SpeechWord::accuracy)
                 .toList();
         if (!scored.isEmpty()) {
-            return scored.stream().mapToDouble(Double::doubleValue).average().orElseThrow();
+            // Per-word mean of Azure's accuracy (an input to the Pronunciation band), not an item score.
+            return scored.stream().mapToDouble(Double::doubleValue).sum() / scored.size();
         }
         // No scored words (all silence, or word detail missing): fall back to the segment scores.
         return weightedByDuration(chunks, results, PronunciationScores::accuracy);
