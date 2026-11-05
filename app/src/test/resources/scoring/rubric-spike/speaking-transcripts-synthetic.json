@@ -1,0 +1,189 @@
+{
+  "datasetVersion": 1,
+  "generatedBy": "AI assistant (Claude), 2026-11-05, plan quang-scoring-rubric-transparency phase 4",
+  "purpose": "Synthetic speaking transcripts for measuring the run-to-run stability of the Gemini Content trait (phase 5). Not real candidate speech. Pronunciation and Oral Fluency come from Azure audio assessment, so intendedBands only carries the traits an LLM scores from a transcript. Proves stability only, never scoring accuracy.",
+  "sources": {
+    "di-water-chart": {
+      "taskType": "DESCRIBE_IMAGE",
+      "label": "Image description (stands in for the chart image)",
+      "text": "Bar chart titled 'Average household water use per person per day, Riverton, 2024 (litres)'. Five bars: showering 45, toilet flushing 30, laundry 20, kitchen and drinking 15, garden watering 10. Total 120 litres. Source line: Riverton Water Authority."
+    },
+    "rl-pollination": {
+      "taskType": "RE_TELL_LECTURE",
+      "label": "Lecture transcript",
+      "text": "Good morning. Today we're looking at pollination and why bees matter so much to agriculture. Around three quarters of the world's major food crops benefit at least partly from animal pollination, and bees are by far the most important pollinators. When a bee visits a flower to collect nectar, pollen sticks to its body and is carried to the next flower, which allows the plant to produce seeds and fruit. Crops such as almonds, apples and blueberries depend heavily on this process. Now, honeybees get most of the attention, but wild bees, including bumblebees and solitary bees, are often more efficient pollinators for certain crops, partly because they are active in cooler weather. The problem is that bee populations are under pressure. The main threats are habitat loss, pesticide use, particularly a group of chemicals called neonicotinoids, diseases and parasites such as the varroa mite, and climate change, which can shift flowering times so that bees and flowers are no longer active at the same time. Farmers can help by planting strips of wildflowers along field edges, reducing pesticide use and protecting nesting sites. Some studies show that these measures can increase yields enough to pay for themselves."
+    },
+    "rts-lost-charger": {
+      "taskType": "RESPOND_TO_A_SITUATION",
+      "label": "Situation",
+      "text": "You borrowed your classmate Sam's laptop charger for the weekend, and you have lost it. Sam needs the charger for an online exam tomorrow morning. Call Sam, explain what happened and say what you will do about it."
+    },
+    "sgd-four-day-week": {
+      "taskType": "SUMMARIZE_GROUP_DISCUSSION",
+      "label": "Group discussion transcript",
+      "text": "Anna: I think a four-day working week would make people more productive. Trials in several countries found that employees got the same amount of work done in four days, and they took fewer sick days. Ben: That might work in offices, but what about hospitals or shops? They need people there five, six or seven days a week, so you'd have to hire more staff, and that costs money. Carla: I agree with Ben that it doesn't suit every sector, but companies could use rotating schedules so the business stays open while each person works four days. And the trials also showed lower staff turnover, which saves recruitment costs. Anna: Exactly, and there's an environmental benefit too, because fewer commuting days mean lower emissions. Ben: I'm still worried that some people would just squeeze five days of stress into four longer days. Carla: That's a fair point, so maybe the answer is to keep the same daily hours and focus on cutting unnecessary meetings."
+    }
+  },
+  "samples": [
+    {
+      "id": "di-01",
+      "taskType": "DESCRIBE_IMAGE",
+      "sourceId": "di-water-chart",
+      "transcript": "This bar chart shows how much water a person in Riverton uses each day at home in 2024, measured in litres. Showering is clearly the largest use, at forty-five litres, followed by toilet flushing at thirty litres. Laundry accounts for twenty litres, kitchen use and drinking for fifteen, and garden watering is the smallest category at only ten litres. Altogether, the average person uses about one hundred and twenty litres a day, and more than sixty percent of that goes on showering and flushing, which suggests these are the best areas for saving water.",
+      "intendedBands": {"CONTENT": 6},
+      "generationNotes": "Top band: names the chart, every category with its value, the ranking, the total and a conclusion."
+    },
+    {
+      "id": "di-02",
+      "taskType": "DESCRIBE_IMAGE",
+      "sourceId": "di-water-chart",
+      "transcript": "The chart is about daily water use per person in a city called Riverton. The biggest part is showering, which is forty-five litres, and the second is toilet flushing with thirty litres. Then there is laundry and kitchen use, and garden watering is the lowest. So most of the water is used in the bathroom.",
+      "intendedBands": {"CONTENT": 4},
+      "generationNotes": "Middle-high band: main categories and a reasonable conclusion, but some values and the total are missing."
+    },
+    {
+      "id": "di-03",
+      "taskType": "DESCRIBE_IMAGE",
+      "sourceId": "di-water-chart",
+      "transcript": "This picture shows water. There are five bars. Showering is high, it is forty-five. And the other ones are lower, like laundry and garden. People use water every day at home.",
+      "intendedBands": {"CONTENT": 3},
+      "generationNotes": "Middle band: identifies the topic and the largest bar but describes the rest vaguely, with no comparison or conclusion."
+    },
+    {
+      "id": "di-04",
+      "taskType": "DESCRIBE_IMAGE",
+      "sourceId": "di-water-chart",
+      "transcript": "Um, this is a chart. It has some colours and some numbers. Water is important for people.",
+      "intendedBands": {"CONTENT": 1},
+      "generationNotes": "Low band: generic statements that could describe almost any chart; no categories or values."
+    },
+    {
+      "id": "di-05",
+      "taskType": "DESCRIBE_IMAGE",
+      "sourceId": "di-water-chart",
+      "transcript": "My favourite holiday was a trip to the mountains with my family. We stayed in a small hotel and went hiking every day, and the food was really delicious.",
+      "intendedBands": {"CONTENT": 0},
+      "generationNotes": "Off-topic: a fluent description of something unrelated to the image."
+    },
+    {
+      "id": "rl-01",
+      "taskType": "RE_TELL_LECTURE",
+      "sourceId": "rl-pollination",
+      "transcript": "The lecture explained why bees are so important for agriculture. About three quarters of major food crops benefit from animal pollination, and bees are the most important pollinators, because pollen sticks to their bodies and is carried between flowers so plants can produce fruit, for example almonds, apples and blueberries. The speaker added that wild bees such as bumblebees can be more efficient than honeybees because they fly in cooler weather. However, bee populations are threatened by habitat loss, pesticides like neonicotinoids, diseases such as the varroa mite, and climate change, which disrupts flowering times. Finally, farmers can help by planting wildflower strips, using fewer pesticides and protecting nesting sites, which can even increase their yields.",
+      "intendedBands": {"CONTENT": 6},
+      "generationNotes": "Top band: every main point (importance, mechanism, wild bees, four threats, three remedies, yield benefit) in a coherent paraphrase."
+    },
+    {
+      "id": "rl-02",
+      "taskType": "RE_TELL_LECTURE",
+      "sourceId": "rl-pollination",
+      "transcript": "The lecture was about bees and pollination. Bees carry pollen from one flower to another, and many food crops like apples and almonds need this. Wild bees are also important, not only honeybees. Bees are in danger because of pesticides, habitat loss and diseases. Farmers can plant wildflowers and use less pesticide to help them.",
+      "intendedBands": {"CONTENT": 5},
+      "generationNotes": "High band: most main points with a clear structure; climate change and the yield benefit are left out."
+    },
+    {
+      "id": "rl-03",
+      "taskType": "RE_TELL_LECTURE",
+      "sourceId": "rl-pollination",
+      "transcript": "The speaker talked about bees. Bees are important for food, like apples. There are honeybees and other bees. Some problems are pesticides and mites. So we should protect bees.",
+      "intendedBands": {"CONTENT": 3},
+      "generationNotes": "Middle band: the topic and a few key words are present, but the mechanism and remedies are missing and ideas are listed rather than connected."
+    },
+    {
+      "id": "rl-04",
+      "taskType": "RE_TELL_LECTURE",
+      "sourceId": "rl-pollination",
+      "transcript": "The lecture is about flowers and, um, insects. Flowers are very beautiful and they have many colours. It was a good lecture.",
+      "intendedBands": {"CONTENT": 1},
+      "generationNotes": "Low band: only the vaguest link to the topic; none of the lecture's points are retold."
+    },
+    {
+      "id": "rl-05",
+      "taskType": "RE_TELL_LECTURE",
+      "sourceId": "rl-pollination",
+      "transcript": "The lecture discussed the history of the printing press, which Johannes Gutenberg developed in Europe around 1440, and how it made books much cheaper and helped spread new ideas quickly across the continent.",
+      "intendedBands": {"CONTENT": 0},
+      "generationNotes": "Off-topic: a confident retelling of a different lecture."
+    },
+    {
+      "id": "rts-01",
+      "taskType": "RESPOND_TO_A_SITUATION",
+      "sourceId": "rts-lost-charger",
+      "transcript": "Hi Sam, it's me. I'm really sorry, but I have some bad news about your laptop charger. I took it with me to the library on Saturday and I think I left it there, because I've searched my bag and my room and I can't find it anywhere. I know you need it for your exam tomorrow morning, so I've already checked online, and the electronics shop near the station has the same model in stock. I'll buy a new one first thing when they open at eight and bring it straight to your place, and I'll also ask the library if anyone handed the old one in. Again, I'm really sorry for the stress.",
+      "intendedBands": {"CONTENT": 6},
+      "generationNotes": "Top band: apology, clear explanation, acknowledges the exam, concrete and timely solution, appropriate tone for a classmate."
+    },
+    {
+      "id": "rts-02",
+      "taskType": "RESPOND_TO_A_SITUATION",
+      "sourceId": "rts-lost-charger",
+      "transcript": "Hi Sam, sorry, I lost your charger. I don't know where it is, maybe on the bus. I know you have the exam tomorrow. I will buy you a new one today and give it to you tonight. Sorry again.",
+      "intendedBands": {"CONTENT": 4},
+      "generationNotes": "Middle-high band: covers apology, explanation and solution, but briefly and without detail."
+    },
+    {
+      "id": "rts-03",
+      "taskType": "RESPOND_TO_A_SITUATION",
+      "sourceId": "rts-lost-charger",
+      "transcript": "Hello Sam. Your charger, I cannot find it. It is lost. Maybe you can use another computer for the exam.",
+      "intendedBands": {"CONTENT": 3},
+      "generationNotes": "Middle band: reports the problem but offers no apology and shifts the solution to Sam."
+    },
+    {
+      "id": "rts-04",
+      "taskType": "RESPOND_TO_A_SITUATION",
+      "sourceId": "rts-lost-charger",
+      "transcript": "Sam, the charger is not here. That is not my problem, chargers are cheap anyway.",
+      "intendedBands": {"CONTENT": 1},
+      "generationNotes": "Low band: mentions the charger but the response is inappropriate in tone and does not deal with the exam."
+    },
+    {
+      "id": "rts-05",
+      "taskType": "RESPOND_TO_A_SITUATION",
+      "sourceId": "rts-lost-charger",
+      "transcript": "Good evening, I would like to book a table for four people on Friday at seven o'clock, preferably near the window if possible.",
+      "intendedBands": {"CONTENT": 0},
+      "generationNotes": "Off-topic: a fluent message for a completely different situation."
+    },
+    {
+      "id": "sgd-01",
+      "taskType": "SUMMARIZE_GROUP_DISCUSSION",
+      "sourceId": "sgd-four-day-week",
+      "transcript": "The group discussed whether a four-day working week is a good idea. Anna supported it, saying trials showed the same output in four days, fewer sick days and lower emissions from commuting. Ben argued that it does not suit hospitals or shops, which would need extra staff, and he worried that people might just work four longer and more stressful days. Carla agreed it does not suit every sector but suggested rotating schedules, pointed to lower staff turnover, and proposed keeping normal daily hours while cutting unnecessary meetings.",
+      "intendedBands": {"CONTENT": 6},
+      "generationNotes": "Top band: every speaker's position with their main reasons, attributed correctly, plus the final compromise."
+    },
+    {
+      "id": "sgd-02",
+      "taskType": "SUMMARIZE_GROUP_DISCUSSION",
+      "sourceId": "sgd-four-day-week",
+      "transcript": "The speakers talked about a four-day week. Anna thinks it makes people more productive and is good for the environment. Ben says hospitals and shops cannot do it easily because they need more staff. Carla thinks companies can use rotating schedules.",
+      "intendedBands": {"CONTENT": 4},
+      "generationNotes": "Middle-high band: each speaker's main view is attributed, but Ben's stress concern and the final compromise are missing."
+    },
+    {
+      "id": "sgd-03",
+      "taskType": "SUMMARIZE_GROUP_DISCUSSION",
+      "sourceId": "sgd-four-day-week",
+      "transcript": "They discussed working four days. Some people like it because it is productive. Some people don't like it because of hospitals. They didn't agree.",
+      "intendedBands": {"CONTENT": 3},
+      "generationNotes": "Middle band: the topic and one reason on each side, with no attribution to speakers."
+    },
+    {
+      "id": "sgd-04",
+      "taskType": "SUMMARIZE_GROUP_DISCUSSION",
+      "sourceId": "sgd-four-day-week",
+      "transcript": "The discussion was about work. Work is important and people work in offices. Everybody needs a job.",
+      "intendedBands": {"CONTENT": 1},
+      "generationNotes": "Low band: only the broad theme of work is mentioned; no positions or reasons from the discussion."
+    },
+    {
+      "id": "sgd-05",
+      "taskType": "SUMMARIZE_GROUP_DISCUSSION",
+      "sourceId": "sgd-four-day-week",
+      "transcript": "The students were discussing which football team will win the league this season, and most of them thought the team with the best defence had the strongest chance.",
+      "intendedBands": {"CONTENT": 0},
+      "generationNotes": "Off-topic: summarises a different conversation entirely."
+    }
+  ]
+}
