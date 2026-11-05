@@ -1,5 +1,6 @@
 package com.pte.assessment.internal.service.definition;
 
+import com.pte.assessment.ActiveRubricVersionPin;
 import com.pte.assessment.domain.ExamDefinition;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.TaskTypeStimulusService;
@@ -48,14 +49,17 @@ public class ExamDefinitionAdminService {
     private final ExamDefinitionCommandService commandService;
     private final ExamDefinitionApprovalWorkflow approvalWorkflow;
 
-    /** Compatibility constructor for callers that do not check time frames against audio lengths. */
+    /**
+     * Compatibility constructor for callers that do not check time frames against audio lengths. It has no rubric pin
+     * port, so creating or cloning a draft through it fails with {@code NoActiveRubricVersionException}.
+     */
     public ExamDefinitionAdminService(ExamDefinitionRepository repository, QuestionTypeService questionTypeService,
             TaskRuntimeProfileService runtimeProfileService, AuditLogService auditLogService,
             TaskRuntimeContractService runtimeContractService,
             TaskTypeObservability observability, ItembankService itembankService,
             Clock clock) {
         this(repository, questionTypeService, runtimeProfileService, auditLogService, runtimeContractService,
-                observability, itembankService, clock, null);
+                observability, itembankService, clock, null, null);
     }
 
     @Autowired
@@ -63,7 +67,7 @@ public class ExamDefinitionAdminService {
             TaskRuntimeProfileService runtimeProfileService, AuditLogService auditLogService,
             TaskRuntimeContractService runtimeContractService,
             TaskTypeObservability observability, ItembankService itembankService,
-            Clock clock, TaskTypeStimulusService stimulusService) {
+            Clock clock, TaskTypeStimulusService stimulusService, ActiveRubricVersionPin activeRubricVersionPin) {
         this.repository = repository;
         this.questionTypeService = questionTypeService;
         this.runtimeProfileService = runtimeProfileService;
@@ -75,7 +79,7 @@ public class ExamDefinitionAdminService {
         this.validator = new ExamDefinitionValidator(questionTypeService, runtimeProfileService, itembankService);
         this.itemMapper = new ExamDefinitionItemMapper(validator);
         this.commandService = new ExamDefinitionCommandService(repository, validator, itemMapper, auditLogService,
-                observability);
+                observability, new RubricVersionPinning(activeRubricVersionPin));
         this.approvalWorkflow = new ExamDefinitionApprovalWorkflow(repository, validator, auditLogService,
                 observability, questionTypeService, clock, stimulusService);
     }

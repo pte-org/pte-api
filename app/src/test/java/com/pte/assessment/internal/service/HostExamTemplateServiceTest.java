@@ -51,7 +51,8 @@ class HostExamTemplateServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new HostExamTemplateService(repository, null, null, null, null, com.pte.TestClocks.fixed(), null);
+        service = new HostExamTemplateService(repository, null, null, null, null, com.pte.TestClocks.fixed(), null,
+                null, () -> Optional.of(UUID.randomUUID()));
         host = new CurrentUser(UUID.randomUUID(), TENANT, List.of("HOST_ADMIN"));
     }
 

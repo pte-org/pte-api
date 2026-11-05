@@ -73,7 +73,7 @@ class ExamBlueprintAssemblerCefrTest {
         return new ExamDefinitionResponse(UUID.randomUUID(), "STANDARD", 1, "Cefr", "ACTIVE", null, List.of(
                 slot(PteTaskType.MC_READING_SINGLE, PteSection.READING, 1, 4),
                 slot(PteTaskType.MC_LISTENING_SINGLE, PteSection.LISTENING, 2, 4)),
-                "STANDARD_PTE", null, null, null, null, null, null, null, null, List.of(), targets);
+                "STANDARD_PTE", null, null, null, null, null, null, null, null, List.of(), targets, null);
     }
 
     private static List<CefrTargetResponse> evenMix() {

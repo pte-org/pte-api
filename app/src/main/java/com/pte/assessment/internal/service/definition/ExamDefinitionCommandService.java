@@ -31,18 +31,20 @@ class ExamDefinitionCommandService {
     private final ExamDefinitionItemMapper itemMapper;
     private final AuditLogService auditLogService;
     private final TaskTypeObservability observability;
+    private final RubricVersionPinning rubricPinning;
 
     ExamDefinitionCommandService(ExamDefinitionRepository repository, ExamDefinitionValidator validator,
             ExamDefinitionItemMapper itemMapper, AuditLogService auditLogService,
-            TaskTypeObservability observability) {
+            TaskTypeObservability observability, RubricVersionPinning rubricPinning) {
         this.observability = observability;
+        this.rubricPinning = rubricPinning;
         this.repository = repository;
         this.validator = validator;
         this.itemMapper = itemMapper;
         this.auditLogService = auditLogService;
     }
 
-    /** Creates an empty DRAFT in the next version of a template code family. */
+    /** Creates an empty DRAFT in the next version of a template code family, pinned to the ACTIVE rubric version. */
     ExamDefinitionResponse createDraft(CreateExamDefinitionRequest request, CurrentUser caller) {
         requireDraftCreate(caller);
         String code = request.code() == null || request.code().isBlank()
@@ -58,6 +60,7 @@ class ExamDefinitionCommandService {
         draft.setStatus(ExamDefinitionStatus.DRAFT);
         draft.setTemplatePolicy(parsePlatformPolicy(request.templatePolicy()));
         draft.setAuthorUserPublicId(caller == null ? null : caller.userId());
+        draft.setRubricVersionPublicId(rubricPinning.active());
 
         ExamDefinition saved = saveOrTranslateConflict(draft);
         audit(caller, ExamDefinitionConstants.AUDIT_CREATED, saved,
@@ -65,7 +68,10 @@ class ExamDefinitionCommandService {
         return ExamDefinitionMapper.toResponse(saved);
     }
 
-    /** Copies every item of source into a new DRAFT one version ahead, same code. */
+    /**
+     * Copies every item of source into a new DRAFT one version ahead, same code. The clone is a new version of the
+     * family, so it pins the ACTIVE rubric version; the source (often ACTIVE or RETIRED) keeps its own pin.
+     */
     ExamDefinitionResponse cloneToDraft(ExamDefinition source, CurrentUser caller) {
         requireDraftCreate(caller);
         repository.findAllByCodeForUpdate(source.getCode());
@@ -81,6 +87,7 @@ class ExamDefinitionCommandService {
         draft.setTimeFrame(source.getTimeFrame());
         draft.setCefrTargets(new java.util.ArrayList<>(source.getCefrTargets()));
         source.getItems().forEach(item -> draft.addItem(itemMapper.copyItem(item)));
+        draft.setRubricVersionPublicId(rubricPinning.active());
 
         ExamDefinition saved = saveOrTranslateConflict(draft);
         audit(caller, ExamDefinitionConstants.AUDIT_CLONED, saved,

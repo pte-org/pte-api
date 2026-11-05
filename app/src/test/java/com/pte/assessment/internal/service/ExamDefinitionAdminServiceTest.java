@@ -51,11 +51,19 @@ class ExamDefinitionAdminServiceTest {
     @Mock
     private AuditLogService auditLogService;
 
+    private static final UUID ACTIVE_RUBRIC = UUID.randomUUID();
+
     private ExamDefinitionAdminService service;
 
     @BeforeEach
     void setUp() {
-        service = new ExamDefinitionAdminService(repository, null, null, null, null, null, null, com.pte.TestClocks.fixed());
+        service = pinned(null, null);
+    }
+
+    /** The full constructor with a rubric pin port: every created or cloned draft pins {@link #ACTIVE_RUBRIC}. */
+    private ExamDefinitionAdminService pinned(QuestionTypeService questionTypes, AuditLogService audit) {
+        return new ExamDefinitionAdminService(repository, questionTypes, null, audit, null, null, null,
+                com.pte.TestClocks.fixed(), null, () -> Optional.of(ACTIVE_RUBRIC));
     }
 
     /** 22 items covering every required task type + every skill weight, valid per FR-05. */
@@ -116,6 +124,10 @@ class ExamDefinitionAdminServiceTest {
         UUID targetId = UUID.randomUUID();
         ExamDefinition oldActive = fullyValidTemplate(oldActiveId, "APEUNI_V5", 1, ExamDefinitionStatus.ACTIVE);
         ExamDefinition target = fullyValidTemplate(targetId, "APEUNI_V5", 2, ExamDefinitionStatus.DRAFT);
+        UUID oldPin = UUID.randomUUID();
+        UUID draftPin = UUID.randomUUID();
+        oldActive.setRubricVersionPublicId(oldPin);
+        target.setRubricVersionPublicId(draftPin);
         when(repository.findWithItemsByPublicIdAndTenantIdIsNull(targetId)).thenReturn(Optional.of(target));
         when(repository.findAllByCodeForUpdate("APEUNI_V5")).thenReturn(List.of(oldActive, target));
         when(repository.findWithItemsByStatusAndTenantIdIsNull(ExamDefinitionStatus.ACTIVE)).thenReturn(Optional.of(oldActive));
@@ -126,6 +138,9 @@ class ExamDefinitionAdminServiceTest {
         assertThat(oldActive.getStatus()).isEqualTo(ExamDefinitionStatus.RETIRED);
         assertThat(target.getStatus()).isEqualTo(ExamDefinitionStatus.ACTIVE);
         assertThat(response.status()).isEqualTo("ACTIVE");
+        // Activation and retirement never re-pin: both keep the rubric version pinned at creation.
+        assertThat(oldActive.getRubricVersionPublicId()).isEqualTo(oldPin);
+        assertThat(response.rubricVersionPublicId()).isEqualTo(draftPin);
     }
 
     @Test
@@ -425,7 +440,7 @@ class ExamDefinitionAdminServiceTest {
             }
             return saved;
         });
-        service = new ExamDefinitionAdminService(repository, null, null, auditLogService, null, null, null, com.pte.TestClocks.fixed());
+        service = pinned(null, auditLogService);
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"));
 
         ExamDefinitionResponse response = service.cloneToDraft(sourceId, caller);

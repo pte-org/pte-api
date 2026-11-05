@@ -5,6 +5,8 @@ public final class ExamDefinitionConstants {
 
     public static final String TEMPLATE_NOT_FOUND = "SCORE_TEMPLATE_NOT_FOUND";
     public static final String NO_ACTIVE_TEMPLATE = "NO_ACTIVE_SCORE_TEMPLATE";
+    /** A new exam definition must pin a rubric version, and there is no ACTIVE one to pin. */
+    public static final String NO_ACTIVE_RUBRIC_VERSION = "SCORE_TEMPLATE_NO_ACTIVE_RUBRIC_VERSION";
     public static final String TEMPLATE_NOT_DRAFT_CODE = "SCORE_TEMPLATE_NOT_DRAFT";
     public static final String TEMPLATE_NOT_DRAFT = "This template version is locked and cannot be edited. Clone it to create a new editable version.";
     public static final String CONCURRENT_MODIFICATION = "SCORE_TEMPLATE_CONCURRENT_MODIFICATION";

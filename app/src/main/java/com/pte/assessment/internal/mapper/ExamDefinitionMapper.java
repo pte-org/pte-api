@@ -34,7 +34,8 @@ public final class ExamDefinitionMapper {
                 null,
                 java.util.List.of(),
                 template.getCefrTargets().stream()
-                        .map(target -> new CefrTargetResponse(target.level(), target.percent())).toList());
+                        .map(target -> new CefrTargetResponse(target.level(), target.percent())).toList(),
+                template.getRubricVersionPublicId());
     }
 
     private static ExamTimeFrameResponse toTimeFrameResponse(ExamTimeFrame frame) {

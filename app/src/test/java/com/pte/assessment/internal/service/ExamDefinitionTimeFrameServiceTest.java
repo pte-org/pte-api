@@ -38,7 +38,7 @@ class ExamDefinitionTimeFrameServiceTest {
     @BeforeEach
     void setUp() {
         service = new ExamDefinitionAdminService(repository, null, null, null, null, null, null,
-                com.pte.TestClocks.fixed());
+                com.pte.TestClocks.fixed(), null, () -> java.util.Optional.of(java.util.UUID.randomUUID()));
     }
 
     private ExamDefinition template(UUID publicId, ExamDefinitionStatus status) {

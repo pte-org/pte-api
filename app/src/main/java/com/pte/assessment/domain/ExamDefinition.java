@@ -75,6 +75,10 @@ public class ExamDefinition extends BaseEntity {
     @Column(name = "base_definition_public_id")
     private java.util.UUID baseDefinitionPublicId;
 
+    /** Rubric version pinned when this template was created or cloned; nullable for legacy templates. */
+    @Column(name = "rubric_version_public_id")
+    private java.util.UUID rubricVersionPublicId;
+
     /** Pearson time window; null when the template carries no time limits. */
     @Embedded
     private ExamTimeFrame timeFrame;
