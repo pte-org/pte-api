@@ -20,7 +20,24 @@ public record ExaminerAnswerDetailResponse(
         String reviewVersion,
         boolean canFinalize,
         String blockingReason,
+        AiScoreDetailResponse ai,
+        ExaminerRubricResponse rubric) {
+    public ExaminerAnswerDetailResponse(UUID answerPublicId,
+        String taskType,
+        ExaminerPromptResponse prompt,
+        ExaminerAnswerPayloadResponse response,
+        String status,
+        Integer myScore,
+        Instant submittedAt,
+        ExaminerAiReferenceResponse aiReference,
+        ExaminerDecisionResponse decision,
+        String reviewVersion,
+        boolean canFinalize,
+        String blockingReason,
         AiScoreDetailResponse ai) {
+        this(answerPublicId, taskType, prompt, response, status, myScore, submittedAt, aiReference, decision, reviewVersion, canFinalize, blockingReason, ai, null);
+    }
+
 
     public ExaminerAnswerDetailResponse(
             UUID answerPublicId,

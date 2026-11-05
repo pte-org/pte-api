@@ -1,5 +1,7 @@
 package com.pte.scoring.internal.service.examiner;
 
+import com.pte.scoring.internal.service.examiner.trait.ExaminerTraitScoreResolver;
+import com.pte.scoring.dto.response.ExaminerRubricResponse;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptExaminerPromptView;
 import com.pte.attempt.dto.response.AttemptGradingCandidateView;
@@ -64,6 +66,7 @@ class ExaminerAttemptDetailReader {
     private final ExaminerWorkflowQueryService workflowQueryService;
     private final AiScoreDetailQueryService aiDetails;
     private final ExaminerSessionNames sessionNames;
+    private final ExaminerTraitScoreResolver traits;
 
     ExaminerAttemptDetailReader(ExaminerWorkQueueRepository workQueueRepository,
             AiEvaluationRepository scoringAnswerRepository,
@@ -72,7 +75,7 @@ class ExaminerAttemptDetailReader {
             AnswerContentReader contentReader, AttemptService attemptService, MediaService mediaService,
             ExaminerReviewVersionService examinerReviewVersionService,
             ExaminerWorkflowQueryService workflowQueryService, AiScoreDetailQueryService aiDetails,
-            ExaminerSessionNames sessionNames) {
+            ExaminerSessionNames sessionNames, ExaminerTraitScoreResolver traits) {
         this.workQueueRepository = workQueueRepository;
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.examinerEvaluationRepository = examinerEvaluationRepository;
@@ -86,6 +89,7 @@ class ExaminerAttemptDetailReader {
         this.workflowQueryService = workflowQueryService;
         this.aiDetails = aiDetails;
         this.sessionNames = sessionNames;
+        this.traits = traits;
     }
 
     ExaminerAttemptDetailResponse read(UUID sessionPublicId, UUID attemptPublicId, CurrentUser examiner) {
@@ -175,13 +179,14 @@ class ExaminerAttemptDetailReader {
         // Only reached after the assignment check, and keyed by the verified answers rather than a client id.
         Map<UUID, AiScoreDetailResponse> aiByAnswer = aiDetails == null ? Map.of()
                 : aiDetails.findAll(examiner.tenantId(), eligibleAnswers);
+        var schemas = traits.schemas(eligibleAnswers, contentByAnswer);
         List<ExaminerAnswerDetailResponse> details = eligibleAnswers.stream()
                 .map(answer -> toAnswerDetail(answer, scoresByAnswer.get(answer.getAnswerPublicId()),
                         promptsByItem.get(answer.getItemPublicId()),
                         decodedByAnswer.get(answer.getAnswerPublicId()),
                         contentByAnswer.get(answer.getAnswerPublicId()), mediaUrls, examiner,
                         assignment, cohort, member, sessionState, attemptCanFinalize, attemptBlockingReason,
-                        aiByAnswer.getOrDefault(answer.getAnswerPublicId(), AiScoreDetailResponse.pending())))
+                        aiByAnswer.getOrDefault(answer.getAnswerPublicId(), AiScoreDetailResponse.pending()), schemas.get(answer.getAnswerPublicId())))
                 .sorted(Comparator.comparingInt(answer -> answer.prompt().orderIndex()))
                 .toList();
         int submittedCount = (int) details.stream().filter(answer -> "SUBMITTED".equals(answer.status())).count();
@@ -200,7 +205,7 @@ class ExaminerAttemptDetailReader {
             Map<UUID, String> mediaUrls,
             CurrentUser examiner, GradingAssignment assignment, SessionGradingGateway.Grading cohort,
             AttemptGradingCandidateView member, SessionGradingGateway.Publication sessionState,
-            boolean attemptCanFinalize, String attemptBlockingReason, AiScoreDetailResponse ai) {
+            boolean attemptCanFinalize, String attemptBlockingReason, AiScoreDetailResponse ai, ExaminerRubricResponse rubric) {
         if (savedScore != null && !savedScore.getExaminerPublicId().equals(examiner.userId())) {
             throw new ExaminerWorkNotFoundException();
         }
@@ -224,11 +229,12 @@ class ExaminerAttemptDetailReader {
                 decoded.gapValues(), decoded.wordIndices());
 
         ExaminerAiReferenceResponse aiRef = examinerReviewVersionService.buildAiReference(answer);
+        var stored = savedScore == null ? null : traits.stored(answer, savedScore);
         ExaminerDecisionResponse decision = savedScore != null
                 ? new ExaminerDecisionResponse(savedScore.getStatus().name(), savedScore.getScore(),
                         savedScore.getDecisionKind(), savedScore.getSubmittedAt(),
                         savedScore.getReviewedAiScore(), savedScore.getReviewedAiVersion(),
-                        savedScore.getRequestPublicId())
+                        savedScore.getRequestPublicId(), stored.traits(), stored.rubricVersionPublicId())
                 : null;
         String reviewVersion = examinerReviewVersionService.computeReviewVersion(
                 answer, content, assignment, cohort, member, savedScore, sessionState);
@@ -239,7 +245,7 @@ class ExaminerAttemptDetailReader {
                 safeResponse, savedScore == null ? "PENDING" : ExaminerAnswerScoreStatus.SUBMITTED.name(),
                 savedScore == null ? null : savedScore.getScore(),
                 savedScore == null ? null : savedScore.getSubmittedAt(),
-                aiRef, decision, reviewVersion, answerCanFinalize, answerBlockingReason, ai);
+                aiRef, decision, reviewVersion, answerCanFinalize, answerBlockingReason, ai, rubric);
     }
 
     private String mediaUrl(Map<UUID, String> mediaUrls, UUID mediaPublicId) {
