@@ -1,6 +1,5 @@
 package com.pte.scoring.internal.vendor.gemini.scorer;
 
-import com.pte.scoring.internal.vendor.gemini.FormCheck;
 import com.pte.scoring.internal.vendor.gemini.GeminiRestClient;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.vendor.AiScoringRequest;
@@ -11,24 +10,20 @@ import tools.jackson.databind.json.JsonMapper;
 import java.util.List;
 import java.util.Set;
 
-/** Summarize Spoken Text: 50–70 words; Form comes from the word count alone. */
+/** Summarize Spoken Text (Score Guide pp.41-43): Gemini scores four traits; code counts Form. */
 @Component
 @ConditionalOnProperty(name = "scoring.ai.provider", havingValue = "azure-gemini")
 public class SummarizeSpokenTextScorer extends GeminiWritingScorer {
 
     private static final String EXAMINER = "You are a PTE Academic examiner grading a Summarize Spoken Text "
-            + "response. The candidate listened to a lecture and wrote a summary of it. Score each criterion "
-            + "0-100: Content (coverage and accuracy of the source's key ideas), Grammar, Vocabulary and "
-            + "Spelling. Form is calculated locally from the candidate word count and is not scored by you; do "
-            + "not guess the word count. Penalize factual misrepresentation, irrelevant additions, and copying "
-            + "long phrases from the source.";
-    private static final String ASK = "Score each criterion 0-100, write brief feedback (2-3 sentences), list the "
-            + "key points covered and missed, and list concrete language errors, each with the offending text and "
-            + "a suggested correction.";
+            + "response. The candidate listened to a lecture and wrote a summary of it. Penalize factual "
+            + "misrepresentation, irrelevant additions, and copying long phrases from the source.";
+    private static final String ASK = "Score each trait on its own scale as described above, write brief feedback "
+            + "(2-3 sentences), list the key points covered and missed, and list concrete language errors, each with "
+            + "the offending text and a suggested correction.";
 
     public SummarizeSpokenTextScorer(GeminiRestClient gemini, JsonMapper json) {
         super(gemini, json, EXAMINER, "Source transcript", "Candidate's written summary", ASK,
-                List.of("content", FORM, "grammar", "vocabulary", "spelling"), false,
                 List.of("covered_points", "missed_points"));
     }
 
@@ -41,10 +36,5 @@ public class SummarizeSpokenTextScorer extends GeminiWritingScorer {
     @Override
     String sourceText(AiScoringRequest request) {
         return request.referenceAnswerText();
-    }
-
-    @Override
-    FormCheck formCheck(String answer, AiScoringRequest request) {
-        return FormCheck.summarizeSpokenText(answer, request.minWordCount(), request.maxWordCount());
     }
 }
