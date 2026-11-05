@@ -9,7 +9,10 @@ import com.pte.reporting.domain.enums.Skill;
 import com.pte.reporting.dto.event.AttemptPublishedEvent;
 import com.pte.reporting.internal.exception.ReportPublicationNotReadyException;
 import com.pte.reporting.internal.repository.ExamResultRepository;
+import com.pte.scoring.RubricTraceService;
 import com.pte.scoring.ScoringService;
+import com.pte.scoring.dto.response.ItemScoreTraceView;
+import com.pte.scoring.dto.response.ItemTraceKind;
 import com.pte.scoring.dto.response.ReportPublicationScoringView;
 import com.pte.scoring.dto.response.ReportScoringAnswerView;
 import com.pte.scoring.dto.response.SessionCohortPublicationView;
@@ -53,13 +56,15 @@ class ReportPublishServiceTest {
     private ExamResultRepository examResultRepository;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private RubricTraceService rubricTraceService;
 
     private ReportPublishService service;
 
     @BeforeEach
     void setUp() {
         service = new ReportPublishService(sessionService, attemptService, scoringService, aggregationService,
-                snapshotCodec, examResultRepository, eventPublisher, com.pte.TestClocks.fixed());
+                snapshotCodec, examResultRepository, eventPublisher, rubricTraceService, com.pte.TestClocks.fixed());
     }
 
     @Test
@@ -84,12 +89,19 @@ class ReportPublishServiceTest {
         when(scoringService.lockForReportPublication(eq(tenantId), eq(sessionId), any()))
                 .thenReturn(new ReportPublicationScoringView(publicationId, List.of(input)));
         when(examResultRepository.findByAttemptPublicId(attemptId)).thenReturn(Optional.of(report));
+        ReportScoreAggregation aggregation = new ReportScoreAggregation(
+                new AttemptScoreContextView(examDefinitionId, scoreTemplateVersion, Set.of("SPEAKING")), summary);
         when(aggregationService.aggregateBatchFromInputs(Set.of(attemptId), Map.of(attemptId, List.of(input))))
-                .thenReturn(Map.of(attemptId, new ReportScoreAggregation(
-                        new AttemptScoreContextView(examDefinitionId, scoreTemplateVersion, Set.of("SPEAKING")),
-                        summary)));
-        when(snapshotCodec.encode(eq(publicationId), eq(actorId), any(), eq(1), eq(examSnapshotId),
-                eq(examDefinitionId), eq(scoreTemplateVersion), eq(summary), eq(List.of(input))))
+                .thenReturn(Map.of(attemptId, aggregation));
+        Map<UUID, ItemScoreTraceView> traces = Map.of(answerId,
+                new ItemScoreTraceView(answerId, ItemTraceKind.LEGACY_NO_TRACE, null, null));
+        when(rubricTraceService.traceItems(List.of(input))).thenReturn(traces);
+        when(snapshotCodec.encode(org.mockito.ArgumentMatchers.argThat(publication ->
+                        publication.publicationPublicId().equals(publicationId)
+                                && publication.publishedByPublicId().equals(actorId)
+                                && publication.cohortSize() == 1
+                                && publication.examSnapshotPublicId().equals(examSnapshotId)),
+                eq(aggregation), eq(List.of(input)), eq(traces)))
                 .thenReturn("immutable-snapshot");
 
         int published = service.publishSession(sessionId, tenantId, actorId);

@@ -332,7 +332,9 @@ class ReportServiceTest {
     }
 
     private String snapshotJson(AttemptScoreSummary summary) {
-        return snapshotCodec.encode(UUID.randomUUID(), UUID.randomUUID(), java.time.Instant.now(), 1,
-                UUID.randomUUID(), UUID.randomUUID(), 1, summary, List.of());
+        return snapshotCodec.encode(new ReportSnapshotCodec.Publication(UUID.randomUUID(), UUID.randomUUID(),
+                java.time.Instant.parse("2026-11-05T00:00:00Z"), 1, UUID.randomUUID()),
+                new ReportScoreAggregation(new com.pte.attempt.dto.response.AttemptScoreContextView(UUID.randomUUID(),
+                        1, java.util.Set.of()), summary), List.of(), Map.of());
     }
 }
