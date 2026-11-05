@@ -15,8 +15,6 @@ import java.util.Set;
 
 /** Summarize Group Discussion (Score Guide pp.25-28): Content 0-6 gates Pronunciation and Oral Fluency. */
 public final class SummarizeGroupDiscussionRubric {
-
-    private static final String PAGES = "tr.25-28";
     private static final int CONTENT_MAX = 6;
 
     private SummarizeGroupDiscussionRubric() {
@@ -25,14 +23,14 @@ public final class SummarizeGroupDiscussionRubric {
     public static TaskRubric create() {
         return new TaskRubric(ScoringConstants.TASK_TYPE_SUMMARIZE_GROUP_DISCUSSION,
                 Set.of(RubricConstants.SKILL_LISTENING, RubricConstants.SKILL_SPEAKING),
-                List.of(content(), PronunciationFluencyTraits.pronunciation(PAGES),
-                        PronunciationFluencyTraits.oralFluency(PAGES)),
-                Set.of(RubricTraits.CONTENT), null, null, PAGES);
+                List.of(content(), PronunciationFluencyTraits.pronunciation(),
+                        PronunciationFluencyTraits.oralFluency()),
+                Set.of(RubricTraits.CONTENT), null, null);
     }
 
     private static TraitDefinition content() {
         return CatalogSupport.trait(RubricTraits.CONTENT, "Nội dung", "Content", TraitScale.fixed(CONTENT_MAX),
-                TraitSource.AI_LLM, "tr.25-27", CatalogSupport.levels(
+                TraitSource.AI_LLM, CatalogSupport.levels(
                         "Response is relevant to the prompt but too limited to assign a higher score.",
                         "The response repeats isolated words and phrases from the discussion but does not provide "
                                 + "adequate context or meaning. Vocabulary is highly restricted and there is no "

@@ -34,7 +34,7 @@ final class RubricResponseMapper {
                                                    java.util.Map<String, Integer> referenceWeights) {
         TaskRubric task = rubric.task();
         return new TaskTypeRubricResponse(task.taskType(), task.skills().stream().sorted().toList(),
-                task.pearsonPages(), version.getPublicId(), version.getVersionNo(), version.getCatalogVersion(),
+                version.getPublicId(), version.getVersionNo(), version.getCatalogVersion(),
                 task.traits().stream().map(trait -> toTrait(trait, rubric, referenceWeights.get(trait.key()))).toList(),
                 task.traits().stream().filter(trait -> task.gateTraits().contains(trait.key()))
                         .map(trait -> new GateTraitResponse(trait.key(), rubric.isGateEnabled(trait.key())))
@@ -52,7 +52,7 @@ final class RubricResponseMapper {
 
     private static TraitDetailsResponse toTrait(TraitDefinition trait, EffectiveRubric rubric, int defaultWeight) {
         return new TraitDetailsResponse(trait.key(), trait.displayNameVi(), trait.displayNameEn(),
-                trait.scale().fixedMax(), trait.scale().isPerWord(), trait.source().name(), trait.pearsonPages(),
+                trait.scale().fixedMax(), trait.scale().isPerWord(), trait.source().name(),
                 rubric.weightOf(trait.key()),
                 trait.levels().stream().map(level -> new LevelResponse(level.level(), level.text())).toList(), defaultWeight);
     }
@@ -66,7 +66,7 @@ final class RubricResponseMapper {
     }
 
     private static ObjectiveRuleResponse toObjectiveRule(ObjectiveRule rule) {
-        return rule == null ? null : new ObjectiveRuleResponse(rule.code(), rule.descriptionVi(), rule.pearsonPages());
+        return rule == null ? null : new ObjectiveRuleResponse(rule.code(), rule.descriptionVi());
     }
 
     /**

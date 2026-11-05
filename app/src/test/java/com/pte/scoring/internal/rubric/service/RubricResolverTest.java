@@ -162,11 +162,11 @@ class RubricResolverTest {
         List<TraitDefinition> rescaledTraits = real.traits().stream()
                 .map(trait -> trait.key().equals(RubricTraits.CONTENT)
                         ? new TraitDefinition(trait.key(), trait.displayNameVi(), trait.displayNameEn(),
-                        TraitScale.fixed(7), trait.levels(), trait.source(), trait.pearsonPages())
+                        TraitScale.fixed(7), trait.levels(), trait.source())
                         : trait)
                 .toList();
         TaskRubric rescaled = new TaskRubric(real.taskType(), real.skills(), rescaledTraits, real.gateTraits(),
-                real.formRule(), real.objectiveRule(), real.pearsonPages());
+                real.formRule(), real.objectiveRule());
         RubricCatalog changedCatalog = spy(new RubricCatalogImpl());
         when(changedCatalog.find(DI)).thenReturn(Optional.of(rescaled));
         ScoringRubricVersion version1 = stored(RubricVersionStatus.ACTIVE, defaultsJson());

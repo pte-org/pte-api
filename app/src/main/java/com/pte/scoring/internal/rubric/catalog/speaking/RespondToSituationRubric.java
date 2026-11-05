@@ -15,8 +15,6 @@ import java.util.Set;
 
 /** Respond to a Situation (Score Guide pp.29-31): Content 0-6 gates Pronunciation and Oral Fluency. */
 public final class RespondToSituationRubric {
-
-    private static final String PAGES = "tr.29-31";
     private static final int CONTENT_MAX = 6;
 
     private RespondToSituationRubric() {
@@ -25,14 +23,14 @@ public final class RespondToSituationRubric {
     public static TaskRubric create() {
         return new TaskRubric(ScoringConstants.TASK_TYPE_RESPOND_TO_A_SITUATION,
                 Set.of(RubricConstants.SKILL_SPEAKING),
-                List.of(content(), PronunciationFluencyTraits.pronunciation(PAGES),
-                        PronunciationFluencyTraits.oralFluency(PAGES)),
-                Set.of(RubricTraits.CONTENT), null, null, PAGES);
+                List.of(content(), PronunciationFluencyTraits.pronunciation(),
+                        PronunciationFluencyTraits.oralFluency()),
+                Set.of(RubricTraits.CONTENT), null, null);
     }
 
     private static TraitDefinition content() {
         return CatalogSupport.trait(RubricTraits.CONTENT, "Nội dung", "Content", TraitScale.fixed(CONTENT_MAX),
-                TraitSource.AI_LLM, "tr.29-30", CatalogSupport.levels(
+                TraitSource.AI_LLM, CatalogSupport.levels(
                         "Response is relevant to the prompt but too limited to assign a higher score.",
                         "The response contains content relevant to the situation but does not achieve the primary "
                                 + "communication goal, showing a lack of understanding of the situation. "

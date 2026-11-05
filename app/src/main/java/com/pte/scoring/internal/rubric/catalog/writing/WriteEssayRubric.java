@@ -16,8 +16,6 @@ import java.util.Set;
 
 /** Write Essay (Score Guide pp.34-39): seven traits worth 26 points; Content or Form 0 zeroes the essay. */
 public final class WriteEssayRubric {
-
-    private static final String PAGES = "tr.34-39";
     private static final int SIX = 6;
     private static final int TWO = 2;
 
@@ -27,25 +25,25 @@ public final class WriteEssayRubric {
     public static TaskRubric create() {
         return new TaskRubric(ScoringConstants.TASK_TYPE_WRITE_ESSAY, Set.of(RubricConstants.SKILL_WRITING),
                 List.of(
-                        llm(RubricTraits.CONTENT, "Nội dung", "Content", SIX, "tr.34-35", WriteEssayLevels.content()),
+                        llm(RubricTraits.CONTENT, "Nội dung", "Content", SIX, WriteEssayLevels.content()),
                         CatalogSupport.trait(RubricTraits.FORM, "Hình thức", "Form", TraitScale.fixed(TWO),
-                                TraitSource.MECHANICAL, "tr.35", WriteEssayLevels.form()),
+                                TraitSource.MECHANICAL, WriteEssayLevels.form()),
                         llm(RubricTraits.DEVELOPMENT_STRUCTURE_COHERENCE, "Phát triển, cấu trúc và mạch lạc",
-                                "Development, Structure and Coherence", SIX, "tr.35-37",
+                                "Development, Structure and Coherence", SIX,
                                 WriteEssayLevels.developmentStructureCoherence()),
-                        llm(RubricTraits.GRAMMAR, "Ngữ pháp", "Grammar", TWO, "tr.37", WriteEssayLevels.grammar()),
+                        llm(RubricTraits.GRAMMAR, "Ngữ pháp", "Grammar", TWO, WriteEssayLevels.grammar()),
                         llm(RubricTraits.GENERAL_LINGUISTIC_RANGE, "Phạm vi ngôn ngữ chung",
-                                "General Linguistic Range", SIX, "tr.38-39", WriteEssayLevels.generalLinguisticRange()),
-                        llm(RubricTraits.VOCABULARY_RANGE, "Phạm vi từ vựng", "Vocabulary Range", TWO, "tr.39",
+                                "General Linguistic Range", SIX, WriteEssayLevels.generalLinguisticRange()),
+                        llm(RubricTraits.VOCABULARY_RANGE, "Phạm vi từ vựng", "Vocabulary Range", TWO,
                                 WriteEssayLevels.vocabularyRange()),
-                        llm(RubricTraits.SPELLING, "Chính tả", "Spelling", TWO, "tr.39", WriteEssayLevels.spelling())),
+                        llm(RubricTraits.SPELLING, "Chính tả", "Spelling", TWO, WriteEssayLevels.spelling())),
                 Set.of(RubricTraits.CONTENT, RubricTraits.FORM),
                 new FormRule(List.of(new FormBand(200, 300, 2), new FormBand(120, 199, 1), new FormBand(301, 380, 1)),
-                        false, true), null, PAGES);
+                        false, true), null);
     }
 
-    private static TraitDefinition llm(String key, String vi, String en, int max, String pages,
+    private static TraitDefinition llm(String key, String vi, String en, int max,
                                        List<com.pte.scoring.rubric.LevelDescriptor> levels) {
-        return CatalogSupport.trait(key, vi, en, TraitScale.fixed(max), TraitSource.AI_LLM, pages, levels);
+        return CatalogSupport.trait(key, vi, en, TraitScale.fixed(max), TraitSource.AI_LLM, levels);
     }
 }

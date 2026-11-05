@@ -11,7 +11,6 @@ import java.util.UUID;
 public record TaskTypeRubricResponse(
         String taskType,
         List<String> skills,
-        String pearsonPages,
         UUID versionPublicId,
         int versionNo,
         int catalogVersion,

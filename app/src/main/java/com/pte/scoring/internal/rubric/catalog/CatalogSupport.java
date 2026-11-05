@@ -24,7 +24,7 @@ public final class CatalogSupport {
     }
 
     public static TraitDefinition trait(String key, String displayNameVi, String displayNameEn, TraitScale scale,
-                                        TraitSource source, String pearsonPages, List<LevelDescriptor> levels) {
-        return new TraitDefinition(key, displayNameVi, displayNameEn, scale, levels, source, pearsonPages);
+                                        TraitSource source, List<LevelDescriptor> levels) {
+        return new TraitDefinition(key, displayNameVi, displayNameEn, scale, levels, source);
     }
 }

@@ -15,8 +15,6 @@ import java.util.Set;
 
 /** Re-tell Lecture (Score Guide pp.21-24): Content 0-6 gates Pronunciation and Oral Fluency. */
 public final class RetellLectureRubric {
-
-    private static final String PAGES = "tr.21-24";
     private static final int CONTENT_MAX = 6;
 
     private RetellLectureRubric() {
@@ -25,14 +23,14 @@ public final class RetellLectureRubric {
     public static TaskRubric create() {
         return new TaskRubric(ScoringConstants.TASK_TYPE_RE_TELL_LECTURE,
                 Set.of(RubricConstants.SKILL_LISTENING, RubricConstants.SKILL_SPEAKING),
-                List.of(content(), PronunciationFluencyTraits.pronunciation(PAGES),
-                        PronunciationFluencyTraits.oralFluency(PAGES)),
-                Set.of(RubricTraits.CONTENT), null, null, PAGES);
+                List.of(content(), PronunciationFluencyTraits.pronunciation(),
+                        PronunciationFluencyTraits.oralFluency()),
+                Set.of(RubricTraits.CONTENT), null, null);
     }
 
     private static TraitDefinition content() {
         return CatalogSupport.trait(RubricTraits.CONTENT, "Nội dung", "Content", TraitScale.fixed(CONTENT_MAX),
-                TraitSource.AI_LLM, "tr.21-23", CatalogSupport.levels(
+                TraitSource.AI_LLM, CatalogSupport.levels(
                         "The response is related to the lecture but is too limited to assign a higher score.",
                         "The response repeats isolated words and phrases from the lecture but does not provide "
                                 + "adequate context or meaning. The content appears on topic but does not "

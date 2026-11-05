@@ -14,8 +14,6 @@ import java.util.Set;
 /** Answer Short Question (Score Guide p.24): one point for an appropriate word; scored for Listening only. */
 public final class AnswerShortQuestionRubric {
 
-    private static final String PAGES = "tr.24";
-
     private AnswerShortQuestionRubric() {
     }
 
@@ -23,9 +21,9 @@ public final class AnswerShortQuestionRubric {
         return new TaskRubric(ScoringConstants.TASK_TYPE_ANSWER_SHORT_QUESTION,
                 Set.of(RubricConstants.SKILL_LISTENING),
                 List.of(CatalogSupport.trait(RubricTraits.VOCABULARY, "Từ vựng", "Vocabulary", TraitScale.fixed(1),
-                        TraitSource.MECHANICAL, PAGES, CatalogSupport.levels(
+                        TraitSource.MECHANICAL, CatalogSupport.levels(
                                 "Inappropriate word choice in response.",
                                 "Appropriate word choice in response."))),
-                Set.of(), null, null, PAGES);
+                Set.of(), null, null);
     }
 }

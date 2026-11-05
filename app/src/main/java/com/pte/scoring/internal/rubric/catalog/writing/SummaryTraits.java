@@ -15,9 +15,9 @@ final class SummaryTraits {
     private SummaryTraits() {
     }
 
-    static TraitDefinition content(String pages) {
+    static TraitDefinition content() {
         return CatalogSupport.trait(RubricTraits.CONTENT, "Nội dung", "Content", TraitScale.fixed(CONTENT_MAX),
-                TraitSource.AI_LLM, pages, CatalogSupport.levels(
+                TraitSource.AI_LLM, CatalogSupport.levels(
                         "Response is too limited to assign a higher score and demonstrates no comprehension of the "
                                 + "source text.",
                         "The response is relevant but not meaningfully summarised, demonstrating limited "
@@ -36,25 +36,25 @@ final class SummaryTraits {
                                 + "synthesized in a concise and coherent manner."));
     }
 
-    static TraitDefinition grammar(String pages) {
+    static TraitDefinition grammar() {
         return CatalogSupport.trait(RubricTraits.GRAMMAR, "Ngữ pháp", "Grammar", TraitScale.fixed(TWO_POINT_MAX),
-                TraitSource.AI_LLM, pages, CatalogSupport.levels(
+                TraitSource.AI_LLM, CatalogSupport.levels(
                         "Has defective grammatical structure which could hinder communication.",
                         "Contains grammatical errors but with no hindrance to communication.",
                         "Has correct grammatical structure."));
     }
 
-    static TraitDefinition vocabulary(String pages) {
+    static TraitDefinition vocabulary() {
         return CatalogSupport.trait(RubricTraits.VOCABULARY, "Từ vựng", "Vocabulary", TraitScale.fixed(TWO_POINT_MAX),
-                TraitSource.AI_LLM, pages, CatalogSupport.levels(
+                TraitSource.AI_LLM, CatalogSupport.levels(
                         "Has defective word choice which could hinder communication.",
                         "Contains lexical errors but with no hindrances to communication.",
                         "Has appropriate choice of words."));
     }
 
-    static TraitDefinition spelling(String pages) {
+    static TraitDefinition spelling() {
         return CatalogSupport.trait(RubricTraits.SPELLING, "Chính tả", "Spelling", TraitScale.fixed(TWO_POINT_MAX),
-                TraitSource.AI_LLM, pages, CatalogSupport.levels(
+                TraitSource.AI_LLM, CatalogSupport.levels(
                         "More than one spelling error.", "One spelling error.", "Correct spelling."));
     }
 }

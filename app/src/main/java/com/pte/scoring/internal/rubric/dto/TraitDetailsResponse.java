@@ -10,7 +10,6 @@ public record TraitDetailsResponse(
         Integer maxScore,
         boolean perWord,
         String source,
-        String pearsonPages,
         int weight,
         List<LevelResponse> levels,
         int defaultWeight) {

@@ -65,7 +65,6 @@ class RubricReadServiceTest {
         assertThat(content.maxScore()).isEqualTo(6);
         assertThat(content.weight()).isEqualTo(6);
         assertThat(content.levels()).hasSize(7).allSatisfy(level -> assertThat(level.text()).isNotBlank());
-        assertThat(content.pearsonPages()).isNotBlank();
         assertThat(describeImage.gates()).singleElement()
                 .satisfies(gate -> assertThat(gate.enabled()).isTrue());
         assertThat(describeImage.formBands()).isNull();

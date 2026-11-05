@@ -15,8 +15,6 @@ import java.util.Set;
 
 /** Describe Image (Score Guide pp.18-20): Content 0-6 gates Pronunciation and Oral Fluency (p.8). */
 public final class DescribeImageRubric {
-
-    private static final String PAGES = "tr.18-20";
     private static final int CONTENT_MAX = 6;
 
     private DescribeImageRubric() {
@@ -24,14 +22,14 @@ public final class DescribeImageRubric {
 
     public static TaskRubric create() {
         return new TaskRubric(ScoringConstants.TASK_TYPE_DESCRIBE_IMAGE, Set.of(RubricConstants.SKILL_SPEAKING),
-                List.of(content(), PronunciationFluencyTraits.pronunciation(PAGES),
-                        PronunciationFluencyTraits.oralFluency(PAGES)),
-                Set.of(RubricTraits.CONTENT), null, null, PAGES);
+                List.of(content(), PronunciationFluencyTraits.pronunciation(),
+                        PronunciationFluencyTraits.oralFluency()),
+                Set.of(RubricTraits.CONTENT), null, null);
     }
 
     private static TraitDefinition content() {
         return CatalogSupport.trait(RubricTraits.CONTENT, "Nội dung", "Content", TraitScale.fixed(CONTENT_MAX),
-                TraitSource.AI_LLM, "tr.18-19", CatalogSupport.levels(
+                TraitSource.AI_LLM, CatalogSupport.levels(
                         "Response is relevant to the prompt but too limited to assign a higher score.",
                         "The response is composed of disconnected elements, or a list of points identified on the "
                                 + "image, without description or elaboration. Vocabulary and expressions are highly "

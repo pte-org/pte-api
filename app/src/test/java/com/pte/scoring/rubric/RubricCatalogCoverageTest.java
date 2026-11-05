@@ -107,11 +107,10 @@ class RubricCatalogCoverageTest {
     }
 
     @Test
-    void everyTaskHasSkillsAndPearsonPages() {
+    void everyTaskHasSkills() {
         for (TaskRubric rubric : CATALOG.all()) {
             assertThat(rubric.skills()).as(rubric.taskType() + " skills").isNotEmpty()
                     .allSatisfy(skill -> assertThat(skill).isNotBlank());
-            assertThat(rubric.pearsonPages()).as(rubric.taskType() + " pages").isNotBlank();
         }
     }
 
@@ -190,13 +189,12 @@ class RubricCatalogCoverageTest {
     }
 
     @Test
-    void everyTraitHasNamesPagesAndALevelDescriptorForEveryLevel() {
+    void everyTraitHasNamesAndALevelDescriptorForEveryLevel() {
         for (String type : TRAIT_SCORED) {
             for (TraitDefinition trait : task(type).traits()) {
                 String where = type + "/" + trait.key();
                 assertThat(trait.displayNameVi()).as(where).isNotBlank();
                 assertThat(trait.displayNameEn()).as(where).isNotBlank();
-                assertThat(trait.pearsonPages()).as(where).isNotBlank();
                 assertThat(trait.source()).as(where).isNotNull();
                 assertThat(trait.levels()).as(where).isNotEmpty();
                 trait.levels().forEach(level -> assertThat(level.text()).as(where).isNotBlank());
@@ -232,7 +230,6 @@ class RubricCatalogCoverageTest {
             assertThat(rubric.objectiveRule()).as(type).isNotNull();
             assertThat(rubric.objectiveRule().code()).as(type).isEqualTo(code);
             assertThat(rubric.objectiveRule().descriptionVi()).as(type).isNotBlank();
-            assertThat(rubric.objectiveRule().pearsonPages()).as(type).isNotBlank();
         });
         for (String type : TRAIT_SCORED) {
             assertThat(task(type).objectiveRule()).as(type).isNull();

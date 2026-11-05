@@ -13,9 +13,9 @@ public final class PronunciationFluencyTraits {
     private PronunciationFluencyTraits() {
     }
 
-    public static TraitDefinition pronunciation(String taskPages) {
+    public static TraitDefinition pronunciation() {
         return CatalogSupport.trait(RubricTraits.PRONUNCIATION, "Phát âm", "Pronunciation", TraitScale.fixed(MAX),
-                TraitSource.AZURE, taskPages + ", tr.45", CatalogSupport.levels(
+                TraitSource.AZURE, CatalogSupport.levels(
                         "Non-English: pronunciation seems completely characteristic of another language. Many "
                                 + "consonants and vowels are mispronounced, mis-ordered or omitted. Listeners may "
                                 + "find more than 1/2 of the speech unintelligible.",
@@ -33,9 +33,9 @@ public final class PronunciationFluencyTraits {
                                 + "words and sentence-level stress is fully appropriate."));
     }
 
-    public static TraitDefinition oralFluency(String taskPages) {
+    public static TraitDefinition oralFluency() {
         return CatalogSupport.trait(RubricTraits.ORAL_FLUENCY, "Độ trôi chảy", "Oral Fluency", TraitScale.fixed(MAX),
-                TraitSource.AZURE, taskPages + ", tr.46", CatalogSupport.levels(
+                TraitSource.AZURE, CatalogSupport.levels(
                         "Disfluent: speech is slow and labored with little discernable phrase grouping, multiple "
                                 + "hesitations, pauses, false starts, and/or major phonological simplifications. "
                                 + "Most words are isolated.",

@@ -15,8 +15,6 @@ import java.util.Set;
 
 /** Repeat Sentence (Score Guide pp.16-17): Content is banded by the share of words repeated in order. */
 public final class RepeatSentenceRubric {
-
-    private static final String PAGES = "tr.16-17";
     private static final int CONTENT_MAX = 3;
 
     private RepeatSentenceRubric() {
@@ -25,14 +23,14 @@ public final class RepeatSentenceRubric {
     public static TaskRubric create() {
         return new TaskRubric(ScoringConstants.TASK_TYPE_REPEAT_SENTENCE,
                 Set.of(RubricConstants.SKILL_LISTENING, RubricConstants.SKILL_SPEAKING),
-                List.of(content(), PronunciationFluencyTraits.pronunciation(PAGES),
-                        PronunciationFluencyTraits.oralFluency(PAGES)),
-                Set.of(), null, null, PAGES);
+                List.of(content(), PronunciationFluencyTraits.pronunciation(),
+                        PronunciationFluencyTraits.oralFluency()),
+                Set.of(), null, null);
     }
 
     private static TraitDefinition content() {
         return CatalogSupport.trait(RubricTraits.CONTENT, "Nội dung (từ lặp lại đúng thứ tự)", "Content",
-                TraitScale.fixed(CONTENT_MAX), TraitSource.MECHANICAL, PAGES, CatalogSupport.levels(
+                TraitScale.fixed(CONTENT_MAX), TraitSource.MECHANICAL, CatalogSupport.levels(
                         "Almost nothing from the prompt in the response.",
                         "Less than 50% of words in the response from the prompt in the correct sequence.",
                         "At least 50% of words in the response from the prompt in the correct sequence.",

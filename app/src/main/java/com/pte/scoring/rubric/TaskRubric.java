@@ -10,7 +10,7 @@ import java.util.Set;
  * Form criterion, {@code objectiveRule} only for answer-key task types (which have no traits).
  */
 public record TaskRubric(String taskType, Set<String> skills, List<TraitDefinition> traits, Set<String> gateTraits,
-                         FormRule formRule, ObjectiveRule objectiveRule, String pearsonPages) {
+                         FormRule formRule, ObjectiveRule objectiveRule) {
 
     public TaskRubric {
         skills = Set.copyOf(skills);
