@@ -114,7 +114,12 @@ class ExaminerDraftCommandServiceTest {
                 issueRepository, evaluationRepository, answerRepository, gateway, attemptService,
                 eligibilityQueryService, workflowQueryService, new ExaminerReviewVersionService(),
                 recorder, new ExaminerFinalizeSubmitter(evaluationRepository, new ExaminerReviewVersionService(),
-                        attemptService), eventPublisher, Clock.fixed(NOW, ZoneOffset.UTC));
+                        attemptService, com.pte.scoring.support.ExaminerTraitWorkflowStub.create(),
+                        org.mockito.Mockito.mock(com.pte.scoring.internal.service.examiner.trait.ExaminerTraitFreshness.class)), eventPublisher,
+                com.pte.scoring.support.ExaminerTraitWorkflowStub.create(),
+                new com.pte.scoring.internal.service.examiner.trait.ExaminerTraitResponses(jsonMapper),
+                org.mockito.Mockito.mock(com.pte.scoring.internal.service.examiner.trait.ExaminerTraitFreshness.class), Clock.fixed(NOW, ZoneOffset.UTC));
+        lenient().when(answerRepository.findByAnswerPublicId(answerId)).thenReturn(Optional.of(EvaluationFixtures.ai(tenantId, sessionId, attemptId, answerId, "READ_ALOUD", ScoringMethod.AI_SPEECH)));
         assignment = new GradingAssignment(tenantId, sessionId, attemptId, examinerId, 1,
                 UUID.randomUUID(), NOW);
         ReflectionTestUtils.setField(assignment, "publicId", assignmentId);
@@ -320,7 +325,7 @@ class ExaminerDraftCommandServiceTest {
                 new AttemptGradingCandidateView(attemptId, UUID.randomUUID(), "SUBMITTED", "v1", false, null)));
         AiEvaluation ai = EvaluationFixtures.ai(tenantId, sessionId, attemptId, answerId, "READ_ALOUD",
                 ScoringMethod.AI_SPEECH);
-        ai.markAiScored(60, AiProviderCategory.REAL, "p", "m", "v", java.time.Instant.now());
+        ai.markAiScored(60, AiProviderCategory.REAL, "p", "m", "v", NOW);
         when(answerRepository.findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(sessionId, tenantId,
                 List.of(attemptId))).thenReturn(List.of(ai));
         when(eligibilityQueryService.isAiEligible(ai)).thenReturn(true);

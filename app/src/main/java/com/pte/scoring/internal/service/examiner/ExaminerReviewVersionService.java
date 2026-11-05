@@ -27,8 +27,18 @@ import java.util.UUID;
  */
 @Service
 public class ExaminerReviewVersionService {
+    private final tools.jackson.databind.json.JsonMapper json;
+    private final com.pte.scoring.RubricScaleService scales;
 
-    public ExaminerAiAvailability determineAiAvailability(AiEvaluation answer) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public ExaminerReviewVersionService(tools.jackson.databind.json.JsonMapper json, com.pte.scoring.RubricScaleService scales) {
+        this.json = json; this.scales = scales;
+    }
+
+    public ExaminerReviewVersionService() { this(tools.jackson.databind.json.JsonMapper.builder().build(), null); }
+
+
+    private ExaminerAiAvailability determineAiAvailability(AiEvaluation answer) {
         if (answer == null) {
             return ExaminerAiAvailability.UNAVAILABLE;
         }
@@ -45,7 +55,7 @@ public class ExaminerReviewVersionService {
         return ExaminerAiAvailability.UNAVAILABLE;
     }
 
-    public String computeAiVersion(AiEvaluation answer) {
+    private String computeAiVersion(AiEvaluation answer) {
         if (answer == null) {
             return sha256Hex(encodeFields("UNAVAILABLE", "", "", "", "", ""));
         }
@@ -61,7 +71,8 @@ public class ExaminerReviewVersionService {
         String scoredAt = availability == ExaminerAiAvailability.AVAILABLE && answer.getScoredAt() != null
                 ? answer.getScoredAt().toString() : "";
 
-        return sha256Hex(encodeFields(availability.name(), scoreStr, provider, model, providerVersion, scoredAt));
+        return sha256Hex(encodeFields(availability.name(), scoreStr, provider, model, providerVersion, scoredAt, answer.getCriteriaScoresJson(),
+                String.valueOf(answer.getRubricVersionPublicId())));
     }
 
     public ExaminerAiReferenceResponse buildAiReference(AiEvaluation answer) {
@@ -73,7 +84,10 @@ public class ExaminerReviewVersionService {
         Integer score = availability == ExaminerAiAvailability.AVAILABLE ? answer.getRawScore() : null;
         java.time.Instant scoredAt = availability == ExaminerAiAvailability.AVAILABLE ? answer.getScoredAt() : null;
         String version = computeAiVersion(answer);
-        return new ExaminerAiReferenceResponse(availability, score, scoredAt, version);
+        var traits = com.pte.scoring.CriteriaScores.read(json, answer.getCriteriaScoresJson());
+        return new ExaminerAiReferenceResponse(availability, score, scoredAt, version,
+                availability == ExaminerAiAvailability.AVAILABLE ? traits.traits() : java.util.Map.of(), traits.rubricVersion(),
+                scales == null ? java.util.Map.of() : scales.traitMaxima(traits.rubricVersion(), answer.getTaskType()).orElse(java.util.Map.of()));
     }
 
     public String computeReviewVersion(AiEvaluation answer, SubmittedAnswerView content,
@@ -125,7 +139,8 @@ public class ExaminerReviewVersionService {
                 examinerId, cohortId, markingMode, cohortStatus, cohortVersion,
                 memberExcluded, dispositionReason, aiAvailability, aiVersion,
                 decisionStatus, decisionScore, decisionKind, finalizedAt,
-                pubId, pubLockedAt));
+                pubId, pubLockedAt, savedScore == null ? null : savedScore.getTraitScoresJson(),
+                savedScore == null ? null : String.valueOf(savedScore.getRubricVersionPublicId())));
     }
 
     public String computeRequestFingerprint(UUID answerPublicId, int score, ExaminerDecisionKind kind,
@@ -137,6 +152,20 @@ public class ExaminerReviewVersionService {
         String reviewedAiVersionStr = reviewedAiVersion != null ? reviewedAiVersion : "";
 
         return sha256Hex(encodeFields(answerStr, scoreStr, kindStr, expectedVersionStr, reviewedAiVersionStr));
+    }
+
+    public String computeRequestFingerprint(UUID answer, Integer score, ExaminerDecisionKind kind,
+            String review, String ai, java.util.Map<String, java.math.BigDecimal> traits, UUID rubric) {
+        if (traits == null && rubric == null && score != null) return computeRequestFingerprint(answer, score.intValue(), kind, review, ai);
+        var canonical = com.pte.scoring.internal.service.examiner.trait.ExaminerTraitInputs.integers(traits);
+        return sha256Hex(encodeFields(String.valueOf(answer), String.valueOf(score), String.valueOf(kind),
+                review, ai, canonical == null ? null : canonicalTraits(canonical), String.valueOf(rubric)));
+    }
+
+    private static String canonicalTraits(java.util.Map<String, Integer> traits) {
+        StringBuilder encoded = new StringBuilder();
+        new java.util.TreeMap<>(traits).forEach((key, value) -> encoded.append(encodeFields(key, value == null ? null : value.toString())));
+        return encoded.toString();
     }
 
     private static String encodeFields(String... fields) {

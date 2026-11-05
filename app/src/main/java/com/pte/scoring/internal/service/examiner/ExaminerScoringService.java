@@ -5,6 +5,7 @@ import com.pte.scoring.internal.service.grading.SessionGradingGateway;
 import com.pte.scoring.internal.service.objective.AnswerContentReader;
 import com.pte.scoring.internal.service.objective.AnswerPayloadDecoder;
 import com.pte.scoring.internal.service.staff.ScoringEligibilityQueryService;
+import com.pte.scoring.internal.service.examiner.trait.ExaminerTraitScoreResolver;
 import com.pte.attempt.AttemptService;
 import com.pte.identity.IdentityService;
 import com.pte.media.MediaService;
@@ -73,7 +74,7 @@ public class ExaminerScoringService {
             ExaminerWorkspaceReadRepository readRepository,
             ExaminerWorkspaceQueryService examinerWorkspaceQueryService,
             ExaminerWorkflowQueryService workflowQueryService,
-            java.time.Clock clock, AiScoreDetailQueryService aiDetails) {
+            java.time.Clock clock, AiScoreDetailQueryService aiDetails, ExaminerTraitScoreResolver traits) {
         this.workQueueRepository = workQueueRepository;
         this.identityService = identityService;
         this.readRepository = readRepository;
@@ -83,11 +84,11 @@ public class ExaminerScoringService {
         this.attemptDetailReader = new ExaminerAttemptDetailReader(workQueueRepository, scoringAnswerRepository,
                 examinerEvaluationRepository, gateway, eligibilityQueryService, answerPayloadDecoder,
                 contentReader, attemptService, mediaService, examinerReviewVersionService, workflowQueryService,
-                aiDetails, sessionNames);
+                aiDetails, sessionNames, traits);
         this.scoreSubmitter = new ExaminerDirectScoreSubmitter(assignmentRepository, scoringAnswerRepository,
                 examinerEvaluationRepository, gateway, eligibilityQueryService, contentReader, attemptService,
                 entityManager, eventPublisher, examinerReviewVersionService, sessionService,
-                workflowQueryService, this.clock);
+                workflowQueryService, traits, this.clock);
     }
 
     @Transactional(readOnly = true)

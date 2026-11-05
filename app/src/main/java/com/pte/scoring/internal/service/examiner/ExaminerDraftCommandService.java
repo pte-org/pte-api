@@ -4,6 +4,7 @@ import com.pte.scoring.internal.service.grading.SessionGradingGateway;
 import com.pte.scoring.internal.service.staff.ScoringEligibilityQueryService;
 import com.pte.scoring.ScoringProgressChangedEvent;
 import com.pte.scoring.domain.ExaminerEvaluation;
+import com.pte.scoring.internal.service.examiner.trait.ExaminerTraitScoreResolver;
 import com.pte.attempt.AttemptService;
 import com.pte.scoring.domain.GradingAssignment;
 import com.pte.scoring.domain.AiEvaluation;
@@ -44,6 +45,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class ExaminerDraftCommandService {
+    private final com.pte.scoring.internal.service.examiner.trait.ExaminerTraitResponses responses;
 
     private final SessionService sessionService;
     private final GradingAssignmentRepository assignmentRepository;
@@ -54,6 +56,8 @@ public class ExaminerDraftCommandService {
     private final ExaminerWorkRecorder recorder;
     private final ExaminerFinalizeSubmitter finalizeSubmitter;
     private final ApplicationEventPublisher eventPublisher;
+    private final ExaminerTraitScoreResolver traits;
+    private final com.pte.scoring.internal.service.examiner.trait.ExaminerTraitFreshness freshness;
     private final Clock clock;
     private final ExaminerWorkGuard workGuard;
 
@@ -71,7 +75,8 @@ public class ExaminerDraftCommandService {
             ExaminerWorkRecorder recorder,
             ExaminerFinalizeSubmitter finalizeSubmitter,
             ApplicationEventPublisher eventPublisher,
-            Clock clock) {
+            ExaminerTraitScoreResolver traits, com.pte.scoring.internal.service.examiner.trait.ExaminerTraitResponses responses,
+            com.pte.scoring.internal.service.examiner.trait.ExaminerTraitFreshness freshness, Clock clock) {
         this.sessionService = sessionService;
         this.assignmentRepository = assignmentRepository;
         this.evaluationRepository = evaluationRepository;
@@ -82,6 +87,9 @@ public class ExaminerDraftCommandService {
         this.finalizeSubmitter = finalizeSubmitter;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
+        this.traits = traits;
+        this.freshness = freshness;
+        this.responses = responses;
         this.workGuard = new ExaminerWorkGuard(assignmentRepository, issueRepository, answerRepository, gateway,
                 attemptService, eligibilityQueryService);
     }
@@ -113,33 +121,38 @@ public class ExaminerDraftCommandService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, ExaminerScoringConstants.ANSWER_NOT_IN_ATTEMPT);
         }
 
-        if (request.decisionKind() == ExaminerDecisionKind.CONFIRM_AI) {
-            AiEvaluation scoringAnswer = answerRepository.findByAnswerPublicId(answerPublicId)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, ExaminerScoringConstants.ANSWER_NOT_FOUND));
-            ExaminerAiReferenceResponse aiRef = examinerReviewVersionService.buildAiReference(scoringAnswer);
-            if (aiRef.availability() != ExaminerAiAvailability.AVAILABLE || aiRef.score() == null
-                    || !Objects.equals(aiRef.version(), request.reviewedAiVersion())
-                    || !Objects.equals(aiRef.score(), request.score())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ExaminerScoringConstants.CONFIRM_AI_DRAFT_MISMATCH);
-            }
-        }
-
+        AiEvaluation scoringAnswer = answerRepository.findByAnswerPublicId(answerPublicId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, ExaminerScoringConstants.ANSWER_NOT_FOUND));
         String fingerprint = ExaminerWorkRecorder.fingerprint(ExaminerScoringConstants.FINGERPRINT_SAVE_DRAFT + user.tenantId() + ":" + assignment.getPublicId()
                 + ":" + answerPublicId + ":" + request.requestPublicId() + ":" + request.expectedDraftVersion()
                 + ":" + request.score() + ":" + (request.comment() != null ? request.comment().trim() : "")
-                + ":" + request.decisionKind() + ":" + request.expectedReviewVersion() + ":" + request.reviewedAiVersion());
+                + ":" + request.decisionKind() + ":" + request.expectedReviewVersion() + ":" + request.reviewedAiVersion() + ":" + examinerReviewVersionService.computeRequestFingerprint(answerPublicId, request.score(),
+                        request.decisionKind(), request.expectedReviewVersion(), request.reviewedAiVersion(), request.traitScores(), traits.versionFor(scoringAnswer)));
 
         Instant now = clock.instant();
         Optional<ExaminerCommandReceiptResponse> replay = recorder.replayOrBegin(user, assignment.getPublicId(),
                 request.requestPublicId(), fingerprint, now);
         if (replay.isPresent()) {
             ExaminerWorkflowView currentView = workflowQueryService.buildWorkflowView(assignment, user.tenantId());
-            ExaminerDraftResponse draftResponse = evaluationRepository
+            var saved = evaluationRepository
                     .findByTenantIdAndAssignmentIdAndAnswerPublicIdAndDeletedFalse(user.tenantId(), work.getId(), answerPublicId)
-                    .map(ExaminerDraftCommandService::toDraftResponse)
                     .orElse(null);
-            return new ExaminerCommandResponse(replay.get(), currentView, draftResponse);
+            var calculated = saved == null ? null : traits.stored(scoringAnswer, saved);
+            return new ExaminerCommandResponse(replay.get(), currentView, saved == null ? null : responses.draft(saved),
+                    calculated == null ? null : calculated.itemScore(), calculated == null ? null : calculated.scoreTrace());
         }
+
+        freshness.requireCurrent(scoringAnswer, assignment, request.expectedReviewVersion());
+        var calculated = traits.resolve(scoringAnswer, request.traitScores(), request.score());
+        if (request.decisionKind() == ExaminerDecisionKind.CONFIRM_AI) {
+            ExaminerAiReferenceResponse aiRef = examinerReviewVersionService.buildAiReference(scoringAnswer);
+            if (aiRef.availability() != ExaminerAiAvailability.AVAILABLE || aiRef.score() == null
+                    || !Objects.equals(aiRef.version(), request.reviewedAiVersion())
+                    || !Objects.equals(aiRef.score(), calculated.itemScore()) || !traits.matchesAi(scoringAnswer, calculated)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ExaminerScoringConstants.CONFIRM_AI_DRAFT_MISMATCH);
+            }
+        }
+
 
         String comment = request.comment() != null ? request.comment().trim() : null;
         Optional<ExaminerEvaluation> existing = evaluationRepository
@@ -152,7 +165,7 @@ public class ExaminerDraftCommandService {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.DRAFT_VERSION_MISMATCH_UNPERSISTED);
             }
             draft = evaluationRepository.save(ExaminerEvaluation.draft(user.tenantId(), sessionPublicId,
-                    attemptPublicId, answerPublicId, user.userId(), work.getId(), request.score(), comment,
+                    attemptPublicId, answerPublicId, user.userId(), work.getId(), calculated.itemScore(), comment,
                     request.decisionKind(), request.expectedReviewVersion(), request.reviewedAiVersion(), now));
         } else {
             draft = existing.get();
@@ -164,20 +177,22 @@ public class ExaminerDraftCommandService {
                         .formatted(request.expectedDraftVersion(), draft.getDraftVersion()));
             }
             previousScore = draft.getScore();
-            draft.updateDraft(request.score(), comment, request.decisionKind(), request.expectedReviewVersion(),
+            draft.updateDraft(calculated.itemScore(), comment, request.decisionKind(), request.expectedReviewVersion(),
                     request.reviewedAiVersion(), now);
             draft = evaluationRepository.save(draft);
         }
 
-        boolean isScoreChange = previousScore != null && !Objects.equals(previousScore, request.score());
+        draft.recordTraitScores(calculated.traitsJson(), calculated.rubricVersionPublicId());
+
+        boolean isScoreChange = previousScore != null && !Objects.equals(previousScore, calculated.itemScore());
         ExaminerGradingOperation op = isScoreChange ? ExaminerGradingOperation.SCORE_CHANGE : ExaminerGradingOperation.SAVE_DRAFT;
 
         ExaminerGradingAuditMetadata auditMetadata = new ExaminerGradingAuditMetadata(
-                user.userId(), ExaminerScoringConstants.EXAMINER_ROLE, assignment.getPublicId(), previousScore, request.score(), 1L,
+                user.userId(), ExaminerScoringConstants.EXAMINER_ROLE, assignment.getPublicId(), previousScore, calculated.itemScore(), 1L,
                 comment != null ? comment : (isScoreChange ? ExaminerScoringConstants.AUDIT_SCORE_UPDATED : ExaminerScoringConstants.AUDIT_DRAFT_SAVED));
         recorder.record(user, assignment.getPublicId(), request.requestPublicId(),
                 ExaminerScoringConstants.AUDIT_DRAFT_SUMMARY_FORMAT.formatted(
-                        user.userId(), op.name(), answerPublicId, request.score(), previousScore),
+                        user.userId(), op.name(), answerPublicId, calculated.itemScore(), previousScore),
                 new ExaminerWorkRecorder.Entry(answerPublicId, op, work.getWorkVersion(), draft.getDraftVersion(),
                         auditMetadata));
 
@@ -187,7 +202,7 @@ public class ExaminerDraftCommandService {
         recorder.complete(user, assignment.getPublicId(), request.requestPublicId(), receipt);
 
         ExaminerWorkflowView currentView = workflowQueryService.buildWorkflowView(assignment, user.tenantId());
-        return new ExaminerCommandResponse(receipt, currentView, toDraftResponse(draft));
+        return new ExaminerCommandResponse(receipt, currentView, responses.draft(draft), calculated.itemScore(), calculated.scoreTrace());
     }
 
     @Transactional
@@ -199,7 +214,7 @@ public class ExaminerDraftCommandService {
 
         String manifestString = request.answers().stream()
                 .sorted(Comparator.comparing(FinalizeExaminerWorkRequest.FinalizeAnswerItemRequest::answerPublicId))
-                .map(a -> a.answerPublicId() + ":" + a.expectedDraftVersion())
+                .map(a -> a.answerPublicId() + ":" + a.expectedDraftVersion() + ":" + a.expectedReviewVersion() + ":" + a.reviewedAiVersion())
                 .collect(Collectors.joining(";"));
 
         String fingerprint = ExaminerWorkRecorder.fingerprint(ExaminerScoringConstants.FINGERPRINT_FINALIZE + user.tenantId() + ":" + assignment.getPublicId()
@@ -246,9 +261,4 @@ public class ExaminerDraftCommandService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, ExaminerScoringConstants.ASSIGNMENT_NOT_FOUND));
     }
 
-    private static ExaminerDraftResponse toDraftResponse(ExaminerEvaluation draft) {
-        return new ExaminerDraftResponse(draft.getAnswerPublicId(), draft.getDraftVersion(), draft.getScore(),
-                draft.getComment(), draft.getDecisionKind(), draft.getExpectedReviewVersion(),
-                draft.getReviewedAiVersion(), draft.getSavedAt(), draft.isCarriedOver());
-    }
 }

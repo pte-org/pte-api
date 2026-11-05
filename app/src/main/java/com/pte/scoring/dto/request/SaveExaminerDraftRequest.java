@@ -15,5 +15,11 @@ public record SaveExaminerDraftRequest(
         @Size(max = 2000) String comment,
         ExaminerDecisionKind decisionKind,
         String expectedReviewVersion,
-        String reviewedAiVersion
-) {}
+        String reviewedAiVersion,
+        @Size(max = com.pte.scoring.internal.constant.RubricConstants.MAX_TRAIT_SCORE_ENTRIES) java.util.Map<String, java.math.BigDecimal> traitScores
+) {
+    public SaveExaminerDraftRequest(UUID request, long work, long draft, Integer score, String comment,
+            ExaminerDecisionKind kind, String review, String ai) {
+        this(request, work, draft, score, comment, kind, review, ai, null);
+    }
+}
