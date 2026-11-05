@@ -78,6 +78,35 @@ class AiScoringResultPersistenceServiceTest {
     }
 
     @Test
+    void persistAiScore_rubricResultIsStoredWithTheScaleAndRubricVersionAndPinsTheVersionOnTheRow() {
+        AiEvaluation answer = dispatchedAnswer();
+        stubAnswerLock(answer);
+        UUID version = UUID.fromString("00000000-0000-0000-0000-0000000000d4");
+
+        boolean persisted = persist(answer, answer.getDispatchToken(), new AiScoreResult(78,
+                Map.of("VOCABULARY", 1, "CONTENT", 3, "FORM", 1, "GRAMMAR", 2), "Clear.", AiProviderCategory.REAL,
+                "GEMINI", "model", null, null, "{\"formCheck\":{}}", false, version));
+
+        assertThat(persisted).isTrue();
+        assertThat(answer.getCriteriaScoresJson()).isEqualTo("{\"scale\":\"PEARSON_V1\",\"rubricVersion\":\""
+                + version + "\",\"traits\":{\"CONTENT\":3,\"FORM\":1,\"GRAMMAR\":2,\"VOCABULARY\":1}}");
+        assertThat(answer.getRubricVersionPublicId()).isEqualTo(version);
+        assertThat(answer.getRawScore()).isEqualTo(78);
+    }
+
+    @Test
+    void persistAiScore_aResultWithoutARubricKeepsTheFlatMapAndClearsAnOlderPin() {
+        AiEvaluation answer = dispatchedAnswer();
+        answer.recordDetail("{}", "old", null, "{}", false, UUID.randomUUID());
+        stubAnswerLock(answer);
+
+        persist(answer, answer.getDispatchToken(), result());
+
+        assertThat(answer.getCriteriaScoresJson()).doesNotContain("scale");
+        assertThat(answer.getRubricVersionPublicId()).isNull();
+    }
+
+    @Test
     void persistAiScore_rescoreOfAFailedAnswerReplacesTheFailureOnTheSameRow() {
         AiEvaluation answer = dispatchedAnswer();
         answer.setStatus(ScoringAnswerStatus.SCORING_FAILED);

@@ -54,6 +54,33 @@ class AiScoreDetailQueryServiceTest {
     }
 
     @Test
+    void aPearsonRowShowsItsTraitsWithTheScaleAndTheRubricVersion() {
+        UUID version = UUID.randomUUID();
+        AiEvaluation answer = aiAnswer(ScoringAnswerStatus.SCORED, 78);
+        answer.recordDetail("{\"scale\":\"PEARSON_V1\",\"rubricVersion\":\"" + version + "\",\"traits\":"
+                + "{\"CONTENT\":3,\"FORM\":1,\"GRAMMAR\":2,\"VOCABULARY\":1}}", "Clear.", null, "{}", false, version);
+
+        AiScoreDetailResponse ai = service.find(answer);
+
+        assertThat(ai.criteria()).containsExactlyInAnyOrderEntriesOf(
+                Map.of("CONTENT", 3, "FORM", 1, "GRAMMAR", 2, "VOCABULARY", 1));
+        assertThat(ai.criteriaScale()).isEqualTo("PEARSON_V1");
+        assertThat(ai.rubricVersionPublicId()).isEqualTo(version);
+    }
+
+    @Test
+    void anOldFlatRowIsStillReadAndCarriesNoScale() {
+        AiEvaluation answer = aiAnswer(ScoringAnswerStatus.SCORED, 72);
+        answer.recordDetail("{\"CONTENT\":80,\"FLUENCY\":64}", "Good range.", null, "{}", false);
+
+        AiScoreDetailResponse ai = service.find(answer);
+
+        assertThat(ai.criteria()).containsEntry("CONTENT", 80).containsEntry("FLUENCY", 64);
+        assertThat(ai.criteriaScale()).isNull();
+        assertThat(ai.rubricVersionPublicId()).isNull();
+    }
+
+    @Test
     void aFailedAnswerShowsTheReasonCodeAndNoScoreEvenWhenAnOlderResultIsKept() {
         AiEvaluation answer = aiAnswer(ScoringAnswerStatus.SCORING_FAILED, 55);
         answer.recordDetail("{\"CONTENT\":50}", "old", null, "{}", false);
