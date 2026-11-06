@@ -14,6 +14,7 @@ package com.pte.identity.internal.constant;
 public final class IdentityConstants {
 
     public static final String INVALID_LOGIN = "INVALID_LOGIN";
+    public static final String TOO_MANY_LOGIN_ATTEMPTS = "TOO_MANY_LOGIN_ATTEMPTS";
     public static final String USER_NOT_FOUND = "USER_NOT_FOUND";
     public static final String IDENTITY_NOT_ELIGIBLE = "IDENTITY_NOT_ELIGIBLE";
     public static final String EMAIL_ALREADY_USED = "EMAIL_ALREADY_USED";

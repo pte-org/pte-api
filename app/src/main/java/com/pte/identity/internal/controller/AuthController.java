@@ -53,14 +53,14 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
-        return ApiResponse.success(authService.login(request));
+    public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
+        return ApiResponse.success(authService.login(request, clientAddress(http)));
     }
 
     @PostMapping("/login-options")
     public ApiResponse<List<LoginOrganizationOptionResponse>> loginOptions(
-            @Valid @RequestBody LoginOrganizationOptionsRequest request) {
-        return ApiResponse.success(authService.loginOrganizations(request));
+            @Valid @RequestBody LoginOrganizationOptionsRequest request, HttpServletRequest http) {
+        return ApiResponse.success(authService.loginOrganizations(request, clientAddress(http)));
     }
 
     @GetMapping("/me")
@@ -93,8 +93,7 @@ public class AuthController {
     @PostMapping("/password-reset/request")
     public ApiResponse<Void> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request,
             HttpServletRequest http) {
-        passwordResetDispatcher.requestAsync(request.email(),
-                ClientAddress.resolve(http.getHeader("X-Forwarded-For"), http.getRemoteAddr()));
+        passwordResetDispatcher.requestAsync(request.email(), clientAddress(http));
         return ApiResponse.success(null);
     }
 
@@ -116,5 +115,9 @@ public class AuthController {
     public ApiResponse<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         userService.changeOwnPassword(request, CurrentUserContext.required());
         return ApiResponse.success(null);
+    }
+
+    private static String clientAddress(HttpServletRequest http) {
+        return ClientAddress.resolve(http.getHeader("X-Forwarded-For"), http.getRemoteAddr());
     }
 }
