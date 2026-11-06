@@ -53,6 +53,8 @@ class AuthServiceMultiOrganizationTest {
     private RefreshTokenService refreshTokenService;
     @Mock
     private TenancyService tenancyService;
+    @Mock
+    private LoginThrottle loginThrottle;
 
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private AuthService authService;
@@ -63,7 +65,7 @@ class AuthServiceMultiOrganizationTest {
     @BeforeEach
     void setUp() {
         authService = new AuthService(userRepository, memberRepository, passwordEncoder, accessTokenIssuer,
-                refreshTokenService, tenancyService);
+                refreshTokenService, tenancyService, loginThrottle);
         host = new User();
         host.setId(7L);
         host.setPublicId(UUID.randomUUID());

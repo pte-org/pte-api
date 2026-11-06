@@ -10,6 +10,7 @@ import com.pte.identity.internal.dto.response.LoginOrganizationOptionResponse;
 import com.pte.identity.internal.dto.response.TokenResponse;
 import com.pte.identity.internal.exception.InvalidLoginException;
 import com.pte.identity.internal.exception.InvalidRefreshTokenException;
+import com.pte.identity.internal.exception.TooManyLoginAttemptsException;
 import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.security.AccessTokenIssuer;
@@ -39,21 +40,30 @@ public class AuthService {
     private final AccessTokenIssuer accessTokenIssuer;
     private final RefreshTokenService refreshTokenService;
     private final TenancyService tenancyService;
+    private final LoginThrottle loginThrottle;
 
     public AuthService(UserRepository userRepository, OrganizationMemberRepository memberRepository,
                        PasswordEncoder passwordEncoder, AccessTokenIssuer accessTokenIssuer,
-                       RefreshTokenService refreshTokenService, TenancyService tenancyService) {
+                       RefreshTokenService refreshTokenService, TenancyService tenancyService,
+                       LoginThrottle loginThrottle) {
         this.userRepository = userRepository;
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.accessTokenIssuer = accessTokenIssuer;
         this.refreshTokenService = refreshTokenService;
         this.tenancyService = tenancyService;
+        this.loginThrottle = loginThrottle;
     }
 
     @Transactional
     public TokenResponse login(LoginRequest request) {
-        User user = authenticate(request.username(), request.password());
+        return login(request, null);
+    }
+
+    /** {@code clientIp} scopes the failure budget together with the user name; null counts as one unknown address. */
+    @Transactional
+    public TokenResponse login(LoginRequest request, String clientIp) {
+        User user = authenticate(request.username(), request.password(), clientIp);
         return issueTokens(user, resolveMember(user, request.tenantId()));
     }
 
@@ -63,7 +73,12 @@ public class AuthService {
      */
     @Transactional(readOnly = true)
     public List<LoginOrganizationOptionResponse> loginOrganizations(LoginOrganizationOptionsRequest request) {
-        User user = authenticate(request.username(), request.password());
+        return loginOrganizations(request, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<LoginOrganizationOptionResponse> loginOrganizations(LoginOrganizationOptionsRequest request, String clientIp) {
+        User user = authenticate(request.username(), request.password(), clientIp);
         List<LoginOrganizationOptionResponse> options = new ArrayList<>();
         Set<UUID> seenOrganizationIds = new HashSet<>();
         for (OrganizationMember member : memberRepository.findByUser_IdAndDeletedFalse(user.getId())) {
@@ -99,13 +114,17 @@ public class AuthService {
         refreshTokenService.revoke(request.refreshToken());
     }
 
-    private User authenticate(String username, String password) {
-        User user = userRepository.findByUsernameAndDeletedFalse(username)
-                .orElseThrow(InvalidLoginException::new);
-        if (user.isSuspended() || user.getCredentialHash() == null
+    private User authenticate(String username, String password, String clientIp) {
+        if (loginThrottle.isLocked(username, clientIp)) {
+            throw new TooManyLoginAttemptsException();
+        }
+        User user = userRepository.findByUsernameAndDeletedFalse(username).orElse(null);
+        if (user == null || user.isSuspended() || user.getCredentialHash() == null
                 || !passwordEncoder.matches(password, user.getCredentialHash())) {
+            loginThrottle.recordFailure(username, clientIp);
             throw new InvalidLoginException();
         }
+        loginThrottle.clear(username, clientIp);
         return user;
     }
 
