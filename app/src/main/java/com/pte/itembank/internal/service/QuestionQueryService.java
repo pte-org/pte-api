@@ -104,6 +104,13 @@ public class QuestionQueryService {
     @Transactional(readOnly = true)
     public PagedResult<QuestionResponse> listAccessible(CurrentUser caller, int requestedPage, int requestedSize,
             String taskType, String section, String status, String query, String pool, String cefrLevel) {
+        return listAccessible(caller, requestedPage, requestedSize, taskType, section, status, query, pool, cefrLevel, null);
+    }
+
+    /** As above, with optional aiGenerated filter: true = AI-generated, false = hand-written, null = no filter. */
+    @Transactional(readOnly = true)
+    public PagedResult<QuestionResponse> listAccessible(CurrentUser caller, int requestedPage, int requestedSize,
+            String taskType, String section, String status, String query, String pool, String cefrLevel, Boolean aiGenerated) {
         CefrLevel requestedCefr = parseOptionalCefr(cefrLevel);
         int page = normalizePage(requestedPage);
         int size = normalizePageSize(requestedSize);
@@ -117,11 +124,14 @@ public class QuestionQueryService {
                 Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
 
         String sectionName = requestedSection == null ? null : requestedSection.name();
-        Page<UUID> questionPage = requestedCefr == null
-                ? questionRepository.findPagePublicIds(requestedTaskTypeKey, sectionName, requestedStatus,
-                        requestedPool, normalizedQuery, publicIdQuery, pageable)
-                : questionRepository.findPagePublicIdsByCefr(requestedTaskTypeKey, sectionName, requestedStatus,
-                        requestedPool, normalizedQuery, publicIdQuery, requestedCefr, pageable);
+        Page<UUID> questionPage = aiGenerated == null
+                ? (requestedCefr == null
+                    ? questionRepository.findPagePublicIds(requestedTaskTypeKey, sectionName, requestedStatus,
+                            requestedPool, normalizedQuery, publicIdQuery, pageable)
+                    : questionRepository.findPagePublicIdsByCefr(requestedTaskTypeKey, sectionName, requestedStatus,
+                            requestedPool, normalizedQuery, publicIdQuery, requestedCefr, pageable))
+                : questionRepository.findPagePublicIdsByAiGenerated(requestedTaskTypeKey, sectionName, requestedStatus,
+                        requestedPool, normalizedQuery, publicIdQuery, requestedCefr, aiGenerated, pageable);
 
         List<UUID> publicIds = questionPage.getContent();
         Map<UUID, Question> questionsByPublicId = publicIds.isEmpty()

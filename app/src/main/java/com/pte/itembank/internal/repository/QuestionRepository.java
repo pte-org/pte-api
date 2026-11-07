@@ -21,7 +21,7 @@ import java.util.UUID;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;
 
-public interface QuestionRepository extends JpaRepository<Question, Long> {
+public interface QuestionRepository extends JpaRepository<Question, Long>, QuestionRepositoryCustom {
 
     @EntityGraph(attributePaths = "options")
     @Query("select q from Question q where q.publicId = :publicId and q.deleted = false")
@@ -31,54 +31,24 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("select q from Question q where q.publicId = :publicId")
     Optional<Question> findByPublicIdForUpdate(@Param("publicId") UUID publicId);
 
+    /** The question a generation job already produced for one slot (idempotent retry after a crash). */
+    Optional<Question> findByGenerationJobPublicIdAndGenerationItemIndex(UUID jobPublicId, Integer itemIndex);
+
+    /** Whether a live question of the task type already carries this normalized-content hash. */
+    boolean existsByTaskTypeKeyAndContentHashAndDeletedFalse(String taskTypeKey, String contentHash);
+
     /** True when another question was opened as a revision of this one. */
     boolean existsBySupersedesPublicId(UUID supersedesPublicId);
+
+    /** Another live question that plays the same audio, so a shared file is not removed with one of them. */
+    boolean existsByAudioPromptRefAndDeletedFalseAndPublicIdNot(UUID audioPromptRef, UUID publicId);
+
+    /** Another live question that shows the same image. */
+    boolean existsByImagePromptRefAndDeletedFalseAndPublicIdNot(UUID imagePromptRef, UUID publicId);
 
     @EntityGraph(attributePaths = "options")
     @Query("SELECT q FROM Question q WHERE q.deleted = false")
     List<Question> findAllWithOptions();
-
-    @Query(value = """
-            SELECT q.publicId
-            FROM Question q
-            WHERE q.deleted = false
-              AND (:taskTypeKey IS NULL OR q.taskTypeKey = :taskTypeKey)
-              AND (:section IS NULL OR q.taskTypeSection = :section)
-              AND (:status IS NULL OR q.status = :status)
-              AND (:cefrLevel IS NULL OR q.cefrLevel = :cefrLevel)
-              AND (:pool IS NULL
-                   OR q.availabilityFlagsExplicit = false AND q.pool = :pool
-                   OR q.availabilityFlagsExplicit = true
-                      AND (:pool = com.pte.itembank.domain.enums.QuestionPool.EXAM AND q.availableForExam = true
-                           OR :pool = com.pte.itembank.domain.enums.QuestionPool.PRACTICE
-                              AND q.availableForPractice = true))
-              AND (:query = ''
-                   OR q.promptText IS NOT NULL AND LOWER(q.promptText) LIKE CONCAT('%', :query, '%')
-                   OR :publicIdQuery IS NOT NULL AND q.publicId = :publicIdQuery)
-            """,
-            countQuery = """
-            SELECT COUNT(q)
-            FROM Question q
-            WHERE q.deleted = false
-              AND (:taskTypeKey IS NULL OR q.taskTypeKey = :taskTypeKey)
-              AND (:section IS NULL OR q.taskTypeSection = :section)
-              AND (:status IS NULL OR q.status = :status)
-              AND (:cefrLevel IS NULL OR q.cefrLevel = :cefrLevel)
-              AND (:pool IS NULL
-                   OR q.availabilityFlagsExplicit = false AND q.pool = :pool
-                   OR q.availabilityFlagsExplicit = true
-                      AND (:pool = com.pte.itembank.domain.enums.QuestionPool.EXAM AND q.availableForExam = true
-                           OR :pool = com.pte.itembank.domain.enums.QuestionPool.PRACTICE
-                              AND q.availableForPractice = true))
-              AND (:query = ''
-                   OR q.promptText IS NOT NULL AND LOWER(q.promptText) LIKE CONCAT('%', :query, '%')
-                   OR :publicIdQuery IS NOT NULL AND q.publicId = :publicIdQuery)
-            """)
-    Page<UUID> findPagePublicIdsByCefr(@Param("taskTypeKey") String taskTypeKey,
-            @Param("section") String section, @Param("status") QuestionStatus status,
-            @Param("pool") QuestionPool pool, @Param("query") String query,
-            @Param("publicIdQuery") UUID publicIdQuery, @Param("cefrLevel") CefrLevel cefrLevel,
-            Pageable pageable);
 
     /** The same page without a CEFR filter. */
     default Page<UUID> findPagePublicIds(String taskTypeKey, String section, QuestionStatus status,
@@ -254,4 +224,17 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
             ORDER BY public_id
             """, nativeQuery = true)
     List<UUID> publishedSharedIdsByTaskTypeKey(@Param("taskTypeKey") String taskTypeKey);
+
+    /**
+     * Retrieves topics from the last N AI-generated questions of the same task type.
+     * Used to populate the avoidTopics hint for the generator.
+     */
+    @Query(value = """
+            SELECT generation_meta ->> 'topic'
+            FROM questions
+            WHERE deleted = false AND task_type_key = :taskTypeKey AND generation_meta IS NOT NULL
+            ORDER BY created_at DESC
+            """, nativeQuery = true)
+    List<String> findRecentTopicsByTaskType(@Param("taskTypeKey") String taskTypeKey,
+            Pageable pageable);
 }

@@ -41,6 +41,7 @@ public class QuestionLifecycleService {
     private final AuditLogService auditLogService;
     private final QuestionApprovalService approvalService;
     private final QuestionMediaReferenceValidator mediaValidator;
+    private final GenerationMetaHelper generationMetaHelper;
 
     @Autowired
     public QuestionLifecycleService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
@@ -53,6 +54,7 @@ public class QuestionLifecycleService {
         this.accessPolicy = accessPolicy;
         this.auditLogService = auditLogService;
         this.approvalService = approvalService;
+        this.generationMetaHelper = new GenerationMetaHelper(auditLogService);
     }
 
     public QuestionLifecycleService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
@@ -179,6 +181,10 @@ public class QuestionLifecycleService {
         applyContent(question, request.promptText(), request.audioPromptRef(),
                 request.imagePromptRef(), request.referenceAnswerText(), request.correctAnswerText(),
                 request.minWordCount(), request.maxWordCount(), request.options());
+        // Mark AI-generated questions as edited by human when content is updated
+        if (question.getGenerationMeta() != null) {
+            generationMetaHelper.markAsEditedByHuman(question);
+        }
         if (request.cefrLevel() != null) {
             question.setCefrLevel(CefrLevels.parse(request.cefrLevel()));
         }
