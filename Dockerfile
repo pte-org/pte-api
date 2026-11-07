@@ -25,8 +25,9 @@ RUN --mount=type=cache,target=/root/.m2,sharing=locked \
 FROM eclipse-temurin:21-jre AS runtime
 ARG SERVICE_MODULE
 # curl is required by this image's own docker-compose healthcheck (actuator/health has no other client in the base image).
+# fontconfig and fonts-dejavu-core are needed for AWT/XChart rendering in phase 7 (chart generation headless).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl fontconfig fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /workspace/${SERVICE_MODULE}/target/*.jar app.jar

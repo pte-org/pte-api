@@ -63,4 +63,27 @@ public class MediaService {
     public void validateAuthoringMedia(UUID mediaPublicId, String assetKind, CurrentUser caller) {
         cloudinaryMediaService.validateAuthoringMedia(mediaPublicId, assetKind, caller);
     }
+
+    /**
+     * Server-side generation and upload of media (audio or image).
+     * Creates a completed MediaAsset in Cloudinary and returns its public id.
+     * Used by generation pipeline for AI-synthesized content.
+     *
+     * @param bytes media content
+     * @param contentType MIME type (e.g., "audio/wav" or "image/png")
+     * @param assetKind categorization ("AUDIO_PROMPT" or "IMAGE_PROMPT")
+     * @param owner current user who owns the asset
+     * @return UUID of the created media asset
+     */
+    public UUID storeGenerated(byte[] bytes, String contentType, String assetKind, CurrentUser owner) {
+        return cloudinaryMediaService.storeGenerated(bytes, contentType, assetKind, owner);
+    }
+
+    /**
+     * Removes media that {@code owner} generated (audio or image of an AI-generated question) from Cloudinary and the
+     * database; unknown ids are ignored.
+     */
+    public void deleteGenerated(UUID mediaPublicId, CurrentUser owner) {
+        cloudinaryMediaService.deleteGenerated(mediaPublicId, owner);
+    }
 }
