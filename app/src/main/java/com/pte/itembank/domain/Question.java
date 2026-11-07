@@ -19,6 +19,8 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -128,6 +130,21 @@ public class Question extends BaseEntity {
 
     @Column
     private Integer maxWordCount;
+
+    /** AI provenance and review sheet; null for a hand-written question and never copied to a revision. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "generation_meta")
+    private String generationMeta;
+
+    /** SHA-256 of the normalized stimulus text, set for AI-generated questions only. */
+    @Column(name = "content_hash", length = 64)
+    private String contentHash;
+
+    @Column(name = "generation_job_public_id")
+    private UUID generationJobPublicId;
+
+    @Column(name = "generation_item_index")
+    private Integer generationItemIndex;
 
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "question_options", joinColumns = @JoinColumn(name = "question_id"),
