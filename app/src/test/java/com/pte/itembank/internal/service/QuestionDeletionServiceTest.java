@@ -4,10 +4,13 @@ import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.internal.exception.QuestionDeletionException;
 import com.pte.itembank.internal.repository.QuestionRepository;
+import com.pte.media.MediaService;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -17,7 +20,8 @@ import static org.mockito.Mockito.*;
 class QuestionDeletionServiceTest {
     private final QuestionRepository repository = mock(QuestionRepository.class);
     private final AuditLogService audit = mock(AuditLogService.class);
-    private final QuestionDeletionService service = new QuestionDeletionService(repository, audit);
+    private final MediaService media = mock(MediaService.class);
+    private final QuestionDeletionService service = new QuestionDeletionService(repository, audit, media);
     private final CurrentUser author = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_AUTHOR"));
 
     private Question draft() {
@@ -99,5 +103,83 @@ class QuestionDeletionServiceTest {
             assertThatThrownBy(() -> service.deleteDraft(UUID.randomUUID(), caller)).isInstanceOf(AccessDeniedException.class);
         }
         verifyNoInteractions(repository, audit);
+    }
+
+    /** Runs what the service registered for after the transaction commits, as Spring would. */
+    private void commit() {
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+        TransactionSynchronizationManager.clearSynchronization();
+    }
+
+    @Test void deletingAnAiDraftRemovesItsGeneratedAudioAndImageAfterCommit() {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            Question question = draft();
+            question.setGenerationMeta("{}");
+            UUID audio = UUID.randomUUID();
+            UUID image = UUID.randomUUID();
+            question.setAudioPromptRef(audio);
+            question.setImagePromptRef(image);
+
+            service.deleteDraft(question.getPublicId(), author);
+            verify(media, never()).deleteGenerated(any(), any());
+            commit();
+
+            verify(media).deleteGenerated(audio, author);
+            verify(media).deleteGenerated(image, author);
+        } finally {
+            TransactionSynchronizationManager.clear();
+        }
+    }
+
+    @Test void aHandWrittenDraftKeepsItsMedia() {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            Question question = draft();
+            question.setAudioPromptRef(UUID.randomUUID());
+
+            service.deleteDraft(question.getPublicId(), author);
+            commit();
+
+            verifyNoInteractions(media);
+        } finally {
+            TransactionSynchronizationManager.clear();
+        }
+    }
+
+    @Test void mediaAnotherLiveQuestionStillUsesIsNotRemoved() {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            Question question = draft();
+            question.setGenerationMeta("{}");
+            UUID audio = UUID.randomUUID();
+            question.setAudioPromptRef(audio);
+            when(repository.existsByAudioPromptRefAndDeletedFalseAndPublicIdNot(audio, question.getPublicId()))
+                    .thenReturn(true);
+
+            service.deleteDraft(question.getPublicId(), author);
+            commit();
+
+            verifyNoInteractions(media);
+        } finally {
+            TransactionSynchronizationManager.clear();
+        }
+    }
+
+    @Test void aFailureRemovingTheFileNeverUndoesTheDeletion() {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            Question question = draft();
+            question.setGenerationMeta("{}");
+            question.setImagePromptRef(UUID.randomUUID());
+            doThrow(new IllegalStateException("down")).when(media).deleteGenerated(any(), any());
+
+            service.deleteDraft(question.getPublicId(), author);
+            commit();
+
+            assertThat(question.isDeleted()).isTrue();
+        } finally {
+            TransactionSynchronizationManager.clear();
+        }
     }
 }
