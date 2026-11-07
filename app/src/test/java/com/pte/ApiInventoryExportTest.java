@@ -62,6 +62,17 @@ class ApiInventoryExportTest {
                     .satisfies(endpoint -> assertThat(endpoint.get("authorization"))
                             .isEqualTo("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')"));
         }
+        assertThat(endpoints).filteredOn(endpoint -> String.valueOf(endpoint.get("path"))
+                        .startsWith("/api/v1/question-generation"))
+                .extracting(endpoint -> endpoint.get("method") + " " + endpoint.get("path"))
+                .containsExactlyInAnyOrder("POST /api/v1/question-generation/jobs",
+                        "GET /api/v1/question-generation/jobs", "GET /api/v1/question-generation/jobs/{publicId}",
+                        "PATCH /api/v1/question-generation/jobs/{publicId}/status",
+                        "GET /api/v1/question-generation/task-types", "GET /api/v1/question-generation/quota");
+        assertThat(endpoints).filteredOn(endpoint -> String.valueOf(endpoint.get("path"))
+                        .startsWith("/api/v1/question-generation"))
+                .allSatisfy(endpoint -> assertThat(endpoint.get("authorization"))
+                        .isEqualTo("hasRole('PLATFORM_ADMIN')"));
         assertThat(endpoints).filteredOn(endpoint -> "/api/v1/scoring-rubrics/simulations".equals(endpoint.get("path")))
                 .singleElement().satisfies(endpoint -> {
                     assertThat(endpoint.get("method")).isEqualTo("POST");
