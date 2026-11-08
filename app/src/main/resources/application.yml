@@ -10,12 +10,30 @@ cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001}
 
 app:
+  auth:
+    tokens:
+      access-token-ttl-seconds: ${AUTH_ACCESS_TOKEN_TTL_SECONDS:900}
+      refresh-token-ttl-seconds: ${AUTH_REFRESH_TOKEN_TTL_SECONDS:604800}
   web:
     tenant-url: ${APP_WEB_TENANT_URL:http://localhost:3000}
     admin-url: ${APP_WEB_ADMIN_URL:http://localhost:3001}
   password-reset:
     token-ttl-minutes: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:30}
     retention-days: ${PASSWORD_RESET_RETENTION_DAYS:7}
+    # Requests per e-mail and per client address within the window; more are ignored quietly.
+    throttle:
+      email-limit: ${PASSWORD_RESET_EMAIL_LIMIT:3}
+      ip-limit: ${PASSWORD_RESET_IP_LIMIT:10}
+      window: ${PASSWORD_RESET_THROTTLE_WINDOW:15m}
+    # Reset e-mails are sent off the request thread; a full queue drops the request.
+    mail:
+      max-threads: ${PASSWORD_RESET_MAIL_MAX_THREADS:4}
+      queue-capacity: ${PASSWORD_RESET_MAIL_QUEUE_CAPACITY:200}
+  security:
+    # Wrong passwords for one account from one address before sign-in is refused until the window ends.
+    login:
+      failure-limit: ${LOGIN_FAILURE_LIMIT:5}
+      window: ${LOGIN_LOCK_WINDOW:15m}
 
 rate-limit:
   per-second: ${RATE_LIMIT_PER_SECOND:40}
@@ -33,20 +51,23 @@ practice:
   # gets 403 from chat. Set true in every environment that runs chat (dev, staging, production).
   strict-entitlement:
     enabled: ${PRACTICE_STRICT_ENTITLEMENT_ENABLED:false}
+  entitlement:
+    # When the practice app should ask again whether the student may practise.
+    refresh-seconds: ${PRACTICE_ENTITLEMENT_REFRESH_SECONDS:300}
 
-# Student chat. Own key and a pinned model, never shared with scoring.ai.*; nothing is validated while
-# enabled is false. model has no default on purpose: pin a concrete name, '-latest' aliases are rejected.
+# Student chat uses the question-generation provider; no separate chat API key is needed.
+# Provider settings are validated only when chat is enabled.
 chat:
   ai:
     enabled: ${CHAT_AI_ENABLED:false}
-    api-key: ${CHAT_AI_GEMINI_API_KEY:}
-    model: ${CHAT_AI_MODEL:}
-    # Google by default; point at a proxy or a stand-in server only for staging or end-to-end checks.
-    base-url: ${CHAT_AI_BASE_URL:https://generativelanguage.googleapis.com}
+    provider: openai-compatible
+    api-key: ${itembank.generation.llm.api-key:}
+    model: ${itembank.generation.llm.generator-model:Capstone}
+    base-url: ${itembank.generation.llm.base-url:}
     temperature: ${CHAT_AI_TEMPERATURE:0.2}
-    max-tokens: ${CHAT_AI_MAX_TOKENS:800}
+    max-tokens: ${itembank.generation.llm.max-tokens:0}
     connect-timeout-ms: ${CHAT_AI_CONNECT_TIMEOUT_MS:2000}
-    read-timeout-ms: ${CHAT_AI_READ_TIMEOUT_MS:30000}
+    read-timeout-ms: ${CHAT_AI_READ_TIMEOUT_MS:90000}
     daily-limit: ${CHAT_AI_DAILY_LIMIT:20}
     max-input-chars: ${CHAT_AI_MAX_INPUT_CHARS:1000}
     history-size: ${CHAT_AI_HISTORY_SIZE:6}
@@ -72,6 +93,9 @@ billing:
     cron: ${BILLING_ORDER_EXPIRATION_CRON:0 0 * * * *}
   license-code-expiration:
     cron: ${BILLING_LICENSE_CODE_EXPIRATION_CRON:0 15 * * * *}
+  license-code:
+    # How long a platform admin has to confirm a revoke after previewing it.
+    revoke-preview-ttl: ${BILLING_LICENSE_REVOKE_PREVIEW_TTL:5m}
 
 spring:
   application:
@@ -134,10 +158,58 @@ notification:
   session-reminder:
     poll-delay-ms: ${NOTIFICATION_SESSION_REMINDER_POLL_DELAY_MS:60000}
     threshold-seconds: ${NOTIFICATION_SESSION_REMINDER_THRESHOLD_SECONDS:900}
+  email:
+    # A failed send is tried again with a growing wait, then goes to the dead-letter queue.
+    retry:
+      max-attempts: ${NOTIFICATION_EMAIL_RETRY_MAX_ATTEMPTS:3}
+      initial-interval-ms: ${NOTIFICATION_EMAIL_RETRY_INITIAL_INTERVAL_MS:2000}
+      max-interval-ms: ${NOTIFICATION_EMAIL_RETRY_MAX_INTERVAL_MS:10000}
 
 scoring:
   grading-reconciliation:
     poll-delay-ms: ${SCORING_GRADING_RECONCILIATION_POLL_DELAY_MS:60000}
+  # Optional AI provider (com.pte.scoring, Phase 08). Keep stub as the default
+  # for local development. Set SCORING_AI_PROVIDER=openai-compatible only with
+  # deployment-owned credentials and explicitly selected models; the adapter
+  # then calls /chat/completions.
+  ai:
+    provider: ${SCORING_AI_PROVIDER:stub}
+    base-url: ${SCORING_AI_BASE_URL:https://api.openai.com/v1}
+    api-key: ${SCORING_AI_API_KEY:}
+    essay-model: ${SCORING_AI_ESSAY_MODEL:}
+    speech-model: ${SCORING_AI_SPEECH_MODEL:}
+    audio-format: ${SCORING_AI_AUDIO_FORMAT:wav}
+    max-tokens: ${SCORING_AI_MAX_TOKENS:800}
+    media-url-ttl-seconds: ${SCORING_AI_MEDIA_URL_TTL_SECONDS:120}
+    connect-timeout-ms: ${SCORING_AI_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${SCORING_AI_READ_TIMEOUT_MS:30000}
+    # Time one job may spend on vendor calls, retry waits included.
+    job-budget-ms: ${SCORING_AI_JOB_BUDGET_MS:90000}
+    # A host scoring request re-dispatches answers still AI_SCORING this long after dispatch.
+    stale-dispatch-minutes: ${SCORING_AI_STALE_DISPATCH_MINUTES:10}
+    # Calls per request to one AI vendor when it answers with a temporary error, and the failures in a row
+    # after which that vendor is left alone for a minute.
+    retry-max-attempts: ${SCORING_AI_RETRY_MAX_ATTEMPTS:3}
+    breaker-threshold: ${SCORING_AI_BREAKER_THRESHOLD:5}
+    # provider=azure-gemini: speech via Azure short-audio REST, text and images via Gemini.
+    # It reads connect-timeout-ms above but not read-timeout-ms; each vendor has its own timeout-ms.
+    azure:
+      speech-key: ${SCORING_AI_AZURE_SPEECH_KEY:}
+      speech-region: ${SCORING_AI_AZURE_SPEECH_REGION:}
+      timeout-ms: ${SCORING_AI_AZURE_TIMEOUT_MS:60000}
+    gemini:
+      api-key: ${SCORING_AI_GEMINI_API_KEY:}
+      model: ${SCORING_AI_GEMINI_MODEL:gemini-flash-lite-latest}
+      timeout-ms: ${SCORING_AI_GEMINI_TIMEOUT_MS:60000}
+    # Who reads transcripts, essays and pictures under azure-gemini (Azure Speech always does the audio):
+    # gemini = the Google API above; gateway = an OpenAI-compatible /chat/completions service, by default the same
+    # Capstone gateway as question generation and the student chat (AI_GATEWAY_*).
+    text-vendor: ${SCORING_AI_TEXT_VENDOR:gemini}
+    gateway:
+      base-url: ${SCORING_AI_GATEWAY_BASE_URL:${itembank.generation.llm.base-url:}}
+      api-key: ${SCORING_AI_GATEWAY_API_KEY:${itembank.generation.llm.api-key:}}
+      model: ${SCORING_AI_GATEWAY_MODEL:${itembank.generation.llm.generator-model:Capstone}}
+      timeout-ms: ${SCORING_AI_GATEWAY_TIMEOUT_MS:60000}
 
 management:
   endpoints:
@@ -158,6 +230,8 @@ media:
     api-secret: ${CLOUDINARY_API_SECRET:}
     authoring-folder: ${CLOUDINARY_AUTHORING_FOLDER:pte/authoring}
     submission-folder: ${CLOUDINARY_SUBMISSION_FOLDER:pte/submissions}
+    # Life of a signed upload or media link; also the cap on the link life any module asks for.
+    signature-ttl-seconds: ${CLOUDINARY_SIGNATURE_TTL_SECONDS:900}
 
 locations:
   vietnam:
@@ -176,6 +250,14 @@ attempt:
   security-audit:
     retention-days: ${ATTEMPT_SECURITY_AUDIT_RETENTION_DAYS:180}
     retention-cron: ${ATTEMPT_SECURITY_AUDIT_RETENTION_CRON:0 0 2 * * *}
+  # The built exam of a running attempt, kept in Redis; one builder holds the lock while others wait.
+  content-cache:
+    ttl: ${ATTEMPT_CONTENT_CACHE_TTL:24h}
+    lock-ttl: ${ATTEMPT_CONTENT_CACHE_LOCK_TTL:10s}
+  # Extra life given to media links: on top of the session window at start, on top of the time left on reload.
+  media-url:
+    grace-seconds: ${ATTEMPT_MEDIA_URL_GRACE_SECONDS:60}
+    reload-margin-seconds: ${ATTEMPT_MEDIA_URL_RELOAD_MARGIN_SECONDS:600}
   # RSA keypair for answer-submission encryption (STRICT answerIntegrityLevel
   # attempts only). attempt holds its own keypair — never identity's — so no
   # call to identity is needed for key material at submission time. Outside
@@ -200,36 +282,6 @@ identity:
   #   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out identity-key.pem
   rsa-private-key-pem: ${IDENTITY_RSA_PRIVATE_KEY_PEM:}
 
-# Optional AI provider (com.pte.scoring, Phase 08). Keep stub as the default
-# for local development. Set SCORING_AI_PROVIDER=openai-compatible only with
-# deployment-owned credentials and explicitly selected models; the adapter
-# then calls /chat/completions.
-  ai:
-    provider: ${SCORING_AI_PROVIDER:stub}
-    base-url: ${SCORING_AI_BASE_URL:https://api.openai.com/v1}
-    api-key: ${SCORING_AI_API_KEY:}
-    essay-model: ${SCORING_AI_ESSAY_MODEL:}
-    speech-model: ${SCORING_AI_SPEECH_MODEL:}
-    audio-format: ${SCORING_AI_AUDIO_FORMAT:wav}
-    max-tokens: ${SCORING_AI_MAX_TOKENS:800}
-    media-url-ttl-seconds: ${SCORING_AI_MEDIA_URL_TTL_SECONDS:120}
-    connect-timeout-ms: ${SCORING_AI_CONNECT_TIMEOUT_MS:2000}
-    read-timeout-ms: ${SCORING_AI_READ_TIMEOUT_MS:30000}
-    # Time one job may spend on vendor calls, retry waits included.
-    job-budget-ms: ${SCORING_AI_JOB_BUDGET_MS:90000}
-    # A host scoring request re-dispatches answers still AI_SCORING this long after dispatch.
-    stale-dispatch-minutes: ${SCORING_AI_STALE_DISPATCH_MINUTES:10}
-    # provider=azure-gemini: speech via Azure short-audio REST, text and images via Gemini.
-    # It reads connect-timeout-ms above but not read-timeout-ms; each vendor has its own timeout-ms.
-    azure:
-      speech-key: ${SCORING_AI_AZURE_SPEECH_KEY:}
-      speech-region: ${SCORING_AI_AZURE_SPEECH_REGION:}
-      timeout-ms: ${SCORING_AI_AZURE_TIMEOUT_MS:60000}
-    gemini:
-      api-key: ${SCORING_AI_GEMINI_API_KEY:}
-      model: ${SCORING_AI_GEMINI_MODEL:gemini-flash-lite-latest}
-      timeout-ms: ${SCORING_AI_GEMINI_TIMEOUT_MS:60000}
-
 task-types:
   rollout:
     # Standard compatibility/read paths remain on. Enable custom creation
@@ -243,16 +295,21 @@ itembank:
     # Deterministic stub generator: test, local and local-schema profiles only (startup fails elsewhere).
     stub: ${QUESTION_GEN_STUB:false}
     llm:
-      base-url: ${QUESTION_GEN_BASE_URL:}
-      api-key: ${QUESTION_GEN_API_KEY:}
-      generator-model: ${QUESTION_GEN_GENERATOR_MODEL:Capstone}
-      reviewer-model: ${QUESTION_GEN_REVIEWER_MODEL:Capstone}
+      # The AI gateway (Capstone) shared by generation, its reviewer, the student chat and text scoring.
+      # AI_GATEWAY_* is the name to use; QUESTION_GEN_* is still read for older env files.
+      base-url: ${AI_GATEWAY_BASE_URL:${QUESTION_GEN_BASE_URL:}}
+      api-key: ${AI_GATEWAY_API_KEY:${QUESTION_GEN_API_KEY:}}
+      generator-model: ${AI_GATEWAY_MODEL:${QUESTION_GEN_GENERATOR_MODEL:Capstone}}
+      reviewer-model: ${QUESTION_GEN_REVIEWER_MODEL:${AI_GATEWAY_MODEL:Capstone}}
       generator-temperature: ${QUESTION_GEN_GENERATOR_TEMPERATURE:0.8}
       reviewer-temperature: ${QUESTION_GEN_REVIEWER_TEMPERATURE:0.0}
       max-tokens: ${QUESTION_GEN_MAX_TOKENS:0}
       connect-timeout: ${QUESTION_GEN_CONNECT_TIMEOUT:5s}
       read-timeout: ${QUESTION_GEN_READ_TIMEOUT:90s}
       retry-delay: ${QUESTION_GEN_RETRY_DELAY:2s}
+      # Only for the cost estimate on the AI overview (USD per million tokens).
+      price-input-per-million-usd: ${QUESTION_GEN_PRICE_INPUT_PER_MILLION_USD:0.10}
+      price-output-per-million-usd: ${QUESTION_GEN_PRICE_OUTPUT_PER_MILLION_USD:0.40}
     kokoro:
       base-url: ${KOKORO_BASE_URL:}
       api-key: ${KOKORO_API_KEY:}
@@ -271,3 +328,14 @@ itembank:
     worker:
       poll-delay-ms: ${QUESTION_GEN_POLL_DELAY_MS:3000}
       lease-duration: ${QUESTION_GEN_LEASE_DURATION:10m}
+    # The live view of a running job (server-sent events), held in memory on this instance.
+    live:
+      emitter-timeout-ms: ${QUESTION_GEN_LIVE_STREAM_TIMEOUT_MS:1800000}
+      heartbeat-interval-ms: ${QUESTION_GEN_LIVE_HEARTBEAT_MS:15000}
+      finished-retention-ms: ${QUESTION_GEN_LIVE_FINISHED_RETENTION_MS:600000}
+      idle-retention-ms: ${QUESTION_GEN_LIVE_IDLE_RETENTION_MS:1800000}
+
+shared:
+  idempotency:
+    # Nightly removal of idempotency keys past their retention.
+    purge-cron: ${IDEMPOTENCY_PURGE_CRON:0 15 3 * * *}
