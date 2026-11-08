@@ -8,8 +8,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.math.BigDecimal;
 
 /**
- * Deployment-owned settings for the student chat. Kept apart from {@code scoring.ai.*} on purpose: its own
- * key and a pinned model, so chat rate limits can never starve answer scoring. Nothing here is checked
+ * Student chat settings. Application configuration aliases the provider URL, key and model to question
+ * generation; chat retains its own quota and concurrency limits. Nothing here is checked
  * while {@code enabled} is false, see {@link ChatAiPropertiesValidator}.
  */
 @Getter
@@ -18,6 +18,8 @@ import java.math.BigDecimal;
 public class ChatAiProperties {
 
     private boolean enabled = false;
+    /** Legacy default for explicitly constructed clients; application.yml selects the shared provider. */
+    private String provider = ChatConstants.PROVIDER_GEMINI;
     private String apiKey = "";
     private String model = "";
     /** The provider's address. Google's by default; a proxy or a stand-in server for staging and end-to-end checks. */

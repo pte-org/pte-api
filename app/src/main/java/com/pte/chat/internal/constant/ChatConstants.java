@@ -8,6 +8,9 @@ public final class ChatConstants {
 
     public static final String PROPERTY_PREFIX = "chat.ai";
     public static final String PROPERTY_ENABLED = PROPERTY_PREFIX + ".enabled";
+    public static final String PROPERTY_PROVIDER = PROPERTY_PREFIX + ".provider";
+    public static final String PROVIDER_GEMINI = "gemini";
+    public static final String PROVIDER_OPENAI_COMPATIBLE = "openai-compatible";
 
     /** Quota days roll over at 00:00 in this zone; the server picks the day, never the client. */
     /** Replaces student and session ids when the retention job anonymises a row; no real id is all zeros. */
@@ -111,15 +114,16 @@ public final class ChatConstants {
 
     /** Startup configuration problems, reported together by the validator. */
     public static final String CONFIG_INVALID_PREFIX = "Invalid chat.ai settings: ";
+    public static final String CONFIG_PROVIDER_MESSAGE = "chat.ai.provider must be openai-compatible or gemini";
     public static final String CONFIG_API_KEY_MESSAGE =
-            "chat.ai.api-key must be set and contain no whitespace (CHAT_AI_GEMINI_API_KEY)";
+            "chat.ai.api-key must be set and contain no whitespace (AI_GATEWAY_API_KEY)";
     public static final String CONFIG_MODEL_UNSET_MESSAGE =
-            "chat.ai.model must be set to a pinned model name (CHAT_AI_MODEL)";
+            "chat.ai.model must be set to a pinned model name (AI_GATEWAY_MODEL)";
     public static final String CONFIG_MODEL_CHARS_MESSAGE =
             "chat.ai.model may only contain letters, digits, '.', '_' and '-'";
     public static final String CONFIG_MODEL_LATEST_MESSAGE = "chat.ai.model must be a pinned model, not a '-latest' alias";
     public static final String CONFIG_BASE_URL_MESSAGE =
-            "chat.ai.base-url must be an http or https address with a host (CHAT_AI_BASE_URL)";
+            "chat.ai.base-url must be an http or https address with a host (AI_GATEWAY_BASE_URL)";
     public static final String CONFIG_NOT_NEGATIVE_TEMPLATE ="%s must be set and not negative";
     public static final String CONFIG_AT_LEAST_ONE_TEMPLATE ="%s must be at least 1 (was %d)";
     public static final String CONFIG_TEMPERATURE_TEMPLATE = "chat.ai.temperature must be between %s and %s";

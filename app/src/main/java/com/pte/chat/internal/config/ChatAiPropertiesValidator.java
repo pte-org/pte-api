@@ -37,10 +37,14 @@ public final class ChatAiPropertiesValidator {
         if (!isHttpAddress(properties.getBaseUrl())) {
             problems.add(ChatConstants.CONFIG_BASE_URL_MESSAGE);
         }
+        boolean gemini = ChatConstants.PROVIDER_GEMINI.equals(properties.getProvider());
+        if (!gemini && !ChatConstants.PROVIDER_OPENAI_COMPATIBLE.equals(properties.getProvider())) {
+            problems.add(ChatConstants.CONFIG_PROVIDER_MESSAGE);
+        }
         String model = properties.getModel();
         if (model == null || model.isBlank()) {
             problems.add(ChatConstants.CONFIG_MODEL_UNSET_MESSAGE);
-        } else {
+        } else if (gemini) {
             if (!MODEL.matcher(model).matches()) {
                 problems.add(ChatConstants.CONFIG_MODEL_CHARS_MESSAGE);
             }
@@ -50,7 +54,11 @@ public final class ChatAiPropertiesValidator {
         }
         requireAtLeastOne(problems, "chat.ai.daily-limit", properties.getDailyLimit());
         requireAtLeastOne(problems, "chat.ai.max-input-chars", properties.getMaxInputChars());
-        requireAtLeastOne(problems, "chat.ai.max-tokens", properties.getMaxTokens());
+        if (gemini) {
+            requireAtLeastOne(problems, "chat.ai.max-tokens", properties.getMaxTokens());
+        } else if (properties.getMaxTokens() < 0) {
+            problems.add(ChatConstants.CONFIG_NOT_NEGATIVE_TEMPLATE.formatted("chat.ai.max-tokens"));
+        }
         requireAtLeastOne(problems, "chat.ai.history-size", properties.getHistorySize());
         requireAtLeastOne(problems, "chat.ai.max-concurrent", properties.getMaxConcurrent());
         requireNotNegative(problems, "chat.ai.price-input-per-million-usd", properties.getPriceInputPerMillionUsd());
