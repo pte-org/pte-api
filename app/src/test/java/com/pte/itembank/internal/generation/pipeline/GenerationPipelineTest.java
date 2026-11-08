@@ -83,8 +83,10 @@ class GenerationPipelineTest {
     }
 
     @Test
-    void aChartTheImageReviewerRefusesFailsTheItemAndItsImageIsRemoved() {
+    void aChartTheImageReviewerKeepsRefusingIsRedrawnThenKeptForAPerson() {
         ready();
+        properties.getLimits().setMaxCallsPerItem(15);
+        properties.getLimits().setMaxCallsPerRound(5);
         properties.getReview().setVisionCheck(true);
         var chart = new com.pte.itembank.internal.generation.draft.ItemDraft.ChartDraft("Energy", "bar", "Use",
                 "Year", "TWh", "TWh", List.of("2020", "2021", "2022"), List.of(), List.of());
@@ -102,11 +104,49 @@ class GenerationPipelineTest {
                 new com.pte.itembank.internal.generation.review.ChartImageReviewer.Result(false,
                         List.of("The legend is missing.")));
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.FAILED);
+        when(writer.save(any(), any(), any(Integer.class), any(), any())).thenReturn(ItemOutcome.SAVED);
 
-        verify(mediaRenderer).discard(null, image, admin);
-        verify(itemState).fail(claim, 0, QuestionGenerationConstants.GENERATION_IMAGE_REVIEW_FAILED,
-                "The legend is missing.");
+        // 15 calls at 5 a round give 3 rounds: two redraws, then the last chart is kept.
+        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.SAVED);
+
+        verify(liveFeed).draft(claim.jobPublicId(), 0, 1, chartItem.question());
+        verify(liveFeed).draft(claim.jobPublicId(), 0, 3, chartItem.question());
+        verify(liveFeed, org.mockito.Mockito.times(3)).review(claim.jobPublicId(), 0, "IMAGE", false,
+                "The legend is missing.", java.util.Map.of());
+        verify(mediaRenderer, org.mockito.Mockito.times(2)).discard(null, image, admin);
+        verify(itemState, never()).fail(any(), any(Integer.class), any(), any());
+    }
+
+    @Test
+    void aBrokenDraftAndAPassingProviderFailureAreWrittenAgainInsteadOfFailing() {
+        ready();
+        when(generator.generate(any(), any()))
+                .thenThrow(new com.pte.itembank.internal.generation.exception.GenerationRequestInvalidException(
+                        QuestionGenerationConstants.GENERATION_VALIDATION_FAILED, "WORD_COUNT"))
+                .thenThrow(new LlmProviderException(
+                        LlmFailureType.UNAVAILABLE))
+                .thenReturn(item);
+        when(writer.save(any(), any(), any(Integer.class), any(), any())).thenReturn(ItemOutcome.SAVED);
+
+        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.SAVED);
+
+        verify(generator, org.mockito.Mockito.times(3)).generate(any(), any());
+        verify(itemState, never()).fail(any(), any(Integer.class), any(), any());
+    }
+
+    @Test
+    void aJobFromTheQuestionFormEndsReadyWithoutSavingAQuestion() {
+        JobClaim formClaim = new JobClaim(claim.jobId(), claim.jobPublicId(), claim.requesterId(),
+                claim.taskTypeKey(), claim.cefrLevel(), claim.pool(), claim.topicHint(), claim.workerId(), false);
+        when(itemState.advance(formClaim, 0, ItemStage.GENERATING)).thenReturn(true);
+        when(generator.supports("MC_READING_SINGLE")).thenReturn(true);
+        when(avoidTopicsProvider.getAvoidTopicsForTaskType("MC_READING_SINGLE")).thenReturn("No prior topics.");
+        when(generator.generate(any(), any())).thenReturn(item);
+
+        assertThat(pipeline.runItem(formClaim, admin, 0)).isEqualTo(ItemOutcome.SAVED);
+
+        verify(itemState).ready(formClaim, 0);
+        verify(liveFeed).stage(formClaim.jobPublicId(), 0, ItemStage.READY);
         verify(writer, never()).save(any(), any(), any(Integer.class), any(), any());
     }
 

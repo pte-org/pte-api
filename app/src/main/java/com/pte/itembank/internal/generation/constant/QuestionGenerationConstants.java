@@ -92,6 +92,16 @@ public final class QuestionGenerationConstants {
     /** The reviewer that looks at a drawn chart (a second REVIEWER prompt). */
     public static final String PROMPT_KEY_IMAGE_REVIEWER = "CHART_IMAGE_REVIEWER";
     public static final String GENERATION_IMAGE_REVIEW_FAILED = "GENERATION_IMAGE_REVIEW_FAILED";
+    /** What the writer is told when a draft is sent back for something other than the content reviewer's notes. */
+    public static final String FEEDBACK_INVALID =
+            "Your previous answer could not be used. Fix this and return the complete JSON again:";
+    public static final String FEEDBACK_DUPLICATE =
+            "This exact content already exists in the bank. Write a different item on another angle of the topic.";
+    public static final String FEEDBACK_AUDIO_LENGTH =
+            "The spoken text gave audio outside the allowed length for this task type. Adjust its length:";
+    public static final String FEEDBACK_IMAGE =
+            "The chart drawn from your data was rejected by the image reviewer. Keep category labels short (at most "
+                    + "two or three words) and fix these issues:";
     public static final String PROMPT_SECTION_INTRO_ID = "intro";
     public static final String PROMPT_SECTION_INTRO_TITLE = "Overview";
     public static final String PROMPT_SECTION_PLACEHOLDERS_ID = "placeholders";

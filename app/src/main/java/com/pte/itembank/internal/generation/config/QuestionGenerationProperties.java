@@ -84,9 +84,18 @@ public class QuestionGenerationProperties {
         private int maxItemsPerDayGlobal = 300;
         @Min(1)
         private int maxConcurrentJobs = 3;
-        /** Hard allowance of provider calls for ONE question (each call may retry once inside the gateway). */
+        /**
+         * Hard allowance of provider calls for ONE question (each call may retry once inside the gateway). A refused
+         * or broken draft is written again while a whole round still fits: 40 calls give 8 rounds.
+         */
         @Min(1)
-        private int maxCallsPerItem = 6;
+        private int maxCallsPerItem = 40;
+        /**
+         * Most provider calls one round can make (generation, a JSON retry, a rule rewrite, its JSON retry, a review).
+         * Another round starts only while this many calls are left, and the allowance divided by it caps the rounds.
+         */
+        @Min(1)
+        private int maxCallsPerRound = 5;
         /** Consecutive provider outages after which the whole job stops instead of failing every item. */
         @Min(1)
         private int consecutiveProviderFailuresToStop = 3;

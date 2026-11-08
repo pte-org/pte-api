@@ -323,7 +323,8 @@ itembank:
       max-items-per-user-per-day: ${QUESTION_GEN_MAX_ITEMS_PER_USER_PER_DAY:100}
       max-items-per-day-global: ${QUESTION_GEN_MAX_ITEMS_PER_DAY_GLOBAL:300}
       max-concurrent-jobs: ${QUESTION_GEN_MAX_CONCURRENT_JOBS:3}
-      max-calls-per-item: ${QUESTION_GEN_MAX_CALLS_PER_ITEM:6}
+      max-calls-per-item: ${QUESTION_GEN_MAX_CALLS_PER_ITEM:40}
+      max-calls-per-round: ${QUESTION_GEN_MAX_CALLS_PER_ROUND:5}
       consecutive-provider-failures-to-stop: ${QUESTION_GEN_CONSECUTIVE_FAILURES_TO_STOP:3}
     worker:
       poll-delay-ms: ${QUESTION_GEN_POLL_DELAY_MS:3000}
