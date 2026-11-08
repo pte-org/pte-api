@@ -26,11 +26,13 @@ class CloudinaryUploadRequester {
     private final PracticeMediaBindingPort practiceMediaBindingService;
     private final String authoringFolder;
     private final String submissionFolder;
+    private final long signatureTtlSeconds;
     private final Clock clock;
 
     CloudinaryUploadRequester(MediaAssetRepository repository, CloudinaryRequestSigner signer,
             MediaAccessGuard accessGuard, PracticeMediaBindingPort practiceMediaBindingService,
-            String authoringFolder, String submissionFolder, Clock clock) {
+            String authoringFolder, String submissionFolder, long signatureTtlSeconds, Clock clock) {
+        this.signatureTtlSeconds = signatureTtlSeconds;
         this.repository = repository;
         this.signer = signer;
         this.accessGuard = accessGuard;
@@ -100,7 +102,7 @@ class CloudinaryUploadRequester {
                 resourceType);
         return new CloudinaryUploadResponse(media.getPublicId(), cloudinaryPublicId, uploadUrl, signer.apiKey(),
                 String.valueOf(timestamp),
-                signature, folder, resourceType, CloudinaryMediaService.SIGNATURE_TTL_SECONDS);
+                signature, folder, resourceType, signatureTtlSeconds);
     }
 
     private void validateContentType(String contentType, String assetKind) {

@@ -14,6 +14,7 @@ import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.StudentQuota;
 import com.pte.tenancy.TenantOrganizationSummary;
 import com.pte.tenancy.TenancyService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,14 +43,27 @@ public class PracticeEntitlementService implements PracticeEntitlementGate {
     private final TenancyService tenancyService;
     private final boolean strictEntitlementEnabled;
     private final PracticeObservability observability;
+    private final long refreshSeconds;
     private final Clock clock;
 
+    PracticeEntitlementService(IdentityService identityService, BillingService billingService,
+            TenancyService tenancyService, boolean strictEntitlementEnabled, PracticeObservability observability,
+            Clock clock) {
+        this(identityService, billingService, tenancyService, strictEntitlementEnabled, observability,
+                PracticeConstants.ENTITLEMENT_REFRESH_SECONDS, clock);
+    }
+
+    /** {@code practice.entitlement.refresh-seconds}: when the practice app should ask again. */
+    @Autowired
     public PracticeEntitlementService(IdentityService identityService,
             BillingService billingService, TenancyService tenancyService,
             @Value("${" + PracticeConstants.PRACTICE_STRICT_ENTITLEMENT_ENABLED_PROPERTY + ":false}")
             boolean strictEntitlementEnabled,
             PracticeObservability observability,
+            @Value("${practice.entitlement.refresh-seconds:" + PracticeConstants.ENTITLEMENT_REFRESH_SECONDS + "}")
+            long refreshSeconds,
             Clock clock) {
+        this.refreshSeconds = refreshSeconds;
         this.identityService = identityService;
         this.billingService = billingService;
         this.tenancyService = tenancyService;
@@ -120,6 +134,6 @@ public class PracticeEntitlementService implements PracticeEntitlementGate {
                 organization,
                 organization == null ? List.of() : List.of(organization),
                 new PracticeEntitlementResponse.PracticeStatus(state),
-                clock.instant().plus(PracticeConstants.ENTITLEMENT_REFRESH_SECONDS, ChronoUnit.SECONDS));
+                clock.instant().plus(refreshSeconds, ChronoUnit.SECONDS));
     }
 }

@@ -40,21 +40,29 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
     private final CloudinaryMediaReader mediaReader;
     private final CloudinaryGeneratedUploader generatedUploader;
 
+    CloudinaryMediaService(MediaAssetRepository repository, String cloudName, String apiKey, String apiSecret,
+            String authoringFolder, String submissionFolder, PracticeMediaBindingPort practiceMediaBindingService,
+            AuditLogService auditLogService, Clock clock, RestClient.Builder restClientBuilder) {
+        this(repository, cloudName, apiKey, apiSecret, authoringFolder, submissionFolder, SIGNATURE_TTL_SECONDS,
+                practiceMediaBindingService, auditLogService, clock, restClientBuilder);
+    }
+
     @Autowired
     public CloudinaryMediaService(MediaAssetRepository repository,
-            @Value("${cloudinary.cloud-name:}") String cloudName,
-            @Value("${cloudinary.api-key:}") String apiKey,
-            @Value("${cloudinary.api-secret:}") String apiSecret,
-            @Value("${cloudinary.authoring-folder:pte/authoring}") String authoringFolder,
-            @Value("${cloudinary.submission-folder:pte/submissions}") String submissionFolder,
+            @Value("${media.cloudinary.cloud-name:}") String cloudName,
+            @Value("${media.cloudinary.api-key:}") String apiKey,
+            @Value("${media.cloudinary.api-secret:}") String apiSecret,
+            @Value("${media.cloudinary.authoring-folder:pte/authoring}") String authoringFolder,
+            @Value("${media.cloudinary.submission-folder:pte/submissions}") String submissionFolder,
+            @Value("${media.cloudinary.signature-ttl-seconds:" + SIGNATURE_TTL_SECONDS + "}") long signatureTtlSeconds,
             PracticeMediaBindingPort practiceMediaBindingService, AuditLogService auditLogService, Clock clock,
             RestClient.Builder restClientBuilder) {
         CloudinaryRequestSigner signer = new CloudinaryRequestSigner(cloudName, apiKey, apiSecret, clock);
         MediaAccessGuard accessGuard = new MediaAccessGuard(practiceMediaBindingService, auditLogService);
         this.uploadRequester = new CloudinaryUploadRequester(repository, signer, accessGuard,
-                practiceMediaBindingService, authoringFolder, submissionFolder, clock);
+                practiceMediaBindingService, authoringFolder, submissionFolder, signatureTtlSeconds, clock);
         this.uploadVerifier = new CloudinaryUploadVerifier(repository, signer, accessGuard);
-        this.mediaReader = new CloudinaryMediaReader(repository, signer);
+        this.mediaReader = new CloudinaryMediaReader(repository, signer, signatureTtlSeconds);
         this.generatedUploader = new CloudinaryGeneratedUploader(repository, signer, authoringFolder, clock,
                 restClientBuilder);
     }

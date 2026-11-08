@@ -11,6 +11,7 @@ import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFacto
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.retry.interceptor.MethodInvocationRecoverer;
@@ -73,13 +74,16 @@ public class NotificationRabbitMqConfig {
     }
 
     @Bean
-    public RetryOperationsInterceptor emailRetryInterceptor() {
+    public RetryOperationsInterceptor emailRetryInterceptor(
+            @Value("${notification.email.retry.max-attempts:" + MAX_ATTEMPTS + "}") int maxAttempts,
+            @Value("${notification.email.retry.initial-interval-ms:" + INITIAL_INTERVAL_MS + "}") long initialIntervalMs,
+            @Value("${notification.email.retry.max-interval-ms:" + MAX_INTERVAL_MS + "}") long maxIntervalMs) {
         MethodInvocationRecoverer<Object> recoverer = (args, cause) -> {
             throw new AmqpRejectAndDontRequeueException(NotificationConstants.EMAIL_SEND_RETRIES_EXHAUSTED, cause);
         };
         return RetryInterceptorBuilder.stateless()
-                .maxAttempts(MAX_ATTEMPTS)
-                .backOffOptions(INITIAL_INTERVAL_MS, MULTIPLIER, MAX_INTERVAL_MS)
+                .maxAttempts(maxAttempts)
+                .backOffOptions(initialIntervalMs, MULTIPLIER, maxIntervalMs)
                 .recoverer(recoverer)
                 .build();
     }

@@ -26,7 +26,6 @@ import java.util.UUID;
 class CloudinaryGeneratedUploader {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CloudinaryGeneratedUploader.class);
-    private static final long REQUEST_TIMEOUT_MS = 60_000;
 
     private final MediaAssetRepository repository;
     private final CloudinaryRequestSigner signer;

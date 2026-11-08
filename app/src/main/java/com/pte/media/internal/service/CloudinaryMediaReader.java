@@ -24,9 +24,13 @@ class CloudinaryMediaReader {
     private final MediaAssetRepository repository;
     private final CloudinaryRequestSigner signer;
 
-    CloudinaryMediaReader(MediaAssetRepository repository, CloudinaryRequestSigner signer) {
+    /** Longest life of a signed media link, also the cap on a TTL another module asks for. */
+    private final long signatureTtlSeconds;
+
+    CloudinaryMediaReader(MediaAssetRepository repository, CloudinaryRequestSigner signer, long signatureTtlSeconds) {
         this.repository = repository;
         this.signer = signer;
+        this.signatureTtlSeconds = signatureTtlSeconds;
     }
 
     MediaPreviewResponse preview(UUID mediaPublicId, CurrentUser caller) {
@@ -37,7 +41,7 @@ class CloudinaryMediaReader {
             throw new MediaNotYetUploadedException();
         }
         long ttl = media.getCloudinaryDeliveryType() == CloudinaryDeliveryType.AUTHENTICATED
-                ? CloudinaryMediaService.SIGNATURE_TTL_SECONDS : 0;
+                ? signatureTtlSeconds : 0;
         String url = ttl == 0 ? media.getSecureUrl() : signer.privateDownloadUrl(media, ttl);
         return new MediaPreviewResponse(url, ttl, media.getDurationSeconds());
     }
@@ -92,7 +96,7 @@ class CloudinaryMediaReader {
         if (media.getStatus() != MediaStatus.UPLOADED || media.getSecureUrl() == null) {
             throw new MediaNotYetUploadedException();
         }
-        long ttl = Math.min(Math.max(requestedTtlSeconds, 1), CloudinaryMediaService.SIGNATURE_TTL_SECONDS);
+        long ttl = Math.min(Math.max(requestedTtlSeconds, 1), signatureTtlSeconds);
         if (media.getCloudinaryDeliveryType() != CloudinaryDeliveryType.AUTHENTICATED) {
             // Existing pre-migration assets are still public Cloudinary uploads; never claim their URL expires.
             return new PresignedDownloadResponse(media.getSecureUrl(), 0, media.getDurationSeconds());
