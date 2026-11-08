@@ -1,7 +1,7 @@
 package com.pte.identity.internal.service;
 
 import com.pte.identity.domain.User;
-import com.pte.identity.internal.constant.IdentityConstants;
+import com.pte.identity.internal.config.AuthTokenProperties;
 import com.pte.identity.internal.domain.RefreshToken;
 import com.pte.identity.internal.exception.InvalidRefreshTokenException;
 import com.pte.identity.internal.repository.RefreshTokenRepository;
@@ -22,11 +22,14 @@ public class RefreshTokenService {
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final TokenHasher tokenHasher;
+    private final AuthTokenProperties tokenProperties;
     private final Clock clock;
 
-    public RefreshTokenService(RefreshTokenRepository refreshTokenRepository, TokenHasher tokenHasher, Clock clock) {
+    public RefreshTokenService(RefreshTokenRepository refreshTokenRepository, TokenHasher tokenHasher,
+            AuthTokenProperties tokenProperties, Clock clock) {
         this.refreshTokenRepository = refreshTokenRepository;
         this.tokenHasher = tokenHasher;
+        this.tokenProperties = tokenProperties;
         this.clock = clock;
     }
 
@@ -37,7 +40,7 @@ public class RefreshTokenService {
         token.setUserId(user.getId());
         token.setOrganizationId(organizationId);
         token.setTokenHash(tokenHasher.hash(raw));
-        token.setExpiresAt(clock.instant().plusSeconds(IdentityConstants.REFRESH_TOKEN_TTL_SECONDS));
+        token.setExpiresAt(clock.instant().plusSeconds(tokenProperties.getRefreshTokenTtlSeconds()));
         token.setRevoked(false);
         refreshTokenRepository.save(token);
         return raw;

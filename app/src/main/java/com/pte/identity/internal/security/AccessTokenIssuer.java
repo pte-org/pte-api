@@ -4,6 +4,7 @@ import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.constant.IdentityConstants;
+import com.pte.identity.internal.config.AuthTokenProperties;
 import com.pte.shared.security.SecurityClaims;
 import com.pte.shared.security.SecurityRoles;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
@@ -29,10 +30,12 @@ import java.util.Set;
 public class AccessTokenIssuer {
 
     private final JwtEncoder jwtEncoder;
+    private final AuthTokenProperties tokenProperties;
     private final Clock clock;
 
-    public AccessTokenIssuer(JwtEncoder jwtEncoder, Clock clock) {
+    public AccessTokenIssuer(JwtEncoder jwtEncoder, AuthTokenProperties tokenProperties, Clock clock) {
         this.jwtEncoder = jwtEncoder;
+        this.tokenProperties = tokenProperties;
         this.clock = clock;
     }
 
@@ -42,7 +45,7 @@ public class AccessTokenIssuer {
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
                 .issuer(IdentityConstants.TOKEN_ISSUER)
                 .issuedAt(now)
-                .expiresAt(now.plusSeconds(IdentityConstants.ACCESS_TOKEN_TTL_SECONDS))
+                .expiresAt(now.plusSeconds(tokenProperties.getAccessTokenTtlSeconds()))
                 .subject(user.getPublicId().toString())
                 .claim(SecurityClaims.ROLES, rolesFor(user, member));
         if (member != null) {

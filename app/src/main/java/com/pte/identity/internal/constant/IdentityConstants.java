@@ -106,8 +106,11 @@ public final class IdentityConstants {
 
     public static final String KEY_ID = "iam-rsa-key";
     public static final String TOKEN_ISSUER = "pte-iam";
-    public static final long ACCESS_TOKEN_TTL_SECONDS = 900L;      // 15 minutes
-    public static final long REFRESH_TOKEN_TTL_SECONDS = 604_800L; // 7 days
+    public static final long DEFAULT_ACCESS_TOKEN_TTL_SECONDS = 900L;
+    public static final long DEFAULT_REFRESH_TOKEN_TTL_SECONDS = 604_800L;
+    public static final String ACCESS_TOKEN_TTL_INVALID = "Access token TTL must be a positive number of seconds";
+    public static final String REFRESH_TOKEN_TTL_INVALID = "Refresh token TTL must be a positive number of seconds";
+    public static final String REFRESH_TOKEN_TTL_ORDER_INVALID = "Refresh token TTL must exceed access token TTL";
 
     private IdentityConstants() {
     }
