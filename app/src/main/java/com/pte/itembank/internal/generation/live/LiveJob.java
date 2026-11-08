@@ -53,6 +53,18 @@ final class LiveJob {
         send(GenerationLiveConstants.EVENT_MEDIA, new LiveEvent.Media(index, audioRef, imageRef));
     }
 
+    synchronized void draft(LiveEvent.Draft draft, Instant now) {
+        item(draft.index()).draft(draft);
+        touch(now);
+        send(GenerationLiveConstants.EVENT_DRAFT, draft);
+    }
+
+    synchronized void review(LiveEvent.Review review, Instant now) {
+        item(review.index()).review(review);
+        touch(now);
+        send(GenerationLiveConstants.EVENT_REVIEW, review);
+    }
+
     synchronized void itemEnded(int index, Instant now) {
         touch(now);
         send(GenerationLiveConstants.EVENT_ITEM, new LiveEvent.Item(index));

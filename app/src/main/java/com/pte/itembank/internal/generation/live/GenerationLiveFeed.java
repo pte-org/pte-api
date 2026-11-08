@@ -1,10 +1,13 @@
 package com.pte.itembank.internal.generation.live;
 
+import com.pte.itembank.dto.request.CreateQuestionRequest;
+
 import com.pte.itembank.internal.generation.domain.ItemStage;
 import com.pte.itembank.internal.generation.llm.LlmRole;
 import com.pte.itembank.internal.generation.llm.TokenSink;
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -42,6 +45,18 @@ public class GenerationLiveFeed {
 
     public void media(UUID jobPublicId, int index, UUID audioRef, UUID imageRef) {
         registry.open(jobPublicId).media(index, audioRef, imageRef, registry.clock().instant());
+    }
+
+    /** The generator's draft of an item, already in the question form's fields. */
+    public void draft(UUID jobPublicId, int index, int attempt, CreateQuestionRequest fields) {
+        registry.open(jobPublicId).draft(new LiveEvent.Draft(index, attempt, fields), registry.clock().instant());
+    }
+
+    /** A reviewer's verdict on an item: {@code kind} is CONTENT or IMAGE, {@code notes} the problems by check. */
+    public void review(UUID jobPublicId, int index, String kind, boolean passed, String fixSuggestion,
+                       Map<String, String> notes) {
+        registry.open(jobPublicId).review(new LiveEvent.Review(index, kind, passed, fixSuggestion, notes),
+                registry.clock().instant());
     }
 
     public void itemEnded(UUID jobPublicId, int index) {

@@ -16,6 +16,8 @@ final class LiveItem {
     private LlmRole activeAgent;
     private UUID audioRef;
     private UUID imageRef;
+    private LiveEvent.Draft draft;
+    private LiveEvent.Review review;
 
     LiveItem(int index) {
         this.index = index;
@@ -41,9 +43,17 @@ final class LiveItem {
         imageRef = image;
     }
 
+    void draft(LiveEvent.Draft latest) {
+        draft = latest;
+    }
+
+    void review(LiveEvent.Review latest) {
+        review = latest;
+    }
+
     LiveEvent.ItemSnapshot snapshot() {
         return new LiveEvent.ItemSnapshot(index, stage, activeAgent == null ? null : activeAgent.name(),
-                text(LlmRole.GENERATOR), text(LlmRole.REVIEWER), audioRef, imageRef);
+                text(LlmRole.GENERATOR), text(LlmRole.REVIEWER), audioRef, imageRef, draft, review);
     }
 
     private LiveEvent.AgentText text(LlmRole agent) {

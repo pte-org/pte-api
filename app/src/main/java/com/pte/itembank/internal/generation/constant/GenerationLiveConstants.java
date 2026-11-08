@@ -11,6 +11,12 @@ public final class GenerationLiveConstants {
     public static final String EVENT_TOKEN = "token";
     public static final String EVENT_STAGE = "stage";
     public static final String EVENT_MEDIA = "media";
+    /** The generator's draft of an item as the question form's fields. */
+    public static final String EVENT_DRAFT = "draft";
+    /** A reviewer's verdict on an item (its text or its drawn chart). */
+    public static final String EVENT_REVIEW = "review";
+    public static final String REVIEW_CONTENT = "CONTENT";
+    public static final String REVIEW_IMAGE = "IMAGE";
     /** An item ended (saved or failed); the client reloads the job for its outcome. */
     public static final String EVENT_ITEM = "item";
     /** The job ended; the stream closes after it. */
