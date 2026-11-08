@@ -47,6 +47,10 @@ public class QuestionGenerationJob extends BaseEntity {
     @Column(name = "requested_count", nullable = false, updatable = false)
     private int requestedCount;
 
+    /** False for a job started from the question form: its question goes into the form, not into the bank. */
+    @Column(name = "save_questions", nullable = false, updatable = false)
+    private boolean saveQuestions = true;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private JobStatus status = JobStatus.QUEUED;

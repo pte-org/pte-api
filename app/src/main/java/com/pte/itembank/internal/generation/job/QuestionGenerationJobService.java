@@ -81,6 +81,7 @@ public class QuestionGenerationJobService {
         job.setPool(pool);
         job.setTopicHint(topicHint);
         job.setRequestedCount(request.count());
+        job.setSaveQuestions(request.savesQuestions());
         QuestionGenerationJob saved;
         try {
             saved = jobs.saveAndFlush(job);

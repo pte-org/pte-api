@@ -20,7 +20,7 @@ import static com.pte.itembank.internal.generation.repository.GenerationJobRepos
 public interface GenerationJobItemRepository extends JpaRepository<QuestionGenerationJobItem, Long> {
 
     String LEASED = " and exists (select 1 from " + JOB + " j where j.id = :jobId and j.workerId = :workerId)";
-    String OPEN_STAGES = " and i.stage not in (" + STAGE + ".SAVED, " + STAGE + ".FAILED, " + STAGE + ".CANCELLED)";
+    String OPEN_STAGES = " and i.stage not in (" + STAGE + ".READY, " + STAGE + ".SAVED, " + STAGE + ".FAILED, " + STAGE + ".CANCELLED)";
 
     List<QuestionGenerationJobItem> findByJobIdOrderByItemIndexAsc(Long jobId);
 
@@ -43,6 +43,13 @@ public interface GenerationJobItemRepository extends JpaRepository<QuestionGener
             + "i.updatedAt = :now where i.jobId = :jobId and i.itemIndex = :index" + OPEN_STAGES + LEASED)
     int fail(@Param("jobId") Long jobId, @Param("index") int index, @Param("code") String code,
              @Param("note") String note, @Param("workerId") String workerId, @Param("now") Instant now);
+
+    /** A question written into the form and not saved: the item is done, with no question in the bank. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update " + ITEM + " i set i.stage = " + STAGE + ".READY, i.failureCode = null, i.failureNote = null, "
+            + "i.updatedAt = :now where i.jobId = :jobId and i.itemIndex = :index" + OPEN_STAGES + LEASED)
+    int markReady(@Param("jobId") Long jobId, @Param("index") int index, @Param("workerId") String workerId,
+                  @Param("now") Instant now);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update " + ITEM + " i set i.stage = " + STAGE + ".SAVED, i.questionPublicId = :questionPublicId, "

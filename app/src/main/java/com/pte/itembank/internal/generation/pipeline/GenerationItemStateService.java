@@ -43,6 +43,13 @@ public class GenerationItemStateService {
         return items.advance(claim.jobId(), index, stage, claim.workerId(), clock.instant()) > 0;
     }
 
+    /** The question went into the form it was asked from; nothing is saved. */
+    @Transactional
+    public void ready(JobClaim claim, int index) {
+        items.markReady(claim.jobId(), index, claim.workerId(), clock.instant());
+        jobs.refreshCounters(claim.jobId());
+    }
+
     @Transactional
     public void fail(JobClaim claim, int index, String code, String note) {
         items.fail(claim.jobId(), index, code, truncate(note), claim.workerId(), clock.instant());

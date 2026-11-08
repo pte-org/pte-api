@@ -95,8 +95,8 @@ public interface GenerationJobRepository extends JpaRepository<QuestionGeneratio
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update " + JOB + " j set "
-            + "j.succeededCount = (select count(i) from " + ITEM + " i where i.jobId = j.id and i.stage = "
-            + STAGE + ".SAVED), "
+            + "j.succeededCount = (select count(i) from " + ITEM + " i where i.jobId = j.id and i.stage in ("
+            + STAGE + ".READY, " + STAGE + ".SAVED)), "
             + "j.failedCount = (select count(i) from " + ITEM + " i where i.jobId = j.id and i.stage = "
             + STAGE + ".FAILED) where j.id = :id")
     int refreshCounters(@Param("id") Long id);

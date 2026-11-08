@@ -12,5 +12,16 @@ public record SubmitGenerationJobRequest(
         @NotBlank String cefrLevel,
         @NotBlank String pool,
         @Size(max = QuestionGenerationConstants.MAX_TOPIC_HINT_LENGTH) String topicHint,
-        @Min(1) @Max(QuestionGenerationConstants.MAX_ITEMS_PER_JOB_HARD_LIMIT) int count) {
+        @Min(1) @Max(QuestionGenerationConstants.MAX_ITEMS_PER_JOB_HARD_LIMIT) int count,
+        Boolean saveQuestions) {
+
+    /** A batch for the bank: every question is saved as a draft. */
+    public SubmitGenerationJobRequest(String taskType, String cefrLevel, String pool, String topicHint, int count) {
+        this(taskType, cefrLevel, pool, topicHint, count, null);
+    }
+
+    /** False only when asked: a job saves its questions unless it was started from the question form. */
+    public boolean savesQuestions() {
+        return !Boolean.FALSE.equals(saveQuestions);
+    }
 }
