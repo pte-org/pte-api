@@ -106,7 +106,8 @@ public final class QuestionMapper {
                     dto.media() == null ? null : new GenerationMetaResponse.GenerationMediaResponse(
                             dto.media().voice(),
                             dto.media().speed(),
-                            dto.media().durationSec()),
+                            dto.media().durationSec(),
+                            dto.media().chartType()),
                     false);
         } catch (Exception e) {
             LOG.warn("Failed to parse generation_meta JSON", e);

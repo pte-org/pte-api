@@ -26,9 +26,14 @@ public record GenerationMetaDto(
         double fleschKincaid) {
     }
 
+    /**
+     * What was made for the question. Audio has a voice, speed and length; a dialogue has no single speed and a chart
+     * has neither, so every field may be null. The length is kept to one decimal.
+     */
     public record GenerationMediaDto(
         String voice,
-        double speed,
-        int durationSec) {
+        Double speed,
+        Double durationSec,
+        String chartType) {
     }
 }

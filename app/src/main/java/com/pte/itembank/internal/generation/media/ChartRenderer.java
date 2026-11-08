@@ -30,6 +30,12 @@ public class ChartRenderer {
     private static final Logger LOGGER = LoggerFactory.getLogger(ChartRenderer.class);
     private static final int CHART_WIDTH = 800;
     private static final int CHART_HEIGHT = 500;
+    /** Rough width of one tick-label character at {@link #MIN_FONT_SIZE}, and the space kept between labels. */
+    private static final double APPROX_CHAR_WIDTH_PX = 8.0;
+    private static final int LABEL_GAP_CHARS = 2;
+    /** Share of the image width the plot area takes, axis titles and margins aside. */
+    private static final double PLOT_WIDTH_SHARE = 0.8;
+    private static final int TURNED_LABEL_DEGREES = 45;
     private static final int MIN_FONT_SIZE = 14;
 
     public byte[] render(ItemDraft.ChartDraft draft) {
@@ -64,6 +70,7 @@ public class ChartRenderer {
 
         styleChart(chart.getStyler());
         styleAxes(chart.getStyler());
+        fitCategoryLabels(chart.getStyler(), draft.categories());
 
         // Add series
         if (draft.series() != null) {
@@ -87,6 +94,7 @@ public class ChartRenderer {
 
         styleChart(chart.getStyler());
         styleAxes(chart.getStyler());
+        fitCategoryLabels(chart.getStyler(), draft.categories());
         chart.getStyler().setDefaultSeriesRenderStyle(CategorySeries.CategorySeriesRenderStyle.Line);
 
         // Add series
@@ -194,6 +202,21 @@ public class ChartRenderer {
     private void styleAxes(AxesChartStyler styler) {
         styler.setAxisTitleFont(new Font("Arial", Font.BOLD, MIN_FONT_SIZE));
         styler.setAxisTickLabelsFont(new Font("Arial", Font.PLAIN, MIN_FONT_SIZE));
+    }
+
+    /**
+     * Turns the category labels when, written flat, they would not fit side by side under the plot: the image reviewer
+     * refuses a chart whose labels overlap.
+     */
+    static void fitCategoryLabels(AxesChartStyler styler, List<String> categories) {
+        if (categories == null || categories.isEmpty()) {
+            return;
+        }
+        int longest = categories.stream().mapToInt(label -> label == null ? 0 : label.length()).max().orElse(0);
+        double needed = (double) categories.size() * (longest + LABEL_GAP_CHARS) * APPROX_CHAR_WIDTH_PX;
+        if (needed > CHART_WIDTH * PLOT_WIDTH_SHARE) {
+            styler.setXAxisLabelRotation(TURNED_LABEL_DEGREES);
+        }
     }
 
     private void styleChart(Styler styler) {

@@ -29,10 +29,12 @@ public record GenerationMetaResponse(
         double fleschKincaid) {
     }
 
+    /** Audio has voice, speed and length; a dialogue has no single speed and a chart has none: each may be null. */
     public record GenerationMediaResponse(
         String voice,
-        double speed,
-        int durationSec) {
+        Double speed,
+        Double durationSec,
+        String chartType) {
     }
 
     public record ReviewVerdictResponse(
