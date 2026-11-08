@@ -17,7 +17,7 @@ import com.pte.scoring.internal.vendor.azure.SpeechAssessment;
 import com.pte.scoring.internal.vendor.gemini.GeminiImage;
 import com.pte.scoring.internal.vendor.gemini.GeminiRequest;
 import com.pte.scoring.internal.vendor.gemini.GeminiResponse;
-import com.pte.scoring.internal.vendor.gemini.GeminiRestClient;
+import com.pte.scoring.internal.vendor.gemini.StructuredModelClient;
 import com.pte.scoring.internal.vendor.speech.SpeechAudioLoader;
 import com.pte.scoring.rubric.EffectiveRubric;
 import com.pte.scoring.rubric.RubricScorer;
@@ -49,10 +49,10 @@ abstract class GeminiSpeakingScorer implements AiAnswerScorer {
 
     private final SpeechAudioLoader audio;
     private final AzureSpeechAssessor assessor;
-    private final GeminiRestClient gemini;
+    private final StructuredModelClient gemini;
     private final JsonMapper json;
 
-    GeminiSpeakingScorer(SpeechAudioLoader audio, AzureSpeechAssessor assessor, GeminiRestClient gemini,
+    GeminiSpeakingScorer(SpeechAudioLoader audio, AzureSpeechAssessor assessor, StructuredModelClient gemini,
                          JsonMapper json) {
         this.audio = audio;
         this.assessor = assessor;

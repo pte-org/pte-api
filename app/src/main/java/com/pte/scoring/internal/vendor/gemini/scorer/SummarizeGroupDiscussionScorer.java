@@ -1,6 +1,6 @@
 package com.pte.scoring.internal.vendor.gemini.scorer;
 
-import com.pte.scoring.internal.vendor.gemini.GeminiRestClient;
+import com.pte.scoring.internal.vendor.gemini.StructuredModelClient;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.vendor.AiScoringRequest;
 import com.pte.scoring.internal.vendor.azure.AzureSpeechAssessor;
@@ -22,7 +22,7 @@ import java.util.Set;
 @ConditionalOnProperty(name = "scoring.ai.provider", havingValue = "azure-gemini")
 public class SummarizeGroupDiscussionScorer extends GeminiSpeakingScorer {
 
-    private static final String EXAMINER = "You are a PTE Academic examiner grading a Summarize Group Discussion "
+    static final String EXAMINER = "You are a PTE Academic examiner grading a Summarize Group Discussion "
             + "response. The candidate heard a discussion between several speakers and summarized it aloud; you "
             + "receive the transcript of what they said. Score CONTENT: does the candidate accurately summarize the "
             + "overall topic, each speaker's important contribution, and the relationships (agreement, contrast, "
@@ -44,7 +44,7 @@ public class SummarizeGroupDiscussionScorer extends GeminiSpeakingScorer {
             "relationships", GeminiScorers.strings());
 
     public SummarizeGroupDiscussionScorer(SpeechAudioLoader audio, AzureSpeechAssessor assessor,
-                                          GeminiRestClient gemini, JsonMapper json) {
+                                          StructuredModelClient gemini, JsonMapper json) {
         super(audio, assessor, gemini, json);
     }
 

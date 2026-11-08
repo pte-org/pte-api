@@ -24,7 +24,7 @@ import java.util.Set;
  * The API key travels only in the {@code x-goog-api-key} header, never on
  * the query string, so it cannot leak through URLs, HTTP logs or exceptions.
  */
-public class GeminiRestClient {
+public class GeminiRestClient implements StructuredModelClient {
 
     public static final String VENDOR = "Gemini";
     private static final Set<String> BLOCKED_FINISH_REASONS =
@@ -54,7 +54,7 @@ public class GeminiRestClient {
         this.guard = guard;
     }
 
-    /** Only the HTTP exchange is retried; a 200 the model got wrong fails the same way every time. */
+    @Override
     public GeminiResponse generate(GeminiRequest request) {
         HttpRequest httpRequest = HttpRequest.newBuilder(endpoint)
                 .timeout(timeout)

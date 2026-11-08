@@ -1,6 +1,6 @@
 package com.pte.scoring.internal.vendor.gemini.scorer;
 
-import com.pte.scoring.internal.vendor.gemini.GeminiRestClient;
+import com.pte.scoring.internal.vendor.gemini.StructuredModelClient;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.vendor.AiScoringRequest;
 import com.pte.scoring.internal.vendor.azure.AzureSpeechAssessor;
@@ -22,7 +22,7 @@ import java.util.Set;
 @ConditionalOnProperty(name = "scoring.ai.provider", havingValue = "azure-gemini")
 public class RespondToSituationScorer extends GeminiSpeakingScorer {
 
-    private static final String EXAMINER = "You are a PTE Academic examiner grading a Respond to a Situation "
+    static final String EXAMINER = "You are a PTE Academic examiner grading a Respond to a Situation "
             + "response. Read the situation and the transcript of the candidate's spoken response. Infer the "
             + "practical requirements and the expected formal or informal register of the situation. Score CONTENT: "
             + "does the response achieve the communication goal of the situation, stay relevant, and use a tone "
@@ -39,7 +39,7 @@ public class RespondToSituationScorer extends GeminiSpeakingScorer {
             "missed_requirements", GeminiScorers.strings(),
             "misinterpreted_requirements", GeminiScorers.strings());
 
-    public RespondToSituationScorer(SpeechAudioLoader audio, AzureSpeechAssessor assessor, GeminiRestClient gemini,
+    public RespondToSituationScorer(SpeechAudioLoader audio, AzureSpeechAssessor assessor, StructuredModelClient gemini,
                                     JsonMapper json) {
         super(audio, assessor, gemini, json);
     }

@@ -13,7 +13,7 @@ import com.pte.scoring.internal.vendor.azure.AzureScorers;
 import com.pte.scoring.internal.vendor.gemini.FormCheck;
 import com.pte.scoring.internal.vendor.gemini.GeminiRequest;
 import com.pte.scoring.internal.vendor.gemini.GeminiResponse;
-import com.pte.scoring.internal.vendor.gemini.GeminiRestClient;
+import com.pte.scoring.internal.vendor.gemini.StructuredModelClient;
 import com.pte.scoring.rubric.EffectiveRubric;
 import com.pte.scoring.rubric.FormRule;
 import com.pte.scoring.rubric.RubricScorer;
@@ -45,7 +45,7 @@ abstract class GeminiWritingScorer implements AiAnswerScorer {
     private static final String TRUNCATED = "truncatedForModel";
     private static final String SCHEMA_ATTEMPTS = "schemaAttempts";
 
-    private final GeminiRestClient gemini;
+    private final StructuredModelClient gemini;
     private final JsonMapper json;
     private final String examiner;
     private final String sourceLabel;
@@ -57,7 +57,7 @@ abstract class GeminiWritingScorer implements AiAnswerScorer {
      * @param examiner    the examiner role; the catalog's rubric section and the injection guard follow it
      * @param extraFields further string-list fields Gemini returns after its feedback
      */
-    GeminiWritingScorer(GeminiRestClient gemini, JsonMapper json, String examiner, String sourceLabel,
+    GeminiWritingScorer(StructuredModelClient gemini, JsonMapper json, String examiner, String sourceLabel,
                         String answerLabel, String ask, List<String> extraFields) {
         this.gemini = gemini;
         this.json = json;

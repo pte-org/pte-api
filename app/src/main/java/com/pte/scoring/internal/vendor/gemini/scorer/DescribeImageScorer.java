@@ -1,7 +1,7 @@
 package com.pte.scoring.internal.vendor.gemini.scorer;
 
 import com.pte.scoring.internal.vendor.gemini.GeminiImage;
-import com.pte.scoring.internal.vendor.gemini.GeminiRestClient;
+import com.pte.scoring.internal.vendor.gemini.StructuredModelClient;
 import com.pte.scoring.internal.vendor.gemini.PromptImageLoader;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.vendor.AiProviderException;
@@ -29,7 +29,7 @@ public class DescribeImageScorer extends GeminiSpeakingScorer {
     static final String NO_IMAGE_REFERENCE = "NO_IMAGE_REFERENCE";
     static final String MISSED_DETAILS = "missed_details";
 
-    private static final String EXAMINER = "You are a PTE Academic examiner grading a Describe Image response. "
+    static final String EXAMINER = "You are a PTE Academic examiner grading a Describe Image response. "
             + "The candidate was shown an image and described it aloud; you receive the transcript of what they "
             + "said. Score CONTENT: how accurately and fully the description covers the main features of the "
             + "image, the relationships between them and their meaning. Deduct for missing important elements, "
@@ -47,7 +47,7 @@ public class DescribeImageScorer extends GeminiSpeakingScorer {
 
     private final PromptImageLoader images;
 
-    public DescribeImageScorer(SpeechAudioLoader audio, AzureSpeechAssessor assessor, GeminiRestClient gemini,
+    public DescribeImageScorer(SpeechAudioLoader audio, AzureSpeechAssessor assessor, StructuredModelClient gemini,
                                JsonMapper json, PromptImageLoader images) {
         super(audio, assessor, gemini, json);
         this.images = images;

@@ -1,6 +1,6 @@
 package com.pte.scoring.internal.vendor.gemini.scorer;
 
-import com.pte.scoring.internal.vendor.gemini.GeminiRestClient;
+import com.pte.scoring.internal.vendor.gemini.StructuredModelClient;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.vendor.AiScoringRequest;
 import com.pte.scoring.internal.vendor.azure.AzureSpeechAssessor;
@@ -21,7 +21,7 @@ public class RetellLectureScorer extends GeminiSpeakingScorer {
 
     static final String MISSED_POINTS = "missed_points";
 
-    private static final String EXAMINER = "You are a PTE Academic examiner grading a Re-tell Lecture response. "
+    static final String EXAMINER = "You are a PTE Academic examiner grading a Re-tell Lecture response. "
             + "The candidate listened to a lecture and retold its content in their own words; you receive the "
             + "transcript of what they said. Score CONTENT: does the retelling accurately cover the lecture's main "
             + "points and how they relate? Deduct for missing key ideas, factual errors, or irrelevant additions. "
@@ -30,7 +30,7 @@ public class RetellLectureScorer extends GeminiSpeakingScorer {
             + "sentences) noting which key points were covered and which were missed, and list in missed_points the "
             + "main points from the lecture that were NOT mentioned in the retelling (empty list if none missing).";
 
-    public RetellLectureScorer(SpeechAudioLoader audio, AzureSpeechAssessor assessor, GeminiRestClient gemini,
+    public RetellLectureScorer(SpeechAudioLoader audio, AzureSpeechAssessor assessor, StructuredModelClient gemini,
                                JsonMapper json) {
         super(audio, assessor, gemini, json);
     }

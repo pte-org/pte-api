@@ -1,6 +1,6 @@
 package com.pte.scoring.internal.vendor.gemini.scorer;
 
-import com.pte.scoring.internal.vendor.gemini.GeminiRestClient;
+import com.pte.scoring.internal.vendor.gemini.StructuredModelClient;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -14,13 +14,13 @@ import java.util.Set;
 @ConditionalOnProperty(name = "scoring.ai.provider", havingValue = "azure-gemini")
 public class SummarizeWrittenTextScorer extends GeminiWritingScorer {
 
-    private static final String EXAMINER = "You are a PTE Academic examiner grading a Summarize Written Text "
+    static final String EXAMINER = "You are a PTE Academic examiner grading a Summarize Written Text "
             + "response. The candidate read a passage and wrote a one-sentence summary of it.";
     private static final String ASK = "Score each trait on its own scale as described above, write brief feedback "
             + "(2-3 sentences), and list specific grammar/spelling/vocabulary errors found, each with the offending "
             + "text and a suggested correction.";
 
-    public SummarizeWrittenTextScorer(GeminiRestClient gemini, JsonMapper json) {
+    public SummarizeWrittenTextScorer(StructuredModelClient gemini, JsonMapper json) {
         super(gemini, json, EXAMINER, "Passage", "Candidate's summary", ASK, List.of());
     }
 
