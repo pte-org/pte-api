@@ -24,6 +24,12 @@ public interface GenerationJobItemRepository extends JpaRepository<QuestionGener
 
     List<QuestionGenerationJobItem> findByJobIdOrderByItemIndexAsc(Long jobId);
 
+    /** How many items of jobs created in [{@code since}, {@code until}) ended saved or failed, by task type and failure code (null when saved). */
+    @Query("select j.taskTypeKey, i.stage, i.failureCode, count(i) from " + ITEM + " i, " + JOB
+            + " j where j.id = i.jobId and j.createdAt >= :since and j.createdAt < :until and i.stage in (" + STAGE + ".SAVED, " + STAGE
+            + ".FAILED) group by j.taskTypeKey, i.stage, i.failureCode")
+    List<Object[]> countOutcomesBetween(@Param("since") Instant since, @Param("until") Instant until);
+
     List<QuestionGenerationJobItem> findByJobIdInOrderByItemIndexAsc(Collection<Long> jobIds);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
