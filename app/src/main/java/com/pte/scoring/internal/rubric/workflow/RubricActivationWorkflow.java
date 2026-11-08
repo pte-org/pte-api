@@ -59,7 +59,8 @@ public class RubricActivationWorkflow {
                 || !Objects.equals(diff.diffDigest(), request.confirmedDiffDigest())) {
             throw new RubricVersionException(HttpStatus.CONFLICT, RubricConstants.RUBRIC_DIFF_STALE);
         }
-        return lifecycle.activate(id, caller.userId(), JsonMapper.builder().build().writeValueAsString(diff.changes()));
+        return lifecycle.activate(id, caller.userId(), JsonMapper.builder().build().writeValueAsString(diff.changes()),
+                request.reason());
     }
 
     private static RubricVersionException concurrent() {

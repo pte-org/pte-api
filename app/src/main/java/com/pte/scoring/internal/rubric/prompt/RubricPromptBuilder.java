@@ -21,7 +21,7 @@ public final class RubricPromptBuilder {
     public static final String SPEECH_IS_MEASURED = "Pronunciation and oral fluency are measured from the recording "
             + "by a speech engine and are not yours to score; judge only what was said, from the transcript.";
 
-    private static final String INSTRUCTION = "Score each trait below as one whole number on its own scale. The "
+    public static final String INSTRUCTION = "Score each trait below as one whole number on its own scale. The "
             + "level descriptions are quoted from the Pearson PTE Academic Score Guide: choose, for each trait, the "
             + "level whose description best matches the response. Never answer with a fraction or a value outside "
             + "the trait's scale. Use each trait's key exactly as the field name.";

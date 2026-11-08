@@ -16,5 +16,10 @@ public record RubricVersionResponse(
         Instant decidedAt,
         Instant activatedAt,
         Instant retiredAt,
-        long lockVersion) {
+        long lockVersion,
+        Instant createdAt,
+        Instant updatedAt,
+        UUID updatedByUserPublicId,
+        String authorName,
+        String updatedByName) {
 }

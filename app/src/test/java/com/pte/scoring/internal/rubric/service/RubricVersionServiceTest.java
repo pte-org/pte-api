@@ -119,6 +119,20 @@ class RubricVersionServiceTest {
     }
 
     @Test
+    void activationKeepsTheApproversReasonInTheAuditRowAndTreatsABlankOneAsNone() {
+        ScoringRubricVersion first = stored(RubricVersionStatus.PENDING);
+        service.activate(first.getPublicId(), APPROVER, "CONTENT 1 -> 2", "  Content matters more for read aloud.  ");
+        ScoringRubricVersion second = stored(RubricVersionStatus.PENDING);
+        service.activate(second.getPublicId(), APPROVER, "CONTENT 2 -> 3", "   ");
+
+        org.mockito.ArgumentCaptor<ScoringRubricActivationAudit> saved =
+                org.mockito.ArgumentCaptor.forClass(ScoringRubricActivationAudit.class);
+        verify(audits, org.mockito.Mockito.times(2)).save(saved.capture());
+        assertThat(saved.getAllValues().get(0).getReason()).isEqualTo("Content matters more for read aloud.");
+        assertThat(saved.getAllValues().get(1).getReason()).isNull();
+    }
+
+    @Test
     void activateRetiresTheOldActiveAndFlushesBeforeTheNewOneBecomesActive() {
         ScoringRubricVersion candidate = stored(RubricVersionStatus.PENDING);
         when(versions.findPublicIdByStatus(RubricVersionStatus.ACTIVE)).thenReturn(Optional.of(PREVIOUS_ACTIVE));

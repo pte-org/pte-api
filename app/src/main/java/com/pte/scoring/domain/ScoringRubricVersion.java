@@ -57,6 +57,9 @@ public class ScoringRubricVersion extends BaseEntity {
     @Column(name = "submitted_at")
     private Instant submittedAt;
 
+    @Column(name = "updated_by_user_public_id")
+    private UUID updatedByUserPublicId;
+
     @Column(name = "decided_at")
     private Instant decidedAt;
 
@@ -81,6 +84,7 @@ public class ScoringRubricVersion extends BaseEntity {
         version.parameters = parametersJson;
         version.catalogVersion = catalogVersion;
         version.authorUserPublicId = authorUserPublicId;
+        version.updatedByUserPublicId = authorUserPublicId;
         version.status = RubricVersionStatus.DRAFT;
         return version;
     }
@@ -93,6 +97,7 @@ public class ScoringRubricVersion extends BaseEntity {
     public void markActive(UUID approverPublicId, Instant now) {
         status = RubricVersionStatus.ACTIVE;
         approverUserPublicId = approverPublicId;
+        updatedByUserPublicId = approverPublicId;
         decidedAt = now;
         activatedAt = now;
     }
@@ -100,8 +105,14 @@ public class ScoringRubricVersion extends BaseEntity {
     public void markRejected(UUID approverPublicId, String reason, Instant now) {
         status = RubricVersionStatus.REJECTED;
         approverUserPublicId = approverPublicId;
+        updatedByUserPublicId = approverPublicId;
         rejectionReason = reason;
         decidedAt = now;
+    }
+
+    /** Remembers who last changed the version, for the list; an edit or a submission by someone other than the author. */
+    public void recordUpdater(UUID userPublicId) {
+        updatedByUserPublicId = userPublicId;
     }
 
     public boolean isImmutable() {

@@ -52,6 +52,7 @@ public class RubricVersionCommandService {
         String parameters = parameters(request);
         validator.validate(parameters, RubricConstants.CATALOG_VERSION);
         version.reviseDraft(parameters, RubricConstants.CATALOG_VERSION);
+        version.recordUpdater(caller.userId());
         return save(version);
     }
 
@@ -65,7 +66,11 @@ public class RubricVersionCommandService {
         RubricWorkflowPolicy.author(caller);
         var version = load(id);
         return switch (request.action()) {
-            case SUBMIT -> RubricResponseMapper.toVersionResponse(lifecycle.submit(id));
+            case SUBMIT -> {
+                var submitted = lifecycle.submit(id);
+                submitted.recordUpdater(caller.userId());
+                yield RubricResponseMapper.toVersionResponse(submitted);
+            }
             case REJECT -> {
                 caller.requireAnyRole(com.pte.shared.security.SecurityRoles.PLATFORM_ADMIN,
                         com.pte.shared.security.SecurityRoles.ACADEMIC_MANAGER);

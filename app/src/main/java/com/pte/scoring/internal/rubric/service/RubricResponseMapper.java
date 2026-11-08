@@ -43,11 +43,23 @@ final class RubricResponseMapper {
                 toAzureMapping(rubric));
     }
 
+    /** Without names: the answer to a change, which the page reloads from the read API. */
     static RubricVersionResponse toVersionResponse(ScoringRubricVersion version) {
+        return toVersionResponse(version, null);
+    }
+
+    /** With the names of the author and of whoever last changed it; a null {@code names} leaves them out. */
+    static RubricVersionResponse toVersionResponse(ScoringRubricVersion version, RubricUserNames names) {
+        // A version made before the updater was recorded counts as last changed by its author.
+        var updater = version.getUpdatedByUserPublicId() != null ? version.getUpdatedByUserPublicId()
+                : version.getAuthorUserPublicId();
         return new RubricVersionResponse(version.getPublicId(), version.getVersionNo(), version.getStatus().name(),
                 version.getCatalogVersion(), version.getAuthorUserPublicId(), version.getApproverUserPublicId(),
                 version.getRejectionReason(), version.getSubmittedAt(), version.getDecidedAt(),
-                version.getActivatedAt(), version.getRetiredAt(), version.getLockVersion());
+                version.getActivatedAt(), version.getRetiredAt(), version.getLockVersion(),
+                version.getCreatedAt(), version.getUpdatedAt(), updater,
+                names == null ? null : names.nameOf(version.getAuthorUserPublicId()).orElse(null),
+                names == null ? null : names.nameOf(updater).orElse(null));
     }
 
     private static TraitDetailsResponse toTrait(TraitDefinition trait, EffectiveRubric rubric, int defaultWeight) {

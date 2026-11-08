@@ -172,6 +172,42 @@ class RubricReadServiceTest {
         assertThat(single.authorUserPublicId()).isEqualTo(active.getAuthorUserPublicId());
     }
 
+    @Test
+    void aVersionNamesItsAuthorAndWhoLastChangedItAndFallsBackToTheAuthor() {
+        RubricUserNames names = mock(RubricUserNames.class);
+        RubricReadService withNames = new RubricReadService(versions, CATALOG,
+                new RubricResolver(versions, CATALOG, CODEC, mock(com.pte.assessment.ExamDefinitionService.class)), names);
+        ScoringRubricVersion edited = version(RubricVersionStatus.DRAFT, seedJson());
+        java.util.UUID editor = java.util.UUID.randomUUID();
+        edited.recordUpdater(editor);
+        ScoringRubricVersion legacy = version(RubricVersionStatus.RETIRED, seedJson());
+        org.springframework.test.util.ReflectionTestUtils.setField(legacy, "updatedByUserPublicId", null);
+        when(names.nameOf(edited.getAuthorUserPublicId())).thenReturn(Optional.of("An Author"));
+        when(names.nameOf(editor)).thenReturn(Optional.of("Binh Editor"));
+        when(names.nameOf(legacy.getAuthorUserPublicId())).thenReturn(Optional.of("Old Author"));
+        when(versions.findAllByOrderByVersionNoDesc()).thenReturn(List.of(edited, legacy));
+
+        List<RubricVersionResponse> listed = withNames.listVersions();
+
+        assertThat(listed.get(0).authorName()).isEqualTo("An Author");
+        assertThat(listed.get(0).updatedByUserPublicId()).isEqualTo(editor);
+        assertThat(listed.get(0).updatedByName()).isEqualTo("Binh Editor");
+        assertThat(listed.get(1).updatedByUserPublicId()).isEqualTo(legacy.getAuthorUserPublicId());
+        assertThat(listed.get(1).updatedByName()).isEqualTo("Old Author");
+    }
+
+    @Test
+    void withoutANameSourceTheNamesAreLeftOut() {
+        ScoringRubricVersion draft = version(RubricVersionStatus.DRAFT, seedJson());
+        when(versions.findAllByOrderByVersionNoDesc()).thenReturn(List.of(draft));
+
+        RubricVersionResponse listed = service.listVersions().get(0);
+
+        assertThat(listed.authorName()).isNull();
+        assertThat(listed.updatedByName()).isNull();
+        assertThat(listed.updatedByUserPublicId()).isEqualTo(draft.getAuthorUserPublicId());
+    }
+
     private ScoringRubricVersion active(String json) {
         ScoringRubricVersion active = version(RubricVersionStatus.ACTIVE, json);
         when(versions.findByStatus(RubricVersionStatus.ACTIVE)).thenReturn(Optional.of(active));

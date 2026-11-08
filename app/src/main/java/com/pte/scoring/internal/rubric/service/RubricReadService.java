@@ -9,6 +9,7 @@ import com.pte.scoring.internal.rubric.dto.TaskTypeRubricResponse;
 import com.pte.scoring.internal.rubric.repository.ScoringRubricVersionRepository;
 import com.pte.scoring.rubric.RubricCatalog;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,11 +24,21 @@ public class RubricReadService {
     private final RubricCatalog catalog;
     private final RubricResolver resolver;
 
+    private final RubricUserNames names;
+
+    @Autowired
     public RubricReadService(ScoringRubricVersionRepository versionRepository, RubricCatalog catalog,
-                             RubricResolver resolver) {
+                             RubricResolver resolver, RubricUserNames names) {
         this.versionRepository = versionRepository;
         this.catalog = catalog;
         this.resolver = resolver;
+        this.names = names;
+    }
+
+    /** Without user names, for callers that only need the numbers. */
+    public RubricReadService(ScoringRubricVersionRepository versionRepository, RubricCatalog catalog,
+                             RubricResolver resolver) {
+        this(versionRepository, catalog, resolver, null);
     }
 
     @Transactional(readOnly = true)
@@ -52,12 +63,12 @@ public class RubricReadService {
     @Transactional(readOnly = true)
     public List<RubricVersionResponse> listVersions() {
         return versionRepository.findAllByOrderByVersionNoDesc().stream()
-                .map(RubricResponseMapper::toVersionResponse).toList();
+                .map(version -> RubricResponseMapper.toVersionResponse(version, names)).toList();
     }
 
     @Transactional(readOnly = true)
     public RubricVersionResponse getVersion(UUID versionPublicId) {
-        return RubricResponseMapper.toVersionResponse(load(versionPublicId));
+        return RubricResponseMapper.toVersionResponse(load(versionPublicId), names);
     }
 
     private ScoringRubricVersion versionOrActive(UUID versionPublicId) {

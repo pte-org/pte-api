@@ -75,6 +75,13 @@ public class RubricVersionService {
      */
     @Transactional
     public ScoringRubricVersion activate(UUID versionPublicId, UUID approverUserPublicId, String diffSummary) {
+        return activate(versionPublicId, approverUserPublicId, diffSummary, null);
+    }
+
+    /** As above; {@code reason} is the approver's own words for the change, kept in the audit row, or null. */
+    @Transactional
+    public ScoringRubricVersion activate(UUID versionPublicId, UUID approverUserPublicId, String diffSummary,
+                                         String reason) {
         Objects.requireNonNull(approverUserPublicId, "approverUserPublicId");
         ScoringRubricVersion candidate = load(versionPublicId);
         requireStatus(candidate, ACTIVATABLE);
@@ -92,7 +99,7 @@ public class RubricVersionService {
             throw concurrentChange(concurrent);
         }
         auditRepository.save(new ScoringRubricActivationAudit(activated.getPublicId(), previousActive,
-                approverUserPublicId, now, diffSummary));
+                approverUserPublicId, now, diffSummary, blankToNull(reason)));
         return activated;
     }
 
@@ -127,5 +134,9 @@ public class RubricVersionService {
         if (!allowed.contains(version.getStatus())) {
             throw new RubricVersionException(HttpStatus.CONFLICT, RubricConstants.RUBRIC_VERSION_STATUS_INVALID);
         }
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.strip();
     }
 }

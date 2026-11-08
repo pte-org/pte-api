@@ -36,8 +36,17 @@ public class ScoringRubricActivationAudit extends BaseEntity {
     @Column(name = "diff_summary", columnDefinition = "text", updatable = false)
     private String diffSummary;
 
+    @Column(name = "reason", length = 1000, updatable = false)
+    private String reason;
+
     public ScoringRubricActivationAudit(UUID versionPublicId, UUID previousActivePublicId, UUID actorUserPublicId,
                                         Instant activatedAt, String diffSummary) {
+        this(versionPublicId, previousActivePublicId, actorUserPublicId, activatedAt, diffSummary, null);
+    }
+
+    public ScoringRubricActivationAudit(UUID versionPublicId, UUID previousActivePublicId, UUID actorUserPublicId,
+                                        Instant activatedAt, String diffSummary, String reason) {
+        this.reason = reason;
         this.versionPublicId = versionPublicId;
         this.previousActivePublicId = previousActivePublicId;
         this.actorUserPublicId = actorUserPublicId;

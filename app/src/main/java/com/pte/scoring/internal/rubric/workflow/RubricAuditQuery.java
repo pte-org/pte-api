@@ -16,6 +16,7 @@ public class RubricAuditQuery {
     public List<RubricActivationAuditResponse> forVersion(UUID id) {
         return audits.findAllByVersionPublicIdOrderByActivatedAtDesc(id).stream()
                 .map(row -> new RubricActivationAuditResponse(row.getPublicId(), row.getVersionPublicId(),
-                        row.getPreviousActivePublicId(), row.getActorUserPublicId(), row.getActivatedAt(), row.getDiffSummary())).toList();
+                        row.getPreviousActivePublicId(), row.getActorUserPublicId(), row.getActivatedAt(), row.getDiffSummary(),
+                        row.getReason())).toList();
     }
 }
