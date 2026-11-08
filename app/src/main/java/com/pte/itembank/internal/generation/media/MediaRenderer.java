@@ -158,7 +158,8 @@ public class MediaRenderer {
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("imagePromptRef", ref.toString());
         meta.put("chartType", draft.chartType());
-        return new RenderedMedia(null, ref, meta);
+        // The bytes go along so the image reviewer can look at the same picture without reading it back.
+        return new RenderedMedia(null, ref, meta, png);
     }
 
     /** Removes media that was stored for a question that then could not be created. Never throws. */

@@ -5,6 +5,8 @@ import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants
 import com.pte.itembank.internal.generation.domain.ItemStage;
 import com.pte.itembank.internal.generation.exception.GenerationCallBudgetExceededException;
 import com.pte.itembank.internal.generation.job.AvoidTopicsProvider;
+import com.pte.itembank.internal.generation.live.GenerationLiveContext;
+import com.pte.itembank.internal.generation.live.GenerationLiveFeed;
 import com.pte.itembank.internal.generation.llm.LlmFailureType;
 import com.pte.itembank.internal.generation.llm.LlmProviderException;
 import com.pte.itembank.internal.generation.review.LlmItemReviewer;
@@ -12,6 +14,8 @@ import com.pte.itembank.internal.generation.review.ReviewVerdict;
 import com.pte.itembank.internal.generation.exception.GenerationMediaException;
 import com.pte.itembank.internal.generation.exception.GenerationRequestInvalidException;
 import com.pte.itembank.internal.generation.media.MediaRenderer;
+import com.pte.itembank.internal.generation.draft.ItemDraft;
+import com.pte.itembank.internal.generation.review.ChartImageReviewer;
 import com.pte.itembank.internal.generation.media.RenderedMedia;
 import java.util.Optional;
 import com.pte.shared.exception.DomainException;
@@ -26,6 +30,7 @@ import java.util.List;
  * Runs ONE question: generate → validate → duplicate check → review → save.
  * All provider calls happen outside transactions. Every failure is recorded on the item
  * and turned into an {@link ItemOutcome}; only outcomes are logged, never prompt/response/provider data.
+ * What the item goes through is also reported to the live view of the job, which never changes the outcome.
  */
 @Service
 public class GenerationPipeline {
@@ -39,11 +44,15 @@ public class GenerationPipeline {
     private final AvoidTopicsProvider avoidTopicsProvider;
     private final LlmItemReviewer itemReviewer;
     private final MediaRenderer mediaRenderer;
+    private final GenerationLiveFeed liveFeed;
+    private final ChartImageReviewer imageReviewer;
 
     public GenerationPipeline(List<ItemGenerator> generators, GeneratedQuestionWriter writer,
                               GenerationItemStateService itemState, QuestionGenerationProperties properties,
                               AvoidTopicsProvider avoidTopicsProvider, LlmItemReviewer itemReviewer,
-                              MediaRenderer mediaRenderer) {
+                              MediaRenderer mediaRenderer, GenerationLiveFeed liveFeed,
+                              ChartImageReviewer imageReviewer) {
+        this.imageReviewer = imageReviewer;
         this.generators = generators;
         this.writer = writer;
         this.itemState = itemState;
@@ -51,10 +60,21 @@ public class GenerationPipeline {
         this.avoidTopicsProvider = avoidTopicsProvider;
         this.itemReviewer = itemReviewer;
         this.mediaRenderer = mediaRenderer;
+        this.liveFeed = liveFeed;
     }
 
     public ItemOutcome runItem(JobClaim claim, CurrentUser caller, int index) {
-        if (!itemState.advance(claim, index, ItemStage.GENERATING)) {
+        GenerationLiveContext.open(liveFeed, claim.jobPublicId(), index);
+        try {
+            return run(claim, caller, index);
+        } finally {
+            GenerationLiveContext.close();
+            liveFeed.itemEnded(claim.jobPublicId(), index);
+        }
+    }
+
+    private ItemOutcome run(JobClaim claim, CurrentUser caller, int index) {
+        if (!advance(claim, index, ItemStage.GENERATING)) {
             return ItemOutcome.LEASE_LOST;
         }
         try {
@@ -82,7 +102,7 @@ public class GenerationPipeline {
             // Review (only if draft is available; stub generator may have null draft)
             ReviewVerdict verdict = null;
             if (item.draft() != null) {
-                itemState.advance(claim, index, ItemStage.REVIEWING);
+                advance(claim, index, ItemStage.REVIEWING);
                 verdict = itemReviewer.review(item.draft(), claim.taskTypeKey(),
                         claim.cefrLevel(), budget, null);
 
@@ -113,11 +133,17 @@ public class GenerationPipeline {
 
             // Media only after the text passed review, so nothing is spoken or drawn for a rejected draft.
             if (item.draft() != null) {
-                itemState.advance(claim, index, ItemStage.RENDERING_MEDIA);
+                advance(claim, index, ItemStage.RENDERING_MEDIA);
                 Optional<RenderedMedia> media = mediaRenderer.render(item.draft(), claim.taskTypeKey(), index,
                         claim.jobPublicId().getLeastSignificantBits(), caller);
                 if (media.isPresent()) {
                     item = item.withMedia(media.get());
+                    liveFeed.media(claim.jobPublicId(), index, media.get().audioPromptRef(),
+                            media.get().imagePromptRef());
+                    ItemOutcome refused = reviewImage(claim, caller, index, item, media.get());
+                    if (refused != null) {
+                        return refused;
+                    }
                 }
             }
 
@@ -151,6 +177,41 @@ public class GenerationPipeline {
             return fail(claim, index, QuestionGenerationConstants.GENERATION_INTERNAL_ERROR, null,
                     ItemOutcome.FAILED);
         }
+    }
+
+    /**
+     * With {@code itembank.generation.review.vision-check} on, a reviewer looks at a drawn chart next to its data.
+     * A chart is drawn by code from the data, so drawing it again gives the same picture: a refused image fails the
+     * item, with the reviewer's issues as its note, and the stored image is removed.
+     *
+     * @return the outcome of a refused image, or null when the item goes on
+     */
+    private ItemOutcome reviewImage(JobClaim claim, CurrentUser caller, int index, GeneratedItem item,
+                                    RenderedMedia media) {
+        if (!properties.getReview().isVisionCheck() || media.imagePng() == null
+                || !(item.draft() instanceof ItemDraft.ChartDraft chart)) {
+            return null;
+        }
+        advance(claim, index, ItemStage.REVIEWING);
+        ChartImageReviewer.Result look = imageReviewer.review(chart, media.imagePng());
+        if (look.passed()) {
+            return null;
+        }
+        mediaRenderer.discard(null, media.imagePromptRef(), caller);
+        String note = String.join(" ", look.issues());
+        return fail(claim, index, QuestionGenerationConstants.GENERATION_IMAGE_REVIEW_FAILED,
+                note.length() > QuestionGenerationConstants.MAX_FAILURE_NOTE_LENGTH
+                        ? note.substring(0, QuestionGenerationConstants.MAX_FAILURE_NOTE_LENGTH) : note,
+                ItemOutcome.FAILED);
+    }
+
+    /** @return false when the lease was lost; the live view only hears of a stage the item really reached */
+    private boolean advance(JobClaim claim, int index, ItemStage stage) {
+        boolean moved = itemState.advance(claim, index, stage);
+        if (moved) {
+            liveFeed.stage(claim.jobPublicId(), index, stage);
+        }
+        return moved;
     }
 
     private ItemOutcome fail(JobClaim claim, int index, String code, String note, ItemOutcome outcome) {
