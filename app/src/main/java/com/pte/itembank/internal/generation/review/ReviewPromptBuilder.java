@@ -3,6 +3,7 @@ package com.pte.itembank.internal.generation.review;
 import com.pte.itembank.GenerationRubricTraits;
 import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.internal.generation.draft.ItemDraft;
+import com.pte.itembank.internal.generation.prompt.PromptRegistry;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -18,74 +19,55 @@ public class ReviewPromptBuilder {
 
     private static final JsonMapper DRAFT_WRITER = JsonMapper.builder().build();
 
-    private final GenerationRubricTraits rubricTraits;
+    private static final String CONTEXT_FORMAT = "## Task Type%n%s%n%n## Scoring Rubric Traits%n%s%n%n%s";
+    private static final String NO_TRAITS = "This task type has no scoring rubric traits.";
 
-    public ReviewPromptBuilder(GenerationRubricTraits rubricTraits) {
+    private final GenerationRubricTraits rubricTraits;
+    private final PromptRegistry promptRegistry;
+
+    public ReviewPromptBuilder(GenerationRubricTraits rubricTraits, PromptRegistry promptRegistry) {
         this.rubricTraits = rubricTraits;
+        this.promptRegistry = promptRegistry;
     }
 
     /**
-     * Builds the system prompt for review. The prompt contains task spec, trait details,
-     * CEFR descriptions, and does NOT contain the generator's reasoning.
+     * Builds the system prompt for review from the prompt in use (the shipped one when none is stored), with the task
+     * type and its rubric traits filled in. It does NOT contain the generator's prompt or reasoning.
      */
     public String buildSystemPrompt(String taskTypeKey) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("You are a rigorous question reviewer for PTE Academic.\n\n");
+        return render(promptRegistry.reviewerPrompt().orElseGet(ReviewPromptDefaults::text), taskTypeKey);
+    }
 
-        sb.append("## Task Type\n");
-        sb.append(taskTypeKey).append("\n\n");
+    /**
+     * A reviewer prompt text with the task type and its rubric traits filled in: where the prompt names them with
+     * {@code {taskType}} and {@code {rubricTraits}}, otherwise as a block in front of it.
+     */
+    public String render(String template, String taskTypeKey) {
+        boolean placed = template.contains(ReviewPromptDefaults.TASK_TYPE_TOKEN)
+                || template.contains(ReviewPromptDefaults.RUBRIC_TRAITS_TOKEN);
+        String traits = traitsText(taskTypeKey);
+        String filled = template.replace(ReviewPromptDefaults.TASK_TYPE_TOKEN, taskTypeKey)
+                .replace(ReviewPromptDefaults.RUBRIC_TRAITS_TOKEN, traits);
+        return placed ? filled : String.format(CONTEXT_FORMAT, taskTypeKey, traits, filled);
+    }
 
-        // Rubric traits
+    private String traitsText(String taskTypeKey) {
         Optional<GenerationRubricTraits.TaskTraitInfo> rubric = rubricTraits.find(taskTypeKey);
-        if (rubric.isPresent()) {
-            sb.append("## Scoring Rubric Traits\n");
-            for (GenerationRubricTraits.TraitInfo trait : rubric.get().traits()) {
-                int maxScore = trait.maxScore() != null ? trait.maxScore() : 5; // default for per-word
-                sb.append(String.format("### %s (0-%d)%n", trait.displayNameEn(), maxScore));
-                for (GenerationRubricTraits.LevelDescriptor level : trait.levels()) {
-                    if (level.text() != null) {
-                        sb.append(String.format("- **%d**: %s%n", level.level(), level.text()));
-                    }
-                }
-                sb.append("\n");
-            }
+        if (rubric.isEmpty()) {
+            return NO_TRAITS;
         }
-
-        // Review checklist
-        sb.append("## Your Review Checklist\n");
-        sb.append("1. **taskFidelity**: Does this question measure the intended construct for this task type?\n");
-        sb.append("2. **cefrFit**: Is the linguistic difficulty appropriate for the target CEFR? Provide estimated CEFR level.\n");
-        sb.append("3. **answerKey**: Is the answer key clear, unambiguous, and defensible?\n");
-        sb.append("4. **scorability**: Can this question be scored by the rubric traits above (or answer-key rules for objective tasks)?\n");
-        sb.append("5. **clarity**: Is the question wording clear? Would test-takers understand what is expected?\n");
-        sb.append("6. **safety**: Are there any sensitive, offensive, or culturally inappropriate elements?\n\n");
-
-        sb.append("## What you are judging\n");
-        sb.append("- Judge only the question content in the draft. The platform scores answers with its own rules, ")
-                .append("so do NOT ask for scoring rules, extra fields, or a separate answer-key field.\n");
-        sb.append("- Where the answer lives depends on the task type: for Write From Dictation, Repeat Sentence, ")
-                .append("Re-tell Lecture and Summarize Spoken Text the transcript is the spoken text and the reference; ")
-                .append("for Answer Short Question the answer field lists the accepted answers; for choice tasks ")
-                .append("correctIndexes mark the correct options; for blank tasks blanks or slots hold the answers; ")
-                .append("for Highlight Incorrect Words changedIndexes are the word positions that were changed in ")
-                .append("displayedText.\n");
-        sb.append("- A short spoken sentence is normal for dictation and repeat-sentence tasks: judge the level by ")
-                .append("vocabulary and structure, not by length.\n");
-        sb.append("- Audio and images are produced from the draft after you approve it; do not ask for them.\n");
-        sb.append("- Return FAIL only for a real defect in the content (a wrong or ambiguous answer, the wrong level, ")
-                .append("unclear wording, unsafe content). Do not fail a question for missing optional metadata.\n\n");
-
-        sb.append("Respond ONLY with valid JSON matching this schema:\n");
-        sb.append("{\"verdict\":\"PASS|FAIL\",\"checks\":{");
-        sb.append("\"taskFidelity\":{\"ok\":bool,\"note\":\"...\"},");
-        sb.append("\"cefrFit\":{\"ok\":bool,\"estimated\":\"B1|B2|C1|C2\",\"note\":\"...\"},");
-        sb.append("\"answerKey\":{\"ok\":bool,\"note\":\"...\"},");
-        sb.append("\"scorability\":{\"ok\":bool,\"note\":\"...\"},");
-        sb.append("\"clarity\":{\"ok\":bool,\"note\":\"...\"},");
-        sb.append("\"safety\":{\"ok\":bool,\"note\":\"...\"}},");
-        sb.append("\"fixSuggestion\":\"...\"}\n");
-
-        return sb.toString();
+        StringBuilder sb = new StringBuilder();
+        for (GenerationRubricTraits.TraitInfo trait : rubric.get().traits()) {
+            int maxScore = trait.maxScore() != null ? trait.maxScore() : 5; // default for per-word
+            sb.append(String.format("### %s (0-%d)%n", trait.displayNameEn(), maxScore));
+            for (GenerationRubricTraits.LevelDescriptor level : trait.levels()) {
+                if (level.text() != null) {
+                    sb.append(String.format("- %d: %s%n", level.level(), level.text()));
+                }
+            }
+            sb.append(System.lineSeparator());
+        }
+        return sb.toString().strip();
     }
 
     /**

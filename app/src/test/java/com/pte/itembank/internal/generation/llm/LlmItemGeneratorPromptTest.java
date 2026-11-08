@@ -7,7 +7,7 @@ import com.pte.itembank.internal.generation.draft.DraftToQuestionMapper;
 import com.pte.itembank.internal.generation.exception.GenerationRequestInvalidException;
 import com.pte.itembank.internal.generation.pipeline.GenerationCallBudget;
 import com.pte.itembank.internal.generation.pipeline.GenerationRequest;
-import com.pte.itembank.internal.generation.prompt.PromptRegistry;
+import com.pte.itembank.internal.generation.prompt.PromptTestRegistry;
 import com.pte.itembank.internal.generation.validate.DraftValidator;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -29,7 +29,7 @@ class LlmItemGeneratorPromptTest {
 
     private final LlmGateway gateway = mock(LlmGateway.class);
     private final DraftParser parser = mock(DraftParser.class);
-    private final LlmItemGenerator generator = new LlmItemGenerator(gateway, new PromptRegistry(), parser,
+    private final LlmItemGenerator generator = new LlmItemGenerator(gateway, PromptTestRegistry.create(), parser,
             mock(DraftValidator.class), mock(DraftToQuestionMapper.class));
 
     private String capturedSystemPrompt(GenerationRequest request) {
@@ -84,7 +84,7 @@ class LlmItemGeneratorPromptTest {
                 java.util.List.of());
         when(gateway.completeJson(any(), anyString(), anyString())).thenReturn("{}");
         when(parser.parse(anyString(), anyString())).thenReturn(draft);
-        var gen = new LlmItemGenerator(gateway, new PromptRegistry(), parser, validator,
+        var gen = new LlmItemGenerator(gateway, PromptTestRegistry.create(), parser, validator,
                 mock(DraftToQuestionMapper.class));
 
         gen.generate(new GenerationRequest(UUID.randomUUID(), 0, "RE_ORDER_PARAGRAPHS", CefrLevel.B2,
@@ -104,7 +104,7 @@ class LlmItemGeneratorPromptTest {
                 new com.pte.itembank.internal.generation.validate.ValidationIssue("TOO_SHORT", "Need four")));
         when(gateway.completeJson(any(), anyString(), anyString())).thenReturn("{}");
         when(parser.parse(anyString(), anyString())).thenReturn(draft);
-        var gen = new LlmItemGenerator(gateway, new PromptRegistry(), parser, validator,
+        var gen = new LlmItemGenerator(gateway, PromptTestRegistry.create(), parser, validator,
                 mock(DraftToQuestionMapper.class));
 
         assertThatThrownBy(() -> gen.generate(new GenerationRequest(UUID.randomUUID(), 0, "RE_ORDER_PARAGRAPHS",

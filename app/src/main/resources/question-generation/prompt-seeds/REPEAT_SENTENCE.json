@@ -1,0 +1,69 @@
+{
+  "title": "Repeat Sentence (RS)",
+  "intro": [
+    {
+      "type": "TEXT",
+      "label": "",
+      "text": "Create a short sentence for students to listen to and repeat accurately.",
+      "items": [],
+      "levels": [],
+      "sentToAi": true
+    }
+  ],
+  "sections": [
+    {
+      "id": "requirements",
+      "title": "Requirements",
+      "blocks": [
+        {
+          "type": "LIST",
+          "label": "",
+          "text": "",
+          "items": [
+            "Transcript: eight to fifteen words",
+            "Audio duration: approximately three to nine seconds",
+            "Content: grammatically correct, clear English",
+            "Numbers must be spelled out as words",
+            "Avoid abbreviations"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "output",
+      "title": "Output",
+      "blocks": [
+        {
+          "type": "FIELDS",
+          "label": "",
+          "text": "",
+          "items": [
+            "topic: Business Communication",
+            "transcript: The effectiveness of team collaboration significantly improves project outcomes",
+            "question: ",
+            "options: null",
+            "correctIndexes: null"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "instructions",
+      "title": "Instructions",
+      "blocks": [
+        {
+          "type": "TEXT",
+          "label": "",
+          "text": "Return ONLY the JSON object with transcript field. The sentence should be natural, grammatically correct, and free of ambiguity.",
+          "items": [],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    }
+  ]
+}

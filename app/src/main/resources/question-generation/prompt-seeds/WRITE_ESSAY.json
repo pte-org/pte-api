@@ -1,0 +1,67 @@
+{
+  "title": "Write Essay",
+  "intro": [
+    {
+      "type": "TEXT",
+      "label": "",
+      "text": "Create an essay prompt that elicits structured argument writing.",
+      "items": [],
+      "levels": [],
+      "sentToAi": true
+    }
+  ],
+  "sections": [
+    {
+      "id": "requirements",
+      "title": "Requirements",
+      "blocks": [
+        {
+          "type": "LIST",
+          "label": "",
+          "text": "",
+          "items": [
+            "Prompt: 20-60 words",
+            "Should include argument words (agree, discuss, advantages, to what extent, etc.)",
+            "Prompt should be clear and engaging",
+            "Single key point or multiple perspectives possible"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "output",
+      "title": "Output",
+      "blocks": [
+        {
+          "type": "FIELDS",
+          "label": "",
+          "text": "",
+          "items": [
+            "topic: Workplace Technology",
+            "passage: ",
+            "essayPrompt: Some people believe that advances in technology have made the workplace more efficient, while others argue that it has created more stress and distraction. Discuss both views and give your own opinion.",
+            "keyPoints: null"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "instructions",
+      "title": "Instructions",
+      "blocks": [
+        {
+          "type": "TEXT",
+          "label": "",
+          "text": "Return ONLY the JSON object, no additional text.",
+          "items": [],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    }
+  ]
+}

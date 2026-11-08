@@ -1,0 +1,69 @@
+{
+  "title": "Write From Dictation (WFD)",
+  "intro": [
+    {
+      "type": "TEXT",
+      "label": "",
+      "text": "Create an audio transcription task where students write what they hear.",
+      "items": [],
+      "levels": [],
+      "sentToAi": true
+    }
+  ],
+  "sections": [
+    {
+      "id": "requirements",
+      "title": "Requirements",
+      "blocks": [
+        {
+          "type": "LIST",
+          "label": "",
+          "text": "",
+          "items": [
+            "Transcript: eight to fourteen words",
+            "Audio duration: approximately three to eight seconds",
+            "Content: authentic, clear English with natural pronunciation",
+            "Numbers must be spelled out as words",
+            "Avoid abbreviations"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "output",
+      "title": "Output",
+      "blocks": [
+        {
+          "type": "FIELDS",
+          "label": "",
+          "text": "",
+          "items": [
+            "topic: Education Technology",
+            "transcript: Online learning platforms have revolutionized how students access educational content today",
+            "question: ",
+            "options: null",
+            "correctIndexes: null"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "instructions",
+      "title": "Instructions",
+      "blocks": [
+        {
+          "type": "TEXT",
+          "label": "",
+          "text": "Return ONLY the JSON object with transcript field containing the sentence to be dictated. No markdown or additional text.\nThe transcript should be clear, natural, and appropriate for the CEFR level specified.",
+          "items": [],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    }
+  ]
+}

@@ -3,6 +3,7 @@ package com.pte.itembank.internal.generation.review;
 import com.pte.itembank.GenerationRubricTraits;
 import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.internal.generation.draft.ItemDraft;
+import com.pte.itembank.internal.generation.prompt.PromptTestRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -24,7 +25,7 @@ class ReviewPromptBuilderTest {
     @BeforeEach
     void setup() {
         MockitoAnnotations.openMocks(this);
-        builder = new ReviewPromptBuilder(rubricTraits);
+        builder = new ReviewPromptBuilder(rubricTraits, PromptTestRegistry.create());
     }
 
     @Test
@@ -211,5 +212,26 @@ class ReviewPromptBuilderTest {
         assertTrue(prompt.contains("Expression Clarity"));
         assertTrue(prompt.contains("Excellent"));
         assertTrue(prompt.contains("Exceptionally clear"));
+    }
+
+    @Test
+    void theShippedPromptCarriesNoTokensAndTheTaskContextComesInFrontOfIt() {
+        when(rubricTraits.find("WRITE_ESSAY")).thenReturn(Optional.empty());
+        String shipped = com.pte.itembank.internal.generation.review.ReviewPromptDefaults.text();
+
+        String prompt = builder.render(shipped, "WRITE_ESSAY");
+
+        assertFalse(shipped.contains("{taskType}") || shipped.contains("{rubricTraits}"));
+        assertTrue(prompt.startsWith("## Task Type"));
+        assertTrue(prompt.indexOf("WRITE_ESSAY") < prompt.indexOf("rigorous question reviewer"));
+    }
+
+    @Test
+    void aPromptThatPlacesTheTokensItselfGetsNoExtraBlock() {
+        when(rubricTraits.find("WRITE_ESSAY")).thenReturn(Optional.empty());
+
+        String prompt = builder.render("Review a {taskType} question.", "WRITE_ESSAY");
+
+        assertTrue(prompt.equals("Review a WRITE_ESSAY question."));
     }
 }

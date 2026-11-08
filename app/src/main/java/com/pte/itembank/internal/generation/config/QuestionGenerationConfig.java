@@ -2,6 +2,7 @@ package com.pte.itembank.internal.generation.config;
 
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import com.pte.itembank.internal.generation.llm.NineRouterLlmGateway;
+import com.pte.itembank.internal.generation.usage.GenerationUsageRecorder;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -32,7 +33,8 @@ public class QuestionGenerationConfig {
     /** Present only when generation is on and the stub is not: the real 9router transport. */
     @Bean
     @ConditionalOnExpression("${itembank.generation.enabled:false} and !${itembank.generation.stub:false}")
-    public NineRouterLlmGateway nineRouterLlmGateway(QuestionGenerationProperties properties, JsonMapper jsonMapper) {
+    public NineRouterLlmGateway nineRouterLlmGateway(QuestionGenerationProperties properties, JsonMapper jsonMapper,
+                                                     GenerationUsageRecorder usageRecorder) {
         QuestionGenerationProperties.Llm llm = properties.getLlm();
         // Redirects are never followed: a 3xx must not carry the bearer key to another host.
         HttpClient httpClient = HttpClient.newBuilder()
@@ -46,7 +48,7 @@ public class QuestionGenerationConfig {
                 .requestFactory(requestFactory)
                 .defaultHeader(HttpHeaders.AUTHORIZATION, BEARER + llm.getApiKey())
                 .build();
-        return new NineRouterLlmGateway(restClient, properties, jsonMapper);
+        return new NineRouterLlmGateway(restClient, properties, jsonMapper, usageRecorder);
     }
 
     /** A dedicated single thread: a job runs for minutes and must not block the shared one-thread scheduler. */

@@ -1,90 +1,101 @@
 package com.pte.itembank.internal.generation.prompt;
 
+import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
+import com.pte.itembank.internal.generation.domain.AiPromptKind;
+import com.pte.itembank.internal.generation.domain.AiPromptStatus;
+import com.pte.itembank.internal.generation.domain.AiPromptVersion;
+import com.pte.itembank.internal.generation.repository.AiPromptVersionRepository;
 import org.springframework.stereotype.Component;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
+
+import java.util.Comparator;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.TreeMap;
 
 /**
- * Registry of task-type-specific prompts. Loads from
- * resources/question-generation/prompts/{TASK_TYPE}.md and _common-generator.md.
- * Each prompt is versioned and includes placeholders for {cefr}, {topicHint}, {avoidTopics}, {lengthRules}.
+ * The prompts the generator uses: for each task type and for the block they share, the version that is ACTIVE in the
+ * database. Text is assembled from the stored JSON on every read, so a newly activated version is used by the next
+ * item without a restart. The prompts carry the placeholders {cefr}, {topicHint}, {avoidTopics} and {lengthRules}.
  */
 @Component
 public class PromptRegistry {
 
-    private static final int PROMPT_VERSION = 1;
-    private final Map<String, String> prompts = new HashMap<>();
-    private String commonPrompt;
+    private final AiPromptVersionRepository versions;
+    private final PromptContentCodec codec;
 
-    public PromptRegistry() {
-        loadPrompts();
+    public PromptRegistry(AiPromptVersionRepository versions, PromptContentCodec codec) {
+        this.versions = versions;
+        this.codec = codec;
     }
 
-    /** Retrieve the system/instruction prompt for a task type. Placeholder substitution happens in generator. */
+    /** The instruction prompt of a task type, or null when it has none. Placeholders are filled in by the generator. */
     public String getPrompt(String taskTypeKey) {
-        return prompts.get(taskTypeKey.toUpperCase());
+        return generatorContent(taskTypeKey).map(PromptTextAssembler::assemble).orElse(null);
     }
 
-    /** Common instruction shared across all task types. */
+    /** The instruction shared by all task types; null when it has not been stored. */
     public String getCommonPrompt() {
-        return commonPrompt;
+        return commonContent().map(PromptTextAssembler::assemble).orElse(null);
     }
 
+    public Optional<PromptContent> generatorContent(String taskTypeKey) {
+        return active(AiPromptKind.GENERATOR, taskTypeKey.toUpperCase(Locale.ROOT)).map(this::contentOf);
+    }
+
+    /** The reviewer's prompt in use, as the text the model receives before the task type and traits are filled in. */
+    public Optional<String> reviewerPrompt() {
+        return active(AiPromptKind.REVIEWER, QuestionGenerationConstants.PROMPT_KEY_REVIEWER).map(this::contentOf)
+                .map(PromptTextAssembler::assembleWithoutTitle);
+    }
+
+    /** The image reviewer's prompt in use, as the text the model receives. */
+    public Optional<String> imageReviewerPrompt() {
+        return active(AiPromptKind.REVIEWER, QuestionGenerationConstants.PROMPT_KEY_IMAGE_REVIEWER)
+                .map(this::contentOf).map(PromptTextAssembler::assembleWithoutTitle);
+    }
+
+    public Optional<PromptContent> commonContent() {
+        return active(AiPromptKind.SHARED, QuestionGenerationConstants.PROMPT_KEY_COMMON_GENERATOR)
+                .map(this::contentOf);
+    }
+
+    /** Every task-type prompt's content, by task type, in a stable order. */
+    public Map<String, PromptContent> allContents() {
+        Map<String, PromptContent> contents = new TreeMap<>();
+        versions.findByKindAndStatus(AiPromptKind.GENERATOR, AiPromptStatus.ACTIVE)
+                .forEach(version -> contents.put(version.getPromptKey(), contentOf(version)));
+        return contents;
+    }
+
+    /** Every task-type prompt as the text the generator sends, by task type, in a stable order. */
+    public Map<String, String> all() {
+        Map<String, String> texts = new TreeMap<>();
+        allContents().forEach((taskType, content) -> texts.put(taskType, PromptTextAssembler.assemble(content)));
+        return texts;
+    }
+
+    /** The titles of the prompts in use of one kind, by key, in a stable order. */
+    public Map<String, String> activeTitles(AiPromptKind kind) {
+        Map<String, String> titles = new TreeMap<>();
+        versions.findByKindAndStatus(kind, AiPromptStatus.ACTIVE)
+                .forEach(version -> titles.put(version.getPromptKey(), contentOf(version).title()));
+        return titles;
+    }
+
+    /** The highest version number among the live generator prompts: it rises whenever one of them is replaced. */
     public int getPromptVersion() {
-        return PROMPT_VERSION;
+        return versions.findByKindAndStatus(AiPromptKind.GENERATOR, AiPromptStatus.ACTIVE).stream()
+                .map(AiPromptVersion::getVersionNo)
+                .max(Comparator.naturalOrder())
+                .orElse(0);
     }
 
-    private void loadPrompts() {
-        // Load common prompt
-        commonPrompt = loadResource("_common-generator.md");
-
-        // Load task-type specific prompts for text (Phase 2), audio (Phase 5), dialogue (Phase 6), and chart (Phase 7) types
-        String[] taskTypes = {
-                "MC_READING_SINGLE",
-                "MC_READING_MULTIPLE",
-                "FILL_IN_THE_BLANKS_DROPDOWN",
-                "FILL_IN_THE_BLANKS_DRAG_AND_DROP",
-                "RE_ORDER_PARAGRAPHS",
-                "SUMMARIZE_WRITTEN_TEXT",
-                "WRITE_ESSAY",
-                "READ_ALOUD",
-                "WRITE_FROM_DICTATION",
-                "REPEAT_SENTENCE",
-                "ANSWER_SHORT_QUESTION",
-                "SUMMARIZE_SPOKEN_TEXT",
-                "MC_LISTENING_SINGLE",
-                "MC_LISTENING_MULTIPLE",
-                "HIGHLIGHT_CORRECT_SUMMARY",
-                "SELECT_MISSING_WORD",
-                "HIGHLIGHT_INCORRECT_WORDS",
-                "FILL_IN_THE_BLANKS_TYPE_IN",
-                "RE_TELL_LECTURE",
-                "SUMMARIZE_GROUP_DISCUSSION",
-                "RESPOND_TO_A_SITUATION",
-                "DESCRIBE_IMAGE"
-        };
-
-        for (String taskType : taskTypes) {
-            String filename = taskType + ".md";
-            try {
-                String content = loadResource(filename);
-                prompts.put(taskType, content);
-            } catch (Exception e) {
-                // Log warning but continue; prompt validation will catch missing prompts
-                System.err.println("Warning: failed to load prompt for " + taskType + ": " + e.getMessage());
-            }
-        }
+    private Optional<AiPromptVersion> active(AiPromptKind kind, String promptKey) {
+        return versions.findByKindAndPromptKeyAndStatus(kind, promptKey, AiPromptStatus.ACTIVE);
     }
 
-    private String loadResource(String filename) {
-        try {
-            String path = "/question-generation/prompts/" + filename;
-            byte[] bytes = getClass().getResourceAsStream(path).readAllBytes();
-            return new String(bytes, StandardCharsets.UTF_8);
-        } catch (IOException | NullPointerException e) {
-            throw new RuntimeException("Failed to load prompt resource: " + filename, e);
-        }
+    private PromptContent contentOf(AiPromptVersion version) {
+        return codec.read(version.getContent());
     }
 }

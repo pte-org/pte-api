@@ -4,11 +4,12 @@ import com.pte.chat.internal.client.ChatAiAnswer;
 import com.pte.chat.internal.client.ChatAiException;
 import com.pte.chat.internal.client.ChatAiFailureReason;
 import com.pte.chat.internal.client.ChatAiUsage;
-import com.pte.chat.internal.client.GeminiChatClient;
+import com.pte.chat.internal.client.ChatAiClient;
 import com.pte.chat.internal.config.ChatAiProperties;
 import com.pte.chat.internal.constant.ChatConstants;
 import com.pte.chat.internal.exception.ChatBusyException;
 import com.pte.chat.internal.prompt.ChatPrompts;
+import com.pte.chat.internal.prompt.ChatPromptTexts;
 import com.pte.chat.internal.service.quota.ChatQuotaService;
 import com.pte.chat.internal.service.quota.ChatQuotaSnapshot;
 import com.pte.chat.internal.service.quota.ChatQuotaTicket;
@@ -26,7 +27,7 @@ import java.util.UUID;
 
 /**
  * One student question, end to end: entitlement, validation, one request per student, a global slot, the quota
- * charge and the Gemini call. Nothing the student typed or was answered is stored: the earlier turns arrive with
+ * charge and the provider call. Nothing the student typed or was answered is stored: the earlier turns arrive with
  * the request, and the only thing kept afterwards is a count and the tokens (see {@link ChatUsageRecorder}).
  *
  * <p>Every path after the charge ends in either an answer or a refund. The refund is attempted before the
@@ -48,14 +49,16 @@ public class ChatService {
     private final ChatAiProperties properties;
     private final ChatQuotaService quotaService;
     private final ChatConcurrencyGate gate;
-    private final GeminiChatClient client;
+    private final ChatAiClient client;
     private final ChatUsageRecorder usageRecorder;
     private final ChatObservability observability;
     private final ChatSendValidator validator;
+    private final ChatPromptTexts promptTexts;
 
     public ChatService(PracticeEntitlementGate entitlementGate, ChatAiProperties properties,
-                       ChatQuotaService quotaService, ChatConcurrencyGate gate, GeminiChatClient client,
-                       ChatUsageRecorder usageRecorder, ChatObservability observability) {
+                       ChatQuotaService quotaService, ChatConcurrencyGate gate, ChatAiClient client,
+                       ChatUsageRecorder usageRecorder, ChatObservability observability,
+                       ChatPromptTexts promptTexts) {
         this.entitlementGate = entitlementGate;
         this.properties = properties;
         this.quotaService = quotaService;
@@ -63,6 +66,7 @@ public class ChatService {
         this.client = client;
         this.usageRecorder = usageRecorder;
         this.observability = observability;
+        this.promptTexts = promptTexts;
         this.validator = new ChatSendValidator(properties);
     }
 
@@ -92,7 +96,7 @@ public class ChatService {
         ChatQuotaTicket ticket = quotaService.consume(studentId);
         ChatAiAnswer answer;
         try {
-            answer = client.generate(ChatPrompts.systemInstruction(), input.history(),
+            answer = client.generate(promptTexts.systemInstruction(), input.history(),
                     ChatPrompts.userTurn(input.message(), input.exercisePrompt(), input.taskType()));
         } catch (ChatAiException ex) {
             // The reason and status come from fixed texts, never from the question, the answer or the key.
@@ -106,7 +110,7 @@ public class ChatService {
         if (!answer.onTopic()) {
             refund(ticket, CAUSE_OFF_TOPIC);
             usageRecorder.record(answer.model(), ChatConstants.STATUS_REFUSED, answer.usage());
-            return new ChatReply(ChatPrompts.refusal(input.language(), input.message()), false, quotaService.snapshot(ticket));
+            return new ChatReply(promptTexts.refusal(input.language(), input.message()), false, quotaService.snapshot(ticket));
         }
         usageRecorder.record(answer.model(), ChatConstants.STATUS_OK, answer.usage());
         return new ChatReply(answer.markdown(), true, quotaService.snapshot(ticket));

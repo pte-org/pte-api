@@ -83,6 +83,28 @@ public final class QuestionGenerationConstants {
     public static final String STUB_GENERATOR_NAME = "stub";
     public static final String STUB_TASK_TYPE = "MC_READING_SINGLE";
 
+    public static final String PROMPT_CATEGORY_GENERATION = "GENERATION";
+    public static final String PROMPT_CATEGORY_REVIEW = "REVIEW";
+    public static final String PROMPT_CATEGORY_SCORING = "SCORING";
+    public static final String PROMPT_CATEGORY_SHARED = "SHARED";
+    public static final String PROMPT_KEY_COMMON_GENERATOR = "COMMON_GENERATOR";
+    public static final String PROMPT_KEY_REVIEWER = "REVIEWER";
+    /** The reviewer that looks at a drawn chart (a second REVIEWER prompt). */
+    public static final String PROMPT_KEY_IMAGE_REVIEWER = "CHART_IMAGE_REVIEWER";
+    public static final String GENERATION_IMAGE_REVIEW_FAILED = "GENERATION_IMAGE_REVIEW_FAILED";
+    public static final String PROMPT_SECTION_INTRO_ID = "intro";
+    public static final String PROMPT_SECTION_INTRO_TITLE = "Overview";
+    public static final String PROMPT_SECTION_PLACEHOLDERS_ID = "placeholders";
+    public static final String PROMPT_SECTION_PLACEHOLDERS_TITLE = "Placeholders";
+    public static final String ENGINE_LLM = "LLM";
+    public static final String ENGINE_TTS = "TTS";
+    public static final String ENGINE_CHART = "CHART";
+    public static final String PROMPT_SEED_PATTERN = "classpath*:question-generation/prompt-seeds/*.json";
+    public static final String PROMPT_CODE_LANGUAGE = "json";
+    public static final String PROMPT_CONTENT_UNREADABLE = "A stored prompt could not be read as JSON.";
+    public static final String PROMPT_NOT_FOUND = "AI_PROMPT_NOT_FOUND";
+    public static final String PROMPT_NOT_FOUND_MESSAGE = "Prompt not found.";
+
     private QuestionGenerationConstants() {
     }
 }

@@ -1,5 +1,6 @@
 package com.pte.chat.internal.service;
 
+import com.pte.chat.internal.prompt.ChatPromptTexts;
 import com.pte.chat.internal.client.GeminiChatClient;
 import com.pte.chat.internal.config.ChatAiProperties;
 import com.pte.chat.internal.service.quota.ChatQuotaRepository;
@@ -61,7 +62,8 @@ final class ChatFlowHarness implements AutoCloseable {
         ChatUsageRecorder recorder = new ChatUsageRecorder(new ChatUsageDailyRepository(jdbc), properties, clock,
                 observability);
         service = new ChatService((caller, organization) -> { }, properties, quota,
-                new ChatConcurrencyGate(properties, observability), client, recorder, observability);
+                new ChatConcurrencyGate(properties, observability), client, recorder, observability,
+                ChatPromptTexts.builtIn());
     }
 
     /** A harness whose entitlement gate lets everyone in. */

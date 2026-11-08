@@ -1,5 +1,6 @@
 package com.pte.chat.internal.service;
 
+import com.pte.chat.internal.prompt.ChatPromptTexts;
 import com.pte.chat.internal.client.ChatAiAnswer;
 import com.pte.chat.internal.client.ChatTurn;
 import com.pte.chat.internal.client.GeminiChatClient;
@@ -67,7 +68,7 @@ final class ChatLoadStack implements AutoCloseable {
         service = new ChatService((caller, organization) -> { }, properties,
                 new ChatQuotaService(new ChatQuotaRepository(jdbc), properties, clock, observability), gate, client,
                 new ChatUsageRecorder(new ChatUsageDailyRepository(jdbc), properties, clock, observability),
-                observability);
+                observability, ChatPromptTexts.builtIn());
     }
 
     private void script(long latencyMs, int length) {

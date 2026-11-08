@@ -2,7 +2,13 @@ package com.pte.chat.internal.prompt;
 
 import com.pte.chat.internal.constant.ChatConstants;
 
+import com.pte.itembank.PromptTexts;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The chat's instructions and fixed refusal texts. {@link #VERSION} names the prompt that is running: change
@@ -89,6 +95,27 @@ public final class ChatPrompts {
         return SYSTEM_INSTRUCTION;
     }
 
+    private static final Pattern PART_HEAD = Pattern.compile("^([A-Z][A-Z ]+)\\.\\s+(.*)$", Pattern.DOTALL);
+
+    /**
+     * The system instruction as titled parts for the AI prompt pages: each paragraph that opens with its name in
+     * capitals ("SCOPE. ...") becomes a part named in plain words ("Scope") holding the rest of the paragraph.
+     */
+    public static List<PromptTexts.Part> systemParts() {
+        List<PromptTexts.Part> parts = new ArrayList<>();
+        for (String paragraph : SYSTEM_INSTRUCTION.strip().split("\\n\\s*\\n")) {
+            Matcher head = PART_HEAD.matcher(paragraph.strip());
+            if (head.matches()) {
+                String name = head.group(1).strip().toLowerCase(Locale.ROOT);
+                parts.add(new PromptTexts.Part(name.substring(0, 1).toUpperCase(Locale.ROOT) + name.substring(1),
+                        head.group(2)));
+            } else {
+                parts.add(new PromptTexts.Part("", paragraph.strip()));
+            }
+        }
+        return parts;
+    }
+
     /**
      * The student's turn as the model sees it: the question alone, or the exercise text first (marked as data) and
      * the question last. The exercise text is not part of the system instruction so it can never outrank the rules.
@@ -133,7 +160,7 @@ public final class ChatPrompts {
      * vowel), so a Vietnamese question is refused in Vietnamese even when the page is set to English. Vietnamese
      * typed without accents is not detected and follows the page language.
      */
-    static boolean isVietnamese(String text) {
+    public static boolean isVietnamese(String text) {
         if (text == null) {
             return false;
         }

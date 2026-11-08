@@ -1,5 +1,6 @@
 package com.pte.chat.internal.service;
 
+import com.pte.chat.internal.prompt.ChatPromptTexts;
 import com.pte.chat.internal.client.ChatAiAnswer;
 import com.pte.chat.internal.client.ChatAiUsage;
 import com.pte.chat.internal.client.GeminiChatClient;
@@ -73,7 +74,8 @@ abstract class ChatServiceTestSupport {
     }
 
     ChatService newService() {
-        return new ChatService(entitlementGate, properties, quotaService, gate, client, usageRecorder, observability);
+        return new ChatService(entitlementGate, properties, quotaService, gate, client, usageRecorder, observability,
+                ChatPromptTexts.builtIn());
     }
 
     ChatSendCommand command(String message) {

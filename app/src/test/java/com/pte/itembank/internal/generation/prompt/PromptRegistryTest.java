@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PromptRegistryTest {
 
-    private final PromptRegistry registry = new PromptRegistry();
+    private final PromptRegistry registry = PromptTestRegistry.create();
 
     @Test
     void loadCommonPrompt_NotNull() {

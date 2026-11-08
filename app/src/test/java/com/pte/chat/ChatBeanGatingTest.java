@@ -10,6 +10,7 @@ import com.pte.chat.internal.controller.ChatAdminUsageController;
 import com.pte.chat.internal.service.report.ChatUsageReportService;
 import com.pte.chat.internal.service.usage.ChatUsageDailyRepository;
 import com.pte.chat.internal.service.usage.ChatUsageRecorder;
+import com.pte.chat.internal.prompt.ChatPromptTexts;
 import com.pte.chat.internal.service.ChatObservability;
 import com.pte.chat.internal.service.ChatService;
 import com.pte.chat.internal.service.quota.ChatQuotaRepository;
@@ -68,6 +69,7 @@ class ChatBeanGatingTest {
                 .withBean(Clock.class, Clock::systemUTC)
                 .withBean(MeterRegistry.class, SimpleMeterRegistry::new)
                 .withBean(PracticeEntitlementGate.class, () -> mock(PracticeEntitlementGate.class))
+                .withBean(ChatPromptTexts.class, ChatPromptTexts::builtIn)
                 .withBean(NamedParameterJdbcTemplate.class, () -> mock(NamedParameterJdbcTemplate.class));
     }
 

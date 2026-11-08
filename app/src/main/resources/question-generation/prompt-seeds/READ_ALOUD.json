@@ -1,0 +1,68 @@
+{
+  "title": "Read Aloud",
+  "intro": [
+    {
+      "type": "TEXT",
+      "label": "",
+      "text": "Create a short passage for candidates to read aloud. Should have no audio or image requirements.",
+      "items": [],
+      "levels": [],
+      "sentToAi": true
+    }
+  ],
+  "sections": [
+    {
+      "id": "requirements",
+      "title": "Requirements",
+      "blocks": [
+        {
+          "type": "LIST",
+          "label": "",
+          "text": "",
+          "items": [
+            "Passage: 50-60 words (approximately 15-20 seconds at normal speech)",
+            "No numbers or abbreviations",
+            "Clear, natural English",
+            "Suitable for fluency assessment",
+            "No special characters or complex punctuation"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "output",
+      "title": "Output",
+      "blocks": [
+        {
+          "type": "FIELDS",
+          "label": "",
+          "text": "",
+          "items": [
+            "topic: Daily Life",
+            "passage: Urban parks provide essential green spaces where residents can exercise, relax, and connect with nature. These public areas offer recreation facilities and often host community events. Access to quality parks improves physical health and mental well-being, making them valuable community resources.",
+            "keyPoints: null",
+            "essayPrompt: null"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "instructions",
+      "title": "Instructions",
+      "blocks": [
+        {
+          "type": "TEXT",
+          "label": "",
+          "text": "Return ONLY the JSON object, no additional text.",
+          "items": [],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    }
+  ]
+}
