@@ -25,7 +25,8 @@ class QuestionGenerationWorkerTest {
     private final JobLeaseService leases = mock(JobLeaseService.class);
     private final GenerationJobRunner runner = mock(GenerationJobRunner.class);
     private final ThreadPoolTaskExecutor executor = mock(ThreadPoolTaskExecutor.class);
-    private final QuestionGenerationWorker worker = new QuestionGenerationWorker(leases, runner, executor);
+    private final QuestionGenerationWorker worker = new QuestionGenerationWorker(leases, runner, executor,
+            org.mockito.Mockito.mock(com.pte.itembank.internal.generation.live.GenerationLiveFeed.class));
     private final JobClaim claim = new JobClaim(5L, UUID.randomUUID(), UUID.randomUUID(), "MC_READING_SINGLE",
             CefrLevel.B2, QuestionPool.PRACTICE, null, "worker");
 

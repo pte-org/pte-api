@@ -1,5 +1,8 @@
 package com.pte.itembank.internal.generation.controller;
 
+import com.pte.itembank.internal.generation.exception.GenerationJobNotFoundException;
+import com.pte.itembank.internal.generation.live.GenerationLiveSubscriptions;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import com.pte.itembank.internal.generation.dto.GenerationJobResponse;
 import com.pte.itembank.internal.generation.dto.GenerationQuotaResponse;
 import com.pte.itembank.internal.generation.dto.GenerationTaskTypeResponse;
@@ -44,6 +47,7 @@ class QuestionGenerationControllerTest {
 
     private final QuestionGenerationJobService jobService = mock(QuestionGenerationJobService.class);
     private final QuestionGenerationQueryService queryService = mock(QuestionGenerationQueryService.class);
+    private final GenerationLiveSubscriptions liveSubscriptions = mock(GenerationLiveSubscriptions.class);
     private final CurrentUser admin = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
     private MockedStatic<CurrentUserContext> context;
     private MockMvc mvc;
@@ -52,7 +56,8 @@ class QuestionGenerationControllerTest {
     void setUp() {
         context = Mockito.mockStatic(CurrentUserContext.class);
         context.when(CurrentUserContext::required).thenReturn(admin);
-        mvc = MockMvcBuilders.standaloneSetup(new QuestionGenerationController(jobService, queryService))
+        mvc = MockMvcBuilders.standaloneSetup(new QuestionGenerationController(jobService, queryService,
+                        liveSubscriptions))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -65,6 +70,29 @@ class QuestionGenerationControllerTest {
     private static GenerationJobResponse job(UUID id, String status) {
         return new GenerationJobResponse(id, "MC_READING_SINGLE", "B2", "PRACTICE", null, 3, status, 0, 0, null,
                 Instant.parse("2026-11-07T10:00:00Z"), null, null, List.of());
+    }
+
+    @Test
+    void theLiveStreamOfAnUnknownJobIsTheUsualJsonErrorAndNoStreamIsOpened() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(queryService.get(id, admin)).thenThrow(new GenerationJobNotFoundException());
+
+        mvc.perform(get("/api/v1/question-generation/jobs/{id}/live", id)
+                        .accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("GENERATION_JOB_NOT_FOUND"));
+        verifyNoInteractions(liveSubscriptions);
+    }
+
+    @Test
+    void theLiveStreamOfAKnownJobIsOpenedAfterTheAccessCheck() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(queryService.get(id, admin)).thenReturn(job(id, "RUNNING"));
+        when(liveSubscriptions.subscribe(id)).thenReturn(new SseEmitter());
+
+        mvc.perform(get("/api/v1/question-generation/jobs/{id}/live", id).accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(status().isOk());
+        Mockito.verify(liveSubscriptions).subscribe(id);
     }
 
     @Test

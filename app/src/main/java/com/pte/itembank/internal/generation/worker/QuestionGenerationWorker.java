@@ -1,6 +1,7 @@
 package com.pte.itembank.internal.generation.worker;
 
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
+import com.pte.itembank.internal.generation.live.GenerationLiveFeed;
 import com.pte.itembank.internal.generation.pipeline.JobClaim;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,13 +32,15 @@ public class QuestionGenerationWorker {
     private final JobLeaseService leases;
     private final GenerationJobRunner runner;
     private final ThreadPoolTaskExecutor executor;
+    private final GenerationLiveFeed liveFeed;
 
     public QuestionGenerationWorker(JobLeaseService leases, GenerationJobRunner runner,
                                     @Qualifier(QuestionGenerationConstants.EXECUTOR_NAME)
-                                    ThreadPoolTaskExecutor executor) {
+                                    ThreadPoolTaskExecutor executor, GenerationLiveFeed liveFeed) {
         this.leases = leases;
         this.runner = runner;
         this.executor = executor;
+        this.liveFeed = liveFeed;
     }
 
     @Scheduled(fixedDelayString = "${itembank.generation.worker.poll-delay-ms:3000}")
@@ -72,6 +75,8 @@ public class QuestionGenerationWorker {
             LOG.warn("Generation job aborted: jobId={}, errorType={}", claim.jobPublicId(),
                     aborted.getClass().getSimpleName());
         } finally {
+            // Also after an abort: the watchers reconnect and find the job resumed or ended.
+            liveFeed.jobEnded(claim.jobPublicId());
             busy.set(false);
         }
     }

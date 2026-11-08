@@ -7,7 +7,7 @@ import com.pte.itembank.internal.generation.dto.GenerationTaskTypeResponse;
 import com.pte.itembank.internal.generation.job.GenerationTaskTypeCatalog;
 import com.pte.itembank.internal.generation.llm.LlmGateway;
 import com.pte.itembank.internal.generation.llm.LlmItemGenerator;
-import com.pte.itembank.internal.generation.prompt.PromptRegistry;
+import com.pte.itembank.internal.generation.prompt.PromptTestRegistry;
 import com.pte.itembank.internal.generation.validate.DraftValidator;
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +32,7 @@ class GenerationQueryTest {
     private final GenerationTaskTypeCatalog catalog = new GenerationTaskTypeCatalog(List.of(realGenerator()));
 
     private static LlmItemGenerator realGenerator() {
-        return new LlmItemGenerator(mock(LlmGateway.class), new PromptRegistry(), mock(DraftParser.class),
+        return new LlmItemGenerator(mock(LlmGateway.class), PromptTestRegistry.create(), mock(DraftParser.class),
                 mock(DraftValidator.class), mock(DraftToQuestionMapper.class));
     }
 

@@ -26,6 +26,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /** Drives the real gateway bean (real HTTP client, no redirects) against a local server. */
 class NineRouterLlmGatewayTest {
 
+    private final com.pte.itembank.internal.generation.usage.GenerationUsageRecorder usageRecorder =
+            org.mockito.Mockito.mock(com.pte.itembank.internal.generation.usage.GenerationUsageRecorder.class);
+
     private static final String KEY = "test-key-not-a-secret";
     private static final String OK_BODY =
             "{\"choices\":[{\"message\":{\"content\":\"{\\\"a\\\":1}\"}}],\"usage\":{\"total_tokens\":42}}";
@@ -97,7 +100,17 @@ class NineRouterLlmGatewayTest {
         synchronized (replies) {
             replies.addAll(List.of(script));
         }
-        return new QuestionGenerationConfig().nineRouterLlmGateway(properties, JSON);
+        return new QuestionGenerationConfig().nineRouterLlmGateway(properties, JSON, usageRecorder);
+    }
+
+    @Test
+    void countsTheTokensTheProviderReportsUnderTheRoleAndModel() {
+        String body = "{\"choices\":[{\"message\":{\"content\":\"{}\"}}],"
+                + "\"usage\":{\"prompt_tokens\":120,\"completion_tokens\":30,\"total_tokens\":150}}";
+        gateway(new Reply(200, body, null, 0)).completeJson(LlmRole.REVIEWER, "system", "user");
+
+        org.mockito.Mockito.verify(usageRecorder).record("REVIEWER", "rev-model",
+                new com.pte.itembank.internal.generation.usage.GenerationUsage(1, 120, 30));
     }
 
     @Test

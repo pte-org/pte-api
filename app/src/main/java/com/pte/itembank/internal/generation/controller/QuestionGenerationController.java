@@ -8,11 +8,13 @@ import com.pte.itembank.internal.generation.dto.GenerationTaskTypeResponse;
 import com.pte.itembank.internal.generation.dto.SubmitGenerationJobRequest;
 import com.pte.itembank.internal.generation.job.QuestionGenerationJobService;
 import com.pte.itembank.internal.generation.job.QuestionGenerationQueryService;
+import com.pte.itembank.internal.generation.live.GenerationLiveSubscriptions;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
 import com.pte.shared.web.PagedResult;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 import java.util.UUID;
@@ -35,11 +38,14 @@ public class QuestionGenerationController {
 
     private final QuestionGenerationJobService jobService;
     private final QuestionGenerationQueryService queryService;
+    private final GenerationLiveSubscriptions liveSubscriptions;
 
     public QuestionGenerationController(QuestionGenerationJobService jobService,
-                                        QuestionGenerationQueryService queryService) {
+                                        QuestionGenerationQueryService queryService,
+                                        GenerationLiveSubscriptions liveSubscriptions) {
         this.jobService = jobService;
         this.queryService = queryService;
+        this.liveSubscriptions = liveSubscriptions;
     }
 
     @PostMapping("/jobs")
@@ -51,6 +57,16 @@ public class QuestionGenerationController {
     @GetMapping("/jobs/{publicId}")
     public ApiResponse<GenerationJobResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(queryService.get(publicId, currentUser()));
+    }
+
+    /**
+     * What the agents write for the job, as server-sent events. The job is loaded first, so an unknown job or a caller
+     * without access gets the usual JSON error instead of a stream.
+     */
+    @GetMapping(path = "/jobs/{publicId}/live", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter live(@PathVariable UUID publicId) {
+        queryService.get(publicId, currentUser());
+        return liveSubscriptions.subscribe(publicId);
     }
 
     @GetMapping("/jobs")
