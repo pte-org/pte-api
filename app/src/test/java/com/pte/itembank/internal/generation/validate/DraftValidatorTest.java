@@ -98,7 +98,7 @@ class DraftValidatorTest {
                 new ItemDraft.BlankFillDraft.Slot("answer3", List.of("d1", "d2", "d3")),
                 new ItemDraft.BlankFillDraft.Slot("answer4", List.of("d1", "d2", "d3")));
 
-        var draft = new ItemDraft.BlankFillDraft("Topic", "passage", slots);
+        var draft = new ItemDraft.BlankFillDraft("Topic", "A {{1}} b {{2}} c {{3}} d {{4}}.", slots);
         var issues = blankFillValidator.validateDropdown(draft);
         assertTrue(issues.isEmpty());
     }
@@ -121,7 +121,7 @@ class DraftValidatorTest {
                 new ItemDraft.BlankFillDraft.Slot("word2", List.of("d3", "d4")),
                 new ItemDraft.BlankFillDraft.Slot("word3", List.of("d5", "d6")));
 
-        var draft = new ItemDraft.BlankFillDraft("Topic", "passage", slots);
+        var draft = new ItemDraft.BlankFillDraft("Topic", "A {{1}} b {{2}} c {{3}}.", slots);
         var issues = blankFillValidator.validateDragDrop(draft);
         assertTrue(issues.isEmpty());
     }

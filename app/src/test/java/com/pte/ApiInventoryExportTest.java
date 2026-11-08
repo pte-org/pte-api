@@ -68,6 +68,7 @@ class ApiInventoryExportTest {
                 .containsExactlyInAnyOrder("POST /api/v1/question-generation/jobs",
                         "GET /api/v1/question-generation/jobs", "GET /api/v1/question-generation/jobs/{publicId}",
                         "PATCH /api/v1/question-generation/jobs/{publicId}/status",
+                        "GET /api/v1/question-generation/jobs/{publicId}/live",
                         "GET /api/v1/question-generation/task-types", "GET /api/v1/question-generation/quota");
         assertThat(endpoints).filteredOn(endpoint -> String.valueOf(endpoint.get("path"))
                         .startsWith("/api/v1/question-generation"))
