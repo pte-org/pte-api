@@ -16,13 +16,13 @@ class AttendanceSnapshotFactory {
     AttendanceRowView current(UUID studentPublicId, ExamRegistration registration) {
         if (registration == null) {
             return new AttendanceRowView(studentPublicId, null, null, null, AttendanceStatus.UNMARKED, 0L, null,
-                    null, null, null, false, AttendanceConstants.BLOCK_NOT_ENROLLED, null, null,
+                    null, null, null, false, AttendanceConstants.BLOCK_NOT_ENROLLED, null, null, null,
                     IdentityVerificationStatus.UNVERIFIED.name(), null);
         }
         return new AttendanceRowView(studentPublicId, registration.getPublicId(), null, null,
                 registration.getAttendanceStatus(), registration.getAttendanceVersion(),
                 registration.getLastActorPublicId(), registration.getLastActorRole(),
-                registration.getLastActionAt(), registration.getLastReasonOrNote(), true, null, null, null,
+                registration.getLastActionAt(), registration.getLastReasonOrNote(), true, null, null, null, null,
                 registration.getIdentityStatus().name(), registration.getIdentityNote());
     }
 }

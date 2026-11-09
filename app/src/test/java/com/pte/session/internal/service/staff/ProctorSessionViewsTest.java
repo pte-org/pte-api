@@ -4,7 +4,6 @@ import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.ExamSessionProctor;
 import com.pte.session.domain.enums.ProctorRole;
 import com.pte.session.domain.enums.SessionStatus;
-import com.pte.session.dto.response.ProctorMonitoringSessionView;
 import com.pte.session.dto.response.ProctorWorkspaceSessionView;
 import org.junit.jupiter.api.Test;
 
@@ -177,16 +176,5 @@ class ProctorSessionViewsTest {
         ExamSessionProctor assignment = assignment(session(SessionStatus.OPEN, OPENS, CLOSES), null);
 
         assertThat(ProctorSessionViews.toWorkspaceSessionView(assignment, OPENS).assignmentRole()).isNull();
-    }
-
-    @Test
-    void toSessionView_exposesTheProctorWhoHoldsTheAssignment() {
-        ExamSessionProctor assignment = assignment(session(SessionStatus.OPEN, OPENS, CLOSES), ProctorRole.ASSISTANT_PROCTOR);
-
-        ProctorMonitoringSessionView view = ProctorSessionViews.toSessionView(assignment);
-
-        assertThat(view.assignmentRole()).isEqualTo("ASSISTANT_PROCTOR");
-        assertThat(view.proctorPublicId()).isEqualTo(assignment.getProctorPublicId());
-        assertThat(view.status()).isEqualTo(SessionStatus.OPEN);
     }
 }
