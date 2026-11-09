@@ -30,6 +30,8 @@ public interface GenerationJobRepository extends JpaRepository<QuestionGeneratio
 
     Page<QuestionGenerationJob> findByDeletedFalse(Pageable pageable);
 
+    Page<QuestionGenerationJob> findByRequestedByUserPublicIdAndDeletedFalse(UUID requestedBy, Pageable pageable);
+
     long countByStatusIn(Collection<JobStatus> statuses);
 
     boolean existsByRequestedByUserPublicIdAndStatusIn(UUID requestedBy, Collection<JobStatus> statuses);

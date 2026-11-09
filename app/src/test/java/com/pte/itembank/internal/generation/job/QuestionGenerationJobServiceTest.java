@@ -131,10 +131,10 @@ class QuestionGenerationJobServiceTest {
     }
 
     @Test
-    void onlyAPlatformAdminMaySubmit() {
-        CurrentUser staff = new CurrentUser(UUID.randomUUID(), null, List.of("ACADEMIC_STAFF"));
+    void onlyAQuestionWriterMaySubmit() {
+        CurrentUser host = new CurrentUser(UUID.randomUUID(), null, List.of("HOST_ADMIN"));
 
-        assertThatThrownBy(() -> service.submit(request(1), staff)).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> service.submit(request(1), host)).isInstanceOf(AccessDeniedException.class);
         verify(jobs, never()).saveAndFlush(any());
     }
 

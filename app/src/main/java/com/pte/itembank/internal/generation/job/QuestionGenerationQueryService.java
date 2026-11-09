@@ -10,7 +10,6 @@ import com.pte.itembank.internal.generation.exception.GenerationJobNotFoundExcep
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
 import com.pte.shared.security.CurrentUser;
-import com.pte.shared.security.SecurityRoles;
 import com.pte.shared.web.PageMeta;
 import com.pte.shared.web.PagedResult;
 import org.springframework.data.domain.Page;
@@ -46,32 +45,35 @@ public class QuestionGenerationQueryService {
 
     @Transactional(readOnly = true)
     public GenerationJobResponse get(UUID publicId, CurrentUser caller) {
-        caller.requireAnyRole(SecurityRoles.PLATFORM_ADMIN);
         QuestionGenerationJob job = jobs.findByPublicIdAndDeletedFalse(publicId)
                 .orElseThrow(GenerationJobNotFoundException::new);
+        GenerationAccessPolicy.requireAccess(caller, job);
         return GenerationJobResponse.from(job, items.findByJobIdOrderByItemIndexAsc(job.getId()));
     }
 
-    /** Newest first, without items (the list only needs the counters). */
+    /** Newest first, without items (the list only needs the counters); a staff writer sees only their own jobs. */
     @Transactional(readOnly = true)
     public PagedResult<GenerationJobResponse> list(int page, int size, CurrentUser caller) {
-        caller.requireAnyRole(SecurityRoles.PLATFORM_ADMIN);
+        GenerationAccessPolicy.requireAuthor(caller);
         int safeSize = Math.min(Math.max(size, 1), QuestionGenerationConstants.MAX_PAGE_SIZE);
-        Page<QuestionGenerationJob> result = jobs.findByDeletedFalse(
-                PageRequest.of(Math.max(page, 0), safeSize, Sort.by(Sort.Direction.DESC, "createdAt")));
+        PageRequest pageRequest = PageRequest.of(Math.max(page, 0), safeSize,
+                Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<QuestionGenerationJob> result = GenerationAccessPolicy.seesAllJobs(caller)
+                ? jobs.findByDeletedFalse(pageRequest)
+                : jobs.findByRequestedByUserPublicIdAndDeletedFalse(caller.userId(), pageRequest);
         List<GenerationJobResponse> data = result.getContent().stream().map(GenerationJobResponse::from).toList();
         return new PagedResult<>(data, new PageMeta(result.getNumber(), result.getSize(), result.getTotalElements(),
                 result.getTotalPages(), result.isFirst(), result.isLast(), result.hasNext(), result.hasPrevious()));
     }
 
     public List<GenerationTaskTypeResponse> taskTypes(CurrentUser caller) {
-        caller.requireAnyRole(SecurityRoles.PLATFORM_ADMIN);
+        GenerationAccessPolicy.requireAuthor(caller);
         return catalog.supported();
     }
 
     @Transactional(readOnly = true)
     public GenerationQuotaResponse quota(CurrentUser caller) {
-        caller.requireAnyRole(SecurityRoles.PLATFORM_ADMIN);
+        GenerationAccessPolicy.requireAuthor(caller);
         long used = jobs.sumRequestedSinceByUser(caller.userId(), clock.instant().truncatedTo(ChronoUnit.DAYS));
         return new GenerationQuotaResponse(used, properties.getLimits().getMaxItemsPerUserPerDay());
     }

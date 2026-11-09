@@ -73,7 +73,7 @@ class ApiInventoryExportTest {
         assertThat(endpoints).filteredOn(endpoint -> String.valueOf(endpoint.get("path"))
                         .startsWith("/api/v1/question-generation"))
                 .allSatisfy(endpoint -> assertThat(endpoint.get("authorization"))
-                        .isEqualTo("hasRole('PLATFORM_ADMIN')"));
+                        .isEqualTo("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')"));
         assertThat(endpoints).filteredOn(endpoint -> "/api/v1/scoring-rubrics/simulations".equals(endpoint.get("path")))
                 .singleElement().satisfies(endpoint -> {
                     assertThat(endpoint.get("method")).isEqualTo("POST");

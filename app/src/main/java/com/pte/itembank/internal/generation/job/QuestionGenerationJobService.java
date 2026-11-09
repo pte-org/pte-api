@@ -19,7 +19,6 @@ import com.pte.itembank.internal.generation.exception.GenerationRequestInvalidEx
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
 import com.pte.shared.security.CurrentUser;
-import com.pte.shared.security.SecurityRoles;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,7 +57,7 @@ public class QuestionGenerationJobService {
 
     @Transactional
     public GenerationJobResponse submit(SubmitGenerationJobRequest request, CurrentUser caller) {
-        caller.requireAnyRole(SecurityRoles.PLATFORM_ADMIN);
+        GenerationAccessPolicy.requireAuthor(caller);
         if (!properties.isEnabled()) {
             throw new GenerationDisabledException();
         }
@@ -107,9 +106,9 @@ public class QuestionGenerationJobService {
      */
     @Transactional
     public GenerationJobResponse cancel(UUID publicId, CurrentUser caller) {
-        caller.requireAnyRole(SecurityRoles.PLATFORM_ADMIN);
         QuestionGenerationJob job = jobs.findByPublicIdAndDeletedFalse(publicId)
                 .orElseThrow(GenerationJobNotFoundException::new);
+        GenerationAccessPolicy.requireAccess(caller, job);
         Instant now = clock.instant();
         if (jobs.cancelQueued(publicId, now) > 0) {
             items.cancelOpenUnleased(job.getId(), now);

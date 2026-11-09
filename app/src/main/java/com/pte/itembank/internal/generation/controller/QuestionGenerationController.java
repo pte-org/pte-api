@@ -30,10 +30,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.List;
 import java.util.UUID;
 
-/** AI question generation for the platform bank. Platform admins only; all rules live in the services. */
+/** AI question generation for the platform bank, for everyone who writes its questions; rules live in the services. */
 @RestController
 @RequestMapping("/api/v1/question-generation")
-@PreAuthorize("hasRole('PLATFORM_ADMIN')")
+@PreAuthorize("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')")
 public class QuestionGenerationController {
 
     private final QuestionGenerationJobService jobService;

@@ -56,8 +56,21 @@ class GenerationCallerResolverTest {
     }
 
     @Test
-    void aDemotedAdminIsNotResolved() {
-        when(identity.findById(id)).thenReturn(Optional.of(user(UserStatus.ACTIVE, false, Role.ACADEMIC_STAFF)));
+    void aStaffWriterRunsWithStaffRightsOnly() {
+        when(identity.findById(id)).thenReturn(Optional.of(
+                user(UserStatus.ACTIVE, false, Role.ACADEMIC_STAFF, Role.HOST_ADMIN)));
+
+        Optional<CurrentUser> caller = resolver.resolve(id);
+
+        assertThat(caller).isPresent();
+        assertThat(caller.get().hasRole("ACADEMIC_STAFF")).isTrue();
+        assertThat(caller.get().hasRole("PLATFORM_ADMIN")).isFalse();
+        assertThat(caller.get().hasRole("HOST_ADMIN")).isFalse();
+    }
+
+    @Test
+    void aUserWhoLostEveryWriterRoleIsNotResolved() {
+        when(identity.findById(id)).thenReturn(Optional.of(user(UserStatus.ACTIVE, false, Role.HOST_ADMIN)));
 
         assertThat(resolver.resolve(id)).isEmpty();
     }

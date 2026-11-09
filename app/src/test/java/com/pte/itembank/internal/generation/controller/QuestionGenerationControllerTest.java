@@ -183,11 +183,11 @@ class QuestionGenerationControllerTest {
     }
 
     @Test
-    void everyRouteIsRestrictedToPlatformAdminsAndNoMethodBroadensIt() {
+    void everyRouteIsRestrictedToQuestionWritersAndNoMethodBroadensIt() {
         PreAuthorize classLevel = QuestionGenerationController.class.getAnnotation(PreAuthorize.class);
 
         assertThat(classLevel).isNotNull();
-        assertThat(classLevel.value()).isEqualTo("hasRole('PLATFORM_ADMIN')");
+        assertThat(classLevel.value()).isEqualTo("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')");
         for (var method : QuestionGenerationController.class.getDeclaredMethods()) {
             assertThat(method.getAnnotation(PreAuthorize.class))
                     .as("method %s must not override the class-level restriction", method.getName()).isNull();
