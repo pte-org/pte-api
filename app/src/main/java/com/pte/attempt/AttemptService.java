@@ -10,9 +10,7 @@ import com.pte.attempt.dto.response.ScoreSelectionView;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.attempt.dto.response.AttemptGradingCandidateView;
 import com.pte.attempt.dto.response.AttemptGradingCoverageView;
-import com.pte.attempt.dto.response.MonitoringAttemptSummaryView;
 import com.pte.attempt.dto.response.MonitoringAttemptView;
-import com.pte.attempt.dto.response.MonitoringRosterAggregateView;
 import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import com.pte.attempt.internal.repository.ExamAttemptSpecifications;
@@ -241,18 +239,6 @@ public class AttemptService implements StartedAttemptLookup {
     public Map<UUID, MonitoringAttemptView> getLatestAttemptsForStudents(
             UUID sessionPublicId, UUID tenantId, Collection<UUID> studentPublicIds) {
         return attemptMonitoringQueryService.findLatestAttemptsForStudents(sessionPublicId, tenantId, studentPublicIds);
-    }
-
-    /** Returns bounded attempt history for a specific enrolled student on an exam session. */
-    public PagedResult<MonitoringAttemptSummaryView> getAttemptHistoryForStudent(
-            UUID sessionPublicId, UUID studentPublicId, UUID tenantId, int page, int size) {
-        return attemptMonitoringQueryService.findAttemptHistoryForStudent(sessionPublicId, studentPublicId, tenantId, page, size);
-    }
-
-    /** Whole-session status aggregate over the given enrolled students, each counted once by latest attempt. */
-    public MonitoringRosterAggregateView getRosterAggregate(UUID sessionPublicId, UUID tenantId,
-            Collection<UUID> enrolledStudentPublicIds) {
-        return attemptMonitoringQueryService.getRosterAggregate(sessionPublicId, tenantId, enrolledStudentPublicIds);
     }
 
     /** Applies a scoped force-submit command verifying exact attempt, session, and tenant. Returns true if submitted, false if already submitted (no-op). */

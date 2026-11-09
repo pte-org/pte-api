@@ -66,19 +66,6 @@ public interface ExamIncidentRepository extends JpaRepository<ExamIncident, Long
                                       @Param("cursorId") UUID cursorId,
                                       Pageable pageable);
 
-    @Query("""
-            SELECT incident.attemptPublicId, COUNT(incident) FROM ExamIncident incident
-            WHERE incident.sessionPublicId = :sessionPublicId
-              AND incident.tenantId = :tenantId
-              AND incident.origin = com.pte.proctoring.domain.enums.IncidentOrigin.PROCTOR_FLAG
-              AND incident.attemptPublicId IN :attemptPublicIds
-              AND incident.deleted = false
-            GROUP BY incident.attemptPublicId
-            """)
-    List<Object[]> countFlagsByAttemptPublicIdIn(@Param("sessionPublicId") UUID sessionPublicId,
-                                                 @Param("tenantId") UUID tenantId,
-                                                 @Param("attemptPublicIds") Collection<UUID> attemptPublicIds);
-
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             UPDATE ExamIncident incident

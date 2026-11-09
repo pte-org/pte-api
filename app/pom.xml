@@ -64,11 +64,6 @@
 			<artifactId>bucket4j_jdk17-lettuce</artifactId>
 			<version>8.19.0</version>
 		</dependency>
-		<!-- STOMP/WebSocket for the proctor console (com.pte.proctoring, Phase 09). -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-websocket</artifactId>
-		</dependency>
 		<!-- SMTP send for EmailWorker (com.pte.notification, Phase 09). -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

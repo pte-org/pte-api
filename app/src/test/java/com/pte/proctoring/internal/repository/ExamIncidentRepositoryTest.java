@@ -10,7 +10,6 @@ import org.springframework.data.domain.PageRequest;
 
 import java.time.Instant;
 import java.util.EnumSet;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -101,23 +100,6 @@ class ExamIncidentRepositoryTest {
 
         assertThat(repository.findAuditAfter(sessionId, tenantId, EVIDENCE, firstDetectedAt,
                 first.getPublicId(), PageRequest.of(0, 10))).containsExactly(second);
-    }
-
-    @Test
-    void flagCountsGroupByAttemptAndIgnoreOtherOrigins() {
-        UUID tenantId = UUID.randomUUID();
-        UUID sessionId = UUID.randomUUID();
-        UUID attemptId = UUID.randomUUID();
-        Instant at = Instant.parse("2026-09-28T04:00:00Z");
-        repository.saveAndFlush(incident(tenantId, sessionId, attemptId, IncidentOrigin.PROCTOR_FLAG, null, at));
-        repository.saveAndFlush(incident(tenantId, sessionId, attemptId, IncidentOrigin.PROCTOR_FLAG, null, at));
-        repository.saveAndFlush(incident(tenantId, sessionId, attemptId, IncidentOrigin.AUTO, "c", at));
-
-        List<Object[]> counts = repository.countFlagsByAttemptPublicIdIn(sessionId, tenantId, List.of(attemptId));
-
-        assertThat(counts).hasSize(1);
-        assertThat(counts.get(0)[0]).isEqualTo(attemptId);
-        assertThat(counts.get(0)[1]).isEqualTo(2L);
     }
 
     @Test
