@@ -57,18 +57,20 @@ class UserBulkCreateWriterTest {
     }
 
     @Test
-    void createOne_happyPath_savesAccountWithCredentialAndStudentMembership() {
+    void createGeneratedStudent_savesGeneratedUsernameEmailCredentialAndStudentMembership() {
         UUID tenantId = UUID.randomUUID();
-        when(userRepository.findByUsernameAndDeletedFalse("student@tenant.example")).thenReturn(Optional.empty());
         stubSaveAssigningIds();
 
-        Optional<UserBulkCreateWriter.Result> result = writer.createOne(row(), tenantId);
+        Optional<UserBulkCreateWriter.Result> result = writer.createGeneratedStudent("school.abcdefgh", row(),
+                tenantId);
 
         assertThat(result).isPresent();
-        assertThat(result.get().user().getEmail()).isEqualTo("student@tenant.example");
+        User user = result.get().user();
+        assertThat(user.getUsername()).isEqualTo("school.abcdefgh");
+        assertThat(user.getEmail()).isEqualTo("student@tenant.example");
+        assertThat(user.isMustChangePassword()).isTrue();
         assertThat(result.get().generatedPassword()).matches("^[2-9A-HJ-NP-Za-hj-np-z]{4}-[2-9A-HJ-NP-Za-hj-np-z]{4}$");
-        assertThat(passwordEncoder.matches(result.get().generatedPassword(),
-                result.get().user().getCredentialHash())).isTrue();
+        assertThat(passwordEncoder.matches(result.get().generatedPassword(), user.getCredentialHash())).isTrue();
         ArgumentCaptor<OrganizationMember> member = ArgumentCaptor.forClass(OrganizationMember.class);
         verify(memberRepository).saveAndFlush(member.capture());
         assertThat(member.getValue().getOrganizationId()).isEqualTo(tenantId);
@@ -76,83 +78,13 @@ class UserBulkCreateWriterTest {
     }
 
     @Test
-    void createOne_concurrentDuplicateEmail_savesThrows_returnsEmpty_neverCreatesMembership() {
-        UUID tenantId = UUID.randomUUID();
-        when(userRepository.findByUsernameAndDeletedFalse("student@tenant.example")).thenReturn(Optional.empty());
-        when(userRepository.saveAndFlush(any(User.class)))
-                .thenThrow(new DataIntegrityViolationException("unique violation"));
-
-        Optional<UserBulkCreateWriter.Result> result = writer.createOne(row(), tenantId);
-
-        assertThat(result).isEmpty();
-        verify(memberRepository, never()).saveAndFlush(any());
-    }
-
-    @Test
-    void createOne_emailOfExistingAccount_joinsItAsStudentWithoutNewCredential() {
-        UUID tenantId = UUID.randomUUID();
-        User existing = new User();
-        existing.setId(9L);
-        existing.setPublicId(UUID.randomUUID());
-        existing.setUsername("student@tenant.example");
-        existing.setCredentialHash("existing-hash");
-        when(userRepository.findByUsernameAndDeletedFalse("student@tenant.example"))
-                .thenReturn(Optional.of(existing));
-        when(memberRepository.findByUser_IdAndOrganizationIdAndDeletedFalse(9L, tenantId))
-                .thenReturn(Optional.empty());
-
-        Optional<UserBulkCreateWriter.Result> result = writer.createOne(row(), tenantId);
-
-        assertThat(result).isPresent();
-        assertThat(result.get().user()).isSameAs(existing);
-        assertThat(result.get().generatedPassword()).isNull();
-        assertThat(existing.getCredentialHash()).isEqualTo("existing-hash");
-        verify(userRepository, never()).saveAndFlush(any(User.class));
-        verify(memberRepository).saveAndFlush(any(OrganizationMember.class));
-    }
-
-    @Test
-    void createOne_accountAlreadyMemberOfTheOrganization_returnsEmpty() {
-        UUID tenantId = UUID.randomUUID();
-        User existing = new User();
-        existing.setId(9L);
-        when(userRepository.findByUsernameAndDeletedFalse("student@tenant.example"))
-                .thenReturn(Optional.of(existing));
-        when(memberRepository.findByUser_IdAndOrganizationIdAndDeletedFalse(9L, tenantId))
-                .thenReturn(Optional.of(new OrganizationMember()));
-
-        assertThat(writer.createOne(row(), tenantId)).isEmpty();
-
-        verify(memberRepository, never()).saveAndFlush(any());
-    }
-
-    @Test
-    void createGeneratedStudent_setsGeneratedUsernameAndFirstLoginFlag() {
-        UUID tenantId = UUID.randomUUID();
-        stubSaveAssigningIds();
-
-        Optional<UserBulkCreateWriter.Result> result = writer.createGeneratedStudent("school.abcdefgh", tenantId);
-
-        assertThat(result).isPresent();
-        assertThat(result.get().user().getUsername()).isEqualTo("school.abcdefgh");
-        assertThat(result.get().user().getEmail()).isNull();
-        assertThat(result.get().user().isMustChangePassword()).isTrue();
-        ArgumentCaptor<OrganizationMember> member = ArgumentCaptor.forClass(OrganizationMember.class);
-        verify(memberRepository).saveAndFlush(member.capture());
-        assertThat(member.getValue().getOrganizationId()).isEqualTo(tenantId);
-    }
-
-    @Test
     void createGeneratedStudent_preservesOptionalRosterFields() {
-        UUID tenantId = UUID.randomUUID();
         stubSaveAssigningIds();
 
-        UserBulkCreateWriter.Row row = new UserBulkCreateWriter.Row(
-                null, null, "SC-001", "12A1", "0900000000", LocalDate.of(2008, 1, 1));
-        Optional<UserBulkCreateWriter.Result> result = writer.createGeneratedStudent("school.abcdefgh", row, tenantId);
+        Optional<UserBulkCreateWriter.Result> result = writer.createGeneratedStudent("school.abcdefgh", row(),
+                UUID.randomUUID());
 
         assertThat(result).isPresent();
-        assertThat(result.get().user().getUsername()).isEqualTo("school.abcdefgh");
         assertThat(result.get().user().getStudentCode()).isEqualTo("SC-001");
         assertThat(result.get().user().getClassName()).isEqualTo("12A1");
         assertThat(result.get().user().getPhone()).isEqualTo("0900000000");
@@ -160,27 +92,24 @@ class UserBulkCreateWriterTest {
     }
 
     @Test
-    void createOne_platformAccount_isNeverJoinedToAnOrganization() {
-        UUID tenantId = UUID.randomUUID();
-        User platformAdmin = new User();
-        platformAdmin.setId(9L);
-        platformAdmin.setRoles(java.util.Set.of(Role.PLATFORM_ADMIN));
-        when(userRepository.findByUsernameAndDeletedFalse("student@tenant.example"))
-                .thenReturn(Optional.of(platformAdmin));
+    void createGeneratedStudent_usernameLosesConcurrentRace_returnsEmpty_neverCreatesMembership() {
+        when(userRepository.saveAndFlush(any(User.class)))
+                .thenThrow(new DataIntegrityViolationException("unique violation"));
 
-        assertThat(writer.createOne(row(), tenantId)).isEmpty();
+        Optional<UserBulkCreateWriter.Result> result = writer.createGeneratedStudent("school.abcdefgh", row(),
+                UUID.randomUUID());
 
+        assertThat(result).isEmpty();
         verify(memberRepository, never()).saveAndFlush(any());
     }
 
     @Test
-    void createOne_emailHeldByAnotherAccountUnderADifferentUsername_isSkipped() {
-        UUID tenantId = UUID.randomUUID();
-        when(userRepository.findByUsernameAndDeletedFalse("student@tenant.example")).thenReturn(Optional.empty());
-        when(userRepository.existsByEmailIgnoreCaseAndDeletedFalse("student@tenant.example")).thenReturn(true);
+    void createGeneratedStudent_neverLooksUpAnExistingAccountByEmail() {
+        stubSaveAssigningIds();
 
-        assertThat(writer.createOne(row(), tenantId)).isEmpty();
+        writer.createGeneratedStudent("school.abcdefgh", row(), UUID.randomUUID());
 
-        verify(userRepository, never()).saveAndFlush(any(User.class));
+        verify(userRepository, never()).findByUsernameAndDeletedFalse(any());
+        verify(userRepository, never()).existsByEmailIgnoreCaseAndDeletedFalse(any());
     }
 }
