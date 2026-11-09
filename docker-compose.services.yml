@@ -120,8 +120,6 @@ services:
       # since local dev has no real mail credentials to satisfy it anyway.
       MANAGEMENT_HEALTH_MAIL_ENABLED: ${MANAGEMENT_HEALTH_MAIL_ENABLED:-false}
       TENANT_APPLICATION_RESPONSE_SLA_HOURS: ${TENANT_APPLICATION_RESPONSE_SLA_HOURS:-72}
-      # com.pte.proctoring (Phase 09) — STOMP console origin(s); override per environment.
-      PROCTOR_WS_ALLOWED_ORIGINS: ${PROCTOR_WS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
       # com.pte.attempt (Phase 07) — STRICT answerIntegrityLevel encryption keypair;
       # required outside dev/local profiles (EncryptionKeyProvider fails fast otherwise).
       ATTEMPT_ENCRYPTION_PRIVATE_KEY_PEM: ${ATTEMPT_ENCRYPTION_PRIVATE_KEY_PEM:?set ATTEMPT_ENCRYPTION_PRIVATE_KEY_PEM in the env file}
