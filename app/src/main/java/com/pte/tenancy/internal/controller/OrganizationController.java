@@ -3,10 +3,12 @@ package com.pte.tenancy.internal.controller;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
+import com.pte.shared.web.PagedResult;
 import com.pte.tenancy.TenantSuspensionImpact;
 import com.pte.tenancy.internal.dto.request.GrantQuotaRequest;
 import com.pte.tenancy.internal.dto.request.UpdateBrandingRequest;
 import com.pte.tenancy.internal.dto.request.UpdateOrganizationProfileRequest;
+import com.pte.tenancy.internal.dto.request.OrganizationPageRequest;
 import com.pte.tenancy.internal.dto.response.OrganizationResponse;
 import com.pte.tenancy.internal.dto.response.QuotaGrantResponse;
 import com.pte.tenancy.internal.service.OrganizationLifecycleService;
@@ -15,6 +17,7 @@ import com.pte.tenancy.internal.service.QuotaGrantService;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PatchMapping;
 import com.pte.tenancy.internal.dto.request.OrganizationStatusAction;
 import com.pte.tenancy.internal.dto.request.OrganizationStatusRequest;
@@ -61,6 +64,12 @@ public class OrganizationController {
     @PreAuthorize(PLATFORM_OPERATORS_OR_HOST)
     public ApiResponse<List<OrganizationResponse>> list(@RequestParam(required = false) String q) {
         return ApiResponse.success(organizationService.list(currentUser(), q));
+    }
+
+    @GetMapping("/page")
+    @PreAuthorize(PLATFORM_OPERATORS)
+    public ApiResponse<PagedResult<OrganizationResponse>> page(@Valid @ModelAttribute OrganizationPageRequest request) {
+        return ApiResponse.success(organizationService.page(currentUser(), request));
     }
 
     @GetMapping("/{publicId}")
