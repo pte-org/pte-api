@@ -203,6 +203,17 @@ public class QuestionQueryService {
         return poolService.freeze(questionPublicId);
     }
 
+    /** CEFR level per question; questions without a level or not found are left out. */
+    @Transactional(readOnly = true)
+    public Map<UUID, String> cefrLevels(java.util.Collection<UUID> questionPublicIds) {
+        if (questionPublicIds.isEmpty()) {
+            return Map.of();
+        }
+        return questionRepository.findByPublicIdIn(questionPublicIds).stream()
+                .filter(question -> question.getCefrLevel() != null)
+                .collect(Collectors.toUnmodifiableMap(Question::getPublicId, question -> question.getCefrLevel().name()));
+    }
+
     private QuestionResponse toResponse(Question question) {
         return QuestionMapper.toResponse(question);
     }

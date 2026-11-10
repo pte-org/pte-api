@@ -180,4 +180,10 @@ public class ItembankService {
     public QuestionFreezeView freeze(UUID questionPublicId) {
         return queryService.freeze(questionPublicId);
     }
+
+    /** CEFR level per question public id, for showing an item's difficulty; unclassified questions are absent. */
+    @Transactional(readOnly = true)
+    public Map<UUID, String> cefrLevels(java.util.Collection<UUID> questionPublicIds) {
+        return queryService.cefrLevels(questionPublicIds);
+    }
 }

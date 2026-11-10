@@ -331,7 +331,7 @@ class ExaminerScoringServiceTest {
         assertThat(queueJson).doesNotContain("rawScore", "teacherScore", "selectedScoreSource", "aiProvider");
         assertThat(detailJson).doesNotContain("rawScore", "teacherScore", "selectedScoreSource",
                 "selectedScoreSourceByPublicId", "selectedExaminerScorePublicId", "aiProvider", "aiModel",
-                "aiProviderVersion", "provenance", "referenceAnswerText", "correctAnswerText");
+                "aiProviderVersion", "provenance");
         assertThat(detailJson).doesNotContain("private-ai-provider", "private-ai-model", "private-v1");
         assertThat(detailJson).doesNotContain("\"rawScore\":94", "\"teacherScore\":98");
     }

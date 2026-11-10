@@ -219,7 +219,8 @@ class ExaminerAttemptDetailReader {
                 mediaUrl(mediaUrls, prompt.audioPromptRef()), mediaUrl(mediaUrls, prompt.imagePromptRef()),
                 prompt.minWordCount(), prompt.maxWordCount(),
                 prompt.options().stream().map(option -> new ExaminerPromptOptionResponse(
-                        option.orderIndex(), option.text(), option.blankIndex())).toList());
+                        option.orderIndex(), option.text(), option.blankIndex(), option.correct(), option.correctGapIndex()))
+                        .toList(), prompt.cefrLevel(), prompt.referenceAnswerText(), prompt.correctAnswerText());
         ExaminerAnswerPayloadResponse safeResponse = new ExaminerAnswerPayloadResponse(
                 ExaminerAnswerContentKind.valueOf(decoded.kind().name()), decoded.text(), answerMediaUrl,
                 decoded.options() == null ? List.of() : decoded.options().stream()

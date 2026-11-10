@@ -50,6 +50,8 @@ public interface QuestionRepository extends JpaRepository<Question, Long>, Quest
     @Query("SELECT q FROM Question q WHERE q.deleted = false")
     List<Question> findAllWithOptions();
 
+    List<Question> findByPublicIdIn(Collection<UUID> publicIds);
+
     /** The same page without a CEFR filter. */
     default Page<UUID> findPagePublicIds(String taskTypeKey, String section, QuestionStatus status,
             QuestionPool pool, String query, UUID publicIdQuery, Pageable pageable) {
