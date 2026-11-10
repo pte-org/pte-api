@@ -36,6 +36,8 @@ public final class RubricConstants {
 
     /** Upper bound on trait entries accepted from any caller (simulator, examiner, stored JSON). */
     public static final int MAX_TRAIT_SCORE_ENTRIES = 16;
+    public static final int MAX_AI_GAP_REASON_LENGTH = 500;
+
     public static final int MAX_TASK_TYPE_LENGTH = 128;
     public static final int DIFF_DIGEST_LENGTH = 64;
     public static final int ACTIVATION_MAX_ATTEMPTS = 2;

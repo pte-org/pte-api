@@ -16,7 +16,14 @@ public record ExaminerDraftResponse(
         Instant savedAt,
         boolean carriedOver
 ,
-        java.util.Map<String, Integer> traitScores, UUID rubricVersionPublicId) {
+        java.util.Map<String, Integer> traitScores, UUID rubricVersionPublicId,
+        java.util.Map<String, String> aiGapReasons) {
+    public ExaminerDraftResponse(UUID answerPublicId, long draftVersion, Integer score, String comment,
+            ExaminerDecisionKind decisionKind, String expectedReviewVersion, String reviewedAiVersion, Instant savedAt,
+            boolean carriedOver, java.util.Map<String, Integer> traitScores, UUID rubricVersionPublicId) {
+        this(answerPublicId, draftVersion, score, comment, decisionKind, expectedReviewVersion, reviewedAiVersion,
+                savedAt, carriedOver, traitScores, rubricVersionPublicId, java.util.Map.of());
+    }
     public ExaminerDraftResponse(UUID answerPublicId,
         long draftVersion,
         Integer score,
@@ -26,6 +33,6 @@ public record ExaminerDraftResponse(
         String reviewedAiVersion,
         Instant savedAt,
         boolean carriedOver) {
-        this(answerPublicId, draftVersion, score, comment, decisionKind, expectedReviewVersion, reviewedAiVersion, savedAt, carriedOver, java.util.Map.of(), null);
+        this(answerPublicId, draftVersion, score, comment, decisionKind, expectedReviewVersion, reviewedAiVersion, savedAt, carriedOver, java.util.Map.of(), null, java.util.Map.of());
     }
 }

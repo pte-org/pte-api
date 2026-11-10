@@ -183,6 +183,7 @@ public class ExaminerDraftCommandService {
         }
 
         draft.recordTraitScores(calculated.traitsJson(), calculated.rubricVersionPublicId());
+        draft.recordAiGapReasons(responses.aiGapReasonsJson(request.aiGapReasons(), request.traitScores()));
 
         boolean isScoreChange = previousScore != null && !Objects.equals(previousScore, calculated.itemScore());
         ExaminerGradingOperation op = isScoreChange ? ExaminerGradingOperation.SCORE_CHANGE : ExaminerGradingOperation.SAVE_DRAFT;
