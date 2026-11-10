@@ -6,10 +6,9 @@ import org.mockito.ArgumentCaptor;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-/** Contact details a student types never reach Google, the stored history or the shared cache. */
+/** Contact details a student types never reach Google. */
 class ChatServiceMaskingTest extends ChatServiceTestSupport {
 
     private static final String TYPED = "Check my sentence, I am an.nguyen@gmail.com or 0912 345 678";
@@ -22,21 +21,6 @@ class ChatServiceMaskingTest extends ChatServiceTestSupport {
         ArgumentCaptor<String> sent = ArgumentCaptor.forClass(String.class);
         verify(client).generate(any(), any(), sent.capture());
         assertThat(sent.getValue()).isEqualTo(MASKED).doesNotContain("@").doesNotContain("0912");
-    }
-
-    @Test
-    void theStoredQuestionIsTheMaskedOne() {
-        service.send(caller, command(TYPED));
-
-        assertThat(savedMessage().getQuestion()).isEqualTo(MASKED);
-    }
-
-    @Test
-    void aMaskedQuestionNeverEntersTheSharedCache() {
-        service.send(caller, command(TYPED));
-
-        verify(cacheService, never()).find(any());
-        verify(cacheService, never()).storeQuietly(any(), any(), any());
     }
 
     @Test

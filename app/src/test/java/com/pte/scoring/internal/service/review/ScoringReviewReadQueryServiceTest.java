@@ -58,7 +58,8 @@ class ScoringReviewReadQueryServiceTest {
     void setUp() {
         lenient().when(selectionReader.forSession(sessionId, tenantId)).thenReturn(Map.of());
         service = new ScoringReviewReadQueryService(answerRepository, examinerScoreRepository,
-                assignmentRepository, gateway, selectionReader, aiDetails, dispatcher);
+                assignmentRepository, gateway, selectionReader, aiDetails, dispatcher,
+                new ReportTraitReader(tools.jackson.databind.json.JsonMapper.builder().build()));
     }
 
     @Test

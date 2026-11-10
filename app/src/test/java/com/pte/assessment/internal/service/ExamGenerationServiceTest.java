@@ -402,7 +402,7 @@ class ExamGenerationServiceTest {
             return blueprint;
         });
         when(snapshotPublishService.publish(any(UUID.class), any(CurrentUser.class), any(ExamDefinitionResponse.class),
-                anyLong(), anyString(), anyString())).thenReturn(mock(SnapshotResponse.class));
+                anyLong(), anyString(), anyString(), anyString())).thenReturn(mock(SnapshotResponse.class));
 
         long seed = 20260921L;
         service.generateDeterministic("Exam", templateId, seed, hostCaller);
@@ -416,7 +416,7 @@ class ExamGenerationServiceTest {
                 .map(BlueprintItem::getQuestionPublicId).toList();
         assertThat(first).containsExactlyElementsOf(second);
         verify(snapshotPublishService, org.mockito.Mockito.times(2)).publish(any(UUID.class), any(CurrentUser.class),
-                eq(template), eq(seed), eq("PTE_SEEDED_V2"), eq(templateId + ":4"));
+                eq(template), eq(seed), eq("PTE_SEEDED_V2"), eq(templateId + ":4"), anyString());
         verify(itembankService, org.mockito.Mockito.never())
                 .publishedQuestionIds(PteTaskType.PERSONAL_INTRODUCTION);
     }

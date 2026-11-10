@@ -1,5 +1,6 @@
 package com.pte.chat.internal.config;
 
+import com.pte.chat.internal.constant.ChatConstants;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -46,7 +47,7 @@ class ChatAiPropertiesValidatorTest {
         properties.setModel("gemini-flash-latest/ x");
         properties.setDailyLimit(0);
         properties.setMaxInputChars(0);
-        properties.setMaxTokens(0);
+        properties.setMaxTokens(-1);
         properties.setHistorySize(0);
         properties.setMaxConcurrent(0);
 
@@ -145,9 +146,18 @@ class ChatAiPropertiesValidatorTest {
     }
 
     @Test
-    void enabled_with_zero_max_tokens_is_reported() {
+    void zero_max_tokens_uses_the_provider_budget() {
         ChatAiProperties properties = validEnabled();
+        properties.setProvider(ChatConstants.PROVIDER_OPENAI_COMPATIBLE);
         properties.setMaxTokens(0);
+
+        assertThat(ChatAiPropertiesValidator.validate(properties)).isEmpty();
+    }
+
+    @Test
+    void negative_max_tokens_is_reported() {
+        ChatAiProperties properties = validEnabled();
+        properties.setMaxTokens(-1);
 
         assertThat(ChatAiPropertiesValidator.validate(properties)).hasSize(1);
     }
@@ -192,7 +202,7 @@ class ChatAiPropertiesValidatorTest {
         properties.setModel("gemini-flash-latest");
         properties.setDailyLimit(0);
         properties.setMaxInputChars(0);
-        properties.setMaxTokens(0);
+        properties.setMaxTokens(-1);
         properties.setHistorySize(0);
         properties.setMaxConcurrent(0);
 

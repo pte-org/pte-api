@@ -1,5 +1,6 @@
 package com.pte.notification.internal.listener;
 
+import com.pte.notification.internal.template.NotificationEmailTemplate;
 import com.pte.identity.IdentityService;
 import com.pte.identity.domain.Role;
 import com.pte.notification.domain.enums.NotificationType;
@@ -16,11 +17,13 @@ public class StudentEnrollmentConflictNotificationListener {
 
     private final IdentityService identityService;
     private final NotificationDispatchService dispatchService;
+    private final java.time.Clock clock;
 
     public StudentEnrollmentConflictNotificationListener(IdentityService identityService,
-            NotificationDispatchService dispatchService) {
+            NotificationDispatchService dispatchService, java.time.Clock clock) {
         this.identityService = identityService;
         this.dispatchService = dispatchService;
+        this.clock = clock;
     }
 
     @TransactionalEventListener
@@ -35,11 +38,13 @@ public class StudentEnrollmentConflictNotificationListener {
                 .reduce((left, right) -> left + "\n" + right)
                 .orElse("");
         String body = NotificationConstants.STUDENT_ENROLLMENT_CONFLICT_BODY.formatted(sessionLabel, details);
+        String html = NotificationEmailTemplate.enrollmentConflict(sessionLabel,
+                event.conflicts().stream().map(this::formatConflict).toList(), java.time.Year.now(clock).getValue());
         for (var hostAdmin : identityService.findActiveByTenantIdAndRole(event.tenantId(), Role.HOST_ADMIN)) {
             String dedupeKey = NotificationConstants.STUDENT_ENROLLMENT_CONFLICT_DEDUPE_KEY.formatted(
                     event.sessionPublicId(), hostAdmin.getPublicId(), details.hashCode());
             dispatchService.dispatchTo(NotificationType.STUDENT_ENROLLMENT_CONFLICT, hostAdmin, event.tenantId(),
-                    NotificationConstants.STUDENT_ENROLLMENT_CONFLICT_SUBJECT, body, dedupeKey);
+                    NotificationConstants.STUDENT_ENROLLMENT_CONFLICT_SUBJECT, body, dedupeKey, html);
         }
     }
 

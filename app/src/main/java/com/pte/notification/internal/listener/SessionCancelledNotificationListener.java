@@ -1,5 +1,6 @@
 package com.pte.notification.internal.listener;
 
+import com.pte.notification.internal.template.NotificationEmailTemplate;
 import com.pte.identity.IdentityService;
 import com.pte.notification.domain.enums.NotificationType;
 import com.pte.notification.internal.constant.NotificationConstants;
@@ -47,12 +48,14 @@ public class SessionCancelledNotificationListener {
                 ? event.sessionPublicId().toString() : event.sessionName();
         String cancelledAt = event.cancelledAt() == null ? clock.instant().toString() : event.cancelledAt().toString();
         String body = NotificationConstants.SESSION_CANCELLED_BODY.formatted(sessionLabel, cancelledAt);
+        String html = NotificationEmailTemplate.sessionCancelled(sessionLabel, cancelledAt,
+                java.time.Year.now(clock).getValue());
         for (UUID staffPublicId : staffPublicIds) {
             identityService.findActiveStaffInTenant(staffPublicId, event.tenantId())
                     .ifPresent(user -> dispatchService.dispatch(NotificationType.SESSION_CANCELLED, user,
                             event.tenantId(), NotificationConstants.SESSION_CANCELLED_SUBJECT, body,
                             NotificationConstants.SESSION_CANCELLED_DEDUPE_KEY.formatted(
-                                    event.sessionPublicId(), user.getPublicId())));
+                                    event.sessionPublicId(), user.getPublicId()), html));
         }
     }
 }

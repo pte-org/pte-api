@@ -1,0 +1,67 @@
+{
+  "title": "Fill in the Blanks – Dropdown",
+  "intro": [
+    {
+      "type": "TEXT",
+      "label": "",
+      "text": "Create a cloze test with 4-6 blanks. Each blank has a correct answer and 3 distractors in a dropdown.",
+      "items": [],
+      "levels": [],
+      "sentToAi": true
+    }
+  ],
+  "sections": [
+    {
+      "id": "requirements",
+      "title": "Requirements",
+      "blocks": [
+        {
+          "type": "LIST",
+          "label": "",
+          "text": "",
+          "items": [
+            "Passage: 150-250 words",
+            "Blanks: 4-6 (indicated as __BLANK__)",
+            "Each blank has 1 correct answer and 3 distractors",
+            "Distractors must be wrong (no duplicates with answer)",
+            "Different parts of speech recommended for variety"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "output",
+      "title": "Output",
+      "blocks": [
+        {
+          "type": "FIELDS",
+          "label": "",
+          "text": "",
+          "items": [
+            "topic: History and Culture",
+            "passageWithSlots: The ancient __BLANK__ civilization developed one of the world's earliest writing systems. Archaeological discoveries have revealed __BLANK__ structures and intricate artwork. Scholars believe this society __BLANK__ advanced knowledge in mathematics and astronomy. Trade routes __BLANK__ the empire to distant regions. This period __BLANK__ significant advances in technology and governance.",
+            "slots: [{\"answer\": \"Egyptian\", \"distractors\": [\"Roman\", \"Greek\", \"Chinese\"]}, {\"answer\": \"magnificent\", \"distractors\": [\"ancient\", \"small\", \"mysterious\"]}, {\"answer\": \"possessed\", \"distractors\": [\"developed\", \"knew\", \"discovered\"]}, {\"answer\": \"connected\", \"distractors\": [\"linked\", \"established\", \"formed\"]}, {\"answer\": \"witnessed\", \"distractors\": [\"recorded\", \"showed\", \"demonstrated\"]}]"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "instructions",
+      "title": "Instructions",
+      "blocks": [
+        {
+          "type": "TEXT",
+          "label": "",
+          "text": "Return ONLY the JSON object, no additional text.",
+          "items": [],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    }
+  ]
+}

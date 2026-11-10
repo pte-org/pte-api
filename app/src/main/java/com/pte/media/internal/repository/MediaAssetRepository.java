@@ -16,6 +16,11 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, Long> {
 
     Optional<MediaAsset> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 
+    /** Measured length of each given media object that has one, as {@code [publicId, durationSeconds]}. */
+    @Query("select media.publicId, media.durationSeconds from MediaAsset media "
+            + "where media.publicId in :publicIds and media.durationSeconds is not null")
+    List<Object[]> findDurationsByPublicIds(@Param("publicIds") Collection<UUID> publicIds);
+
     @Query("select media from MediaAsset media where media.publicId in :publicIds "
             + "and (media.tenantId = :tenantId or media.tenantId is null)")
     List<MediaAsset> findAllForTrustedTenant(@Param("publicIds") Collection<UUID> publicIds,

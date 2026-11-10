@@ -5,6 +5,7 @@ import com.pte.tenancy.domain.Organization;
 import com.pte.tenancy.domain.enums.OrganizationStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -60,6 +61,15 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
             + "lower(o.code) like :prefix or lower(o.taxCode) like :prefix or lower(o.contactEmail) = :exact) "
             + "order by o.name asc")
     List<Organization> searchApproved(@Param("prefix") String prefix, @Param("exact") String exact,
+            Pageable pageable);
+
+    /** The unique id breaks name ties so navigating a page never depends on database row order. */
+    @Query("select o from Organization o where o.deleted = false and o.status in "
+            + "(com.pte.tenancy.domain.enums.OrganizationStatus.ACTIVE, "
+            + "com.pte.tenancy.domain.enums.OrganizationStatus.SUSPENDED) and (:term = '' or "
+            + "lower(o.code) like :prefix or lower(o.taxCode) like :prefix or lower(o.contactEmail) = :term) "
+            + "order by o.name asc, o.id asc")
+    Page<Organization> findApprovedPage(@Param("prefix") String prefix, @Param("term") String term,
             Pageable pageable);
 
     /** Overview: non-deleted approved organizations grouped by status (counts only). */

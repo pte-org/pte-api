@@ -8,7 +8,7 @@ import com.pte.attempt.internal.dto.request.StartAttemptRequest;
 import com.pte.attempt.internal.dto.response.AttemptTaskResponse;
 import com.pte.attempt.internal.exception.AlreadyAttemptedException;
 import com.pte.attempt.internal.exception.DeviceCheckRequiredException;
-import com.pte.attempt.internal.exception.ExamCapabilityException;
+import com.pte.shared.exception.exam.ExamCapabilityException;
 import com.pte.attempt.internal.exception.RetryLimitReachedException;
 import com.pte.attempt.internal.exception.content.ExamEmptyException;
 import com.pte.attempt.internal.mapper.AttemptMapper;

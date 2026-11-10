@@ -1,7 +1,7 @@
 package com.pte.identity.internal.service;
 
 import com.pte.identity.domain.User;
-import com.pte.identity.internal.constant.IdentityConstants;
+import com.pte.identity.internal.config.AuthTokenProperties;
 import com.pte.identity.internal.domain.RefreshToken;
 import com.pte.identity.internal.exception.InvalidRefreshTokenException;
 import com.pte.identity.internal.repository.RefreshTokenRepository;
@@ -22,11 +22,14 @@ public class RefreshTokenService {
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final TokenHasher tokenHasher;
+    private final AuthTokenProperties tokenProperties;
     private final Clock clock;
 
-    public RefreshTokenService(RefreshTokenRepository refreshTokenRepository, TokenHasher tokenHasher, Clock clock) {
+    public RefreshTokenService(RefreshTokenRepository refreshTokenRepository, TokenHasher tokenHasher,
+            AuthTokenProperties tokenProperties, Clock clock) {
         this.refreshTokenRepository = refreshTokenRepository;
         this.tokenHasher = tokenHasher;
+        this.tokenProperties = tokenProperties;
         this.clock = clock;
     }
 
@@ -37,7 +40,7 @@ public class RefreshTokenService {
         token.setUserId(user.getId());
         token.setOrganizationId(organizationId);
         token.setTokenHash(tokenHasher.hash(raw));
-        token.setExpiresAt(clock.instant().plusSeconds(IdentityConstants.REFRESH_TOKEN_TTL_SECONDS));
+        token.setExpiresAt(clock.instant().plusSeconds(tokenProperties.getRefreshTokenTtlSeconds()));
         token.setRevoked(false);
         refreshTokenRepository.save(token);
         return raw;
@@ -64,6 +67,25 @@ public class RefreshTokenService {
     @Transactional
     public void revokeForMembership(Long userId, UUID organizationId) {
         refreshTokenRepository.revokeAllActiveByUserIdAndOrganizationId(userId, organizationId);
+    }
+
+    /**
+     * Signs every other device out after the user changed their own password. The session presenting
+     * {@code keepRawToken} survives only when that token is the user's own and still active; any other value
+     * revokes everything rather than trusting a token it cannot vouch for.
+     */
+    @Transactional
+    public void revokeAllOthers(Long userId, String keepRawToken) {
+        Long keepId = keepRawToken == null || keepRawToken.isBlank() ? null
+                : refreshTokenRepository.findByTokenHash(tokenHasher.hash(keepRawToken))
+                        .filter(token -> token.getUserId().equals(userId) && token.isActive(clock.instant()))
+                        .map(RefreshToken::getId)
+                        .orElse(null);
+        if (keepId == null) {
+            refreshTokenRepository.revokeAllActiveByUserId(userId);
+        } else {
+            refreshTokenRepository.revokeAllActiveByUserIdExceptId(userId, keepId);
+        }
     }
 
     /** Revokes every active refresh token when a user loses account access. */

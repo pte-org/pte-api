@@ -1,12 +1,14 @@
 package com.pte.identity.internal.service;
 
 import com.pte.identity.domain.User;
+import com.pte.identity.internal.config.AuthTokenProperties;
 import com.pte.identity.internal.exception.InvalidRefreshTokenException;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.security.TokenHasher;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Import;
 
 import java.util.UUID;
@@ -16,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Phase 2: a refresh token is bound to the organization chosen at login and never crosses organizations. */
 @DataJpaTest
+@EnableConfigurationProperties(AuthTokenProperties.class)
 @Import({RefreshTokenService.class, TokenHasher.class, com.pte.shared.config.ClockConfig.class})
 class RefreshTokenOrganizationTest {
 

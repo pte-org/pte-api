@@ -6,11 +6,13 @@ import com.pte.scoring.internal.service.objective.AnswerContentReader;
 import com.pte.scoring.internal.service.objective.AnswerPayloadDecoder;
 import com.pte.scoring.internal.service.staff.ScoringEligibilityQueryService;
 import com.pte.attempt.AttemptService;
+import com.pte.attempt.dto.response.AttemptGradingCoverageView;
 import com.pte.attempt.dto.response.AttemptOwnerView;
 import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
+import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.dto.response.AnswerListItemResponse;
 import com.pte.scoring.internal.dto.response.AnswerListResponse;
 import com.pte.scoring.internal.dto.response.AnswerPayloadKind;
@@ -18,7 +20,6 @@ import com.pte.scoring.internal.dto.response.AnswerReviewDetailResponse;
 import com.pte.scoring.internal.dto.response.DecodedAnswerPayload;
 import com.pte.scoring.internal.dto.response.ScoringAnswerResponse;
 import com.pte.scoring.internal.exception.AnswerNotFoundException;
-import com.pte.scoring.internal.exception.InvalidAnswerStatusException;
 import com.pte.scoring.internal.exception.ScoreSourceSelectionException;
 import com.pte.scoring.internal.constant.ScoreReviewConstants;
 import com.pte.scoring.internal.mapper.ScoringAnswerMapper;
@@ -105,17 +106,26 @@ public class ScoringReviewService {
     @Transactional(readOnly = true)
     public AnswerListResponse listAnswers(UUID sessionPublicId, UUID attemptPublicId, String statusFilter,
             String search, Pageable pageable, CurrentUser caller) {
-        ScoringAnswerStatus status = parseStatus(statusFilter);
+        ScoringAnswerStatus status = AnswerFilterParser.status(statusFilter);
         String normalizedSearch = search == null ? null : search.trim().toLowerCase(java.util.Locale.ROOT);
         if (normalizedSearch != null && normalizedSearch.isBlank()) {
             normalizedSearch = null;
         }
-        Page<AiEvaluation> page = normalizedSearch == null
+        boolean awaitingOnly = status == ScoringAnswerStatus.PENDING;
+        AttemptGradingCoverageView coverage = attemptPublicId == null || attemptService == null ? null
+                : attemptService.getGradingCoverage(List.of(attemptPublicId), sessionPublicId, caller.tenantId())
+                        .get(attemptPublicId);
+        Map<UUID, Integer> questionNumbers = questionNumbers(coverage);
+        // One attempt holds a bounded set of answers; the question order is not a column, so it is sorted here.
+        Pageable queryPage = attemptPublicId == null ? pageable : Pageable.unpaged();
+        Page<AiEvaluation> found = normalizedSearch == null
                 ? evaluationRepository.findForReview(caller.tenantId(), sessionPublicId, attemptPublicId, status,
-                        pageable)
+                        awaitingOnly, queryPage)
                 : evaluationRepository.findForReviewWithSearch(caller.tenantId(), sessionPublicId,
-                        attemptPublicId, status, normalizedSearch, parseSearchStatus(normalizedSearch),
-                        parseUuid(normalizedSearch), pageable);
+                        attemptPublicId, status, awaitingOnly, normalizedSearch, AnswerFilterParser.searchStatus(normalizedSearch),
+                        AnswerFilterParser.uuid(normalizedSearch), queryPage);
+        Page<AiEvaluation> page = attemptPublicId == null ? found
+                : byQuestionNumber(found.getContent(), questionNumbers, pageable);
         log.debug("Host {} listed answers (tenantId={}, sessionPublicId={}, status={}) -> {} results",
                 caller.userId(), caller.tenantId(), sessionPublicId, status, page.getNumberOfElements());
         Map<UUID, AttemptOwnerView> attemptOwners = attemptService == null ? Map.of()
@@ -130,10 +140,49 @@ public class ScoringReviewService {
                         answer.getRawScore(), answer.getTeacherScore(), answer.getCreatedAt(),
                         attemptNumber(attemptOwners.get(answer.getAttemptPublicId())),
                         isFallback(aiFlags.get(answer.getAnswerPublicId())),
-                        eligibility != null && eligibility.isAiEligible(answer)))
+                        eligibility != null && eligibility.isAiEligible(answer),
+                        isUnscored(answer), questionNumbers.get(answer.getItemPublicId())))
                 .toList();
+        int[] counts = coverageCounts(coverage, sessionPublicId, attemptPublicId, caller);
         return new AnswerListResponse(items, page.getNumber(), page.getSize(), page.getTotalElements(),
-                page.getTotalPages());
+                page.getTotalPages(), counts == null ? null : counts[0], counts == null ? null : counts[1]);
+    }
+
+    /** Ascending question number (answers of unnumbered items last), sliced to the requested page. */
+    private static Page<AiEvaluation> byQuestionNumber(List<AiEvaluation> answers,
+            Map<UUID, Integer> questionNumbers, Pageable pageable) {
+        List<AiEvaluation> sorted = answers.stream()
+                .sorted(java.util.Comparator.comparing((AiEvaluation answer) -> questionNumbers.get(answer.getItemPublicId()),
+                        java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
+                .toList();
+        int from = (int) Math.min(pageable.getOffset(), sorted.size());
+        int to = Math.min(from + pageable.getPageSize(), sorted.size());
+        return new org.springframework.data.domain.PageImpl<>(sorted.subList(from, to), pageable, sorted.size());
+    }
+
+    /** Exam items by 1-based position, so the host can tell apart answers of the same task type. */
+    private static Map<UUID, Integer> questionNumbers(AttemptGradingCoverageView coverage) {
+        Map<UUID, Integer> numbers = new java.util.HashMap<>();
+        if (coverage != null) {
+            coverage.expectedItems().stream().filter(item -> item.orderIndex() != null)
+                    .forEach(item -> numbers.put(item.itemPublicId(), item.orderIndex() + 1));
+        }
+        return numbers;
+    }
+
+    /** {expected, answered}: the exam's items for the attempt and how many of them the student answered. */
+    private int[] coverageCounts(AttemptGradingCoverageView coverage, UUID sessionPublicId, UUID attemptPublicId,
+            CurrentUser caller) {
+        if (coverage == null) {
+            return null;
+        }
+        java.util.Set<UUID> answeredItems = evaluationRepository
+                .findByTenantIdAndSessionPublicIdAndAttemptPublicIdAndDeletedFalse(caller.tenantId(),
+                        sessionPublicId, attemptPublicId).stream()
+                .map(AiEvaluation::getItemPublicId).collect(java.util.stream.Collectors.toSet());
+        int answered = (int) coverage.expectedItems().stream()
+                .filter(item -> answeredItems.contains(item.itemPublicId())).count();
+        return new int[] {coverage.expectedItems().size(), answered};
     }
 
     /**
@@ -152,7 +201,11 @@ public class ScoringReviewService {
         return new AnswerReviewDetailResponse(answer.getAnswerPublicId(), answer.getAttemptPublicId(),
                 answer.getSessionPublicId(), answer.getTaskType(), answer.getStatus().name(), answer.getRawScore(),
                 answer.getTeacherScore(), answer.getCreatedAt(), decoded,
-                aiDetails == null ? null : aiDetails.find(answer));
+                aiDetails == null ? null : aiDetails.find(answer), isUnscored(answer));
+    }
+
+    private static boolean isUnscored(AiEvaluation answer) {
+        return answer.getScoringMethod() == null || answer.getScoringMethod() == ScoringMethod.UNSCORED;
     }
 
     /**
@@ -209,39 +262,6 @@ public class ScoringReviewService {
 
     private static boolean isFallback(AiDetailFlags flags) {
         return flags != null && flags.fallback();
-    }
-
-    private ScoringAnswerStatus parseStatus(String statusFilter) {
-        if (statusFilter == null || statusFilter.isBlank()) {
-            return null;
-        }
-        try {
-            return ScoringAnswerStatus.valueOf(statusFilter.toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            throw new InvalidAnswerStatusException();
-        }
-    }
-
-    private ScoringAnswerStatus parseSearchStatus(String search) {
-        if (search == null) {
-            return null;
-        }
-        try {
-            return ScoringAnswerStatus.valueOf(search.toUpperCase(java.util.Locale.ROOT));
-        } catch (IllegalArgumentException ex) {
-            return null;
-        }
-    }
-
-    private UUID parseUuid(String value) {
-        if (value == null) {
-            return null;
-        }
-        try {
-            return UUID.fromString(value);
-        } catch (IllegalArgumentException ex) {
-            return null;
-        }
     }
 
     private AiEvaluation findOwned(UUID answerPublicId, CurrentUser caller) {

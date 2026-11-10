@@ -1,6 +1,7 @@
 package com.pte.scoring.internal.config;
 
 import com.pte.scoring.internal.constant.ScoringConstants;
+import com.pte.scoring.internal.vendor.ProviderGuard;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -16,6 +17,9 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "scoring.ai")
 public class AiProviderProperties {
 
+    public static final String TEXT_VENDOR_GEMINI = "gemini";
+    public static final String TEXT_VENDOR_GATEWAY = "gateway";
+
     @Pattern(regexp = "stub|openai-compatible|azure-gemini", message = ScoringConstants.AI_PROVIDER_INVALID)
     private String provider = "stub";
     private String baseUrl = "https://api.openai.com/v1";
@@ -29,10 +33,16 @@ public class AiProviderProperties {
     private int readTimeoutMs = 30_000;
     private int jobBudgetMs = 90_000;
     private int staleDispatchMinutes = 10;
+    private int retryMaxAttempts = ProviderGuard.STANDARD_MAX_ATTEMPTS;
+    private int breakerThreshold = ProviderGuard.STANDARD_BREAKER_THRESHOLD;
     @Valid
     private final Azure azure = new Azure();
     @Valid
     private final Gemini gemini = new Gemini();
+
+    private String textVendor = TEXT_VENDOR_GEMINI;
+
+    private final ScoringGatewayProperties gateway = new ScoringGatewayProperties();
 
     public String getProvider() {
         return provider;
@@ -138,12 +148,50 @@ public class AiProviderProperties {
         this.staleDispatchMinutes = staleDispatchMinutes;
     }
 
+    /** Calls per request to one vendor, the first included, when it answers with a temporary error. */
+    @Min(1)
+    public int getRetryMaxAttempts() {
+        return retryMaxAttempts;
+    }
+
+    public void setRetryMaxAttempts(int retryMaxAttempts) {
+        this.retryMaxAttempts = retryMaxAttempts;
+    }
+
+    /** Temporary failures in a row after which a vendor is not called for a minute. */
+    @Min(1)
+    public int getBreakerThreshold() {
+        return breakerThreshold;
+    }
+
+    public void setBreakerThreshold(int breakerThreshold) {
+        this.breakerThreshold = breakerThreshold;
+    }
+
     public Azure getAzure() {
         return azure;
     }
 
     public Gemini getGemini() {
         return gemini;
+    }
+
+    /** Who reads transcripts, essays and pictures under azure-gemini: {@code gemini} or {@code gateway}. */
+    public String getTextVendor() {
+        return textVendor;
+    }
+
+    public void setTextVendor(String textVendor) {
+        this.textVendor = textVendor;
+    }
+
+    public boolean usesGateway() {
+        return TEXT_VENDOR_GATEWAY.equalsIgnoreCase(textVendor);
+    }
+
+    @Valid
+    public ScoringGatewayProperties getGateway() {
+        return gateway;
     }
 
     /** Azure Speech short-audio REST, used when provider=azure-gemini. */

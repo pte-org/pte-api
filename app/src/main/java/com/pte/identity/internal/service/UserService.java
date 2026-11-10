@@ -22,6 +22,7 @@ import com.pte.identity.internal.service.user.ManagedUserResolver;
 import com.pte.identity.internal.service.user.ManagedUserResolver.Target;
 import com.pte.identity.internal.service.user.UserAccountProvisioner;
 import com.pte.identity.internal.service.user.UserCredentialRotation;
+import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
@@ -30,6 +31,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -56,7 +58,8 @@ public class UserService {
                        OrganizationMemberDirectory memberDirectory, PasswordEncoder passwordEncoder,
                        UserProvisioningHelper provisioningHelper, UserBulkCreateWriter bulkCreateWriter,
                        TenancyService tenancyService, ApplicationEventPublisher eventPublisher,
-                       AuditLogService auditLogService, RefreshTokenService refreshTokenService) {
+                       AuditLogService auditLogService, RefreshTokenService refreshTokenService,
+                       StartedAttemptLookup startedAttemptLookup, Clock clock) {
         this.userRepository = userRepository;
         this.memberRepository = memberRepository;
         this.memberDirectory = memberDirectory;
@@ -66,9 +69,10 @@ public class UserService {
         this.targetResolver = new ManagedUserResolver(userRepository, memberRepository, memberDirectory,
                 provisioningHelper);
         this.accountProvisioner = new UserAccountProvisioner(userRepository, memberRepository, passwordEncoder,
-                provisioningHelper, bulkCreateWriter, tenancyService);
+                provisioningHelper, bulkCreateWriter, tenancyService, eventPublisher, clock);
         this.credentialRotation = new UserCredentialRotation(userRepository, memberDirectory, passwordEncoder,
-                provisioningHelper, targetResolver, eventPublisher, auditLogService);
+                provisioningHelper, targetResolver, eventPublisher, auditLogService, refreshTokenService,
+                startedAttemptLookup);
     }
 
     @Transactional
@@ -104,9 +108,10 @@ public class UserService {
         }
         User user = member.getUser();
         String email = UserAccountProvisioner.normalizeOptional(request.email());
-        if (email != null && (memberRepository.existsCanonicalEmail(caller.tenantId(),
-                email.toLowerCase(Locale.ROOT), publicId)
-                || userRepository.existsByEmailIgnoreCaseAndDeletedFalseAndIdNot(email, user.getId()))) {
+        // A Student's e-mail only has to be unique inside the organization: the same person in another
+        // organization is a separate account.
+        if (email != null && memberRepository.existsCanonicalEmail(caller.tenantId(),
+                email.toLowerCase(Locale.ROOT), publicId)) {
             throw new EmailAlreadyUsedException();
         }
         user.setFullName(request.fullName().trim());

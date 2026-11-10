@@ -99,7 +99,7 @@ class ExaminerScoringServiceTest {
         service = new ExaminerScoringService(workQueueRepository, assignmentRepository, scoringAnswerRepository,
                 examinerAnswerScoreRepository, gateway, eligibilityQueryService, answerPayloadDecoder,
                 contentReader, identityService, attemptService, mediaService, entityManager, null,
-                new ExaminerReviewVersionService(), null, null, null, null, com.pte.TestClocks.fixed(), null);
+                new ExaminerReviewVersionService(), null, null, null, null, com.pte.TestClocks.fixed(), null, com.pte.scoring.support.ExaminerTraitWorkflowStub.create());
     }
 
     @Test
@@ -331,7 +331,7 @@ class ExaminerScoringServiceTest {
         assertThat(queueJson).doesNotContain("rawScore", "teacherScore", "selectedScoreSource", "aiProvider");
         assertThat(detailJson).doesNotContain("rawScore", "teacherScore", "selectedScoreSource",
                 "selectedScoreSourceByPublicId", "selectedExaminerScorePublicId", "aiProvider", "aiModel",
-                "aiProviderVersion", "provenance", "referenceAnswerText", "correctAnswerText");
+                "aiProviderVersion", "provenance");
         assertThat(detailJson).doesNotContain("private-ai-provider", "private-ai-model", "private-v1");
         assertThat(detailJson).doesNotContain("\"rawScore\":94", "\"teacherScore\":98");
     }

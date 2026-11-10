@@ -77,7 +77,7 @@ public class ExamDraftService {
         validateWindow(request.opensAt(), request.closesAt());
         SubscriptionView subscription = access.lockedActiveSubscription(request.subscriptionPublicId(), tenantId);
         validateSubscriptionWindowAndCapacity(subscription, request.opensAt(), request.closesAt(), request.capacity());
-        var template = examDefinitionService.findActiveByPublicId(request.examDefinitionPublicId())
+        var template = examDefinitionService.findActiveForTenant(request.examDefinitionPublicId(), tenantId)
                 .orElseThrow(() -> new ExamDraftConfigurationException(SessionConstants.EXAM_TEMPLATE_ACTIVE_REQUIRED));
 
         ExamMode mode = request.examMode() == null ? ExamMode.OFFICIAL_EXAM : request.examMode();
@@ -98,6 +98,8 @@ public class ExamDraftService {
         Set<String> templateSkills = skills.resolveTemplateSkills(template);
         session.setSelectedSkills(skills.resolveSelectedSkills(request.selectedSkills(), templateSkills));
         session.setMaxRetriesPerStudent(skills.resolveRetryCount(request.maxRetriesPerStudent()));
+        session.setCefrTargets(ExamCefrOverride.parse(request.cefrTargets()));
+        session.setAvoidRepeatedQuestions(Boolean.TRUE.equals(request.avoidRepeatedQuestions()));
         session.setOpensAt(request.opensAt());
         session.setClosesAt(request.closesAt());
         session.setCapacity(request.capacity());
@@ -159,7 +161,7 @@ public class ExamDraftService {
             session.setName(request.name().trim());
         }
         if (request.examDefinitionPublicId() != null) {
-            selectedTemplate = examDefinitionService.findActiveByPublicId(request.examDefinitionPublicId())
+            selectedTemplate = examDefinitionService.findActiveForTenant(request.examDefinitionPublicId(), tenantId)
                     .orElseThrow(() -> new ExamDraftConfigurationException(SessionConstants.EXAM_TEMPLATE_ACTIVE_REQUIRED));
             session.setExamDefinitionPublicId(selectedTemplate.publicId());
             session.setExamDefinitionVersion(selectedTemplate.version());
@@ -204,6 +206,12 @@ public class ExamDraftService {
         session.setSelectedSkills(skills.resolveSelectedSkills(requestedSkills, templateSkills));
         if (request.maxRetriesPerStudent() != null) {
             session.setMaxRetriesPerStudent(skills.resolveRetryCount(request.maxRetriesPerStudent()));
+        }
+        if (request.cefrTargets() != null) {
+            session.setCefrTargets(ExamCefrOverride.parse(request.cefrTargets()));
+        }
+        if (request.avoidRepeatedQuestions() != null) {
+            session.setAvoidRepeatedQuestions(request.avoidRepeatedQuestions());
         }
         validateWindow(session.getOpensAt(), session.getClosesAt());
         validateConfiguration(session.getReusePolicy(), session.getSeriesKey());

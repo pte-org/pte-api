@@ -67,7 +67,8 @@ public class GradingCompletionEvaluator {
                 }
                 AiEvaluation answer = attemptAnswers.get(item.itemPublicId());
                 if (answer == null) {
-                    reasons.add(GradingConstants.MISSING_EXPECTED_ANSWER);
+                    // Left blank by the student: nothing to grade, reporting scores it 0.
+                    satisfiedItems++;
                     continue;
                 }
                 ScoringMethod method = answer.getScoringMethod();

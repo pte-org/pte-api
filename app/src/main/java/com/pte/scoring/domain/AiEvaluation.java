@@ -183,13 +183,25 @@ public class AiEvaluation extends AnswerEvaluation {
         this.failureReason = reason;
     }
 
+    /** What lies behind a result that was not produced through a rubric (0-100 criteria); clears any older pin. */
     public void recordDetail(String criteriaScoresJson, String feedback, String transcript, String detailJson,
             boolean fallback) {
+        recordDetail(criteriaScoresJson, feedback, transcript, detailJson, fallback, null);
+    }
+
+    /**
+     * What lies behind the latest result. {@code rubricVersionPublicId} names the rubric version whose Pearson
+     * scales {@code criteriaScoresJson} uses, so the item score can be recomputed and explained later; null for a
+     * result that was not produced through a rubric.
+     */
+    public void recordDetail(String criteriaScoresJson, String feedback, String transcript, String detailJson,
+            boolean fallback, UUID rubricVersionPublicId) {
         this.criteriaScoresJson = criteriaScoresJson;
         this.feedback = feedback;
         this.transcript = transcript;
         this.detailJson = detailJson;
         this.fallback = fallback;
         this.failureReason = null;
+        recordRubricVersion(rubricVersionPublicId);
     }
 }

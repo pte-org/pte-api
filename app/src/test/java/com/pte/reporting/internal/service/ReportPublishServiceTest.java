@@ -3,12 +3,16 @@ package com.pte.reporting.internal.service;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptScoreContextView;
 import com.pte.attempt.dto.response.AttemptSummaryView;
+import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.reporting.domain.ExamResult;
 import com.pte.reporting.domain.enums.Skill;
 import com.pte.reporting.dto.event.AttemptPublishedEvent;
 import com.pte.reporting.internal.exception.ReportPublicationNotReadyException;
 import com.pte.reporting.internal.repository.ExamResultRepository;
+import com.pte.scoring.RubricTraceService;
 import com.pte.scoring.ScoringService;
+import com.pte.scoring.dto.response.ItemScoreTraceView;
+import com.pte.scoring.dto.response.ItemTraceKind;
 import com.pte.scoring.dto.response.ReportPublicationScoringView;
 import com.pte.scoring.dto.response.ReportScoringAnswerView;
 import com.pte.scoring.dto.response.SessionCohortPublicationView;
@@ -52,13 +56,15 @@ class ReportPublishServiceTest {
     private ExamResultRepository examResultRepository;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private RubricTraceService rubricTraceService;
 
     private ReportPublishService service;
 
     @BeforeEach
     void setUp() {
         service = new ReportPublishService(sessionService, attemptService, scoringService, aggregationService,
-                snapshotCodec, examResultRepository, eventPublisher, com.pte.TestClocks.fixed());
+                snapshotCodec, examResultRepository, eventPublisher, rubricTraceService, com.pte.TestClocks.fixed());
     }
 
     @Test
@@ -83,12 +89,19 @@ class ReportPublishServiceTest {
         when(scoringService.lockForReportPublication(eq(tenantId), eq(sessionId), any()))
                 .thenReturn(new ReportPublicationScoringView(publicationId, List.of(input)));
         when(examResultRepository.findByAttemptPublicId(attemptId)).thenReturn(Optional.of(report));
+        ReportScoreAggregation aggregation = new ReportScoreAggregation(
+                new AttemptScoreContextView(examDefinitionId, scoreTemplateVersion, Set.of("SPEAKING")), summary);
         when(aggregationService.aggregateBatchFromInputs(Set.of(attemptId), Map.of(attemptId, List.of(input))))
-                .thenReturn(Map.of(attemptId, new ReportScoreAggregation(
-                        new AttemptScoreContextView(examDefinitionId, scoreTemplateVersion, Set.of("SPEAKING")),
-                        summary)));
-        when(snapshotCodec.encode(eq(publicationId), eq(actorId), any(), eq(1), eq(examSnapshotId),
-                eq(examDefinitionId), eq(scoreTemplateVersion), eq(summary), eq(List.of(input))))
+                .thenReturn(Map.of(attemptId, aggregation));
+        Map<UUID, ItemScoreTraceView> traces = Map.of(answerId,
+                new ItemScoreTraceView(answerId, ItemTraceKind.LEGACY_NO_TRACE, null, null));
+        when(rubricTraceService.traceItems(List.of(input))).thenReturn(traces);
+        when(snapshotCodec.encode(org.mockito.ArgumentMatchers.argThat(publication ->
+                        publication.publicationPublicId().equals(publicationId)
+                                && publication.publishedByPublicId().equals(actorId)
+                                && publication.cohortSize() == 1
+                                && publication.examSnapshotPublicId().equals(examSnapshotId)),
+                eq(aggregation), eq(List.of(input)), eq(traces)))
                 .thenReturn("immutable-snapshot");
 
         int published = service.publishSession(sessionId, tenantId, actorId);
@@ -176,6 +189,44 @@ class ReportPublishServiceTest {
         assertThat(readiness.canPublish()).isFalse();
         assertThat(readiness.blockerCount()).isEqualTo(2);
         assertThat(readiness.readyAttemptCount()).isOne();
+    }
+
+    @Test
+    void preflight_attemptWithNoAnswersAtAll_isReadyAndNotBlocked() {
+        UUID sessionId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        AttemptSummaryView attempt = new AttemptSummaryView(attemptId, sessionId, UUID.randomUUID(), tenantId);
+        when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(List.of(attempt));
+        when(attemptService.getSubmittedAnswersForSession(sessionId, tenantId)).thenReturn(List.of());
+        when(sessionService.isSessionClosed(sessionId, tenantId)).thenReturn(true);
+        when(scoringService.getReportScoringInputs(tenantId, sessionId)).thenReturn(List.of());
+
+        var readiness = service.preflight(sessionId, tenantId);
+
+        assertThat(readiness.canPublish()).isTrue();
+        assertThat(readiness.blockerCount()).isZero();
+        assertThat(readiness.readyAttemptCount()).isOne();
+    }
+
+    @Test
+    void preflight_answersThatNeverReachedScoring_stillBlockWithInputsMissing() {
+        UUID sessionId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        AttemptSummaryView attempt = new AttemptSummaryView(attemptId, sessionId, UUID.randomUUID(), tenantId);
+        SubmittedAnswerView answer = org.mockito.Mockito.mock(SubmittedAnswerView.class);
+        when(answer.attemptPublicId()).thenReturn(attemptId);
+        when(attemptService.getSubmittedAttemptsForSession(sessionId, tenantId)).thenReturn(List.of(attempt));
+        when(attemptService.getSubmittedAnswersForSession(sessionId, tenantId)).thenReturn(List.of(answer));
+        when(sessionService.isSessionClosed(sessionId, tenantId)).thenReturn(true);
+        when(scoringService.getReportScoringInputs(tenantId, sessionId)).thenReturn(List.of());
+
+        var readiness = service.preflight(sessionId, tenantId);
+
+        assertThat(readiness.canPublish()).isFalse();
+        assertThat(readiness.blockers()).singleElement()
+                .satisfies(blocker -> assertThat(blocker.reason()).isEqualTo("SCORING_INPUTS_MISSING"));
     }
 
     @Test

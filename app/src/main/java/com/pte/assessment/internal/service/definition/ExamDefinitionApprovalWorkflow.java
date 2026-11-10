@@ -5,6 +5,7 @@ import com.pte.assessment.domain.ExamDefinitionItem;
 import com.pte.assessment.domain.enums.ExamDefinitionStatus;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.assessment.dto.request.RejectExamDefinitionRequest;
+import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.internal.constant.ExamDefinitionConstants;
 import com.pte.assessment.internal.exception.ExamDefinitionNotDraftException;
@@ -13,6 +14,8 @@ import com.pte.assessment.internal.mapper.ExamDefinitionMapper;
 import com.pte.assessment.internal.repository.ExamDefinitionRepository;
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskTypeObservability;
+import com.pte.itembank.TaskTypeStimulusService;
+import com.pte.assessment.internal.service.timing.ExamTimeFrameActivationCheck;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.security.CurrentUser;
@@ -22,6 +25,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Clock;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Handles exam definition approval workflow: submission, review approval/rejection, and publication.
@@ -35,10 +40,18 @@ class ExamDefinitionApprovalWorkflow {
     private final TaskTypeObservability observability;
     private final QuestionTypeService questionTypeService;
     private final Clock clock;
+    private final TaskTypeStimulusService stimulusService;
 
     ExamDefinitionApprovalWorkflow(ExamDefinitionRepository repository, ExamDefinitionValidator validator,
             AuditLogService auditLogService, TaskTypeObservability observability,
             QuestionTypeService questionTypeService, Clock clock) {
+        this(repository, validator, auditLogService, observability, questionTypeService, clock, null);
+    }
+
+    ExamDefinitionApprovalWorkflow(ExamDefinitionRepository repository, ExamDefinitionValidator validator,
+            AuditLogService auditLogService, TaskTypeObservability observability,
+            QuestionTypeService questionTypeService, Clock clock, TaskTypeStimulusService stimulusService) {
+        this.stimulusService = stimulusService;
         this.repository = repository;
         this.validator = validator;
         this.auditLogService = auditLogService;
@@ -53,6 +66,7 @@ class ExamDefinitionApprovalWorkflow {
         requireDraftModification(caller, template);
         try {
             validator.validateCatalog(template, true);
+            validator.validateIncludesWholeCatalog(template);
             ExamDefinitionActivationValidator.validate(template);
             validator.validateQuestionBank(template);
         } catch (ExamDefinitionValidationException ex) {
@@ -73,6 +87,7 @@ class ExamDefinitionApprovalWorkflow {
         requirePendingApproval(template);
         try {
             validator.validateCatalog(template, true);
+            validator.validateIncludesWholeCatalog(template);
             ExamDefinitionActivationValidator.validate(template);
             validator.validateQuestionBank(template);
         } catch (ExamDefinitionValidationException ex) {
@@ -99,13 +114,24 @@ class ExamDefinitionApprovalWorkflow {
         return response;
     }
 
+    private void verifyTimeFrame(ExamDefinition target) {
+        ExamDefinitionResponse response = ExamDefinitionMapper.toResponse(target);
+        Map<String, Integer> stimulusSeconds = stimulusService == null ? Map.of()
+                : stimulusService.stimulusBeforeTimer(
+                        response.items().stream().map(ExamDefinitionItemResponse::taskTypeKey).toList())
+                        .entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().seconds()));
+        ExamTimeFrameActivationCheck.verify(response, stimulusSeconds);
+    }
+
     /** Activates approved draft, retires previous active version. */
     ExamDefinitionResponse activate(ExamDefinition target, CurrentUser caller) {
-        requireDraft(target);
+        requireActivatable(target);
         requirePublish(caller, target);
         try {
             validator.validateCatalog(target, true);
+            validator.validateIncludesWholeCatalog(target);
             ExamDefinitionActivationValidator.validate(target);
+            verifyTimeFrame(target);
             validator.validateQuestionBank(target);
         } catch (ExamDefinitionValidationException ex) {
             auditValidationFailure(caller, target, ex);
@@ -113,7 +139,7 @@ class ExamDefinitionApprovalWorkflow {
         }
 
         repository.findAllByCodeForUpdate(target.getCode());
-        repository.findWithItemsByStatus(ExamDefinitionStatus.ACTIVE)
+        repository.findWithItemsByStatusAndTenantIdIsNull(ExamDefinitionStatus.ACTIVE)
                 .filter(active -> !active.getPublicId().equals(target.getPublicId()))
                 .ifPresent(active -> {
                     active.setStatus(ExamDefinitionStatus.RETIRED);
@@ -139,6 +165,14 @@ class ExamDefinitionApprovalWorkflow {
 
     private void requireDraft(ExamDefinition template) {
         if (template.getStatus() != ExamDefinitionStatus.DRAFT) {
+            throw new ExamDefinitionNotDraftException();
+        }
+    }
+
+    /** A DRAFT goes live, or a RETIRED version is switched back on; ACTIVE and PENDING_APPROVAL are not activatable. */
+    private void requireActivatable(ExamDefinition template) {
+        if (template.getStatus() != ExamDefinitionStatus.DRAFT
+                && template.getStatus() != ExamDefinitionStatus.RETIRED) {
             throw new ExamDefinitionNotDraftException();
         }
     }

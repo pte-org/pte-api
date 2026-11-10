@@ -8,11 +8,16 @@ import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 
 public record SubmitExaminerScoreRequest(
-        @NotNull @Min(0) @Max(100) Integer score,
+        @Min(0) @Max(100) Integer score,
         ExaminerDecisionKind decisionKind,
         String expectedReviewVersion,
         String reviewedAiVersion,
-        UUID requestPublicId) {
+        UUID requestPublicId,
+        @jakarta.validation.constraints.Size(max = com.pte.scoring.internal.constant.RubricConstants.MAX_TRAIT_SCORE_ENTRIES) java.util.Map<String, java.math.BigDecimal> traitScores) {
+
+    public SubmitExaminerScoreRequest(Integer score, ExaminerDecisionKind kind, String review, String ai, UUID request) {
+        this(score, kind, review, ai, request, null);
+    }
 
     public SubmitExaminerScoreRequest(Integer score) {
         this(score, null, null, null, null);

@@ -114,7 +114,12 @@ class ExaminerDraftCommandServiceTest {
                 issueRepository, evaluationRepository, answerRepository, gateway, attemptService,
                 eligibilityQueryService, workflowQueryService, new ExaminerReviewVersionService(),
                 recorder, new ExaminerFinalizeSubmitter(evaluationRepository, new ExaminerReviewVersionService(),
-                        attemptService), eventPublisher, Clock.fixed(NOW, ZoneOffset.UTC));
+                        attemptService, com.pte.scoring.support.ExaminerTraitWorkflowStub.create(),
+                        org.mockito.Mockito.mock(com.pte.scoring.internal.service.examiner.trait.ExaminerTraitFreshness.class)), eventPublisher,
+                com.pte.scoring.support.ExaminerTraitWorkflowStub.create(),
+                new com.pte.scoring.internal.service.examiner.trait.ExaminerTraitResponses(jsonMapper),
+                org.mockito.Mockito.mock(com.pte.scoring.internal.service.examiner.trait.ExaminerTraitFreshness.class), Clock.fixed(NOW, ZoneOffset.UTC));
+        lenient().when(answerRepository.findByAnswerPublicId(answerId)).thenReturn(Optional.of(EvaluationFixtures.ai(tenantId, sessionId, attemptId, answerId, "READ_ALOUD", ScoringMethod.AI_SPEECH)));
         assignment = new GradingAssignment(tenantId, sessionId, attemptId, examinerId, 1,
                 UUID.randomUUID(), NOW);
         ReflectionTestUtils.setField(assignment, "publicId", assignmentId);
@@ -275,6 +280,43 @@ class ExaminerDraftCommandServiceTest {
         verify(evaluationRepository, never()).save(any());
     }
 
+    @Test
+    void finalizeIsRefusedWhileACarriedOverDraftIsUnconfirmed() {
+        stubFinalize();
+        ExaminerEvaluation carried = carriedOverDraft(70);
+        lenient().when(evaluationRepository.findByTenantIdAndAssignmentIdAndDeletedFalse(tenantId, 7L))
+                .thenReturn(List.of(carried));
+        lenient().when(evaluationRepository.findSubmittedByAttempt(tenantId, sessionId, attemptId))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.finalizeWork(sessionId, attemptId, finalizeRequest(1L), examiner))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+
+        assertThat(carried.getStatus()).isEqualTo(ExaminerAnswerScoreStatus.DRAFT);
+        verify(evaluationRepository, never()).save(any());
+    }
+
+    @Test
+    void savingACarriedOverDraftConfirmsItEvenWithTheSameScore() {
+        ExaminerEvaluation carried = carriedOverDraft(70);
+        when(evaluationRepository.findByAnswerWithLock(tenantId, answerId)).thenReturn(Optional.of(carried));
+
+        ExaminerCommandResponse response = service.saveDraft(sessionId, attemptId, answerId, draftRequest(1), examiner);
+
+        assertThat(carried.isCarriedOver()).isFalse();
+        assertThat(response.draft().carriedOver()).isFalse();
+        assertThat(response.draft().score()).isEqualTo(70);
+    }
+
+    private ExaminerEvaluation carriedOverDraft(int score) {
+        ExaminerEvaluation carried = ExaminerEvaluation.draft(tenantId, sessionId, attemptId, answerId,
+                UUID.randomUUID(), 7L, score, "n", ExaminerDecisionKind.MANUAL, "rv", null, NOW);
+        carried.carryOverTo(examinerId);
+        assertThat(carried.isCarriedOver()).isTrue();
+        return carried;
+    }
+
     private void stubFinalize() {
         when(gateway.grading(tenantId, sessionId)).thenReturn(Optional.of(new SessionGradingGateway.Grading(
                 sessionId, tenantId, GradingMarkingMode.MANUAL_EXAMINER, GradingCohortStatus.FROZEN, "preview-v1",
@@ -283,7 +325,7 @@ class ExaminerDraftCommandServiceTest {
                 new AttemptGradingCandidateView(attemptId, UUID.randomUUID(), "SUBMITTED", "v1", false, null)));
         AiEvaluation ai = EvaluationFixtures.ai(tenantId, sessionId, attemptId, answerId, "READ_ALOUD",
                 ScoringMethod.AI_SPEECH);
-        ai.markAiScored(60, AiProviderCategory.REAL, "p", "m", "v", java.time.Instant.now());
+        ai.markAiScored(60, AiProviderCategory.REAL, "p", "m", "v", NOW);
         when(answerRepository.findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(sessionId, tenantId,
                 List.of(attemptId))).thenReturn(List.of(ai));
         when(eligibilityQueryService.isAiEligible(ai)).thenReturn(true);

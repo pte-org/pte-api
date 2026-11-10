@@ -6,108 +6,60 @@ import com.pte.billing.TenantApplicationRejectedEvent;
 import com.pte.billing.TenantApplicationSubmittedEvent;
 import com.pte.notification.domain.enums.NotificationType;
 import com.pte.notification.internal.service.NotificationDispatchService;
+import com.pte.notification.internal.template.BrandedEmailTemplate;
+import com.pte.notification.internal.template.RenderedEmail;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.time.Clock;
+import java.time.Year;
 import java.util.UUID;
 
-/** Sends the three customer-facing lifecycle emails for tenant applications. */
+/** Sends the three customer-facing lifecycle emails for tenant applications as cards with a plain-text twin. */
 @Component
 public class TenantApplicationNotificationListener {
 
-    /** Approval mail for a contact who had no account yet: carries the generated temporary credentials. */
-    private static final String NEW_ACCOUNT_APPROVED_BODY = """
-            Hello,
-
-            We are pleased to let you know that your organization application has been approved.
-
-            Organization: %s
-            Tenant code: %s
-            Username: %s
-            Temporary password: %s
-
-            Please change the temporary password after your first sign-in.
-
-            Regards,
-            PTE Prep Platform Team
-            """;
-
-    /** Approval mail for a contact who already has an account: no new credentials are issued. */
-    private static final String EXISTING_ACCOUNT_APPROVED_BODY = """
-            Hello,
-
-            We are pleased to let you know that your organization application has been approved.
-
-            Organization: %s
-            Tenant code: %s
-            Username: %s
-
-            This organization was added to your existing account. Sign in with your current password and choose
-            this organization.
-
-            Regards,
-            PTE Prep Platform Team
-            """;
-
     private final NotificationDispatchService dispatchService;
     private final BillingSettingsService billingSettingsService;
+    private final Clock clock;
 
     public TenantApplicationNotificationListener(NotificationDispatchService dispatchService,
-            BillingSettingsService billingSettingsService) {
+            BillingSettingsService billingSettingsService, Clock clock) {
         this.dispatchService = dispatchService;
         this.billingSettingsService = billingSettingsService;
+        this.clock = clock;
     }
 
     @TransactionalEventListener
     public void onApplicationSubmitted(TenantApplicationSubmittedEvent event) {
-        String subject = "PTE Prep - Application received";
-        String body = """
-                Hello,
-
-                Thank you for submitting your organization application to PTE Prep.
-
-                Our platform team will review your application and send an update within %d hours.
-
-                Regards,
-                PTE Prep Platform Team
-                """.formatted(billingSettingsService.getTenantApplicationResponseSlaHours());
+        RenderedEmail email = BrandedEmailTemplate.applicationReceived(
+                billingSettingsService.getTenantApplicationResponseSlaHours(), currentYear());
 
         dispatchService.dispatchExternal(NotificationType.TENANT_APPLICATION_SUBMITTED, event.contactEmail(), null,
-                dedupeKey(event.applicationPublicId(), "submitted"), subject, body);
+                dedupeKey(event.applicationPublicId(), "submitted"), email.subject(), email.text(), email.html());
     }
 
+    /** Carries generated credentials only for a contact who had no account yet; otherwise none are issued. */
     @TransactionalEventListener
     public void onApplicationApproved(TenantApplicationApprovedEvent event) {
-        String subject = "PTE Prep - Your application was approved";
-        String body = event.hostAdminPassword() == null
-                ? EXISTING_ACCOUNT_APPROVED_BODY.formatted(
-                        event.organizationName(), event.tenantCode(), event.hostAdminUsername())
-                : NEW_ACCOUNT_APPROVED_BODY.formatted(event.organizationName(), event.tenantCode(),
-                        event.hostAdminUsername(), event.hostAdminPassword());
+        RenderedEmail email = BrandedEmailTemplate.applicationApproved(event.organizationName(), event.tenantCode(),
+                event.hostAdminUsername(), event.hostAdminPassword(), currentYear());
 
         dispatchService.dispatchExternalSensitive(NotificationType.TENANT_APPLICATION_APPROVED, event.contactEmail(),
-                event.tenantPublicId(), dedupeKey(event.applicationPublicId(), "approved"), subject, body);
+                event.tenantPublicId(), dedupeKey(event.applicationPublicId(), "approved"), email.subject(),
+                email.text(), email.html());
     }
 
     @TransactionalEventListener
     public void onApplicationRejected(TenantApplicationRejectedEvent event) {
-        String subject = "PTE Prep - Update on your application";
-        String body = """
-                Hello,
-
-                Thank you for your interest in PTE Prep. After reviewing your organization application, we are unable
-                to approve it at this time.
-
-                Reason: %s
-
-                Please address the reason above and submit a new application if you would like us to review it again.
-
-                Regards,
-                PTE Prep Platform Team
-                """.formatted(event.rejectReason());
+        RenderedEmail email = BrandedEmailTemplate.applicationRejected(event.rejectReason(), currentYear());
 
         dispatchService.dispatchExternal(NotificationType.TENANT_APPLICATION_REJECTED, event.contactEmail(), null,
-                dedupeKey(event.applicationPublicId(), "rejected"), subject, body);
+                dedupeKey(event.applicationPublicId(), "rejected"), email.subject(), email.text(), email.html());
+    }
+
+    private int currentYear() {
+        return Year.now(clock).getValue();
     }
 
     private String dedupeKey(UUID applicationPublicId, String transition) {

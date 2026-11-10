@@ -1,10 +1,19 @@
 package com.pte.chat.internal.service;
 
-import java.util.UUID;
+import java.util.List;
 
-public record ChatSendCommand(UUID sessionId, String message, String taskType, String language, String exercisePrompt) {
+/**
+ * What a student sent. {@code history} is the earlier part of the open conversation, kept by the browser: the
+ * server stores nothing between two messages. It is untrusted until {@link ChatSendValidator} has checked it.
+ */
+public record ChatSendCommand(String message, String taskType, String language, String exercisePrompt,
+                              List<ChatHistoryEntry> history) {
 
-    public ChatSendCommand(UUID sessionId, String message, String taskType, String language) {
-        this(sessionId, message, taskType, language, null);
+    public ChatSendCommand(String message, String taskType, String language) {
+        this(message, taskType, language, null, null);
+    }
+
+    public ChatSendCommand(String message, String taskType, String language, String exercisePrompt) {
+        this(message, taskType, language, exercisePrompt, null);
     }
 }

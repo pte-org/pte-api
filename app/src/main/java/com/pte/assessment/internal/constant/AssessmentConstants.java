@@ -17,6 +17,7 @@ public final class AssessmentConstants {
     public static final String INVALID_SKILL_SELECTION = "INVALID_SKILL_SELECTION";
     public static final String TEMPLATE_NOT_ACTIVE = "TEMPLATE_NOT_ACTIVE";
     public static final String DETERMINISTIC_ALGORITHM_VERSION = "PTE_SEEDED_V2";
+    public static final String BALANCED_ALGORITHM_VERSION = "PTE_SEEDED_BALANCED_V1";
 
     public static final String QUESTION_REFERENCE_REQUIRED = "Question reference is required";
     public static final String SECTION_REQUIRED = "Section is required";
@@ -55,4 +56,15 @@ public final class AssessmentConstants {
 
     private AssessmentConstants() {
     }
+
+    public static final String SNAPSHOT_TASK_TYPE_SECTION_MISMATCH =
+            "task type section does not match the frozen snapshot section";
+    public static final String SNAPSHOT_CUSTOM_TASK_TYPE_SECTION_REQUIRED =
+            "custom task type section is missing";
+    public static final String SNAPSHOT_RUNTIME_PROFILE_NOT_ALLOWLISTED =
+            "runtime profile is not an allowlisted match";
+    public static final String SNAPSHOT_STANDARD_RUNTIME_PROFILE_MISMATCH =
+            "standard runtime profile differs from the allowlisted match";
+    public static final String SNAPSHOT_CUSTOM_RUNTIME_PROFILE_INCOMPLETE =
+            "custom runtime profile is incomplete";
 }

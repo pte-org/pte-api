@@ -41,6 +41,7 @@ public class QuestionLifecycleService {
     private final AuditLogService auditLogService;
     private final QuestionApprovalService approvalService;
     private final QuestionMediaReferenceValidator mediaValidator;
+    private final GenerationMetaHelper generationMetaHelper;
 
     @Autowired
     public QuestionLifecycleService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
@@ -53,6 +54,7 @@ public class QuestionLifecycleService {
         this.accessPolicy = accessPolicy;
         this.auditLogService = auditLogService;
         this.approvalService = approvalService;
+        this.generationMetaHelper = new GenerationMetaHelper(auditLogService);
     }
 
     public QuestionLifecycleService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
@@ -65,7 +67,13 @@ public class QuestionLifecycleService {
 
     @Transactional
     public QuestionResponse createRevision(UUID publicId, CurrentUser caller) {
-        Question source = loadForPlatformWrite(publicId, caller);
+        // The source is published content, not anyone's draft: any academic author may open a revision.
+        // The new draft is owned by the caller, so later edits and review keep the ownership rules.
+        Question source = questionRepository.findWithOptionsByPublicId(publicId)
+                .orElseThrow(QuestionNotFoundException::new);
+        if (!accessPolicy.canWrite(caller)) {
+            deny(caller, publicId, ItembankConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
+        }
         if (source.getStatus() != QuestionStatus.APPROVED || !source.isCurrent()) {
             throw new InvalidQuestionStatusTransitionException();
         }
@@ -75,11 +83,11 @@ public class QuestionLifecycleService {
                 ? source.getPteTaskType().name() : source.getTaskTypeKey());
         revision.setTaskTypeSection(source.getTaskTypeSection() == null && source.getPteTaskType() != null
                 ? source.getPteTaskType().getSection().name() : source.getTaskTypeSection());
-        revision.setVisibility(source.getVisibility());
         revision.setPool(source.getPool());
         revision.setAvailableForPractice(source.isAvailableForPractice());
         revision.setAvailableForExam(source.isAvailableForExam());
         revision.setAvailabilityFlagsExplicit(source.isAvailabilityFlagsExplicit());
+        revision.setCefrLevel(source.getCefrLevel());
         revision.setTenantId(source.getTenantId());
         revision.setAuthorUserPublicId(caller.userId());
         revision.setStatus(QuestionStatus.DRAFT);
@@ -88,7 +96,7 @@ public class QuestionLifecycleService {
         revision.setRevisionNumber(source.getRevisionNumber() + 1);
         revision.setSupersedesPublicId(source.getPublicId());
         revision.setCurrent(false);
-        applyContent(revision, source.getTitle(), source.getPromptText(), source.getAudioPromptRef(),
+        applyContent(revision, source.getPromptText(), source.getAudioPromptRef(),
                 source.getImagePromptRef(), source.getReferenceAnswerText(), source.getCorrectAnswerText(),
                 source.getMinWordCount(), source.getMaxWordCount(), source.getOptions().stream()
                         .map(o -> new OptionRequest(o.getText(), o.isCorrect(), o.getOrderIndex(),
@@ -96,7 +104,7 @@ public class QuestionLifecycleService {
                         .toList());
         Question saved = questionRepository.save(revision);
         audit(caller, ItembankConstants.AUDIT_REVISION_CREATED, saved,
-                "Created question revision " + saved.getRevisionNumber());
+                String.format(ItembankConstants.AUDIT_SUMMARY_REVISION_CREATED, saved.getRevisionNumber()));
         return toResponse(saved);
     }
 
@@ -134,7 +142,8 @@ public class QuestionLifecycleService {
         if (question.getStatus() == QuestionStatus.APPROVED) question.setEverPublished(true);
         question.setStatus(QuestionStatus.ARCHIVED);
         question.setCurrent(false);
-        audit(caller, ItembankConstants.AUDIT_ARCHIVED, question, "Archived question");
+        audit(caller, ItembankConstants.AUDIT_ARCHIVED, question,
+                ItembankConstants.AUDIT_SUMMARY_ARCHIVED);
         return toResponse(question);
     }
 
@@ -155,7 +164,8 @@ public class QuestionLifecycleService {
                 .existsByRevisionGroupPublicIdAndCurrentTrueAndPublicIdNot(
                         question.getRevisionGroupPublicId(), question.getPublicId());
         question.setCurrent(!groupHasCurrentElsewhere);
-        audit(caller, ItembankConstants.AUDIT_UNARCHIVED, question, "Restored question to draft");
+        audit(caller, ItembankConstants.AUDIT_UNARCHIVED, question,
+                ItembankConstants.AUDIT_SUMMARY_UNARCHIVED);
         return toResponse(question);
     }
 
@@ -168,9 +178,18 @@ public class QuestionLifecycleService {
         if (request.version() != null && request.version() != question.getVersion()) {
             throw new QuestionVersionConflictException();
         }
-        applyContent(question, request.title(), request.promptText(), request.audioPromptRef(),
+        applyContent(question, request.promptText(), request.audioPromptRef(),
                 request.imagePromptRef(), request.referenceAnswerText(), request.correctAnswerText(),
                 request.minWordCount(), request.maxWordCount(), request.options());
+        // Mark AI-generated questions as edited by human when content is updated
+        if (question.getGenerationMeta() != null) {
+            generationMetaHelper.markAsEditedByHuman(question);
+        }
+        if (request.cefrLevel() != null) {
+            question.setCefrLevel(CefrLevels.parse(request.cefrLevel()));
+        }
+        boolean wasForExam = question.isAvailableForExam();
+        boolean wasForPractice = question.isAvailableForPractice();
         if (request.availableForPractice() != null) {
             question.setAvailableForPractice(request.availableForPractice());
         }
@@ -182,7 +201,13 @@ public class QuestionLifecycleService {
         }
         validationHelper.validate(question);
         mediaValidator.validate(question, caller);
-        audit(caller, ItembankConstants.AUDIT_UPDATED, question, "Updated question draft");
+        String summary = ItembankConstants.AUDIT_SUMMARY_UPDATED;
+        if (wasForExam != question.isAvailableForExam() || wasForPractice != question.isAvailableForPractice()) {
+            // Moving between exam and practice is a leak-risk decision; keep it visible in the audit trail.
+            summary += String.format(ItembankConstants.AUDIT_SUMMARY_AVAILABILITY_CHANGED, wasForExam,
+                    question.isAvailableForExam(), wasForPractice, question.isAvailableForPractice());
+        }
+        audit(caller, ItembankConstants.AUDIT_UPDATED, question, summary);
         return toResponse(question);
     }
 
@@ -209,10 +234,9 @@ public class QuestionLifecycleService {
         deny(caller, null, ItembankConstants.ACADEMIC_PUBLISH_REQUIRED);
     }
 
-    private void applyContent(Question question, String title, String promptText, UUID audioPromptRef,
+    private void applyContent(Question question, String promptText, UUID audioPromptRef,
             UUID imagePromptRef, String referenceAnswerText, String correctAnswerText, Integer minWordCount,
             Integer maxWordCount, List<OptionRequest> options) {
-        question.setTitle(title);
         question.setPromptText(promptText);
         question.setAudioPromptRef(audioPromptRef);
         question.setImagePromptRef(imagePromptRef);
@@ -242,13 +266,14 @@ public class QuestionLifecycleService {
         String text = summary == null ? "" : summary;
         auditLogService.record(caller, ItembankConstants.QUESTION_AGGREGATE,
                 String.valueOf(question.getPublicId()), action,
-                text.length() <= 500 ? text : text.substring(0, 500));
+                text.length() <= ItembankConstants.AUDIT_SUMMARY_MAX_LENGTH ? text
+                        : text.substring(0, ItembankConstants.AUDIT_SUMMARY_MAX_LENGTH));
     }
 
     private void deny(CurrentUser caller, UUID aggregateId, String message) {
         if (auditLogService != null && caller != null) {
             auditLogService.recordFailure(caller, ItembankConstants.QUESTION_AGGREGATE,
-                    aggregateId == null ? "unknown" : aggregateId.toString(),
+                    aggregateId == null ? ItembankConstants.AUDIT_UNKNOWN_AGGREGATE : aggregateId.toString(),
                     SharedConstants.AUDIT_AUTHORIZATION_DENIED, message);
         }
         throw new AccessDeniedException(message);

@@ -11,6 +11,7 @@ import com.pte.practice.internal.messaging.PracticeScoringJob;
 import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.scoring.PracticeAiEvaluation;
 import com.pte.scoring.PracticeScoringFailure;
+import com.pte.scoring.RubricScaleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +42,8 @@ class PracticeScoringStateServiceTest {
     private PracticeResponseRepository itemRepository;
     @Mock
     private PracticeScoringDispatcher dispatcher;
+    @Mock
+    private RubricScaleService rubricScales;
 
     private PracticeScoringProperties properties;
     private PracticeScoringStateService service;
@@ -51,7 +54,7 @@ class PracticeScoringStateServiceTest {
     void setUp() {
         properties = new PracticeScoringProperties();
         service = new PracticeScoringStateService(itemRepository, dispatcher, properties,
-                JsonMapper.builder().build());
+                JsonMapper.builder().build(), rubricScales);
         session = new PracticeSession();
         session.setStudentPublicId(UUID.randomUUID());
         session.setTenantId(UUID.randomUUID());
@@ -330,6 +333,58 @@ class PracticeScoringStateServiceTest {
         assertThat(result.score()).isNull();
         assertThat(result.retryable()).isFalse();
         verify(itemRepository, never()).countScoringRequestsSince(any(), any());
+    }
+
+    @Test
+    void aRubricResultIsStoredOnThePearsonScaleWithItsVersionAndShownAgainstEachMaximum() {
+        UUID version = UUID.randomUUID();
+        item.setTaskCode("SUMMARIZE_WRITTEN_TEXT");
+        UUID token = scoringItem(NOW);
+        when(itemRepository.findByPublicIdAndDeletedFalse(item.getPublicId())).thenReturn(Optional.of(item));
+        when(rubricScales.traitMaxima(version, "SUMMARIZE_WRITTEN_TEXT")).thenReturn(Optional.of(
+                Map.of("CONTENT", 4, "FORM", 1, "GRAMMAR", 2, "VOCABULARY", 2)));
+
+        service.complete(item.getPublicId(), token, new PracticeAiEvaluation(78,
+                Map.of("CONTENT", 3, "FORM", 1, "GRAMMAR", 2, "VOCABULARY", 1), "UNVALIDATED", "GEMINI", "m", null,
+                null, "{}", NOW, "hash", "Clear.", version));
+        PracticeItemResultResponse result = service.resultOf(item);
+
+        assertThat(item.getAiSubScoresJson()).startsWith("{\"scale\":\"PEARSON_V1\",\"rubricVersion\":\""
+                + version + "\"");
+        assertThat(result.subScores()).containsExactlyInAnyOrderEntriesOf(
+                Map.of("CONTENT", 3, "FORM", 1, "GRAMMAR", 2, "VOCABULARY", 1));
+        assertThat(result.subScoreMax()).containsEntry("CONTENT", 4).containsEntry("FORM", 1);
+        assertThat(PracticeScoringStateService.readSubScores(JsonMapper.builder().build(),
+                item.getAiSubScoresJson())).containsEntry("CONTENT", 3);
+    }
+
+    @Test
+    void anOldFlatResultIsStillShownAsRawNumbersWithoutMaxima() {
+        item.setScoringStatus(PracticeScoringStatus.SCORED);
+        item.setAiScore(82);
+        item.setAiSubScoresJson("{\"content\":70,\"fluency\":64}");
+
+        PracticeItemResultResponse result = service.resultOf(item);
+
+        assertThat(result.subScores()).containsEntry("content", 70).containsEntry("fluency", 64);
+        assertThat(result.subScoreMax()).isNull();
+        verify(rubricScales, never()).traitMaxima(any(), any());
+    }
+
+    @Test
+    void aPearsonResultWhoseVersionCannotBeReadIsShownWithoutMaxima() {
+        UUID version = UUID.randomUUID();
+        item.setTaskCode("WRITE_ESSAY");
+        item.setScoringStatus(PracticeScoringStatus.SCORED);
+        item.setAiScore(65);
+        item.setAiSubScoresJson("{\"scale\":\"PEARSON_V1\",\"rubricVersion\":\"" + version
+                + "\",\"traits\":{\"CONTENT\":4}}");
+        when(rubricScales.traitMaxima(version, "WRITE_ESSAY")).thenReturn(Optional.empty());
+
+        PracticeItemResultResponse result = service.resultOf(item);
+
+        assertThat(result.subScores()).containsExactly(Map.entry("CONTENT", 4));
+        assertThat(result.subScoreMax()).isNull();
     }
 
     private UUID scoringItem(Instant dispatchedAt) {

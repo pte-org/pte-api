@@ -41,6 +41,7 @@ import java.util.UUID;
 @Service
 @Transactional(readOnly = true)
 public class ExaminerWorkflowQueryService {
+    private final com.pte.scoring.internal.service.examiner.trait.ExaminerTraitResponses responses;
 
     private final ExaminerWorkRecorder recorder;
     private final GradingIssueRepository issueRepository;
@@ -59,8 +60,9 @@ public class ExaminerWorkflowQueryService {
             SessionGradingGateway gateway,
             AttemptService attemptService,
             AiEvaluationRepository answerRepository,
-            ExamDefinitionService examDefinitionService) {
+            ExamDefinitionService examDefinitionService, com.pte.scoring.internal.service.examiner.trait.ExaminerTraitResponses responses) {
         this.recorder = recorder;
+        this.responses = responses;
         this.issueRepository = issueRepository;
         this.assignmentRepository = assignmentRepository;
         this.evaluationRepository = evaluationRepository;
@@ -110,15 +112,7 @@ public class ExaminerWorkflowQueryService {
             List<ExaminerEvaluation> draftEntities = evaluationRepository
                     .findByTenantIdAndAssignmentIdAndDeletedFalse(tenantId, work.getId());
             drafts = draftEntities.stream()
-                    .map(d -> new ExaminerDraftResponse(
-                            d.getAnswerPublicId(),
-                            d.getDraftVersion(),
-                            d.getScore(),
-                            d.getComment(),
-                            d.getDecisionKind(),
-                            d.getExpectedReviewVersion(),
-                            d.getReviewedAiVersion(),
-                            d.getSavedAt()))
+                    .map(responses::draft)
                     .toList();
         } else {
             // Derived legacy state
@@ -131,6 +125,10 @@ public class ExaminerWorkflowQueryService {
             } else {
                 status = ExaminerWorkflowStatus.COMPLETED;
             }
+        }
+
+        if (blockingReason == null && drafts.stream().anyMatch(ExaminerDraftResponse::carriedOver)) {
+            blockingReason = ExaminerScoringConstants.CARRIED_OVER_DRAFTS_BLOCKING_REASON;
         }
 
         boolean readOnly = isPublished || status == ExaminerWorkflowStatus.COMPLETED;

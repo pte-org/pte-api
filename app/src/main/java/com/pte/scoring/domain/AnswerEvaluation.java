@@ -54,6 +54,10 @@ public abstract class AnswerEvaluation extends BaseEntity {
     @Column(name = "answer_public_id", nullable = false, updatable = false)
     private UUID answerPublicId;
 
+    /** Rubric version used for this evaluation; nullable for legacy data. */
+    @Column(name = "rubric_version_public_id")
+    private UUID rubricVersionPublicId;
+
     /** 0-100; null until the evaluation has a result. */
     @Column(name = "score")
     private Integer score;
@@ -77,5 +81,10 @@ public abstract class AnswerEvaluation extends BaseEntity {
     protected void recordScore(Integer score, Instant scoredAt) {
         this.score = score;
         this.scoredAt = scoredAt;
+    }
+
+    /** The rubric version whose trait scales the stored scores use; null for a score not produced by a rubric. */
+    protected void recordRubricVersion(UUID rubricVersionPublicId) {
+        this.rubricVersionPublicId = rubricVersionPublicId;
     }
 }

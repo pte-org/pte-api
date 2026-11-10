@@ -24,7 +24,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -95,6 +97,15 @@ public class ExamSession extends BaseEntity {
                     columnNames = {"session_id", "skill"}))
     @Column(name = "skill", nullable = false, length = 16)
     private Set<String> selectedSkills = new LinkedHashSet<>();
+
+    /** CEFR mix chosen for this exam, overriding its template's; empty means the exam follows the template. */
+    @ElementCollection
+    @CollectionTable(name = "exam_session_cefr_targets", joinColumns = @JoinColumn(name = "session_id"))
+    private List<SessionCefrTarget> cefrTargets = new ArrayList<>();
+
+    /** Prefer questions the centre has not used in its earlier exams when the exam is generated. */
+    @Column(name = "avoid_repeated_questions", nullable = false)
+    private boolean avoidRepeatedQuestions = false;
 
     /** Additional submissions allowed after the initial attempt. */
     @Column(name = "max_retries_per_student", nullable = false)

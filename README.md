@@ -16,6 +16,22 @@ initialized named volume; rotate the existing Postgres/RabbitMQ accounts
 explicitly, and do not use `docker compose down -v` unless deleting local data is
 intentional.
 
+## Authentication token lifetimes
+
+Set `AUTH_ACCESS_TOKEN_TTL_SECONDS` (default `900`, 15 minutes) and
+`AUTH_REFRESH_TOKEN_TTL_SECONDS` (default `604800`, 7 days) in the ignored
+environment file used by Compose. Both values must be positive whole seconds,
+and the refresh lifetime must exceed the access lifetime. Invalid values stop
+application startup.
+
+These settings apply to all clients through `app.auth.tokens`. JWT expiry,
+`expiresInSeconds` in login/refresh responses, and stored refresh-token expiry
+use the same bound configuration. Rebuild/restart the backend after introducing
+this code; later env-only changes require recreating its container. Existing
+tokens keep their original expiry; only newly issued tokens use the new values.
+Spring does not load `.env` files directly when running outside Compose: export
+the variables in the process environment or configure the IDE launcher.
+
 ## Running services locally with Docker Compose
 
 Two deployment options for local development:
@@ -62,7 +78,7 @@ running (`PTE_BASE_URL` defaults to `http://localhost:8080`; use `http://localho
 ```powershell
 $env:PTE_ADMIN_PASSWORD = '<local-admin-password>'
 $env:PTE_SEED_PASSWORD  = '<local-seed-password>'
-.\scripts\seed-local-template-and-question-bank.ps1 -SeedKey PTE_LOCAL
+node scripts/seed-local-doc-question-bank.mjs            # imports approved questions for every task type
 .\scripts\seed-local-exam-ready.ps1 -SeedKey PTE_LOCAL   # creates the tenant, host, student and an open exam
 .\scripts\seed-local-platform-roles.ps1                  # optional: platform manager/support accounts
 ```

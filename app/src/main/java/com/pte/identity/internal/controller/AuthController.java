@@ -4,6 +4,13 @@ import com.pte.identity.internal.dto.request.auth.LoginRequest;
 import com.pte.identity.internal.dto.request.auth.LoginOrganizationOptionsRequest;
 import com.pte.identity.internal.dto.request.auth.RefreshRequest;
 import com.pte.identity.internal.dto.request.auth.ChangePasswordRequest;
+import com.pte.identity.internal.dto.request.auth.PasswordResetConfirmRequest;
+import com.pte.identity.internal.dto.request.auth.PasswordResetRequest;
+import com.pte.identity.internal.dto.request.auth.PasswordResetValidateRequest;
+import com.pte.identity.internal.dto.response.PasswordResetTokenStatus;
+import com.pte.identity.internal.service.passwordreset.PasswordResetDispatcher;
+import com.pte.identity.internal.service.passwordreset.PasswordResetService;
+import jakarta.servlet.http.HttpServletRequest;
 import com.pte.identity.internal.dto.request.profile.UpdateOwnProfileRequest;
 import com.pte.identity.internal.dto.response.TokenResponse;
 import com.pte.identity.internal.dto.response.LoginOrganizationOptionResponse;
@@ -11,6 +18,7 @@ import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.service.AuthService;
 import com.pte.identity.internal.service.UserService;
 import com.pte.identity.internal.service.UserProfileService;
+import com.pte.identity.internal.util.ClientAddress;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -32,22 +40,27 @@ public class AuthController {
     private final AuthService authService;
     private final UserService userService;
     private final UserProfileService userProfileService;
+    private final PasswordResetService passwordResetService;
+    private final PasswordResetDispatcher passwordResetDispatcher;
 
-    public AuthController(AuthService authService, UserService userService, UserProfileService userProfileService) {
+    public AuthController(AuthService authService, UserService userService, UserProfileService userProfileService,
+            PasswordResetService passwordResetService, PasswordResetDispatcher passwordResetDispatcher) {
         this.authService = authService;
         this.userService = userService;
         this.userProfileService = userProfileService;
+        this.passwordResetService = passwordResetService;
+        this.passwordResetDispatcher = passwordResetDispatcher;
     }
 
     @PostMapping("/login")
-    public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
-        return ApiResponse.success(authService.login(request));
+    public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
+        return ApiResponse.success(authService.login(request, clientAddress(http)));
     }
 
     @PostMapping("/login-options")
     public ApiResponse<List<LoginOrganizationOptionResponse>> loginOptions(
-            @Valid @RequestBody LoginOrganizationOptionsRequest request) {
-        return ApiResponse.success(authService.loginOrganizations(request));
+            @Valid @RequestBody LoginOrganizationOptionsRequest request, HttpServletRequest http) {
+        return ApiResponse.success(authService.loginOrganizations(request, clientAddress(http)));
     }
 
     @GetMapping("/me")
@@ -73,10 +86,38 @@ public class AuthController {
         return ApiResponse.success(null);
     }
 
+    /**
+     * Answers at once and does the work afterwards, so neither the body nor the response time reveals whether the
+     * address has an account.
+     */
+    @PostMapping("/password-reset/request")
+    public ApiResponse<Void> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request,
+            HttpServletRequest http) {
+        passwordResetDispatcher.requestAsync(request.email(), clientAddress(http));
+        return ApiResponse.success(null);
+    }
+
+    /** Read-only check, so the reset page can warn about a spent or expired link before anything is typed. */
+    @PostMapping("/password-reset/validate")
+    public ApiResponse<PasswordResetTokenStatus> validatePasswordReset(
+            @Valid @RequestBody PasswordResetValidateRequest request) {
+        return ApiResponse.success(new PasswordResetTokenStatus(passwordResetService.isUsable(request.token())));
+    }
+
+    @PostMapping("/password-reset/confirm")
+    public ApiResponse<Void> confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmRequest request) {
+        passwordResetService.confirm(request.token(), request.newPassword());
+        return ApiResponse.success(null);
+    }
+
     @PostMapping("/change-password")
     @PreAuthorize("isAuthenticated()")
     public ApiResponse<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         userService.changeOwnPassword(request, CurrentUserContext.required());
         return ApiResponse.success(null);
+    }
+
+    private static String clientAddress(HttpServletRequest http) {
+        return ClientAddress.resolve(http.getHeader("X-Forwarded-For"), http.getRemoteAddr());
     }
 }

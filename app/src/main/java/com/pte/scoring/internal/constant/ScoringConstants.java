@@ -1,5 +1,7 @@
 package com.pte.scoring.internal.constant;
 
+import java.util.Set;
+
 /** Centralized codes/labels for scoring. */
 public final class ScoringConstants {
 
@@ -99,6 +101,33 @@ public final class ScoringConstants {
     public static final String DESCRIBE_IMAGE_SOURCE_MISSING =
             "Describe Image has neither a usable image nor a reference description";
     public static final String GEMINI_FIELD_INVALID = "Gemini response field %s is missing or out of range";
+    public static final String AI_MEDIAN_RUNS_INCOMPLETE =
+            "Median of three needs three complete trait sets with the same traits";
+    /**
+     * Task types whose item score comes from the rubric (RubricScorer over Pearson trait scores): the three writing
+     * tasks (phase 3) and the seven scored speaking tasks (phase 5). A provider without a rubric scorer for one of
+     * them fails the answer instead of letting a generic client produce a 0-100 score: decision B of the rubric plan
+     * (phase 4), so {@code openai-compatible} and {@code stub} are explicitly unsupported for these task types.
+     */
+    public static final Set<String> RUBRIC_SCORED_TASK_TYPES = Set.of(TASK_TYPE_SUMMARIZE_WRITTEN_TEXT,
+            TASK_TYPE_WRITE_ESSAY, TASK_TYPE_SUMMARIZE_SPOKEN_TEXT, TASK_TYPE_READ_ALOUD, TASK_TYPE_REPEAT_SENTENCE,
+            TASK_TYPE_DESCRIBE_IMAGE, TASK_TYPE_RE_TELL_LECTURE, TASK_TYPE_RESPOND_TO_A_SITUATION,
+            TASK_TYPE_SUMMARIZE_GROUP_DISCUSSION, TASK_TYPE_ANSWER_SHORT_QUESTION);
+    public static final String AI_RUBRIC_SCORER_UNAVAILABLE = "AI_RUBRIC_SCORER_UNAVAILABLE";
+    public static final String AI_RUBRIC_UNRESOLVED = "AI_RUBRIC_UNRESOLVED";
+    public static final String AI_RUBRIC_MISSING = "AI_RUBRIC_MISSING";
+    /** The rubric version names an Azure band-mapping table this code does not declare; the answer is not scored. */
+    public static final String AI_AZURE_BAND_MAPPING_UNKNOWN = "AI_AZURE_BAND_MAPPING_UNKNOWN";
+    /**
+     * Hesitation words a speech transcript may carry; Score Guide p.16 ignores hesitations and filled pauses when
+     * Read Aloud and Repeat Sentence Content are counted, so they are removed before the words are aligned.
+     */
+    public static final Set<String> SPEECH_FILLER_WORDS = Set.of("uh", "um", "er", "erm", "ah", "eh", "hmm", "mm",
+            "uhm", "umm");
+    /** Marks criteria scores stored on the Pearson trait scales of a rubric version (not the legacy 0-100 map). */
+    public static final String CRITERIA_SCALE_PEARSON_V1 = "PEARSON_V1";
+    /** Detail key of the stored word count: Read Aloud's passage length N, a writing answer's length for Form. */
+    public static final String DETAIL_WORD_COUNT = "wordCount";
     public static final String AI_SCORER_DUPLICATE = "More than one AI scorer handles task type %s";
     public static final String ANSWER_KEY_EMPTY = "Short-question answer key has no accepted answer";
     public static final String AI_DETAIL_SERIALIZATION_FAILED = "Could not serialize the AI score detail";

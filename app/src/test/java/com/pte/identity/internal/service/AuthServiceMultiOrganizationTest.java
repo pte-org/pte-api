@@ -4,6 +4,7 @@ import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
+import com.pte.identity.internal.config.AuthTokenProperties;
 import com.pte.identity.internal.dto.request.auth.LoginOrganizationOptionsRequest;
 import com.pte.identity.internal.dto.request.auth.LoginRequest;
 import com.pte.identity.internal.dto.request.auth.RefreshRequest;
@@ -53,6 +54,8 @@ class AuthServiceMultiOrganizationTest {
     private RefreshTokenService refreshTokenService;
     @Mock
     private TenancyService tenancyService;
+    @Mock
+    private LoginThrottle loginThrottle;
 
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private AuthService authService;
@@ -63,7 +66,7 @@ class AuthServiceMultiOrganizationTest {
     @BeforeEach
     void setUp() {
         authService = new AuthService(userRepository, memberRepository, passwordEncoder, accessTokenIssuer,
-                refreshTokenService, tenancyService);
+                refreshTokenService, tenancyService, loginThrottle, new AuthTokenProperties());
         host = new User();
         host.setId(7L);
         host.setPublicId(UUID.randomUUID());

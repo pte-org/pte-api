@@ -8,6 +8,7 @@ import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.identity.internal.security.RsaKeyProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
@@ -23,6 +24,7 @@ import java.security.interfaces.RSAPublicKey;
  * round-trip to for this module's own tokens).
  */
 @Configuration
+@EnableConfigurationProperties(AuthTokenProperties.class)
 public class JwtConfig {
 
     @Bean

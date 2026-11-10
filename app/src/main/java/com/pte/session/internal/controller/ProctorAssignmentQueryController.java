@@ -3,6 +3,7 @@ package com.pte.session.internal.controller;
 import com.pte.session.SessionService;
 import com.pte.session.dto.response.ProctorAssignedSessionsPageView;
 import com.pte.session.dto.response.ProctorWorkspaceOverviewView;
+import com.pte.session.dto.response.ProctorWorkspaceSessionView;
 import com.pte.session.internal.dto.response.proctor.AssignedProctorSessionResponse;
 import com.pte.session.internal.dto.response.proctor.ProctorAssignedSessionsPageResponse;
 import com.pte.session.internal.dto.response.proctor.ProctorWorkspaceOverviewResponse;
@@ -12,11 +13,13 @@ import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * PROCTOR-only assigned sessions endpoint for the tenant web proctor workspace.
@@ -63,6 +66,16 @@ public class ProctorAssignmentQueryController {
                 view.dayEnd(),
                 view.counts(),
                 priority));
+    }
+
+    @GetMapping("/mine/{sessionPublicId}")
+    public ApiResponse<AssignedProctorSessionResponse> getMyAssignedSession(@PathVariable UUID sessionPublicId) {
+        CurrentUser caller = CurrentUserContext.required();
+        ProctorWorkspaceSessionView v = sessionService
+                .getAssignedSessionForProctor(sessionPublicId, caller.userId(), caller.tenantId());
+        return ApiResponse.success(new AssignedProctorSessionResponse(v.assignmentPublicId(),
+                v.examSessionPublicId(), v.name(), v.sessionCode(), v.status(), v.opensAt(), v.closesAt(),
+                v.assignmentRole(), v.canMonitor(), v.monitoringBlockingReason()));
     }
 
     @GetMapping("/mine")

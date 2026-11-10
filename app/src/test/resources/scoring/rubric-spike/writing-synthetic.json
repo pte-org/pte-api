@@ -1,0 +1,184 @@
+{
+  "datasetVersion": 1,
+  "generatedBy": "AI assistant (Claude), 2026-11-05, plan quang-scoring-rubric-transparency phase 4",
+  "purpose": "Synthetic writing answers for measuring the run-to-run stability of LLM trait scores. Not real candidate work. Proves stability only, never scoring accuracy.",
+  "sources": {
+    "swt-urban-heat": {
+      "taskType": "SUMMARIZE_WRITTEN_TEXT",
+      "label": "Reading passage",
+      "text": "Cities are often several degrees warmer than the countryside around them, a pattern known as the urban heat island effect. The main cause is the replacement of vegetation and soil with asphalt, concrete and dark roofing, which absorb sunlight during the day and release it slowly at night. Waste heat from vehicles, air conditioners and industry adds to the problem, while tall buildings trap warm air and reduce wind. The consequences are significant. Hotter nights prevent people from recovering from daytime heat, and heatwaves in dense neighbourhoods are linked to higher rates of hospital admission and death, especially among elderly residents and people living in poorly insulated housing. Higher temperatures also increase demand for cooling, which raises electricity use and, where power comes from fossil fuels, greenhouse gas emissions. Several responses have proved effective. Planting street trees and creating parks provides shade and cools the air through evaporation. Reflective or 'cool' roofs and lighter paving materials absorb less heat, and green roofs add insulation as well as vegetation. Researchers stress, however, that these measures work best when they are planned together and targeted at the neighbourhoods that are hottest and least able to adapt, rather than introduced piecemeal."
+    },
+    "we-tuition": {
+      "taskType": "WRITE_ESSAY",
+      "label": "Essay prompt",
+      "text": "Some people believe that university education should be free for all students and paid for by the government. Others think that students should pay at least part of the cost themselves. Discuss both views and give your own opinion."
+    },
+    "sst-sleep-memory": {
+      "taskType": "SUMMARIZE_SPOKEN_TEXT",
+      "label": "Lecture transcript",
+      "text": "Today I want to talk about why sleep matters for learning. For a long time, scientists assumed that sleep was simply a period of rest, when the brain more or less switched off. We now know that this is wrong. During sleep, and particularly during deep, slow-wave sleep, the brain replays patterns of activity that were recorded during the day. This replay seems to move new information from the hippocampus, which acts as a temporary store, into the cortex, where long-term memories are kept. In experiments, students who slept after learning a list of word pairs remembered significantly more of them the next morning than students who stayed awake for the same length of time. Rapid eye movement sleep, or REM sleep, appears to play a different role. It seems to help us connect new information with what we already know, and it may support creative problem solving. So what does this mean for students? First, staying up all night before an exam is counterproductive, because it removes the very process that would have consolidated what you studied. Second, short naps can help, but they are not a replacement for a full night's sleep. And finally, regular sleep schedules matter, because irregular sleep disrupts the cycles in which consolidation happens."
+    }
+  },
+  "samples": [
+    {
+      "id": "swt-01",
+      "taskType": "SUMMARIZE_WRITTEN_TEXT",
+      "sourceId": "swt-urban-heat",
+      "answer": "Cities are warmer than surrounding areas mainly because hard, dark surfaces and waste heat store and release warmth, which harms health and raises energy demand, but coordinated measures such as trees, parks and reflective or green roofs can reduce the effect, particularly in vulnerable neighbourhoods.",
+      "intendedBands": {"CONTENT": 4, "FORM": 1, "GRAMMAR": 2, "VOCABULARY": 2},
+      "generationNotes": "High band. One complete sentence in the 5-75 word range covering cause, consequences and coordinated solutions in paraphrase."
+    },
+    {
+      "id": "swt-02",
+      "taskType": "SUMMARIZE_WRITTEN_TEXT",
+      "sourceId": "swt-urban-heat",
+      "answer": "Urban areas are hotter than the countryside because concrete and asphalt absorb heat and buildings trap warm air. This causes health problems and higher energy use, although trees, parks and cool roofs can help.",
+      "intendedBands": {"CONTENT": 3, "FORM": 0, "GRAMMAR": 2, "VOCABULARY": 2},
+      "generationNotes": "Form edge case: two correct sentences instead of one, so coded Form is 0 (gate). Content is adequate but omits the targeting point."
+    },
+    {
+      "id": "swt-03",
+      "taskType": "SUMMARIZE_WRITTEN_TEXT",
+      "sourceId": "swt-urban-heat",
+      "answer": "The urban heat island effect the main cause is the replacement of vegetation and soil with asphalt and concrete and hotter nights prevent people from recovering from daytime heat and planting street trees and creating parks provides shade.",
+      "intendedBands": {"CONTENT": 2, "FORM": 1, "GRAMMAR": 1, "VOCABULARY": 1},
+      "generationNotes": "Middle-low band. One run-on sentence stitched from verbatim excerpts with no synthesis; a broken clause boundary at the start."
+    },
+    {
+      "id": "swt-04",
+      "taskType": "SUMMARIZE_WRITTEN_TEXT",
+      "sourceId": "swt-urban-heat",
+      "answer": "Because cities replace vegetation and soil with asphalt, concrete and dark roofing that absorb sunlight during the day and release it slowly at night, and because vehicles, air conditioners and industry add waste heat while tall buildings trap warm air, urban areas become several degrees warmer than the countryside, which leads to hotter nights, more hospital admissions and deaths during heatwaves, especially for elderly people, and to higher electricity use and emissions, although trees, parks, cool roofs and green roofs can reduce the problem when they are planned together and targeted.",
+      "intendedBands": {"CONTENT": 3, "FORM": 0, "GRAMMAR": 1, "VOCABULARY": 2},
+      "generationNotes": "Form edge case: a single sentence longer than 75 words, so Form is 0. Covers the content but leans on the source wording; the long chain of clauses strains grammar."
+    },
+    {
+      "id": "swt-05",
+      "taskType": "SUMMARIZE_WRITTEN_TEXT",
+      "sourceId": "swt-urban-heat",
+      "answer": "CITIES ARE HOTTER THAN THE COUNTRYSIDE BECAUSE PAVED SURFACES AND WASTE HEAT TRAP WARMTH, WHICH ENDANGERS VULNERABLE RESIDENTS AND RAISES ENERGY USE, BUT TREES, PARKS AND REFLECTIVE ROOFS CAN COOL THEM.",
+      "intendedBands": {"CONTENT": 3, "FORM": 0, "GRAMMAR": 2, "VOCABULARY": 2},
+      "generationNotes": "Form edge case: written entirely in capital letters, so Form is 0. Otherwise an adequate single-sentence summary."
+    },
+    {
+      "id": "swt-06",
+      "taskType": "SUMMARIZE_WRITTEN_TEXT",
+      "sourceId": "swt-urban-heat",
+      "answer": "Online shopping has changed the way people buy clothes, because customers can compare prices quickly and return items easily, although many small shops in town centres have closed as a result.",
+      "intendedBands": {"CONTENT": 0, "FORM": 1, "GRAMMAR": 2, "VOCABULARY": 2},
+      "generationNotes": "Off-topic: a fluent, well-formed sentence about a different subject. Content 0 (gate) while language traits stay high."
+    },
+    {
+      "id": "swt-07",
+      "taskType": "SUMMARIZE_WRITTEN_TEXT",
+      "sourceId": "swt-urban-heat",
+      "answer": "Cities are getting hotter.",
+      "intendedBands": {"CONTENT": 1, "FORM": 0, "GRAMMAR": 2, "VOCABULARY": 1},
+      "generationNotes": "Very short: four words, below the 5-word minimum, so Form is 0. Content is relevant but far too limited."
+    },
+    {
+      "id": "we-01",
+      "taskType": "WRITE_ESSAY",
+      "sourceId": "we-tuition",
+      "answer": "University education is very important for young peoples. Some people think goverment should pay all the fees because many family can not afford it. If education is free, more student can study and the country will have more skilled worker. But other people say student must pay some money because then they study more hard and dont waste time. Also goverment have limited money and need to spend for hospital and roads. In my opinion i think university should be free for poor students but rich students should pay. This is more fair for everybody. In conclusion, both side have good points but i agree with free education for poor.",
+      "intendedBands": {"CONTENT": 2, "FORM": 0, "DEVELOPMENT_STRUCTURE_COHERENCE": 2, "GRAMMAR": 0, "GENERAL_LINGUISTIC_RANGE": 2, "VOCABULARY_RANGE": 0, "SPELLING": 0},
+      "generationNotes": "Short essay of about 110 words (below 120, so Form 0). Addresses the prompt superficially with basic vocabulary, frequent agreement errors and repeated misspellings."
+    },
+    {
+      "id": "we-02",
+      "taskType": "WRITE_ESSAY",
+      "sourceId": "we-tuition",
+      "answer": "Whether university should be free is a question that divides many people. Supporters of free tuition argue that education is a public good. When the government pays, talented students from poor families can study without fear of debt, and society later benefits from their skills and taxes. On the other hand, critics say that free education is very expensive for the state. They also believe that students who pay something value their course more and are less likely to drop out.\n\nIn my opinion, a mixed system is the most sensible. The goverment should cover most of the cost, but graduates who earn a high salary should repay a small part through the tax system. This approach keep university open to everyone while sharing the burden more fairly. Therefore, I believe free education is good in principle, but a modest contribution from students is reasonable.",
+      "intendedBands": {"CONTENT": 4, "FORM": 1, "DEVELOPMENT_STRUCTURE_COHERENCE": 4, "GRAMMAR": 1, "GENERAL_LINGUISTIC_RANGE": 4, "VOCABULARY_RANGE": 1, "SPELLING": 1},
+      "generationNotes": "Middle band essay of about 145 words (Form 1). Clear position with limited development; one agreement error and exactly one spelling error."
+    },
+    {
+      "id": "we-03",
+      "taskType": "WRITE_ESSAY",
+      "sourceId": "we-tuition",
+      "answer": "Few policy questions reveal our assumptions about fairness as clearly as the debate over who should pay for university. Advocates of fully state-funded higher education contend that a degree is not merely a private investment but a public good. Graduates tend to earn more, pay higher taxes and rely less on welfare, while the research universities generate benefits the entire economy. Moreover, tuition fees can deter capable applicants from low-income households, who are often more averse to debt than their wealthier peers, thereby entrenching inequality across generations.\n\nOpponents, however, raise legitimate concerns. Public budgets are finite, and every dollar spent subsidising degrees is unavailable for primary schools, hospitals or vocational training, which arguably serve disadvantaged groups more directly. They also note that the main beneficiaries of free tuition are frequently middle-class students who would have enrolled anyway, so the policy may transfer resources from average taxpayers to future high earners.\n\nOn balance, the most persuasive position lies between these extremes. Tuition should be free at the point of entry, so that no talented student is turned away because of cost, but graduates whose incomes exceed a reasonable threshold should repay part of the expense through an income-contingent scheme. Such a model preserves access while ensuring that those who gain most from their education contribute most to it.\n\nIn conclusion, both sides make valid points, yet a carefully designed repayment system reconciles equal opportunity with the realities of public finance.",
+      "intendedBands": {"CONTENT": 6, "FORM": 2, "DEVELOPMENT_STRUCTURE_COHERENCE": 6, "GRAMMAR": 2, "GENERAL_LINGUISTIC_RANGE": 6, "VOCABULARY_RANGE": 2, "SPELLING": 2},
+      "generationNotes": "Top band essay of about 240 words (Form 2). Introduction, two balanced body paragraphs, a nuanced position and a conclusion; no language errors."
+    },
+    {
+      "id": "we-04",
+      "taskType": "WRITE_ESSAY",
+      "sourceId": "we-tuition",
+      "answer": "The question of whether governments should pay the full cost of university study has become increasingly important as more young people seek higher qualifications. Both sides of the argument deserve careful consideration before reaching a conclusion.\n\nThose who support free university education usually begin with the idea of equal opportunity. In many countries, tuition fees are high enough to discourage students from poorer backgrounds, even when they have excellent grades. If the state removes this barrier, admission depends on ability rather than family income. Supporters also point out that society as a whole gains from a more educated population, because graduates are more productive, more likely to start businesses and more likely to take part in civic life. From this perspective, paying for degrees is an investment that the government eventually recovers through higher tax revenue.\n\nOn the other hand, critics argue that free tuition is costly and not always well targeted. Universities need stable funding for teaching and research, and if all of it comes from taxation, governments may limit the number of places or reduce quality. Critics also claim that students who make a financial contribution tend to choose their courses more carefully and take their studies more seriously. Furthermore, since graduates usually earn more over their lifetimes than non-graduates, it seems reasonable that they should share some of the cost of the education that made those earnings possible.\n\nIn my view, the strongest arguments on each side can be combined. Governments should guarantee that no student has to pay fees before or during their studies, so that access is not determined by wealth. At the same time, graduates whose salaries rise above an agreed level could repay a proportion of their tuition through the tax system over many years. This arrangement protects equal opportunity while keeping universities well funded.\n\nTo conclude, although free education is an attractive ideal, a system that combines public funding with fair repayment by successful graduates is likely to be more sustainable in the long term.",
+      "intendedBands": {"CONTENT": 5, "FORM": 1, "DEVELOPMENT_STRUCTURE_COHERENCE": 5, "GRAMMAR": 2, "GENERAL_LINGUISTIC_RANGE": 5, "VOCABULARY_RANGE": 2, "SPELLING": 2},
+      "generationNotes": "Long essay of about 330 words (301-380, so Form 1). Well organised and accurate but somewhat predictable in argument and phrasing."
+    },
+    {
+      "id": "we-05",
+      "taskType": "WRITE_ESSAY",
+      "sourceId": "we-tuition",
+      "answer": "MANY PEOPLE DISAGREE ABOUT WHO SHOULD PAY FOR UNIVERSITY. SOME BELIEVE THAT THE GOVERNMENT SHOULD PAY FOR EVERYTHING, WHILE OTHERS THINK THAT STUDENTS SHOULD PAY PART OF THE COST THEMSELVES. IN THIS ESSAY I WILL LOOK AT BOTH OPINIONS.\n\nPEOPLE WHO WANT FREE UNIVERSITY SAY THAT EDUCATION SHOULD BE A RIGHT FOR EVERYONE. IF STUDENTS DO NOT HAVE TO PAY, THEN YOUNG PEOPLE FROM POOR FAMILIES CAN GO TO UNIVERSITY AND GET BETTER JOBS. THIS IS GOOD FOR THE WHOLE COUNTRY, BECAUSE THE ECONOMY NEEDS DOCTORS, ENGINEERS AND TEACHERS.\n\nHOWEVER, OTHER PEOPLE SAY THAT FREE UNIVERSITY COSTS TOO MUCH MONEY. THE GOVERNMENT ALSO HAS TO PAY FOR HOSPITALS, ROADS AND SCHOOLS, SO IT CANNOT SPEND UNLIMITED MONEY ON DEGREES. THEY ALSO SAY THAT WHEN STUDENTS PAY SOMETHING, THEY WORK HARDER AND DO NOT WASTE THEIR TIME.\n\nIN MY OPINION, UNIVERSITY SHOULD BE FREE FOR STUDENTS WHO CANNOT AFFORD IT, BUT STUDENTS FROM RICH FAMILIES SHOULD PAY SOME FEES. THIS WAY, EVERYONE HAS A CHANCE TO STUDY, AND THE GOVERNMENT CAN SAVE MONEY FOR OTHER IMPORTANT SERVICES. I THINK THIS IS THE FAIREST SOLUTION FOR SOCIETY.\n\nIN CONCLUSION, BOTH SIDES HAVE REASONABLE ARGUMENTS, BUT A SYSTEM BASED ON FAMILY INCOME IS THE BEST BALANCE BETWEEN FAIRNESS AND COST.",
+      "intendedBands": {"CONTENT": 4, "FORM": 0, "DEVELOPMENT_STRUCTURE_COHERENCE": 4, "GRAMMAR": 2, "GENERAL_LINGUISTIC_RANGE": 4, "VOCABULARY_RANGE": 1, "SPELLING": 2},
+      "generationNotes": "Form edge case: an otherwise adequate essay of about 210 words written entirely in capital letters, so Form is 0 (gate)."
+    },
+    {
+      "id": "we-06",
+      "taskType": "WRITE_ESSAY",
+      "sourceId": "we-tuition",
+      "answer": "Social media has become a central part of teenage life, and its influence on young people is widely debated. Some parents and teachers worry that platforms such as Instagram and TikTok harm concentration and self-esteem, while others believe they offer valuable opportunities for connection and creativity.\n\nOn the negative side, many teenagers spend several hours a day scrolling through short videos. This habit can reduce the time available for homework, sport and sleep. In addition, constant comparison with carefully edited images may make young people feel that their own lives and bodies are not good enough, which can contribute to anxiety.\n\nOn the positive side, social media allows teenagers to stay in touch with friends, find communities that share their interests and learn new skills from tutorials. Young people who feel isolated at school may find support online, and some use these platforms to share their art, music or writing with a wide audience.\n\nIn my opinion, the effects of social media depend largely on how it is used. Schools should teach digital literacy, and parents should agree clear limits on screen time without banning access completely. In conclusion, social media is neither entirely harmful nor entirely beneficial, and teenagers need guidance to use it wisely.",
+      "intendedBands": {"CONTENT": 0, "FORM": 2, "DEVELOPMENT_STRUCTURE_COHERENCE": 4, "GRAMMAR": 2, "GENERAL_LINGUISTIC_RANGE": 4, "VOCABULARY_RANGE": 1, "SPELLING": 2},
+      "generationNotes": "Off-topic: a well-structured essay of about 205 words on social media instead of tuition. Content 0 (gate) while form and language stay solid."
+    },
+    {
+      "id": "we-07",
+      "taskType": "WRITE_ESSAY",
+      "sourceId": "we-tuition",
+      "answer": "In this contemporary era, the issue of education has become a highly controversial topic in many parts of the world. While some people strongly believe in one side of this argument, others are of the opinion that the opposite view is more appropriate. This essay will discuss both points of view before giving my own opinion.\n\nTo commence with, there are a number of reasons why some people support the first view. Firstly, it is an undeniable fact that education plays a vital role in the development of any country. Secondly, it is widely acknowledged that this has many advantages for individuals and for society as a whole. For instance, many experts have pointed out that this is a very important issue nowadays.\n\nOn the other hand, there are also several reasons why other people support the second view. To begin with, it can be argued that this approach has some disadvantages which cannot be ignored. Moreover, it is also important to consider the various factors that are involved in this situation. As a result, it is clear that both sides have their own merits and demerits.\n\nIn conclusion, after considering both sides of the argument, I firmly believe that the advantages outweigh the disadvantages. Therefore, governments and individuals should work together to find the best solution for this issue in the near future.",
+      "intendedBands": {"CONTENT": 2, "FORM": 2, "DEVELOPMENT_STRUCTURE_COHERENCE": 3, "GRAMMAR": 2, "GENERAL_LINGUISTIC_RANGE": 3, "VOCABULARY_RANGE": 1, "SPELLING": 2},
+      "generationNotes": "Memorised-template edge case: about 225 words (Form 2) of generic, prompt-independent phrases that never mention tuition, fees or who pays."
+    },
+    {
+      "id": "sst-01",
+      "taskType": "SUMMARIZE_SPOKEN_TEXT",
+      "sourceId": "sst-sleep-memory",
+      "answer": "The speaker says that sleep helps memory. In deep sleep the brain moves new information from the hippocampus to the cortex, and REM sleep connects ideas. Students should not stay up all night before exams.",
+      "intendedBands": {"CONTENT": 3, "FORM": 0, "GRAMMAR": 2, "VOCABULARY": 2, "SPELLING": 2},
+      "generationNotes": "Length edge case: about 35 words (below 40, so Form 0 and the gate zeroes the item). Accurate but compressed."
+    },
+    {
+      "id": "sst-02",
+      "taskType": "SUMMARIZE_SPOKEN_TEXT",
+      "sourceId": "sst-sleep-memory",
+      "answer": "The lecture argues that sleep actively supports learning. During deep sleep the brain replays the day and moves memories from the hippocampus to the cortex, while REM sleep links new and old knowledge. Students should therefore sleep properly before exams and keep regular schedules.",
+      "intendedBands": {"CONTENT": 3, "FORM": 1, "GRAMMAR": 2, "VOCABULARY": 2, "SPELLING": 2},
+      "generationNotes": "About 45 words (40-49, so Form 1). Main points present; the experiment and the advice on naps are omitted."
+    },
+    {
+      "id": "sst-03",
+      "taskType": "SUMMARIZE_SPOKEN_TEXT",
+      "sourceId": "sst-sleep-memory",
+      "answer": "The lecturer explains that sleep is not simply rest but an active process for memory. During deep sleep the brain replays daily activity and transfers information from the hippocampus to the cortex, while REM sleep links new knowledge with existing knowledge. Therefore, students should avoid all-night study sessions, treat naps only as a supplement and keep regular sleep schedules.",
+      "intendedBands": {"CONTENT": 4, "FORM": 2, "GRAMMAR": 2, "VOCABULARY": 2, "SPELLING": 2},
+      "generationNotes": "Top band, about 60 words (50-70, so Form 2). Covers the claim, both sleep stages and all three pieces of advice in paraphrase."
+    },
+    {
+      "id": "sst-04",
+      "taskType": "SUMMARIZE_SPOKEN_TEXT",
+      "sourceId": "sst-sleep-memory",
+      "answer": "The speaker talk about the importance of sleep for students learning. In the past scientists believed that sleep was only rest, but now we know the brain is active. In deep sleep the brain replay the day and moves new information into the cortex. An experiment showed that students who slept remembered more word pairs. REM sleep helps to conect ideas. So students should not study all night, naps are useful but not enough, and a regular sleep is important.",
+      "intendedBands": {"CONTENT": 3, "FORM": 1, "GRAMMAR": 1, "VOCABULARY": 2, "SPELLING": 1},
+      "generationNotes": "About 80 words (71-100, so Form 1). Good coverage with two agreement errors and exactly one spelling error."
+    },
+    {
+      "id": "sst-05",
+      "taskType": "SUMMARIZE_SPOKEN_TEXT",
+      "sourceId": "sst-sleep-memory",
+      "answer": "The lecture is about the role of sleep in learning and memory. Scientists used to think that the brain simply rested during sleep, but research now shows that it remains very active. During deep, slow-wave sleep, the brain replays patterns of activity from the day, and moves new information from the hippocampus into the cortex, where long-term memories are kept. In one experiment, students who slept after learning word pairs remembered more of them than students who stayed awake. REM sleep has a different function, helping people connect new information with existing knowledge and possibly supporting creativity. The speaker concludes with practical advice for students.",
+      "intendedBands": {"CONTENT": 3, "FORM": 0, "GRAMMAR": 2, "VOCABULARY": 2, "SPELLING": 2},
+      "generationNotes": "Length edge case: about 105 words (above 100, so Form 0). Detailed and accurate, but the advice itself is only announced, not stated."
+    },
+    {
+      "id": "sst-06",
+      "taskType": "SUMMARIZE_SPOKEN_TEXT",
+      "sourceId": "sst-sleep-memory",
+      "answer": "the speaker say sleep is about learning. scientist think sleep is rest when brain is swiched off. brain replays patterns of activity recorded during the day. hipocampus is temporary store and cortex. students who slept remember word pairs. REM sleep is diffrent role. staying up all night before an exam is counterproductive. naps are not replacement of full night sleep and regular sleep schedules matter",
+      "intendedBands": {"CONTENT": 1, "FORM": 2, "GRAMMAR": 0, "VOCABULARY": 1, "SPELLING": 0},
+      "generationNotes": "Low band, about 65 words (Form 2: punctuation present, sentences longer than three words). Disconnected excerpts without synthesis, no capitals, frequent grammar errors and several misspellings."
+    }
+  ]
+}

@@ -7,7 +7,7 @@ Cloudinary after the app issues signed upload parameters.
 
 | Origin | Routing |
 |---|---|
-| `pte-tenant.duckdns.org` | tenant-web, `/api/v1/*`, `/actuator/*`, `/ws` |
+| `pte-tenant.duckdns.org` | tenant-web, `/api/v1/*`, `/actuator/*` |
 | `pte-admin.duckdns.org` | vendor-web and the same API/transport routes |
 Only TCP 22, 80, and 443 should be allowed from the internet. The hosted
 Compose overlay removes host bindings for app, web, PostgreSQL, Redis,

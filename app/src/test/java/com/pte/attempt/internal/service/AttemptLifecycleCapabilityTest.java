@@ -8,7 +8,7 @@ import com.pte.attempt.internal.constant.AttemptConstants;
 import com.pte.attempt.internal.dto.request.ClientCapabilityManifest;
 import com.pte.attempt.internal.dto.request.StartAttemptRequest;
 import com.pte.attempt.internal.exception.AttemptNotFoundException;
-import com.pte.attempt.internal.exception.ExamCapabilityException;
+import com.pte.shared.exception.exam.ExamCapabilityException;
 import com.pte.attempt.internal.mapper.AttemptMapper;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import com.pte.session.SessionService;

@@ -21,6 +21,10 @@ public interface ExamVersionRepository extends JpaRepository<ExamVersion, Long> 
     /** Next version number for a blueprint = count of prior snapshots + 1. */
     long countBySourceBlueprintPublicId(UUID sourceBlueprintPublicId);
 
+    /** Every question the tenant has put into an exam of its own, so a new exam can avoid repeating them. */
+    @Query("select distinct i.sourceQuestionPublicId from ExamVersion v join v.items i where v.tenantId = :tenantId")
+    List<UUID> findUsedQuestionIds(@Param("tenantId") UUID tenantId);
+
     /** Frozen items of any version the tenant owns, by item id (examiner prompt lookup). */
     @Query("select i from ExamVersion v join v.items i where i.publicId in :itemPublicIds and v.tenantId = :tenantId")
     List<ExamVersionItem> findItemsForTenant(@Param("itemPublicIds") Collection<UUID> itemPublicIds,

@@ -72,4 +72,20 @@ class AiScoreResultTest {
                 AiProviderCategory.REAL, "P".repeat(65), null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    /** Read Aloud Content is out of N passage words, so a rubric result may carry a trait above 100. */
+    @Test
+    void result_rubricTraitsMayExceedOneHundredButNeverGoNegative() {
+        java.util.UUID version = java.util.UUID.randomUUID();
+        AiScoreResult result = new AiScoreResult(90, Map.of("CONTENT", 120), "", AiProviderCategory.REAL,
+                "AZURE_SPEECH", null, null, null, null, false, version);
+
+        assertThat(result.subScores()).containsEntry("CONTENT", 120);
+        assertThatThrownBy(() -> new AiScoreResult(90, Map.of("CONTENT", -1), "", AiProviderCategory.REAL,
+                "AZURE_SPEECH", null, null, null, null, false, version))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AiScoreResult(90, Map.of("CONTENT", 120), "", AiProviderCategory.REAL,
+                "AZURE_SPEECH", null, null, null, null, false))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

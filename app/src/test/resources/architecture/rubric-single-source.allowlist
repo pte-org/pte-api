@@ -1,0 +1,5 @@
+# Ratchet allowlist for RubricScoreSingleSourceTest (<kind>:<file>=current offence count): entries may only shrink or be removed.
+# average:  a vendor scorer averages sub-scores itself instead of calling RubricScorer.
+# form-band: a word-count band threshold outside the rubric catalog instead of FormRule.bandFor.
+# Plan: pte-doc/projects/plans/quang-scoring-rubric-transparency (phase 3 removed the writing scorers and FormCheck;
+# phase 5 removed the speaking scorers and SpeechAggregator). Empty: keep it empty.

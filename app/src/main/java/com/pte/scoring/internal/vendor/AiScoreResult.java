@@ -6,6 +6,7 @@ import com.pte.scoring.domain.enums.AiProviderCategory;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * A vendor's scoring result. {@code rawScore} is 0–100 (same scale as {@link
@@ -13,19 +14,31 @@ import java.util.Objects;
  * reporting's aggregation can average objective and AI scores uniformly).
  * {@code subScores} (criterion → 0–100), {@code feedback}, {@code transcript}
  * and {@code detailJson} are stored on the answer's AI detail row; {@code
- * fallback} marks a score produced without the full vendor pipeline.
+ * fallback} marks a score produced without the full vendor pipeline. A
+ * rubric-scored result names its {@code rubricVersionPublicId}; its {@code
+ * subScores} are then trait scores on that version's Pearson scales (stored
+ * with {@code scale = PEARSON_V1}), and {@code rawScore} is RubricScorer's
+ * item score. Other results leave it null and keep the 0–100 map.
  *
  * <p>{@link #toString()} leaves out the candidate's content (feedback,
  * transcript, detail) so a result can never leak into a log line.
  */
 public record AiScoreResult(int rawScore, Map<String, Integer> subScores, String feedback,
         AiProviderCategory providerCategory, String provider, String model, String providerVersion,
-        String transcript, String detailJson, boolean fallback) {
+        String transcript, String detailJson, boolean fallback, UUID rubricVersionPublicId) {
 
     /** A result without transcript or detail, from adapters that produce neither. */
     public AiScoreResult(int rawScore, Map<String, Integer> subScores, String feedback,
             AiProviderCategory providerCategory, String provider, String model, String providerVersion) {
         this(rawScore, subScores, feedback, providerCategory, provider, model, providerVersion, null, null, false);
+    }
+
+    /** A result that is not rubric-scored: its sub-scores stay on the legacy 0–100 scale. */
+    public AiScoreResult(int rawScore, Map<String, Integer> subScores, String feedback,
+            AiProviderCategory providerCategory, String provider, String model, String providerVersion,
+            String transcript, String detailJson, boolean fallback) {
+        this(rawScore, subScores, feedback, providerCategory, provider, model, providerVersion, transcript,
+                detailJson, fallback, null);
     }
 
     public AiScoreResult {
@@ -48,7 +61,10 @@ public record AiScoreResult(int rawScore, Map<String, Integer> subScores, String
                 if (name == null || name.isBlank()) {
                     throw new IllegalArgumentException(ScoringConstants.SUBSCORE_NAME_BLANK);
                 }
-                if (score == null || score < 0 || score > 100) {
+                // A Pearson trait has its own scale, checked by RubricScorer: Read Aloud Content may exceed 100.
+                boolean outOfRange = rubricVersionPublicId == null ? score == null || score < 0 || score > 100
+                        : score == null || score < 0;
+                if (outOfRange) {
                     throw new IllegalArgumentException(ScoringConstants.SUBSCORES_RANGE_INVALID);
                 }
                 safeSubScores.put(name, score);

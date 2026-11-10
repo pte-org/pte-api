@@ -2,11 +2,12 @@ package com.pte.attempt.internal.service;
 
 import com.pte.assessment.AssessmentService;
 import com.pte.assessment.internal.config.TaskTimingConfig;
+import com.pte.assessment.internal.service.ExamItemRuntimeResolver;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
 import com.pte.attempt.internal.service.cache.ExamItemView;
-import com.pte.attempt.internal.exception.content.MissingAudioDurationException;
-import com.pte.attempt.internal.exception.content.MissingAudioPromptException;
-import com.pte.attempt.internal.exception.content.MissingImagePromptException;
+import com.pte.shared.exception.exam.MissingAudioDurationException;
+import com.pte.shared.exception.exam.MissingAudioPromptException;
+import com.pte.shared.exception.exam.MissingImagePromptException;
 import com.pte.media.MediaService;
 import com.pte.media.dto.response.PresignedDownloadResponse;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
@@ -100,8 +101,7 @@ class ExamItemLoaderTest {
         // so toView always falls back to taskTimingConfig — the exact
         // pre-Phase-3 behavior these regression tests were written against.
         stubTemplateItems();
-        service = new ExamItemLoader(assessmentService, mediaService, taskTimingConfig, examDefinitionService,
-                questionTypeService, com.pte.TestClocks.fixed());
+ExamItemRuntimeResolver resolver = new ExamItemRuntimeResolver(mediaService, taskTimingConfig,                examDefinitionService, questionTypeService, com.pte.TestClocks.fixed());        lenient().when(assessmentService.resolveExamItems(any(), anyLong(), any())).thenAnswer(invocation ->                resolver.resolve(invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2)));        service = new ExamItemLoader(assessmentService);
     }
 
     @Test

@@ -5,6 +5,13 @@ import java.util.UUID;
 /** Error and audit action codes owned by the tenancy module. */
 public final class TenancyConstants {
 
+    public static final int ORGANIZATION_PAGE_DEFAULT_SIZE = 20;
+    public static final int ORGANIZATION_PAGE_MAX_SIZE = 100;
+    public static final int ORGANIZATION_SEARCH_MAX_LENGTH = 320;
+    public static final String ORGANIZATION_PAGE_INVALID = "Page must be zero or greater";
+    public static final String ORGANIZATION_PAGE_SIZE_INVALID = "Page size must be between 1 and 100";
+    public static final String ORGANIZATION_SEARCH_TOO_LONG = "Organization search must be at most 320 characters";
+
     public static final String TENANT_NOT_FOUND = "TENANT_NOT_FOUND";
     public static final String TENANT_SUSPENDED = "TENANT_SUSPENDED";
     public static final String TENANT_SUSPENSION_DAYS_INVALID = "TENANT_SUSPENSION_DAYS_INVALID";

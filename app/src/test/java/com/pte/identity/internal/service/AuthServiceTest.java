@@ -4,6 +4,7 @@ import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
+import com.pte.identity.internal.config.AuthTokenProperties;
 import com.pte.identity.internal.dto.request.auth.LoginOrganizationOptionsRequest;
 import com.pte.identity.internal.dto.request.auth.LoginRequest;
 import com.pte.identity.internal.dto.request.auth.RefreshRequest;
@@ -11,6 +12,7 @@ import com.pte.identity.internal.dto.response.LoginOrganizationOptionResponse;
 import com.pte.identity.internal.dto.response.TokenResponse;
 import com.pte.identity.internal.exception.InvalidLoginException;
 import com.pte.identity.internal.exception.InvalidRefreshTokenException;
+import com.pte.identity.internal.exception.TooManyLoginAttemptsException;
 import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.security.AccessTokenIssuer;
@@ -31,6 +33,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -58,13 +63,17 @@ class AuthServiceTest {
     @Mock
     private TenancyService tenancyService;
 
+    @Mock
+    private LoginThrottle loginThrottle;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private AuthService authService;
+    private final AuthTokenProperties tokenProperties = new AuthTokenProperties();
 
     @BeforeEach
     void setUp() {
         authService = new AuthService(userRepository, memberRepository, passwordEncoder,
-                accessTokenIssuer, refreshTokenService, tenancyService);
+                accessTokenIssuer, refreshTokenService, tenancyService, loginThrottle, tokenProperties);
     }
 
     private User activeUser(Long id, Set<Role> roles, String username) {
@@ -336,5 +345,59 @@ class AuthServiceTest {
 
         assertThat(authService.loginOrganizations(new LoginOrganizationOptionsRequest(username, PASSWORD)))
                 .extracting(LoginOrganizationOptionResponse::tenantId).containsExactly(activeOrganizationId);
+    }
+
+    @Test
+    void login_isRefusedWithoutCheckingThePasswordWhenTheAccountIsLocked() {
+        String username = "locked@tenant.example";
+        when(loginThrottle.isLocked(username, "203.0.113.9")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest(username, PASSWORD), "203.0.113.9"))
+                .isInstanceOf(TooManyLoginAttemptsException.class);
+        verify(userRepository, never()).findByUsernameAndDeletedFalse(any());
+    }
+
+    @Test
+    void login_wrongPasswordTakesOneFromTheFailureBudget() {
+        String username = "host@tenant.example";
+        User user = activeUser(1L, Set.of(Role.PLATFORM_ADMIN), username);
+        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest(username, "wrong-password"), "203.0.113.9"))
+                .isInstanceOf(InvalidLoginException.class);
+        verify(loginThrottle).recordFailure(username, "203.0.113.9");
+        verify(loginThrottle, never()).clear(any(), any());
+    }
+
+    @Test
+    void login_unknownUserAlsoCountsAsAFailure() {
+        when(userRepository.findByUsernameAndDeletedFalse("nobody@x.vn")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("nobody@x.vn", PASSWORD), "203.0.113.9"))
+                .isInstanceOf(InvalidLoginException.class);
+        verify(loginThrottle).recordFailure("nobody@x.vn", "203.0.113.9");
+    }
+
+    @Test
+    void login_correctPasswordClearsTheFailureBudget() {
+        String username = "admin@platform.example";
+        User user = activeUser(1L, Set.of(Role.PLATFORM_ADMIN), username);
+        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
+        when(memberRepository.findByUser_IdAndDeletedFalse(1L)).thenReturn(List.of());
+        when(accessTokenIssuer.issue(user, null)).thenReturn("access-token");
+        when(refreshTokenService.issue(user, null)).thenReturn("refresh-token");
+
+        assertBearerPair(authService.login(new LoginRequest(username, PASSWORD), "203.0.113.9"));
+        verify(loginThrottle).clear(username, "203.0.113.9");
+        verify(loginThrottle, never()).recordFailure(any(), any());
+    }
+
+    @Test
+    void loginOrganizations_isRefusedWhenTheAccountIsLocked() {
+        when(loginThrottle.isLocked("two@tenant.example", "203.0.113.9")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.loginOrganizations(
+                new LoginOrganizationOptionsRequest("two@tenant.example", PASSWORD), "203.0.113.9"))
+                .isInstanceOf(TooManyLoginAttemptsException.class);
     }
 }

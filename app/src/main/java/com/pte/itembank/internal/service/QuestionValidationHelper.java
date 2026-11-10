@@ -39,9 +39,6 @@ public class QuestionValidationHelper {
         boolean requiresReferenceAnswer = definition == null ? type != null && type.requiresReferenceAnswer() : definition.isRequiresReferenceAnswer();
         boolean requiresWordCount = definition == null ? type != null && type.requiresWordCount() : definition.isRequiresWordCount();
 
-        if (!StringUtils.hasText(question.getTitle())) {
-            throw new QuestionValidationException(ItembankConstants.TITLE_REQUIRED);
-        }
         if (question.getMinWordCount() != null && question.getMaxWordCount() != null
                 && question.getMinWordCount() > question.getMaxWordCount()) {
             throw new QuestionValidationException(ItembankConstants.INVALID_QUESTION_FIELDS);

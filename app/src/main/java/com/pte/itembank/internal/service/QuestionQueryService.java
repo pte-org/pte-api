@@ -2,9 +2,9 @@ package com.pte.itembank.internal.service;
 
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
-import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.dto.response.QuestionResponse;
@@ -83,7 +83,6 @@ public class QuestionQueryService {
                                 ? q.getPteTaskType().getSection().name() : q.getTaskTypeSection()))
                 .filter(q -> requestedStatus == null || q.getStatus() == requestedStatus)
                 .filter(q -> normalizedQuery.isBlank()
-                        || q.getTitle().toLowerCase().contains(normalizedQuery)
                         || (q.getPromptText() != null && q.getPromptText().toLowerCase().contains(normalizedQuery)))
                 .map(this::toResponse)
                 .toList();
@@ -98,6 +97,21 @@ public class QuestionQueryService {
     @Transactional(readOnly = true)
     public PagedResult<QuestionResponse> listAccessible(CurrentUser caller, int requestedPage, int requestedSize,
             String taskType, String section, String status, String query, String pool) {
+        return listAccessible(caller, requestedPage, requestedSize, taskType, section, status, query, pool, null);
+    }
+
+    /** As above, narrowed to one CEFR level when {@code cefrLevel} is given. */
+    @Transactional(readOnly = true)
+    public PagedResult<QuestionResponse> listAccessible(CurrentUser caller, int requestedPage, int requestedSize,
+            String taskType, String section, String status, String query, String pool, String cefrLevel) {
+        return listAccessible(caller, requestedPage, requestedSize, taskType, section, status, query, pool, cefrLevel, null);
+    }
+
+    /** As above, with optional aiGenerated filter: true = AI-generated, false = hand-written, null = no filter. */
+    @Transactional(readOnly = true)
+    public PagedResult<QuestionResponse> listAccessible(CurrentUser caller, int requestedPage, int requestedSize,
+            String taskType, String section, String status, String query, String pool, String cefrLevel, Boolean aiGenerated) {
+        CefrLevel requestedCefr = parseOptionalCefr(cefrLevel);
         int page = normalizePage(requestedPage);
         int size = normalizePageSize(requestedSize);
         String requestedTaskTypeKey = parseOptionalTaskTypeKey(taskType);
@@ -109,14 +123,15 @@ public class QuestionQueryService {
         Pageable pageable = PageRequest.of(page, size,
                 Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
 
-        Page<UUID> questionPage = questionRepository.findPagePublicIds(
-                requestedTaskTypeKey,
-                requestedSection == null ? null : requestedSection.name(),
-                requestedStatus,
-                requestedPool,
-                normalizedQuery,
-                publicIdQuery,
-                pageable);
+        String sectionName = requestedSection == null ? null : requestedSection.name();
+        Page<UUID> questionPage = aiGenerated == null
+                ? (requestedCefr == null
+                    ? questionRepository.findPagePublicIds(requestedTaskTypeKey, sectionName, requestedStatus,
+                            requestedPool, normalizedQuery, publicIdQuery, pageable)
+                    : questionRepository.findPagePublicIdsByCefr(requestedTaskTypeKey, sectionName, requestedStatus,
+                            requestedPool, normalizedQuery, publicIdQuery, requestedCefr, pageable))
+                : questionRepository.findPagePublicIdsByAiGenerated(requestedTaskTypeKey, sectionName, requestedStatus,
+                        requestedPool, normalizedQuery, publicIdQuery, requestedCefr, aiGenerated, pageable);
 
         List<UUID> publicIds = questionPage.getContent();
         Map<UUID, Question> questionsByPublicId = publicIds.isEmpty()
@@ -138,13 +153,13 @@ public class QuestionQueryService {
 
     @Transactional(readOnly = true)
     public QuestionStatsResponse stats(CurrentUser caller) {
-        Map<String, Long> sectionCounts = questionRepository.countBySectionAndVisibility(Visibility.SHARED).stream()
+        Map<String, Long> sectionCounts = questionRepository.countBySection().stream()
                 .collect(Collectors.toMap(row -> (String) row[0], row -> ((Number) row[1]).longValue()));
-        Map<QuestionStatus, Long> statusCounts = questionRepository.countByStatusAndVisibility(Visibility.SHARED)
+        Map<QuestionStatus, Long> statusCounts = questionRepository.countByStatus()
                 .stream()
                 .collect(Collectors.toMap(row -> (QuestionStatus) row[0], row -> ((Number) row[1]).longValue()));
         return new QuestionStatsResponse(
-                questionRepository.countByDeletedFalseAndVisibility(Visibility.SHARED),
+                questionRepository.countByDeletedFalse(),
                 sectionCounts.getOrDefault(PteSection.LISTENING.name(), 0L),
                 sectionCounts.getOrDefault(PteSection.READING.name(), 0L),
                 sectionCounts.getOrDefault(PteSection.WRITING.name(), 0L),
@@ -188,6 +203,17 @@ public class QuestionQueryService {
         return poolService.freeze(questionPublicId);
     }
 
+    /** CEFR level per question; questions without a level or not found are left out. */
+    @Transactional(readOnly = true)
+    public Map<UUID, String> cefrLevels(java.util.Collection<UUID> questionPublicIds) {
+        if (questionPublicIds.isEmpty()) {
+            return Map.of();
+        }
+        return questionRepository.findByPublicIdIn(questionPublicIds).stream()
+                .filter(question -> question.getCefrLevel() != null)
+                .collect(Collectors.toUnmodifiableMap(Question::getPublicId, question -> question.getCefrLevel().name()));
+    }
+
     private QuestionResponse toResponse(Question question) {
         return QuestionMapper.toResponse(question);
     }
@@ -229,6 +255,15 @@ public class QuestionQueryService {
             return QuestionStatus.valueOf(value.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             throw new QuestionValidationException(ItembankConstants.INVALID_QUESTION_FIELDS);
+        }
+    }
+
+    private CefrLevel parseOptionalCefr(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return CefrLevel.valueOf(value.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new QuestionValidationException(ItembankConstants.INVALID_CEFR_LEVEL);
         }
     }
 

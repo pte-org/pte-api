@@ -153,7 +153,7 @@ class ReportServiceTest {
     }
 
     @Test
-    void getReport_hostCanSeeLegacyPublishedReportWithoutSnapshot() {
+    void getReport_publishedReportWithoutSnapshotShowsNoScores() {
         UUID attemptPublicId = UUID.randomUUID();
         ExamResult report = new ExamResult();
         report.setAttemptPublicId(attemptPublicId);
@@ -161,16 +161,14 @@ class ReportServiceTest {
         report.setStudentPublicId(studentPublicId);
         report.setTenantId(tenantId);
         report.setPublished(true);
-        AttemptScoreSummary legacySummary = new AttemptScoreSummary(SkillScore.of(64), Map.of());
         when(examResultRepository.findByAttemptPublicId(attemptPublicId)).thenReturn(Optional.of(report));
-        when(scoreAggregationService.aggregateLegacyPublished(attemptPublicId, tenantId)).thenReturn(legacySummary);
 
         ReportResponse response = service.getReport(attemptPublicId,
                 new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN")));
 
         assertThat(response.published()).isTrue();
         assertThat(response.immutableSnapshot()).isFalse();
-        assertThat(response.overall().score()).isEqualTo(64);
+        assertThat(response.overall()).isNull();
     }
 
     @Test
@@ -183,7 +181,6 @@ class ReportServiceTest {
 
         verify(examResultRepository, never()).findByAttemptPublicId(any());
         verify(scoreAggregationService, never()).aggregateProvisional(any(), any());
-        verify(scoreAggregationService, never()).aggregateLegacyPublished(any(), any());
     }
 
     @Test
@@ -335,7 +332,9 @@ class ReportServiceTest {
     }
 
     private String snapshotJson(AttemptScoreSummary summary) {
-        return snapshotCodec.encode(UUID.randomUUID(), UUID.randomUUID(), java.time.Instant.now(), 1,
-                UUID.randomUUID(), UUID.randomUUID(), 1, summary, List.of());
+        return snapshotCodec.encode(new ReportSnapshotCodec.Publication(UUID.randomUUID(), UUID.randomUUID(),
+                java.time.Instant.parse("2026-11-05T00:00:00Z"), 1, UUID.randomUUID()),
+                new ReportScoreAggregation(new com.pte.attempt.dto.response.AttemptScoreContextView(UUID.randomUUID(),
+                        1, java.util.Set.of()), summary), List.of(), Map.of());
     }
 }

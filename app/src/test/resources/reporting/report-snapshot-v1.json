@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "publicationPublicId": "00000000-0000-0000-0000-0000000e0001",
+  "publishedByPublicId": "00000000-0000-0000-0000-0000000e0002",
+  "publishedAt": "2026-09-24T10:15:30Z",
+  "cohortSize": 4,
+  "examSnapshotPublicId": "00000000-0000-0000-0000-0000000e0003",
+  "scoreTemplatePublicId": "00000000-0000-0000-0000-00000000d001",
+  "scoreTemplateVersion": 7,
+  "scoreSummary": {
+    "overall": null,
+    "skillScores": {
+      "WRITING": {"score": 81, "sufficientData": true, "appliedWeight": 3.5},
+      "READING": {"score": null, "sufficientData": false, "appliedWeight": 0}
+    }
+  },
+  "scoreInputs": [
+    {
+      "answerPublicId": "00000000-0000-0000-0000-0000000e0004",
+      "scoreTemplatePublicId": "00000000-0000-0000-0000-00000000d001",
+      "taskType": "WRITE_ESSAY",
+      "section": "WRITING",
+      "scoringMethod": "AI_TEXT",
+      "aiRawScore": 75,
+      "aiProviderCategory": "REAL",
+      "aiProvider": "provider",
+      "aiModel": "model",
+      "aiProviderVersion": "v2",
+      "examinerScore": 81,
+      "selectedScoreSource": "EXAMINER",
+      "selectedScore": 81
+    }
+  ]
+}

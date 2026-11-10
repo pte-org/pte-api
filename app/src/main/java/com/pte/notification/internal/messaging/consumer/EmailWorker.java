@@ -6,9 +6,15 @@ import com.pte.notification.internal.constant.NotificationConstants;
 import com.pte.notification.internal.config.NotificationProperties;
 import com.pte.notification.internal.messaging.job.EmailJob;
 import com.pte.notification.internal.repository.NotificationLogRepository;
+import com.pte.notification.internal.template.BrandedEmailTemplate;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.MimeMessageHelper;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
+import java.nio.charset.StandardCharsets;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +31,9 @@ import java.util.Optional;
  */
 @Component
 public class EmailWorker {
+
+    /** The project's logo mark, attached inline to HTML cards (see {@link BrandedEmailTemplate#LOGO_CID}). */
+    private static final String LOGO_RESOURCE = "notification/logo-mark.png";
 
     private final NotificationLogRepository notificationLogRepository;
     private final JavaMailSender mailSender;
@@ -69,6 +78,10 @@ public class EmailWorker {
     }
 
     private void sendEmail(EmailJob job) {
+        if (job.htmlBody() != null && !job.htmlBody().isBlank()) {
+            sendHtmlEmail(job);
+            return;
+        }
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(notificationProperties.getMailFrom());
         message.setTo(job.recipientEmail());
@@ -77,6 +90,25 @@ public class EmailWorker {
         try {
             mailSender.send(message);
         } catch (MailException ex) {
+            throw new IllegalStateException(
+                    String.format(NotificationConstants.EMAIL_SEND_FAILED, job.notificationLogPublicId()), ex);
+        }
+    }
+
+    /** One multipart/alternative message: clients that cannot show the HTML card show its plain-text twin. */
+    private void sendHtmlEmail(EmailJob job) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, StandardCharsets.UTF_8.name());
+            helper.setFrom(notificationProperties.getMailFrom());
+            helper.setTo(job.recipientEmail());
+            helper.setSubject(job.subject());
+            helper.setText(job.body(), job.htmlBody());
+            if (job.htmlBody().contains("cid:" + BrandedEmailTemplate.LOGO_CID)) {
+                helper.addInline(BrandedEmailTemplate.LOGO_CID, new ClassPathResource(LOGO_RESOURCE), "image/png");
+            }
+            mailSender.send(message);
+        } catch (MailException | MessagingException ex) {
             throw new IllegalStateException(
                     String.format(NotificationConstants.EMAIL_SEND_FAILED, job.notificationLogPublicId()), ex);
         }

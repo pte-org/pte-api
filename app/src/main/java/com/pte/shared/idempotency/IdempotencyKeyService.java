@@ -62,7 +62,7 @@ public class IdempotencyKeyService {
         return repository.deleteExpired(now);
     }
 
-    @Scheduled(cron = IdempotencyConstants.PURGE_CRON)
+    @Scheduled(cron = "${shared.idempotency.purge-cron:" + IdempotencyConstants.PURGE_CRON + "}")
     void purgeExpiredOnSchedule() {
         purgeExpired(clock.instant());
     }

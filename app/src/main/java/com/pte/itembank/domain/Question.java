@@ -1,9 +1,9 @@
 package com.pte.itembank.domain;
 
+import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
-import com.pte.itembank.domain.enums.Visibility;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -19,6 +19,8 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,7 +35,6 @@ import java.util.UUID;
 @Entity
 @Table(name = "questions", indexes = {
         @Index(name = "idx_questions_tenant", columnList = "tenant_id"),
-        @Index(name = "idx_questions_visibility", columnList = "visibility"),
         @Index(name = "idx_questions_task_type", columnList = "pte_task_type")
 })
 @Getter
@@ -46,15 +47,16 @@ public class Question extends BaseEntity {
     private PteTaskType pteTaskType;
 
     /** Canonical identity for standard and custom authored questions. */
+    /** CEFR level the question is written for; null means not yet classified. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cefr_level", length = 2)
+    private CefrLevel cefrLevel;
+
     @Column(name = "task_type_key", nullable = false, length = 64)
     private String taskTypeKey;
 
     @Column(name = "task_type_section", nullable = false, length = 16)
     private String taskTypeSection;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Visibility visibility;
 
     /** Immutable after insert: a question belongs to exactly one pool for its whole life. */
     @Enumerated(EnumType.STRING)
@@ -108,9 +110,6 @@ public class Question extends BaseEntity {
     @Column(name = "rejection_reason", length = 500)
     private String rejectionReason;
 
-    @Column(nullable = false)
-    private String title;
-
     @Column(columnDefinition = "text")
     private String promptText;
 
@@ -132,6 +131,21 @@ public class Question extends BaseEntity {
     @Column
     private Integer maxWordCount;
 
+    /** AI provenance and review sheet; null for a hand-written question and never copied to a revision. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "generation_meta")
+    private String generationMeta;
+
+    /** SHA-256 of the normalized stimulus text, set for AI-generated questions only. */
+    @Column(name = "content_hash", length = 64)
+    private String contentHash;
+
+    @Column(name = "generation_job_public_id")
+    private UUID generationJobPublicId;
+
+    @Column(name = "generation_item_index")
+    private Integer generationItemIndex;
+
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "question_options", joinColumns = @JoinColumn(name = "question_id"),
             indexes = @jakarta.persistence.Index(name = "idx_options_question", columnList = "question_id"))
@@ -141,9 +155,5 @@ public class Question extends BaseEntity {
     /** Add an option (no public collection setter). */
     public void addOption(QuestionOption option) {
         options.add(option);
-    }
-
-    public boolean isShared() {
-        return visibility == Visibility.SHARED;
     }
 }

@@ -1,23 +1,29 @@
 package com.pte.scoring.internal.vendor.azure;
 
 import com.pte.scoring.internal.constant.ScoringConstants;
+import com.pte.scoring.internal.rubric.speech.AzureBandMapping;
+import com.pte.scoring.internal.rubric.speech.ReadAloudContent;
+import com.pte.scoring.internal.rubric.speech.SpeechBands;
 import com.pte.scoring.internal.vendor.AiAnswerScorer;
 import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.AiScoringRequest;
 import com.pte.scoring.internal.vendor.azure.AzureScorers.ScriptedScore;
 import com.pte.scoring.internal.vendor.speech.SpeechAudioLoader;
+import com.pte.scoring.rubric.EffectiveRubric;
+import com.pte.scoring.rubric.RubricScorer;
+import com.pte.scoring.rubric.TraitScoreSet;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * Read Aloud: the score is the pronunciation score of the whole recording,
- * from Azure's merged accuracy, fluency and prosody and a completeness the
- * backend measures by aligning what was heard against the passage.
+ * Read Aloud through the rubric (Score Guide pp.15-16): Content is counted in code as N passage words minus every
+ * replaced, omitted or inserted word ({@link ReadAloudContent}); Pronunciation and Oral Fluency are Azure's scores
+ * through the rubric version's uncalibrated band mapping; the item score is {@link RubricScorer} over the three traits
+ * with N as the per-word maximum. N is stored in the detail ({@code wordCount}) so the item can be rescored later.
  */
 @Component
 @ConditionalOnProperty(name = "scoring.ai.provider", havingValue = "azure-gemini")
@@ -40,26 +46,25 @@ public class ReadAloudScorer implements AiAnswerScorer {
 
     @Override
     public AiScoreResult score(AiScoringRequest request) {
+        EffectiveRubric rubric = SpeechBands.requireRubric(request);
+        AzureBandMapping mapping = SpeechBands.mappingOf(rubric);
         String passage = AzureScorers.requireReference(request.promptText());
         ScriptedScore scored = AzureScorers.scoreScripted(audio, assessor, request, passage);
         SpeechAssessment assessed = scored.assessed();
-
-        Map<String, Integer> subScores = new LinkedHashMap<>();
-        subScores.put("PRONUNCIATION", AzureScorers.points(scored.pronunciation()));
-        subScores.put("ACCURACY", AzureScorers.points(AzureScorers.orZero(assessed.accuracy())));
-        subScores.put("FLUENCY", AzureScorers.points(AzureScorers.orZero(assessed.fluency())));
-        if (assessed.prosody() != null) {
-            subScores.put("PROSODY", AzureScorers.points(assessed.prosody()));
-        }
-        subScores.put("COMPLETENESS", AzureScorers.points(scored.alignment().recall()));
+        ReadAloudContent content = ReadAloudContent.measure(passage, scored.transcript());
+        SpeechBands bands = SpeechBands.of(mapping, assessed.accuracy(), assessed.fluency(), assessed.prosody());
+        Map<String, Integer> traits = bands.traitsWithContent(content.achieved());
+        int itemScore = RubricScorer.score(rubric, new TraitScoreSet(traits, content.wordCount())).itemScore();
 
         Map<String, Object> detail = AzureScorers.newDetail();
-        detail.put("pronunciation", scored.pronunciation());
+        detail.put(ScoringConstants.DETAIL_WORD_COUNT, content.wordCount());
+        detail.put("readAloudContent", content.detail());
+        bands.writeInto(detail);
         detail.put("alignment", AzureScorers.alignmentDetail(scored.alignment()));
         detail.put("wordErrors", AzureScorers.wordErrors(assessed));
         detail.put("omittedWords", scored.alignment().missingTokens());
         detail.put("audioDurationMs", assessed.audioDurationMs());
-        return AzureScorers.result(json, AzureScorers.points(scored.pronunciation()), subScores,
-                scored.transcript(), detail);
+        return AzureScorers.result(json, itemScore, traits, scored.transcript(), detail,
+                request.rubricVersionPublicId());
     }
 }

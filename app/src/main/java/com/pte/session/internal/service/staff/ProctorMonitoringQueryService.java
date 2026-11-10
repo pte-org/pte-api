@@ -2,11 +2,10 @@ package com.pte.session.internal.service.staff;
 
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.ExamSessionProctor;
-import com.pte.session.dto.response.MonitoringEnrollmentView;
 import com.pte.session.dto.response.ProctorAssignedSessionsPageView;
-import com.pte.session.dto.response.ProctorMonitoringSessionView;
 import com.pte.session.dto.response.ProctorWorkspaceOverviewView;
 import com.pte.session.dto.response.ProctorWorkspaceSessionView;
+import com.pte.session.internal.exception.staff.ProctorNotAssignedException;
 import com.pte.session.internal.dto.response.proctor.ProctorOverviewCountsResponse;
 import com.pte.session.internal.exception.staff.InvalidProctorScopeException;
 import com.pte.session.internal.exception.capacity.InvalidTimezoneException;
@@ -15,12 +14,10 @@ import com.pte.session.internal.repository.ExamSessionRepository;
 import com.pte.session.internal.repository.ExamSessionProctorRepository;
 import com.pte.session.internal.repository.ProctorOverviewCountsProjection;
 import com.pte.shared.web.PageMeta;
-import com.pte.shared.web.PagedResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,7 +28,6 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -61,91 +57,8 @@ public class ProctorMonitoringQueryService {
         this.clock = clock;
     }
 
-    /**
-     * Reads monitoring metadata for an exam session if the proctor is assigned to it within the caller's tenant.
-     */
-    @Transactional(readOnly = true)
-    public Optional<ProctorMonitoringSessionView> getMonitoringSession(
-            UUID sessionPublicId, UUID proctorPublicId, UUID tenantId) {
-        if (sessionPublicId == null || proctorPublicId == null || tenantId == null) {
-            return Optional.empty();
-        }
-        return proctorRepository.findAssignment(sessionPublicId, proctorPublicId, tenantId)
-                .map(ProctorSessionViews::toSessionView);
-    }
-
-    /**
-     * Lists assigned sessions for a proctor in the caller's tenant, ordered by opensAt ASC nulls-last then publicId ASC.
-     */
-    @Transactional(readOnly = true)
-    public PagedResult<ProctorMonitoringSessionView> getAssignedSessions(
-            UUID proctorPublicId, UUID tenantId, int requestedPage, int requestedSize) {
-        int page = Math.max(0, requestedPage);
-        int size = requestedSize <= 0 ? DEFAULT_SIZE : Math.min(MAX_SIZE, requestedSize);
-        Pageable pageable = PageRequest.of(page, size,
-                Sort.by(Sort.Order.asc("session.opensAt").nullsLast())
-                        .and(Sort.by("session.publicId").ascending()));
-
-        Page<ExamSessionProctor> assignmentPage = proctorRepository.findAssignedSessions(
-                proctorPublicId, tenantId, pageable);
-
-        List<ProctorMonitoringSessionView> items = assignmentPage.getContent().stream()
-                .map(ProctorSessionViews::toSessionView)
-                .toList();
-
-        PageMeta meta = new PageMeta(
-                assignmentPage.getNumber(),
-                assignmentPage.getSize(),
-                assignmentPage.getTotalElements(),
-                assignmentPage.getTotalPages(),
-                assignmentPage.isFirst(),
-                assignmentPage.isLast(),
-                assignmentPage.hasNext(),
-                assignmentPage.hasPrevious());
-
-        return new PagedResult<>(items, meta);
-    }
-
-    /**
-     * Paged active student enrollments for an exam session, stable by enrollment publicId ASC.
-     */
-    @Transactional(readOnly = true)
-    public PagedResult<MonitoringEnrollmentView> getEnrollments(
-            UUID sessionPublicId, UUID tenantId, int requestedPage, int requestedSize) {
-        int page = Math.max(0, requestedPage);
-        int size = requestedSize <= 0 ? DEFAULT_SIZE : Math.min(MAX_SIZE, requestedSize);
-        Pageable pageable = PageRequest.of(page, size, Sort.by("publicId").ascending());
-
-        Page<com.pte.session.domain.ExamRegistration> enrollmentPage = registrationRepository
-                .findEnrolledBySessionPublicId(sessionPublicId, tenantId, pageable);
-
-        List<MonitoringEnrollmentView> items = enrollmentPage.getContent().stream()
-                .map(e -> new MonitoringEnrollmentView(e.getPublicId(), e.getStudentPublicId()))
-                .toList();
-
-        PageMeta meta = new PageMeta(
-                enrollPage(enrollmentPage),
-                enrollmentPage.getSize(),
-                enrollmentPage.getTotalElements(),
-                enrollmentPage.getTotalPages(),
-                enrollmentPage.isFirst(),
-                enrollmentPage.isLast(),
-                enrollmentPage.hasNext(),
-                enrollmentPage.hasPrevious());
-
-        return new PagedResult<>(items, meta);
-    }
-
     private int enrollPage(Page<?> page) {
         return page.getNumber();
-    }
-
-    @Transactional(readOnly = true)
-    public List<UUID> findEnrolledStudentIds(UUID sessionPublicId, UUID tenantId) {
-        if (sessionPublicId == null || tenantId == null) {
-            return List.of();
-        }
-        return registrationRepository.findEnrolledStudentPublicIds(sessionPublicId, tenantId);
     }
 
     @Transactional(readOnly = true)
@@ -170,6 +83,14 @@ public class ProctorMonitoringQueryService {
             return false;
         }
         return proctorRepository.isProctorAssigned(sessionPublicId, proctorPublicId, tenantId);
+    }
+
+    /** One exam session the proctor is assigned to in the caller's tenant; throws when not assigned. */
+    @Transactional(readOnly = true)
+    public ProctorWorkspaceSessionView getAssignedSession(UUID sessionPublicId, UUID proctorPublicId, UUID tenantId) {
+        return proctorRepository.findAssignment(sessionPublicId, proctorPublicId, tenantId)
+                .map(assignment -> ProctorSessionViews.toWorkspaceSessionView(assignment, clock.instant()))
+                .orElseThrow(ProctorNotAssignedException::new);
     }
 
     @Transactional(readOnly = true)

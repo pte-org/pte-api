@@ -8,6 +8,8 @@ import com.pte.attempt.internal.service.cache.ExamItemView;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.itembank.TaskTypeCodeCompatibility;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -34,12 +36,28 @@ public class ExamContentService {
 
     private final ExamItemLoader loader;
     private final ExamContentCache cache;
+    private final long mediaUrlGraceSeconds;
+    private final long mediaUrlReloadMarginSeconds;
     private final Clock clock;
     private final Map<UUID, Map<UUID, SnapshotContentResponse.Item>> contentItems = new ConcurrentHashMap<>();
 
-    public ExamContentService(ExamItemLoader loader, ExamContentCache cache, Clock clock) {
+    ExamContentService(ExamItemLoader loader, ExamContentCache cache, Clock clock) {
+        this(loader, cache, AttemptConstants.MEDIA_URL_GRACE_SECONDS,
+                AttemptConstants.MEDIA_URL_RELOAD_MARGIN_SECONDS, clock);
+    }
+
+    /** The two media-link margins come from {@code attempt.media-url.*}; the constants are their defaults. */
+    @Autowired
+    public ExamContentService(ExamItemLoader loader, ExamContentCache cache,
+            @Value("${attempt.media-url.grace-seconds:" + AttemptConstants.MEDIA_URL_GRACE_SECONDS + "}")
+            long mediaUrlGraceSeconds,
+            @Value("${attempt.media-url.reload-margin-seconds:" + AttemptConstants.MEDIA_URL_RELOAD_MARGIN_SECONDS
+                    + "}") long mediaUrlReloadMarginSeconds,
+            Clock clock) {
         this.loader = loader;
         this.cache = cache;
+        this.mediaUrlGraceSeconds = mediaUrlGraceSeconds;
+        this.mediaUrlReloadMarginSeconds = mediaUrlReloadMarginSeconds;
         this.clock = clock;
     }
 
@@ -57,7 +75,7 @@ public class ExamContentService {
     public List<ExamItemView> loadForStart(UUID attemptPublicId, SnapshotContentResponse content, UUID tenantId,
             Instant windowOpensAt, Instant windowClosesAt) {
         long mediaUrlTtlSeconds = Duration.between(windowOpensAt, windowClosesAt).getSeconds()
-                + AttemptConstants.MEDIA_URL_GRACE_SECONDS;
+                + mediaUrlGraceSeconds;
         List<ExamItemView> items = loader.load(content, mediaUrlTtlSeconds, tenantId);
         cache.warm(attemptPublicId, items);
         return items;
@@ -121,6 +139,6 @@ public class ExamContentService {
         long remainingSeconds = attempt.getExamEndTime() == null ? 0L
                 : Math.max(0L, Duration.between(clock.instant(), attempt.getExamEndTime()).getSeconds());
         return loader.load(loader.content(attempt.getExamVersionPublicId()),
-                remainingSeconds + AttemptConstants.MEDIA_URL_RELOAD_MARGIN_SECONDS, attempt.getTenantId());
+                remainingSeconds + mediaUrlReloadMarginSeconds, attempt.getTenantId());
     }
 }

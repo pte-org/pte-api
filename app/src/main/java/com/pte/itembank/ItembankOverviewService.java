@@ -3,7 +3,6 @@ package com.pte.itembank;
 import com.pte.itembank.domain.enums.PteSection;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
-import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.internal.repository.QuestionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,7 +46,7 @@ public class ItembankOverviewService {
         Map<String, Long> byPool = zeroed(QuestionPool.values());
         Map<String, Long> approvedByPool = zeroed(QuestionPool.values());
         long total = 0L;
-        for (Object[] row : questionRepository.countByStatusSectionAndPool(Visibility.SHARED)) {
+        for (Object[] row : questionRepository.countByStatusSectionAndPool()) {
             QuestionStatus status = (QuestionStatus) row[0];
             String section = (String) row[1];
             QuestionPool pool = (QuestionPool) row[2];
@@ -68,7 +67,7 @@ public class ItembankOverviewService {
     /** Questions created in {@code [from, to)}, whatever their status is now. */
     @Transactional(readOnly = true)
     public long countCreatedBetween(Instant from, Instant to) {
-        return questionRepository.countCreatedBetween(Visibility.SHARED, from, to);
+        return questionRepository.countCreatedBetween(from, to);
     }
 
     private static Map<String, Long> zeroed(Enum<?>[] keys) {

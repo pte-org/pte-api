@@ -56,6 +56,37 @@ class ApiInventoryExportTest {
 
         assertThat(endpoints).isNotEmpty();
         assertThat(endpoints).allSatisfy(endpoint -> assertThat(endpoint.get("path")).isNotNull());
+        for (String path : List.of("/api/v1/scoring-rubrics/versions/{publicId}/diff",
+                "/api/v1/scoring-rubrics/versions/{publicId}/status", "/api/v1/scoring-rubrics/versions/{publicId}/activations")) {
+            assertThat(endpoints).filteredOn(endpoint -> path.equals(endpoint.get("path"))).singleElement()
+                    .satisfies(endpoint -> assertThat(endpoint.get("authorization"))
+                            .isEqualTo("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')"));
+        }
+        assertThat(endpoints).filteredOn(endpoint -> String.valueOf(endpoint.get("path"))
+                        .startsWith("/api/v1/question-generation"))
+                .extracting(endpoint -> endpoint.get("method") + " " + endpoint.get("path"))
+                .containsExactlyInAnyOrder("POST /api/v1/question-generation/jobs",
+                        "GET /api/v1/question-generation/jobs", "GET /api/v1/question-generation/jobs/{publicId}",
+                        "PATCH /api/v1/question-generation/jobs/{publicId}/status",
+                        "GET /api/v1/question-generation/jobs/{publicId}/live",
+                        "GET /api/v1/question-generation/task-types", "GET /api/v1/question-generation/quota");
+        assertThat(endpoints).filteredOn(endpoint -> String.valueOf(endpoint.get("path"))
+                        .startsWith("/api/v1/question-generation"))
+                .allSatisfy(endpoint -> assertThat(endpoint.get("authorization"))
+                        .isEqualTo("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')"));
+        assertThat(endpoints).filteredOn(endpoint -> "/api/v1/scoring-rubrics/simulations".equals(endpoint.get("path")))
+                .singleElement().satisfies(endpoint -> {
+                    assertThat(endpoint.get("method")).isEqualTo("POST");
+                    assertThat(endpoint.get("authorization"))
+                            .isEqualTo("hasAnyRole('PLATFORM_ADMIN','ACADEMIC_MANAGER','ACADEMIC_STAFF','PLATFORM_AUTHOR')");
+                });
+        // Score explanation (rubric transparency phase 6): Host and Examiner only, never a vendor role.
+        assertThat(endpoints).filteredOn(endpoint -> "/api/v1/reports/attempts/{attemptPublicId}/score-explanation"
+                        .equals(endpoint.get("path")))
+                .singleElement().satisfies(endpoint -> {
+                    assertThat(endpoint.get("method")).isEqualTo("GET");
+                    assertThat(endpoint.get("authorization")).isEqualTo("hasAnyRole('HOST_ADMIN','EXAMINER')");
+                });
 
         String out = System.getProperty(OUTPUT_PROPERTY);
         if (out != null && !out.isBlank()) {

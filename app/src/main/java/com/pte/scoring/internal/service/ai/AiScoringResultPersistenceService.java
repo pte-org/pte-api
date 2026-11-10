@@ -1,6 +1,7 @@
 package com.pte.scoring.internal.service.ai;
 
 import com.pte.scoring.internal.service.grading.SessionGradingGateway;
+import com.pte.scoring.CriteriaScores;
 import com.pte.scoring.ScoringProgressChangedEvent;
 import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.AiFailureReason;
@@ -14,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Clock;
-import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -54,15 +54,15 @@ public class AiScoringResultPersistenceService {
     @Transactional
     public boolean persistAiScore(UUID answerPublicId, UUID attemptPublicId, UUID tenantId, UUID sessionPublicId,
             long dispatchToken, AiScoreResult result) {
-        // Sorted so the stored JSON is stable whatever map the adapter returned.
-        String criteriaScoresJson = result.subScores() == null
-                ? null : jsonMapper.writeValueAsString(new TreeMap<>(result.subScores()));
+        // A rubric result is stored with its scale and version; any other keeps the legacy flat 0-100 map.
+        String criteriaScoresJson = CriteriaScores.ofResult(result.rubricVersionPublicId(), result.subScores())
+                .toJson(jsonMapper);
         return applyIfAwaiting(answerPublicId, attemptPublicId, tenantId, sessionPublicId, dispatchToken,
                 answer -> {
                     answer.markAiScored(result.rawScore(), result.providerCategory(), result.provider(),
                             result.model(), result.providerVersion(), clock.instant());
                     answer.recordDetail(criteriaScoresJson, result.feedback(), result.transcript(),
-                            result.detailJson(), result.fallback());
+                            result.detailJson(), result.fallback(), result.rubricVersionPublicId());
                 });
     }
 

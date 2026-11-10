@@ -86,9 +86,9 @@ class ArchiveLifecyclePostgresIntegrationTest {
     }
     private Question draft() {
         return tx(() -> {
-            Question question = new Question(); question.setTitle("Lifecycle draft"); question.setPromptText("Read this fixture.");
+            Question question = new Question(); question.setPromptText("Read this fixture.");
             question.setPteTaskType(PteTaskType.READ_ALOUD); question.setTaskTypeKey("READ_ALOUD");
-            question.setTaskTypeSection("SPEAKING"); question.setVisibility(Visibility.SHARED);
+            question.setTaskTypeSection("SPEAKING");
             question.setEverPublished(false); question.setRevisionGroupPublicId(UUID.randomUUID());
             return questions.saveAndFlush(question);
         });
@@ -243,7 +243,7 @@ class ArchiveLifecyclePostgresIntegrationTest {
             var item = new com.pte.assessment.domain.ExamVersionItem();
             item.setSourceQuestionPublicId(question.getPublicId()); item.setPteTaskType(PteTaskType.READ_ALOUD);
             item.setTaskTypeKey("READ_ALOUD"); item.setSection(PteSection.SPEAKING); item.setOrderIndex(1);
-            item.setTitle(question.getTitle()); item.setPromptText(question.getPromptText()); item.setOptionsJson("[]");
+            item.setTitle("Lifecycle draft"); item.setPromptText(question.getPromptText()); item.setOptionsJson("[]");
             frozen.addItem(item); return snapshots.saveAndFlush(frozen);
         });
         ItembankService itembank = com.pte.itembank.ItembankFixtures.itembankService(questions, mock(QuestionValidationHelper.class), new ItembankAccessPolicy());

@@ -7,10 +7,13 @@ import com.pte.itembank.domain.enums.QuestionStatus;
 public final class QuestionLifecyclePolicy {
     private QuestionLifecyclePolicy() { }
 
+    /**
+     * A draft that was never published can go, including a revision of a published question: the
+     * published source and the exam snapshots made from it are untouched by the removal.
+     */
     public static boolean canDeleteDraft(Question question) {
         return !question.isDeleted() && question.getStatus() == QuestionStatus.DRAFT
-                && Boolean.FALSE.equals(question.getEverPublished())
-                && question.getSupersedesPublicId() == null && question.getRevisionNumber() == 1;
+                && Boolean.FALSE.equals(question.getEverPublished());
     }
 
     public static boolean canArchive(Question question) {

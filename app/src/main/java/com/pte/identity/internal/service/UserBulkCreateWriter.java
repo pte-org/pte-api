@@ -21,8 +21,8 @@ import java.util.UUID;
  * from {@link UserService} would not let Spring's proxy honor that boundary. Isolates a rare
  * concurrent-duplicate race to just this row instead of the whole batch.
  *
- * <p>A row with an e-mail that already belongs to an account does not create a second account: the existing
- * account gains a STUDENT membership in the organization and keeps its own credentials.
+ * <p>Every row becomes a new Student account with a generated username: Student accounts are never shared between
+ * organizations, even when the e-mail is the same.
  */
 @Service
 public class UserBulkCreateWriter {
@@ -42,31 +42,10 @@ public class UserBulkCreateWriter {
                        String phone, LocalDate dateOfBirth) {
     }
 
-    /** {@code generatedPassword} is null when the row joined an account that already existed. */
     public record Result(User user, String generatedPassword) {
     }
 
-    /** Empty result means the row lost a concurrent race on a unique key or is already a member. */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public Optional<Result> createOne(Row row, UUID tenantId) {
-        Optional<User> existing = userRepository.findByUsernameAndDeletedFalse(row.email());
-        if (existing.isPresent()) {
-            return joinExisting(existing.get(), tenantId);
-        }
-        if (userRepository.existsByEmailIgnoreCaseAndDeletedFalse(row.email())) {
-            return Optional.empty();
-        }
-        User user = newStudent(row.email(), row, false);
-        return persist(user, tenantId);
-    }
-
-    /** Creates an import-only student with a generated username and first-login password change flag. */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public Optional<Result> createGeneratedStudent(String username, UUID tenantId) {
-        return createGeneratedStudent(username, new Row(null, null, null, null, null, null), tenantId);
-    }
-
-    /** Creates an import-only student while preserving any optional roster profile fields. */
+    /** Empty result means the generated username lost a concurrent race on its unique key. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<Result> createGeneratedStudent(String username, Row row, UUID tenantId) {
         return persist(newStudent(username, row, true), tenantId);
@@ -83,18 +62,6 @@ public class UserBulkCreateWriter {
         user.setDateOfBirth(row.dateOfBirth());
         user.setMustChangePassword(mustChangePassword);
         return user;
-    }
-
-    private Optional<Result> joinExisting(User existing, UUID tenantId) {
-        if (existing.hasPlatformRole() || memberRepository.findByUser_IdAndOrganizationIdAndDeletedFalse(existing.getId(), tenantId).isPresent()) {
-            return Optional.empty();
-        }
-        try {
-            addStudentMember(existing, tenantId);
-        } catch (DataIntegrityViolationException ex) {
-            return Optional.empty();
-        }
-        return Optional.of(new Result(existing, null));
     }
 
     private Optional<Result> persist(User user, UUID tenantId) {

@@ -136,8 +136,9 @@ public class PlatformUserService {
 
     @Transactional(readOnly = true)
     public List<UserDirectoryEntryResponse> listDirectory(CurrentUser caller) {
-        if (caller == null || !caller.isPlatformUser()
-                || (!caller.hasRole("PLATFORM_ADMIN") && !caller.hasRole("PLATFORM_MANAGER"))) {
+        if (caller == null || !caller.isPlatformUser() || !(caller.hasRole("PLATFORM_ADMIN")
+                || caller.hasRole("PLATFORM_MANAGER") || caller.hasRole("ACADEMIC_MANAGER")
+                || caller.hasRole("ACADEMIC_STAFF"))) {
             throw new AccessDeniedException(SharedConstants.ACCESS_DENIED);
         }
         return userRepository.findPlatformDirectory(provisioningHelper.platformRoleValues()).stream()

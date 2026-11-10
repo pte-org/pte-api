@@ -93,6 +93,27 @@ class ExaminerWorkspaceReadRepositoryTest {
     }
 
     @Test
+    void queueDateRangeFiltersAssignmentTimeInclusivelyAtTheDateEnd() {
+        UUID tenantId = UUID.randomUUID();
+        UUID examinerId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        Instant start = Instant.parse("2026-10-10T00:00:00Z");
+        UUID included = assign(tenantId, sessionId, examinerId, start.plusSeconds(60));
+        UUID includedAtEnd = assign(tenantId, sessionId, examinerId, start.plusSeconds(86_399));
+        assign(tenantId, sessionId, examinerId, start.minusSeconds(60));
+        assign(tenantId, sessionId, examinerId, start.plusSeconds(86_460));
+        entityManager.flush();
+
+        Page<ExaminerQueueItemResponse> result = readRepository.findQueue(
+                tenantId, examinerId, sessionId, "ALL", null, "ASSIGNED_ASC",
+                start, start.plusSeconds(86_400), PageRequest.of(0, 20));
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getContent()).extracting(ExaminerQueueItemResponse::attemptPublicId)
+                .containsExactly(included, includedAtEnd);
+    }
+
+    @Test
     void testGetReportsWhenEmptyReturnsZeroSummaryAndEmptyLists() {
         UUID tenantId = UUID.randomUUID();
         UUID examinerId = UUID.randomUUID();

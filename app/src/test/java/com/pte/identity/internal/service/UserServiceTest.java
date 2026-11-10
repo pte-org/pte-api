@@ -1,5 +1,15 @@
 package com.pte.identity.internal.service;
 
+import static org.mockito.Mockito.times;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.assertj.core.api.Assertions.tuple;
+import java.time.ZoneOffset;
+import java.time.Instant;
+import java.time.Clock;
+import org.mockito.ArgumentCaptor;
+import org.assertj.core.api.InstanceOfAssertFactories;
+import com.pte.identity.internal.exception.RosterValidationException;
+import com.pte.identity.internal.dto.response.RosterRowError;
 import com.pte.identity.UserCredentialsEmailRequestedEvent;
 import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
@@ -14,13 +24,12 @@ import com.pte.identity.internal.dto.request.auth.ResetPasswordRequest;
 import com.pte.identity.internal.dto.response.BulkCreateUsersResponse;
 import com.pte.identity.internal.dto.response.GeneratedCredentialsResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
-import com.pte.identity.internal.exception.DuplicateEmailInBatchException;
 import com.pte.identity.internal.exception.EmailAlreadyUsedException;
 import com.pte.identity.internal.exception.ForbiddenPasswordResetException;
-import com.pte.identity.internal.exception.StudentCredentialEmailNotAllowedException;
 import com.pte.identity.internal.exception.UserNotFoundException;
 import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
+import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
@@ -85,6 +94,9 @@ class UserServiceTest {
     @Mock
     private RefreshTokenService refreshTokenService;
 
+    @Mock
+    private StartedAttemptLookup startedAttemptLookup;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private UserService userService;
 
@@ -92,7 +104,8 @@ class UserServiceTest {
     void setUp() {
         userService = new UserService(userRepository, memberRepository, memberDirectory, passwordEncoder,
                 provisioningHelper, bulkCreateWriter, tenancyService, eventPublisher, auditLogService,
-                refreshTokenService);
+                refreshTokenService, startedAttemptLookup,
+                Clock.fixed(Instant.parse("2026-11-09T03:00:00Z"), ZoneOffset.UTC));
     }
 
     private User account(Long id, UUID publicId, String oldPassword) {
@@ -250,9 +263,11 @@ class UserServiceTest {
                 List.of("STUDENT"), null,
                 "SC-001", "12A1", "0900000000", LocalDate.of(2008, 5, 1));
 
-        when(userRepository.findByUsername(request.email())).thenReturn(Optional.empty());
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
         when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.STUDENT));
+        when(memberRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
+                .thenReturn(List.of());
+        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> {
             User user = invocation.getArgument(0);
             user.setId(1L);
@@ -320,21 +335,20 @@ class UserServiceTest {
     }
 
     private BulkCreateUserRow row(String email) {
-        return new BulkCreateUserRow(email, "Student " + email, "SC-" + email, "12A1", "0900000000",
-                LocalDate.of(2008, 1, 1));
+        return new BulkCreateUserRow(email, "Student " + email, null, null, null, null);
     }
 
-    private UserBulkCreateWriter.Result writerResult(String email, UUID publicId, String password) {
+    private UserBulkCreateWriter.Result writerResult(String email, String username, String password) {
         User user = new User();
-        user.setPublicId(publicId);
-        user.setUsername(email);
+        user.setPublicId(UUID.randomUUID());
+        user.setUsername(username);
         user.setEmail(email);
         user.setFullName("Student " + email);
         return new UserBulkCreateWriter.Result(user, password);
     }
 
     @Test
-    void createBulk_createsAllRowsWhenNoneConflict() {
+    void createBulk_givesEveryRowAGeneratedUsername_evenWhenItHasAnEmail() {
         UUID tenantId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
         BulkCreateUserRow rowA = row("a@tenant.example");
@@ -344,43 +358,65 @@ class UserServiceTest {
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
         when(memberRepository.findActiveByOrganizationAndEmails(tenantId, List.of(rowA.email(), rowB.email())))
                 .thenReturn(List.of());
-        when(bulkCreateWriter.createOne(any(), eq(tenantId)))
-                .thenReturn(Optional.of(writerResult(rowA.email(), UUID.randomUUID(), "Abcd-2345")))
-                .thenReturn(Optional.of(writerResult(rowB.email(), UUID.randomUUID(), "Efgh-6789")));
+        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
+        when(bulkCreateWriter.createGeneratedStudent(anyString(), any(UserBulkCreateWriter.Row.class), eq(tenantId)))
+                .thenReturn(Optional.of(writerResult(rowA.email(), "school.abcd2345", "Abcd-2345")))
+                .thenReturn(Optional.of(writerResult(rowB.email(), "school.efgh6789", "Efgh-6789")));
 
         BulkCreateUsersResponse response = userService.createBulk(request, caller);
 
-        assertThat(response.created()).hasSize(2);
+        assertThat(response.created()).extracting(BulkCreateUsersResponse.CreatedUser::username)
+                .containsExactly("school.abcd2345", "school.efgh6789");
         assertThat(response.skipped()).isEmpty();
-        assertThat(response.created().get(0).generatedPassword()).matches("^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$");
+        ArgumentCaptor<String> usernames = ArgumentCaptor.forClass(String.class);
+        verify(bulkCreateWriter, times(2)).createGeneratedStudent(usernames.capture(), any(), eq(tenantId));
+        assertThat(usernames.getAllValues()).allMatch(username -> username.startsWith("school."));
         verify(tenancyService).assertCanAddStudents(tenantId, 2L);
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
-    void createBulk_allowsStudentRowWithoutEmailOrFullName_andReturnsGeneratedUsername() {
-        UUID tenantId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
-        BulkCreateUserRow row = new BulkCreateUserRow(null, null, null, null, null, null);
-        BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(row), null);
-        UUID publicId = UUID.randomUUID();
-        User createdUser = new User();
-        createdUser.setPublicId(publicId);
-        createdUser.setUsername("school.abcd2345");
+    void createBulk_rowWithoutEmailOrFullName_rejectsWholeRosterWithEveryRowError() {
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("HOST_ADMIN"));
+        BulkCreateUserRow valid = row("ok@tenant.example");
+        BulkCreateUserRow blank = new BulkCreateUserRow(null, " ", null, null, null, null);
+        BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(valid, blank), null);
+        when(provisioningHelper.resolveTargetTenant(any(), any())).thenReturn(UUID.randomUUID());
 
-        when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
-        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
-        when(bulkCreateWriter.createGeneratedStudent(anyString(), any(UserBulkCreateWriter.Row.class), eq(tenantId)))
-                .thenReturn(Optional.of(new UserBulkCreateWriter.Result(createdUser, "Abcd-2345")));
+        assertThatThrownBy(() -> userService.createBulk(request, caller))
+                .isInstanceOfSatisfying(RosterValidationException.class, ex -> assertThat(ex.getData())
+                        .asInstanceOf(InstanceOfAssertFactories.list(RosterRowError.class))
+                        .containsExactly(
+                                new RosterRowError(1, IdentityConstants.ROSTER_FIELD_EMAIL,
+                                        IdentityConstants.ROSTER_EMAIL_REQUIRED),
+                                new RosterRowError(1, IdentityConstants.ROSTER_FIELD_FULL_NAME,
+                                        IdentityConstants.ROSTER_FULL_NAME_REQUIRED)));
 
-        BulkCreateUsersResponse response = userService.createBulk(request, caller);
+        verify(bulkCreateWriter, never()).createGeneratedStudent(anyString(), any(), any());
+        verify(tenancyService, never()).assertCanAddStudents(any(), anyLong());
+    }
 
-        assertThat(response.created()).hasSize(1);
-        assertThat(response.created().get(0).username()).isEqualTo("school.abcd2345");
-        assertThat(response.created().get(0).email()).isNull();
-        assertThat(response.created().get(0).fullName()).isNull();
-        assertThat(response.skipped()).isEmpty();
-        verify(bulkCreateWriter, never()).createOne(any(), any());
-        verify(tenancyService).assertCanAddStudents(tenantId, 1L);
+    @Test
+    void createBulk_formatRules_reportInvalidEmailPhoneDateLengthAndDuplicate() {
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("HOST_ADMIN"));
+        BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(
+                new BulkCreateUserRow("not-an-email", "A", null, null, "12ab", null),
+                new BulkCreateUserRow("dup@tenant.example", "B", "x".repeat(51), null, "+84 901-234-567",
+                        LocalDate.of(2008, 1, 15)),
+                new BulkCreateUserRow("DUP@tenant.example", "C", null, null, null, LocalDate.of(2026, 11, 9))),
+                null);
+        when(provisioningHelper.resolveTargetTenant(any(), any())).thenReturn(UUID.randomUUID());
+
+        assertThatThrownBy(() -> userService.createBulk(request, caller))
+                .isInstanceOfSatisfying(RosterValidationException.class, ex -> assertThat(ex.getData())
+                        .asInstanceOf(InstanceOfAssertFactories.list(RosterRowError.class))
+                        .extracting(RosterRowError::rowIndex, RosterRowError::code)
+                        .containsExactly(
+                                tuple(0, IdentityConstants.ROSTER_EMAIL_INVALID),
+                                tuple(0, IdentityConstants.ROSTER_PHONE_INVALID),
+                                tuple(1, IdentityConstants.ROSTER_STUDENT_CODE_TOO_LONG),
+                                tuple(2, IdentityConstants.DUPLICATE_EMAIL_IN_BATCH),
+                                tuple(2, IdentityConstants.ROSTER_DATE_OF_BIRTH_INVALID)));
     }
 
     @Test
@@ -397,8 +433,9 @@ class UserServiceTest {
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
         when(memberRepository.findActiveByOrganizationAndEmails(tenantId, List.of(existing.email(), fresh.email())))
                 .thenReturn(List.of(memberOf(existingUser, tenantId, Role.STUDENT)));
-        when(bulkCreateWriter.createOne(any(), eq(tenantId)))
-                .thenReturn(Optional.of(writerResult(fresh.email(), UUID.randomUUID(), "Ijkl-2345")));
+        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
+        when(bulkCreateWriter.createGeneratedStudent(anyString(), any(UserBulkCreateWriter.Row.class), eq(tenantId)))
+                .thenReturn(Optional.of(writerResult(fresh.email(), "school.ijkl2345", "Ijkl-2345")));
 
         BulkCreateUsersResponse response = userService.createBulk(request, caller);
 
@@ -406,27 +443,12 @@ class UserServiceTest {
         assertThat(response.created().get(0).email()).isEqualTo(fresh.email());
         assertThat(response.skipped()).hasSize(1);
         assertThat(response.skipped().get(0).rowIndex()).isEqualTo(0);
-        assertThat(response.skipped().get(0).email()).isEqualTo(existing.email());
+        assertThat(response.skipped().get(0).reason()).isEqualTo(IdentityConstants.EMAIL_ALREADY_USED);
         verify(tenancyService).assertCanAddStudents(tenantId, 1L);
     }
 
     @Test
-    void createBulk_duplicateEmailWithinBatch_rejectsWholeBatch_noWrites() {
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("HOST_ADMIN"));
-        BulkCreateUserRow rowA = row("dup@tenant.example");
-        BulkCreateUserRow rowB = row("dup@tenant.example");
-        BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(rowA, rowB), null);
-
-        when(provisioningHelper.resolveTargetTenant(any(), any())).thenReturn(UUID.randomUUID());
-
-        assertThatThrownBy(() -> userService.createBulk(request, caller))
-                .isInstanceOf(DuplicateEmailInBatchException.class);
-
-        verify(bulkCreateWriter, never()).createOne(any(), any());
-    }
-
-    @Test
-    void createBulk_writerLosesConcurrentRace_skipsThatRowOnly_stillCreatesOthers() {
+    void createBulk_writerLosesConcurrentRaceEveryRetry_skipsThatRowOnly_stillCreatesOthers() {
         UUID tenantId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
         BulkCreateUserRow raced = row("raced@tenant.example");
@@ -436,17 +458,72 @@ class UserServiceTest {
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
         when(memberRepository.findActiveByOrganizationAndEmails(tenantId, List.of(raced.email(), fine.email())))
                 .thenReturn(List.of());
-        when(bulkCreateWriter.createOne(any(), eq(tenantId)))
-                .thenReturn(Optional.empty())
-                .thenReturn(Optional.of(writerResult(fine.email(), UUID.randomUUID(), "Mnop-2345")));
+        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
+        when(bulkCreateWriter.createGeneratedStudent(anyString(), any(UserBulkCreateWriter.Row.class), eq(tenantId)))
+                .thenReturn(Optional.empty(), Optional.empty(), Optional.empty())
+                .thenReturn(Optional.of(writerResult(fine.email(), "school.mnop2345", "Mnop-2345")));
 
         BulkCreateUsersResponse response = userService.createBulk(request, caller);
 
         assertThat(response.created()).hasSize(1);
         assertThat(response.created().get(0).email()).isEqualTo(fine.email());
-        assertThat(response.skipped()).hasSize(1);
-        assertThat(response.skipped().get(0).email()).isEqualTo(raced.email());
+        assertThat(response.skipped()).singleElement()
+                .satisfies(error -> {
+                    assertThat(error.email()).isEqualTo(raced.email());
+                    assertThat(error.reason()).isEqualTo(IdentityConstants.ROSTER_IMPORT_FAILED);
+                });
         verify(tenancyService).assertCanAddStudents(tenantId, 2L);
+    }
+
+    @Test
+    void createBulk_withSendCredentialsEmail_publishesOneEventPerCreatedStudent() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        BulkCreateUserRow rowA = row("a@tenant.example");
+        BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(rowA), null, true);
+
+        when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
+        when(memberRepository.findActiveByOrganizationAndEmails(tenantId, List.of(rowA.email())))
+                .thenReturn(List.of());
+        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
+        when(bulkCreateWriter.createGeneratedStudent(anyString(), any(UserBulkCreateWriter.Row.class), eq(tenantId)))
+                .thenReturn(Optional.of(writerResult(rowA.email(), "school.abcd2345", "Abcd-2345")));
+
+        userService.createBulk(request, caller);
+
+        ArgumentCaptor<UserCredentialsEmailRequestedEvent> event =
+                ArgumentCaptor.forClass(UserCredentialsEmailRequestedEvent.class);
+        verify(eventPublisher).publishEvent(event.capture());
+        assertThat(event.getValue().username()).isEqualTo("school.abcd2345");
+        assertThat(event.getValue().email()).isEqualTo(rowA.email());
+        assertThat(event.getValue().temporaryPassword()).isEqualTo("Abcd-2345");
+        assertThat(event.getValue().tenantId()).isEqualTo(tenantId);
+    }
+
+    @Test
+    void create_student_getsGeneratedUsername_andEmailOnlyHasToBeUniqueInTheOrganization() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        CreateUserRequest request = new CreateUserRequest(
+                "student@tenant.example", "Student One", "Password123",
+                List.of("STUDENT"), null, null, null, null, null);
+
+        when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
+        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.STUDENT));
+        when(memberRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
+                .thenReturn(List.of());
+        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(memberRepository.saveAndFlush(any(OrganizationMember.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        userService.create(request, caller);
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getUsername()).startsWith("school.");
+        assertThat(saved.getValue().getEmail()).isEqualTo(request.email());
+        verify(userRepository, never()).existsByEmailIgnoreCaseAndDeletedFalse(anyString());
     }
 
     @Test
@@ -457,9 +534,10 @@ class UserServiceTest {
                 "student@tenant.example", "Student One", "Password123",
                 List.of("STUDENT"), null, null, null, null, null);
 
-        when(userRepository.findByUsername(request.email())).thenReturn(Optional.empty());
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
         when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.STUDENT));
+        when(memberRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
+                .thenReturn(List.of());
         doThrow(new StudentLimitExceededException(100L, 100L, 1L))
                 .when(tenancyService).assertCanAddStudents(tenantId, 1L);
 
@@ -549,29 +627,6 @@ class UserServiceTest {
 
         assertThatThrownBy(() -> userService.sendGeneratedCredentials(userPublicId, caller))
                 .isInstanceOf(com.pte.identity.internal.exception.UserEmailRequiredException.class);
-
-        assertThat(user.getCredentialHash()).isEqualTo(hashBefore);
-        verify(userRepository, never()).save(any());
-        verify(eventPublisher, never()).publishEvent(any());
-    }
-
-    @Test
-    void sendGeneratedCredentials_student_isRejectedBeforeHashChange() {
-        UUID userPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-        User user = account(1L, userPublicId, "OldPassword123");
-        String hashBefore = user.getCredentialHash();
-        user.setUsername("tenant.student");
-        user.setEmail("student@tenant.example");
-        OrganizationMember student = memberOf(user, tenantId, Role.STUDENT);
-        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(student);
-
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
-        when(provisioningHelper.canManageTarget(caller, student.getRoles())).thenReturn(true);
-        when(memberDirectory.isExclusivelyOwned(student)).thenReturn(true);
-
-        assertThatThrownBy(() -> userService.sendGeneratedCredentials(userPublicId, caller))
-                .isInstanceOf(StudentCredentialEmailNotAllowedException.class);
 
         assertThat(user.getCredentialHash()).isEqualTo(hashBefore);
         verify(userRepository, never()).save(any());
@@ -713,17 +768,17 @@ class UserServiceTest {
     }
 
     @Test
-    void create_emailOfPlatformAccount_isRejectedAndNeverJoinsTheOrganization() {
+    void create_staffEmailOfPlatformAccount_isRejectedAndNeverJoinsTheOrganization() {
         UUID tenantId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
         CreateUserRequest request = new CreateUserRequest(
                 "admin@test.local", "Admin", "Password123",
-                List.of("STUDENT"), null, null, null, null, null);
+                List.of("PROCTOR"), null, null, null, null, null);
         User platformAdmin = account(7L, UUID.randomUUID(), "KeepThisPassword1");
         platformAdmin.setRoles(Set.of(Role.PLATFORM_ADMIN));
         when(userRepository.findByUsername(request.email())).thenReturn(Optional.of(platformAdmin));
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
-        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.STUDENT));
+        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.PROCTOR));
 
         assertThatThrownBy(() -> userService.create(request, caller)).isInstanceOf(EmailAlreadyUsedException.class);
 
@@ -731,16 +786,16 @@ class UserServiceTest {
     }
 
     @Test
-    void create_emailHeldByAnotherAccountUnderADifferentUsername_isRejected() {
+    void create_staffEmailHeldByAnotherAccount_isRejected() {
         UUID tenantId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
         CreateUserRequest request = new CreateUserRequest(
                 "taken@tenant.example", "Student", "Password123",
-                List.of("STUDENT"), null, null, null, null, null);
+                List.of("PROCTOR"), null, null, null, null, null);
         when(userRepository.findByUsername(request.email())).thenReturn(Optional.empty());
         when(userRepository.existsByEmailIgnoreCaseAndDeletedFalse(request.email())).thenReturn(true);
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
-        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.STUDENT));
+        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.PROCTOR));
 
         assertThatThrownBy(() -> userService.create(request, caller)).isInstanceOf(EmailAlreadyUsedException.class);
 

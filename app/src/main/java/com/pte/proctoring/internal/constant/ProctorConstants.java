@@ -3,13 +3,8 @@ package com.pte.proctoring.internal.constant;
 /** Centralized codes/labels for proctoring. */
 public final class ProctorConstants {
 
-    public static final String PROCTOR_ROLE_REQUIRED = "PROCTOR_ROLE_REQUIRED";
-    public static final String ATTEMPT_REFERENCE_REQUIRED = "Attempt reference is required";
-    public static final String VIOLATION_TYPE_REQUIRED = "Violation type is required";
     public static final String COMMAND_TYPE_REQUIRED = "Command type is required";
     public static final String TARGET_ATTEMPT_INVALID = "TARGET_ATTEMPT_INVALID";
-    public static final String STOMP_AUTH_HEADER_MISSING = "Missing or malformed Authorization header on STOMP CONNECT";
-    public static final String STOMP_JWT_INVALID = "Invalid JWT on STOMP CONNECT";
     public static final int SECURITY_AUDIT_DEFAULT_LIMIT = 50;
     public static final int SECURITY_AUDIT_MAX_LIMIT = 100;
     public static final String SECURITY_AUDIT_LIMIT_INVALID = "SECURITY_AUDIT_LIMIT_INVALID";
@@ -19,9 +14,8 @@ public final class ProctorConstants {
     public static final String SECURITY_AUDIT_CURSOR_INVALID_MESSAGE =
             "Security audit cursor is invalid or expired.";
 
-    public static final String WATCH_STATUS_ACTIVE = "ACTIVE";
-    public static final String PROCTOR_ROLE = "PROCTOR";
-    public static final String PROCTOR_FLAG_SEVERITY = "WARNING";
+    public static final String ATTEMPT_ACTION_APPLIED = "APPLIED";
+    public static final String ATTEMPT_ACTION_NO_OP = "NO_OP";
 
     public static final String SECURITY_AUDIT_DISABLED = "SECURITY_AUDIT_DISABLED";
     public static final String SECURITY_AUDIT_POLICY_UNRESOLVED = "SECURITY_AUDIT_POLICY_UNRESOLVED";
@@ -42,12 +36,6 @@ public final class ProctorConstants {
     public static final String LOCKDOWN_MODE_STANDARD = "STANDARD";
     public static final String LOCKDOWN_MODE_STRICT = "STRICT";
     public static final String LOCKDOWN_MODE_NONE = "NONE";
-    public static final String SESSION_ACCESS_DENIED = "Session access denied";
-    public static final String STUDENT_NOT_ENROLLED_DENIED = "Student is not enrolled in this session";
-    public static final String DEFAULT_STUDENT_NAME = "Thí sinh";
-
-    // STOMP
-    public static final String TOPIC_PREFIX = "/topic/proctor-sessions/";
 
     private ProctorConstants() {
     }

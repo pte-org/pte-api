@@ -22,10 +22,26 @@ public interface ExamDefinitionRepository extends JpaRepository<ExamDefinition, 
     @Query("SELECT DISTINCT t FROM ExamDefinition t WHERE t.publicId IN :publicIds")
     List<ExamDefinition> findAllWithItemsByPublicIds(@Param("publicIds") List<UUID> publicIds);
 
+    /** The platform default template in {@code status}; host templates are never returned. */
     @EntityGraph(attributePaths = "items")
-    Optional<ExamDefinition> findWithItemsByStatus(ExamDefinitionStatus status);
+    Optional<ExamDefinition> findWithItemsByStatusAndTenantIdIsNull(ExamDefinitionStatus status);
 
-    List<ExamDefinition> findAllByOrderByCodeAscVersionDesc();
+    @EntityGraph(attributePaths = "items")
+    Optional<ExamDefinition> findWithItemsByPublicIdAndTenantIdIsNull(UUID publicId);
+
+    @EntityGraph(attributePaths = "items")
+    Optional<ExamDefinition> findWithItemsByPublicIdAndTenantId(UUID publicId, UUID tenantId);
+
+    /** Platform default templates only (admin console). */
+    List<ExamDefinition> findAllByTenantIdIsNullOrderByCodeAscVersionDesc();
+
+    @EntityGraph(attributePaths = "items")
+    List<ExamDefinition> findAllByTenantIdOrderByCodeAscVersionDesc(UUID tenantId);
+
+    /** ACTIVE versions of one host template family; activating a newer version retires them. */
+    @EntityGraph(attributePaths = "items")
+    List<ExamDefinition> findAllWithItemsByTenantIdAndCodeAndStatus(UUID tenantId, String code,
+            ExamDefinitionStatus status);
 
     /** Next version for {@code code} = max existing version + 1 (no rows yet -> version 1). */
     @Query("SELECT COALESCE(MAX(t.version), 0) FROM ExamDefinition t WHERE t.code = :code")

@@ -316,7 +316,7 @@ class CloudinaryMediaServiceTest {
     }
 
     private CloudinaryMediaService service() {
-        return new CloudinaryMediaService(repository, "test-cloud", "test-key", "test-secret", "pte/authoring", "pte/submissions", practiceMediaBindingService, null, com.pte.TestClocks.fixed());
+        return new CloudinaryMediaService(repository, "test-cloud", "test-key", "test-secret", "pte/authoring", "pte/submissions", practiceMediaBindingService, null, com.pte.TestClocks.fixed(), org.springframework.web.client.RestClient.builder());
     }
 
     private Map<String, String> query(String rawQuery) {

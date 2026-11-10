@@ -2,6 +2,7 @@ package com.pte.itembank.dto.response;
 
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public record QuestionTypeResponse(
@@ -30,7 +31,27 @@ public record QuestionTypeResponse(
         TaskTypeEditabilityResponse editability,
         String lifecycleStatus,
         boolean requiresReferenceAnswer,
-        String instruction) {
+        String instruction,
+        /** When the task type last changed; tracking screens show how long it has been in its stage. */
+        Instant updatedAt) {
+
+    /** Shape of a response that does not say when the task type last changed. */
+    public QuestionTypeResponse(UUID publicId, String code, String displayName, String shortName,
+            String section, boolean scored, boolean active, int displayOrder,
+            boolean requiresAudioPrompt, boolean requiresImagePrompt, boolean requiresPromptText,
+            boolean requiresOptions, boolean requiresCorrectAnswer, boolean requiresWordCount,
+            boolean requiresSingleCorrectOption, boolean usesOptionOrderAsCorrectPosition,
+            TaskRuntimeProfileDescriptor runtime, String taskTypeCode, String taskTypeKey,
+            String screenKey, Integer contractVersion, TaskTypeReadinessResponse readiness,
+            TaskTypeEditabilityResponse editability, String lifecycleStatus,
+            boolean requiresReferenceAnswer, String instruction) {
+        this(publicId, code, displayName, shortName, section, scored, active, displayOrder,
+                requiresAudioPrompt, requiresImagePrompt, requiresPromptText, requiresOptions,
+                requiresCorrectAnswer, requiresWordCount, requiresSingleCorrectOption,
+                usesOptionOrderAsCorrectPosition, runtime, taskTypeCode, taskTypeKey, screenKey,
+                contractVersion, readiness, editability, lifecycleStatus, requiresReferenceAnswer,
+                instruction, null);
+    }
 
     /** Compatibility constructor for callers compiled against the old DTO shape. */
     public QuestionTypeResponse(UUID publicId, String code, String displayName, String shortName,

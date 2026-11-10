@@ -110,6 +110,12 @@ public class ExaminerWorkspaceReadRepository {
 
     public Page<ExaminerQueueItemResponse> findQueue(
             UUID tenantId, UUID examinerPublicId, UUID sessionPublicId, String status, String search, String sort, Pageable pageable) {
+        return findQueue(tenantId, examinerPublicId, sessionPublicId, status, search, sort, null, null, pageable);
+    }
+
+    public Page<ExaminerQueueItemResponse> findQueue(
+            UUID tenantId, UUID examinerPublicId, UUID sessionPublicId, String status, String search, String sort,
+            Instant fromDate, Instant toDate, Pageable pageable) {
         StringBuilder whereClause = new StringBuilder(" WHERE 1=1");
         if (sessionPublicId != null) {
             whereClause.append(" AND session_public_id = :sessionPublicId");
@@ -119,6 +125,12 @@ public class ExaminerWorkspaceReadRepository {
         }
         if (search != null && !search.isBlank()) {
             whereClause.append(" AND (CAST(attempt_public_id AS text) ILIKE :searchPattern OR CAST(session_public_id AS text) ILIKE :searchPattern)");
+        }
+        if (fromDate != null) {
+            whereClause.append(" AND assigned_at >= :fromDate");
+        }
+        if (toDate != null) {
+            whereClause.append(" AND assigned_at < :toDate");
         }
 
         String orderClause = " ORDER BY assigned_at DESC, assignment_id DESC";
@@ -168,6 +180,14 @@ public class ExaminerWorkspaceReadRepository {
             String pattern = "%" + search.trim() + "%";
             selectQuery.setParameter("searchPattern", pattern);
             countQuery.setParameter("searchPattern", pattern);
+        }
+        if (fromDate != null) {
+            selectQuery.setParameter("fromDate", fromDate);
+            countQuery.setParameter("fromDate", fromDate);
+        }
+        if (toDate != null) {
+            selectQuery.setParameter("toDate", toDate);
+            countQuery.setParameter("toDate", toDate);
         }
 
         @SuppressWarnings("unchecked")

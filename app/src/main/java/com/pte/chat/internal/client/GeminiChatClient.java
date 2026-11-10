@@ -36,7 +36,7 @@ import java.util.concurrent.TimeoutException;
  * production) and the response's {@code usageMetadata.thoughtsTokenCount}. A {@code generateContent} answer without a
  * {@code finishReason} is rejected: only STOP is a normal end.
  */
-public class GeminiChatClient {
+public class GeminiChatClient implements ChatAiClient {
 
     private static final Set<String> BLOCKED_FINISH_REASONS =
             Set.of("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION");

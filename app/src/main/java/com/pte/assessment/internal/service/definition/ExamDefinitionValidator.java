@@ -136,6 +136,36 @@ class ExamDefinitionValidator {
         }
     }
 
+    /** A platform default template must hold every active catalog task type; host templates are exempt. */
+    void validateIncludesWholeCatalog(ExamDefinition template) {
+        if (questionTypeService == null || template.isHostOwned()) {
+            return;
+        }
+        Set<String> present = taskTypeKeys(template);
+        List<String> missing = questionTypeService.listActiveTaskTypeKeys().stream()
+                .filter(key -> !present.contains(key))
+                .toList();
+        if (!missing.isEmpty()) {
+            throw new ExamDefinitionValidationException(ExamDefinitionConstants.MISSING_CATALOG_TASK_TYPES + missing);
+        }
+    }
+
+    /** A host template may only keep task types its base default template has. */
+    void validateWithinBase(ExamDefinition template, ExamDefinition base) {
+        Set<String> allowed = taskTypeKeys(base);
+        List<String> outside = taskTypeKeys(template).stream().filter(key -> !allowed.contains(key)).toList();
+        if (!outside.isEmpty()) {
+            throw new ExamDefinitionValidationException(ExamDefinitionConstants.HOST_TASK_TYPE_OUTSIDE_BASE + outside);
+        }
+    }
+
+    private Set<String> taskTypeKeys(ExamDefinition template) {
+        return template.getItems().stream()
+                .map(this::logicalTaskKey)
+                .filter(key -> key != null && !key.isBlank())
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
     /**
      * Validates that the question bank contains sufficient items for each task type
      * required by the template at the specified quantity.
@@ -144,10 +174,7 @@ class ExamDefinitionValidator {
         if (itembankService == null) {
             return;
         }
-        Set<String> taskTypeKeys = template.getItems().stream()
-                .map(this::logicalTaskKey)
-                .filter(key -> key != null && !key.isBlank())
-                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        Set<String> taskTypeKeys = taskTypeKeys(template);
         Map<String, Long> available = itembankService.countPublishedByTaskTypeKeys(taskTypeKeys);
         List<String> shortages = template.getItems().stream()
                 .filter(item -> available.getOrDefault(logicalTaskKey(item), 0L) < item.getMaxCount())

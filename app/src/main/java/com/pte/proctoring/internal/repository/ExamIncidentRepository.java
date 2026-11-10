@@ -19,6 +19,19 @@ import java.util.UUID;
 @Repository
 public interface ExamIncidentRepository extends JpaRepository<ExamIncident, Long> {
 
+    @Query("""
+            select incident from ExamIncident incident
+            where incident.sessionPublicId = :sessionId and incident.tenantId = :tenantId
+              and incident.origin = :origin and incident.deleted = false
+              and (:status is null or incident.status = :status)
+              and (locate(:search, lower(incident.title)) > 0
+                   or locate(:search, lower(coalesce(incident.description, ''))) > 0)
+            """)
+    Page<ExamIncident> searchReportedIncidents(
+            @Param("sessionId") UUID sessionId, @Param("tenantId") UUID tenantId,
+            @Param("origin") IncidentOrigin origin, @Param("status") String status,
+            @Param("search") String search, Pageable pageable);
+
     Page<ExamIncident> findBySessionPublicIdAndTenantIdAndOriginAndDeletedFalse(
             UUID sessionPublicId, UUID tenantId, IncidentOrigin origin, Pageable pageable);
 
@@ -65,19 +78,6 @@ public interface ExamIncidentRepository extends JpaRepository<ExamIncident, Long
                                       @Param("cursorAt") Instant cursorAt,
                                       @Param("cursorId") UUID cursorId,
                                       Pageable pageable);
-
-    @Query("""
-            SELECT incident.attemptPublicId, COUNT(incident) FROM ExamIncident incident
-            WHERE incident.sessionPublicId = :sessionPublicId
-              AND incident.tenantId = :tenantId
-              AND incident.origin = com.pte.proctoring.domain.enums.IncidentOrigin.PROCTOR_FLAG
-              AND incident.attemptPublicId IN :attemptPublicIds
-              AND incident.deleted = false
-            GROUP BY incident.attemptPublicId
-            """)
-    List<Object[]> countFlagsByAttemptPublicIdIn(@Param("sessionPublicId") UUID sessionPublicId,
-                                                 @Param("tenantId") UUID tenantId,
-                                                 @Param("attemptPublicIds") Collection<UUID> attemptPublicIds);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""

@@ -66,6 +66,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -182,7 +183,7 @@ class ExamWorkflowServicesTest {
 
     @Test
     void createDraft_partialSkillSelection_isRejected() {
-        when(examDefinitionService.findActiveByPublicId(templateId)).thenReturn(Optional.of(
+        when(examDefinitionService.findActiveForTenant(templateId, tenantId)).thenReturn(Optional.of(
                 twoSkillTemplateResponse()));
         stubSubscriptionForDraft();
 
@@ -625,7 +626,7 @@ class ExamWorkflowServicesTest {
         var snapshot = new com.pte.assessment.dto.response.SnapshotResponse(examVersionId, "Draft", 1,
                 UUID.randomUUID(), templateId, 3, tenantId, List.of());
         when(assessmentService.generateDeterministic(eq(session.getName()), eq(templateId), anyLong(), eq(hostAdmin),
-                any())).thenReturn(snapshot);
+                any(), any(), anyBoolean())).thenReturn(snapshot);
 
         var response = publishService.generate(session.getPublicId(), "key-1", hostAdmin);
 
@@ -758,7 +759,7 @@ class ExamWorkflowServicesTest {
     }
 
     private void stubTemplateAndSubscription() {
-        when(examDefinitionService.findActiveByPublicId(templateId)).thenReturn(Optional.of(
+        when(examDefinitionService.findActiveForTenant(templateId, tenantId)).thenReturn(Optional.of(
                 templateResponse()));
         when(billingService.getActiveSubscription(subscriptionId, tenantId)).thenReturn(Optional.of(
                 new SubscriptionView(subscriptionId, tenantId, UUID.randomUUID(), "LIC-TEST",

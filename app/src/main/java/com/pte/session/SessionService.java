@@ -1,20 +1,18 @@
 package com.pte.session;
 
+import com.pte.session.dto.response.ProctorWorkspaceSessionView;
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
 import com.pte.session.dto.response.AttemptRetryPolicyResponse;
 import com.pte.session.dto.response.ClosingSoonSessionView;
 import com.pte.session.dto.response.SessionSummaryView;
 import com.pte.billing.SubscriptionRevocationImpactQuery.SubscriptionRevocationImpact;
-import com.pte.session.dto.response.MonitoringEnrollmentView;
 import com.pte.session.dto.response.ProctorAssignedSessionsPageView;
-import com.pte.session.dto.response.ProctorMonitoringSessionView;
 import com.pte.session.dto.response.ProctorWorkspaceOverviewView;
 import com.pte.session.internal.service.enrollment.EntitlementService;
 import com.pte.session.internal.service.staff.ProctorMonitoringQueryService;
 import com.pte.session.internal.service.SessionLifecycleService;
 import com.pte.session.internal.service.staff.SessionStaffAssignmentQueryService;
-import com.pte.shared.web.PagedResult;
 import com.pte.session.dto.request.RecordAttendanceRequest;
 import com.pte.session.dto.request.RecordIdentityVerificationRequest;
 import com.pte.session.dto.response.AttendanceCommandReceiptView;
@@ -175,10 +173,10 @@ public class SessionService {
         return sessionLifecycleService.getSubscriptionRevocationImpact(subscriptionId, tenantId);
     }
 
-    /** Reads session metadata and assignment role for an assigned proctor. */
-    public Optional<ProctorMonitoringSessionView> getMonitoringSession(
+    /** Returns one exam session assigned to the proctor, with whether it is open for proctor actions now. */
+    public ProctorWorkspaceSessionView getAssignedSessionForProctor(
             UUID sessionPublicId, UUID proctorPublicId, UUID tenantId) {
-        return proctorMonitoring.getMonitoringSession(sessionPublicId, proctorPublicId, tenantId);
+        return proctorMonitoring.getAssignedSession(sessionPublicId, proctorPublicId, tenantId);
     }
 
     /** Returns overview summary and priority sessions for proctor workspace. */
@@ -191,23 +189,6 @@ public class SessionService {
     public ProctorAssignedSessionsPageView getAssignedSessionsForProctor(
             UUID proctorPublicId, UUID tenantId, String scope, String timezone, String sort, int page, int size) {
         return proctorMonitoring.getAssignedSessions(proctorPublicId, tenantId, scope, timezone, sort, page, size);
-    }
-
-    /** Returns paginated assigned sessions for the proctor within tenant. */
-    public PagedResult<ProctorMonitoringSessionView> getAssignedSessionsForProctor(
-            UUID proctorPublicId, UUID tenantId, int page, int size) {
-        return proctorMonitoring.getAssignedSessions(proctorPublicId, tenantId, page, size);
-    }
-
-    /** Returns paginated student enrollments for an exam session within tenant. */
-    public PagedResult<MonitoringEnrollmentView> getMonitoringEnrollments(
-            UUID sessionPublicId, UUID tenantId, int page, int size) {
-        return proctorMonitoring.getEnrollments(sessionPublicId, tenantId, page, size);
-    }
-
-    /** Every student actively enrolled in an exam session, for whole-session status aggregates. */
-    public List<UUID> findEnrolledStudentPublicIds(UUID sessionPublicId, UUID tenantId) {
-        return proctorMonitoring.findEnrolledStudentIds(sessionPublicId, tenantId);
     }
 
     /** Total count of active student enrollments for an exam session. */

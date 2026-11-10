@@ -5,6 +5,8 @@ import com.pte.scoring.internal.vendor.ProviderGuard;
 import com.pte.scoring.internal.vendor.azure.AzureSpeechAssessor;
 import com.pte.scoring.internal.vendor.azure.AzureSpeechRestClient;
 import com.pte.scoring.internal.vendor.gemini.GeminiRestClient;
+import com.pte.scoring.internal.vendor.gemini.OpenAiCompatibleStructuredClient;
+import com.pte.scoring.internal.vendor.gemini.StructuredModelClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -54,7 +56,8 @@ public class AzureGeminiProviderConfig {
         return new AzureSpeechRestClient(httpClient, jsonMapper,
                 URI.create("https://" + azure.getSpeechRegion() + ".stt.speech.microsoft.com"),
                 azure.getSpeechKey(), Duration.ofMillis(azure.getTimeoutMs()),
-                ProviderGuard.standard(AzureSpeechRestClient.VENDOR, clock));
+                ProviderGuard.standard(AzureSpeechRestClient.VENDOR, properties.getRetryMaxAttempts(),
+                properties.getBreakerThreshold(), clock));
     }
 
     @Bean
@@ -63,11 +66,19 @@ public class AzureGeminiProviderConfig {
     }
 
     @Bean
-    public GeminiRestClient geminiRestClient(JsonMapper jsonMapper) {
+    public StructuredModelClient scoringModelClient(JsonMapper jsonMapper) {
         AiProviderProperties.Gemini gemini = properties.getGemini();
+        if (properties.usesGateway()) {
+            ScoringGatewayProperties gateway = properties.getGateway();
+            return new OpenAiCompatibleStructuredClient(httpClient, jsonMapper, gateway.getBaseUrl(),
+                    gateway.getApiKey(), gateway.getModel(), Duration.ofMillis(gateway.getTimeoutMs()),
+                    ProviderGuard.standard(OpenAiCompatibleStructuredClient.VENDOR, properties.getRetryMaxAttempts(),
+                properties.getBreakerThreshold(), clock));
+        }
         return new GeminiRestClient(httpClient, jsonMapper, GEMINI_BASE_URI, gemini.getApiKey(),
                 gemini.getModel(), Duration.ofMillis(gemini.getTimeoutMs()),
-                ProviderGuard.standard(GeminiRestClient.VENDOR, clock));
+                ProviderGuard.standard(GeminiRestClient.VENDOR, properties.getRetryMaxAttempts(),
+                properties.getBreakerThreshold(), clock));
     }
 
     private static void validate(AiProviderProperties properties) {
@@ -80,15 +91,34 @@ public class AzureGeminiProviderConfig {
         if (azure.getSpeechRegion() == null || !AZURE_REGION.matcher(azure.getSpeechRegion()).matches()) {
             problems.add("scoring.ai.azure.speech-region (SCORING_AI_AZURE_SPEECH_REGION), e.g. southeastasia");
         }
-        if (!isApiKey(gemini.getApiKey())) {
-            problems.add("scoring.ai.gemini.api-key (SCORING_AI_GEMINI_API_KEY)");
-        }
-        if (gemini.getModel() == null || !GEMINI_MODEL.matcher(gemini.getModel()).matches()) {
-            problems.add("scoring.ai.gemini.model (SCORING_AI_GEMINI_MODEL)");
+        if (properties.usesGateway()) {
+            validateGateway(properties.getGateway(), problems);
+        } else if (!AiProviderProperties.TEXT_VENDOR_GEMINI.equalsIgnoreCase(properties.getTextVendor())) {
+            problems.add("scoring.ai.text-vendor (SCORING_AI_TEXT_VENDOR), gemini or gateway");
+        } else {
+            if (!isApiKey(gemini.getApiKey())) {
+                problems.add("scoring.ai.gemini.api-key (SCORING_AI_GEMINI_API_KEY)");
+            }
+            if (gemini.getModel() == null || !GEMINI_MODEL.matcher(gemini.getModel()).matches()) {
+                problems.add("scoring.ai.gemini.model (SCORING_AI_GEMINI_MODEL)");
+            }
         }
         if (!problems.isEmpty()) {
             throw new IllegalStateException(
                     ScoringConstants.AZURE_GEMINI_SETTINGS_INVALID.formatted(String.join(", ", problems)));
+        }
+    }
+
+    private static void validateGateway(ScoringGatewayProperties gateway, List<String> problems) {
+        String baseUrl = gateway.getBaseUrl();
+        if (baseUrl == null || !(baseUrl.startsWith("https://") || baseUrl.startsWith("http://"))) {
+            problems.add("scoring.ai.gateway.base-url (SCORING_AI_GATEWAY_BASE_URL or AI_GATEWAY_BASE_URL)");
+        }
+        if (!isApiKey(gateway.getApiKey())) {
+            problems.add("scoring.ai.gateway.api-key (SCORING_AI_GATEWAY_API_KEY or AI_GATEWAY_API_KEY)");
+        }
+        if (gateway.getModel() == null || gateway.getModel().isBlank()) {
+            problems.add("scoring.ai.gateway.model (SCORING_AI_GATEWAY_MODEL or AI_GATEWAY_MODEL)");
         }
     }
 

@@ -1,7 +1,7 @@
 package com.pte.billing.internal.controller;
 
 import com.pte.billing.internal.dto.request.license.IssueLicenseCodeRequest;
-import com.pte.billing.internal.dto.response.LicenseIssueReceipt;
+import com.pte.billing.internal.dto.response.license.LicenseIssueReceipt;
 import com.pte.billing.internal.constant.BillingConstants;
 import org.springframework.web.bind.annotation.RequestHeader;
 import com.pte.billing.internal.service.license.LicenseCodeService;

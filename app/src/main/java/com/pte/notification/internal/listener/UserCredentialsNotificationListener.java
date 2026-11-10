@@ -3,38 +3,32 @@ package com.pte.notification.internal.listener;
 import com.pte.identity.UserCredentialsEmailRequestedEvent;
 import com.pte.notification.domain.enums.NotificationType;
 import com.pte.notification.internal.service.NotificationDispatchService;
+import com.pte.notification.internal.template.BrandedEmailTemplate;
+import com.pte.notification.internal.template.RenderedEmail;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-/** Queues a fresh temporary credential without retaining it in notification history. */
+import java.time.Clock;
+import java.time.Year;
+
+/** Queues a fresh temporary credential as a card with a plain-text twin, without retaining it in history. */
 @Component
 public class UserCredentialsNotificationListener {
 
     private final NotificationDispatchService dispatchService;
+    private final Clock clock;
 
-    public UserCredentialsNotificationListener(NotificationDispatchService dispatchService) {
+    public UserCredentialsNotificationListener(NotificationDispatchService dispatchService, Clock clock) {
         this.dispatchService = dispatchService;
+        this.clock = clock;
     }
 
     @TransactionalEventListener
     public void onCredentialsRequested(UserCredentialsEmailRequestedEvent event) {
-        String subject = "PTE Prep - Your temporary login credentials";
-        String body = """
-                Hello %s,
-
-                A temporary password has been generated for your PTE Prep account.
-
-                Username: %s
-                Temporary password: %s
-
-                Please change the temporary password after your first sign-in.
-
-                Regards,
-                PTE Prep Platform Team
-                """.formatted(event.fullName() == null ? "there" : event.fullName(), event.username(),
-                event.temporaryPassword());
-
+        RenderedEmail email = BrandedEmailTemplate.temporaryCredentials(event.fullName(), event.username(),
+                event.temporaryPassword(), Year.now(clock).getValue());
         dispatchService.dispatchExternalSensitive(NotificationType.USER_CREDENTIALS_SENT, event.email(),
-                event.tenantId(), "user-credentials:" + event.requestId(), subject, body);
+                event.tenantId(), "user-credentials:" + event.requestId(), email.subject(), email.text(),
+                email.html());
     }
 }

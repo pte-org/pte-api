@@ -6,8 +6,8 @@ import com.pte.billing.domain.LicenseCode;
 import com.pte.billing.domain.Subscription;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.dto.request.license.ConfirmLicenseRevokeRequest;
-import com.pte.billing.internal.dto.response.LicenseRevokePreviewResponse;
-import com.pte.billing.internal.dto.response.LicenseRevokeResponse;
+import com.pte.billing.internal.dto.response.license.LicenseRevokePreviewResponse;
+import com.pte.billing.internal.dto.response.license.LicenseRevokeResponse;
 import com.pte.billing.internal.exception.license.LicenseCodeException;
 import com.pte.billing.internal.repository.LicenseCodeRepository;
 import com.pte.billing.internal.repository.SubscriptionRepository;
@@ -28,7 +28,8 @@ import java.util.UUID;
 /** Two-step revoke: a short-lived preview of the impact, then a confirm that must match that preview. */
 class LicenseCodeRevoker {
 
-    private static final Duration REVOKE_PREVIEW_TTL = Duration.ofMinutes(5);
+    /** Default of {@code billing.license-code.revoke-preview-ttl}: how long a revoke preview can be confirmed. */
+    static final long DEFAULT_REVOKE_PREVIEW_MINUTES = 5;
 
     private final LicenseCodeRepository licenseCodeRepository;
     private final SubscriptionRepository subscriptionRepository;
@@ -36,8 +37,12 @@ class LicenseCodeRevoker {
     private final LicenseRevokeScopeResolver scopeResolver;
     private final Clock clock;
 
+    private final Duration revokePreviewTtl;
+
     LicenseCodeRevoker(LicenseCodeRepository licenseCodeRepository, SubscriptionRepository subscriptionRepository,
-            ApplicationEventPublisher eventPublisher, LicenseRevokeScopeResolver scopeResolver, Clock clock) {
+            ApplicationEventPublisher eventPublisher, LicenseRevokeScopeResolver scopeResolver,
+            Duration revokePreviewTtl, Clock clock) {
+        this.revokePreviewTtl = revokePreviewTtl;
         this.licenseCodeRepository = licenseCodeRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.eventPublisher = eventPublisher;
@@ -49,7 +54,7 @@ class LicenseCodeRevoker {
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         LicenseCode code = scopeResolver.lockedCode(publicId);
         RevokeScope scope = scopeResolver.loadRevokeScope(code);
-        Instant previewExpiresAt = now.plus(REVOKE_PREVIEW_TTL);
+        Instant previewExpiresAt = now.plus(revokePreviewTtl);
         return toPreview(scope, actorId, previewExpiresAt);
     }
 
@@ -126,7 +131,7 @@ class LicenseCodeRevoker {
             throw new LicenseCodeException(HttpStatus.BAD_REQUEST,
                     BillingConstants.LICENSE_CODE_REVOKE_CONFIRMATION_REQUIRED);
         }
-        if (!expiresAt.isAfter(now) || expiresAt.isAfter(now.plus(REVOKE_PREVIEW_TTL))) {
+        if (!expiresAt.isAfter(now) || expiresAt.isAfter(now.plus(revokePreviewTtl))) {
             throw new LicenseCodeException(HttpStatus.CONFLICT,
                     BillingConstants.LICENSE_CODE_REVOKE_PREVIEW_EXPIRED);
         }
