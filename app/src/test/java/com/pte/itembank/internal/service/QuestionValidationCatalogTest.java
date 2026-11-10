@@ -38,7 +38,6 @@ class QuestionValidationCatalogTest {
 
         Question question = new Question();
         question.setPteTaskType(PteTaskType.READ_ALOUD);
-        question.setTitle("Configured without prompt");
 
         assertThatCode(() -> new QuestionValidationHelper(questionTypeService).validate(question))
                 .doesNotThrowAnyException();
@@ -46,7 +45,7 @@ class QuestionValidationCatalogTest {
 
     @Test
     void referenceAnswer_isRequiredForAnyTypeThatTheCatalogFlags() {
-        Question question = question(PteTaskType.READ_ALOUD, "Flagged read aloud");
+        Question question = question(PteTaskType.READ_ALOUD);
         question.setPromptText("Some text");
         stubDefinition(PteTaskType.READ_ALOUD, definition -> definition.setRequiresReferenceAnswer(true));
 
@@ -61,7 +60,7 @@ class QuestionValidationCatalogTest {
 
     @Test
     void referenceAnswer_isNotRequiredWhenTheCatalogClearsTheFlag() {
-        Question question = question(PteTaskType.REPEAT_SENTENCE, "Unflagged repeat sentence");
+        Question question = question(PteTaskType.REPEAT_SENTENCE);
         question.setAudioPromptRef(UUID.randomUUID());
         stubDefinition(PteTaskType.REPEAT_SENTENCE, definition -> {
             definition.setRequiresAudioPrompt(true);
@@ -74,7 +73,7 @@ class QuestionValidationCatalogTest {
 
     @Test
     void promptText_isNotRequiredForSummarizeSpokenTextWhenTheCatalogClearsTheFlag() {
-        Question question = question(PteTaskType.SUMMARIZE_SPOKEN_TEXT, "Unflagged summarize spoken text");
+        Question question = question(PteTaskType.SUMMARIZE_SPOKEN_TEXT);
         stubDefinition(PteTaskType.SUMMARIZE_SPOKEN_TEXT, definition -> definition.setRequiresPromptText(false));
 
         assertThatCode(() -> new QuestionValidationHelper(questionTypeService).validate(question))
@@ -83,7 +82,7 @@ class QuestionValidationCatalogTest {
 
     @Test
     void promptText_isRequiredForSummarizeSpokenTextWhenTheCatalogSetsTheFlag() {
-        Question question = question(PteTaskType.SUMMARIZE_SPOKEN_TEXT, "Flagged summarize spoken text");
+        Question question = question(PteTaskType.SUMMARIZE_SPOKEN_TEXT);
         stubDefinition(PteTaskType.SUMMARIZE_SPOKEN_TEXT, definition -> definition.setRequiresPromptText(true));
 
         assertThatThrownBy(() -> new QuestionValidationHelper(questionTypeService).validate(question))
@@ -99,10 +98,9 @@ class QuestionValidationCatalogTest {
         when(questionTypeService.findDefinitionByCode(type.name())).thenReturn(Optional.of(definition));
     }
 
-    private static Question question(PteTaskType type, String title) {
+    private static Question question(PteTaskType type) {
         Question question = new Question();
         question.setPteTaskType(type);
-        question.setTitle(title);
         return question;
     }
 }

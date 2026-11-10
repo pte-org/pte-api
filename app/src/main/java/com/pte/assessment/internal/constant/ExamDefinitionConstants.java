@@ -5,6 +5,8 @@ public final class ExamDefinitionConstants {
 
     public static final String TEMPLATE_NOT_FOUND = "SCORE_TEMPLATE_NOT_FOUND";
     public static final String NO_ACTIVE_TEMPLATE = "NO_ACTIVE_SCORE_TEMPLATE";
+    /** A new exam definition must pin a rubric version, and there is no ACTIVE one to pin. */
+    public static final String NO_ACTIVE_RUBRIC_VERSION = "SCORE_TEMPLATE_NO_ACTIVE_RUBRIC_VERSION";
     public static final String TEMPLATE_NOT_DRAFT_CODE = "SCORE_TEMPLATE_NOT_DRAFT";
     public static final String TEMPLATE_NOT_DRAFT = "This template version is locked and cannot be edited. Clone it to create a new editable version.";
     public static final String CONCURRENT_MODIFICATION = "SCORE_TEMPLATE_CONCURRENT_MODIFICATION";
@@ -21,6 +23,8 @@ public final class ExamDefinitionConstants {
     public static final String UNKNOWN_TASK_TYPE = "UNKNOWN_TASK_TYPE";
     public static final String MISSING_TASK_TYPE_KEY = "missing task type key";
     public static final String UNKNOWN_TEMPLATE_POLICY = "Unknown template policy: ";
+    public static final String PLATFORM_TEMPLATE_POLICY_NOT_CUSTOM =
+            "A platform template must cover the whole task-type catalog, so it cannot use the CUSTOM policy";
     public static final String TEMPLATE_FEASIBILITY_DEPENDENCIES_NOT_CONFIGURED =
             "Template feasibility dependencies are not configured";
     public static final String TEMPLATE_READ_SERVICE_NOT_CONFIGURED = "Score template read service is not configured";
@@ -74,6 +78,20 @@ public final class ExamDefinitionConstants {
     public static final String AUDIT_ACTIVATED = "ACTIVATED";
     public static final String AUDIT_RETIRED = "RETIRED";
     public static final String AUDIT_VALIDATION_FAILED = "VALIDATION_FAILED";
+    public static final String TEMPLATE_TIME_FRAME_INFEASIBLE =
+            "No combination of question counts fits the time frame: ";
+    public static final String AUDIT_CEFR_TARGETS_UPDATED = "CEFR_TARGETS_UPDATED";
+    public static final String CEFR_TARGET_UNKNOWN_LEVEL = "CEFR level must be one of A1, A2, B1, B2, C1, C2: ";
+    public static final String CEFR_TARGET_DUPLICATE_LEVEL = "A CEFR level can appear only once: ";
+    public static final String CEFR_TARGET_NOT_100 = "The CEFR percentages must sum to 100, got ";
+    public static final String AUDIT_TIME_FRAME_UPDATED = "TIME_FRAME_UPDATED";
+    public static final String TIME_FRAME_INVALID_RANGE =
+            "Each part's minimum time must not exceed its maximum: ";
+    public static final String TIME_FRAME_TOTAL_BELOW_MINIMUM =
+            "The total time ceiling must cover the sum of the three part minimums";
+    public static final String TIME_FRAME_PART_SPEAKING_WRITING = "speaking and writing";
+    public static final String TIME_FRAME_PART_READING = "reading";
+    public static final String TIME_FRAME_PART_LISTENING = "listening";
     public static final String AUDIT_PUBLICATION_USAGE_RECORDED = "TASK_TYPE_PUBLICATION_USAGE_RECORDED";
 
     private ExamDefinitionConstants() {

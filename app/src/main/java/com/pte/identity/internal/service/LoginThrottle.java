@@ -5,6 +5,8 @@ import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.BucketConfiguration;
 import io.github.bucket4j.distributed.proxy.ProxyManager;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -12,7 +14,7 @@ import java.util.Locale;
 
 /**
  * Temporary protection against password guessing: after {@value #FAILURE_LIMIT} wrong passwords for one account from
- * one address within {@value #WINDOW_MINUTES} minutes, sign-in is refused until the window ends. The budget is per
+ * one address within {@value #WINDOW_MINUTES} minutes (both set by {@code app.security.login.*}), sign-in is refused until the window ends. The budget is per
  * account and address, so a stranger cannot lock the owner out from another address. Keys carry only a hash of the
  * user name: Redis never holds it in clear.
  */
@@ -25,10 +27,21 @@ public class LoginThrottle {
 
     private final ProxyManager<String> proxyManager;
     private final TokenHasher tokenHasher;
+    private final int failureLimit;
+    private final Duration window;
 
-    public LoginThrottle(ProxyManager<String> proxyManager, TokenHasher tokenHasher) {
+    LoginThrottle(ProxyManager<String> proxyManager, TokenHasher tokenHasher) {
+        this(proxyManager, tokenHasher, FAILURE_LIMIT, WINDOW);
+    }
+
+    @Autowired
+    public LoginThrottle(ProxyManager<String> proxyManager, TokenHasher tokenHasher,
+                         @Value("${app.security.login.failure-limit:" + FAILURE_LIMIT + "}") int failureLimit,
+                         @Value("${app.security.login.window:" + WINDOW_MINUTES + "m}") Duration window) {
         this.proxyManager = proxyManager;
         this.tokenHasher = tokenHasher;
+        this.failureLimit = failureLimit;
+        this.window = window;
     }
 
     /** True while the account has used up its failures for this address. */
@@ -48,7 +61,7 @@ public class LoginThrottle {
 
     private Bucket bucket(String username, String clientIp) {
         return proxyManager.getProxy(key(username, clientIp), () -> BucketConfiguration.builder()
-                .addLimit(Bandwidth.builder().capacity(FAILURE_LIMIT).refillIntervally(FAILURE_LIMIT, WINDOW).build())
+                .addLimit(Bandwidth.builder().capacity(failureLimit).refillIntervally(failureLimit, window).build())
                 .build());
     }
 

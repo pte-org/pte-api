@@ -3,7 +3,6 @@ package com.pte.itembank;
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
-import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.response.PracticeQuestionContent;
 import com.pte.itembank.dto.response.PracticeQuestionEvaluationContent;
 import com.pte.itembank.dto.response.PracticeQuestionPin;
@@ -98,8 +97,8 @@ public class PracticeQuestionService {
             return false;
         }
         String normalizedKey = TaskTypeCodeCompatibility.normalizeTaskTypeKey(taskTypeKey);
-        return questionRepository.existsByDeletedFalseAndVisibilityAndStatusAndCurrentTrueAndPoolAndTaskTypeKey(
-                Visibility.SHARED, QuestionStatus.APPROVED, QuestionPool.PRACTICE, normalizedKey);
+        return questionRepository.existsByDeletedFalseAndStatusAndCurrentTrueAndPoolAndTaskTypeKey(
+                QuestionStatus.APPROVED, QuestionPool.PRACTICE, normalizedKey);
     }
 
     /**
@@ -115,7 +114,6 @@ public class PracticeQuestionService {
 
     private boolean isPracticeReady(Question question) {
         return !question.isDeleted()
-                && question.getVisibility() == Visibility.SHARED
                 && question.getStatus() == QuestionStatus.APPROVED
                 && question.isCurrent()
                 && (question.isAvailableForPractice() || !question.isAvailabilityFlagsExplicit()

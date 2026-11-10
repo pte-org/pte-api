@@ -16,6 +16,12 @@ public record ExaminerCommandReceiptResponse(
 ) {
     public record ChildRequestReceipt(
             UUID answerPublicId,
-            UUID requestPublicId
-    ) {}
+            UUID requestPublicId,
+            Integer itemScore,
+            com.pte.scoring.rubric.ScoreTrace scoreTrace
+    ) {
+        public ChildRequestReceipt(UUID answerPublicId, UUID requestPublicId) {
+            this(answerPublicId, requestPublicId, null, null);
+        }
+    }
 }

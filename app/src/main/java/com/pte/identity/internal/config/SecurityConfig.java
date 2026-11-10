@@ -38,11 +38,6 @@ import java.util.Map;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    // "/ws/**" (com.pte.proctoring, Phase 09): the STOMP handshake itself is
-    // permitted here — authentication happens per-frame inside STOMP
-    // (StompAuthChannelInterceptor), not at the HTTP upgrade request, since
-    // browser WS clients can't reliably set custom handshake headers.
-    //
     // "/applications" (com.pte.billing, plans/quang-tenant-commercialization
     // Phase 2): an org submits its tenant application before it has any
     // account to authenticate with. This is an EXACT path match (no "/**"),
@@ -54,7 +49,7 @@ public class SecurityConfig {
             "/api/v1/auth/refresh", "/api/v1/auth/logout",
             "/api/v1/auth/password-reset/request", "/api/v1/auth/password-reset/confirm",
             "/api/v1/auth/password-reset/validate",
-            "/actuator/health", "/actuator/health/**", "/ws/**",
+            "/actuator/health", "/actuator/health/**",
             "/api/v1/applications", "/api/v1/plans", "/api/v1/webhooks/payos");
 
     @Bean

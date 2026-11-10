@@ -2,9 +2,9 @@ package com.pte.itembank.internal.repository;
 
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
-import com.pte.itembank.domain.enums.Visibility;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Page;
@@ -21,7 +21,7 @@ import java.util.UUID;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;
 
-public interface QuestionRepository extends JpaRepository<Question, Long> {
+public interface QuestionRepository extends JpaRepository<Question, Long>, QuestionRepositoryCustom {
 
     @EntityGraph(attributePaths = "options")
     @Query("select q from Question q where q.publicId = :publicId and q.deleted = false")
@@ -31,45 +31,32 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("select q from Question q where q.publicId = :publicId")
     Optional<Question> findByPublicIdForUpdate(@Param("publicId") UUID publicId);
 
-    boolean existsByRevisionGroupPublicIdAndPublicIdNot(UUID revisionGroupPublicId, UUID publicId);
+    /** The question a generation job already produced for one slot (idempotent retry after a crash). */
+    Optional<Question> findByGenerationJobPublicIdAndGenerationItemIndex(UUID jobPublicId, Integer itemIndex);
+
+    /** Whether a live question of the task type already carries this normalized-content hash. */
+    boolean existsByTaskTypeKeyAndContentHashAndDeletedFalse(String taskTypeKey, String contentHash);
+
+    /** True when another question was opened as a revision of this one. */
+    boolean existsBySupersedesPublicId(UUID supersedesPublicId);
+
+    /** Another live question that plays the same audio, so a shared file is not removed with one of them. */
+    boolean existsByAudioPromptRefAndDeletedFalseAndPublicIdNot(UUID audioPromptRef, UUID publicId);
+
+    /** Another live question that shows the same image. */
+    boolean existsByImagePromptRefAndDeletedFalseAndPublicIdNot(UUID imagePromptRef, UUID publicId);
 
     @EntityGraph(attributePaths = "options")
-    @Query("SELECT q FROM Question q WHERE q.deleted = false "
-            + "AND q.visibility = com.pte.itembank.domain.enums.Visibility.SHARED")
+    @Query("SELECT q FROM Question q WHERE q.deleted = false")
     List<Question> findAllWithOptions();
 
-    @Query(value = """
-            SELECT q.publicId
-            FROM Question q
-            WHERE q.deleted = false
-              AND q.visibility = com.pte.itembank.domain.enums.Visibility.SHARED
-              AND (:taskTypeKey IS NULL OR q.taskTypeKey = :taskTypeKey)
-              AND (:section IS NULL OR q.taskTypeSection = :section)
-              AND (:status IS NULL OR q.status = :status)
-              AND (:pool IS NULL OR q.pool = :pool)
-              AND (:query = ''
-                   OR q.title IS NOT NULL AND LOWER(q.title) LIKE CONCAT('%', :query, '%')
-                   OR q.promptText IS NOT NULL AND LOWER(q.promptText) LIKE CONCAT('%', :query, '%')
-                   OR :publicIdQuery IS NOT NULL AND q.publicId = :publicIdQuery)
-            """,
-            countQuery = """
-            SELECT COUNT(q)
-            FROM Question q
-            WHERE q.deleted = false
-              AND q.visibility = com.pte.itembank.domain.enums.Visibility.SHARED
-              AND (:taskTypeKey IS NULL OR q.taskTypeKey = :taskTypeKey)
-              AND (:section IS NULL OR q.taskTypeSection = :section)
-              AND (:status IS NULL OR q.status = :status)
-              AND (:pool IS NULL OR q.pool = :pool)
-              AND (:query = ''
-                   OR q.title IS NOT NULL AND LOWER(q.title) LIKE CONCAT('%', :query, '%')
-                   OR q.promptText IS NOT NULL AND LOWER(q.promptText) LIKE CONCAT('%', :query, '%')
-                   OR :publicIdQuery IS NOT NULL AND q.publicId = :publicIdQuery)
-            """)
-    Page<UUID> findPagePublicIds(@Param("taskTypeKey") String taskTypeKey,
-            @Param("section") String section, @Param("status") QuestionStatus status,
-            @Param("pool") QuestionPool pool, @Param("query") String query,
-            @Param("publicIdQuery") UUID publicIdQuery, Pageable pageable);
+    List<Question> findByPublicIdIn(Collection<UUID> publicIds);
+
+    /** The same page without a CEFR filter. */
+    default Page<UUID> findPagePublicIds(String taskTypeKey, String section, QuestionStatus status,
+            QuestionPool pool, String query, UUID publicIdQuery, Pageable pageable) {
+        return findPagePublicIdsByCefr(taskTypeKey, section, status, pool, query, publicIdQuery, null, pageable);
+    }
 
     @EntityGraph(attributePaths = "options")
     @Query("SELECT DISTINCT q FROM Question q WHERE q.deleted = false AND q.publicId IN :publicIds")
@@ -78,7 +65,6 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("""
             SELECT q.publicId FROM Question q
             WHERE q.deleted = false
-              AND q.visibility = com.pte.itembank.domain.enums.Visibility.SHARED
               AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED
               AND q.current = true
               AND (q.availableForPractice = true OR (q.availabilityFlagsExplicit = false
@@ -93,7 +79,6 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("""
             SELECT q.taskTypeKey, COUNT(q) FROM Question q
             WHERE q.deleted = false
-              AND q.visibility = com.pte.itembank.domain.enums.Visibility.SHARED
               AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED
               AND q.current = true
               AND (q.availableForPractice = true OR (q.availabilityFlagsExplicit = false
@@ -105,16 +90,16 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
 
     @Query("""
             select case when count(q) > 0 then true else false end from Question q
-             where q.deleted = false and q.visibility = :visibility and q.status = :status
+             where q.deleted = false and q.status = :status
                and q.current = true
                and (q.availableForPractice = true OR (q.availabilityFlagsExplicit = false and q.pool = :pool))
                and q.taskTypeKey = :taskTypeKey
             """)
-    boolean existsByDeletedFalseAndVisibilityAndStatusAndCurrentTrueAndPoolAndTaskTypeKey(
-            @Param("visibility") Visibility visibility, @Param("status") QuestionStatus status,
+    boolean existsByDeletedFalseAndStatusAndCurrentTrueAndPoolAndTaskTypeKey(
+            @Param("status") QuestionStatus status,
             @Param("pool") QuestionPool pool, @Param("taskTypeKey") String taskTypeKey);
 
-    long countByDeletedFalseAndVisibility(Visibility visibility);
+    long countByDeletedFalse();
 
     /** True when some other revision in the group already holds the group's one "current" slot. */
     boolean existsByRevisionGroupPublicIdAndCurrentTrueAndPublicIdNot(UUID revisionGroupPublicId,
@@ -125,53 +110,63 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
             UUID publicId);
 
     @Query("SELECT q.taskTypeSection, COUNT(q) FROM Question q "
-            + "WHERE q.deleted = false AND q.visibility = :visibility GROUP BY q.taskTypeSection")
-    List<Object[]> countBySectionAndVisibility(@Param("visibility") Visibility visibility);
+            + "WHERE q.deleted = false GROUP BY q.taskTypeSection")
+    List<Object[]> countBySection();
 
     @Query("SELECT q.status, COUNT(q) FROM Question q "
-            + "WHERE q.deleted = false AND q.visibility = :visibility GROUP BY q.status")
-    List<Object[]> countByStatusAndVisibility(@Param("visibility") Visibility visibility);
+            + "WHERE q.deleted = false GROUP BY q.status")
+    List<Object[]> countByStatus();
 
     /**
      * Overview: one grouped read of the bank by status, skill section and pool (at most
      * statuses x sections x pools rows); counts the same rows as the two stats queries above.
      */
     @Query("SELECT q.status, q.taskTypeSection, q.pool, COUNT(q) FROM Question q "
-            + "WHERE q.deleted = false AND q.visibility = :visibility "
+            + "WHERE q.deleted = false "
             + "GROUP BY q.status, q.taskTypeSection, q.pool")
-    List<Object[]> countByStatusSectionAndPool(@Param("visibility") Visibility visibility);
+    List<Object[]> countByStatusSectionAndPool();
 
     /** Overview: questions created in {@code [from, to)}, whatever their status is now. */
-    @Query("SELECT COUNT(q) FROM Question q WHERE q.deleted = false AND q.visibility = :visibility "
+    @Query("SELECT COUNT(q) FROM Question q WHERE q.deleted = false "
             + "AND q.createdAt >= :from AND q.createdAt < :to")
-    long countCreatedBetween(@Param("visibility") Visibility visibility, @Param("from") Instant from,
+    long countCreatedBetween(@Param("from") Instant from,
             @Param("to") Instant to);
+    /** Every exam-ready question of a task type with its CEFR level, as {@code [publicId, cefrLevel]}, in a fixed order. */
+    @Query("SELECT q.publicId, q.cefrLevel FROM Question q WHERE q.deleted = false "
+            + "AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED "
+            + "AND q.current = true AND (q.availableForExam = true OR (q.availabilityFlagsExplicit = false AND q.pool = com.pte.itembank.domain.enums.QuestionPool.EXAM)) "
+            + "AND q.taskTypeKey = :taskTypeKey ORDER BY q.publicId")
+    List<Object[]> findExamCandidatesByTaskTypeKey(@Param("taskTypeKey") String taskTypeKey);
+
+    /** Audio prompt of every exam-ready question of the given task types, as {@code [taskTypeKey, audioPromptRef]}. */
+    @Query("SELECT q.taskTypeKey, q.audioPromptRef FROM Question q WHERE q.deleted = false "
+            + "AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED "
+            + "AND q.current = true AND (q.availableForExam = true OR (q.availabilityFlagsExplicit = false AND q.pool = com.pte.itembank.domain.enums.QuestionPool.EXAM)) "
+            + "AND q.audioPromptRef IS NOT NULL AND q.taskTypeKey IN :taskTypeKeys")
+    List<Object[]> findExamAudioPromptRefsByTaskTypeKeys(@Param("taskTypeKeys") Collection<String> taskTypeKeys);
+
     @Query("SELECT q.pteTaskType, COUNT(q) FROM Question q "
-            + "WHERE q.deleted = false AND q.visibility = :visibility "
+            + "WHERE q.deleted = false "
             + "AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED "
             + "AND q.current = true AND (q.availableForExam = true OR (q.availabilityFlagsExplicit = false AND q.pool = com.pte.itembank.domain.enums.QuestionPool.EXAM)) "
             + "AND q.pteTaskType IN :taskTypes GROUP BY q.pteTaskType")
-    List<Object[]> countByVisibilityAndTaskTypeIn(@Param("visibility") Visibility visibility,
-                                                    @Param("taskTypes") Set<PteTaskType> taskTypes);
+    List<Object[]> countByTaskTypeIn(@Param("taskTypes") Set<PteTaskType> taskTypes);
 
     @Query("SELECT COUNT(q) FROM Question q WHERE q.deleted = false "
-            + "AND q.visibility = com.pte.itembank.domain.enums.Visibility.SHARED "
             + "AND q.status = com.pte.itembank.domain.enums.QuestionStatus.APPROVED "
             + "AND q.current = true AND (q.availableForExam = true OR (q.availabilityFlagsExplicit = false AND q.pool = com.pte.itembank.domain.enums.QuestionPool.EXAM)) "
             + "AND q.pteTaskType = :taskType")
     long countAvailableByTaskType(@Param("taskType") PteTaskType taskType);
 
     /**
-     * Exam-generation pool count, grouped by task type. Literal
-     * {@code visibility = 'SHARED'} — the generation pool never depends on
-     * which tenant's host is asking (Plan B, 2026-09-17 platform-only decision).
-     * Every exam-generation query below pins the independent exam channel flag
-     * so practice-only revisions never reach an exam.
+     * Exam-generation pool count, grouped by task type. The pool never depends on which
+     * tenant's host is asking (platform-only bank). Every exam-generation query below pins the
+     * independent exam channel flag so practice-only revisions never reach an exam.
      */
     @Query(value = """
             SELECT pte_task_type AS taskType, COUNT(*) AS count
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+            WHERE deleted = false AND status = 'APPROVED' AND is_current = true
               AND (available_for_exam = true OR (availability_flags_explicit = false AND pool = 'EXAM'))
               AND pte_task_type IN (:taskTypes)
             GROUP BY pte_task_type
@@ -182,7 +177,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+            WHERE deleted = false AND status = 'APPROVED' AND is_current = true
               AND (available_for_exam = true OR (availability_flags_explicit = false AND pool = 'EXAM')) AND pte_task_type = :taskType
             ORDER BY random()
             LIMIT :n
@@ -193,7 +188,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+            WHERE deleted = false AND status = 'APPROVED' AND is_current = true
               AND (available_for_exam = true OR (availability_flags_explicit = false AND pool = 'EXAM')) AND pte_task_type = :taskType
             ORDER BY public_id
             """, nativeQuery = true)
@@ -202,7 +197,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT task_type_key AS taskType, COUNT(*) AS count
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+            WHERE deleted = false AND status = 'APPROVED' AND is_current = true
               AND (available_for_exam = true OR (availability_flags_explicit = false AND pool = 'EXAM'))
               AND task_type_key IN (:taskTypeKeys)
             GROUP BY task_type_key
@@ -213,7 +208,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+            WHERE deleted = false AND status = 'APPROVED' AND is_current = true
               AND (available_for_exam = true OR (availability_flags_explicit = false AND pool = 'EXAM'))
               AND task_type_key = :taskTypeKey
             ORDER BY random()
@@ -225,10 +220,23 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query(value = """
             SELECT public_id
             FROM questions
-            WHERE deleted = false AND status = 'APPROVED' AND visibility = 'SHARED' AND is_current = true
+            WHERE deleted = false AND status = 'APPROVED' AND is_current = true
               AND (available_for_exam = true OR (availability_flags_explicit = false AND pool = 'EXAM'))
               AND task_type_key = :taskTypeKey
             ORDER BY public_id
             """, nativeQuery = true)
     List<UUID> publishedSharedIdsByTaskTypeKey(@Param("taskTypeKey") String taskTypeKey);
+
+    /**
+     * Retrieves topics from the last N AI-generated questions of the same task type.
+     * Used to populate the avoidTopics hint for the generator.
+     */
+    @Query(value = """
+            SELECT generation_meta ->> 'topic'
+            FROM questions
+            WHERE deleted = false AND task_type_key = :taskTypeKey AND generation_meta IS NOT NULL
+            ORDER BY created_at DESC
+            """, nativeQuery = true)
+    List<String> findRecentTopicsByTaskType(@Param("taskTypeKey") String taskTypeKey,
+            Pageable pageable);
 }

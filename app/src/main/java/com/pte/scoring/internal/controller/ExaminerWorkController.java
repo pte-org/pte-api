@@ -18,6 +18,7 @@ import com.pte.scoring.internal.service.examiner.ExaminerDraftCommandService;
 import com.pte.scoring.internal.service.examiner.ExaminerScoringService;
 import com.pte.scoring.internal.service.examiner.ExaminerWorkflowCommandService;
 import com.pte.scoring.internal.service.examiner.ExaminerWorkflowQueryService;
+import com.pte.scoring.internal.exception.examiner.InvalidExaminerQueueDateException;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -98,11 +99,29 @@ public class ExaminerWorkController {
             @RequestParam(required = false) UUID sessionPublicId,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String sort,
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
         return ApiResponse.success(examinerScoringService.listWork(status, sessionPublicId, search, sort,
+                parseQueueBoundary(fromDate, false), parseQueueBoundary(toDate, true),
                 page == null || page < 0 ? 0 : page,
                 size == null || size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE), currentUser()));
+    }
+
+    private static Instant parseQueueBoundary(String text, boolean endExclusive) {
+        if (text == null || text.isBlank()) return null;
+        String value = text.trim();
+        try {
+            if (value.length() == 10) {
+                java.time.LocalDate date = java.time.LocalDate.parse(value);
+                if (endExclusive) date = date.plusDays(1);
+                return date.atStartOfDay().toInstant(java.time.ZoneOffset.UTC);
+            }
+            return Instant.parse(value);
+        } catch (java.time.DateTimeException ex) {
+            throw new InvalidExaminerQueueDateException();
+        }
     }
 
     @GetMapping("/{sessionPublicId}/{attemptPublicId}")

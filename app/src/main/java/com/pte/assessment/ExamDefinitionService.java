@@ -2,14 +2,19 @@ package com.pte.assessment;
 
 import com.pte.assessment.domain.ExamDefinition;
 import com.pte.assessment.domain.enums.ExamDefinitionStatus;
+import com.pte.itembank.ExamCandidateService;
 import com.pte.itembank.ItembankService;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.itembank.TaskRuntimeProfileService;
+import com.pte.itembank.TaskTypeStimulusService;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse;
 import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.assessment.dto.response.ExamDefinitionSlotFeasibilityResponse;
+import com.pte.assessment.dto.response.PartTimeFeasibilityResponse;
+import com.pte.assessment.internal.service.timing.ExamTimeModel;
+import com.pte.assessment.internal.service.timing.PartTimeReport;
 import com.pte.assessment.internal.exception.NoActiveExamDefinitionException;
 import com.pte.assessment.internal.exception.ExamDefinitionNotFoundException;
 import com.pte.assessment.internal.mapper.ExamDefinitionMapper;
@@ -43,13 +48,24 @@ public class ExamDefinitionService {
     private final ExamDefinitionRepository repository;
     private final ItembankService itembankService;
     private final TaskRuntimeProfileService runtimeProfileService;
+    private final TaskTypeStimulusService stimulusService;
+    private final ExamCandidateService candidateService;
+
+    /** Compatibility constructor for callers that do not plan durations. */
+    public ExamDefinitionService(ExamDefinitionRepository repository, ItembankService itembankService,
+            TaskRuntimeProfileService runtimeProfileService) {
+        this(repository, itembankService, runtimeProfileService, null, null);
+    }
 
     @Autowired
     public ExamDefinitionService(ExamDefinitionRepository repository, ItembankService itembankService,
-            TaskRuntimeProfileService runtimeProfileService) {
+            TaskRuntimeProfileService runtimeProfileService, TaskTypeStimulusService stimulusService,
+            ExamCandidateService candidateService) {
+        this.candidateService = candidateService;
         this.repository = repository;
         this.itembankService = itembankService;
         this.runtimeProfileService = runtimeProfileService;
+        this.stimulusService = stimulusService;
     }
 
     /** Optional active platform default for practice timing and mock-test generation. */
@@ -155,13 +171,29 @@ public class ExamDefinitionService {
                 String reason = profileReason != null ? profileReason
                         : !sectionMatches ? "SECTION_MISMATCH" : ready ? null : "INSUFFICIENT_POOL";
                 slots.add(new ExamDefinitionSlotFeasibilityResponse(taskTypeKey, item.section(),
-                        item.maxCount(), available, ready, reason));
+                        item.maxCount(), available, ready, reason, cefrCounts(taskTypeKey)));
             } catch (RuntimeException ignored) {
                 // The invalid slot was already added above with a stable reason.
             }
         }
+        Map<String, Integer> stimulusSeconds = stimulusService == null ? Map.of()
+                : stimulusService.stimulusBeforeTimer(taskTypeKeys).entrySet().stream()
+                        .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().seconds()));
+        List<PartTimeFeasibilityResponse> parts = PartTimeReport.of(
+                ExamTimeModel.partRanges(template.items(), stimulusSeconds), template.timeFrame());
+        Integer totalMaxSeconds = template.timeFrame() == null ? null : template.timeFrame().totalMaxSeconds();
         return new ExamDefinitionFeasibilityResponse(template.publicId(), template.version(),
-                slots.stream().allMatch(ExamDefinitionSlotFeasibilityResponse::ready), slots);
+                slots.stream().allMatch(ExamDefinitionSlotFeasibilityResponse::ready), slots, parts, totalMaxSeconds);
+    }
+
+    // How many exam-ready questions of the task type sit at each CEFR level; empty without a candidate service.
+    private Map<String, Long> cefrCounts(String taskTypeKey) {
+        if (candidateService == null) {
+            return Map.of();
+        }
+        return candidateService.candidates(taskTypeKey).stream().collect(java.util.stream.Collectors.groupingBy(
+                candidate -> candidate.cefrLevel() == null ? "UNCLASSIFIED" : candidate.cefrLevel(),
+                java.util.stream.Collectors.counting()));
     }
 
     private String runtimeProfileReason(ExamDefinitionItemResponse item,

@@ -112,6 +112,7 @@ public class AttendanceCoordinatorService {
                     row.blockingReason(),
                     activityStatus,
                     activityAt,
+                    attempt != null ? attempt.attemptPublicId() : null,
                     row.identityStatus(),
                     row.identityNote()
             );

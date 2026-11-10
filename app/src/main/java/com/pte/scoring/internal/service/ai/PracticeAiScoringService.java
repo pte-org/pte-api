@@ -13,6 +13,9 @@ import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.config.AiProviderProperties;
+import com.pte.scoring.internal.constant.ScoringConstants;
+import com.pte.scoring.internal.rubric.service.ResolvedRubric;
+import com.pte.scoring.internal.rubric.service.RubricResolver;
 import com.pte.scoring.internal.vendor.AiAnswerScorer;
 import com.pte.scoring.internal.vendor.AiJobBudget;
 import com.pte.scoring.internal.vendor.AiProviderException;
@@ -42,8 +45,11 @@ import java.util.Map;
  * Practice adapter over the scorers the exam already uses. {@link #score} mirrors
  * {@code AiScoringWorker.callVendor}: the task-specific scorer when one is
  * registered, otherwise the generic speech or essay client, always inside one
- * {@link AiJobBudget}. It has no persistence or attempt side effects; Practice
- * owns the result snapshot and the dispatch bookkeeping. Keep the two in step.
+ * {@link AiJobBudget}. A rubric-scored task type is scored with the ACTIVE
+ * rubric version (practice has no exam definition to pin one) and only by its
+ * task-specific scorer, never by a generic client. It has no persistence or
+ * attempt side effects; Practice owns the result snapshot and the dispatch
+ * bookkeeping. Keep the two in step.
  */
 @Service
 public class PracticeAiScoringService {
@@ -58,24 +64,26 @@ public class PracticeAiScoringService {
     private final ObjectiveScoringService objectiveScoringService;
     private final Clock clock;
     private final AiProviderProperties properties;
+    private final RubricResolver rubricResolver;
 
     @Autowired
     public PracticeAiScoringService(ObjectProvider<AiAnswerScorer> scorers, SpeechScoringClient speechScoringClient,
             EssayScoringClient essayScoringClient, ObjectiveScoringService objectiveScoringService, Clock clock,
-            AiProviderProperties properties) {
+            AiProviderProperties properties, RubricResolver rubricResolver) {
         this(scorers.orderedStream().toList(), speechScoringClient, essayScoringClient, objectiveScoringService,
-                clock, properties);
+                clock, properties, rubricResolver);
     }
 
     PracticeAiScoringService(List<AiAnswerScorer> scorers, SpeechScoringClient speechScoringClient,
             EssayScoringClient essayScoringClient, ObjectiveScoringService objectiveScoringService, Clock clock,
-            AiProviderProperties properties) {
+            AiProviderProperties properties, RubricResolver rubricResolver) {
         this.scorersByTaskType = byTaskType(scorers);
         this.speechScoringClient = speechScoringClient;
         this.essayScoringClient = essayScoringClient;
         this.objectiveScoringService = objectiveScoringService;
         this.clock = clock;
         this.properties = properties;
+        this.rubricResolver = rubricResolver;
     }
 
     /** Classifies a task type from the exam's runtime profile table; unknown codes are UNSUPPORTED. */
@@ -146,17 +154,32 @@ public class PracticeAiScoringService {
                 nullToEmpty(result.transcript()), nullToEmpty(result.detailJson()));
         return new PracticeAiEvaluation(result.rawScore(), result.subScores(), scoreStatus, result.provider(),
                 result.model(), result.providerVersion(), result.transcript(), result.detailJson(), evaluatedAt,
-                hash, result.feedback());
+                hash, result.feedback(), result.rubricVersionPublicId());
     }
 
     private AiScoreResult callVendor(PracticeScoringRoute route, AiScoringRequest request) {
         AiAnswerScorer scorer = scorersByTaskType.get(request.taskType());
+        if (ScoringConstants.RUBRIC_SCORED_TASK_TYPES.contains(request.taskType())) {
+            if (scorer == null) {
+                throw new AiProviderException(ScoringConstants.AI_RUBRIC_SCORER_UNAVAILABLE);
+            }
+            return scorer.score(withActiveRubric(request));
+        }
         if (scorer != null) {
             return scorer.score(request);
         }
         return route == PracticeScoringRoute.AI_SPEECH
                 ? speechScoringClient.score(request.payload(), request.correctAnswerText(), request.tenantId())
                 : essayScoringClient.score(request.payload(), request.correctAnswerText());
+    }
+
+    /** A rubric that cannot be resolved escapes as a domain error, which {@link #scoreAi} reports as INTERNAL. */
+    private AiScoringRequest withActiveRubric(AiScoringRequest request) {
+        ResolvedRubric active = rubricResolver.resolveActiveVersion(request.taskType());
+        return new AiScoringRequest(request.taskType(), request.payload(), request.promptText(),
+                request.referenceAnswerText(), request.correctAnswerText(), request.imagePromptRef(),
+                request.minWordCount(), request.maxWordCount(), request.tenantId(), active.rubric(),
+                active.versionPublicId());
     }
 
     private static TaskRuntimeProfileDescriptor runtimeFor(String taskType) {

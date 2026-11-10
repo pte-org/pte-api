@@ -47,7 +47,8 @@ public class OpenAiCompatibleChatClient {
         this.restClient = restClient;
         this.properties = properties;
         this.jsonMapper = jsonMapper;
-        this.guard = ProviderGuard.standard(VENDOR, clock);
+        this.guard = ProviderGuard.standard(VENDOR, properties.getRetryMaxAttempts(),
+                properties.getBreakerThreshold(), clock);
     }
 
     public AiScoreResult complete(String model, List<Map<String, Object>> messages) {

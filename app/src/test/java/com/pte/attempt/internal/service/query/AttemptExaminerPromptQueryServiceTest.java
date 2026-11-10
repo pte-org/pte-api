@@ -37,7 +37,8 @@ class AttemptExaminerPromptQueryServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AttemptExaminerPromptQueryService(attemptRepository, contentService, jsonMapper);
+        service = new AttemptExaminerPromptQueryService(attemptRepository, contentService, jsonMapper,
+                org.mockito.Mockito.mock(com.pte.itembank.ItembankService.class));
     }
 
     @Test
@@ -65,7 +66,33 @@ class AttemptExaminerPromptQueryServiceTest {
         assertThat(prompt.promptText()).contains("daily English");
         assertThat(prompt.options()).extracting(AttemptExaminerPromptView.Option::text)
                 .containsExactly("choice");
-        assertThat(jsonMapper.writeValueAsString(prompt)).doesNotContain("secret answer", "correctGapIndex");
+        assertThat(prompt.correctAnswerText()).isEqualTo("secret answer");
+        assertThat(prompt.options()).extracting(AttemptExaminerPromptView.Option::correct).containsExactly(true);
+    }
+
+    @Test
+    void carriesTheReferenceAnswerForEveryItem() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        UUID audioItemId = UUID.randomUUID();
+        UUID textItemId = UUID.randomUUID();
+        ExamAttempt attempt = attempt(tenantId, sessionId, attemptId);
+        SnapshotContentResponse.Item audio = new SnapshotContentResponse.Item(1, "SPEAKING", "REPEAT_SENTENCE",
+                "Repeat", null, UUID.randomUUID(), null, "The bus leaves at noon.", "secret answer", null, null, null,
+                "REPEAT_SENTENCE", "Repeat", "REPEAT_SENTENCE", null, null, null, null, audioItemId);
+        SnapshotContentResponse.Item text = new SnapshotContentResponse.Item(2, "WRITING", "WRITE_ESSAY",
+                "Essay", "Discuss.", null, null, "model essay", null, null, null, null,
+                "WRITE_ESSAY", "Essay", "WRITE_ESSAY", null, null, null, null, textItemId);
+        when(attemptRepository.findByPublicId(attemptId)).thenReturn(Optional.of(attempt));
+        when(contentService.contentItems(attempt.getExamVersionPublicId()))
+                .thenReturn(Map.of(audioItemId, audio, textItemId, text));
+
+        Map<UUID, AttemptExaminerPromptView> result = service.findForExaminer(
+                attemptId, sessionId, tenantId, List.of(audioItemId, textItemId));
+
+        assertThat(result.get(audioItemId).referenceAnswerText()).isEqualTo("The bus leaves at noon.");
+        assertThat(result.get(textItemId).referenceAnswerText()).isEqualTo("model essay");
     }
 
     @Test

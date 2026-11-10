@@ -20,6 +20,7 @@ public record AttendanceRowView(
         String blockingReason,
         String latestAttemptActivityStatus,
         Instant latestAttemptActivityAt,
+        UUID latestAttemptPublicId,
         String identityStatus,
         String identityNote
 ) {

@@ -4,7 +4,7 @@ package com.pte.itembank.internal.constant;
 public final class ItembankConstants {
 
     public static final String QUESTION_DELETE_NOT_ALLOWED = "QUESTION_DELETE_NOT_ALLOWED";
-    public static final String QUESTION_DELETE_NOT_ALLOWED_MESSAGE = "Only a new, never-published draft without revision history can be deleted. Legacy drafts with unknown history are protected.";
+    public static final String QUESTION_DELETE_NOT_ALLOWED_MESSAGE = "Only a draft that has never been published can be deleted. Legacy drafts with unknown history are protected.";
     public static final String QUESTION_AGGREGATE = "Question";
     public static final String QUESTION_DRAFT_DELETED = "QuestionDraftDeleted";
     public static final String QUESTION_DRAFT_DELETED_SUMMARY = "Unused question draft removed.";
@@ -13,6 +13,8 @@ public final class ItembankConstants {
     public static final String INVALID_QUESTION_FIELDS = "INVALID_QUESTION_FIELDS";
     public static final String INVALID_QUESTION_TYPE = "INVALID_QUESTION_TYPE";
     public static final String UNKNOWN_TASK_TYPE = "UNKNOWN_TASK_TYPE";
+    public static final String INVALID_CEFR_LEVEL = "CEFR level must be one of A1, A2, B1, B2, C1, C2";
+    public static final String CEFR_LEVEL_REQUIRED = "An exam question needs a CEFR level before it is submitted for approval";
     public static final String TASK_TYPE_KEY_INVALID = "TASK_TYPE_KEY_INVALID";
     public static final String TASK_TYPE_KEY_ALREADY_USED = "TASK_TYPE_KEY_ALREADY_USED";
     public static final String TASK_TYPE_DISPLAY_NAME_ALREADY_USED = "TASK_TYPE_DISPLAY_NAME_ALREADY_USED";
@@ -85,9 +87,23 @@ public final class ItembankConstants {
     public static final String AUDIT_ARCHIVED = "ARCHIVED";
     public static final String AUDIT_UNARCHIVED = "UNARCHIVED";
 
+    /** Audit trail summaries for question lifecycle actions (stored, not shown to end users). */
+    public static final String AUDIT_SUMMARY_CREATED = "Created question draft";
+    public static final String AUDIT_SUMMARY_UPDATED = "Updated question draft";
+    public static final String AUDIT_SUMMARY_AVAILABILITY_CHANGED =
+            "; availability exam %s->%s, practice %s->%s";
+    public static final String AUDIT_SUMMARY_REVISION_CREATED = "Created question revision %d";
+    public static final String AUDIT_SUMMARY_SUBMITTED = "Submitted question for approval";
+    public static final String AUDIT_SUMMARY_APPROVED = "Approved question";
+    public static final String AUDIT_SUMMARY_REJECTED = "Rejected question: %s";
+    public static final String AUDIT_SUMMARY_PUBLISHED = "Published question";
+    public static final String AUDIT_SUMMARY_ARCHIVED = "Archived question";
+    public static final String AUDIT_SUMMARY_UNARCHIVED = "Restored question to draft";
+    public static final String AUDIT_UNKNOWN_AGGREGATE = "unknown";
+    public static final int AUDIT_SUMMARY_MAX_LENGTH = 500;
+
     public static final String OPTION_TEXT_REQUIRED = "Option text is required";
     public static final String TASK_TYPE_REQUIRED = "Task type is required";
-    public static final String TITLE_REQUIRED = "Title is required";
     public static final String TASK_SKILL_MAPPING_LOAD_FAILED = "Failed to load task-skill mapping from %s";
 
     private ItembankConstants() {

@@ -20,6 +20,7 @@ import com.pte.shared.security.PlatformOperation;
 import com.pte.shared.web.PagedResult;
 import com.pte.tenancy.TenancyService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.UUID;
 
 /** Issues bearer codes and funnels redemption through the single activation path. */
@@ -41,7 +43,6 @@ public class LicenseCodeService {
     private final LicenseCodeRevoker revoker;
     private final LicenseCodeRedeemer redeemer;
 
-    @Autowired
     public LicenseCodeService(LicenseCodeRepository licenseCodeRepository, ServicePlanRepository planRepository,
             SubscriptionRepository subscriptionRepository,
             LicenseCodePersistenceService licenseCodePersistenceService,
@@ -49,6 +50,23 @@ public class LicenseCodeService {
             SubscriptionActivationService subscriptionActivationService,
             ApplicationEventPublisher eventPublisher, AuditLogService auditLogService,
             TenancyService tenancyService, Clock clock) {
+        this(licenseCodeRepository, planRepository, subscriptionRepository, licenseCodePersistenceService,
+                licenseCodeGenerator, subscriptionActivationService, eventPublisher, auditLogService, tenancyService,
+                Duration.ofMinutes(LicenseCodeRevoker.DEFAULT_REVOKE_PREVIEW_MINUTES),
+                clock);
+    }
+
+    @Autowired
+    public LicenseCodeService(LicenseCodeRepository licenseCodeRepository, ServicePlanRepository planRepository,
+            SubscriptionRepository subscriptionRepository,
+            LicenseCodePersistenceService licenseCodePersistenceService,
+            LicenseCodeGenerator licenseCodeGenerator,
+            SubscriptionActivationService subscriptionActivationService,
+            ApplicationEventPublisher eventPublisher, AuditLogService auditLogService,
+            TenancyService tenancyService,
+            @Value("${billing.license-code.revoke-preview-ttl:" + LicenseCodeRevoker.DEFAULT_REVOKE_PREVIEW_MINUTES + "m}")
+            Duration revokePreviewTtl,
+            Clock clock) {
         this.licenseCodeRepository = licenseCodeRepository;
         this.auditLogService = auditLogService;
         this.accessPolicy = new LicenseCodeAccessPolicy(auditLogService, tenancyService);
@@ -59,7 +77,7 @@ public class LicenseCodeService {
         this.revoker = new LicenseCodeRevoker(licenseCodeRepository, subscriptionRepository, eventPublisher,
                 new LicenseRevokeScopeResolver(licenseCodeRepository, planRepository, subscriptionRepository,
                         eventPublisher, clock),
-                clock);
+                revokePreviewTtl, clock);
         this.redeemer = new LicenseCodeRedeemer(licenseCodeRepository, planRepository, subscriptionRepository,
                 subscriptionActivationService, eventPublisher, clock);
     }

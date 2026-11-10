@@ -31,7 +31,7 @@ class CloudinaryPracticeRecordingPlaybackTest {
     private final UUID mediaId = UUID.randomUUID();
     private final CloudinaryMediaService service = new CloudinaryMediaService(repository,
             "test-cloud", "test-key", "test-secret", "pte/authoring", "pte/submissions",
-            liveBinding, null, com.pte.TestClocks.fixed());
+            liveBinding, null, com.pte.TestClocks.fixed(), org.springframework.web.client.RestClient.builder());
 
     @Test
     void completedRecordingPlaybackChecksStoredOwnershipWithoutRequiringALiveSession() {

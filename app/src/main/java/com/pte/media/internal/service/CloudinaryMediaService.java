@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
 import java.util.Collection;
@@ -37,21 +38,33 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
     private final CloudinaryUploadRequester uploadRequester;
     private final CloudinaryUploadVerifier uploadVerifier;
     private final CloudinaryMediaReader mediaReader;
+    private final CloudinaryGeneratedUploader generatedUploader;
+
+    CloudinaryMediaService(MediaAssetRepository repository, String cloudName, String apiKey, String apiSecret,
+            String authoringFolder, String submissionFolder, PracticeMediaBindingPort practiceMediaBindingService,
+            AuditLogService auditLogService, Clock clock, RestClient.Builder restClientBuilder) {
+        this(repository, cloudName, apiKey, apiSecret, authoringFolder, submissionFolder, SIGNATURE_TTL_SECONDS,
+                practiceMediaBindingService, auditLogService, clock, restClientBuilder);
+    }
 
     @Autowired
     public CloudinaryMediaService(MediaAssetRepository repository,
-            @Value("${cloudinary.cloud-name:}") String cloudName,
-            @Value("${cloudinary.api-key:}") String apiKey,
-            @Value("${cloudinary.api-secret:}") String apiSecret,
-            @Value("${cloudinary.authoring-folder:pte/authoring}") String authoringFolder,
-            @Value("${cloudinary.submission-folder:pte/submissions}") String submissionFolder,
-            PracticeMediaBindingPort practiceMediaBindingService, AuditLogService auditLogService, Clock clock) {
+            @Value("${media.cloudinary.cloud-name:}") String cloudName,
+            @Value("${media.cloudinary.api-key:}") String apiKey,
+            @Value("${media.cloudinary.api-secret:}") String apiSecret,
+            @Value("${media.cloudinary.authoring-folder:pte/authoring}") String authoringFolder,
+            @Value("${media.cloudinary.submission-folder:pte/submissions}") String submissionFolder,
+            @Value("${media.cloudinary.signature-ttl-seconds:" + SIGNATURE_TTL_SECONDS + "}") long signatureTtlSeconds,
+            PracticeMediaBindingPort practiceMediaBindingService, AuditLogService auditLogService, Clock clock,
+            RestClient.Builder restClientBuilder) {
         CloudinaryRequestSigner signer = new CloudinaryRequestSigner(cloudName, apiKey, apiSecret, clock);
         MediaAccessGuard accessGuard = new MediaAccessGuard(practiceMediaBindingService, auditLogService);
         this.uploadRequester = new CloudinaryUploadRequester(repository, signer, accessGuard,
-                practiceMediaBindingService, authoringFolder, submissionFolder, clock);
+                practiceMediaBindingService, authoringFolder, submissionFolder, signatureTtlSeconds, clock);
         this.uploadVerifier = new CloudinaryUploadVerifier(repository, signer, accessGuard);
-        this.mediaReader = new CloudinaryMediaReader(repository, signer);
+        this.mediaReader = new CloudinaryMediaReader(repository, signer, signatureTtlSeconds);
+        this.generatedUploader = new CloudinaryGeneratedUploader(repository, signer, authoringFolder, clock,
+                restClientBuilder);
     }
 
     @Transactional
@@ -86,6 +99,12 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
         return mediaReader.resolveForTrustedCallers(mediaPublicIds, requestedTtlSeconds, tenantId);
     }
 
+    /** Measured length of each given media object that has one, from one repository query. */
+    @Transactional(readOnly = true)
+    public Map<UUID, Integer> durationSeconds(Collection<UUID> mediaPublicIds) {
+        return mediaReader.durationSeconds(mediaPublicIds);
+    }
+
     public void validateAuthoringMedia(UUID mediaPublicId, String assetKind, CurrentUser caller) {
         uploadVerifier.validateAuthoringMedia(mediaPublicId, assetKind, caller);
     }
@@ -103,5 +122,17 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
             UUID itemPublicId, CurrentUser owner, long ttlSeconds) {
         return mediaReader.presignOwnedPracticeResponseAudio(mediaPublicId, sessionPublicId, itemPublicId,
                 owner, ttlSeconds);
+    }
+
+    /** Server-side upload of AI-generated media (audio or image) for questions. */
+    @Transactional
+    public UUID storeGenerated(byte[] bytes, String contentType, String assetKind, CurrentUser owner) {
+        return generatedUploader.storeGenerated(bytes, contentType, assetKind, owner);
+    }
+
+    /** Removes AI-generated media the caller generated, at Cloudinary and in the database. */
+    @Transactional
+    public void deleteGenerated(UUID mediaPublicId, CurrentUser owner) {
+        generatedUploader.deleteGenerated(mediaPublicId, owner);
     }
 }

@@ -17,6 +17,7 @@ public final class AssessmentConstants {
     public static final String INVALID_SKILL_SELECTION = "INVALID_SKILL_SELECTION";
     public static final String TEMPLATE_NOT_ACTIVE = "TEMPLATE_NOT_ACTIVE";
     public static final String DETERMINISTIC_ALGORITHM_VERSION = "PTE_SEEDED_V2";
+    public static final String BALANCED_ALGORITHM_VERSION = "PTE_SEEDED_BALANCED_V1";
 
     public static final String QUESTION_REFERENCE_REQUIRED = "Question reference is required";
     public static final String SECTION_REQUIRED = "Section is required";

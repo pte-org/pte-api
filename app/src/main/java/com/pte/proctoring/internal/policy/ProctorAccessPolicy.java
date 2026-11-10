@@ -46,22 +46,4 @@ public class ProctorAccessPolicy {
         }
         throw new AccessDeniedException("Assigned PROCTOR or HOST_ADMIN role is required");
     }
-
-    /**
-     * Strictly requires caller to be an assigned PROCTOR for this session within the caller's tenant.
-     */
-    public UUID authorizeProctorAssigned(UUID sessionPublicId, CurrentUser caller) {
-        if (caller == null) {
-            throw new AccessDeniedException("Authenticated user is required");
-        }
-        if (!caller.hasRole("PROCTOR")) {
-            throw new AccessDeniedException("PROCTOR role is required");
-        }
-        ProctorAssignmentCheckResponse assignment = sessionService.checkProctorAssignment(
-                sessionPublicId, caller.userId());
-        if (caller.tenantId() != null && !Objects.equals(assignment.tenantId(), caller.tenantId())) {
-            throw new AccessDeniedException("Tenant mismatch on proctor assignment");
-        }
-        return assignment.tenantId();
-    }
 }

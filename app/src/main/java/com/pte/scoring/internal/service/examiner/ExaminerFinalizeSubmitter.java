@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.service.examiner;
 
+import com.pte.scoring.internal.service.examiner.trait.ExaminerTraitScoreResolver;
 import com.pte.attempt.AttemptService;
 import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.ExaminerEvaluation;
@@ -37,12 +38,17 @@ class ExaminerFinalizeSubmitter {
     private final ExaminerEvaluationRepository evaluationRepository;
     private final ExaminerReviewVersionService examinerReviewVersionService;
     private final AttemptService attemptService;
+    private final ExaminerTraitScoreResolver traits;
+    private final com.pte.scoring.internal.service.examiner.trait.ExaminerTraitFreshness freshness;
 
     ExaminerFinalizeSubmitter(ExaminerEvaluationRepository evaluationRepository,
-            ExaminerReviewVersionService examinerReviewVersionService, AttemptService attemptService) {
+            ExaminerReviewVersionService examinerReviewVersionService, AttemptService attemptService, ExaminerTraitScoreResolver traits,
+            com.pte.scoring.internal.service.examiner.trait.ExaminerTraitFreshness freshness) {
         this.evaluationRepository = evaluationRepository;
         this.examinerReviewVersionService = examinerReviewVersionService;
         this.attemptService = attemptService;
+        this.traits = traits;
+        this.freshness = freshness;
     }
 
     List<ExaminerCommandReceiptResponse.ChildRequestReceipt> submitAll(CurrentUser user, UUID sessionPublicId,
@@ -84,17 +90,23 @@ class ExaminerFinalizeSubmitter {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.DRAFT_STALE_FORMAT.formatted(item.answerPublicId()));
             }
 
+            AiEvaluation answerEntity = answersById.get(item.answerPublicId());
+            freshness.requireCurrent(answerEntity, work, item.expectedReviewVersion());
+            var calculated = traits.stored(answerEntity, draft);
+            if (!Objects.equals(item.expectedReviewVersion(), draft.getExpectedReviewVersion())
+                    || !Objects.equals(item.reviewedAiVersion(), draft.getReviewedAiVersion()))
+                throw new com.pte.scoring.internal.exception.examiner.StaleReviewVersionException();
+
             UUID childUUID = UUID.nameUUIDFromBytes((ExaminerScoringConstants.FINALIZE_CHILD_KEY_PREFIX + request.requestPublicId() + ":" + item.answerPublicId()).getBytes(StandardCharsets.UTF_8));
-            String childFingerprint = ExaminerWorkRecorder.fingerprint(ExaminerScoringConstants.FINGERPRINT_SCORE + user.tenantId() + ":" + item.answerPublicId() + ":" + childUUID + ":" + draft.getScore());
+            String childFingerprint = ExaminerWorkRecorder.fingerprint(ExaminerScoringConstants.FINGERPRINT_SCORE + user.tenantId() + ":" + item.answerPublicId() + ":" + childUUID + ":" + draft.getScore() + ":" + draft.getTraitScoresJson() + ":" + draft.getRubricVersionPublicId());
 
             ExaminerDecisionKind decisionKind = draft.getDecisionKind() != null ? draft.getDecisionKind() : ExaminerDecisionKind.MANUAL;
             Integer reviewedAiScore = null;
             if (decisionKind == ExaminerDecisionKind.CONFIRM_AI) {
-                AiEvaluation answerEntity = answersById.get(item.answerPublicId());
                 ExaminerAiReferenceResponse aiRef = examinerReviewVersionService.buildAiReference(answerEntity);
                 if (aiRef.availability() != ExaminerAiAvailability.AVAILABLE || aiRef.score() == null
                         || !Objects.equals(aiRef.version(), draft.getReviewedAiVersion())
-                        || !Objects.equals(aiRef.score(), draft.getScore())) {
+                        || !Objects.equals(aiRef.score(), calculated.itemScore()) || !traits.matchesAi(answerEntity, calculated)) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT,
                             ExaminerScoringConstants.CONFIRM_AI_FINALIZE_MISMATCH_FORMAT.formatted(item.answerPublicId()));
                 }
@@ -105,7 +117,7 @@ class ExaminerFinalizeSubmitter {
                     draft.getExpectedReviewVersion(), childUUID, childFingerprint);
             evaluationRepository.save(draft);
             scoreByAnswer.put(item.answerPublicId(), draft.getPublicId());
-            childReceipts.add(new ExaminerCommandReceiptResponse.ChildRequestReceipt(item.answerPublicId(), childUUID));
+            childReceipts.add(new ExaminerCommandReceiptResponse.ChildRequestReceipt(item.answerPublicId(), childUUID, calculated.itemScore(), calculated.scoreTrace()));
         }
         // In a manual session the examiner's submitted score is the score of record, so selecting it is part of finalizing.
         attemptService.selectScoreSource(scoreByAnswer.keySet(), user.tenantId(), ExaminerScoringConstants.EXAMINER_SOURCE, user.userId(), now,

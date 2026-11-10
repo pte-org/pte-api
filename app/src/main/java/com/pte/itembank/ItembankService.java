@@ -85,6 +85,21 @@ public class ItembankService {
     }
 
     @Transactional(readOnly = true)
+    public PagedResult<QuestionResponse> listAccessible(CurrentUser caller, int requestedPage, int requestedSize,
+            String taskType, String section, String status, String query, String pool, String cefrLevel) {
+        return queryService.listAccessible(caller, requestedPage, requestedSize, taskType, section, status, query,
+                pool, cefrLevel);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<QuestionResponse> listAccessible(CurrentUser caller, int requestedPage, int requestedSize,
+            String taskType, String section, String status, String query, String pool, String cefrLevel,
+            Boolean aiGenerated) {
+        return queryService.listAccessible(caller, requestedPage, requestedSize, taskType, section, status, query,
+                pool, cefrLevel, aiGenerated);
+    }
+
+    @Transactional(readOnly = true)
     public QuestionStatsResponse stats(CurrentUser caller) {
         return queryService.stats(caller);
     }
@@ -164,5 +179,11 @@ public class ItembankService {
     @Transactional(readOnly = true)
     public QuestionFreezeView freeze(UUID questionPublicId) {
         return queryService.freeze(questionPublicId);
+    }
+
+    /** CEFR level per question public id, for showing an item's difficulty; unclassified questions are absent. */
+    @Transactional(readOnly = true)
+    public Map<UUID, String> cefrLevels(java.util.Collection<UUID> questionPublicIds) {
+        return queryService.cefrLevels(questionPublicIds);
     }
 }

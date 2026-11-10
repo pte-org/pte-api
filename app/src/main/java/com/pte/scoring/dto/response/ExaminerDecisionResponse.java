@@ -16,5 +16,16 @@ public record ExaminerDecisionResponse(
         Instant finalizedAt,
         Integer reviewedAiScore,
         String reviewedAiVersion,
+        UUID requestPublicId,
+        java.util.Map<String, Integer> traitScores, UUID rubricVersionPublicId) {
+    public ExaminerDecisionResponse(String status,
+        Integer score,
+        ExaminerDecisionKind decisionKind,
+        Instant finalizedAt,
+        Integer reviewedAiScore,
+        String reviewedAiVersion,
         UUID requestPublicId) {
+        this(status, score, decisionKind, finalizedAt, reviewedAiScore, reviewedAiVersion, requestPublicId, java.util.Map.of(), null);
+    }
+
 }

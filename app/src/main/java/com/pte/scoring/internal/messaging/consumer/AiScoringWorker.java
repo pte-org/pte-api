@@ -8,6 +8,8 @@ import com.pte.scoring.internal.config.AiProviderProperties;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
 import com.pte.scoring.internal.repository.AiEvaluationRepository;
+import com.pte.scoring.internal.rubric.service.ResolvedRubric;
+import com.pte.scoring.internal.rubric.service.RubricResolver;
 import com.pte.scoring.internal.service.ai.AiScoringResultPersistenceService;
 import com.pte.scoring.internal.vendor.AiAnswerScorer;
 import com.pte.scoring.internal.vendor.AiJobBudget;
@@ -16,6 +18,7 @@ import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.AiScoringRequest;
 import com.pte.scoring.internal.vendor.EssayScoringClient;
 import com.pte.scoring.internal.vendor.SpeechScoringClient;
+import com.pte.shared.exception.DomainException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -43,6 +46,11 @@ import java.util.Map;
  * An {@link AiProviderException} that survives marks the answer failed with
  * its reason; any other exception rejects the message to the DLQ, where
  * {@link #onDeadLettered} marks it failed as {@code INTERNAL_ERROR}.
+ *
+ * <p>A rubric-scored task type is scored with the rubric version pinned on the
+ * answer's exam definition, resolved when the job runs (not when it was
+ * queued). It needs a task-specific scorer: the generic clients never score
+ * it, and a rubric that cannot be resolved fails the answer.
  */
 @Component
 public class AiScoringWorker {
@@ -57,14 +65,16 @@ public class AiScoringWorker {
     private final Clock clock;
     private final AiProviderProperties properties;
     private final AnswerContentReader contentReader;
+    private final RubricResolver rubricResolver;
 
     @Autowired
     public AiScoringWorker(AiEvaluationRepository scoringAnswerRepository, SpeechScoringClient speechScoringClient,
                            EssayScoringClient essayScoringClient, ObjectProvider<AiAnswerScorer> scorers,
                            AiScoringResultPersistenceService resultPersistenceService, Clock clock,
-                           AiProviderProperties properties, AnswerContentReader contentReader) {
+                           AiProviderProperties properties, AnswerContentReader contentReader,
+                           RubricResolver rubricResolver) {
         this(scoringAnswerRepository, speechScoringClient, essayScoringClient, scorers.orderedStream().toList(),
-                resultPersistenceService, clock, properties, contentReader);
+                resultPersistenceService, clock, properties, contentReader, rubricResolver);
     }
 
     /**
@@ -74,8 +84,10 @@ public class AiScoringWorker {
     public AiScoringWorker(AiEvaluationRepository scoringAnswerRepository, SpeechScoringClient speechScoringClient,
                            EssayScoringClient essayScoringClient, List<AiAnswerScorer> scorers,
                            AiScoringResultPersistenceService resultPersistenceService, Clock clock,
-                           AiProviderProperties properties, AnswerContentReader contentReader) {
+                           AiProviderProperties properties, AnswerContentReader contentReader,
+                           RubricResolver rubricResolver) {
         this.contentReader = contentReader;
+        this.rubricResolver = rubricResolver;
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.speechScoringClient = speechScoringClient;
         this.essayScoringClient = essayScoringClient;
@@ -123,7 +135,7 @@ public class AiScoringWorker {
         AiScoreResult result;
         try {
             result = AiJobBudget.run(clock, Duration.ofMillis(properties.getJobBudgetMs()),
-                    () -> callVendor(job.scoringMethod(), content));
+                    () -> callVendor(job.scoringMethod(), answer, content));
         } catch (AiProviderException ex) {
             log.warn("AI scoring failed for answer {}: {}", job.answerPublicId(), ex.getReason());
             resultPersistenceService.markScoringFailed(job.answerPublicId(), job.attemptPublicId(), job.tenantId(),
@@ -143,14 +155,21 @@ public class AiScoringWorker {
                 job.sessionPublicId(), job.dispatchToken(), AiFailureReason.INTERNAL_ERROR);
     }
 
-    /** Switches on the {@code scoringMethod} resolved once at dispatch time from the pinned ScoreTemplate (spec FR-07), not re-derived from task type here. */
-    private AiScoreResult callVendor(String scoringMethod, SubmittedAnswerView answer) {
+    /**
+     * A rubric task type goes to its scorer with the rubric resolved now; any other task type to its scorer, or else
+     * switches on the {@code scoringMethod} resolved once at dispatch time from the pinned ScoreTemplate (spec FR-07),
+     * not re-derived from task type here.
+     */
+    private AiScoreResult callVendor(String scoringMethod, AiEvaluation evaluation, SubmittedAnswerView answer) {
         AiAnswerScorer scorer = scorersByTaskType.get(answer.taskType());
+        if (ScoringConstants.RUBRIC_SCORED_TASK_TYPES.contains(answer.taskType())) {
+            if (scorer == null) {
+                throw new AiProviderException(ScoringConstants.AI_RUBRIC_SCORER_UNAVAILABLE);
+            }
+            return scorer.score(request(answer, resolveRubric(evaluation, answer.taskType())));
+        }
         if (scorer != null) {
-            return scorer.score(new AiScoringRequest(answer.taskType(), answer.payload(),
-                    answer.promptText(), answer.referenceAnswerText(), answer.correctAnswerText(),
-                    answer.imagePromptRef(), answer.minWordCount(), answer.maxWordCount(),
-                    answer.tenantId()));
+            return scorer.score(request(answer, null));
         }
         return switch (scoringMethod) {
             case "AI_SPEECH" -> speechScoringClient.score(answer.payload(), answer.correctAnswerText(),
@@ -159,5 +178,21 @@ public class AiScoringWorker {
             default -> throw new IllegalArgumentException(
                     String.format(ScoringConstants.UNSUPPORTED_AI_TASK_TYPE, answer.taskType()));
         };
+    }
+
+    /** A pinned version that is missing, drifted or unreadable fails the answer; it never falls back to a default. */
+    private ResolvedRubric resolveRubric(AiEvaluation evaluation, String taskType) {
+        try {
+            return rubricResolver.resolveForExamDefinition(evaluation.getExamDefinitionPublicId(), taskType);
+        } catch (DomainException ex) {
+            throw new AiProviderException(ScoringConstants.AI_RUBRIC_UNRESOLVED, ex);
+        }
+    }
+
+    private static AiScoringRequest request(SubmittedAnswerView answer, ResolvedRubric rubric) {
+        return new AiScoringRequest(answer.taskType(), answer.payload(), answer.promptText(),
+                answer.referenceAnswerText(), answer.correctAnswerText(), answer.imagePromptRef(),
+                answer.minWordCount(), answer.maxWordCount(), answer.tenantId(),
+                rubric == null ? null : rubric.rubric(), rubric == null ? null : rubric.versionPublicId());
     }
 }

@@ -161,6 +161,28 @@ class ScoringCommandServiceTest {
         verify(evaluationRepository, never()).save(any());
     }
 
+    /** An essay the model kept scoring outside the schema is re-queued by the host's existing scoring request. */
+    @Test
+    void requestScoring_redispatchesAWritingAnswerThatFailedOnSchemaViolations() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        Instant staleBefore = Instant.parse("2026-10-11T09:50:00Z");
+        AiEvaluation essay = answer(ScoringConstants.TASK_TYPE_WRITE_ESSAY, ScoringMethod.AI_TEXT);
+        essay.markAiDispatched(staleBefore.plusSeconds(60));
+        essay.setStatus(ScoringAnswerStatus.SCORING_FAILED);
+        essay.recordFailure(com.pte.scoring.domain.enums.AiFailureReason.PROVIDER_RESPONSE_INVALID);
+        when(aiScoringDispatcher.staleBefore()).thenReturn(staleBefore);
+        when(evaluationRepository.findScoringWork(sessionPublicId, tenantId, staleBefore))
+                .thenReturn(List.of(essay));
+        when(objectiveScoringService.supports(ScoringMethod.AI_TEXT)).thenReturn(false);
+        when(aiScoringDispatcher.supports(ScoringMethod.AI_TEXT)).thenReturn(true);
+
+        service.requestScoring(sessionPublicId, tenantId);
+
+        assertThat(essay.isRescorable(staleBefore)).isTrue();
+        verify(aiScoringDispatcher).dispatch(essay, ScoringMethod.AI_TEXT);
+    }
+
     @Test
     void requestScoring_unscoredScoringMethod_leavesAnswerPending() {
         UUID sessionPublicId = UUID.randomUUID();

@@ -4,6 +4,7 @@ import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
+import com.pte.identity.internal.config.AuthTokenProperties;
 import com.pte.identity.internal.dto.request.auth.LoginOrganizationOptionsRequest;
 import com.pte.identity.internal.dto.request.auth.LoginRequest;
 import com.pte.identity.internal.dto.request.auth.RefreshRequest;
@@ -67,11 +68,12 @@ class AuthServiceTest {
 
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private AuthService authService;
+    private final AuthTokenProperties tokenProperties = new AuthTokenProperties();
 
     @BeforeEach
     void setUp() {
         authService = new AuthService(userRepository, memberRepository, passwordEncoder,
-                accessTokenIssuer, refreshTokenService, tenancyService, loginThrottle);
+                accessTokenIssuer, refreshTokenService, tenancyService, loginThrottle, tokenProperties);
     }
 
     private User activeUser(Long id, Set<Role> roles, String username) {

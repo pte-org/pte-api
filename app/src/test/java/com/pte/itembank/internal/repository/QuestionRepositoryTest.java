@@ -2,10 +2,10 @@ package com.pte.itembank.internal.repository;
 
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.QuestionOption;
+import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
-import com.pte.itembank.domain.enums.Visibility;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -29,10 +29,10 @@ class QuestionRepositoryTest {
 
     @Test
     void pageQuery_filtersBeforePaginationAndSupportsPublicIdSearch() {
-        Question matching = persist("Packet switching", "A network packet carries data", "READING",
+        Question matching = persist("A network packet carries data", "READING",
                 QuestionStatus.APPROVED);
-        persist("Other title", "Unrelated prompt", "READING", QuestionStatus.APPROVED);
-        persist("Draft title", "A network packet is still a draft", "READING", QuestionStatus.DRAFT);
+        persist("Unrelated prompt", "READING", QuestionStatus.APPROVED);
+        persist("A network packet is still a draft", "READING", QuestionStatus.DRAFT);
 
         Page<UUID> byText = questionRepository.findPagePublicIds(
                 null, "READING", QuestionStatus.APPROVED, null, "packet", null, PageRequest.of(0, 10));
@@ -46,23 +46,43 @@ class QuestionRepositoryTest {
     }
 
     @Test
+    void pageQuery_canNarrowToOneCefrLevelAndCountsOnlyThatLevel() {
+        Question b2 = persist("First prompt", "READING", QuestionStatus.APPROVED);
+        b2.setCefrLevel(CefrLevel.B2);
+        questionRepository.saveAndFlush(b2);
+        Question c1 = persist("Second prompt", "READING", QuestionStatus.APPROVED);
+        c1.setCefrLevel(CefrLevel.C1);
+        questionRepository.saveAndFlush(c1);
+        persist("Unclassified prompt", "READING", QuestionStatus.APPROVED);
+
+        Page<UUID> onlyB2 = questionRepository.findPagePublicIdsByCefr(
+                null, null, null, null, "", null, CefrLevel.B2, PageRequest.of(0, 10));
+        Page<UUID> any = questionRepository.findPagePublicIds(
+                null, null, null, null, "", null, PageRequest.of(0, 10));
+
+        assertThat(onlyB2.getContent()).containsExactly(b2.getPublicId());
+        assertThat(onlyB2.getTotalElements()).isEqualTo(1);
+        assertThat(any.getTotalElements()).isEqualTo(3);
+    }
+
+    @Test
     void groupedCounts_coverSharedQuestionBankOnly() {
-        persist("Shared listening", "prompt", "LISTENING", QuestionStatus.APPROVED);
-        persist("Shared draft", "prompt", "LISTENING", QuestionStatus.DRAFT);
-        Question deletedQuestion = persist("Deleted reading", "prompt", "READING", QuestionStatus.APPROVED);
+        persist("prompt", "LISTENING", QuestionStatus.APPROVED);
+        persist("prompt", "LISTENING", QuestionStatus.DRAFT);
+        Question deletedQuestion = persist("prompt", "READING", QuestionStatus.APPROVED);
         deletedQuestion.setDeleted(true);
         questionRepository.saveAndFlush(deletedQuestion);
 
-        assertThat(questionRepository.countByDeletedFalseAndVisibility(Visibility.SHARED)).isEqualTo(2);
-        assertThat(questionRepository.countBySectionAndVisibility(Visibility.SHARED))
+        assertThat(questionRepository.countByDeletedFalse()).isEqualTo(2);
+        assertThat(questionRepository.countBySection())
                 .containsExactlyInAnyOrder(
                         new Object[] { "LISTENING", 2L });
     }
 
     @Test
     void pageQuery_filtersByPool() {
-        Question exam = persist("Exam item", "prompt", "READING", QuestionStatus.APPROVED);
-        Question practice = persist("Practice item", "prompt", "READING", QuestionStatus.APPROVED,
+        Question exam = persist("prompt", "READING", QuestionStatus.APPROVED);
+        Question practice = persist("prompt", "READING", QuestionStatus.APPROVED,
                 QuestionPool.PRACTICE);
 
         Page<UUID> practiceOnly = questionRepository.findPagePublicIds(
@@ -78,9 +98,26 @@ class QuestionRepositoryTest {
     }
 
     @Test
+    void pageQuery_poolFilterFollowsExplicitAvailabilityFlags() {
+        Question movedToPractice = persist("prompt", "READING", QuestionStatus.DRAFT);
+        movedToPractice.setAvailabilityFlagsExplicit(true);
+        movedToPractice.setAvailableForExam(false);
+        movedToPractice.setAvailableForPractice(true);
+        questionRepository.saveAndFlush(movedToPractice);
+
+        Page<UUID> practiceOnly = questionRepository.findPagePublicIds(
+                null, null, null, QuestionPool.PRACTICE, "", null, PageRequest.of(0, 10));
+        Page<UUID> examOnly = questionRepository.findPagePublicIds(
+                null, null, null, QuestionPool.EXAM, "", null, PageRequest.of(0, 10));
+
+        assertThat(practiceOnly.getContent()).containsExactly(movedToPractice.getPublicId());
+        assertThat(examOnly.getContent()).isEmpty();
+    }
+
+    @Test
     void examGenerationQueries_ignorePracticeQuestions() {
-        persist("Exam item", "prompt", "READING", QuestionStatus.APPROVED);
-        persist("Practice item", "prompt", "READING", QuestionStatus.APPROVED, QuestionPool.PRACTICE);
+        persist("prompt", "READING", QuestionStatus.APPROVED);
+        persist("prompt", "READING", QuestionStatus.APPROVED, QuestionPool.PRACTICE);
         String key = PteTaskType.MC_READING_SINGLE.name();
 
         // Count projections only: H2 cannot convert native UUID result lists, Postgres can.
@@ -94,7 +131,7 @@ class QuestionRepositoryTest {
 
     @Test
     void practiceQueryReturnsOnlyPublishedCurrentPracticeContentWithOptions() {
-        Question practice = persist("Practice item", "Read this passage", "READING",
+        Question practice = persist("Read this passage", "READING",
                 QuestionStatus.APPROVED, QuestionPool.PRACTICE);
         QuestionOption option = new QuestionOption();
         option.setText("The supported statement");
@@ -102,7 +139,7 @@ class QuestionRepositoryTest {
         option.setOrderIndex(0);
         practice.addOption(option);
         questionRepository.saveAndFlush(practice);
-        persist("Exam item", "Do not return this", "READING", QuestionStatus.APPROVED);
+        persist("Do not return this", "READING", QuestionStatus.APPROVED);
 
         List<UUID> ids = questionRepository.findPublishedPracticeQuestionIdsByTaskTypeKey(
                 "MC_READING_SINGLE", PageRequest.of(0, 1));
@@ -113,14 +150,14 @@ class QuestionRepositoryTest {
             assertThat(question.getOptions()).singleElement().extracting(QuestionOption::getText)
                     .isEqualTo("The supported statement");
         });
-        assertThat(questionRepository.existsByDeletedFalseAndVisibilityAndStatusAndCurrentTrueAndPoolAndTaskTypeKey(
-                Visibility.SHARED, QuestionStatus.APPROVED, QuestionPool.PRACTICE, "MC_READING_SINGLE"))
+        assertThat(questionRepository.existsByDeletedFalseAndStatusAndCurrentTrueAndPoolAndTaskTypeKey(
+                QuestionStatus.APPROVED, QuestionPool.PRACTICE, "MC_READING_SINGLE"))
                 .isTrue();
     }
 
     @Test
     void optionsAreAChildTableReloadedInAuthoredOrderWithStableIds() {
-        Question question = persist("Ordering", "prompt", "READING", QuestionStatus.APPROVED);
+        Question question = persist("prompt", "READING", QuestionStatus.APPROVED);
         QuestionOption second = new QuestionOption();
         second.setText("second");
         second.setOrderIndex(1);
@@ -141,23 +178,21 @@ class QuestionRepositoryTest {
         assertThat(reloaded.getOptions().get(0).isCorrect()).isTrue();
     }
 
-    private Question persist(String title, String prompt, String section, QuestionStatus status) {
-        return persist(title, prompt, section, status, QuestionPool.EXAM);
+    private Question persist(String prompt, String section, QuestionStatus status) {
+        return persist(prompt, section, status, QuestionPool.EXAM);
     }
 
-    private Question persist(String title, String prompt, String section, QuestionStatus status,
+    private Question persist(String prompt, String section, QuestionStatus status,
             QuestionPool pool) {
         Question question = new Question();
         question.setPteTaskType(section.equals("READING") ? PteTaskType.MC_READING_SINGLE : PteTaskType.READ_ALOUD);
         question.setTaskTypeKey(question.getPteTaskType().name());
         question.setTaskTypeSection(section);
-        question.setVisibility(Visibility.SHARED);
         question.setPool(pool);
         question.setStatus(status);
         question.setRevisionGroupPublicId(UUID.randomUUID());
         question.setRevisionNumber(1);
         question.setCurrent(true);
-        question.setTitle(title);
         question.setPromptText(prompt);
         return questionRepository.saveAndFlush(question);
     }

@@ -2,7 +2,7 @@ package com.pte.identity.internal.service;
 
 import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.User;
-import com.pte.identity.internal.constant.IdentityConstants;
+import com.pte.identity.internal.config.AuthTokenProperties;
 import com.pte.identity.internal.dto.request.auth.LoginOrganizationOptionsRequest;
 import com.pte.identity.internal.dto.request.auth.LoginRequest;
 import com.pte.identity.internal.dto.request.auth.RefreshRequest;
@@ -41,11 +41,12 @@ public class AuthService {
     private final RefreshTokenService refreshTokenService;
     private final TenancyService tenancyService;
     private final LoginThrottle loginThrottle;
+    private final AuthTokenProperties tokenProperties;
 
     public AuthService(UserRepository userRepository, OrganizationMemberRepository memberRepository,
                        PasswordEncoder passwordEncoder, AccessTokenIssuer accessTokenIssuer,
                        RefreshTokenService refreshTokenService, TenancyService tenancyService,
-                       LoginThrottle loginThrottle) {
+                       LoginThrottle loginThrottle, AuthTokenProperties tokenProperties) {
         this.userRepository = userRepository;
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
@@ -53,6 +54,7 @@ public class AuthService {
         this.refreshTokenService = refreshTokenService;
         this.tenancyService = tenancyService;
         this.loginThrottle = loginThrottle;
+        this.tokenProperties = tokenProperties;
     }
 
     @Transactional
@@ -161,7 +163,7 @@ public class AuthService {
         UUID organizationId = member == null ? null : member.getOrganizationId();
         String accessToken = accessTokenIssuer.issue(user, member);
         String refreshToken = refreshTokenService.issue(user, organizationId);
-        return TokenResponse.bearer(accessToken, refreshToken, IdentityConstants.ACCESS_TOKEN_TTL_SECONDS,
+        return TokenResponse.bearer(accessToken, refreshToken, tokenProperties.getAccessTokenTtlSeconds(),
                 user.isMustChangePassword());
     }
 }

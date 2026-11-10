@@ -4,8 +4,19 @@ public final class ExaminerScoringConstants {
 
     public static final String WORK_NOT_FOUND = "EXAMINER_WORK_NOT_FOUND";
     public static final String INVALID_QUEUE_STATUS = "INVALID_EXAMINER_QUEUE_STATUS";
+    public static final String INVALID_QUEUE_DATE = "INVALID_EXAMINER_QUEUE_DATE";
     public static final String SCORE_CONFLICT = "EXAMINER_SCORE_CONFLICT";
     public static final String INVALID_SCORE = "INVALID_EXAMINER_SCORE";
+    public static final String TRAITS_REQUIRED = "EXAMINER_TRAITS_REQUIRED";
+    public static final String TRAIT_INVALID = "EXAMINER_TRAIT_INVALID";
+    public static final String TRAIT_UNKNOWN = "EXAMINER_TRAIT_UNKNOWN";
+    public static final String TRAIT_COUNT_INVALID = "EXAMINER_TRAIT_COUNT_INVALID";
+    public static final String AI_TRAITS_UNAVAILABLE = "EXAMINER_AI_TRAITS_UNAVAILABLE";
+    public static final String TRAIT_SCORE_MISMATCH = "EXAMINER_TRAIT_SCORE_MISMATCH";
+    public static final String RUBRIC_NOT_READABLE = "EXAMINER_RUBRIC_NOT_READABLE";
+    public static final String RUBRIC_MISMATCH = "EXAMINER_RUBRIC_MISMATCH";
+    public static final String ANSWER_CONTENT_UNAVAILABLE = "EXAMINER_ANSWER_CONTENT_UNAVAILABLE";
+    public static final String DIRECT_DISABLED_FOR_ATOMIC = "Single-item score submission is disabled for ATOMIC_DRAFT workflow. Use draft and atomic finalize.";
     public static final String OLD_PAYLOAD_UNSUPPORTED = "OLD_PAYLOAD_UNSUPPORTED";
     public static final String STALE_REVIEW_VERSION = "STALE_REVIEW_VERSION";
     public static final String MISSING_MANUAL_COHORT = "MISSING_MANUAL_COHORT";
@@ -79,6 +90,14 @@ public final class ExaminerScoringConstants {
     public static final String AUDIT_ISSUE_REASON_FORMAT = "%s: %s";
     public static final String AUDIT_RESOLUTION_PREFIX = "Resolved issue: ";
     public static final long MEDIA_URL_TTL_SECONDS = 900;
+
+    /** Phase 10: nine human-ratable AI task types; ASQ remains mechanically scored. */
+    public static final java.util.Set<String> TRAIT_TASK_TYPES = java.util.Set.of(
+            ScoringConstants.TASK_TYPE_READ_ALOUD, ScoringConstants.TASK_TYPE_REPEAT_SENTENCE,
+            ScoringConstants.TASK_TYPE_DESCRIBE_IMAGE, ScoringConstants.TASK_TYPE_RE_TELL_LECTURE,
+            ScoringConstants.TASK_TYPE_RESPOND_TO_A_SITUATION, ScoringConstants.TASK_TYPE_SUMMARIZE_GROUP_DISCUSSION,
+            ScoringConstants.TASK_TYPE_SUMMARIZE_WRITTEN_TEXT, ScoringConstants.TASK_TYPE_WRITE_ESSAY,
+            ScoringConstants.TASK_TYPE_SUMMARIZE_SPOKEN_TEXT);
 
     private ExaminerScoringConstants() {
     }

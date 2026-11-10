@@ -8,7 +8,6 @@ import com.pte.itembank.domain.QuestionOption;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
-import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.request.CreateQuestionRequest;
 import com.pte.itembank.dto.request.OptionRequest;
 import com.pte.itembank.dto.response.QuestionResponse;
@@ -72,7 +71,6 @@ public class QuestionCreationService {
         question.setPteTaskType(taskType);
         question.setTaskTypeKey(taskTypeKey);
         question.setTaskTypeSection(resolveTaskTypeSection(taskTypeKey, taskType));
-        question.setVisibility(Visibility.SHARED);
         QuestionPool pool = parsePool(request.pool());
         question.setPool(pool);
         boolean hasExplicitFlags = request.availableForPractice() != null || request.availableForExam() != null;
@@ -88,7 +86,7 @@ public class QuestionCreationService {
         question.setRevisionGroupPublicId(UUID.randomUUID());
         question.setRevisionNumber(1);
         question.setCurrent(true);
-        question.setTitle(request.title());
+        question.setCefrLevel(CefrLevels.parse(request.cefrLevel()));
         question.setPromptText(request.promptText());
         question.setAudioPromptRef(request.audioPromptRef());
         question.setImagePromptRef(request.imagePromptRef());
@@ -101,7 +99,7 @@ public class QuestionCreationService {
         validationHelper.validate(question);
         mediaValidator.validate(question, caller);
         Question saved = questionRepository.save(question);
-        audit(caller, ItembankConstants.AUDIT_CREATED, saved, "Created question draft");
+        audit(caller, ItembankConstants.AUDIT_CREATED, saved, ItembankConstants.AUDIT_SUMMARY_CREATED);
         return toResponse(saved);
     }
 
@@ -167,13 +165,14 @@ public class QuestionCreationService {
         String text = summary == null ? "" : summary;
         auditLogService.record(caller, ItembankConstants.QUESTION_AGGREGATE,
                 String.valueOf(question.getPublicId()), action,
-                text.length() <= 500 ? text : text.substring(0, 500));
+                text.length() <= ItembankConstants.AUDIT_SUMMARY_MAX_LENGTH ? text
+                        : text.substring(0, ItembankConstants.AUDIT_SUMMARY_MAX_LENGTH));
     }
 
     private void deny(CurrentUser caller, UUID aggregateId, String message) {
         if (auditLogService != null && caller != null) {
             auditLogService.recordFailure(caller, ItembankConstants.QUESTION_AGGREGATE,
-                    aggregateId == null ? "unknown" : aggregateId.toString(),
+                    aggregateId == null ? ItembankConstants.AUDIT_UNKNOWN_AGGREGATE : aggregateId.toString(),
                     SharedConstants.AUDIT_AUTHORIZATION_DENIED, message);
         }
         throw new AccessDeniedException(message);

@@ -7,7 +7,6 @@ import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.domain.enums.QuestionStatus;
-import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.response.QuestionStatsResponse;
 import com.pte.itembank.internal.controller.QuestionController;
 import com.pte.itembank.internal.service.ItembankAccessPolicy;
@@ -74,13 +73,11 @@ class ItembankOverviewQueriesTest {
         question.setPteTaskType(type);
         question.setTaskTypeKey(type.name() + (++counter));
         question.setTaskTypeSection(section);
-        question.setVisibility(Visibility.SHARED);
         question.setPool(pool);
         question.setStatus(status);
         question.setRevisionGroupPublicId(UUID.randomUUID());
         question.setRevisionNumber(1);
         question.setCurrent(true);
-        question.setTitle("Secret title " + counter);
         question.setPromptText("Secret prompt " + counter);
         question.setDeleted(deleted);
         return questions.saveAndFlush(question);
@@ -108,9 +105,6 @@ class ItembankOverviewQueriesTest {
         assertThat(QuestionStatus.values()).extracting(Enum::name)
                 .containsExactly("DRAFT", "PENDING_APPROVAL", "APPROVED", "ARCHIVED");
         assertThat(QuestionPool.values()).extracting(Enum::name).containsExactly("EXAM", "PRACTICE");
-        // The bank has a single visibility: "non-shared are excluded" is vacuous until a second one is added,
-        // at which point this guard forces a decision about the overview.
-        assertThat(Visibility.values()).containsExactly(Visibility.SHARED);
     }
 
     // ---- zero-filled keys ----
@@ -276,9 +270,9 @@ class ItembankOverviewQueriesTest {
         // service entry point and the two legacy grouped queries are still there with their old signatures
         assertThat(ItembankService.class.getMethod("stats", CurrentUser.class).getReturnType())
                 .isEqualTo(QuestionStatsResponse.class);
-        assertThat(QuestionRepository.class.getMethod("countBySectionAndVisibility", Visibility.class)).isNotNull();
-        assertThat(QuestionRepository.class.getMethod("countByStatusAndVisibility", Visibility.class)).isNotNull();
-        assertThat(QuestionRepository.class.getMethod("countByDeletedFalseAndVisibility", Visibility.class)).isNotNull();
+        assertThat(QuestionRepository.class.getMethod("countBySection")).isNotNull();
+        assertThat(QuestionRepository.class.getMethod("countByStatus")).isNotNull();
+        assertThat(QuestionRepository.class.getMethod("countByDeletedFalse")).isNotNull();
     }
 
     @Test
@@ -380,6 +374,6 @@ class ItembankOverviewQueriesTest {
                 () -> counts.byStatus().put("X", 1L));
         org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
                 () -> counts.byPool().clear());
-        assertThat(counts.toString()).doesNotContain("Secret title").doesNotContain("Secret prompt");
+        assertThat(counts.toString()).doesNotContain("Secret prompt");
     }
 }

@@ -1,0 +1,67 @@
+{
+  "title": "Answer Short Question (ASQ)",
+  "intro": [
+    {
+      "type": "TEXT",
+      "label": "",
+      "text": "Create a question for students to listen to and answer with one to three words.",
+      "items": [],
+      "levels": [],
+      "sentToAi": true
+    }
+  ],
+  "sections": [
+    {
+      "id": "requirements",
+      "title": "Requirements",
+      "blocks": [
+        {
+          "type": "LIST",
+          "label": "",
+          "text": "",
+          "items": [
+            "Question: six to twenty words",
+            "Expected answer: one to three words maximum",
+            "Clear, unambiguous question",
+            "Numbers must be spelled out as words",
+            "Avoid abbreviations"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "output",
+      "title": "Output",
+      "blocks": [
+        {
+          "type": "FIELDS",
+          "label": "",
+          "text": "",
+          "items": [
+            "topic: Environmental Science",
+            "transcript: What do we call the source of energy that comes from the wind?",
+            "answer: wind power / wind energy"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "instructions",
+      "title": "Instructions",
+      "blocks": [
+        {
+          "type": "TEXT",
+          "label": "",
+          "text": "Return ONLY the JSON object. The transcript field contains the question to be asked. The answer field contains the accepted answers, each one to three words, separated by \" / \" when several are acceptable.\nStudents will hear the question and respond with one to three words.",
+          "items": [],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    }
+  ]
+}

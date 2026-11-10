@@ -1,0 +1,32 @@
+{
+  "manifestVersion": 1,
+  "purpose": "Phase 5 only: synthetic TTS recordings with inserted hesitations and repetitions, to check that the Azure-based Oral Fluency band falls monotonically (FLUENT >= MILD_HESITATION >= HEAVY_HESITATION) for the same words. Not for Content, not for accuracy. WAV files are never committed; generate them with generate-tts.ps1 into SCORING_AI_SPIKE_WAV_DIR.",
+  "audioFormat": {"sampleRateHz": 16000, "bitsPerSample": 16, "channels": 1},
+  "pauseMarker": "[pause N] inserts a silence of N milliseconds",
+  "entries": [
+    {"fileName": "tts-di-01-fluent.wav", "basedOnSampleId": "di-01", "variant": "FLUENT",
+     "text": "This bar chart shows how much water a person in Riverton uses each day at home. Showering is the largest use, at forty-five litres, followed by toilet flushing at thirty litres. Laundry accounts for twenty litres, kitchen use for fifteen, and garden watering for only ten."},
+    {"fileName": "tts-di-01-mild.wav", "basedOnSampleId": "di-01", "variant": "MILD_HESITATION",
+     "text": "This bar chart shows, uh, how much water a person in Riverton uses each day at home. [pause 600] Showering is the largest use, at forty-five litres, followed by, um, toilet flushing at thirty litres. Laundry accounts for twenty litres, [pause 500] kitchen use for fifteen, and garden watering for only ten."},
+    {"fileName": "tts-di-01-heavy.wav", "basedOnSampleId": "di-01", "variant": "HEAVY_HESITATION",
+     "text": "This, this bar chart [pause 1200] shows how much, uh, how much water [pause 1000] a person in Riverton uses, um, each day at home. [pause 1500] Showering is the, the largest use, [pause 1000] at, uh, forty-five litres, followed by toilet, toilet flushing [pause 1200] at thirty litres. Laundry, um, [pause 1000] accounts for twenty litres, kitchen use for, uh, fifteen, [pause 1500] and garden, garden watering for only ten."},
+    {"fileName": "tts-rl-02-fluent.wav", "basedOnSampleId": "rl-02", "variant": "FLUENT",
+     "text": "The lecture was about bees and pollination. Bees carry pollen from one flower to another, and many food crops like apples and almonds need this. Bees are in danger because of pesticides, habitat loss and diseases. Farmers can plant wildflowers and use less pesticide to help them."},
+    {"fileName": "tts-rl-02-mild.wav", "basedOnSampleId": "rl-02", "variant": "MILD_HESITATION",
+     "text": "The lecture was about, uh, bees and pollination. Bees carry pollen from one flower to another, [pause 600] and many food crops like apples and almonds need this. Bees are in danger because of, um, pesticides, habitat loss and diseases. [pause 500] Farmers can plant wildflowers and use less pesticide to help them."},
+    {"fileName": "tts-rl-02-heavy.wav", "basedOnSampleId": "rl-02", "variant": "HEAVY_HESITATION",
+     "text": "The lecture, the lecture was about [pause 1200] uh, bees and, and pollination. [pause 1500] Bees carry, um, pollen from one flower [pause 1000] to another, and many, many food crops like, uh, apples and almonds [pause 1200] need this. Bees are in, in danger because of [pause 1000] pesticides, um, habitat loss and, uh, diseases. [pause 1500] Farmers can, can plant wildflowers and [pause 1000] use less pesticide to help them."},
+    {"fileName": "tts-rts-01-fluent.wav", "basedOnSampleId": "rts-01", "variant": "FLUENT",
+     "text": "Hi Sam, I'm really sorry, but I think I left your laptop charger at the library on Saturday. I know you need it for your exam tomorrow morning, so I'll buy the same model when the shop opens at eight and bring it straight to your place."},
+    {"fileName": "tts-rts-01-mild.wav", "basedOnSampleId": "rts-01", "variant": "MILD_HESITATION",
+     "text": "Hi Sam, I'm really sorry, but, uh, I think I left your laptop charger at the library on Saturday. [pause 600] I know you need it for your exam tomorrow morning, so, um, I'll buy the same model when the shop opens at eight [pause 500] and bring it straight to your place."},
+    {"fileName": "tts-rts-01-heavy.wav", "basedOnSampleId": "rts-01", "variant": "HEAVY_HESITATION",
+     "text": "Hi Sam, I'm, I'm really sorry, [pause 1200] but, uh, I think I left your, your laptop charger [pause 1000] at the library on, um, Saturday. [pause 1500] I know you need it for your, uh, your exam tomorrow morning, [pause 1200] so I'll, I'll buy the same model when the shop, um, opens at eight [pause 1500] and bring it, bring it straight to your place."},
+    {"fileName": "tts-sgd-02-fluent.wav", "basedOnSampleId": "sgd-02", "variant": "FLUENT",
+     "text": "The speakers talked about a four-day week. Anna thinks it makes people more productive and is good for the environment. Ben says hospitals and shops cannot do it easily because they need more staff. Carla thinks companies can use rotating schedules."},
+    {"fileName": "tts-sgd-02-mild.wav", "basedOnSampleId": "sgd-02", "variant": "MILD_HESITATION",
+     "text": "The speakers talked about, uh, a four-day week. Anna thinks it makes people more productive [pause 600] and is good for the environment. Ben says hospitals and shops cannot do it, um, easily because they need more staff. [pause 500] Carla thinks companies can use rotating schedules."},
+    {"fileName": "tts-sgd-02-heavy.wav", "basedOnSampleId": "sgd-02", "variant": "HEAVY_HESITATION",
+     "text": "The speakers, the speakers talked about [pause 1200] uh, a four-day, four-day week. [pause 1000] Anna thinks it, um, makes people more productive [pause 1500] and is good for the, the environment. Ben says, uh, hospitals and shops [pause 1200] cannot do it easily because they, they need more staff. [pause 1500] Carla thinks, um, companies can use [pause 1000] rotating schedules."}
+  ]
+}

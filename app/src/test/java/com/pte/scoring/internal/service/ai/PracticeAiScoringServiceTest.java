@@ -10,6 +10,11 @@ import com.pte.scoring.PracticeScoringRoute;
 import com.pte.scoring.domain.enums.AiFailureReason;
 import com.pte.scoring.domain.enums.AiProviderCategory;
 import com.pte.scoring.internal.config.AiProviderProperties;
+import com.pte.scoring.internal.constant.RubricConstants;
+import com.pte.scoring.internal.exception.RubricVersionException;
+import com.pte.scoring.internal.rubric.catalog.RubricCatalogImpl;
+import com.pte.scoring.internal.rubric.service.ResolvedRubric;
+import com.pte.scoring.internal.rubric.service.RubricResolver;
 import com.pte.scoring.internal.vendor.AiAnswerScorer;
 import com.pte.scoring.internal.vendor.AiJobBudget;
 import com.pte.scoring.internal.vendor.AiProviderException;
@@ -17,7 +22,10 @@ import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.AiScoringRequest;
 import com.pte.scoring.internal.vendor.EssayScoringClient;
 import com.pte.scoring.internal.vendor.SpeechScoringClient;
+import com.pte.scoring.rubric.EffectiveRubric;
+import com.pte.scoring.rubric.RubricCatalog;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Clock;
@@ -34,6 +42,10 @@ import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * The practice facade must route every one of the 23 task types exactly like
@@ -48,7 +60,11 @@ class PracticeAiScoringServiceTest {
             "[{\"text\":\"London\",\"correct\":false,\"orderIndex\":0},"
                     + "{\"text\":\"Paris\",\"correct\":true,\"orderIndex\":1}]";
 
+    private static final RubricCatalog CATALOG = new RubricCatalogImpl();
+    private static final UUID ACTIVE_VERSION = UUID.fromString("00000000-0000-0000-0000-0000000000f6");
+
     private final AtomicReference<AiScoringRequest> seen = new AtomicReference<>();
+    private final RubricResolver rubricResolver = activeRubricResolver();
     private final AtomicReference<Duration> budgetSeen = new AtomicReference<>();
 
     private static AiScoreResult result(int score, boolean fallback) {
@@ -75,7 +91,19 @@ class PracticeAiScoringServiceTest {
     private PracticeAiScoringService service(List<AiAnswerScorer> scorers, SpeechScoringClient speech,
             EssayScoringClient essay) {
         return new PracticeAiScoringService(scorers, speech, essay,
-                new ObjectiveScoringService(JsonMapper.builder().build()), CLOCK, new AiProviderProperties());
+                new ObjectiveScoringService(JsonMapper.builder().build()), CLOCK, new AiProviderProperties(),
+                rubricResolver);
+    }
+
+    /** Practice has no exam definition: it always scores with the ACTIVE rubric version. */
+    private static RubricResolver activeRubricResolver() {
+        RubricResolver resolver = mock(RubricResolver.class);
+        when(resolver.resolveActiveVersion(anyString())).thenAnswer(call -> {
+            String taskType = call.getArgument(0);
+            return new ResolvedRubric(ACTIVE_VERSION, new EffectiveRubric(CATALOG.find(taskType).orElseThrow(),
+                    CATALOG.defaultParameters(taskType)));
+        });
+        return resolver;
     }
 
     private PracticeAiScoringService serviceWith(AiAnswerScorer scorer) {
@@ -147,7 +175,44 @@ class PracticeAiScoringServiceTest {
         PracticeAiEvaluation evaluation = service.score(request("WRITE_ESSAY", "An essay body."));
 
         assertThat(seen.get().payload()).isEqualTo("An essay body.");
+        assertThat(seen.get().rubricVersionPublicId()).isEqualTo(ACTIVE_VERSION);
+        assertThat(seen.get().rubric().task().taskType()).isEqualTo("WRITE_ESSAY");
         assertThat(evaluation.rawScore()).isEqualTo(64);
+    }
+
+    @Test
+    void aiText_carriesTheRubricVersionOfTheResultIntoTheEvaluation() {
+        PracticeAiScoringService service = serviceWith(scorerFor(Set.of("WRITE_ESSAY"), r -> new AiScoreResult(65,
+                Map.of("CONTENT", 4, "FORM", 1), "ok", AiProviderCategory.REAL, "GEMINI", "m", null, null, "{}",
+                false, r.rubricVersionPublicId())));
+
+        PracticeAiEvaluation evaluation = service.score(request("WRITE_ESSAY", "An essay body."));
+
+        assertThat(evaluation.rubricVersionPublicId()).isEqualTo(ACTIVE_VERSION);
+        assertThat(evaluation.subScores()).containsEntry("CONTENT", 4).containsEntry("FORM", 1);
+    }
+
+    @Test
+    void aiText_withNoActiveRubricFailsInternallyWithoutCallingTheScorer() {
+        when(rubricResolver.resolveActiveVersion("SUMMARIZE_SPOKEN_TEXT")).thenThrow(
+                new RubricVersionException(HttpStatus.NOT_FOUND, RubricConstants.RUBRIC_VERSION_NO_ACTIVE));
+        PracticeAiScoringService service = serviceWith(scorerFor(Set.of("SUMMARIZE_SPOKEN_TEXT"), r -> {
+            throw new AssertionError("scorer must not run without a rubric");
+        }));
+
+        assertThatThrownBy(() -> service.score(request("SUMMARIZE_SPOKEN_TEXT", "A summary.")))
+                .isInstanceOfSatisfying(PracticeScoringException.class,
+                        ex -> assertThat(ex.failure()).isEqualTo(PracticeScoringFailure.INTERNAL));
+    }
+
+    @Test
+    void speechTypes_areScoredWithTheActiveRubricSincePhaseFive() {
+        PracticeAiScoringService service = serviceWith(scorerFor(Set.of("READ_ALOUD"), r -> result(50, false)));
+
+        service.score(request("READ_ALOUD", "media-1"));
+
+        assertThat(seen.get().rubric().task().taskType()).isEqualTo("READ_ALOUD");
+        assertThat(seen.get().rubricVersionPublicId()).isEqualTo(ACTIVE_VERSION);
     }
 
     @Test
@@ -167,33 +232,41 @@ class PracticeAiScoringServiceTest {
         assertThat(service.score(request("READ_ALOUD", "media-1")).scoreStatus()).isEqualTo("FALLBACK");
     }
 
+    /** Phase 5: every scored speaking task type is rubric-scored too, so the generic speech client never scores it. */
     @Test
-    void speechTypeWithoutScorer_fallsBackToTheGenericSpeechClient() {
-        AtomicReference<String> mediaId = new AtomicReference<>();
-        PracticeAiScoringService service = service(List.of(), (media, ref, tenant) -> {
-            mediaId.set(media);
-            assertThat(ref).isEqualTo("correct");
-            assertThat(tenant).isEqualTo(TENANT);
-            return result(33, false);
-        }, (text, prompt) -> {
-            throw new AssertionError("essay client must not run for speech");
-        });
+    void rubricSpeechTypeWithoutScorer_failsInsteadOfFallingBackToTheGenericSpeechClient() {
+        for (String taskType : List.of("READ_ALOUD", "REPEAT_SENTENCE", "DESCRIBE_IMAGE", "RE_TELL_LECTURE",
+                "RESPOND_TO_A_SITUATION", "SUMMARIZE_GROUP_DISCUSSION", "ANSWER_SHORT_QUESTION")) {
+            PracticeAiScoringService service = service(List.of(), (media, ref, tenant) -> {
+                throw new AssertionError("generic speech client must not score a rubric task type");
+            }, (text, prompt) -> {
+                throw new AssertionError("essay client must not run for speech");
+            });
 
-        assertThat(service.score(request("READ_ALOUD", "media-9")).rawScore()).isEqualTo(33);
-        assertThat(mediaId.get()).isEqualTo("media-9");
+            assertThatThrownBy(() -> service.score(request(taskType, "media-9")))
+                    .isInstanceOfSatisfying(PracticeScoringException.class,
+                            ex -> assertThat(ex.failure()).as(taskType).isEqualTo(PracticeScoringFailure.INTERNAL));
+        }
     }
 
+    /**
+     * The three writing task types are rubric-scored; the generic essay client of another provider must not invent
+     * a 0-100 score for them (phase 4 decides that provider), so practice fails them clearly instead.
+     */
     @Test
-    void textTypeWithoutScorer_fallsBackToTheGenericEssayClient() {
-        PracticeAiScoringService service = service(List.of(), (m, r, t) -> {
-            throw new AssertionError("speech client must not run for text");
-        }, (text, prompt) -> {
-            assertThat(text).isEqualTo("my text");
-            assertThat(prompt).isEqualTo("correct");
-            return result(58, false);
-        });
+    void rubricTextTypeWithoutScorer_failsInsteadOfFallingBackToTheGenericEssayClient() {
+        for (String taskType : List.of("WRITE_ESSAY", "SUMMARIZE_WRITTEN_TEXT", "SUMMARIZE_SPOKEN_TEXT")) {
+            PracticeAiScoringService service = service(List.of(), (m, r, t) -> {
+                throw new AssertionError("speech client must not run for text");
+            }, (text, prompt) -> {
+                throw new AssertionError("generic essay client must not score a rubric task type");
+            });
 
-        assertThat(service.score(request("WRITE_ESSAY", "my text")).rawScore()).isEqualTo(58);
+            assertThatThrownBy(() -> service.score(request(taskType, "my text")))
+                    .isInstanceOfSatisfying(PracticeScoringException.class,
+                            ex -> assertThat(ex.failure()).as(taskType).isEqualTo(PracticeScoringFailure.INTERNAL));
+        }
+        verifyNoInteractions(rubricResolver);
     }
 
     // ---- failures become public reasons, never an empty result ----

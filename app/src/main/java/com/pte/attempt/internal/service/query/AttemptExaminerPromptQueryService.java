@@ -1,5 +1,6 @@
 package com.pte.attempt.internal.service.query;
 
+import com.pte.itembank.ItembankService;
 import com.pte.attempt.internal.service.ExamContentService;
 import com.pte.attempt.domain.ExamAttempt;
 import com.pte.assessment.dto.response.SnapshotContentResponse;
@@ -33,12 +34,14 @@ public class AttemptExaminerPromptQueryService {
     private final ExamAttemptRepository attemptRepository;
     private final ExamContentService contentService;
     private final JsonMapper jsonMapper;
+    private final ItembankService itembankService;
 
     public AttemptExaminerPromptQueryService(ExamAttemptRepository attemptRepository,
-            ExamContentService contentService, JsonMapper jsonMapper) {
+            ExamContentService contentService, JsonMapper jsonMapper, ItembankService itembankService) {
         this.attemptRepository = attemptRepository;
         this.contentService = contentService;
         this.jsonMapper = jsonMapper;
+        this.itembankService = itembankService;
     }
 
     @Transactional(readOnly = true)
@@ -58,9 +61,12 @@ public class AttemptExaminerPromptQueryService {
             return Map.of();
         }
 
-        return contentService.contentItems(attempt.getExamVersionPublicId()).values().stream()
-                .filter(item -> requestedItemIds.contains(item.itemPublicId()))
-                .collect(Collectors.toUnmodifiableMap(SnapshotContentResponse.Item::itemPublicId, this::toView));
+        List<SnapshotContentResponse.Item> items = contentService.contentItems(attempt.getExamVersionPublicId())
+                .values().stream().filter(item -> requestedItemIds.contains(item.itemPublicId())).toList();
+        Map<UUID, String> levels = itembankService.cefrLevels(items.stream()
+                .map(SnapshotContentResponse.Item::sourceQuestionPublicId).filter(Objects::nonNull).distinct().toList());
+        return items.stream().collect(Collectors.toUnmodifiableMap(SnapshotContentResponse.Item::itemPublicId,
+                item -> toView(item, levels.get(item.sourceQuestionPublicId()))));
     }
 
     private boolean belongsToRequestedScope(ExamAttempt attempt, UUID sessionPublicId, UUID tenantId) {
@@ -68,12 +74,13 @@ public class AttemptExaminerPromptQueryService {
                 && sessionPublicId.equals(attempt.getSessionPublicId());
     }
 
-    private AttemptExaminerPromptView toView(SnapshotContentResponse.Item item) {
+    private AttemptExaminerPromptView toView(SnapshotContentResponse.Item item, String cefrLevel) {
         String taskType = item.taskTypeKey() != null ? item.taskTypeKey()
                 : item.taskTypeCode() != null ? item.taskTypeCode() : item.taskType();
         return new AttemptExaminerPromptView(item.itemPublicId(), item.orderIndex(), item.section(), taskType,
                 item.title(), item.promptText(), item.audioPromptRef(), item.imagePromptRef(),
-                item.minWordCount(), item.maxWordCount(), parseOptions(item.optionsJson()));
+                item.minWordCount(), item.maxWordCount(), parseOptions(item.optionsJson()), cefrLevel,
+                item.referenceAnswerText(), item.correctAnswerText());
     }
 
     private List<AttemptExaminerPromptView.Option> parseOptions(String optionsJson) {
@@ -83,14 +90,14 @@ public class AttemptExaminerPromptQueryService {
         try {
             return jsonMapper.readValue(optionsJson, OPTIONS).stream()
                     .map(option -> new AttemptExaminerPromptView.Option(
-                            option.orderIndex(), option.text(), option.blankIndex()))
+                            option.orderIndex(), option.text(), option.blankIndex(), option.correct(),
+                            option.correctGapIndex()))
                     .toList();
         } catch (JacksonException ex) {
             throw new IllegalStateException(AttemptConstants.EXAM_ITEM_OPTIONS_PARSE_FAILED, ex);
         }
     }
 
-    /** Includes key-bearing fields only while decoding; none are copied into the public projection. */
     private record FrozenOption(String text, boolean correct, int orderIndex,
             Integer blankIndex, Integer correctGapIndex) {
     }

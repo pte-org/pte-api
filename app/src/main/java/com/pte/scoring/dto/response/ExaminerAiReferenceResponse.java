@@ -13,5 +13,13 @@ public record ExaminerAiReferenceResponse(
         ExaminerAiAvailability availability,
         Integer score,
         Instant scoredAt,
+        String version,
+        java.util.Map<String, Integer> traitScores, java.util.UUID rubricVersionPublicId, java.util.Map<String, Integer> traitMaxima) {
+    public ExaminerAiReferenceResponse(ExaminerAiAvailability availability,
+        Integer score,
+        Instant scoredAt,
         String version) {
+        this(availability, score, scoredAt, version, java.util.Map.of(), null, java.util.Map.of());
+    }
+
 }

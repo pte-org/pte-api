@@ -10,18 +10,18 @@ import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.messaging.PracticeScoringDispatcher;
 import com.pte.practice.internal.messaging.PracticeScoringJob;
 import com.pte.practice.internal.repository.PracticeResponseRepository;
+import com.pte.scoring.CriteriaScores;
 import com.pte.scoring.PracticeAiEvaluation;
 import com.pte.scoring.PracticeScoringFailure;
+import com.pte.scoring.RubricScaleService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -41,13 +41,16 @@ public class PracticeScoringStateService {
     private final PracticeScoringDispatcher dispatcher;
     private final PracticeScoringProperties properties;
     private final JsonMapper jsonMapper;
+    private final RubricScaleService rubricScales;
 
     public PracticeScoringStateService(PracticeResponseRepository itemRepository,
-            PracticeScoringDispatcher dispatcher, PracticeScoringProperties properties, JsonMapper jsonMapper) {
+            PracticeScoringDispatcher dispatcher, PracticeScoringProperties properties, JsonMapper jsonMapper,
+            RubricScaleService rubricScales) {
         this.itemRepository = itemRepository;
         this.dispatcher = dispatcher;
         this.properties = properties;
         this.jsonMapper = jsonMapper;
+        this.rubricScales = rubricScales;
     }
 
     /** First submission of an AI-scored answer: enforce the rate limit, mark SCORING and queue the job after commit. */
@@ -171,15 +174,26 @@ public class PracticeScoringStateService {
         PracticeScoringStatus state = item.getScoringStatus();
         boolean scored = state == PracticeScoringStatus.SCORED;
         boolean failed = state == PracticeScoringStatus.FAILED;
+        CriteriaScores criteria = scored ? CriteriaScores.read(jsonMapper, item.getAiSubScoresJson())
+                : CriteriaScores.legacy(Map.of());
         return new PracticeItemResultResponse(item.getPublicId(), item.getTaskCode(), state,
                 scored ? scoreOf(item) : null,
                 scored ? item.getAiScoreStatus() : null,
-                scored ? readSubScores(jsonMapper, item.getAiSubScoresJson()) : Map.of(),
+                criteria.traits(),
                 scored ? item.getAiFeedback() : null,
                 scored ? item.getAiTranscript() : null,
                 failed ? item.getScoringFailureCode() : null,
                 isRetryable(item),
-                scored ? item.getAiScoredAt() : null);
+                scored ? item.getAiScoredAt() : null,
+                maximaOf(criteria, item.getTaskCode()));
+    }
+
+    /** Only Pearson trait scores have a maximum to show; older 0-100 results stay raw numbers. */
+    private Map<String, Integer> maximaOf(CriteriaScores criteria, String taskCode) {
+        if (!criteria.isPearson()) {
+            return null;
+        }
+        return rubricScales.traitMaxima(criteria.rubricVersion(), taskCode).orElse(null);
     }
 
     /** Objective items fill both result sets; fall back to the objective score if the AI column is empty. */
@@ -236,7 +250,7 @@ public class PracticeScoringStateService {
     private void applyResult(PracticeResponse item, PracticeAiEvaluation evaluation) {
         item.setAiScore(evaluation.rawScore());
         item.setAiScoreStatus(evaluation.scoreStatus());
-        item.setAiSubScoresJson(writeSubScores(evaluation.subScores()));
+        item.setAiSubScoresJson(writeSubScores(evaluation));
         item.setAiProvider(evaluation.provider());
         item.setAiModel(evaluation.model());
         item.setAiProviderVersion(evaluation.providerVersion());
@@ -247,33 +261,18 @@ public class PracticeScoringStateService {
         item.setAiResultHash(evaluation.resultHash());
     }
 
-    private String writeSubScores(Map<String, Integer> subScores) {
+    /** A rubric result keeps its scale and version so a reader can tell it from the legacy 0-100 criteria. */
+    private String writeSubScores(PracticeAiEvaluation evaluation) {
         try {
-            return jsonMapper.writeValueAsString(subScores == null ? Map.of() : subScores);
+            return CriteriaScores.ofResult(evaluation.rubricVersionPublicId(), evaluation.subScores())
+                    .toJson(jsonMapper);
         } catch (RuntimeException exception) {
             return "{}";
         }
     }
 
-    /** Numeric entries of the stored sub-score object; anything unreadable yields no sub-scores. */
+    /** The stored sub-scores in either shape (legacy flat map or Pearson traits); unreadable yields none. */
     static Map<String, Integer> readSubScores(JsonMapper jsonMapper, String json) {
-        if (json == null || json.isBlank()) {
-            return Map.of();
-        }
-        try {
-            JsonNode root = jsonMapper.readTree(json);
-            if (root == null || !root.isObject()) {
-                return Map.of();
-            }
-            Map<String, Integer> scores = new LinkedHashMap<>();
-            root.properties().forEach(entry -> {
-                if (entry.getValue() != null && entry.getValue().isNumber()) {
-                    scores.put(entry.getKey(), entry.getValue().asInt());
-                }
-            });
-            return Map.copyOf(scores);
-        } catch (RuntimeException exception) {
-            return Map.of();
-        }
+        return CriteriaScores.read(jsonMapper, json).traits();
     }
 }

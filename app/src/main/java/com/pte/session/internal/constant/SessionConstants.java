@@ -162,6 +162,9 @@ public final class SessionConstants {
     public static final String SKILLS_REQUIRED = "At least one skill is required";
     public static final Set<String> SUPPORTED_EXAM_SKILLS =
             Set.of("SPEAKING", "WRITING", "READING", "LISTENING");
+    public static final String CEFR_TARGET_UNKNOWN_LEVEL = "CEFR level must be one of A1, A2, B1, B2, C1, C2";
+    public static final String CEFR_TARGET_DUPLICATE_LEVEL = "A CEFR level can appear only once";
+    public static final String CEFR_TARGET_NOT_100 = "The CEFR percentages must sum to 100";
     public static final String SKILLS_SIZE_INVALID = "Between 1 and 4 skills must be selected";
     public static final String SKILLS_DUPLICATE = "Select each skill only once.";
     public static final String SKILLS_NOT_IN_TEMPLATE = "Choose only skills included in the selected exam template.";

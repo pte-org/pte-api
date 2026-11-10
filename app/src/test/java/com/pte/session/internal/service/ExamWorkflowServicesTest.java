@@ -66,6 +66,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -625,7 +626,7 @@ class ExamWorkflowServicesTest {
         var snapshot = new com.pte.assessment.dto.response.SnapshotResponse(examVersionId, "Draft", 1,
                 UUID.randomUUID(), templateId, 3, tenantId, List.of());
         when(assessmentService.generateDeterministic(eq(session.getName()), eq(templateId), anyLong(), eq(hostAdmin),
-                any())).thenReturn(snapshot);
+                any(), any(), anyBoolean())).thenReturn(snapshot);
 
         var response = publishService.generate(session.getPublicId(), "key-1", hostAdmin);
 

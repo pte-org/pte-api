@@ -11,7 +11,8 @@ param(
 )
 
 # Prerequisites:
-# - Run seed-local-template-and-question-bank.ps1 first with the same SeedKey.
+# - An ACTIVE standard platform template exists (the V1 baseline seeds PTE_Score_Template) and its
+#   task types have approved questions (seed-local-doc-question-bank.mjs imports them).
 # - A PLATFORM_ADMIN already exists; this script uses it to onboard the local tenant.
 # - The supplied SeedPassword is assigned to both seed accounts (unless an
 #   existing account is reused, in which case its password is reset deliberately).
@@ -395,7 +396,6 @@ $className = "Local seed class $SeedKey"
 $planName = "PTE local exam package $SeedKey"
 $seedToken = (($SeedKey -replace "[^A-Za-z0-9_]", "_").ToUpperInvariant())
 $seedToken = $seedToken.Substring(0, [Math]::Min(52, $seedToken.Length))
-$templateCode = $seedToken + "_TEMPLATE"
 $examName = "PTE local exam $SeedKey"
 
 Write-Host "== Creating or reusing tenant =="
@@ -436,11 +436,14 @@ Write-Host "== Creating or reusing active exam package =="
 $plan = Invoke-WithSeedMutex -Key $SeedKey -Action { Ensure-ActivePlan -Name $planName }
 $subscription = Ensure-Subscription -TenantId $tenant.publicId -PlanId $plan.publicId -SeedKey $SeedKey
 
-Write-Host "== Finding the active seeded template =="
+Write-Host "== Finding the active standard template =="
 $templates = Get-Array (Invoke-SeedApi -Method GET -Path "/api/v1/exam-definitions" -Token $script:AdminToken)
-$template = $templates | Where-Object { $_.code -eq $templateCode -and "$($_.status)".ToUpperInvariant() -eq "ACTIVE" } | Select-Object -First 1
+$template = $templates |
+    Where-Object { "$($_.status)".ToUpperInvariant() -eq "ACTIVE" -and "$($_.templatePolicy)".ToUpperInvariant() -eq "STANDARD_PTE" } |
+    Sort-Object -Property version -Descending |
+    Select-Object -First 1
 if ($null -eq $template) {
-    throw "Active template '$templateCode' was not found. Run seed-local-template-and-question-bank.ps1 first."
+    throw "No ACTIVE standard platform template was found. Activate one first (node scripts/activate-local-standard-template.mjs)."
 }
 
 Write-Host "== Creating or reusing a published/open exam =="

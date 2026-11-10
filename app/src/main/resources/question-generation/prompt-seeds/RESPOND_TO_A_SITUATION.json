@@ -1,0 +1,103 @@
+{
+  "title": "Respond to a Situation (RTS) Generation Prompt",
+  "intro": [
+    {
+      "type": "TEXT",
+      "label": "",
+      "text": "You are generating a Respond to a Situation task for the PTE exam. The student listens to a brief scenario and 1–2 turns of dialogue, then responds to complete the conversation.",
+      "items": [],
+      "levels": [],
+      "sentToAi": true
+    }
+  ],
+  "sections": [
+    {
+      "id": "task-structure",
+      "title": "Task Structure",
+      "blocks": [
+        {
+          "type": "TEXT",
+          "label": "",
+          "text": "The student hears a situation (40–90 words) and optionally 1–2 dialogue turns. The student must respond appropriately (typically with a question or statement, 10–30 seconds of speaking time, roughly 50–100 words).",
+          "items": [],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "field-notes",
+      "title": "Field notes",
+      "blocks": [
+        {
+          "type": "LIST",
+          "label": "",
+          "text": "",
+          "items": [
+            "Task type (taskType): Always RESPOND_TO_A_SITUATION",
+            "Topic: A brief topic name (3-5 words, no special characters)",
+            "Situation: The background scenario (40-90 words)",
+            "Turns: Each turn has a speaker (A or B) and a text, a prompt or statement the student must respond to",
+            "Key points (keyPoints): Each item is one thing the ideal response should address"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "requirements",
+      "title": "Requirements",
+      "blocks": [
+        {
+          "type": "TEXT",
+          "label": "",
+          "text": "1. Situation: clear, realistic scenario (40–90 words) that sets context.\n2. 1–2 dialogue turns: one or two lines to which the student responds.\n3. Speakers: typically \"A\" (person in the situation) and optionally \"B\" (if two turns).\n4. Numbers and abbreviations: spell out fully.\n5. No acronyms: always use full form.\n6. Natural context: the scenario should naturally lead to a response.\n7. 2–4 key points: expectations for the student's response.",
+          "items": [],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "output",
+      "title": "Output",
+      "blocks": [
+        {
+          "type": "FIELDS",
+          "label": "",
+          "text": "",
+          "items": [
+            "taskType: RESPOND_TO_A_SITUATION",
+            "topic: Job Interview Feedback",
+            "situation: You are at a job interview for a marketing position at a tech company. The interviewer has just finished asking you questions and now wants to hear your thoughts on the role and the company.",
+            "turns: [{\"speaker\": \"A\", \"text\": \"Thank you for all those questions. Do you have any questions for us or anything you would like to know about the company culture?\"}]",
+            "keyPoints: [\"Student demonstrates knowledge of the company\", \"Student asks thoughtful questions about growth or role expectations\", \"Student shows enthusiasm and professionalism\"]"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "validation-rules-enforced-after-generation",
+      "title": "Validation Rules (enforced after generation)",
+      "blocks": [
+        {
+          "type": "LIST",
+          "label": "",
+          "text": "",
+          "items": [
+            "Situation is 40–90 words",
+            "1–2 dialogue turns",
+            "Speakers are \"A\" or \"B\"",
+            "No numbers or acronyms in text",
+            "Key points are achievable and clear"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    }
+  ]
+}

@@ -27,10 +27,11 @@ public class ExamIncidentService {
     public PagedResult<IncidentView> listIncidents(
             UUID sessionPublicId,
             String status,
+            String search,
             int page,
             int size,
             CurrentUser caller) {
-        return queryService.listIncidents(sessionPublicId, status, page, size, caller);
+        return queryService.listIncidents(sessionPublicId, status, search, page, size, caller);
     }
 
     public IncidentView createIncident(

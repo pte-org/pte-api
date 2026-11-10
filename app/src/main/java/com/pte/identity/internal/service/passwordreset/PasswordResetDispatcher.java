@@ -4,6 +4,7 @@ import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ArrayBlockingQueue;
@@ -30,11 +31,15 @@ public class PasswordResetDispatcher {
     private final Executor executor;
     private final ExecutorService ownedExecutor;
 
+    /** Pool size and queue come from {@code app.password-reset.mail.*}; a full queue drops the request quietly. */
     @Autowired
-    public PasswordResetDispatcher(PasswordResetService passwordResetService) {
+    public PasswordResetDispatcher(PasswordResetService passwordResetService,
+                                   @Value("${app.password-reset.mail.max-threads:" + MAX_THREADS + "}") int maxThreads,
+                                   @Value("${app.password-reset.mail.queue-capacity:" + QUEUE_CAPACITY + "}")
+                                   int queueCapacity) {
         this.passwordResetService = passwordResetService;
-        this.ownedExecutor = new ThreadPoolExecutor(CORE_THREADS, MAX_THREADS, 60, TimeUnit.SECONDS,
-                new ArrayBlockingQueue<>(QUEUE_CAPACITY), runnable -> {
+        this.ownedExecutor = new ThreadPoolExecutor(Math.min(CORE_THREADS, maxThreads), maxThreads, 60,
+                TimeUnit.SECONDS, new ArrayBlockingQueue<>(queueCapacity), runnable -> {
                     Thread thread = new Thread(runnable, "password-reset");
                     thread.setDaemon(true);
                     return thread;

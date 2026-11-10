@@ -22,6 +22,7 @@ public final class IdentityConstants {
     public static final String USER_EMAIL_REQUIRED = "USER_EMAIL_REQUIRED";
     public static final String STUDENT_ATTEMPT_IN_PROGRESS = "STUDENT_ATTEMPT_IN_PROGRESS";
     public static final String INVALID_PASSWORD_RESET_TOKEN = "INVALID_PASSWORD_RESET_TOKEN";
+    public static final String PASSWORD_RESET_PATH = "/reset-password?token=";
     public static final String INVALID_REFRESH_TOKEN = "INVALID_REFRESH_TOKEN";
     public static final String FORBIDDEN_ROLE_ASSIGNMENT = "FORBIDDEN_ROLE_ASSIGNMENT";
     public static final String FORBIDDEN_USER_MANAGEMENT = "FORBIDDEN_USER_MANAGEMENT";
@@ -61,23 +62,35 @@ public final class IdentityConstants {
     public static final String USER_PROFILE_UPDATED_SUMMARY = "User updated their profile.";
     public static final String INVALID_EXAM_STAFF_QUERY = "INVALID_EXAM_STAFF_QUERY";
     public static final String DUPLICATE_EMAIL_IN_BATCH = "DUPLICATE_EMAIL_IN_BATCH";
-    public static final String ROSTER_FILE_REQUIRED = "ROSTER_FILE_REQUIRED";
-    public static final String ROSTER_FILE_EMPTY = "ROSTER_FILE_EMPTY";
-    public static final String ROSTER_FILE_EXTENSION_INVALID = "ROSTER_FILE_EXTENSION_INVALID";
-    public static final String ROSTER_FILE_TYPE_INVALID = "ROSTER_FILE_TYPE_INVALID";
-    public static final String ROSTER_FILE_TOO_LARGE = "ROSTER_FILE_TOO_LARGE: maxBytes=%d";
-    public static final String ROSTER_ROW_LIMIT_EXCEEDED = "ROSTER_ROW_LIMIT_EXCEEDED: maxRows=%d";
-    public static final String ROSTER_NO_DATA_ROWS = "ROSTER_NO_DATA_ROWS";
-    public static final String ROSTER_CREDENTIAL_COUNT_MISMATCH = "ROSTER_CREDENTIAL_COUNT_MISMATCH";
     public static final String ROSTER_IMPORT_FAILED = "ROSTER_IMPORT_FAILED";
-    public static final String ROSTER_ACCOUNT_HEADER = "account";
-    public static final String ROSTER_PASSWORD_HEADER = "password";
-    public static final String ROSTER_OUTPUT_FILENAME = "students_credentials.xlsx";
-    public static final String ROSTER_CONTENT_TYPE =
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    public static final long ROSTER_MAX_FILE_SIZE_BYTES = 10L * 1024L * 1024L;
-    public static final int ROSTER_MAX_DATA_ROWS = 10_000;
     public static final int ROSTER_USERNAME_COLLISION_RETRIES = 3;
+
+    /** Whole roster rejected because at least one row breaks a format rule; {@code data} lists every row error. */
+    public static final String ROSTER_VALIDATION_FAILED = "ROSTER_VALIDATION_FAILED";
+    public static final String ROSTER_FIELD_EMAIL = "email";
+    public static final String ROSTER_FIELD_FULL_NAME = "fullName";
+    public static final String ROSTER_FIELD_STUDENT_CODE = "studentCode";
+    public static final String ROSTER_FIELD_CLASS_NAME = "className";
+    public static final String ROSTER_FIELD_PHONE = "phone";
+    public static final String ROSTER_FIELD_DATE_OF_BIRTH = "dateOfBirth";
+    public static final String ROSTER_EMAIL_REQUIRED = "EMAIL_REQUIRED";
+    public static final String ROSTER_EMAIL_INVALID = "EMAIL_INVALID";
+    public static final String ROSTER_EMAIL_TOO_LONG = "EMAIL_TOO_LONG";
+    public static final String ROSTER_FULL_NAME_REQUIRED = "FULL_NAME_REQUIRED";
+    public static final String ROSTER_FULL_NAME_TOO_LONG = "FULL_NAME_TOO_LONG";
+    public static final String ROSTER_STUDENT_CODE_TOO_LONG = "STUDENT_CODE_TOO_LONG";
+    public static final String ROSTER_CLASS_NAME_TOO_LONG = "CLASS_NAME_TOO_LONG";
+    public static final String ROSTER_PHONE_INVALID = "PHONE_INVALID";
+    public static final String ROSTER_DATE_OF_BIRTH_INVALID = "DATE_OF_BIRTH_INVALID";
+    public static final int ROSTER_MAX_EMAIL_LENGTH = 254;
+    public static final int ROSTER_MAX_FULL_NAME_LENGTH = 100;
+    public static final int ROSTER_MAX_STUDENT_CODE_LENGTH = 50;
+    public static final int ROSTER_MAX_CLASS_NAME_LENGTH = 100;
+    /** Optional leading +, then 9–15 digits, after spaces, dots and dashes are removed. */
+    public static final String ROSTER_PHONE_PATTERN = "^\\+?\\d{9,15}$";
+    public static final String ROSTER_PHONE_SEPARATORS = "[\\s.\\-]";
+    /** Same shape as Jakarta {@code @Email}'s practical subset: one @, a dot in the domain, no spaces. */
+    public static final String ROSTER_EMAIL_PATTERN = "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$";
 
     public static final String USERNAME_REQUIRED = "Username is required";
     public static final String EMAIL_REQUIRED = "Email is required";
@@ -105,8 +118,11 @@ public final class IdentityConstants {
 
     public static final String KEY_ID = "iam-rsa-key";
     public static final String TOKEN_ISSUER = "pte-iam";
-    public static final long ACCESS_TOKEN_TTL_SECONDS = 900L;      // 15 minutes
-    public static final long REFRESH_TOKEN_TTL_SECONDS = 604_800L; // 7 days
+    public static final long DEFAULT_ACCESS_TOKEN_TTL_SECONDS = 900L;
+    public static final long DEFAULT_REFRESH_TOKEN_TTL_SECONDS = 604_800L;
+    public static final String ACCESS_TOKEN_TTL_INVALID = "Access token TTL must be a positive number of seconds";
+    public static final String REFRESH_TOKEN_TTL_INVALID = "Refresh token TTL must be a positive number of seconds";
+    public static final String REFRESH_TOKEN_TTL_ORDER_INVALID = "Refresh token TTL must exceed access token TTL";
 
     private IdentityConstants() {
     }

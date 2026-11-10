@@ -2,6 +2,7 @@ package com.pte.attempt.internal.service.cache;
 
 import com.pte.attempt.internal.constant.AttemptConstants;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
@@ -22,17 +23,24 @@ import java.util.function.Supplier;
 @Component
 public class ExamContentCache {
 
-    private static final Duration CACHE_TTL = Duration.ofHours(24);
-    private static final Duration LOCK_TTL = Duration.ofSeconds(10);
+    private static final String DEFAULT_CACHE_TTL = "24h";
+    private static final String DEFAULT_LOCK_TTL = "10s";
     private static final int MAX_WAIT_RETRIES = 20;
     private static final long WAIT_RETRY_MS = 100;
 
     private final StringRedisTemplate redisTemplate;
     private final JsonMapper jsonMapper;
+    private final Duration cacheTtl;
+    private final Duration lockTtl;
 
-    public ExamContentCache(StringRedisTemplate redisTemplate, JsonMapper jsonMapper) {
+    /** How long a built exam stays in Redis and how long one builder holds the lock: {@code attempt.content-cache.*}. */
+    public ExamContentCache(StringRedisTemplate redisTemplate, JsonMapper jsonMapper,
+                            @Value("${attempt.content-cache.ttl:" + DEFAULT_CACHE_TTL + "}") Duration cacheTtl,
+                            @Value("${attempt.content-cache.lock-ttl:" + DEFAULT_LOCK_TTL + "}") Duration lockTtl) {
         this.redisTemplate = redisTemplate;
         this.jsonMapper = jsonMapper;
+        this.cacheTtl = cacheTtl;
+        this.lockTtl = lockTtl;
     }
 
     /** Called right after an attempt loads the exam, so the very first read is already a cache hit. */
@@ -50,7 +58,7 @@ public class ExamContentCache {
             return cached.get();
         }
         String lockKey = AttemptConstants.LOCK_KEY_PREFIX + attemptPublicId;
-        Boolean acquired = redisTemplate.opsForValue().setIfAbsent(lockKey, "1", LOCK_TTL);
+        Boolean acquired = redisTemplate.opsForValue().setIfAbsent(lockKey, "1", lockTtl);
         if (Boolean.TRUE.equals(acquired)) {
             try {
                 List<ExamItemView> loaded = loader.get();
@@ -99,7 +107,7 @@ public class ExamContentCache {
     private void write(UUID attemptPublicId, List<ExamItemView> items) {
         try {
             String json = jsonMapper.writeValueAsString(items);
-            redisTemplate.opsForValue().set(AttemptConstants.CACHE_KEY_PREFIX + attemptPublicId, json, CACHE_TTL);
+            redisTemplate.opsForValue().set(AttemptConstants.CACHE_KEY_PREFIX + attemptPublicId, json, cacheTtl);
         } catch (JacksonException ex) {
             throw new IllegalStateException(AttemptConstants.EXAM_CONTENT_CACHE_SERIALIZATION_FAILED, ex);
         }

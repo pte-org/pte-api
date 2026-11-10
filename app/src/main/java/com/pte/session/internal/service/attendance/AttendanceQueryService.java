@@ -194,6 +194,7 @@ public class AttendanceQueryService {
                     finalSessionBlockingReason,
                     null,
                     null,
+                    null,
                     rs.getString("identity_status"),
                     rs.getString("identity_note")
             );

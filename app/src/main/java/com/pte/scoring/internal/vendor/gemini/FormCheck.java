@@ -1,81 +1,60 @@
 package com.pte.scoring.internal.vendor.gemini;
 
+import com.pte.scoring.internal.constant.ScoringConstants;
+import com.pte.scoring.rubric.FormRule;
+import com.pte.scoring.rubric.TextMetrics;
+
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * The writing tasks' mechanical form rules, counted in code and never by the
- * model (LLMs miscount). A failed check scores Form zero; {@code status} says
- * how far outside the range the text was. Ported from the POC's {@code rules.py}.
+ * Counts what the Form criterion of a written response depends on (words, sentences, capitals, punctuation, bullet
+ * points), in code and never by the model, because LLMs miscount. It decides nothing: the band comes from the
+ * rubric's {@link FormRule#bandFor}. Ported from the POC's {@code rules.py}.
  */
-public record FormCheck(int wordCount, Integer sentenceCount, boolean passed, String status, String message) {
+public final class FormCheck {
 
-    static final String IN_RANGE = "in_range";
-    static final String OUTSIDE_FULL_RANGE = "outside_full_range";
-    static final String INVALID_BOUNDARY = "invalid_boundary";
-
-    private static final int SWT_MIN_WORDS = 5;
-    private static final int SWT_MAX_WORDS = 75;
-    private static final int ESSAY_MIN_WORDS = 200;
-    private static final int ESSAY_MAX_WORDS = 300;
-    private static final int SST_MIN_WORDS = 50;
-    private static final int SST_MAX_WORDS = 70;
-    private static final int SST_INVALID_BELOW = 40;
-    private static final int SST_INVALID_ABOVE = 100;
+    /** A sentence of at most this many words is "very short"; a response made only of such sentences is bullet-like. */
+    private static final int VERY_SHORT_SENTENCE_MAX = 3;
 
     private static final Pattern WHITESPACE = Pattern.compile("\\s+", Pattern.UNICODE_CHARACTER_CLASS);
     // U.S.A., e.g., a.m.: a chain of single letters and dots is one token, whatever follows it.
     private static final Pattern ACRONYM = Pattern.compile("\\b(?:\\p{L}\\.){2,}");
     private static final Pattern SENTENCE_END = Pattern.compile("[.!?]+(?:\\s+|$)");
+    private static final Pattern PUNCTUATION = Pattern.compile("[.,;:!?]");
+    private static final Pattern BULLET_LINE = Pattern.compile("^\\s*(?:[-*\\u2022\\u2023\\u25AA\\u25E6]|\\d+[.)])\\s+");
     // Abbreviations whose full stop must not end a sentence.
     private static final List<String> ABBREVIATIONS = List.of(
             "Mr.", "Mrs.", "Ms.", "Dr.", "Prof.", "Sr.", "Jr.",
             "e.g.", "i.e.", "etc.", "vs.", "U.S.", "U.K.", "U.N.",
             "Inc.", "Ltd.", "Co.", "approx.", "cf.", "et al.");
 
-    public static FormCheck summarizeWrittenText(String text, Integer minWords, Integer maxWords) {
-        int words = countWords(text);
-        int sentences = countSentences(text);
-        int min = limit(minWords, SWT_MIN_WORDS);
-        int max = limit(maxWords, SWT_MAX_WORDS);
-        StringBuilder issues = new StringBuilder();
-        if (words < min || words > max) {
-            issues.append("word count ").append(words).append(" outside ").append(min).append('-').append(max);
-        }
-        if (sentences != 1) {
-            issues.append(issues.isEmpty() ? "" : "; ").append("sentence count ").append(sentences).append(" != 1");
-        }
-        boolean passed = issues.isEmpty();
-        return new FormCheck(words, sentences, passed, passed ? IN_RANGE : OUTSIDE_FULL_RANGE,
-                passed ? "OK" : issues.toString());
+    private FormCheck() {
     }
 
-    public static FormCheck essay(String text, Integer minWords, Integer maxWords) {
-        int words = countWords(text);
-        int min = limit(minWords, ESSAY_MIN_WORDS);
-        int max = limit(maxWords, ESSAY_MAX_WORDS);
-        boolean passed = words >= min && words <= max;
-        return new FormCheck(words, null, passed, passed ? IN_RANGE : OUTSIDE_FULL_RANGE,
-                passed ? "OK" : "word count " + words + " outside " + min + "-" + max);
+    public static TextMetrics measure(String text) {
+        String stripped = text == null ? "" : text.strip();
+        return new TextMetrics(countWords(stripped), countSentences(stripped), isAllCaps(stripped),
+                PUNCTUATION.matcher(stripped).find(), isBulletOnly(stripped));
     }
 
-    /**
-     * Inside the range is full form; far outside it ({@code invalid_boundary})
-     * is the POC's explicit zero-form boundary. The question's own range moves
-     * the full-form window but never narrows the boundary.
-     */
-    public static FormCheck summarizeSpokenText(String text, Integer minWords, Integer maxWords) {
-        int words = countWords(text);
-        int min = limit(minWords, SST_MIN_WORDS);
-        int max = limit(maxWords, SST_MAX_WORDS);
-        if (words >= min && words <= max) {
-            return new FormCheck(words, null, true, IN_RANGE, "OK");
-        }
-        boolean invalid = words < Math.min(SST_INVALID_BELOW, min) || words > Math.max(SST_INVALID_ABOVE, max);
-        return new FormCheck(words, null, false, invalid ? INVALID_BOUNDARY : OUTSIDE_FULL_RANGE,
-                "word count " + words + " outside " + min + "-" + max);
+    /** The counts, the band the rubric gave and the rule it applied; never the text itself. */
+    public static Map<String, Object> detail(TextMetrics metrics, FormRule rule, int band) {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put(ScoringConstants.DETAIL_WORD_COUNT, metrics.wordCount());
+        detail.put("sentenceCount", metrics.sentenceCount());
+        detail.put("allCaps", metrics.allCaps());
+        detail.put("hasPunctuation", metrics.hasPunctuation());
+        detail.put("bulletOnly", metrics.bulletOnly());
+        detail.put("band", band);
+        detail.put("maxBand", rule.maxBand());
+        detail.put("requireSingleSentence", rule.requireSingleSentence());
+        detail.put("mechanicalRules", rule.applyMechanicalRules());
+        return detail;
     }
 
     static int countWords(String text) {
@@ -85,35 +64,57 @@ public record FormCheck(int wordCount, Integer sentenceCount, boolean passed, St
 
     /** A heuristic, not an NLP splitter: unlisted abbreviations can still overcount. */
     static int countSentences(String text) {
+        return sentences(text).size();
+    }
+
+    /**
+     * The text cut at sentence ends, abbreviations and acronyms protected. A text without any closing punctuation is
+     * one sentence; an empty text has none.
+     */
+    private static List<String> sentences(String text) {
         String stripped = text == null ? "" : text.strip();
         if (stripped.isEmpty()) {
-            return 0;
+            return List.of();
         }
         // Acronym chains first: the abbreviation list would otherwise eat "U.S." of "U.S.A." and strand the "A.".
         String protectedText = ACRONYM.matcher(stripped).replaceAll("__ACR__");
         for (int i = 0; i < ABBREVIATIONS.size(); i++) {
             protectedText = protectedText.replace(ABBREVIATIONS.get(i), "__ABBR" + i + "__");
         }
-        long ends = SENTENCE_END.matcher(protectedText + " ").results().count();
-        return ends == 0 ? 1 : (int) ends;
+        List<String> sentences = new ArrayList<>();
+        Matcher end = SENTENCE_END.matcher(protectedText + " ");
+        int start = 0;
+        while (end.find()) {
+            sentences.add(protectedText.substring(start, Math.min(end.start(), protectedText.length())));
+            start = Math.min(end.end(), protectedText.length());
+        }
+        if (sentences.isEmpty()) {
+            sentences.add(protectedText);
+        }
+        return sentences;
     }
 
-    /** Form is all or nothing: a failed check is worth zero. */
-    public int score() {
-        return passed ? 100 : 0;
+    /** Letters are present and none of them is lower case. */
+    private static boolean isAllCaps(String text) {
+        boolean hasLetter = false;
+        for (int i = 0; i < text.length(); i++) {
+            char character = text.charAt(i);
+            if (Character.isLowerCase(character)) {
+                return false;
+            }
+            hasLetter |= Character.isLetter(character);
+        }
+        return hasLetter;
     }
 
-    public Map<String, Object> detail() {
-        Map<String, Object> detail = new LinkedHashMap<>();
-        detail.put("wordCount", wordCount);
-        detail.put("sentenceCount", sentenceCount);
-        detail.put("passed", passed);
-        detail.put("status", status);
-        detail.put("message", message);
-        return detail;
-    }
-
-    private static int limit(Integer questionLimit, int fallback) {
-        return questionLimit != null && questionLimit > 0 ? questionLimit : fallback;
+    /** Every non-blank line is a bullet or list item, or the text is two or more very short sentences only. */
+    private static boolean isBulletOnly(String text) {
+        List<String> lines = text.lines().filter(line -> !line.isBlank()).toList();
+        if (!lines.isEmpty() && lines.stream().allMatch(line -> BULLET_LINE.matcher(line).find())) {
+            return true;
+        }
+        List<String> sentences = sentences(text);
+        return sentences.size() > 1 && sentences.stream().allMatch(sentence -> countWords(sentence)
+                <= VERY_SHORT_SENTENCE_MAX);
     }
 }

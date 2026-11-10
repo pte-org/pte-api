@@ -38,8 +38,8 @@ public final class ProviderGuard {
     private static final Duration OPEN_FOR = Duration.ofSeconds(60);
     // Outside a job (e.g. a manual spike run) nothing bounds the wait, so cap it.
     private static final Duration MAX_WAIT_WITHOUT_BUDGET = Duration.ofSeconds(30);
-    private static final int STANDARD_MAX_ATTEMPTS = 3;
-    private static final int STANDARD_BREAKER_THRESHOLD = 5;
+    public static final int STANDARD_MAX_ATTEMPTS = 3;
+    public static final int STANDARD_BREAKER_THRESHOLD = 5;
 
     private final String vendor;
     private final int maxAttempts;
@@ -58,8 +58,12 @@ public final class ProviderGuard {
     }
 
     public static ProviderGuard standard(String vendor, Clock clock) {
-        return new ProviderGuard(vendor, STANDARD_MAX_ATTEMPTS, STANDARD_BREAKER_THRESHOLD, clock,
-                duration -> Thread.sleep(duration));
+        return standard(vendor, STANDARD_MAX_ATTEMPTS, STANDARD_BREAKER_THRESHOLD, clock);
+    }
+
+    /** Retries and breaker as set by {@code scoring.ai.retry-max-attempts} and {@code scoring.ai.breaker-threshold}. */
+    public static ProviderGuard standard(String vendor, int maxAttempts, int breakerThreshold, Clock clock) {
+        return new ProviderGuard(vendor, maxAttempts, breakerThreshold, clock, duration -> Thread.sleep(duration));
     }
 
     /** One attempt and no breaker — the behaviour of a client built without a guard. */

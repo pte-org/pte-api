@@ -9,4 +9,8 @@ public class InvalidExaminerScoreException extends DomainException {
     public InvalidExaminerScoreException() {
         super(HttpStatus.BAD_REQUEST, ExaminerScoringConstants.INVALID_SCORE);
     }
+
+    public InvalidExaminerScoreException(String code) {
+        super(HttpStatus.BAD_REQUEST, code);
+    }
 }

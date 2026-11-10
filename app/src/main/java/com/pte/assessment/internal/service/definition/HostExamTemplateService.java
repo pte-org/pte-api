@@ -1,5 +1,6 @@
 package com.pte.assessment.internal.service.definition;
 
+import com.pte.assessment.ActiveRubricVersionPin;
 import com.pte.assessment.ExamDefinitionService;
 import com.pte.assessment.domain.ExamDefinition;
 import com.pte.assessment.domain.ExamDefinitionItem;
@@ -19,7 +20,9 @@ import com.pte.assessment.internal.exception.ExamDefinitionValidationException;
 import com.pte.assessment.internal.exception.NoActiveExamDefinitionException;
 import com.pte.assessment.internal.mapper.ExamDefinitionMapper;
 import com.pte.assessment.internal.repository.ExamDefinitionRepository;
+import com.pte.assessment.internal.service.standard.HostTemplateLabeler;
 import com.pte.itembank.ItembankService;
+import com.pte.itembank.TaskTypeStimulusService;
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskRuntimeProfileService;
 import com.pte.itembank.TaskTypeCodeCompatibility;
@@ -50,17 +53,30 @@ public class HostExamTemplateService {
     private static final int MAX_NAME_LENGTH = 255;
 
     private final ExamDefinitionRepository repository;
+    private final HostTemplateLabeler labeler;
     private final ExamDefinitionService examDefinitionService;
     private final QuestionTypeService questionTypeService;
     private final HostExamTemplateAudit audit;
     private final Clock clock;
     private final ExamDefinitionValidator validator;
     private final ExamDefinitionItemMapper itemMapper;
+    private final RubricVersionPinning rubricPinning;
+
+    /** Compatibility constructor without audio labels or a rubric pin port (creating a template then fails). */
+    public HostExamTemplateService(ExamDefinitionRepository repository, QuestionTypeService questionTypeService,
+            TaskRuntimeProfileService runtimeProfileService, ItembankService itembankService,
+            AuditLogService auditLogService, Clock clock, ExamDefinitionService examDefinitionService) {
+        this(repository, questionTypeService, runtimeProfileService, itembankService, auditLogService, clock,
+                examDefinitionService, null, null);
+    }
 
     @Autowired
     public HostExamTemplateService(ExamDefinitionRepository repository, QuestionTypeService questionTypeService,
             TaskRuntimeProfileService runtimeProfileService, ItembankService itembankService,
-            AuditLogService auditLogService, Clock clock, ExamDefinitionService examDefinitionService) {
+            AuditLogService auditLogService, Clock clock, ExamDefinitionService examDefinitionService,
+            TaskTypeStimulusService stimulusService, ActiveRubricVersionPin activeRubricVersionPin) {
+        this.rubricPinning = new RubricVersionPinning(activeRubricVersionPin);
+        this.labeler = new HostTemplateLabeler(repository, stimulusService);
         this.repository = repository;
         this.examDefinitionService = examDefinitionService;
         this.questionTypeService = questionTypeService;
@@ -72,13 +88,12 @@ public class HostExamTemplateService {
 
     @Transactional(readOnly = true)
     public List<ExamDefinitionResponse> list(CurrentUser caller) {
-        return repository.findAllByTenantIdOrderByCodeAscVersionDesc(requireTenant(caller)).stream()
-                .map(ExamDefinitionMapper::toResponse).toList();
+        return labeler.label(repository.findAllByTenantIdOrderByCodeAscVersionDesc(requireTenant(caller)));
     }
 
     @Transactional(readOnly = true)
     public ExamDefinitionResponse get(UUID publicId, CurrentUser caller) {
-        return ExamDefinitionMapper.toResponse(findOwned(publicId, caller));
+        return labeler.label(List.of(findOwned(publicId, caller))).get(0);
     }
 
     /** Per task type: how many published questions exist against how many the template needs. */
@@ -95,15 +110,14 @@ public class HostExamTemplateService {
         return SkillWeightNormalizer.suggest(request.items());
     }
 
-    /** New template that starts as a copy of the ACTIVE platform default. */
+    /** New template that starts as a copy of the ACTIVE platform default and keeps the default's rubric pin. */
     @Transactional
     public ExamDefinitionResponse createFromDefault(CreateHostExamTemplateRequest request, CurrentUser caller) {
         UUID tenantId = requireTenant(caller);
         ExamDefinition base = repository.findWithItemsByStatusAndTenantIdIsNull(ExamDefinitionStatus.ACTIVE)
                 .orElseThrow(NoActiveExamDefinitionException::new);
 
-        ExamDefinition draft = newDraft(tenantId, base, generateCode(tenantId), 1, request.name().trim(), caller);
-        base.getItems().forEach(item -> draft.addItem(itemMapper.copyItem(item)));
+        ExamDefinition draft = newDraft(tenantId, base, base.getPublicId(), request.name().trim(), caller);
         ExamDefinition saved = save(draft);
         audit.record(caller, ExamDefinitionConstants.AUDIT_CREATED, saved, "Created host template from default version "
                 + base.getVersion());
@@ -111,23 +125,14 @@ public class HostExamTemplateService {
     }
 
     /**
-     * Copies one of the host's own templates into an independent DRAFT with its own code, so activating the copy
-     * never retires the original.
+     * Copies one of the host's own templates into a DRAFT with its own code, so activating it never retires the
+     * original. The copy keeps the source's rubric pin.
      */
     @Transactional
     public ExamDefinitionResponse cloneToDraft(UUID publicId, CurrentUser caller) {
         ExamDefinition source = findOwned(publicId, caller);
-
-        ExamDefinition draft = new ExamDefinition();
-        draft.setCode(generateCode(source.getTenantId()));
-        draft.setVersion(1);
-        draft.setName(copyName(source.getName()));
-        draft.setStatus(ExamDefinitionStatus.DRAFT);
-        draft.setTemplatePolicy(TemplatePolicy.CUSTOM);
-        draft.setTenantId(source.getTenantId());
-        draft.setBaseDefinitionPublicId(source.getBaseDefinitionPublicId());
-        draft.setAuthorUserPublicId(caller.userId());
-        source.getItems().forEach(item -> draft.addItem(itemMapper.copyItem(item)));
+        ExamDefinition draft = newDraft(source.getTenantId(), source, source.getBaseDefinitionPublicId(),
+                copyName(source.getName()), caller);
         ExamDefinition saved = save(draft);
         audit.record(caller, ExamDefinitionConstants.AUDIT_CLONED, saved, "Cloned from template '" + source.getName()
                 + "' version " + source.getVersion());
@@ -224,17 +229,21 @@ public class HostExamTemplateService {
         return ExamDefinitionMapper.toResponse(saved);
     }
 
-    private ExamDefinition newDraft(UUID tenantId, ExamDefinition base, String code, int version, String name,
+    /** A new template family (own code, version 1) copying the items, CEFR mix and rubric pin of {@code source}. */
+    private ExamDefinition newDraft(UUID tenantId, ExamDefinition source, UUID basePublicId, String name,
             CurrentUser caller) {
         ExamDefinition draft = new ExamDefinition();
-        draft.setCode(code);
-        draft.setVersion(version);
+        draft.setCode(generateCode(tenantId));
+        draft.setVersion(1);
         draft.setName(name);
         draft.setStatus(ExamDefinitionStatus.DRAFT);
         draft.setTemplatePolicy(TemplatePolicy.CUSTOM);
         draft.setTenantId(tenantId);
-        draft.setBaseDefinitionPublicId(base.getPublicId());
+        draft.setBaseDefinitionPublicId(basePublicId);
         draft.setAuthorUserPublicId(caller.userId());
+        draft.setCefrTargets(new java.util.ArrayList<>(source.getCefrTargets()));
+        draft.setRubricVersionPublicId(rubricPinning.inheritedFrom(source.getRubricVersionPublicId()));
+        source.getItems().forEach(item -> draft.addItem(itemMapper.copyItem(item)));
         return draft;
     }
 

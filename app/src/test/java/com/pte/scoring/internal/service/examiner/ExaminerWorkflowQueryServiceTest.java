@@ -67,7 +67,7 @@ class ExaminerWorkflowQueryServiceTest {
         queryService = new ExaminerWorkflowQueryService(
                 recorder, issueRepository,
                 assignmentRepository, scoreRepository, gateway, attemptService, answerRepository,
-                examDefinitionService
+                examDefinitionService, new com.pte.scoring.internal.service.examiner.trait.ExaminerTraitResponses(jsonMapper)
         );
     }
 

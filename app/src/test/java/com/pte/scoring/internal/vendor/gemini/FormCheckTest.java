@@ -1,36 +1,47 @@
 package com.pte.scoring.internal.vendor.gemini;
 
+import com.pte.scoring.internal.constant.ScoringConstants;
+import com.pte.scoring.internal.rubric.catalog.RubricCatalogImpl;
+import com.pte.scoring.rubric.FormRule;
+import com.pte.scoring.rubric.RubricCatalog;
+import com.pte.scoring.rubric.TextMetrics;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * FormCheck only counts (words, sentences, capitals, punctuation, bullet points); the band is decided by the
+ * catalog's {@link FormRule#bandFor}. The band cases below run the counted metrics through the catalog rule of each
+ * writing task, so a count change and a band change are both caught here.
+ */
 class FormCheckTest {
 
+    private static final RubricCatalog CATALOG = new RubricCatalogImpl();
+
     @ParameterizedTest
-    @CsvSource({"4,false", "5,true", "75,true", "76,false"})
-    void summarizeWrittenTextAcceptsFiveToSeventyFiveWordsInOneSentence(int words, boolean passed) {
-        assertThat(FormCheck.summarizeWrittenText(oneSentence(words), null, null).passed()).isEqualTo(passed);
+    @CsvSource({"4,0", "5,1", "75,1", "76,0"})
+    void summarizeWrittenTextEarnsFormOneForFiveToSeventyFiveWordsInOneSentence(int words, int band) {
+        assertThat(band(ScoringConstants.TASK_TYPE_SUMMARIZE_WRITTEN_TEXT, oneSentence(words))).isEqualTo(band);
     }
 
     @Test
-    void summarizeWrittenTextNeedsExactlyOneSentence() {
-        FormCheck form = FormCheck.summarizeWrittenText("The first idea is clear. The second idea follows.",
-                null, null);
+    void summarizeWrittenTextInTwoSentencesHasFormZero() {
+        TextMetrics metrics = FormCheck.measure("The first idea is clear. The second idea follows.");
 
-        assertThat(form.sentenceCount()).isEqualTo(2);
-        assertThat(form.passed()).isFalse();
-        assertThat(form.message()).contains("sentence count 2");
+        assertThat(metrics.sentenceCount()).isEqualTo(2);
+        assertThat(rule(ScoringConstants.TASK_TYPE_SUMMARIZE_WRITTEN_TEXT).bandFor(metrics)).isZero();
     }
 
     @Test
     void summarizeWrittenTextCountsAnAbbreviationAsPartOfTheSentence() {
-        FormCheck form = FormCheck.summarizeWrittenText(
-                "Dr. Smith argued that e.g. solar power is cheaper than U.S. coal today.", null, null);
+        String text = "Dr. Smith argued that e.g. solar power is cheaper than U.S. coal today.";
 
-        assertThat(form.sentenceCount()).isEqualTo(1);
-        assertThat(form.passed()).isTrue();
+        assertThat(FormCheck.measure(text).sentenceCount()).isEqualTo(1);
+        assertThat(band(ScoringConstants.TASK_TYPE_SUMMARIZE_WRITTEN_TEXT, text)).isEqualTo(1);
     }
 
     @Test
@@ -40,73 +51,90 @@ class FormCheckTest {
     }
 
     @Test
-    void aSentenceWithoutClosingPunctuationStillCountsAsOne() {
-        assertThat(FormCheck.summarizeWrittenText("Solar power is getting cheaper every single year", null, null)
-                .sentenceCount()).isEqualTo(1);
-    }
+    void aSentenceWithoutClosingPunctuationStillCountsAsOneButHasNoPunctuation() {
+        TextMetrics metrics = FormCheck.measure("Solar power is getting cheaper every single year");
 
-    @Test
-    void theQuestionsOwnWordLimitsReplaceTheDefaults() {
-        assertThat(FormCheck.summarizeWrittenText(oneSentence(30), null, 25).passed()).isFalse();
-        assertThat(FormCheck.summarizeWrittenText(oneSentence(30), 10, 30).passed()).isTrue();
-        assertThat(FormCheck.summarizeWrittenText(oneSentence(8), 10, 30).passed()).isFalse();
-    }
-
-    @Test
-    void aLimitOfZeroOrLessFallsBackToTheDefault() {
-        assertThat(FormCheck.summarizeWrittenText(oneSentence(80), 0, 0).passed()).isFalse();
-        assertThat(FormCheck.essay(words(250), -1, -1).passed()).isTrue();
+        assertThat(metrics.sentenceCount()).isEqualTo(1);
+        assertThat(metrics.hasPunctuation()).isFalse();
+        // Pearson: a response with no punctuation earns Form 0 (Score Guide pp.33, 35, 42).
+        assertThat(rule(ScoringConstants.TASK_TYPE_SUMMARIZE_WRITTEN_TEXT).bandFor(metrics)).isZero();
     }
 
     @ParameterizedTest
-    @CsvSource({"199,false", "200,true", "300,true", "301,false"})
-    void essayAcceptsTwoHundredToThreeHundredWords(int words, boolean passed) {
-        FormCheck form = FormCheck.essay(words(words), null, null);
+    @CsvSource({"119,0", "120,1", "199,1", "200,2", "300,2", "301,1", "380,1", "381,0"})
+    void essayFormFollowsThePearsonLengthBands(int words, int band) {
+        TextMetrics metrics = FormCheck.measure(prose(words));
 
-        assertThat(form.passed()).isEqualTo(passed);
-        assertThat(form.sentenceCount()).isNull();
-        assertThat(form.wordCount()).isEqualTo(words);
-    }
-
-    @Test
-    void essayUsesTheQuestionsLimits() {
-        assertThat(FormCheck.essay(words(120), 100, 150).passed()).isTrue();
-        assertThat(FormCheck.essay(words(160), 100, 150).passed()).isFalse();
+        assertThat(metrics.wordCount()).isEqualTo(words);
+        assertThat(rule(ScoringConstants.TASK_TYPE_WRITE_ESSAY).bandFor(metrics)).isEqualTo(band);
     }
 
     @ParameterizedTest
-    @CsvSource({
-            "39,invalid_boundary,false", "40,outside_full_range,false", "49,outside_full_range,false",
-            "50,in_range,true", "70,in_range,true", "71,outside_full_range,false",
-            "100,outside_full_range,false", "101,invalid_boundary,false"})
-    void summarizeSpokenTextSeparatesTheFullRangeFromTheInvalidBoundary(int words, String status, boolean passed) {
-        FormCheck form = FormCheck.summarizeSpokenText(words(words), null, null);
-
-        assertThat(form.status()).isEqualTo(status);
-        assertThat(form.passed()).isEqualTo(passed);
-        assertThat(form.score()).isEqualTo(passed ? 100 : 0);
+    @CsvSource({"39,0", "40,1", "49,1", "50,2", "70,2", "71,1", "100,1", "101,0"})
+    void summarizeSpokenTextFormFollowsThePearsonLengthBands(int words, int band) {
+        assertThat(band(ScoringConstants.TASK_TYPE_SUMMARIZE_SPOKEN_TEXT, prose(words))).isEqualTo(band);
     }
 
     @Test
-    void summarizeSpokenTextUsesTheQuestionsRangeButKeepsTheInvalidBoundaryWide() {
-        assertThat(FormCheck.summarizeSpokenText(words(90), 80, 100).status()).isEqualTo("in_range");
-        assertThat(FormCheck.summarizeSpokenText(words(105), 80, 120).status()).isEqualTo("in_range");
-        assertThat(FormCheck.summarizeSpokenText(words(125), 80, 120).status()).isEqualTo("invalid_boundary");
-        assertThat(FormCheck.summarizeSpokenText(words(35), 30, 40).status()).isEqualTo("in_range");
+    void anAllCapitalResponseIsMeasuredAsSuchAndHasFormZero() {
+        String shouting = prose(250).toUpperCase(java.util.Locale.ROOT);
+
+        assertThat(FormCheck.measure(shouting).allCaps()).isTrue();
+        assertThat(FormCheck.measure(prose(250)).allCaps()).isFalse();
+        assertThat(FormCheck.measure("NASA and the ESA launched it.").allCaps()).isFalse();
+        assertThat(band(ScoringConstants.TASK_TYPE_WRITE_ESSAY, shouting)).isZero();
+        assertThat(band(ScoringConstants.TASK_TYPE_SUMMARIZE_WRITTEN_TEXT, "SOLAR POWER IS GETTING CHEAPER NOW."))
+                .isZero();
+    }
+
+    @Test
+    void aResponseMadeOnlyOfBulletPointsIsMeasuredAsSuchAndHasFormZero() {
+        String bullets = ("- " + prose(10) + "\n").repeat(6) + "* " + prose(10) + "\n1. " + prose(10) + "\n2) "
+                + prose(10);
+
+        assertThat(FormCheck.measure(bullets).bulletOnly()).isTrue();
+        assertThat(band(ScoringConstants.TASK_TYPE_SUMMARIZE_SPOKEN_TEXT, bullets)).isZero();
+        assertThat(FormCheck.measure("Intro line.\n- " + prose(10)).bulletOnly()).isFalse();
+    }
+
+    @Test
+    void aResponseMadeOnlyOfVeryShortSentencesCountsAsBulletLike() {
+        // 64 words: inside the SST full-form length, so only the short-sentence rule can zero it.
+        String choppy = "Cars pollute. Bikes help. Buses too. Trains work. ".repeat(8).trim();
+
+        assertThat(FormCheck.measure(choppy).bulletOnly()).isTrue();
+        assertThat(band(ScoringConstants.TASK_TYPE_SUMMARIZE_SPOKEN_TEXT, choppy)).isZero();
+        assertThat(FormCheck.measure("Solar power is getting cheaper every year.").bulletOnly()).isFalse();
     }
 
     @Test
     void wordsAreSeparatedByAnyWhitespace() {
-        assertThat(FormCheck.countWords("one  two\tthree\nfour five")).isEqualTo(5);
+        assertThat(FormCheck.countWords("one  two\tthree\nfour five")).isEqualTo(5);
         assertThat(FormCheck.countWords("   ")).isZero();
+        assertThat(FormCheck.measure(null).wordCount()).isZero();
     }
 
     @Test
-    void theDetailRecordsTheCountsAndTheOutcome() {
-        FormCheck form = FormCheck.essay(words(150), null, null);
+    void theDetailRecordsTheMetricsTheBandAndTheRuleButNeverTheText() {
+        String essay = prose(150);
+        TextMetrics metrics = FormCheck.measure(essay);
+        FormRule rule = rule(ScoringConstants.TASK_TYPE_WRITE_ESSAY);
 
-        assertThat(form.detail()).containsEntry("wordCount", 150).containsEntry("passed", false)
-                .containsEntry("status", "outside_full_range").containsKey("message");
+        Map<String, Object> detail = FormCheck.detail(metrics, rule, rule.bandFor(metrics));
+
+        assertThat(detail).containsEntry("wordCount", 150).containsEntry("band", 1).containsEntry("maxBand", 2)
+                .containsEntry("allCaps", false).containsEntry("hasPunctuation", true)
+                .containsEntry("bulletOnly", false).containsEntry("requireSingleSentence", false)
+                .containsEntry("mechanicalRules", true).containsKey("sentenceCount");
+        assertThat(detail.toString()).doesNotContain("word word");
+    }
+
+    private static int band(String taskType, String text) {
+        return rule(taskType).bandFor(FormCheck.measure(text));
+    }
+
+    private static FormRule rule(String taskType) {
+        return CATALOG.find(taskType).orElseThrow().formRule();
     }
 
     private static String words(int count) {
@@ -115,5 +143,17 @@ class FormCheckTest {
 
     private static String oneSentence(int count) {
         return words(count) + ".";
+    }
+
+    /** Ordinary prose: sentences of up to ten words, each closed by a full stop. */
+    static String prose(int count) {
+        StringBuilder text = new StringBuilder();
+        int left = count;
+        while (left > 0) {
+            int sentence = Math.min(10, left);
+            text.append(text.isEmpty() ? "" : " ").append(words(sentence)).append('.');
+            left -= sentence;
+        }
+        return text.toString();
     }
 }

@@ -3,7 +3,6 @@ package com.pte.session.internal.service.staff;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.ExamSessionProctor;
 import com.pte.session.domain.enums.SessionStatus;
-import com.pte.session.dto.response.ProctorMonitoringSessionView;
 import com.pte.session.dto.response.ProctorWorkspaceSessionView;
 
 import java.time.Instant;
@@ -68,20 +67,5 @@ final class ProctorSessionViews {
                 roleStr,
                 canMon,
                 reason);
-    }
-
-    static ProctorMonitoringSessionView toSessionView(ExamSessionProctor pa) {
-        ExamSession s = pa.getSession();
-        String roleStr = pa.getRole() != null ? pa.getRole().name() : null;
-        return new ProctorMonitoringSessionView(
-                pa.getPublicId(),
-                s.getPublicId(),
-                s.getName(),
-                s.getSessionCode(),
-                s.getStatus(),
-                s.getOpensAt(),
-                s.getClosesAt(),
-                roleStr,
-                pa.getProctorPublicId());
     }
 }

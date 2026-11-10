@@ -41,12 +41,13 @@ public class ExamIncidentController {
     public ApiResponse<PagedResult<IncidentView>> listIncidents(
             @PathVariable UUID sessionPublicId,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         CurrentUser caller = CurrentUserContext.required();
         int safePage = Math.max(0, page);
         int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
-        return ApiResponse.success(incidentService.listIncidents(sessionPublicId, status, safePage, safeSize, caller));
+        return ApiResponse.success(incidentService.listIncidents(sessionPublicId, status, search, safePage, safeSize, caller));
     }
 
     @PostMapping("/{sessionPublicId}/incidents")

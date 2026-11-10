@@ -12,7 +12,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Phase 1 boundary contract of the chat module: it may only lean on the public
- * root of {@code practice} (the entitlement gate) and on {@code shared}; nothing
+ * root of {@code practice} (the entitlement gate), on the public {@code itembank} root (its stored, editable
+ * prompts through {@code PromptTexts}) and on {@code shared}; nothing
  * may depend on chat, and {@code practice} must never depend back on it.
  */
 class ChatModuleBoundaryTest {
@@ -26,10 +27,10 @@ class ChatModuleBoundaryTest {
     }
 
     @Test
-    void chat_depends_only_on_practice_and_shared() {
+    void chat_depends_only_on_practice_itembank_and_shared() {
         ApplicationModule chat = MODULES.getModuleByName(CHAT).orElseThrow();
 
-        assertThat(dependencyNames(chat)).isSubsetOf("practice", "shared");
+        assertThat(dependencyNames(chat)).isSubsetOf("practice", "itembank", "shared");
     }
 
     @Test

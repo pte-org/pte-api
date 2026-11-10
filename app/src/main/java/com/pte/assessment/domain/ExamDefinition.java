@@ -6,6 +6,7 @@ import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -16,6 +17,8 @@ import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import lombok.Getter;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
@@ -72,6 +75,14 @@ public class ExamDefinition extends BaseEntity {
     @Column(name = "base_definition_public_id")
     private java.util.UUID baseDefinitionPublicId;
 
+    /** Rubric version pinned when this template was created or cloned; nullable for legacy templates. */
+    @Column(name = "rubric_version_public_id")
+    private java.util.UUID rubricVersionPublicId;
+
+    /** Pearson time window; null when the template carries no time limits. */
+    @Embedded
+    private ExamTimeFrame timeFrame;
+
     @Column(name = "rejection_reason", length = 1000)
     private String rejectionReason;
 
@@ -79,6 +90,12 @@ public class ExamDefinition extends BaseEntity {
     @Version
     @Column(name = "lock_version", nullable = false)
     private long lockVersion;
+
+    /** CEFR mix exams built from this template aim for; empty means questions are drawn without regard to level. */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @Fetch(FetchMode.SUBSELECT)
+    @CollectionTable(name = "exam_definition_cefr_targets", joinColumns = @JoinColumn(name = "exam_definition_id"))
+    private List<ExamCefrTarget> cefrTargets = new ArrayList<>();
 
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "exam_definition_items", joinColumns = @JoinColumn(name = "exam_definition_id"))

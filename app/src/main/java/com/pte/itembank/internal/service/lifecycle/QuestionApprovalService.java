@@ -1,5 +1,6 @@
 package com.pte.itembank.internal.service.lifecycle;
 
+import com.pte.itembank.internal.exception.QuestionValidationException;
 import com.pte.itembank.internal.service.QuestionMediaReferenceValidator;
 import com.pte.itembank.domain.Question;
 import com.pte.itembank.domain.enums.QuestionStatus;
@@ -51,11 +52,14 @@ public class QuestionApprovalService {
         if (question.getStatus() != QuestionStatus.DRAFT) {
             throw new InvalidQuestionStatusTransitionException();
         }
+        if (question.isAvailableForExam() && question.getCefrLevel() == null) {
+            throw new QuestionValidationException(ItembankConstants.CEFR_LEVEL_REQUIRED);
+        }
         validationHelper.validate(question);
         mediaValidator.validate(question, caller);
         question.setRejectionReason(null);
         question.setStatus(QuestionStatus.PENDING_APPROVAL);
-        audit(caller, ItembankConstants.AUDIT_SUBMITTED, question, "Submitted question for approval");
+        audit(caller, ItembankConstants.AUDIT_SUBMITTED, question, ItembankConstants.AUDIT_SUMMARY_SUBMITTED);
         return toResponse(question);
     }
 
@@ -77,7 +81,7 @@ public class QuestionApprovalService {
         question.setCurrent(true);
         question.setStatus(QuestionStatus.APPROVED);
         question.setEverPublished(true);
-        audit(caller, ItembankConstants.AUDIT_APPROVED, question, "Approved question");
+        audit(caller, ItembankConstants.AUDIT_APPROVED, question, ItembankConstants.AUDIT_SUMMARY_APPROVED);
         return toResponse(question);
     }
 
@@ -94,7 +98,7 @@ public class QuestionApprovalService {
         }
         question.setStatus(QuestionStatus.DRAFT);
         question.setRejectionReason(request.reason());
-        audit(caller, ItembankConstants.AUDIT_REJECTED, question, "Rejected question: " + request.reason());
+        audit(caller, ItembankConstants.AUDIT_REJECTED, question, String.format(ItembankConstants.AUDIT_SUMMARY_REJECTED, request.reason()));
         return toResponse(question);
     }
 
@@ -119,7 +123,7 @@ public class QuestionApprovalService {
         question.setCurrent(true);
         question.setStatus(QuestionStatus.APPROVED);
         question.setEverPublished(true);
-        audit(caller, ItembankConstants.AUDIT_PUBLISHED, question, "Published question");
+        audit(caller, ItembankConstants.AUDIT_PUBLISHED, question, ItembankConstants.AUDIT_SUMMARY_PUBLISHED);
         return toResponse(question);
     }
 
@@ -175,13 +179,14 @@ public class QuestionApprovalService {
         String text = summary == null ? "" : summary;
         auditLogService.record(caller, ItembankConstants.QUESTION_AGGREGATE,
                 String.valueOf(question.getPublicId()), action,
-                text.length() <= 500 ? text : text.substring(0, 500));
+                text.length() <= ItembankConstants.AUDIT_SUMMARY_MAX_LENGTH ? text
+                        : text.substring(0, ItembankConstants.AUDIT_SUMMARY_MAX_LENGTH));
     }
 
     private void deny(CurrentUser caller, UUID aggregateId, String message) {
         if (auditLogService != null && caller != null) {
             auditLogService.recordFailure(caller, ItembankConstants.QUESTION_AGGREGATE,
-                    aggregateId == null ? "unknown" : aggregateId.toString(),
+                    aggregateId == null ? ItembankConstants.AUDIT_UNKNOWN_AGGREGATE : aggregateId.toString(),
                     SharedConstants.AUDIT_AUTHORIZATION_DENIED, message);
         }
         throw new AccessDeniedException(message);

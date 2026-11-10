@@ -6,6 +6,8 @@ import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
+import com.pte.identity.internal.config.PasswordResetProperties;
+import com.pte.identity.internal.config.WebAppProperties;
 import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.identity.internal.domain.PasswordResetToken;
 import com.pte.identity.internal.exception.InvalidPasswordResetTokenException;
@@ -82,7 +84,7 @@ class PasswordResetServiceTest {
     void setUp() {
         service = new PasswordResetService(userRepository, memberRepository, tokenRepository, tokenHasher,
                 passwordEncoder, refreshTokenService, auditLogService, eventPublisher, throttle,
-                Clock.fixed(NOW, ZoneOffset.UTC), TENANT_URL, ADMIN_URL, 30);
+                Clock.fixed(NOW, ZoneOffset.UTC), webProperties(), new PasswordResetProperties());
         lenient().when(throttle.tryAcquire(anyString(), anyString())).thenReturn(true);
     }
 
@@ -245,7 +247,7 @@ class PasswordResetServiceTest {
 
     @Test
     void confirm_unknownToken_isRejectedAndChangesNothing() {
-        when(tokenRepository.findByTokenHash(tokenHasher.hash("nope"))).thenReturn(Optional.empty());
+        when(tokenRepository.findByTokenHashAndDeletedFalse(tokenHasher.hash("nope"))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.confirm("nope", "NewPassword456"))
                 .isInstanceOf(InvalidPasswordResetTokenException.class);
@@ -323,7 +325,7 @@ class PasswordResetServiceTest {
 
     @Test
     void isUsable_anUnknownLink_isFalse() {
-        when(tokenRepository.findByTokenHash(tokenHasher.hash("nope"))).thenReturn(Optional.empty());
+        when(tokenRepository.findByTokenHashAndDeletedFalse(tokenHasher.hash("nope"))).thenReturn(Optional.empty());
 
         assertThat(service.isUsable("nope")).isFalse();
     }
@@ -343,10 +345,17 @@ class PasswordResetServiceTest {
         assertThat(service.isUsable("   ")).isFalse();
         assertThat(service.isUsable(null)).isFalse();
 
-        verify(tokenRepository, never()).findByTokenHash(anyString());
+        verify(tokenRepository, never()).findByTokenHashAndDeletedFalse(anyString());
     }
 
     // ---- helpers ----
+
+    private static WebAppProperties webProperties() {
+        WebAppProperties properties = new WebAppProperties();
+        properties.setTenantUrl(TENANT_URL);
+        properties.setAdminUrl(ADMIN_URL);
+        return properties;
+    }
 
     private PasswordResetEmailRequestedEvent capturedEvent() {
         ArgumentCaptor<PasswordResetEmailRequestedEvent> captor =
@@ -367,7 +376,7 @@ class PasswordResetServiceTest {
         token.setUserId(userId);
         token.setTokenHash(tokenHasher.hash(raw));
         token.setExpiresAt(expiresAt);
-        when(tokenRepository.findByTokenHash(tokenHasher.hash(raw))).thenReturn(Optional.of(token));
+        when(tokenRepository.findByTokenHashAndDeletedFalse(tokenHasher.hash(raw))).thenReturn(Optional.of(token));
         return token;
     }
 

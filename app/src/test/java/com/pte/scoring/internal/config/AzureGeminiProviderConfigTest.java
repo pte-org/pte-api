@@ -18,6 +18,8 @@ import com.pte.scoring.internal.vendor.gemini.scorer.SummarizeSpokenTextScorer;
 import com.pte.scoring.internal.vendor.gemini.scorer.SummarizeWrittenTextScorer;
 import com.pte.scoring.internal.vendor.gemini.scorer.WriteEssayScorer;
 import com.pte.scoring.internal.vendor.gemini.GeminiRestClient;
+import com.pte.scoring.internal.vendor.gemini.OpenAiCompatibleStructuredClient;
+import com.pte.scoring.internal.vendor.gemini.StructuredModelClient;
 import com.pte.scoring.internal.vendor.speech.SpeechAudioLoader;
 import com.pte.scoring.internal.vendor.stub.StubEssayScoringClient;
 import com.pte.scoring.internal.vendor.stub.StubSpeechScoringClient;
@@ -132,6 +134,40 @@ class AzureGeminiProviderConfigTest {
                             .contains("SCORING_AI_GEMINI_API_KEY")
                             .doesNotContain("SCORING_AI_AZURE_SPEECH_KEY")
                             .doesNotContain("pasted gemini key");
+                });
+    }
+
+    @Test
+    void gatewayTextVendorReplacesGeminiAndKeepsAzure() {
+        runner.withPropertyValues("scoring.ai.provider=azure-gemini",
+                        "scoring.ai.azure.speech-key=test-azure-key",
+                        "scoring.ai.azure.speech-region=southeastasia",
+                        "scoring.ai.text-vendor=gateway",
+                        "scoring.ai.gateway.base-url=https://gateway.example/v1",
+                        "scoring.ai.gateway.api-key=test-gateway-key",
+                        "scoring.ai.gateway.model=Capstone")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(AzureSpeechRestClient.class);
+                    assertThat(context).getBean(StructuredModelClient.class)
+                            .isInstanceOf(OpenAiCompatibleStructuredClient.class);
+                    assertThat(context.getBeansOfType(AiAnswerScorer.class)).hasSize(10);
+                });
+    }
+
+    @Test
+    void gatewayWithoutSettingsFailsStartupNamingTheGatewayNotGemini() {
+        runner.withPropertyValues("scoring.ai.provider=azure-gemini",
+                        "scoring.ai.azure.speech-key=test-azure-key",
+                        "scoring.ai.azure.speech-region=southeastasia",
+                        "scoring.ai.text-vendor=gateway")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(failureMessages(context.getStartupFailure()))
+                            .contains("SCORING_AI_GATEWAY_BASE_URL")
+                            .contains("SCORING_AI_GATEWAY_API_KEY")
+                            .contains("SCORING_AI_GATEWAY_MODEL")
+                            .doesNotContain("SCORING_AI_GEMINI_API_KEY");
                 });
     }
 

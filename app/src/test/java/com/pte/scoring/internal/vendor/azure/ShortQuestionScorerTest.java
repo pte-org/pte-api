@@ -7,6 +7,7 @@ import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.AiScoringRequest;
 import com.pte.scoring.internal.vendor.audio.AudioChunk;
 import com.pte.scoring.internal.vendor.speech.SpeechAudioLoader;
+import com.pte.scoring.support.SpeakingRubrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,12 +29,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+/** Answer Short Question through the rubric: Vocabulary 0/1, item score 0 or 100 from RubricScorer. */
 class ShortQuestionScorerTest {
 
     private static final String ANSWER_KEY = "astronomer / an astronomer";
     private static final UUID TENANT = UUID.randomUUID();
     private static final String MEDIA = UUID.randomUUID().toString();
     private static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final UUID VERSION = UUID.randomUUID();
 
     @Mock
     private SpeechAudioLoader audio;
@@ -59,7 +62,8 @@ class ShortQuestionScorerTest {
         AiScoreResult result = scorer.score(request(ANSWER_KEY));
 
         assertThat(result.rawScore()).isEqualTo(100);
-        assertThat(result.subScores()).containsOnly(java.util.Map.entry("CONTENT", 100));
+        assertThat(result.subScores()).containsOnly(java.util.Map.entry("VOCABULARY", 1));
+        assertThat(result.rubricVersionPublicId()).isEqualTo(VERSION);
         assertThat(result.transcript()).isEqualTo("Astronomer.");
         assertThat(result.providerCategory()).isEqualTo(AiProviderCategory.REAL);
         JsonNode detail = JSON.readTree(result.detailJson());
@@ -98,6 +102,7 @@ class ShortQuestionScorerTest {
         AiScoreResult result = scorer.score(request(ANSWER_KEY));
 
         assertThat(result.rawScore()).isZero();
+        assertThat(result.subScores()).containsOnly(java.util.Map.entry("VOCABULARY", 0));
         assertThat(result.transcript()).isEqualTo("A biologist.");
         assertThat(JSON.readTree(result.detailJson()).path("matchedAnswer").isNull()).isTrue();
     }
@@ -127,6 +132,16 @@ class ShortQuestionScorerTest {
         verify(audio, never()).load(any(), any());
     }
 
+    @Test
+    void aRequestWithoutARubricFailsClosedBeforeAnyAudioIsLoaded() {
+        AiScoringRequest noRubric = new AiScoringRequest(ScoringConstants.TASK_TYPE_ANSWER_SHORT_QUESTION, MEDIA,
+                null, null, ANSWER_KEY, null, null, null, TENANT);
+
+        assertThatThrownBy(() -> scorer.score(noRubric)).isInstanceOfSatisfying(AiProviderException.class,
+                ex -> assertThat(ex.getMessage()).isEqualTo(ScoringConstants.AI_RUBRIC_MISSING));
+        verify(audio, never()).load(any(), any());
+    }
+
     private void givenAudioHeardAs(String transcript) {
         when(audio.load(MEDIA, TENANT)).thenReturn(new byte[] {1});
         when(assessor.prepare(any())).thenReturn(chunks);
@@ -135,6 +150,7 @@ class ShortQuestionScorerTest {
 
     private static AiScoringRequest request(String correctAnswerText) {
         return new AiScoringRequest(ScoringConstants.TASK_TYPE_ANSWER_SHORT_QUESTION, MEDIA, null, null,
-                correctAnswerText, null, null, null, TENANT);
+                correctAnswerText, null, null, null, TENANT,
+                SpeakingRubrics.of(ScoringConstants.TASK_TYPE_ANSWER_SHORT_QUESTION), VERSION);
     }
 }

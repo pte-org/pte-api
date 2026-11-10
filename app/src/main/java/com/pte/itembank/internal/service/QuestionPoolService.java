@@ -6,7 +6,6 @@ import com.pte.itembank.domain.QuestionOption;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionStatus;
 import com.pte.itembank.domain.enums.QuestionPool;
-import com.pte.itembank.domain.enums.Visibility;
 import com.pte.itembank.dto.response.QuestionFreezeView;
 import com.pte.itembank.internal.constant.ItembankConstants;
 import com.pte.itembank.internal.exception.QuestionNotFoundException;
@@ -88,7 +87,7 @@ public class QuestionPoolService {
     public QuestionFreezeView freeze(UUID questionPublicId) {
         Question question = questionRepository.findWithOptionsByPublicId(questionPublicId)
                 .orElseThrow(QuestionNotFoundException::new);
-        if (question.getVisibility() != Visibility.SHARED || question.getStatus() != QuestionStatus.APPROVED
+        if (question.getStatus() != QuestionStatus.APPROVED
                 || !question.isCurrent()
                 || (!question.isAvailableForExam()
                         && (question.isAvailabilityFlagsExplicit() || question.getPool() != QuestionPool.EXAM))) {
@@ -126,7 +125,7 @@ public class QuestionPoolService {
                         .map(definition -> definition.getDisplayName())
                         .orElse(taskTypeKey);
         return new QuestionFreezeView(
-                question.getPublicId(), question.getPteTaskType(), question.getTitle(), question.getPromptText(),
+                question.getPublicId(), question.getPteTaskType(), displayName, question.getPromptText(),
                 question.getAudioPromptRef(), question.getImagePromptRef(), question.getReferenceAnswerText(),
                 question.getCorrectAnswerText(), question.getMinWordCount(), question.getMaxWordCount(), options,
                 taskTypeKey,

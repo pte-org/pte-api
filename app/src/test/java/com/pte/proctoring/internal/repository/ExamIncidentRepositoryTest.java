@@ -10,7 +10,6 @@ import org.springframework.data.domain.PageRequest;
 
 import java.time.Instant;
 import java.util.EnumSet;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -24,6 +23,40 @@ class ExamIncidentRepositoryTest {
 
     @Autowired
     private ExamIncidentRepository repository;
+
+    @Test
+    void incidentSearchFiltersBeforePaginationAndKeepsScopeAndLiteralSearch() {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        Instant detectedAt = Instant.parse("2026-11-09T03:00:00Z");
+        ExamIncident titleMatch = incident(tenantId, sessionId, UUID.randomUUID(), IncidentOrigin.REPORTED, null, detectedAt);
+        titleMatch.setTitle("Audio 50%_ outage");
+        repository.saveAndFlush(titleMatch);
+        ExamIncident descriptionMatch = incident(tenantId, sessionId, UUID.randomUUID(), IncidentOrigin.REPORTED, null, detectedAt);
+        descriptionMatch.setDescription("The audio device stopped responding");
+        descriptionMatch.setStatus("RESOLVED");
+        repository.saveAndFlush(descriptionMatch);
+
+        for (int index = 0; index < 4; index++) {
+            ExamIncident excluded = incident(index == 0 ? UUID.randomUUID() : tenantId,
+                    index == 1 ? UUID.randomUUID() : sessionId, UUID.randomUUID(),
+                    index == 2 ? IncidentOrigin.AUTO : IncidentOrigin.REPORTED, null, detectedAt);
+            excluded.setTitle("Audio incident");
+            excluded.setDeleted(index == 3);
+            repository.saveAndFlush(excluded);
+        }
+
+        var first = repository.searchReportedIncidents(sessionId, tenantId, IncidentOrigin.REPORTED,
+                null, "audio", PageRequest.of(0, 1));
+        assertThat(first.getTotalElements()).isEqualTo(2);
+        assertThat(first.getContent()).hasSize(1);
+        assertThat(repository.searchReportedIncidents(sessionId, tenantId, IncidentOrigin.REPORTED,
+                null, "audio", PageRequest.of(1, 1)).getContent()).hasSize(1);
+        assertThat(repository.searchReportedIncidents(sessionId, tenantId, IncidentOrigin.REPORTED,
+                "RESOLVED", "audio", PageRequest.of(0, 20)).getContent()).containsExactly(descriptionMatch);
+        assertThat(repository.searchReportedIncidents(sessionId, tenantId, IncidentOrigin.REPORTED,
+                null, "%_", PageRequest.of(0, 20)).getContent()).containsExactly(titleMatch);
+    }
 
     private ExamIncident incident(UUID tenantId, UUID sessionId, UUID attemptId, IncidentOrigin origin,
                                   String clientEventId, Instant detectedAt) {
@@ -101,23 +134,6 @@ class ExamIncidentRepositoryTest {
 
         assertThat(repository.findAuditAfter(sessionId, tenantId, EVIDENCE, firstDetectedAt,
                 first.getPublicId(), PageRequest.of(0, 10))).containsExactly(second);
-    }
-
-    @Test
-    void flagCountsGroupByAttemptAndIgnoreOtherOrigins() {
-        UUID tenantId = UUID.randomUUID();
-        UUID sessionId = UUID.randomUUID();
-        UUID attemptId = UUID.randomUUID();
-        Instant at = Instant.parse("2026-09-28T04:00:00Z");
-        repository.saveAndFlush(incident(tenantId, sessionId, attemptId, IncidentOrigin.PROCTOR_FLAG, null, at));
-        repository.saveAndFlush(incident(tenantId, sessionId, attemptId, IncidentOrigin.PROCTOR_FLAG, null, at));
-        repository.saveAndFlush(incident(tenantId, sessionId, attemptId, IncidentOrigin.AUTO, "c", at));
-
-        List<Object[]> counts = repository.countFlagsByAttemptPublicIdIn(sessionId, tenantId, List.of(attemptId));
-
-        assertThat(counts).hasSize(1);
-        assertThat(counts.get(0)[0]).isEqualTo(attemptId);
-        assertThat(counts.get(0)[1]).isEqualTo(2L);
     }
 
     @Test

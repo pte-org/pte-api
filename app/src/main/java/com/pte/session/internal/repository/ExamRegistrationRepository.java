@@ -2,8 +2,6 @@ package com.pte.session.internal.repository;
 
 import com.pte.session.domain.ExamRegistration;
 import com.pte.session.domain.enums.AudienceMemberStatus;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -83,20 +81,6 @@ public interface ExamRegistrationRepository extends JpaRepository<ExamRegistrati
             + "and r.status = com.pte.session.domain.enums.AudienceMemberStatus.ENROLLED")
     List<ExamRegistration> findEnrollmentsOfStudents(@Param("tenantId") UUID tenantId,
             @Param("studentPublicIds") List<UUID> studentPublicIds);
-
-    @Query("select r from ExamRegistration r "
-            + "where r.session.publicId = :sessionPublicId and r.tenantId = :tenantId "
-            + "and r.deleted = false and r.session.deleted = false "
-            + "and r.status = com.pte.session.domain.enums.AudienceMemberStatus.ENROLLED")
-    Page<ExamRegistration> findEnrolledBySessionPublicId(@Param("sessionPublicId") UUID sessionPublicId,
-            @Param("tenantId") UUID tenantId, Pageable pageable);
-
-    @Query("select r.studentPublicId from ExamRegistration r "
-            + "where r.session.publicId = :sessionPublicId and r.tenantId = :tenantId "
-            + "and r.deleted = false and r.session.deleted = false "
-            + "and r.status = com.pte.session.domain.enums.AudienceMemberStatus.ENROLLED")
-    List<UUID> findEnrolledStudentPublicIds(@Param("sessionPublicId") UUID sessionPublicId,
-            @Param("tenantId") UUID tenantId);
 
     @Query("select count(r) from ExamRegistration r "
             + "where r.session.publicId = :sessionPublicId and r.tenantId = :tenantId "

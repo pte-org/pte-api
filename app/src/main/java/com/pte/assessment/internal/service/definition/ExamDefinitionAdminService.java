@@ -1,7 +1,9 @@
 package com.pte.assessment.internal.service.definition;
 
+import com.pte.assessment.ActiveRubricVersionPin;
 import com.pte.assessment.domain.ExamDefinition;
 import com.pte.itembank.ItembankService;
+import com.pte.itembank.TaskTypeStimulusService;
 import com.pte.itembank.QuestionTypeService;
 import com.pte.itembank.TaskRuntimeProfileService;
 import com.pte.itembank.TaskRuntimeContractService;
@@ -10,6 +12,8 @@ import com.pte.itembank.QuestionTypeService;
 import com.pte.assessment.dto.request.CreateExamDefinitionRequest;
 import com.pte.assessment.dto.request.RejectExamDefinitionRequest;
 import com.pte.assessment.dto.request.ReplaceExamDefinitionItemsRequest;
+import com.pte.assessment.dto.request.UpdateCefrTargetsRequest;
+import com.pte.assessment.dto.request.UpdateExamTimeFrameRequest;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.internal.exception.ExamDefinitionNotFoundException;
 import com.pte.assessment.internal.mapper.ExamDefinitionMapper;
@@ -45,12 +49,25 @@ public class ExamDefinitionAdminService {
     private final ExamDefinitionCommandService commandService;
     private final ExamDefinitionApprovalWorkflow approvalWorkflow;
 
-    @Autowired
+    /**
+     * Compatibility constructor for callers that do not check time frames against audio lengths. It has no rubric pin
+     * port, so creating or cloning a draft through it fails with {@code NoActiveRubricVersionException}.
+     */
     public ExamDefinitionAdminService(ExamDefinitionRepository repository, QuestionTypeService questionTypeService,
             TaskRuntimeProfileService runtimeProfileService, AuditLogService auditLogService,
             TaskRuntimeContractService runtimeContractService,
             TaskTypeObservability observability, ItembankService itembankService,
             Clock clock) {
+        this(repository, questionTypeService, runtimeProfileService, auditLogService, runtimeContractService,
+                observability, itembankService, clock, null, null);
+    }
+
+    @Autowired
+    public ExamDefinitionAdminService(ExamDefinitionRepository repository, QuestionTypeService questionTypeService,
+            TaskRuntimeProfileService runtimeProfileService, AuditLogService auditLogService,
+            TaskRuntimeContractService runtimeContractService,
+            TaskTypeObservability observability, ItembankService itembankService,
+            Clock clock, TaskTypeStimulusService stimulusService, ActiveRubricVersionPin activeRubricVersionPin) {
         this.repository = repository;
         this.questionTypeService = questionTypeService;
         this.runtimeProfileService = runtimeProfileService;
@@ -62,9 +79,9 @@ public class ExamDefinitionAdminService {
         this.validator = new ExamDefinitionValidator(questionTypeService, runtimeProfileService, itembankService);
         this.itemMapper = new ExamDefinitionItemMapper(validator);
         this.commandService = new ExamDefinitionCommandService(repository, validator, itemMapper, auditLogService,
-                observability);
+                observability, new RubricVersionPinning(activeRubricVersionPin));
         this.approvalWorkflow = new ExamDefinitionApprovalWorkflow(repository, validator, auditLogService,
-                observability, questionTypeService, clock);
+                observability, questionTypeService, clock, stimulusService);
     }
 
     @Transactional(readOnly = true)
@@ -114,6 +131,20 @@ public class ExamDefinitionAdminService {
             CurrentUser caller) {
         ExamDefinition template = findByPublicId(draftPublicId);
         return commandService.replaceItems(template, request, caller);
+    }
+
+    @Transactional
+    public ExamDefinitionResponse updateCefrTargets(UUID draftPublicId, UpdateCefrTargetsRequest request,
+            CurrentUser caller) {
+        ExamDefinition template = findByPublicId(draftPublicId);
+        return commandService.updateCefrTargets(template, request, caller);
+    }
+
+    @Transactional
+    public ExamDefinitionResponse updateTimeFrame(UUID draftPublicId, UpdateExamTimeFrameRequest request,
+            CurrentUser caller) {
+        ExamDefinition template = findByPublicId(draftPublicId);
+        return commandService.updateTimeFrame(template, request, caller);
     }
 
     /** Author submits a complete, structurally valid draft for admin review. */

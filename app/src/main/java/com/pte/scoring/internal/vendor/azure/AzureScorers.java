@@ -16,13 +16,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /** What the Azure-backed speaking scorers share: provenance, the result envelope and the detail JSON. */
 public final class AzureScorers {
 
     public static final String PROVIDER = "AZURE_SPEECH";
     public static final String MODEL = "short-audio-rest";
-    /** Scores come from an unvalidated formula, not a calibrated PTE model; the UI says so. */
+    /** Bands come from an uncalibrated Azure mapping, not a calibrated PTE model; the UI says so. */
     public static final String SCORE_LABEL = "UNVALIDATED";
 
     private static final Set<String> CORRECT_WORD = Set.of("None", "Omission", "Insertion");
@@ -38,17 +39,8 @@ public final class AzureScorers {
         return reference;
     }
 
-    public static int points(double score) {
-        return (int) Math.round(Math.max(0, Math.min(100, score)));
-    }
-
-    public static double orZero(Double score) {
-        return score == null ? 0 : score;
-    }
-
     /** A read-out recording scored against its reference: what was heard, Azure's scores and the alignment. */
-    record ScriptedScore(String transcript, SpeechAssessment assessed, TokenAlignment alignment,
-                         double pronunciation) {
+    record ScriptedScore(String transcript, SpeechAssessment assessed, TokenAlignment alignment) {
     }
 
     static ScriptedScore scoreScripted(SpeechAudioLoader audio, AzureSpeechAssessor assessor,
@@ -59,9 +51,7 @@ public final class AzureScorers {
         String transcript = scripted.heard().displayText();
         // The scored pass is forced onto the reference, so completeness is only visible in what was heard.
         TokenAlignment alignment = TokenAlignment.align(reference, transcript);
-        double pronunciation = PronunciationFormula.score(assessed.accuracy(), assessed.fluency(),
-                assessed.prosody(), alignment.recall());
-        return new ScriptedScore(transcript, assessed, alignment, pronunciation);
+        return new ScriptedScore(transcript, assessed, alignment);
     }
 
     public static Map<String, Object> newDetail() {
@@ -95,15 +85,16 @@ public final class AzureScorers {
         return errors;
     }
 
-    static AiScoreResult result(JsonMapper json, int rawScore, Map<String, Integer> subScores, String transcript,
-                                Map<String, Object> detail) {
+    /** A rubric result: {@code traits} are Pearson trait scores of the rubric version {@code rubricVersionPublicId}. */
+    static AiScoreResult result(JsonMapper json, int rawScore, Map<String, Integer> traits, String transcript,
+                                Map<String, Object> detail, UUID rubricVersionPublicId) {
         String detailJson;
         try {
             detailJson = json.writeValueAsString(detail);
         } catch (JacksonException ex) {
             throw new AiProviderException(ScoringConstants.AI_DETAIL_SERIALIZATION_FAILED, ex);
         }
-        return new AiScoreResult(rawScore, subScores, "", AiProviderCategory.REAL, PROVIDER, MODEL, null,
-                transcript, detailJson, false);
+        return new AiScoreResult(rawScore, traits, "", AiProviderCategory.REAL, PROVIDER, MODEL, null,
+                transcript, detailJson, false, rubricVersionPublicId);
     }
 }

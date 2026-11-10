@@ -10,6 +10,7 @@ import com.pte.assessment.internal.service.ExamItemRuntimeResolver;
 import com.pte.assessment.internal.service.SnapshotPromptQueryService;
 import com.pte.assessment.internal.service.SnapshotPublishService;
 import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.CefrTargetResponse;
 import com.pte.assessment.dto.response.ExamDefinitionFeasibilityResponse;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -108,6 +109,21 @@ public class AssessmentService {
     public SnapshotResponse generateDeterministic(String name, UUID templatePublicId, long seed,
             CurrentUser caller, Set<String> selectedSkills) {
         return examGenerationService.generateDeterministic(name, templatePublicId, seed, caller, selectedSkills);
+    }
+
+    /** Generation with a CEFR mix chosen for this exam, which overrides the template's mix. */
+    public SnapshotResponse generateDeterministic(String name, UUID templatePublicId, long seed,
+            CurrentUser caller, Set<String> selectedSkills, java.util.List<CefrTargetResponse> cefrOverride) {
+        return examGenerationService.generateDeterministic(name, templatePublicId, seed, caller, selectedSkills,
+                cefrOverride);
+    }
+
+    /** As above; {@code avoidRepeats} prefers questions the centre has not used in its earlier exams. */
+    public SnapshotResponse generateDeterministic(String name, UUID templatePublicId, long seed,
+            CurrentUser caller, Set<String> selectedSkills, java.util.List<CefrTargetResponse> cefrOverride,
+            boolean avoidRepeats) {
+        return examGenerationService.generateDeterministic(name, templatePublicId, seed, caller, selectedSkills,
+                cefrOverride, avoidRepeats);
     }
 
     /** Answer-free feasibility for the exact sections that deterministic generation will include. */

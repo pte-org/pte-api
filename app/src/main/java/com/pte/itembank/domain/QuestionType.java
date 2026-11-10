@@ -95,6 +95,17 @@ public class QuestionType extends BaseEntity {
     @Column(name = "uses_option_order_as_correct_position", nullable = false)
     private boolean usesOptionOrderAsCorrectPosition;
 
+    /**
+     * True when the task type plays an audio stimulus before its answer timer starts, so the stimulus is extra
+     * planned time on top of the preparation and answer time.
+     */
+    @Column(name = "stimulus_before_timer", nullable = false)
+    private boolean stimulusBeforeTimer;
+
+    /** Stimulus length used while no approved question of this type has a measured audio length. */
+    @Column(name = "stimulus_estimate_seconds", nullable = false)
+    private int stimulusEstimateSeconds;
+
     @Column(name = "screen_key", length = 96)
     private String screenKey;
 

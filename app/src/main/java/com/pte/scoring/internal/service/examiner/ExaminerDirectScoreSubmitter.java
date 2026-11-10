@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.service.examiner;
 
+import com.pte.scoring.internal.service.examiner.trait.ExaminerTraitScoreResolver;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptGradingCandidateView;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
@@ -13,7 +14,6 @@ import com.pte.scoring.domain.enums.GradingCohortStatus;
 import com.pte.scoring.domain.enums.GradingMarkingMode;
 import com.pte.scoring.dto.request.SubmitExaminerScoreRequest;
 import com.pte.scoring.dto.response.ExaminerAiReferenceResponse;
-import com.pte.scoring.dto.response.ExaminerDecisionResponse;
 import com.pte.scoring.dto.response.ExaminerScoreSubmissionResponse;
 import com.pte.scoring.dto.response.ExaminerWorkflowView;
 import com.pte.scoring.internal.constant.ExaminerScoringConstants;
@@ -68,6 +68,7 @@ class ExaminerDirectScoreSubmitter {
     private final ExaminerReviewVersionService examinerReviewVersionService;
     private final SessionService sessionService;
     private final ExaminerWorkflowQueryService workflowQueryService;
+    private final ExaminerTraitScoreResolver traits;
     private final Clock clock;
 
     ExaminerDirectScoreSubmitter(GradingAssignmentRepository assignmentRepository,
@@ -76,7 +77,7 @@ class ExaminerDirectScoreSubmitter {
             ScoringEligibilityQueryService eligibilityQueryService, AnswerContentReader contentReader,
             AttemptService attemptService, EntityManager entityManager, ApplicationEventPublisher eventPublisher,
             ExaminerReviewVersionService examinerReviewVersionService, SessionService sessionService,
-            ExaminerWorkflowQueryService workflowQueryService, Clock clock) {
+            ExaminerWorkflowQueryService workflowQueryService, ExaminerTraitScoreResolver traits, Clock clock) {
         this.assignmentRepository = assignmentRepository;
         this.scoringAnswerRepository = scoringAnswerRepository;
         this.examinerEvaluationRepository = examinerEvaluationRepository;
@@ -90,11 +91,12 @@ class ExaminerDirectScoreSubmitter {
         this.sessionService = sessionService;
         this.workflowQueryService = workflowQueryService;
         this.clock = clock;
+        this.traits = traits;
     }
 
     ExaminerScoreSubmissionResponse submit(UUID answerPublicId, SubmitExaminerScoreRequest request,
             CurrentUser examiner) {
-        if (request == null || request.score() == null || request.score() < 0 || request.score() > 100) {
+        if (request == null || (request.score() == null && request.traitScores() == null) || (request.score() != null && (request.score() < 0 || request.score() > 100))) {
             throw new InvalidExaminerScoreException();
         }
         AiEvaluation answer = scoringAnswerRepository.findByAnswerPublicId(answerPublicId)
@@ -126,7 +128,7 @@ class ExaminerDirectScoreSubmitter {
             ExaminerWorkflowView workflow = workflowQueryService.buildWorkflowView(assignment, examiner.tenantId());
             if (workflow != null && "ATOMIC_DRAFT".equals(workflow.mode())) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Single-item score submission is disabled for ATOMIC_DRAFT workflow. Use draft and atomic finalize.");
+                        ExaminerScoringConstants.DIRECT_DISABLED_FOR_ATOMIC);
             }
         }
 
@@ -181,10 +183,10 @@ class ExaminerDirectScoreSubmitter {
             if (request.decisionKind() != null) {
                 retryFingerprint = examinerReviewVersionService.computeRequestFingerprint(
                         answerPublicId, request.score(), request.decisionKind(),
-                        request.expectedReviewVersion(), request.reviewedAiVersion());
+                        request.expectedReviewVersion(), request.reviewedAiVersion(), request.traitScores(), existing.getRubricVersionPublicId());
             }
             try {
-                existing.requireIdenticalRetry(examiner.userId(), request.score(),
+                existing.requireIdenticalRetry(examiner.userId(), request.score() == null ? existing.getScore() : request.score(),
                         request.requestPublicId(), retryFingerprint);
             } catch (IllegalStateException ex) {
                 if (ScoringDomainConstants.EXAMINER_RECEIPT_CONFLICT.equals(ex.getMessage())) {
@@ -194,8 +196,12 @@ class ExaminerDirectScoreSubmitter {
             }
             String currentReviewVersion = examinerReviewVersionService.computeReviewVersion(
                     answer, content, assignment, cohort, member, existing, sessionState);
-            return toSubmission(existing, currentReviewVersion);
+            return toSubmission(existing, currentReviewVersion, answer);
         }
+
+        var calculated = traits.resolve(answer, request.traitScores(), request.score());
+        Integer score = calculated.itemScore();
+        if (score == null) throw new InvalidExaminerScoreException();
 
         // New decision: validate AI reference and review version freshness
         Integer reviewedAiScore = null;
@@ -204,7 +210,7 @@ class ExaminerDirectScoreSubmitter {
             ExaminerAiReferenceResponse aiRef = examinerReviewVersionService.buildAiReference(answer);
             if (aiRef.availability() != ExaminerAiAvailability.AVAILABLE || aiRef.score() == null
                     || !Objects.equals(aiRef.version(), request.reviewedAiVersion())
-                    || !Objects.equals(aiRef.score(), request.score())) {
+                    || !Objects.equals(aiRef.score(), score) || !traits.matchesAi(answer, calculated)) {
                 throw new ConfirmAiMismatchException();
             }
             reviewedAiScore = aiRef.score();
@@ -235,19 +241,23 @@ class ExaminerDirectScoreSubmitter {
         if (request.decisionKind() != null) {
             fingerprint = examinerReviewVersionService.computeRequestFingerprint(
                     answerPublicId, request.score(), request.decisionKind(),
-                    request.expectedReviewVersion(), request.reviewedAiVersion());
+                    request.expectedReviewVersion(), request.reviewedAiVersion(), request.traitScores(), calculated.rubricVersionPublicId());
         }
 
         Instant submittedAt = clock.instant();
         ExaminerEvaluation toSave;
         if (row != null) {
-            row.submit(request.score(), submittedAt, request.decisionKind(), reviewedAiScore, reviewedAiVersion,
+            row.recordTraitScores(calculated.traitsJson(), calculated.rubricVersionPublicId());
+            row.submit(score, submittedAt, request.decisionKind(), reviewedAiScore, reviewedAiVersion,
                     request.expectedReviewVersion(), request.requestPublicId(), fingerprint);
             toSave = row;
         } else {
-            toSave = ExaminerEvaluation.submittedDirectly(answer.getTenantId(), answer.getSessionPublicId(),
-                    answer.getAttemptPublicId(), answer.getAnswerPublicId(), examiner.userId(), request.score(),
-                    submittedAt, request.decisionKind(), reviewedAiScore, reviewedAiVersion,
+            toSave = ExaminerEvaluation.draft(answer.getTenantId(), answer.getSessionPublicId(),
+                    answer.getAttemptPublicId(), answer.getAnswerPublicId(), examiner.userId(),
+                    assignment == null ? null : assignment.getId(), score, null, request.decisionKind(),
+                    request.expectedReviewVersion(), reviewedAiVersion, submittedAt);
+            toSave.recordTraitScores(calculated.traitsJson(), calculated.rubricVersionPublicId());
+            toSave.submit(score, submittedAt, request.decisionKind(), reviewedAiScore, reviewedAiVersion,
                     request.expectedReviewVersion(), request.requestPublicId(), fingerprint);
         }
 
@@ -270,7 +280,7 @@ class ExaminerDirectScoreSubmitter {
         }
         String updatedReviewVersion = examinerReviewVersionService.computeReviewVersion(
                 answer, content, assignment, cohort, member, saved, sessionState);
-        return toSubmission(saved, updatedReviewVersion);
+        return toSubmission(saved, updatedReviewVersion, answer);
     }
 
     /** The session row is already locked by the caller, so publication can only be read, not raced. */
@@ -280,12 +290,8 @@ class ExaminerDirectScoreSubmitter {
         }
     }
 
-    private ExaminerScoreSubmissionResponse toSubmission(ExaminerEvaluation score, String reviewVersion) {
-        ExaminerDecisionResponse decision = new ExaminerDecisionResponse(
-                score.getStatus().name(), score.getScore(), score.getDecisionKind(),
-                score.getSubmittedAt(), score.getReviewedAiScore(), score.getReviewedAiVersion(),
-                score.getRequestPublicId());
-        return new ExaminerScoreSubmissionResponse(score.getAnswerPublicId(), score.getScore(),
-                score.getStatus().name(), score.getSubmittedAt(), decision, "EXAMINER", reviewVersion);
+    private ExaminerScoreSubmissionResponse toSubmission(ExaminerEvaluation score, String reviewVersion, AiEvaluation answer) {
+        return com.pte.scoring.internal.service.examiner.trait.ExaminerTraitResponses.submission(
+                score, reviewVersion, traits.stored(answer, score));
     }
 }

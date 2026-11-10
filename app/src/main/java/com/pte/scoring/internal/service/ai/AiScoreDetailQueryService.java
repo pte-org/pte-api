@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.service.ai;
 
+import com.pte.scoring.CriteriaScores;
 import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.dto.response.AiScoreDetailResponse;
@@ -30,7 +31,6 @@ public class AiScoreDetailQueryService {
     private static final String STATUS_FAILED = "FAILED";
     private static final String STATUS_SCORED = "SCORED";
 
-    private static final TypeReference<Map<String, Integer>> CRITERIA = new TypeReference<>() { };
     private static final TypeReference<Map<String, Object>> DETAIL = new TypeReference<>() { };
 
     private final AiEvaluationRepository repository;
@@ -81,9 +81,10 @@ public class AiScoreDetailQueryService {
         if (!hasOutcome) {
             return new AiScoreDetailResponse(status, score, Map.of(), null, null, Map.of(), false, failureReason);
         }
-        return new AiScoreDetailResponse(status, score, read(answer.getCriteriaScoresJson(), CRITERIA),
-                answer.getFeedback(), answer.getTranscript(), read(answer.getDetailJson(), DETAIL),
-                answer.isFallback(), failureReason);
+        CriteriaScores criteria = CriteriaScores.read(json, answer.getCriteriaScoresJson());
+        return new AiScoreDetailResponse(status, score, criteria.traits(), answer.getFeedback(),
+                answer.getTranscript(), read(answer.getDetailJson(), DETAIL), answer.isFallback(), failureReason,
+                criteria.scale(), criteria.rubricVersion());
     }
 
     /** SCORED with no AI outcome is an objective answer: it has no AI side to show. */
@@ -96,7 +97,10 @@ public class AiScoreDetailQueryService {
         };
     }
 
-    /** Unreadable stored JSON must not take the review screen down; the other fields still show. */
+    /**
+     * Unreadable stored JSON must not take the review screen down; the other fields still show. Criteria are read
+     * by {@link CriteriaScores}, which tells the legacy 0-100 map from Pearson trait scores by their scale.
+     */
     private <T> Map<String, T> read(String stored, TypeReference<Map<String, T>> type) {
         if (stored == null || stored.isBlank()) {
             return Map.of();

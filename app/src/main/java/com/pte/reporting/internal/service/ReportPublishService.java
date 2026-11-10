@@ -12,7 +12,9 @@ import com.pte.reporting.internal.dto.response.ReportPublicationReadinessRespons
 import com.pte.reporting.internal.dto.response.ReportPublicationSummaryResponse;
 import com.pte.reporting.internal.exception.ReportPublicationNotReadyException;
 import com.pte.reporting.internal.repository.ExamResultRepository;
+import com.pte.scoring.RubricTraceService;
 import com.pte.scoring.ScoringService;
+import com.pte.scoring.dto.response.ItemScoreTraceView;
 import com.pte.scoring.dto.response.ReportPublicationScoringView;
 import com.pte.scoring.dto.response.ReportScoringAnswerView;
 import com.pte.session.SessionService;
@@ -44,12 +46,13 @@ public class ReportPublishService {
     private final ReportSnapshotCodec snapshotCodec;
     private final ExamResultRepository examResultRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final RubricTraceService rubricTraceService;
     private final Clock clock;
 
     public ReportPublishService(SessionService sessionService, AttemptService attemptService,
             ScoringService scoringService, ScoreAggregationService aggregationService,
             ReportSnapshotCodec snapshotCodec, ExamResultRepository examResultRepository,
-            ApplicationEventPublisher eventPublisher,
+            ApplicationEventPublisher eventPublisher, RubricTraceService rubricTraceService,
             Clock clock) {
         this.sessionService = sessionService;
         this.attemptService = attemptService;
@@ -58,6 +61,7 @@ public class ReportPublishService {
         this.snapshotCodec = snapshotCodec;
         this.examResultRepository = examResultRepository;
         this.eventPublisher = eventPublisher;
+        this.rubricTraceService = rubricTraceService;
         this.clock = clock;
     }
 
@@ -112,6 +116,9 @@ public class ReportPublishService {
                 .collect(Collectors.groupingBy(ReportScoringAnswerView::attemptPublicId));
         Map<UUID, ReportScoreAggregation> scoreAggregations =
                 aggregationService.aggregateBatchFromInputs(attemptIds, inputsByAttempt);
+        // Item traces are recomputed from stored trait scores (no AI call) and frozen into the snapshot.
+        Map<UUID, ItemScoreTraceView> itemTraces = rubricTraceService.traceItems(inputsByAttempt.values().stream()
+                .flatMap(List::stream).toList());
         Instant publishedAt = clock.instant();
         int cohortSize = attempts.size();
         for (AttemptSummaryView summary : attempts) {
@@ -126,9 +133,9 @@ public class ReportPublishService {
             if (scoreAggregation == null) {
                 throw new IllegalStateException(ReportingConstants.SCORE_AGGREGATION_MISSING);
             }
-            String snapshotJson = snapshotCodec.encode(locked.publicationPublicId(), actorPublicId, publishedAt,
-                cohortSize, summary.snapshotPublicId(), scoreAggregation.context().examDefinitionPublicId(),
-                scoreAggregation.context().examDefinitionVersion(), scoreAggregation.summary(), attemptInputs);
+            String snapshotJson = snapshotCodec.encode(new ReportSnapshotCodec.Publication(
+                    locked.publicationPublicId(), actorPublicId, publishedAt, cohortSize, summary.snapshotPublicId()),
+                    scoreAggregation, attemptInputs, itemTraces);
             recordScores(report, scoreAggregation.summary());
             report.publishSnapshot(snapshotJson, locked.publicationPublicId(), actorPublicId, cohortSize, publishedAt);
             examResultRepository.save(report);

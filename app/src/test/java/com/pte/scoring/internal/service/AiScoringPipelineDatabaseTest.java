@@ -87,6 +87,11 @@ class AiScoringPipelineDatabaseTest {
 
     private final SessionGradingGateway gateway = mock(SessionGradingGateway.class);
     private final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
+    /**
+     * A speaking task type outside the rubric catalog, so the stub speech client may score it: since phase 5 every
+     * catalog speaking task type is rubric-scored and fails under the stub provider (decision B).
+     */
+    private static final String CUSTOM_SPEECH_TASK = "CUSTOM_SPEECH";
     private final AnswerContentReader contentReader = mock(AnswerContentReader.class);
     private AiScoringResultPersistenceService persistence;
     private AiScoringWorker worker;
@@ -96,12 +101,13 @@ class AiScoringPipelineDatabaseTest {
         when(contentReader.one(any(UUID.class), any(UUID.class))).thenAnswer(call -> Optional.of(
                 new SubmittedAnswerView(call.getArgument(0), UUID.randomUUID(), UUID.randomUUID(),
                         UUID.randomUUID(), call.getArgument(1), UUID.randomUUID(),
-                        ScoringConstants.TASK_TYPE_READ_ALOUD, "audio-ref", "reference", null, false, null, null,
+                        CUSTOM_SPEECH_TASK, "audio-ref", "reference", null, false, null, null,
                         null, null, null, "SPEAKING", null, null, null, null, null)));
         persistence = new AiScoringResultPersistenceService(answerRepository, gateway,
                 JsonMapper.builder().build(), mock(ApplicationEventPublisher.class), null, com.pte.TestClocks.fixed());
         worker = new AiScoringWorker(answerRepository, new StubSpeechScoringClient(), mock(EssayScoringClient.class),
-                java.util.List.of(), persistence, Clock.fixed(T0, ZoneOffset.UTC), new AiProviderProperties(), contentReader);
+                java.util.List.of(), persistence, Clock.fixed(T0, ZoneOffset.UTC), new AiProviderProperties(), contentReader,
+                mock(com.pte.scoring.internal.rubric.service.RubricResolver.class));
     }
 
     @Test
@@ -308,8 +314,7 @@ class AiScoringPipelineDatabaseTest {
     }
 
     private AiEvaluation newAnswer(UUID tenantId, UUID sessionPublicId) {
-        return EvaluationFixtures.ai(tenantId, sessionPublicId, ScoringConstants.TASK_TYPE_READ_ALOUD,
-                ScoringMethod.AI_SPEECH);
+        return EvaluationFixtures.ai(tenantId, sessionPublicId, CUSTOM_SPEECH_TASK, ScoringMethod.AI_SPEECH);
     }
 
     private AiEvaluation persist(AiEvaluation answer) {

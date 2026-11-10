@@ -78,7 +78,7 @@ class UserCredentialPolicyTest {
     void setUp() {
         userService = new UserService(userRepository, memberRepository, memberDirectory, passwordEncoder,
                 provisioningHelper, bulkCreateWriter, tenancyService, eventPublisher, auditLogService,
-                refreshTokenService, startedAttemptLookup);
+                refreshTokenService, startedAttemptLookup, java.time.Clock.systemUTC());
     }
 
     // ---- a Student who is mid-exam keeps the credential they are using ----

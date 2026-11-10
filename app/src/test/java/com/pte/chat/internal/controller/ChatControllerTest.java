@@ -1,13 +1,11 @@
 package com.pte.chat.internal.controller;
 
 import com.pte.chat.internal.constant.ChatConstants;
-import com.pte.chat.internal.domain.ChatMessage;
 import com.pte.chat.internal.exception.ChatBusyException;
 import com.pte.chat.internal.exception.ChatInvalidRequestException;
 import com.pte.chat.internal.exception.ChatQuotaExceededException;
 import com.pte.chat.internal.exception.ChatRequestInFlightException;
-import com.pte.chat.internal.exception.ChatSessionNotFoundException;
-import com.pte.chat.internal.service.ChatLatestSession;
+import com.pte.chat.internal.service.ChatHistoryEntry;
 import com.pte.chat.internal.service.ChatReply;
 import com.pte.chat.internal.service.ChatSendCommand;
 import com.pte.chat.internal.service.ChatService;
@@ -53,14 +51,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * HTTP contract of the three chat endpoints with {@link ChatService} mocked: the real controller behind the real
+ * HTTP contract of the two chat endpoints with {@link ChatService} mocked: the real controller behind the real
  * method-security proxy and the real {@link GlobalExceptionHandler}, as the other controller tests in this repo do.
  */
 class ChatControllerTest {
 
     private static final String MESSAGES = ChatConstants.CHAT_PATH + ChatConstants.MESSAGES_PATH;
     private static final String QUOTA = ChatConstants.CHAT_PATH + ChatConstants.QUOTA_PATH;
-    private static final String LATEST = ChatConstants.CHAT_PATH + ChatConstants.LATEST_SESSION_PATH;
     private static final UUID STUDENT = UUID.randomUUID();
     private static final UUID TENANT = UUID.randomUUID();
     private static final Instant RESET_AT = Instant.parse("2026-10-28T17:00:00Z");
@@ -101,31 +98,22 @@ class ChatControllerTest {
         SecurityContextHolder.getContext().setAuthentication(ResourceServerJwt.rolesConverter().convert(jwt));
     }
 
-    private static String body(UUID sessionId, String message) {
-        return "{\"sessionId\":" + (sessionId == null ? "null" : "\"" + sessionId + "\"")
-                + ",\"message\":" + (message == null ? "null" : "\"" + message + "\"") + "}";
+    private static String body(String message) {
+        return "{\"message\":" + (message == null ? "null" : "\"" + message + "\"") + "}";
     }
 
-    private static ChatMessage item(String question, String answer, String status, String createdAt) {
-        ChatMessage message = new ChatMessage();
-        message.setQuestion(question);
-        message.setAnswer(answer);
-        message.setStatus(status);
-        message.setCreatedAt(Instant.parse(createdAt));
-        return message;
+    private static ChatReply reply(String markdown, boolean onTopic, int remaining) {
+        return new ChatReply(markdown, onTopic, new ChatQuotaSnapshot(20 - remaining, remaining, 20, RESET_AT));
     }
 
     // ---- POST /messages ------------------------------------------------------------------------------------
 
     @Test
     void sendingAMessagePassesTheCallerAndTheRequestToTheService() throws Exception {
-        UUID sessionId = UUID.randomUUID();
-        when(chatService.send(any(), any())).thenReturn(
-                new ChatReply("answer", true, false, new ChatQuotaSnapshot(1, 19, 20, RESET_AT), sessionId));
+        when(chatService.send(any(), any())).thenReturn(reply("answer", true, 19));
 
         mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(
-                        "{\"sessionId\":\"" + sessionId + "\",\"message\":\"How do I use it?\","
-                                + "\"taskType\":\"WRITE_ESSAY\",\"language\":\"vi\"}"))
+                        "{\"message\":\"How do I use it?\",\"taskType\":\"WRITE_ESSAY\",\"language\":\"vi\"}"))
                 .andExpect(status().isOk());
 
         ArgumentCaptor<CurrentUser> caller = ArgumentCaptor.forClass(CurrentUser.class);
@@ -133,18 +121,15 @@ class ChatControllerTest {
         verify(chatService).send(caller.capture(), command.capture());
         assertThat(caller.getValue().userId()).isEqualTo(STUDENT);
         assertThat(caller.getValue().tenantId()).isEqualTo(TENANT);
-        assertThat(command.getValue()).isEqualTo(new ChatSendCommand(sessionId, "How do I use it?", "WRITE_ESSAY", "vi"));
+        assertThat(command.getValue()).isEqualTo(new ChatSendCommand("How do I use it?", "WRITE_ESSAY", "vi"));
     }
 
     @Test
     void theExercisePromptIsPassedAlongWhenSent() throws Exception {
-        UUID sessionId = UUID.randomUUID();
-        when(chatService.send(any(), any())).thenReturn(
-                new ChatReply("answer", true, false, new ChatQuotaSnapshot(1, 19, 20, RESET_AT), sessionId));
+        when(chatService.send(any(), any())).thenReturn(reply("answer", true, 19));
 
         mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(
-                        "{\"sessionId\":\"" + sessionId + "\",\"message\":\"How do I say it?\","
-                                + "\"taskType\":\"WRITE_ESSAY\",\"language\":\"en\","
+                        "{\"message\":\"How do I say it?\",\"taskType\":\"WRITE_ESSAY\",\"language\":\"en\","
                                 + "\"exercisePrompt\":\"Technology makes us less social.\"}"))
                 .andExpect(status().isOk());
 
@@ -154,12 +139,50 @@ class ChatControllerTest {
     }
 
     @Test
-    void taskTypeAndLanguageAreOptional() throws Exception {
-        UUID sessionId = UUID.randomUUID();
-        when(chatService.send(any(), any())).thenReturn(
-                new ChatReply("answer", true, false, new ChatQuotaSnapshot(1, 19, 20, RESET_AT), sessionId));
+    void theEarlierTurnsOfTheConversationArePassedAlongInOrder() throws Exception {
+        when(chatService.send(any(), any())).thenReturn(reply("answer", true, 19));
 
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body(sessionId, "Question")))
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(
+                        "{\"message\":\"And the past tense?\",\"history\":["
+                                + "{\"role\":\"user\",\"text\":\"present perfect?\"},"
+                                + "{\"role\":\"assistant\",\"text\":\"use has or have\"}]}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<ChatSendCommand> command = ArgumentCaptor.forClass(ChatSendCommand.class);
+        verify(chatService).send(any(), command.capture());
+        assertThat(command.getValue().history()).containsExactly(
+                new ChatHistoryEntry("user", "present perfect?"), new ChatHistoryEntry("assistant", "use has or have"));
+    }
+
+    @Test
+    void aRequestWithoutHistoryPassesNone() throws Exception {
+        when(chatService.send(any(), any())).thenReturn(reply("answer", true, 19));
+
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body("Question")))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<ChatSendCommand> command = ArgumentCaptor.forClass(ChatSendCommand.class);
+        verify(chatService).send(any(), command.capture());
+        assertThat(command.getValue().history()).isNull();
+    }
+
+    @Test
+    void aHistoryWithTooManyEntriesIs400AndTheServiceIsNotCalled() throws Exception {
+        String entries = String.join(",", java.util.Collections.nCopies(ChatConstants.HISTORY_MAX_ITEMS + 1,
+                "{\"role\":\"user\",\"text\":\"q\"}"));
+
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"Question\",\"history\":[" + entries + "]}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(chatService);
+    }
+
+    @Test
+    void taskTypeAndLanguageAreOptional() throws Exception {
+        when(chatService.send(any(), any())).thenReturn(reply("answer", true, 19));
+
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body("Question")))
                 .andExpect(status().isOk());
 
         ArgumentCaptor<ChatSendCommand> command = ArgumentCaptor.forClass(ChatSendCommand.class);
@@ -169,73 +192,47 @@ class ChatControllerTest {
     }
 
     @Test
-    void aSuccessfulReplyHasTheEnvelopeTheMarkdownTheFlagsAndTheQuota() throws Exception {
-        UUID sessionId = UUID.randomUUID();
-        when(chatService.send(any(), any())).thenReturn(
-                new ChatReply("**Use** has/have + V3.", true, false,
-                        new ChatQuotaSnapshot(1, 19, 20, RESET_AT), sessionId));
+    void aSuccessfulReplyHasTheEnvelopeTheMarkdownTheFlagAndTheQuota() throws Exception {
+        when(chatService.send(any(), any())).thenReturn(reply("**Use** has/have + V3.", true, 19));
 
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body(sessionId, "Question")))
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body("Question")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.markdown").value("**Use** has/have + V3."))
                 .andExpect(jsonPath("$.data.onTopic").value(true))
-                .andExpect(jsonPath("$.data.fromCache").value(false))
                 .andExpect(jsonPath("$.data.remaining").value(19))
                 .andExpect(jsonPath("$.data.limit").value(20))
-                .andExpect(jsonPath("$.data.resetAt").value("2026-10-28T17:00:00Z"))
-                .andExpect(jsonPath("$.data.sessionId").value(sessionId.toString()));
+                .andExpect(jsonPath("$.data.resetAt").value("2026-10-28T17:00:00Z"));
     }
 
     @Test
-    void anOffTopicRefusalAndACacheHitKeepTheirFlags() throws Exception {
-        UUID sessionId = UUID.randomUUID();
-        when(chatService.send(any(), any()))
-                .thenReturn(new ChatReply("refusal text", false, false,
-                        new ChatQuotaSnapshot(0, 20, 20, RESET_AT), sessionId))
-                .thenReturn(new ChatReply("cached", true, true,
-                        new ChatQuotaSnapshot(3, 17, 20, RESET_AT), sessionId));
+    void anOffTopicRefusalKeepsItsFlag() throws Exception {
+        when(chatService.send(any(), any())).thenReturn(reply("refusal text", false, 20));
 
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body(sessionId, "Question")))
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body("Question")))
                 .andExpect(jsonPath("$.data.onTopic").value(false))
-                .andExpect(jsonPath("$.data.fromCache").value(false))
                 .andExpect(jsonPath("$.data.remaining").value(20));
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body(sessionId, "Question")))
-                .andExpect(jsonPath("$.data.onTopic").value(true))
-                .andExpect(jsonPath("$.data.fromCache").value(true))
-                .andExpect(jsonPath("$.data.remaining").value(17));
     }
 
     @Test
-    void theReplyExposesNoInternalFields() throws Exception {
-        UUID sessionId = UUID.randomUUID();
-        when(chatService.send(any(), any())).thenReturn(
-                new ChatReply("answer", true, false, new ChatQuotaSnapshot(1, 19, 20, RESET_AT), sessionId));
+    void theReplyExposesNoInternalFieldsAndNoSession() throws Exception {
+        when(chatService.send(any(), any())).thenReturn(reply("answer", true, 19));
 
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body(sessionId, "Question")))
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body("Question")))
                 .andExpect(jsonPath("$.data.used").doesNotExist())
                 .andExpect(jsonPath("$.data.quota").doesNotExist())
                 .andExpect(jsonPath("$.data.tokensIn").doesNotExist())
-                .andExpect(jsonPath("$.data.model").doesNotExist());
+                .andExpect(jsonPath("$.data.model").doesNotExist())
+                .andExpect(jsonPath("$.data.sessionId").doesNotExist())
+                .andExpect(jsonPath("$.data.fromCache").doesNotExist());
     }
 
     // ---- request validation --------------------------------------------------------------------------------
 
-    @Test
-    void aMissingSessionIdIs400AndTheServiceIsNotCalled() throws Exception {
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"Question\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body(null, "Question")))
-                .andExpect(status().isBadRequest());
-
-        verifyNoInteractions(chatService);
-    }
-
     @ParameterizedTest
     @ValueSource(strings = {"", " ", "   ", "\\n\\t"})
     void aBlankMessageIs400AndTheServiceIsNotCalled(String message) throws Exception {
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body(UUID.randomUUID(), message)))
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body(message)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
 
@@ -244,19 +241,9 @@ class ChatControllerTest {
 
     @Test
     void aMissingOrNullMessageIs400() throws Exception {
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"sessionId\":\"" + UUID.randomUUID() + "\"}"))
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest());
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body(UUID.randomUUID(), null)))
-                .andExpect(status().isBadRequest());
-
-        verifyNoInteractions(chatService);
-    }
-
-    @Test
-    void aSessionIdThatIsNotAUuidIs400() throws Exception {
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"sessionId\":\"not-a-uuid\",\"message\":\"Question\"}"))
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body(null)))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(chatService);
@@ -264,7 +251,7 @@ class ChatControllerTest {
 
     @Test
     void malformedJsonIs400() throws Exception {
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content("{\"sessionId\":"))
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content("{\"message\":"))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(chatService);
@@ -286,7 +273,6 @@ class ChatControllerTest {
                         "CHAT_QUOTA_EXCEEDED"),
                 Arguments.of(new ChatRequestInFlightException(), 409, "CHAT_REQUEST_IN_FLIGHT"),
                 Arguments.of(new ChatBusyException(), 503, "CHAT_BUSY"),
-                Arguments.of(new ChatSessionNotFoundException(), 404, "CHAT_SESSION_NOT_FOUND"),
                 Arguments.of(new ChatInvalidRequestException("message is too long"), 400, "CHAT_INVALID_REQUEST"));
     }
 
@@ -296,7 +282,7 @@ class ChatControllerTest {
             throws Exception {
         when(chatService.send(any(), any())).thenThrow(error);
 
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body(UUID.randomUUID(), "Question")))
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body("Question")))
                 .andExpect(status().is(httpStatus))
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.code").value(code))
@@ -310,7 +296,7 @@ class ChatControllerTest {
         when(chatService.send(any(), any())).thenThrow(
                 new ChatQuotaExceededException(new ChatQuotaSnapshot(20, 0, 20, RESET_AT)));
 
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body(UUID.randomUUID(), "Question")))
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body("Question")))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.code").value(ChatConstants.ERR_QUOTA_EXCEEDED))
                 .andExpect(jsonPath("$.data.resetAt").value("2026-10-28T17:00:00Z"))
@@ -322,7 +308,7 @@ class ChatControllerTest {
     void theOtherChatErrorsCarryNoData() throws Exception {
         when(chatService.send(any(), any())).thenThrow(new ChatBusyException());
 
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body(UUID.randomUUID(), "Question")))
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body("Question")))
                 .andExpect(jsonPath("$.data").value((Object) null));
     }
 
@@ -345,53 +331,6 @@ class ChatControllerTest {
         assertThat(caller.getValue().userId()).isEqualTo(STUDENT);
     }
 
-    // ---- GET /sessions/latest ------------------------------------------------------------------------------
-
-    @Test
-    void theLatestSessionEndpointReturnsTheSessionIdAndItsMessagesOldestFirst() throws Exception {
-        UUID sessionId = UUID.randomUUID();
-        when(chatService.latestSession(any())).thenReturn(new ChatLatestSession(sessionId, List.of(
-                item("first question", "first answer", "OK", "2026-10-28T03:00:00Z"),
-                item("off topic question", "refusal text", "REFUSED", "2026-10-28T03:05:00Z"))));
-
-        mvc.perform(get(LATEST))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.sessionId").value(sessionId.toString()))
-                .andExpect(jsonPath("$.data.messages.length()").value(2))
-                .andExpect(jsonPath("$.data.messages[0].question").value("first question"))
-                .andExpect(jsonPath("$.data.messages[0].answer").value("first answer"))
-                .andExpect(jsonPath("$.data.messages[0].status").value("OK"))
-                .andExpect(jsonPath("$.data.messages[0].createdAt").value("2026-10-28T03:00:00Z"))
-                .andExpect(jsonPath("$.data.messages[1].question").value("off topic question"))
-                .andExpect(jsonPath("$.data.messages[1].status").value("REFUSED"));
-    }
-
-    @Test
-    void aStudentWithoutAnySessionGetsANullSessionIdAndNoMessages() throws Exception {
-        when(chatService.latestSession(any())).thenReturn(new ChatLatestSession(null, List.of()));
-
-        mvc.perform(get(LATEST))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.sessionId").value((Object) null))
-                .andExpect(jsonPath("$.data.messages").isArray())
-                .andExpect(jsonPath("$.data.messages.length()").value(0));
-    }
-
-    @Test
-    void theMessageItemsExposeNoIdsTokensOrOwnerFields() throws Exception {
-        when(chatService.latestSession(any())).thenReturn(new ChatLatestSession(UUID.randomUUID(),
-                List.of(item("q", "a", "OK", "2026-10-28T03:00:00Z"))));
-
-        mvc.perform(get(LATEST))
-                .andExpect(jsonPath("$.data.messages[0].studentId").doesNotExist())
-                .andExpect(jsonPath("$.data.messages[0].tenantId").doesNotExist())
-                .andExpect(jsonPath("$.data.messages[0].tokensIn").doesNotExist())
-                .andExpect(jsonPath("$.data.messages[0].publicId").doesNotExist())
-                .andExpect(jsonPath("$.data.messages[0].id").doesNotExist());
-    }
-
     // ---- who may call --------------------------------------------------------------------------------------
 
     @ParameterizedTest
@@ -399,10 +338,9 @@ class ChatControllerTest {
     void aCallerWithoutTheStudentRoleIs403OnEveryEndpointAndNothingReachesTheService(String role) throws Exception {
         authenticate(role);
 
-        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body(UUID.randomUUID(), "Question")))
+        mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body("Question")))
                 .andExpect(status().isForbidden());
         mvc.perform(get(QUOTA)).andExpect(status().isForbidden());
-        mvc.perform(get(LATEST)).andExpect(status().isForbidden());
 
         verifyNoInteractions(chatService);
     }

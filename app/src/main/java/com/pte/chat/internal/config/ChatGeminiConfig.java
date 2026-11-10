@@ -36,6 +36,8 @@ public class ChatGeminiConfig {
     }
 
     @Bean
+    @ConditionalOnProperty(name = ChatConstants.PROPERTY_PROVIDER, havingValue = ChatConstants.PROVIDER_GEMINI,
+            matchIfMissing = true)
     GeminiChatClient geminiChatClient(ChatAiProperties properties, JsonMapper jsonMapper) {
         String model = properties.getModel();
         if (model == null

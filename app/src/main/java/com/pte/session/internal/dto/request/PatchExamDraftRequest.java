@@ -26,7 +26,29 @@ public record PatchExamDraftRequest(
         @Size(min = 1, max = 4, message = SessionConstants.SKILLS_SIZE_INVALID) List<String> selectedSkills,
         @Min(value = 0, message = SessionConstants.RETRY_COUNT_INVALID)
         @Max(value = 9, message = SessionConstants.RETRY_COUNT_INVALID) Integer maxRetriesPerStudent,
-        LockdownMode lockdownMode) {
+        LockdownMode lockdownMode,
+        @jakarta.validation.Valid List<CreateExamDraftRequest.CefrTargetRequest> cefrTargets,
+        /** Prefer questions the centre has not used in its earlier exams; null leaves the choice as it is. */
+        Boolean avoidRepeatedQuestions) {
+
+    /** Constructor for callers that predate the repeat preference. */
+    public PatchExamDraftRequest(String name, UUID examDefinitionPublicId, UUID subscriptionPublicId,
+            Instant opensAt, Instant closesAt, ExamMode examMode, ReusePolicy reusePolicy, String seriesKey,
+            Integer capacity, Long expectedVersion, List<String> selectedSkills, Integer maxRetriesPerStudent,
+            LockdownMode lockdownMode, List<CreateExamDraftRequest.CefrTargetRequest> cefrTargets) {
+        this(name, examDefinitionPublicId, subscriptionPublicId, opensAt, closesAt, examMode, reusePolicy,
+                seriesKey, capacity, expectedVersion, selectedSkills, maxRetriesPerStudent, lockdownMode,
+                cefrTargets, null);
+    }
+
+    /** Constructor for callers that predate the CEFR mix; the mix is then left as it is. */
+    public PatchExamDraftRequest(String name, UUID examDefinitionPublicId, UUID subscriptionPublicId,
+            Instant opensAt, Instant closesAt, ExamMode examMode, ReusePolicy reusePolicy, String seriesKey,
+            Integer capacity, Long expectedVersion, List<String> selectedSkills, Integer maxRetriesPerStudent,
+            LockdownMode lockdownMode) {
+        this(name, examDefinitionPublicId, subscriptionPublicId, opensAt, closesAt, examMode, reusePolicy,
+                seriesKey, capacity, expectedVersion, selectedSkills, maxRetriesPerStudent, lockdownMode, null);
+    }
 
     /** Source-compatible constructor for callers predating explicit skill/retry configuration. */
     public PatchExamDraftRequest(String name, UUID examDefinitionPublicId, UUID subscriptionPublicId,

@@ -2,10 +2,14 @@ package com.pte.tenancy.internal.service;
 
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.SecurityRoles;
+import com.pte.shared.web.PageMeta;
+import com.pte.shared.web.PagedResult;
 import com.pte.tenancy.domain.Organization;
 import com.pte.tenancy.domain.enums.OrganizationStatus;
 import com.pte.tenancy.internal.constant.TenancyConstants;
 import com.pte.tenancy.internal.dto.request.UpdateOrganizationProfileRequest;
+import com.pte.tenancy.internal.dto.request.OrganizationPageRequest;
 import com.pte.tenancy.internal.dto.response.OrganizationResponse;
 import com.pte.tenancy.internal.exception.OrganizationNotFoundException;
 import com.pte.tenancy.internal.exception.TenantNameAlreadyUsedException;
@@ -13,6 +17,7 @@ import com.pte.tenancy.internal.mapper.OrganizationMapper;
 import com.pte.tenancy.internal.repository.OrganizationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -81,6 +86,19 @@ public class OrganizationService {
     @Transactional(readOnly = true)
     public OrganizationResponse get(UUID organizationPublicId, CurrentUser caller) {
         return OrganizationMapper.toResponse(loadVisibleTo(organizationPublicId, caller));
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<OrganizationResponse> page(CurrentUser caller, OrganizationPageRequest request) {
+        caller.requireAnyRole(SecurityRoles.PLATFORM_ADMIN, SecurityRoles.PLATFORM_MANAGER);
+        String term = request.q() == null ? "" : request.q().trim().toLowerCase(Locale.ROOT);
+        // Match the existing lookup semantics: typed wildcard characters cannot widen a prefix.
+        String prefix = term.replace("%", "").replace("_", "").replace("\\", "") + "%";
+        Page<Organization> result = organizationRepository.findApprovedPage(prefix, term,
+                PageRequest.of(request.page(), request.size()));
+        return new PagedResult<>(result.map(OrganizationMapper::toResponse).getContent(),
+                new PageMeta(result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages(),
+                        result.isFirst(), result.isLast(), result.hasNext(), result.hasPrevious()));
     }
 
     @Transactional
