@@ -4,6 +4,7 @@ public final class ExaminerScoringConstants {
 
     public static final String WORK_NOT_FOUND = "EXAMINER_WORK_NOT_FOUND";
     public static final String INVALID_QUEUE_STATUS = "INVALID_EXAMINER_QUEUE_STATUS";
+    public static final String INVALID_QUEUE_DATE = "INVALID_EXAMINER_QUEUE_DATE";
     public static final String SCORE_CONFLICT = "EXAMINER_SCORE_CONFLICT";
     public static final String INVALID_SCORE = "INVALID_EXAMINER_SCORE";
     public static final String TRAITS_REQUIRED = "EXAMINER_TRAITS_REQUIRED";

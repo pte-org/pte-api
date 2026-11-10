@@ -137,6 +137,12 @@ public class ExaminerScoringService {
     @Transactional(readOnly = true)
     public ExaminerQueueResponse listWork(String requestedStatus, UUID sessionPublicId, String search, String sort,
             Integer requestedPage, Integer requestedSize, CurrentUser caller) {
+        return listWork(requestedStatus, sessionPublicId, search, sort, null, null, requestedPage, requestedSize, caller);
+    }
+
+    @Transactional(readOnly = true)
+    public ExaminerQueueResponse listWork(String requestedStatus, UUID sessionPublicId, String search, String sort,
+            Instant fromDate, Instant toDate, Integer requestedPage, Integer requestedSize, CurrentUser caller) {
         CurrentUser examiner = requireActiveExaminer(caller);
         ExaminerQueueStatus status = parseStatus(requestedStatus);
         int page = requestedPage == null || requestedPage < 0 ? 0 : requestedPage;
@@ -145,7 +151,8 @@ public class ExaminerScoringService {
         Page<com.pte.scoring.dto.response.ExaminerQueueItemResponse> result;
         if (readRepository != null) {
             result = readRepository.findQueue(
-                    examiner.tenantId(), examiner.userId(), sessionPublicId, status.name(), search, sort, PageRequest.of(page, size));
+                    examiner.tenantId(), examiner.userId(), sessionPublicId, status.name(), search, sort,
+                    fromDate, toDate, PageRequest.of(page, size));
         } else {
             result = workQueueRepository.findQueue(
                     examiner.tenantId(), examiner.userId(), sessionPublicId, status.name(), PageRequest.of(page, size));
