@@ -160,7 +160,7 @@ class GeminiWritingScorersTest {
                 .contains("\"\"\"\n" + answer + "\n\"\"\"");
         assertThat(sent.images()).isEmpty();
         assertThat(sent.responseSchema().get("required"))
-                .isEqualTo(List.of("CONTENT", "GRAMMAR", "VOCABULARY", "feedback", "errors"));
+                .isEqualTo(List.of("CONTENT", "GRAMMAR", "VOCABULARY", "feedback", "traitRationales", "errors"));
     }
 
     @Test
@@ -324,7 +324,7 @@ class GeminiWritingScorersTest {
 
         assertThat(sentRequest().responseSchema().get("required")).isEqualTo(List.of("CONTENT",
                 "DEVELOPMENT_STRUCTURE_COHERENCE", "GRAMMAR", "GENERAL_LINGUISTIC_RANGE", "VOCABULARY_RANGE",
-                "SPELLING", "feedback", "errors"));
+                "SPELLING", "feedback", "traitRationales", "errors"));
     }
 
     @Test
@@ -355,7 +355,7 @@ class GeminiWritingScorersTest {
         assertThat(detail.path("covered_points").path(0).asText()).isEqualTo("main idea");
         assertThat(detail.path("missed_points").path(0).asText()).isEqualTo("example");
         assertThat(sentRequest().responseSchema().get("required")).isEqualTo(List.of("CONTENT", "GRAMMAR",
-                "VOCABULARY", "SPELLING", "feedback", "covered_points", "missed_points", "errors"));
+                "VOCABULARY", "SPELLING", "feedback", "traitRationales", "covered_points", "missed_points", "errors"));
     }
 
     @Test

@@ -161,7 +161,7 @@ class GeminiSpeakingScorersTest {
                 .doesNotContain("0-100");
         assertThat(sent.userText()).contains("\"\"\"\n" + LECTURE + "\n\"\"\"")
                 .contains("\"\"\"\n" + HEARD + "\n\"\"\"");
-        assertThat(sent.responseSchema().get("required")).isEqualTo(List.of("CONTENT", "feedback", "missed_points"));
+        assertThat(sent.responseSchema().get("required")).isEqualTo(List.of("CONTENT", "feedback", "traitRationales", "missed_points"));
         assertThat(sent.responseSchema().get("properties")).asInstanceOf(
                 org.assertj.core.api.InstanceOfAssertFactories.MAP)
                 .containsEntry("CONTENT", Map.of("type", "INTEGER", "minimum", 0, "maximum", 6));

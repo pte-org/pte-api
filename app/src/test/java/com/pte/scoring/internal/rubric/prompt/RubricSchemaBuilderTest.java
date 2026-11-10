@@ -52,7 +52,7 @@ class RubricSchemaBuilderTest {
                 task(ScoringConstants.TASK_TYPE_SUMMARIZE_SPOKEN_TEXT), List.of("covered_points", "missed_points"));
 
         List<String> expected = List.of(RubricTraits.CONTENT, RubricTraits.GRAMMAR, RubricTraits.VOCABULARY,
-                RubricTraits.SPELLING, "feedback", "covered_points", "missed_points", "errors");
+                RubricTraits.SPELLING, "feedback", "traitRationales", "covered_points", "missed_points", "errors");
         assertThat(schema).containsEntry("type", "OBJECT");
         assertThat(schema.get("required")).isEqualTo(expected);
         assertThat(schema.get("propertyOrdering")).isEqualTo(expected);
@@ -67,7 +67,7 @@ class RubricSchemaBuilderTest {
                 task(ScoringConstants.TASK_TYPE_SUMMARIZE_WRITTEN_TEXT), List.of());
 
         assertThat(schema.get("required")).isEqualTo(List.of(RubricTraits.CONTENT, RubricTraits.GRAMMAR,
-                RubricTraits.VOCABULARY, "feedback", "errors"));
+                RubricTraits.VOCABULARY, "feedback", "traitRationales", "errors"));
         assertThat(properties(schema).get(RubricTraits.CONTENT))
                 .isEqualTo(Map.of("type", "INTEGER", "minimum", 0, "maximum", 4));
     }
@@ -80,10 +80,23 @@ class RubricSchemaBuilderTest {
         Map<String, Object> schema = RubricSchemaBuilder.speakingSchema(describeImage,
                 Map.of("missed_details", Map.of("type", "ARRAY", "items", Map.of("type", "STRING"))));
 
-        assertThat(schema.get("required")).isEqualTo(List.of(RubricTraits.CONTENT, "feedback", "missed_details"));
+        assertThat(schema.get("required")).isEqualTo(List.of(RubricTraits.CONTENT, "feedback", "traitRationales", "missed_details"));
         assertThat(properties(schema)).containsEntry(RubricTraits.CONTENT,
                 Map.of("type", "INTEGER", "minimum", 0, "maximum", 6))
                 .doesNotContainKeys(RubricTraits.PRONUNCIATION, RubricTraits.ORAL_FLUENCY, "errors");
+    }
+
+    /** Every AI-scored trait gets a required {reason, evidence} pair; coded and speech-engine traits get none. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void traitRationalesHoldAReasonAndEvidencePerLlmTraitOnly() {
+        Map<String, Object> rationales = (Map<String, Object>) properties(task(ScoringConstants.TASK_TYPE_DESCRIBE_IMAGE))
+                .get(RubricSchemaBuilder.TRAIT_RATIONALES);
+        Map<String, Object> traits = (Map<String, Object>) rationales.get("properties");
+
+        assertThat(traits).containsOnlyKeys(RubricTraits.CONTENT);
+        Map<String, Object> content = (Map<String, Object>) traits.get(RubricTraits.CONTENT);
+        assertThat(content.get("required")).isEqualTo(List.of("reason", "evidence"));
     }
 
     private static TaskRubric task(String taskType) {

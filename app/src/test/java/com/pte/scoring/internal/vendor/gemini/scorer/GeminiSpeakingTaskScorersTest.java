@@ -137,7 +137,7 @@ class GeminiSpeakingTaskScorersTest {
         assertThat(detail.path("required_facts").path(0).path("status").asText()).isEqualTo("addressed");
         GeminiRequest sent = sentRequest();
         assertThat(sent.userText()).contains("\"\"\"\nYou missed a deadline.\n\"\"\"");
-        assertThat(sent.responseSchema().get("required")).isEqualTo(List.of("CONTENT", "feedback",
+        assertThat(sent.responseSchema().get("required")).isEqualTo(List.of("CONTENT", "feedback", "traitRationales",
                 "expected_register", "required_facts", "missed_requirements", "misinterpreted_requirements"));
     }
 

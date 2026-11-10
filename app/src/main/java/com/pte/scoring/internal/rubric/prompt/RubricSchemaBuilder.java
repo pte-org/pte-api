@@ -21,6 +21,10 @@ public final class RubricSchemaBuilder {
 
     public static final String FEEDBACK = "feedback";
     public static final String ERRORS = "errors";
+    /** Per AI_LLM trait: why the model chose its level and a short quote from the response that shows it. */
+    public static final String TRAIT_RATIONALES = "traitRationales";
+    public static final String RATIONALE_REASON = "reason";
+    public static final String RATIONALE_EVIDENCE = "evidence";
 
     private static final String TYPE = "type";
 
@@ -33,6 +37,7 @@ public final class RubricSchemaBuilder {
             properties.put(trait.key(), traitSchema(trait.scale().maxFor(null)));
         }
         properties.put(FEEDBACK, string());
+        properties.put(TRAIT_RATIONALES, rationales(task));
         for (String extra : extraStringListFields) {
             properties.put(extra, array(string()));
         }
@@ -54,8 +59,21 @@ public final class RubricSchemaBuilder {
             properties.put(trait.key(), traitSchema(trait.scale().maxFor(null)));
         }
         properties.put(FEEDBACK, string());
+        properties.put(TRAIT_RATIONALES, rationales(task));
         properties.putAll(extraProperties);
         return object(properties);
+    }
+
+    /** One {reason, evidence} object per AI_LLM trait, so an examiner can see why each level was chosen. */
+    static Map<String, Object> rationales(TaskRubric task) {
+        Map<String, Object> rationale = new LinkedHashMap<>();
+        rationale.put(RATIONALE_REASON, string());
+        rationale.put(RATIONALE_EVIDENCE, string());
+        Map<String, Object> traits = new LinkedHashMap<>();
+        for (TraitDefinition trait : RubricPromptBuilder.llmTraits(task)) {
+            traits.put(trait.key(), object(rationale));
+        }
+        return object(traits);
     }
 
     /** Variant (b): a whole number from 0 to the trait's Pearson maximum. */

@@ -107,7 +107,7 @@ abstract class GeminiWritingScorer implements AiAnswerScorer {
         Map<String, Integer> traits = traitsInRubricOrder(task, collected.scores(), form);
         int rawScore = RubricScorer.score(rubric, new TraitScoreSet(traits, null)).itemScore();
         JsonNode content = collected.response().content();
-        GeminiScorers.copyInto(detail, content, RubricSchemaBuilder.ERRORS);
+        GeminiScorers.copyInto(detail, content, RubricSchemaBuilder.ERRORS, RubricSchemaBuilder.TRAIT_RATIONALES);
         GeminiScorers.copyInto(detail, content, extraFields.toArray(String[]::new));
         return GeminiScorers.result(json, GeminiScorers.WRITING_PROVIDER,
                 GeminiScorers.model("", collected.response().modelVersion()), rawScore, traits,

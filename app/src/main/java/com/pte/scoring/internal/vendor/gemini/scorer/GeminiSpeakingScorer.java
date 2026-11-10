@@ -107,6 +107,7 @@ abstract class GeminiSpeakingScorer implements AiAnswerScorer {
         int itemScore = RubricScorer.score(rubric, new TraitScoreSet(traits, null)).itemScore();
         JsonNode content = collected.response().content();
         GeminiScorers.copyInto(detail, content, detailSchema().keySet().toArray(String[]::new));
+        GeminiScorers.copyInto(detail, content, RubricSchemaBuilder.TRAIT_RATIONALES);
         return GeminiScorers.result(json, GeminiScorers.SPEAKING_PROVIDER,
                 GeminiScorers.model(MODEL_PREFIX, collected.response().modelVersion()), itemScore, traits,
                 GeminiScorers.text(content, RubricSchemaBuilder.FEEDBACK), transcript, detail,

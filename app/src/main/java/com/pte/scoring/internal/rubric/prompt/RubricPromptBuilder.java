@@ -24,7 +24,9 @@ public final class RubricPromptBuilder {
     public static final String INSTRUCTION = "Score each trait below as one whole number on its own scale. The "
             + "level descriptions are quoted from the Pearson PTE Academic Score Guide: choose, for each trait, the "
             + "level whose description best matches the response. Never answer with a fraction or a value outside "
-            + "the trait's scale. Use each trait's key exactly as the field name.";
+            + "the trait's scale. Use each trait's key exactly as the field name. Under traitRationales give, for every "
+            + "trait, a one-sentence reason naming which level description matched and why, and as evidence a short "
+            + "quote copied from the response that shows it (empty when the response has nothing to quote).";
     private static final String LEVEL_INDENT = "  ";
 
     private RubricPromptBuilder() {
