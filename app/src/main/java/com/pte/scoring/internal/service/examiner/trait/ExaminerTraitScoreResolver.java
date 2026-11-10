@@ -18,7 +18,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.math.BigDecimal;
 import java.util.*;
 
-/** Human traits + same-answer Azure traits + mechanical Form; RubricScorer alone produces the item score. */
+/** Human traits + Azure traits (machine band unless the examiner overrides it) + mechanical Form; RubricScorer alone produces the item score. */
 @Service
 public class ExaminerTraitScoreResolver {
     private final ExaminerTraitRubricReader rubrics;
@@ -86,7 +86,7 @@ public class ExaminerTraitScoreResolver {
             Integer form = formBand(value.rubric(), submission);
             var traits = value.rubric().task().traits().stream().map(trait -> new ExaminerRubricResponse.Trait(trait.key(),
                     trait.displayNameVi(), trait.displayNameEn(), value.rubric().maxOf(trait, words), trait.source().name(),
-                    trait.source() != TraitSource.AZURE && !RubricTraits.FORM.equals(trait.key()), trait.source() == TraitSource.AZURE,
+                    !RubricTraits.FORM.equals(trait.key()), trait.source() == TraitSource.AZURE,
                     trait.levels().stream().map(level -> new ExaminerRubricResponse.Level(level.level(), level.text())).toList())).toList();
             result.put(answer.getAnswerPublicId(), new ExaminerRubricResponse(value.versionPublicId(), answer.getTaskType(), traits,
                     form == null ? Map.of() : Map.of(RubricTraits.FORM, form)));

@@ -23,8 +23,8 @@ public class ExaminerTraitValidator {
         for (var trait : rubric.task().traits()) {
             Integer value;
             if (RubricTraits.FORM.equals(trait.key())) value = formBand;
-            else if (trait.source() == TraitSource.AZURE) {
-                if (requested.get(trait.key()) != null) throw invalid(ExaminerScoringConstants.MACHINE_TRAIT_READ_ONLY);
+            else if (trait.source() == TraitSource.AZURE && requested.get(trait.key()) == null) {
+                // Left blank, an Azure trait takes the machine band; a band the examiner chose overrides it.
                 if (!machineAvailable || ai.get(trait.key()) == null) throw invalid(ExaminerScoringConstants.AI_TRAITS_UNAVAILABLE);
                 value = ai.get(trait.key());
             } else value = requested.get(trait.key());

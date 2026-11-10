@@ -23,9 +23,11 @@ class ExaminerTraitValidatorTest {
         assertThatThrownBy(() -> validator.validate(rubric, null, ai, true, null, null))
                 .hasMessage("EXAMINER_TRAITS_REQUIRED");
     }
-    @Test void machineOnlyTraitsCannotBeOverriddenOrInventedWhenAiIsMissing() {
-        assertThatThrownBy(() -> validator.validate(rubric, Map.of("CONTENT", 4, "PRONUNCIATION", 1), ai, true, null, null))
-                .hasMessage("EXAMINER_MACHINE_TRAIT_READ_ONLY");
+    @Test void azureTraitsDefaultToTheMachineBandUnlessTheExaminerOverridesThem() {
+        assertThat(validator.validate(rubric, Map.of("CONTENT", 4, "PRONUNCIATION", 1), ai, true, null, null))
+                .containsEntry("PRONUNCIATION", 1);
+        assertThat(validator.validate(rubric, Map.of("CONTENT", 4, "PRONUNCIATION", 1, "ORAL_FLUENCY", 2), ai, false,
+                null, null)).containsEntry("ORAL_FLUENCY", 2);
         assertThatThrownBy(() -> validator.validate(rubric, Map.of("CONTENT", 4), ai, false, null, null))
                 .hasMessage("EXAMINER_AI_TRAITS_UNAVAILABLE");
     }

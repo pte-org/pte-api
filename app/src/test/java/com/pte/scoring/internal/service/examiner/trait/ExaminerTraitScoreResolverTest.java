@@ -54,7 +54,7 @@ class ExaminerTraitScoreResolverTest {
         var f = fixture("DESCRIBE_IMAGE");
         assertThat(service.resolve(f.answer(), f.request(), null).traits()).containsEntry("PRONUNCIATION", 3);
         var override = new LinkedHashMap<>(f.request()); override.put("PRONUNCIATION", BigDecimal.ONE);
-        assertThatThrownBy(() -> service.resolve(f.answer(), override, null)).hasMessage("EXAMINER_MACHINE_TRAIT_READ_ONLY");
+        assertThat(service.resolve(f.answer(), override, null).traits()).containsEntry("PRONUNCIATION", 1);
         f.answer().recordDetail(CriteriaScores.pearson(UUID.randomUUID(), Map.of("PRONUNCIATION", 3, "ORAL_FLUENCY", 3)).toJson(json), null, null, null, false, version);
         assertThatThrownBy(() -> service.resolve(f.answer(), f.request(), null)).hasMessage("EXAMINER_AI_TRAITS_UNAVAILABLE");
         f.answer().recordDetail(null, null, null, null, false, version);

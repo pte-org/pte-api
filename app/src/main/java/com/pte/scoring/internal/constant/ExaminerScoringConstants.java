@@ -11,7 +11,6 @@ public final class ExaminerScoringConstants {
     public static final String TRAIT_INVALID = "EXAMINER_TRAIT_INVALID";
     public static final String TRAIT_UNKNOWN = "EXAMINER_TRAIT_UNKNOWN";
     public static final String TRAIT_COUNT_INVALID = "EXAMINER_TRAIT_COUNT_INVALID";
-    public static final String MACHINE_TRAIT_READ_ONLY = "EXAMINER_MACHINE_TRAIT_READ_ONLY";
     public static final String AI_TRAITS_UNAVAILABLE = "EXAMINER_AI_TRAITS_UNAVAILABLE";
     public static final String TRAIT_SCORE_MISMATCH = "EXAMINER_TRAIT_SCORE_MISMATCH";
     public static final String RUBRIC_NOT_READABLE = "EXAMINER_RUBRIC_NOT_READABLE";
