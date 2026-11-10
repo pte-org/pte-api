@@ -24,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -54,6 +55,7 @@ public class ExamIncidentQueryService {
     public PagedResult<IncidentView> listIncidents(
             UUID sessionPublicId,
             String status,
+            String search,
             int page,
             int size,
             CurrentUser caller) {
@@ -61,7 +63,12 @@ public class ExamIncidentQueryService {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<ExamIncident> incidentPage;
 
-        if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
+        if (search != null && !search.isBlank()) {
+            String normalizedStatus = status == null || status.isBlank() || "ALL".equalsIgnoreCase(status)
+                    ? null : status.trim().toUpperCase(Locale.ROOT);
+            incidentPage = incidentRepository.searchReportedIncidents(sessionPublicId, access.tenantId(),
+                    IncidentOrigin.REPORTED, normalizedStatus, search.trim().toLowerCase(Locale.ROOT), pageRequest);
+        } else if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
             incidentPage = incidentRepository.findBySessionPublicIdAndTenantIdAndOriginAndStatusAndDeletedFalse(
                     sessionPublicId, access.tenantId(), IncidentOrigin.REPORTED, status.trim().toUpperCase(),
                     pageRequest);

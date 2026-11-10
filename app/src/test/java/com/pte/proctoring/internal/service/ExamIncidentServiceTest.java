@@ -76,7 +76,7 @@ class ExamIncidentServiceTest {
         when(incidentRepository.findBySessionPublicIdAndTenantIdAndOriginAndDeletedFalse(
                 eq(sessionId), eq(tenantId), eq(IncidentOrigin.REPORTED), any(PageRequest.class))).thenReturn(Page.empty());
 
-        var result = service.listIncidents(sessionId, null, 0, 20, host);
+        var result = service.listIncidents(sessionId, null, null, 0, 20, host);
 
         verify(sessionService).verifyHostAccess(sessionId, tenantId);
         assertThat(result.data()).isEmpty();
@@ -88,12 +88,13 @@ class ExamIncidentServiceTest {
         CurrentUser proctor = new CurrentUser(proctorId, tenantId, List.of("PROCTOR"));
         when(sessionService.isProctorAssignedToSession(sessionId, proctorId, tenantId)).thenReturn(false);
 
-        assertThatThrownBy(() -> service.listIncidents(sessionId, null, 0, 20, proctor))
+        assertThatThrownBy(() -> service.listIncidents(sessionId, null, "audio", 0, 20, proctor))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(exception -> ((ResponseStatusException) exception).getStatusCode().value())
                 .isEqualTo(403);
         verify(incidentRepository, never()).findBySessionPublicIdAndTenantIdAndOriginAndDeletedFalse(
                 any(), any(), any(), any(PageRequest.class));
+        verify(incidentRepository, never()).searchReportedIncidents(any(), any(), any(), any(), any(), any());
     }
 
     @ParameterizedTest
@@ -104,7 +105,7 @@ class ExamIncidentServiceTest {
         when(incidentRepository.findBySessionPublicIdAndTenantIdAndOriginAndDeletedFalse(
                 eq(sessionId), eq(tenantId), eq(IncidentOrigin.REPORTED), any(PageRequest.class))).thenReturn(Page.empty());
 
-        var result = service.listIncidents(sessionId, null, 0, 20, platformUser);
+        var result = service.listIncidents(sessionId, null, null, 0, 20, platformUser);
 
         verify(sessionService).resolveTenantId(sessionId);
         verify(sessionService, never()).verifyHostAccess(any(), any());

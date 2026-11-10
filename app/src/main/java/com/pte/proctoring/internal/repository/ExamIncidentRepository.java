@@ -19,6 +19,19 @@ import java.util.UUID;
 @Repository
 public interface ExamIncidentRepository extends JpaRepository<ExamIncident, Long> {
 
+    @Query("""
+            select incident from ExamIncident incident
+            where incident.sessionPublicId = :sessionId and incident.tenantId = :tenantId
+              and incident.origin = :origin and incident.deleted = false
+              and (:status is null or incident.status = :status)
+              and (locate(:search, lower(incident.title)) > 0
+                   or locate(:search, lower(coalesce(incident.description, ''))) > 0)
+            """)
+    Page<ExamIncident> searchReportedIncidents(
+            @Param("sessionId") UUID sessionId, @Param("tenantId") UUID tenantId,
+            @Param("origin") IncidentOrigin origin, @Param("status") String status,
+            @Param("search") String search, Pageable pageable);
+
     Page<ExamIncident> findBySessionPublicIdAndTenantIdAndOriginAndDeletedFalse(
             UUID sessionPublicId, UUID tenantId, IncidentOrigin origin, Pageable pageable);
 
