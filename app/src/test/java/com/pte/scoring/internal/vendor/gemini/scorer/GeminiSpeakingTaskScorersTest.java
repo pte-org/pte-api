@@ -96,7 +96,8 @@ class GeminiSpeakingTaskScorersTest {
         assertThat(detail.path("confidence").asText()).isEqualTo("LOW");
         GeminiRequest sent = sentRequest();
         assertThat(sent.images()).isEmpty();
-        assertThat(sent.systemInstruction()).contains("reference description");
+        assertThat(sent.userText()).contains("reference description");
+        assertThat(sent.systemInstruction()).doesNotContain("not available to you");
         assertThat(sent.userText()).contains("\"\"\"\nA chart of sales\n\"\"\"");
     }
 

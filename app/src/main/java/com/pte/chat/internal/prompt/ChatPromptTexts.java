@@ -33,6 +33,11 @@ public class ChatPromptTexts {
             }
 
             @Override
+            public Optional<ActivePrompt> active(String category, String key) {
+                return Optional.empty();
+            }
+
+            @Override
             public void seedIfMissing(String category, String key, String title, List<Part> parts) {
                 // Nothing is stored.
             }

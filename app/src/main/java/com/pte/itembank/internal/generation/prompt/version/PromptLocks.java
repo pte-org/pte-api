@@ -22,7 +22,10 @@ public final class PromptLocks {
 
     private static final Map<AiPromptKind, List<String>> LOCKED_BY_KIND = Map.of(
             AiPromptKind.GENERATOR, List.of("instructions"),
-            AiPromptKind.SHARED, List.of("context", "json-format", "answer-hints"));
+            AiPromptKind.SHARED, List.of("context", "json-format", "answer-hints"),
+            // A scoring prompt's level descriptions are the Pearson Score Guide's, the guard keeps answers from
+            // steering the score: both are what makes a stored score defensible, so neither can be edited.
+            AiPromptKind.SCORER, List.of("levels", "guard"));
     private static final List<String> REVIEWER_LOCKED = List.of("student-hints");
 
     private PromptLocks() {

@@ -34,7 +34,8 @@ public class DescribeImageScorer extends GeminiSpeakingScorer {
             + "said. Score CONTENT: how accurately and fully the description covers the main features of the "
             + "image, the relationships between them and their meaning. Deduct for missing important elements, "
             + "factual inaccuracies, or vague descriptions that could apply to any image.";
-    private static final String NO_IMAGE_NOTE = " The image itself is not available to you: judge the description "
+    // Part of the user message, so the system prompt stays the stored one word for word.
+    private static final String NO_IMAGE_NOTE = "The image itself is not available to you: judge the description "
             + "against the reference description of the image given below instead.";
     private static final String ASK_WITH_IMAGE = "Look at the attached image, then score CONTENT on its scale as "
             + "described above, write brief feedback (2-3 sentences) on how well the description matches the image, "
@@ -80,8 +81,9 @@ public class DescribeImageScorer extends GeminiSpeakingScorer {
         detail.put("descriptionSource", "REFERENCE_TEXT");
         detail.put("fallbackReason", fallbackReason);
         detail.put("confidence", "LOW");
-        return new Prepared(EXAMINER + NO_IMAGE_NOTE,
-                transcript -> GeminiScorers.quoted("Reference description of the image", reference) + "\n"
+        return new Prepared(EXAMINER,
+                transcript -> NO_IMAGE_NOTE + "\n\n"
+                        + GeminiScorers.quoted("Reference description of the image", reference) + "\n"
                         + GeminiScorers.quoted("Candidate's description", transcript) + "\n" + ASK_WITH_REFERENCE,
                 List.of(), detail, true);
     }
