@@ -1,5 +1,6 @@
 package com.pte.practice.internal.service;
 
+import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 import com.pte.practice.internal.service.mocktest.PracticeMockTestService;
 
 import com.pte.practice.internal.domain.PracticeSession;
@@ -30,6 +31,14 @@ public class PracticeReviewService {
     /** Set by Spring; null in focused tests, where a mock test review simply has no estimate. */
     private PracticeMockTestService mockTestService;
 
+    /** Set by Spring; null in focused tests, where items simply carry no CEFR level. */
+    private com.pte.itembank.ItembankService itembankService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setItembankService(com.pte.itembank.ItembankService itembankService) {
+        this.itembankService = itembankService;
+    }
+
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setMockTestService(PracticeMockTestService mockTestService) {
         this.mockTestService = mockTestService;
@@ -54,6 +63,7 @@ public class PracticeReviewService {
         itemService.recoverScoring(session, clock.instant());
         List<com.pte.practice.internal.domain.PracticeResponse> sessionItems = itemRepository
                 .findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(session.getId());
+        java.util.Map<UUID, String> cefrLevels = cefrLevelsOf(sessionItems);
         return new PracticeReviewResponse(session.getPublicId(), sessionItems.stream()
                 .map(item -> new PracticeReviewResponse.Item(item.getPublicId(), item.getOrderIndex(), item.getTaskCode(),
                         item.getDisplayName(), item.getSection(), item.getStatus().name(), item.getPromptText(),
@@ -61,8 +71,11 @@ public class PracticeReviewService {
                         item.getObjectiveEvaluatedAt(), item.getAiScore(), item.getAiScoreStatus(),
                         PracticeScoringStateService.readSubScores(jsonMapper, item.getAiSubScoresJson()),
                         item.getAiProvider(), item.getAiModel(), item.getAiScoredAt(),
-                        readOptions(item.getOptionsJson())))
-                .toList(), estimatedScoresOf(session, sessionItems));
+                        readOptions(item.getOptionsJson()),
+                        item.getStatus() == PracticeResponseStatus.ANSWERED ? itemService.resultOf(item) : null,
+                        item.getSourceQuestionPublicId() == null ? null
+                                : cefrLevels.get(item.getSourceQuestionPublicId())))
+                .toList(), estimatedScoresOf(session, sessionItems), session.effectiveKind().name());
     }
 
     /** Reference estimate for a finished mock test; null for other sessions or while the test is unfinished. */
@@ -87,5 +100,11 @@ public class PracticeReviewService {
         } catch (JacksonException ex) {
             return List.of();
         }
+    }
+
+    private java.util.Map<UUID, String> cefrLevelsOf(List<com.pte.practice.internal.domain.PracticeResponse> items) {
+        List<UUID> ids = items.stream().map(com.pte.practice.internal.domain.PracticeResponse::getSourceQuestionPublicId)
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        return itembankService == null || ids.isEmpty() ? java.util.Map.of() : itembankService.cefrLevels(ids);
     }
 }
