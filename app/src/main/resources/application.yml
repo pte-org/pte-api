@@ -47,6 +47,7 @@ practice:
     max-retries: ${PRACTICE_SCORING_MAX_RETRIES:2}
     redispatch-after-seconds: ${PRACTICE_SCORING_REDISPATCH_AFTER_SECONDS:100}
     max-age-seconds: ${PRACTICE_SCORING_MAX_AGE_SECONDS:180}
+    concurrency: ${PRACTICE_SCORING_CONCURRENCY:3}
   # Chat checks entitlement through assertUnlocked, which is fail-closed: with this false every student
   # gets 403 from chat. Set true in every environment that runs chat (dev, staging, production).
   strict-entitlement:
@@ -205,6 +206,9 @@ scoring:
     # gemini = the Google API above; gateway = an OpenAI-compatible /chat/completions service, by default the same
     # Capstone gateway as question generation and the student chat (AI_GATEWAY_*).
     text-vendor: ${SCORING_AI_TEXT_VENDOR:gemini}
+    # Who hears a practice speaking answer under azure-gemini: gateway = the scoring model above listens to the
+    # recording with the Pearson rubric and writes the feedback; azure = the exam path. Exams always use Azure.
+    practice-speech-vendor: ${SCORING_AI_PRACTICE_SPEECH_VENDOR:gateway}
     gateway:
       base-url: ${SCORING_AI_GATEWAY_BASE_URL:${itembank.generation.llm.base-url:}}
       api-key: ${SCORING_AI_GATEWAY_API_KEY:${itembank.generation.llm.api-key:}}
