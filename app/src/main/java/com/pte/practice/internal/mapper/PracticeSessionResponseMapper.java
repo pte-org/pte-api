@@ -155,7 +155,8 @@ public class PracticeSessionResponseMapper {
         Map<UUID, String> mediaUrls = presignPromptMedia(item, tenantId);
         return new PracticeTaskContentResponse(item.getPromptText(), item.getMinWordCount(),
                 item.getMaxWordCount(), item.getAudioPromptRef(), item.getImagePromptRef(), options,
-                urlOf(mediaUrls, item.getAudioPromptRef()), urlOf(mediaUrls, item.getImagePromptRef()));
+                urlOf(mediaUrls, item.getAudioPromptRef()), urlOf(mediaUrls, item.getImagePromptRef()),
+                item.getAnswerHintVi(), item.getAnswerHintEn());
     }
 
     /** Immutable maps reject a null key, and a task may have no audio or no image. */

@@ -1,6 +1,7 @@
 package com.pte.itembank.dto.request;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 
 import java.util.List;
 import java.util.UUID;
@@ -26,7 +27,27 @@ public record CreateQuestionRequest(
         String pool,
         Boolean availableForPractice,
         Boolean availableForExam,
-        String cefrLevel) {
+        String cefrLevel,
+        @Size(max = 1000) String answerHintVi,
+        @Size(max = 1000) String answerHintEn) {
+
+    /** Constructor for callers that predate the answer hints. */
+    public CreateQuestionRequest(String pteTaskType, String taskTypeKey, String promptText,
+            UUID audioPromptRef, UUID imagePromptRef, String referenceAnswerText,
+            String correctAnswerText, Integer minWordCount, Integer maxWordCount,
+            List<OptionRequest> options, String pool, Boolean availableForPractice, Boolean availableForExam,
+            String cefrLevel) {
+        this(pteTaskType, taskTypeKey, promptText, audioPromptRef, imagePromptRef, referenceAnswerText,
+                correctAnswerText, minWordCount, maxWordCount, options, pool, availableForPractice,
+                availableForExam, cefrLevel, null, null);
+    }
+
+    /** The same request carrying the given student-facing answer hints. */
+    public CreateQuestionRequest withAnswerHint(String hintVi, String hintEn) {
+        return new CreateQuestionRequest(pteTaskType, taskTypeKey, promptText, audioPromptRef, imagePromptRef,
+                referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, options, pool,
+                availableForPractice, availableForExam, cefrLevel, hintVi, hintEn);
+    }
 
     /** Constructor for callers that predate the CEFR level. */
     public CreateQuestionRequest(String pteTaskType, String taskTypeKey, String promptText,
