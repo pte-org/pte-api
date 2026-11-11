@@ -1,5 +1,6 @@
 package com.pte.itembank.internal.generation.pipeline;
 
+import com.pte.itembank.internal.generation.config.GenerationLimits;
 import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import com.pte.itembank.internal.generation.constant.GenerationLiveConstants;
@@ -48,13 +49,15 @@ public class GenerationPipeline {
     private final MediaRenderer mediaRenderer;
     private final GenerationLiveFeed liveFeed;
     private final ChartImageReviewer imageReviewer;
+    private final GenerationLimits allowance;
 
     public GenerationPipeline(List<ItemGenerator> generators, GeneratedQuestionWriter writer,
                               GenerationItemStateService itemState, QuestionGenerationProperties properties,
                               AvoidTopicsProvider avoidTopicsProvider, LlmItemReviewer itemReviewer,
                               MediaRenderer mediaRenderer, GenerationLiveFeed liveFeed,
-                              ChartImageReviewer imageReviewer) {
+                              ChartImageReviewer imageReviewer, GenerationLimits allowance) {
         this.imageReviewer = imageReviewer;
+        this.allowance = allowance;
         this.generators = generators;
         this.writer = writer;
         this.itemState = itemState;
@@ -80,7 +83,8 @@ public class GenerationPipeline {
             return ItemOutcome.LEASE_LOST;
         }
         try {
-            GenerationCallBudget budget = new GenerationCallBudget(properties.getLimits().getMaxCallsPerItem());
+            int maxCalls = allowance.maxCallsPerItem();
+            GenerationCallBudget budget = new GenerationCallBudget(maxCalls);
 
             // Generate
             ItemGenerator generator = generators.stream()
@@ -103,10 +107,13 @@ public class GenerationPipeline {
             // passes: a broken answer, a passing provider failure or a refusal goes back to the writer, not to the
             // person. The allowance also caps the rounds, even for a generator that does not count its calls.
             int callsPerRound = properties.getLimits().getMaxCallsPerRound();
-            int maxRounds = Math.max(1, properties.getLimits().getMaxCallsPerItem() / callsPerRound);
+            int maxRounds = Math.max(1, maxCalls / callsPerRound);
             GeneratedItem item;
             ReviewVerdict verdict;
             for (int round = 1; ; round++) {
+                if (round > 1 && itemState.cancelRequested(claim)) {
+                    return ItemOutcome.CANCELLED; // stopped by a person: the draft in progress is dropped
+                }
                 if (round > 1) {
                     advance(claim, index, ItemStage.GENERATING);
                 }

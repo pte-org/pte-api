@@ -1,5 +1,7 @@
 package com.pte.itembank.internal.generation.pipeline;
 
+import com.pte.billing.BillingSettingsService;
+import com.pte.itembank.internal.generation.config.GenerationLimits;
 import com.pte.itembank.internal.generation.live.GenerationLiveContext;
 import com.pte.itembank.internal.generation.live.GenerationLiveFeed;
 import com.pte.itembank.internal.generation.llm.LlmRole;
@@ -49,7 +51,8 @@ class GenerationPipelineTest {
     private final com.pte.itembank.internal.generation.review.ChartImageReviewer imageReviewer =
             mock(com.pte.itembank.internal.generation.review.ChartImageReviewer.class);
     private final GenerationPipeline pipeline = new GenerationPipeline(List.of(generator), writer, itemState,
-            properties, avoidTopicsProvider, itemReviewer, mediaRenderer, liveFeed, imageReviewer);
+            properties, avoidTopicsProvider, itemReviewer, mediaRenderer, liveFeed, imageReviewer,
+            new GenerationLimits(mock(BillingSettingsService.class, call -> call.getArgument(1)), properties));
     private final JobClaim claim = new JobClaim(5L, UUID.randomUUID(), UUID.randomUUID(), "MC_READING_SINGLE",
             CefrLevel.C1, QuestionPool.EXAM, "Climate", "worker-1");
     private final CurrentUser admin = new CurrentUser(claim.requesterId(), null, List.of("PLATFORM_ADMIN"));
