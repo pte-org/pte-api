@@ -115,4 +115,16 @@ public sealed interface ItemDraft {
         public record Series(String name, List<Double> values) {}
         public record KeyPoint(String kind, String ref, String text) {}
     }
+
+    /**
+     * Picture-based DESCRIBE_IMAGE: a scene, process, map or illustration painted by the image model from
+     * {@code imagePrompt}. The key points and the model description are the reference for scoring.
+     */
+    record PictureDraft(
+            String topic,
+            String title,
+            String imagePrompt,
+            List<String> keyPoints,
+            String referenceDescription) implements ItemDraft {
+    }
 }

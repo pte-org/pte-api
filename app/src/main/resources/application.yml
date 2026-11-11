@@ -300,6 +300,8 @@ itembank:
       max-tokens: ${QUESTION_GEN_MAX_TOKENS:0}
       connect-timeout: ${QUESTION_GEN_CONNECT_TIMEOUT:5s}
       read-timeout: ${QUESTION_GEN_READ_TIMEOUT:90s}
+      image-model: ${QUESTION_GEN_IMAGE_MODEL:ag/gemini-3.1-flash-image}
+      image-max-attempts: ${QUESTION_GEN_IMAGE_MAX_ATTEMPTS:2}
       retry-delay: ${QUESTION_GEN_RETRY_DELAY:2s}
       # Only for the cost estimate on the AI overview (USD per million tokens).
       price-input-per-million-usd: ${QUESTION_GEN_PRICE_INPUT_PER_MILLION_USD:0.10}

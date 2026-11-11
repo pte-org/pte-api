@@ -3,10 +3,16 @@ package com.pte.itembank.internal.generation.media;
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import com.pte.itembank.internal.generation.draft.ItemDraft;
 import com.pte.itembank.internal.generation.exception.GenerationMediaException;
+import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
+import com.pte.itembank.internal.generation.llm.LlmGateway;
+import com.pte.itembank.internal.generation.llm.LlmProviderException;
+import com.pte.itembank.internal.generation.prompt.PictureSettings;
+import com.pte.itembank.internal.generation.prompt.PromptRegistry;
 import com.pte.media.MediaService;
 import com.pte.shared.security.CurrentUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -40,9 +46,17 @@ public class MediaRenderer {
     private final DialogueSynthesizer dialogue;
     private final ChartRenderer charts;
     private final MediaService media;
+    private final ObjectProvider<LlmGateway> painter;
+    private final QuestionGenerationProperties properties;
+    private final PromptRegistry prompts;
 
     public MediaRenderer(KokoroSpeechClient speech, VoicePicker voices, AudioDurationProbe probe,
-                         DialogueSynthesizer dialogue, ChartRenderer charts, MediaService media) {
+                         DialogueSynthesizer dialogue, ChartRenderer charts, MediaService media,
+                         ObjectProvider<LlmGateway> painter, QuestionGenerationProperties properties,
+                         PromptRegistry prompts) {
+        this.prompts = prompts;
+        this.painter = painter;
+        this.properties = properties;
         this.speech = speech;
         this.voices = voices;
         this.probe = probe;
@@ -60,6 +74,7 @@ public class MediaRenderer {
                 case ItemDraft.HiwDraft d -> Optional.of(speak(d.transcript(), taskTypeKey, itemIndex, seed, owner));
                 case ItemDraft.DialogueDraft d -> Optional.of(converse(d, taskTypeKey, itemIndex, seed, owner));
                 case ItemDraft.ChartDraft d -> Optional.of(draw(d, owner));
+                case ItemDraft.PictureDraft d -> Optional.of(paint(d, owner));
                 default -> Optional.empty();
             };
         } catch (GenerationMediaException failure) {
@@ -160,6 +175,36 @@ public class MediaRenderer {
         meta.put("chartType", draft.chartType());
         // The bytes go along so the image reviewer can look at the same picture without reading it back.
         return new RenderedMedia(null, ref, meta, png);
+    }
+
+    /**
+     * Paints the picture with the image model, trying again while attempts are left. When every attempt fails the
+     * caller gets {@code GENERATION_IMAGE_FAILED}, which turns the question into a chart.
+     */
+    private RenderedMedia paint(ItemDraft.PictureDraft draft, CurrentUser owner) {
+        LlmGateway gateway = painter.getIfAvailable();
+        String lastFailure = "no image model";
+        int attempts = pictureSettings().maxAttempts();
+        for (int attempt = 1; gateway != null && attempt <= attempts; attempt++) {
+            try {
+                byte[] png = gateway.generateImage(draft.imagePrompt());
+                UUID ref = media.storeGenerated(png, IMAGE_PNG, IMAGE_PROMPT, owner);
+                Map<String, Object> meta = new LinkedHashMap<>();
+                meta.put("imagePromptRef", ref.toString());
+                meta.put("imageKind", "PICTURE");
+                meta.put("imageModel", properties.getLlm().getImageModel());
+                return new RenderedMedia(null, ref, meta, png);
+            } catch (LlmProviderException failure) {
+                lastFailure = failure.getType().code();
+                LOG.info("Generation picture attempt {} failed: type={}", attempt, lastFailure);
+            }
+        }
+        throw new GenerationMediaException(QuestionGenerationConstants.GENERATION_IMAGE_FAILED, lastFailure);
+    }
+
+    /** The picture settings in use: those on the picture prompt page, else the configured defaults. */
+    public PictureSettings pictureSettings() {
+        return prompts.pictureSettings(new PictureSettings(properties.getLlm().getImageMaxAttempts(), false));
     }
 
     /** Removes media that was stored for a question that then could not be created. Never throws. */

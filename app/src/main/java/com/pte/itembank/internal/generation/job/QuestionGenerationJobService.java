@@ -1,5 +1,6 @@
 package com.pte.itembank.internal.generation.job;
 
+import com.pte.itembank.internal.generation.domain.ImageKind;
 import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionPool;
@@ -68,6 +69,7 @@ public class QuestionGenerationJobService {
         CefrLevel cefr = parseCefr(request.cefrLevel());
         QuestionPool pool = parsePool(request.pool());
         String topicHint = TopicHintPolicy.normalize(request.topicHint());
+        ImageKind imageKind = parseImageKind(request.imageKind());
 
         jobs.lockSubmissions(QuestionGenerationConstants.SUBMIT_ADVISORY_LOCK_KEY);
         checkCaps(caller, request.count());
@@ -79,6 +81,7 @@ public class QuestionGenerationJobService {
         job.setCefrLevel(cefr);
         job.setPool(pool);
         job.setTopicHint(topicHint);
+        job.setImageKind(imageKind);
         job.setRequestedCount(request.count());
         job.setSaveQuestions(request.savesQuestions());
         QuestionGenerationJob saved;
@@ -168,6 +171,15 @@ public class QuestionGenerationJobService {
         } catch (IllegalArgumentException unknown) {
             throw invalid(QuestionGenerationConstants.GENERATION_POOL_INVALID,
                     QuestionGenerationConstants.GENERATION_POOL_INVALID_MESSAGE);
+        }
+    }
+
+    private static ImageKind parseImageKind(String raw) {
+        try {
+            return ImageKind.parse(raw);
+        } catch (IllegalArgumentException unknown) {
+            throw invalid(QuestionGenerationConstants.GENERATION_IMAGE_KIND_INVALID,
+                    QuestionGenerationConstants.GENERATION_IMAGE_KIND_INVALID_MESSAGE);
         }
     }
 

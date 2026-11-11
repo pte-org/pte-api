@@ -68,7 +68,7 @@ public final class QuestionGenerationConstants {
             "itembank.generation.llm generator and reviewer models are required.";
 
     public static final int MAX_ITEMS_PER_JOB_HARD_LIMIT = 10;
-    public static final int MAX_TOPIC_HINT_LENGTH = 200;
+    public static final int MAX_TOPIC_HINT_LENGTH = 500;
     public static final int MAX_FAILURE_NOTE_LENGTH = 300;
     public static final int MAX_PAGE_SIZE = 50;
     public static final long SUBMIT_ADVISORY_LOCK_KEY = 7_340_034L;
@@ -91,6 +91,15 @@ public final class QuestionGenerationConstants {
     public static final String PROMPT_KEY_REVIEWER = "REVIEWER";
     /** The reviewer that looks at a drawn chart (a second REVIEWER prompt). */
     public static final String PROMPT_KEY_IMAGE_REVIEWER = "CHART_IMAGE_REVIEWER";
+    public static final String PROMPT_KEY_PICTURE_REVIEWER = "PICTURE_IMAGE_REVIEWER";
+    /** The writer prompt of a Describe Image question whose image is painted, not drawn from data. */
+    public static final String PROMPT_KEY_DESCRIBE_IMAGE_PICTURE = "DESCRIBE_IMAGE_PICTURE";
+    public static final String GENERATION_IMAGE_FAILED = "GENERATION_IMAGE_FAILED";
+    public static final String GENERATION_IMAGE_KIND_INVALID = "GENERATION_IMAGE_KIND_INVALID";
+    public static final String GENERATION_IMAGE_KIND_INVALID_MESSAGE = "Image kind must be AUTO, CHART or PICTURE.";
+    public static final String PICTURE_ATTEMPTS_INVALID = "maxImageAttempts must be a whole number from 1 to 5.";
+    public static final String PICTURE_FALLBACK_INVALID = "whenImageFails must be ASK or CHART.";
+    public static final String IMAGE_FALLBACK_NOTE = "The AI picture could not be made; switched to a chart. ";
     public static final String GENERATION_IMAGE_REVIEW_FAILED = "GENERATION_IMAGE_REVIEW_FAILED";
     /** What the writer is told when a draft is sent back for something other than the content reviewer's notes. */
     public static final String FEEDBACK_INVALID =

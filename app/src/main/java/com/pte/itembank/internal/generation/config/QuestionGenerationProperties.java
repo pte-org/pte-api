@@ -54,6 +54,10 @@ public class QuestionGenerationProperties {
         private Duration connectTimeout = Duration.ofSeconds(5);
         private Duration readTimeout = Duration.ofSeconds(90);
         private Duration retryDelay = Duration.ofSeconds(2);
+        /** Text-to-image model of the same gateway, for Describe Image pictures. */
+        private String imageModel = "ag/gemini-3.1-flash-image";
+        /** Paint attempts (provider failures or reviewer refusals) before a picture question becomes a chart. */
+        private int imageMaxAttempts = 2;
         /** Only for the AI overview cost estimate (USD per million tokens); 0 when the gateway does not bill. */
         @DecimalMin("0")
         private BigDecimal priceInputPerMillionUsd = new BigDecimal("0.10");

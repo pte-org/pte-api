@@ -15,7 +15,6 @@ import com.pte.itembank.internal.generation.review.ReviewVerdict;
 import com.pte.itembank.internal.generation.exception.GenerationMediaException;
 import com.pte.itembank.internal.generation.exception.GenerationRequestInvalidException;
 import com.pte.itembank.internal.generation.media.MediaRenderer;
-import com.pte.itembank.internal.generation.draft.ItemDraft;
 import com.pte.itembank.internal.generation.review.ChartImageReviewer;
 import com.pte.itembank.internal.generation.media.RenderedMedia;
 import java.util.Optional;
@@ -93,7 +92,9 @@ public class GenerationPipeline {
 
             String avoidTopics = avoidTopicsProvider.getAvoidTopicsForTaskType(claim.taskTypeKey());
             GenerationRequest request = new GenerationRequest(claim.jobPublicId(), index, claim.taskTypeKey(),
-                    claim.cefrLevel(), claim.pool(), claim.topicHint(), avoidTopics);
+                    claim.cefrLevel(), claim.pool(), claim.topicHint(), avoidTopics, null,
+                    claim.imageKind().resolve(claim.topicHint()));
+            GeneratedImageCheck images = new GeneratedImageCheck(properties, imageReviewer, liveFeed, mediaRenderer);
             // Write, review and make the media until every reviewer is satisfied or the item's calls run out. Each
             // refusal goes back to the writer as feedback. When the calls run out on a content refusal, the last draft
             // is still saved, with the reviewer's notes, for a person to finish: a job always yields its questions.
@@ -139,7 +140,7 @@ public class GenerationPipeline {
                     break; // the stub generator: nothing to review or render
                 }
                 advance(claim, index, ItemStage.REVIEWING);
-                verdict = itemReviewer.review(item.draft(), claim.taskTypeKey(), claim.cefrLevel(), budget, feedback);
+                verdict = itemReviewer.review(item, claim.taskTypeKey(), claim.cefrLevel(), budget, feedback);
                 reportReview(claim, index, verdict);
                 if (!verdict.isPassed()) {
                     if (canRewrite(budget, round, maxRounds)) {
@@ -156,6 +157,13 @@ public class GenerationPipeline {
                     media = mediaRenderer.render(item.draft(), claim.taskTypeKey(), index,
                             claim.jobPublicId().getLeastSignificantBits(), caller);
                 } catch (GenerationMediaException mediaFailure) {
+                    if (request.isPicture() && QuestionGenerationConstants.GENERATION_IMAGE_FAILED
+                            .equals(mediaFailure.getCode()) && images.fallsBackToChart()
+                            && canRewrite(budget, round, maxRounds)) {
+                        request = images.fallBack(claim.jobPublicId(), index, request, mediaFailure.getUserMessage());
+                        feedback = null;
+                        continue;
+                    }
                     if (!QuestionGenerationConstants.GENERATION_AUDIO_DURATION_OUT_OF_RANGE.equals(mediaFailure.getCode())
                             || !canRewrite(budget, round, maxRounds)) {
                         throw mediaFailure;
@@ -164,11 +172,18 @@ public class GenerationPipeline {
                     continue;
                 }
                 if (media.isPresent()) {
-                    item = item.withMedia(media.get());
+                    item = item.withMedia(images.marked(media.get()));
                     liveFeed.media(claim.jobPublicId(), index, media.get().audioPromptRef(),
                             media.get().imagePromptRef());
                     boolean canRedraw = canRewrite(budget, round, maxRounds);
-                    String imageIssues = imageIssues(claim, caller, index, item, media.get(), canRedraw);
+                    String imageIssues = images.issues(claim.jobPublicId(), index,
+                            () -> advance(claim, index, ItemStage.REVIEWING), caller, item, media.get(), canRedraw);
+                    if (imageIssues != null && canRedraw && request.isPicture() && images.pictureRefused()
+                            && images.fallsBackToChart()) {
+                        request = images.fallBack(claim.jobPublicId(), index, request, imageIssues);
+                        feedback = null;
+                        continue;
+                    }
                     if (imageIssues != null && canRedraw) {
                         feedback = QuestionGenerationConstants.FEEDBACK_IMAGE + " " + imageIssues;
                         continue;
@@ -214,35 +229,6 @@ public class GenerationPipeline {
             return fail(claim, index, QuestionGenerationConstants.GENERATION_INTERNAL_ERROR, null,
                     ItemOutcome.FAILED);
         }
-    }
-
-    /**
-     * With {@code itembank.generation.review.vision-check} on, a reviewer looks at a drawn chart next to its data.
-     * A refused image is removed and its issues go back to the writer, since the chart is drawn from the writer's
-     * data. When no rewrite is left the last image is kept, so a person still gets a question to check.
-     *
-     * @return the reviewer's issues when it refused the image, or null when it passed
-     */
-    private String imageIssues(JobClaim claim, CurrentUser caller, int index, GeneratedItem item,
-                               RenderedMedia media, boolean canRedraw) {
-        if (!properties.getReview().isVisionCheck() || media.imagePng() == null
-                || !(item.draft() instanceof ItemDraft.ChartDraft chart)) {
-            return null;
-        }
-        advance(claim, index, ItemStage.REVIEWING);
-        ChartImageReviewer.Result look = imageReviewer.review(chart, media.imagePng());
-        liveFeed.review(claim.jobPublicId(), index, GenerationLiveConstants.REVIEW_IMAGE, look.passed(),
-                String.join(" ", look.issues()), Map.of());
-        if (look.passed()) {
-            return null;
-        }
-        if (canRedraw) {
-            mediaRenderer.discard(null, media.imagePromptRef(), caller);
-        } else {
-            LOG.info("Generation chart kept for a person after the last refusal: jobId={}, item={}",
-                    claim.jobPublicId(), index);
-        }
-        return String.join(" ", look.issues());
     }
 
     /** Another round is tried only while its worst case still fits in the item's allowance. */
