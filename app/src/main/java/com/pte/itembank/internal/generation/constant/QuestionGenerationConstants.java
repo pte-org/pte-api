@@ -46,6 +46,21 @@ public final class QuestionGenerationConstants {
     public static final String GENERATION_DUPLICATE_CONTENT = "GENERATION_DUPLICATE_CONTENT";
     public static final String GENERATION_CALL_BUDGET_EXCEEDED = "GENERATION_CALL_BUDGET_EXCEEDED";
     public static final String GENERATION_SCHEMA_INVALID = "GENERATION_SCHEMA_INVALID";
+    // Why a model draft broke its schema; the job stores it as the item failure note.
+    public static final String DRAFT_ARRAY_ITEM_EMPTY = "Empty item in array: %s";
+    public static final String DRAFT_ARRAY_ITEM_NOT_INTEGER = "Non-integer item in array: %s";
+    public static final String DRAFT_ARRAY_MISSING = "Missing or empty required array: %s";
+    public static final String DRAFT_FIELD_MISSING = "Missing or empty required field: %s";
+    public static final String DRAFT_JSON_UNREADABLE = "Failed to parse JSON response";
+    public static final String DRAFT_SERIES_MISSING = "Missing or empty required field: series";
+    public static final String DRAFT_SERIES_VALUES_MISSING = "Series needs a values array";
+    public static final String DRAFT_SERIES_VALUES_NOT_NUMBERS = "Series values must be numbers";
+    public static final String DRAFT_SLOTS_INVALID = "Missing or invalid slots array";
+    public static final String DRAFT_TASK_TYPE_UNSUPPORTED = "Unsupported task type: %s";
+    public static final String DRAFT_TURNS_MISSING = "Missing or empty required field: turns";
+    public static final String PICTURE_PROMPT_TOO_SHORT =
+            "The image prompt must describe the picture in at least %d characters";
+    public static final String PICTURE_KEY_POINTS_OUT_OF_RANGE = "Must have %d-%d key points, got %d";
     public static final String GENERATION_VALIDATION_FAILED = "GENERATION_VALIDATION_FAILED";
     public static final String GENERATION_REVIEW_FAILED = "GENERATION_REVIEW_FAILED";
     public static final String GENERATION_REVIEW_PARSING_FAILED = "GENERATION_REVIEW_PARSING_FAILED";

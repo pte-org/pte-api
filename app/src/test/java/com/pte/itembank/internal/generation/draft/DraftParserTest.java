@@ -197,6 +197,6 @@ class DraftParserTest {
 
     @Test
     void changedIndexes_DifferentWordCountsHaveNoPositions() {
-        assertArrayEquals(new int[0], DraftParser.changedIndexes("one two three", "one two"));
+        assertArrayEquals(new int[0], HiwWordDiff.changedIndexes("one two three", "one two"));
     }
 }

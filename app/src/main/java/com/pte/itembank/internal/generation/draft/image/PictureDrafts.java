@@ -44,12 +44,13 @@ public final class PictureDrafts {
         List<ValidationIssue> issues = new ArrayList<>();
         if (draft.imagePrompt().length() < MIN_IMAGE_PROMPT_CHARS) {
             issues.add(new ValidationIssue("imagePrompt",
-                    "The image prompt must describe the picture in at least " + MIN_IMAGE_PROMPT_CHARS + " characters"));
+                    QuestionGenerationConstants.PICTURE_PROMPT_TOO_SHORT.formatted(MIN_IMAGE_PROMPT_CHARS)));
         }
         int points = draft.keyPoints().size();
         if (points < MIN_KEY_POINTS || points > MAX_KEY_POINTS) {
             issues.add(new ValidationIssue("keyPoints",
-                    "Must have " + MIN_KEY_POINTS + "-" + MAX_KEY_POINTS + " key points, got " + points));
+                    QuestionGenerationConstants.PICTURE_KEY_POINTS_OUT_OF_RANGE.formatted(MIN_KEY_POINTS, MAX_KEY_POINTS,
+                            points)));
         }
         return issues;
     }
@@ -65,7 +66,7 @@ public final class PictureDrafts {
         JsonNode value = node.get(field);
         if (value == null || !value.isTextual() || value.asText().isBlank()) {
             throw new GenerationRequestInvalidException(QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
-                    "Missing or empty required field: " + field);
+                    QuestionGenerationConstants.DRAFT_FIELD_MISSING.formatted(field));
         }
         return value.asText().strip();
     }

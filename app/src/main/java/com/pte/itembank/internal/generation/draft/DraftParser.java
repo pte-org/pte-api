@@ -9,7 +9,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.IntStream;
 
 /**
  * Strict JSON parser for LLM responses. Returns an ItemDraft or throws
@@ -34,7 +33,7 @@ public class DraftParser {
         } catch (Exception e) {
             throw new GenerationRequestInvalidException(
                     QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
-                    "Failed to parse JSON response");
+                    QuestionGenerationConstants.DRAFT_JSON_UNREADABLE);
         }
     }
 
@@ -67,14 +66,14 @@ public class DraftParser {
                 case QuestionGenerationConstants.PROMPT_KEY_DESCRIBE_IMAGE_PICTURE -> PictureDrafts.parse(root);
                 default -> throw new GenerationRequestInvalidException(
                         QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
-                        "Unsupported task type: " + taskTypeKey);
+                        QuestionGenerationConstants.DRAFT_TASK_TYPE_UNSUPPORTED.formatted(taskTypeKey));
             };
         } catch (GenerationRequestInvalidException e) {
             throw e;
         } catch (Exception e) {
             throw new GenerationRequestInvalidException(
                     QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
-                    "Failed to parse JSON response");
+                    QuestionGenerationConstants.DRAFT_JSON_UNREADABLE);
         }
     }
 
@@ -97,7 +96,7 @@ public class DraftParser {
         if (slotsNode == null || !slotsNode.isArray()) {
             throw new GenerationRequestInvalidException(
                     QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
-                    "Missing or invalid slots array");
+                    QuestionGenerationConstants.DRAFT_SLOTS_INVALID);
         }
 
         for (JsonNode slot : slotsNode) {
@@ -152,7 +151,7 @@ public class DraftParser {
         JsonNode turnsNode = root.get("turns");
         if (turnsNode == null || !turnsNode.isArray() || turnsNode.isEmpty()) {
             throw new GenerationRequestInvalidException(QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
-                    "Missing or empty required field: turns");
+                    QuestionGenerationConstants.DRAFT_TURNS_MISSING);
         }
         for (JsonNode turn : turnsNode) {
             turns.add(new ItemDraft.DialogueDraft.Turn(requireString(turn, "speaker"), requireString(turn, "text")));
@@ -165,19 +164,19 @@ public class DraftParser {
         JsonNode seriesNode = root.get("series");
         if (seriesNode == null || !seriesNode.isArray() || seriesNode.isEmpty()) {
             throw new GenerationRequestInvalidException(QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
-                    "Missing or empty required field: series");
+                    QuestionGenerationConstants.DRAFT_SERIES_MISSING);
         }
         for (JsonNode one : seriesNode) {
             List<Double> values = new ArrayList<>();
             JsonNode valuesNode = one.get("values");
             if (valuesNode == null || !valuesNode.isArray()) {
                 throw new GenerationRequestInvalidException(QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
-                        "Series needs a values array");
+                        QuestionGenerationConstants.DRAFT_SERIES_VALUES_MISSING);
             }
             for (JsonNode value : valuesNode) {
                 if (!value.isNumber()) {
                     throw new GenerationRequestInvalidException(QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
-                            "Series values must be numbers");
+                            QuestionGenerationConstants.DRAFT_SERIES_VALUES_NOT_NUMBERS);
                 }
                 values.add(value.asDouble());
             }
@@ -201,22 +200,7 @@ public class DraftParser {
         String topic = requireString(root, "topic");
         String transcript = requireString(root, "transcript");
         String displayedText = requireString(root, "displayedText");
-        return new ItemDraft.HiwDraft(topic, transcript, displayedText, changedIndexes(transcript, displayedText));
-    }
-
-    /**
-     * The positions of the changed words, found by comparing the two texts word by word. Models miscount word
-     * positions in a long passage, so the indexes they return are not used. When the word counts differ there is no
-     * position-wise answer; the validator then reports the count mismatch.
-     */
-    static int[] changedIndexes(String transcript, String displayedText) {
-        String[] original = transcript.strip().split("\\s+");
-        String[] shown = displayedText.strip().split("\\s+");
-        if (original.length != shown.length) {
-            return new int[0];
-        }
-        return IntStream.range(0, original.length)
-                .filter(index -> !original[index].equalsIgnoreCase(shown[index])).toArray();
+        return new ItemDraft.HiwDraft(topic, transcript, displayedText, HiwWordDiff.changedIndexes(transcript, displayedText));
     }
 
     private String requireString(JsonNode node, String field) {
@@ -224,7 +208,7 @@ public class DraftParser {
         if (value == null || !value.isTextual() || value.asText().isBlank()) {
             throw new GenerationRequestInvalidException(
                     QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
-                    "Missing or empty required field: " + field);
+                    QuestionGenerationConstants.DRAFT_FIELD_MISSING.formatted(field));
         }
         return value.asText();
     }
@@ -243,7 +227,7 @@ public class DraftParser {
         if (array == null || !array.isArray() || array.size() == 0) {
             throw new GenerationRequestInvalidException(
                     QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
-                    "Missing or empty required array: " + field);
+                    QuestionGenerationConstants.DRAFT_ARRAY_MISSING.formatted(field));
         }
 
         List<String> result = new ArrayList<>();
@@ -251,7 +235,7 @@ public class DraftParser {
             if (!item.isTextual() || item.asText().isBlank()) {
                 throw new GenerationRequestInvalidException(
                         QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
-                        "Empty item in array: " + field);
+                        QuestionGenerationConstants.DRAFT_ARRAY_ITEM_EMPTY.formatted(field));
             }
             result.add(item.asText());
         }
@@ -278,7 +262,7 @@ public class DraftParser {
         if (array == null || !array.isArray() || array.size() == 0) {
             throw new GenerationRequestInvalidException(
                     QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
-                    "Missing or empty required array: " + field);
+                    QuestionGenerationConstants.DRAFT_ARRAY_MISSING.formatted(field));
         }
 
         List<Integer> result = new ArrayList<>();
@@ -286,7 +270,7 @@ public class DraftParser {
             if (!item.isInt()) {
                 throw new GenerationRequestInvalidException(
                         QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
-                        "Non-integer item in array: " + field);
+                        QuestionGenerationConstants.DRAFT_ARRAY_ITEM_NOT_INTEGER.formatted(field));
             }
             result.add(item.asInt());
         }
