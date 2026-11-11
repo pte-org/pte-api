@@ -41,10 +41,7 @@
           "text": "",
           "items": [
             "topic: Business Communication",
-            "transcript: The effectiveness of team collaboration significantly improves project outcomes",
-            "question: ",
-            "options: null",
-            "correctIndexes: null"
+            "transcript: The effectiveness of team collaboration significantly improves project outcomes"
           ],
           "levels": [],
           "sentToAi": true

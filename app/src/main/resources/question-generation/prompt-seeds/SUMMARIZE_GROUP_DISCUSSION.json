@@ -34,7 +34,6 @@
           "label": "",
           "text": "",
           "items": [
-            "Task type (taskType): Always SUMMARIZE_GROUP_DISCUSSION",
             "Topic: A brief topic name (3-5 words, no special characters)",
             "Turns: Each turn has a speaker (A, B or C) and a text, what the speaker says in one sentence or short phrase",
             "Key points (keyPoints): Each item is one key point that the student's summary should cover"
@@ -67,7 +66,6 @@
           "label": "",
           "text": "",
           "items": [
-            "taskType: SUMMARIZE_GROUP_DISCUSSION",
             "topic: Renewable Energy",
             "turns: [{\"speaker\": \"A\", \"text\": \"I think renewable energy is crucial for the environment. Solar and wind power are becoming increasingly affordable.\"}, {\"speaker\": \"B\", \"text\": \"Absolutely. My company recently invested in solar panels and reduced our electricity costs by thirty percent.\"}, {\"speaker\": \"C\", \"text\": \"That's impressive, but we need government support to make it mainstream. Infrastructure is a big challenge.\"}, {\"speaker\": \"A\", \"text\": \"Good point. Countries like Germany and Denmark have shown it is possible with proper planning.\"}, {\"speaker\": \"B\", \"text\": \"Education is also important. People need to understand the long-term benefits beyond just cost savings.\"}]",
             "keyPoints: [\"Renewable energy reduces environmental impact and costs\", \"Solar technology is becoming more affordable for businesses\", \"Government support and infrastructure are necessary for scaling\", \"Education helps people understand the long-term benefits\"]"

@@ -34,7 +34,6 @@
           "label": "",
           "text": "",
           "items": [
-            "Task type (taskType): Always RESPOND_TO_A_SITUATION",
             "Topic: A brief topic name (3-5 words, no special characters)",
             "Situation: The background scenario (40-90 words)",
             "Turns: Each turn has a speaker (A or B) and a text, a prompt or statement the student must respond to",
@@ -68,7 +67,6 @@
           "label": "",
           "text": "",
           "items": [
-            "taskType: RESPOND_TO_A_SITUATION",
             "topic: Job Interview Feedback",
             "situation: You are at a job interview for a marketing position at a tech company. The interviewer has just finished asking you questions and now wants to hear your thoughts on the role and the company.",
             "turns: [{\"speaker\": \"A\", \"text\": \"Thank you for all those questions. Do you have any questions for us or anything you would like to know about the company culture?\"}]",

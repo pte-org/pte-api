@@ -7,5 +7,7 @@ import java.util.List;
  * and the changes accepted so far, newest first.
  */
 public record PromptWorkspaceResponse(PromptVersionResponse live, PromptVersionResponse proposal,
-                                      List<PromptVersionSummary> history) {
+                                      List<PromptVersionSummary> history,
+                                      /** Sections the system depends on; shown read-only and refused when changed. */
+                                      List<String> lockedSectionIds) {
 }
