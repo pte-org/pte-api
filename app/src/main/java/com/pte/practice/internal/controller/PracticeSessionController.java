@@ -14,6 +14,7 @@ import com.pte.practice.internal.dto.response.PracticeSessionResponse;
 import com.pte.practice.internal.service.PracticeRecordingPlaybackService;
 import com.pte.practice.internal.service.PracticeReviewService;
 import com.pte.practice.internal.service.session.PracticeScoringRequestService;
+import com.pte.practice.internal.service.session.PracticeSessionDiscardService;
 import com.pte.practice.internal.service.session.PracticeSessionService;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -41,13 +42,16 @@ public class PracticeSessionController {
     private final PracticeReviewService reviewService;
     private final PracticeRecordingPlaybackService playbackService;
     private final PracticeScoringRequestService scoringRequestService;
+    private final PracticeSessionDiscardService discardService;
 
     public PracticeSessionController(PracticeSessionService sessionService, PracticeReviewService reviewService,
-            PracticeRecordingPlaybackService playbackService, PracticeScoringRequestService scoringRequestService) {
+            PracticeRecordingPlaybackService playbackService, PracticeScoringRequestService scoringRequestService,
+            PracticeSessionDiscardService discardService) {
         this.sessionService = sessionService;
         this.reviewService = reviewService;
         this.playbackService = playbackService;
         this.scoringRequestService = scoringRequestService;
+        this.discardService = discardService;
     }
 
     @PostMapping
@@ -163,6 +167,11 @@ public class PracticeSessionController {
     @GetMapping("/{publicId}/review")
     public ApiResponse<PracticeReviewResponse> review(@PathVariable UUID publicId) {
         return ApiResponse.success(reviewService.get(publicId, CurrentUserContext.required()));
+    }
+
+    @PostMapping("/{publicId}/discard")
+    public ApiResponse<Boolean> discard(@PathVariable UUID publicId) {
+        return ApiResponse.success(discardService.exitWithoutSaving(publicId, CurrentUserContext.required()));
     }
 
     @PostMapping("/{publicId}/save-and-exit")
