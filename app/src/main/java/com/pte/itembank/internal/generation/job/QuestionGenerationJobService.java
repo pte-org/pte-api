@@ -4,6 +4,7 @@ import com.pte.itembank.internal.generation.domain.ImageKind;
 import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionPool;
+import com.pte.itembank.internal.generation.config.GenerationLimits;
 import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import com.pte.itembank.internal.generation.domain.ItemStage;
@@ -45,10 +46,12 @@ public class QuestionGenerationJobService {
     private final GenerationTaskTypeCatalog catalog;
     private final QuestionGenerationProperties properties;
     private final Clock clock;
+    private final GenerationLimits limits;
 
     public QuestionGenerationJobService(GenerationJobRepository jobs, GenerationJobItemRepository items,
                                         GenerationTaskTypeCatalog catalog, QuestionGenerationProperties properties,
-                                        Clock clock) {
+                                        Clock clock, GenerationLimits limits) {
+        this.limits = limits;
         this.jobs = jobs;
         this.items = items;
         this.catalog = catalog;
@@ -125,28 +128,27 @@ public class QuestionGenerationJobService {
     }
 
     private void checkCount(int count) {
-        if (count < 1 || count > properties.getLimits().getMaxItemsPerJob()) {
+        if (count < 1 || count > limits.maxItemsPerJob()) {
             throw invalid(QuestionGenerationConstants.GENERATION_COUNT_OUT_OF_RANGE,
                     QuestionGenerationConstants.GENERATION_COUNT_OUT_OF_RANGE_MESSAGE);
         }
     }
 
     private void checkCaps(CurrentUser caller, int count) {
-        QuestionGenerationProperties.Limits limits = properties.getLimits();
         if (jobs.existsByRequestedByUserPublicIdAndStatusIn(caller.userId(), JobStatus.ACTIVE)) {
             throw new GenerationJobConflictException(QuestionGenerationConstants.GENERATION_JOB_ALREADY_RUNNING,
                     QuestionGenerationConstants.GENERATION_JOB_ALREADY_RUNNING_MESSAGE);
         }
         Instant dayStart = clock.instant().truncatedTo(ChronoUnit.DAYS);
-        if (jobs.sumRequestedSinceByUser(caller.userId(), dayStart) + count > limits.getMaxItemsPerUserPerDay()) {
+        if (jobs.sumRequestedSinceByUser(caller.userId(), dayStart) + count > limits.maxItemsPerUserPerDay()) {
             throw new GenerationLimitException(QuestionGenerationConstants.GENERATION_DAILY_LIMIT_REACHED,
                     QuestionGenerationConstants.GENERATION_DAILY_LIMIT_REACHED_MESSAGE);
         }
-        if (jobs.sumRequestedSince(dayStart) + count > limits.getMaxItemsPerDayGlobal()) {
+        if (jobs.sumRequestedSince(dayStart) + count > limits.maxItemsPerDayGlobal()) {
             throw new GenerationLimitException(QuestionGenerationConstants.GENERATION_GLOBAL_LIMIT_REACHED,
                     QuestionGenerationConstants.GENERATION_GLOBAL_LIMIT_REACHED_MESSAGE);
         }
-        if (jobs.countByStatusIn(JobStatus.ACTIVE) >= limits.getMaxConcurrentJobs()) {
+        if (jobs.countByStatusIn(JobStatus.ACTIVE) >= limits.maxConcurrentJobs()) {
             throw new GenerationLimitException(QuestionGenerationConstants.GENERATION_TOO_MANY_JOBS,
                     QuestionGenerationConstants.GENERATION_TOO_MANY_JOBS_MESSAGE);
         }
