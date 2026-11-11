@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.IntStream;
 
 /**
  * Strict JSON parser for LLM responses. Returns an ItemDraft or throws
@@ -200,10 +201,22 @@ public class DraftParser {
         String topic = requireString(root, "topic");
         String transcript = requireString(root, "transcript");
         String displayedText = requireString(root, "displayedText");
-        List<Integer> changedIndexesList = requireIntList(root, "changedIndexes");
-        int[] changedIndexes = changedIndexesList.stream().mapToInt(Integer::intValue).toArray();
+        return new ItemDraft.HiwDraft(topic, transcript, displayedText, changedIndexes(transcript, displayedText));
+    }
 
-        return new ItemDraft.HiwDraft(topic, transcript, displayedText, changedIndexes);
+    /**
+     * The positions of the changed words, found by comparing the two texts word by word. Models miscount word
+     * positions in a long passage, so the indexes they return are not used. When the word counts differ there is no
+     * position-wise answer; the validator then reports the count mismatch.
+     */
+    static int[] changedIndexes(String transcript, String displayedText) {
+        String[] original = transcript.strip().split("\\s+");
+        String[] shown = displayedText.strip().split("\\s+");
+        if (original.length != shown.length) {
+            return new int[0];
+        }
+        return IntStream.range(0, original.length)
+                .filter(index -> !original[index].equalsIgnoreCase(shown[index])).toArray();
     }
 
     private String requireString(JsonNode node, String field) {

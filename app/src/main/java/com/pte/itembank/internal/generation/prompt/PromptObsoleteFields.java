@@ -9,8 +9,8 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Output fields older prompts still list but no code reads: the task type the job already knows, and option fields of
- * task types that have no options. Some are worse than unused: the essay and read-aloud validators refuse a draft
+ * Output fields older prompts still list but no code reads: the task type the job already knows, option fields of
+ * task types that have no options, and the Highlight Incorrect Words positions the code now works out itself. Some are worse than unused: the essay and read-aloud validators refuse a draft
  * that fills them. They are removed, with the field note of the task type, from the shipped prompts and the live ones.
  */
 public final class PromptObsoleteFields {
@@ -24,7 +24,8 @@ public final class PromptObsoleteFields {
             "WRITE_FROM_DICTATION", NO_OPTIONS,
             "RE_TELL_LECTURE", NO_OPTIONS,
             "SUMMARIZE_SPOKEN_TEXT", NO_OPTIONS,
-            "HIGHLIGHT_INCORRECT_WORDS", NO_OPTIONS,
+            // The changed word positions are found by comparing the two texts; the model miscounts them.
+            "HIGHLIGHT_INCORRECT_WORDS", Set.of("question", "options", "correctIndexes", "changedIndexes"),
             "READ_ALOUD", Set.of("keyPoints", "essayPrompt"),
             "WRITE_ESSAY", Set.of("passage", "keyPoints"));
 
