@@ -1,5 +1,7 @@
 package com.pte.itembank.internal.generation.job;
 
+import com.pte.billing.BillingSettingsService;
+import com.pte.itembank.internal.generation.config.GenerationLimits;
 import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
 import com.pte.itembank.internal.generation.domain.ItemStage;
 import com.pte.itembank.internal.generation.dto.AiStatusResponse;
@@ -109,27 +111,45 @@ class AiAdminServicesTest {
     private AiOverviewService overview(QuestionGenerationProperties properties) {
         GenerationTaskTypeCatalog catalog = mock(GenerationTaskTypeCatalog.class);
         when(catalog.supported()).thenReturn(List.of());
-        return new AiOverviewService(properties, PromptTestRegistry.create(), catalog);
+        return new AiOverviewService(properties, PromptTestRegistry.create(), catalog,
+                new GenerationLimits(mock(BillingSettingsService.class, call -> call.getArgument(1)), properties));
     }
 
     @Test
-    void theStatusReportsWhetherKeysExistAndOnlyTheHostOfEachProvider() {
+    void theStatusReportsWhetherKeysExistAndEachProvidersHostAndPageWithoutSecrets() {
         QuestionGenerationProperties properties = new QuestionGenerationProperties();
         properties.setEnabled(true);
         properties.getLlm().setBaseUrl("https://router.example.test/v1");
         properties.getLlm().setApiKey("sk-secret-value");
-        properties.getKokoro().setBaseUrl("https://tts.example.test/kokoro");
+        properties.getKokoro().setBaseUrl("https://user:pw@tts.example.test/kokoro?token=t0k");
 
         AiStatusResponse status = overview(properties).status();
 
         assertThat(status.generationEnabled()).isTrue();
         assertThat(status.providerHost()).isEqualTo("router.example.test");
+        assertThat(status.providerWebUrl()).isEqualTo("https://router.example.test/");
         assertThat(status.providerKeyConfigured()).isTrue();
         assertThat(status.speechHost()).isEqualTo("tts.example.test");
+        assertThat(status.speechWebUrl()).isEqualTo("https://tts.example.test/kokoro/web/");
         assertThat(status.speechKeyConfigured()).isFalse();
         assertThat(status.generatorModel()).isEqualTo("Capstone");
-        // Nothing in the response may carry the key or a path of the provider URL.
-        assertThat(status.toString()).doesNotContain("sk-secret-value").doesNotContain("/v1").doesNotContain("kokoro");
+        // Nothing in the response may carry the key, the user info or the query of a provider URL.
+        assertThat(status.toString()).doesNotContain("sk-secret-value").doesNotContain("user:pw")
+                .doesNotContain("t0k").doesNotContain("/v1");
+    }
+
+    @Test
+    void aConfiguredWebPageIsLinkedInsteadOfTheDerivedOne() {
+        QuestionGenerationProperties properties = new QuestionGenerationProperties();
+        properties.getLlm().setBaseUrl("https://router.example.test/v1");
+        properties.getLlm().setWebUrl("https://router.example.test/dashboard?key=x");
+        properties.getKokoro().setBaseUrl("https://tts.example.test/kokoro");
+        properties.getKokoro().setWebUrl("https://tts.example.test/ui");
+
+        AiStatusResponse status = overview(properties).status();
+
+        assertThat(status.providerWebUrl()).isEqualTo("https://router.example.test/dashboard");
+        assertThat(status.speechWebUrl()).isEqualTo("https://tts.example.test/ui");
     }
 
     @Test
@@ -141,6 +161,8 @@ class AiAdminServicesTest {
 
         assertThat(status.providerHost()).isEmpty();
         assertThat(status.speechHost()).isEmpty();
+        assertThat(status.providerWebUrl()).isEmpty();
+        assertThat(status.speechWebUrl()).isEmpty();
         assertThat(status.providerKeyConfigured()).isFalse();
     }
 }

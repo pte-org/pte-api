@@ -292,6 +292,7 @@ itembank:
       # The AI gateway (Capstone) shared by generation, its reviewer, the student chat and text scoring.
       # AI_GATEWAY_* is the name to use; QUESTION_GEN_* is still read for older env files.
       base-url: ${AI_GATEWAY_BASE_URL:${QUESTION_GEN_BASE_URL:}}
+      web-url: ${AI_GATEWAY_WEB_URL:}
       api-key: ${AI_GATEWAY_API_KEY:${QUESTION_GEN_API_KEY:}}
       generator-model: ${AI_GATEWAY_MODEL:${QUESTION_GEN_GENERATOR_MODEL:Capstone}}
       reviewer-model: ${QUESTION_GEN_REVIEWER_MODEL:${AI_GATEWAY_MODEL:Capstone}}
@@ -308,6 +309,7 @@ itembank:
       price-output-per-million-usd: ${QUESTION_GEN_PRICE_OUTPUT_PER_MILLION_USD:0.40}
     kokoro:
       base-url: ${KOKORO_BASE_URL:}
+      web-url: ${KOKORO_WEB_URL:}
       api-key: ${KOKORO_API_KEY:}
       timeout: ${KOKORO_TIMEOUT:300s}
       voices-us: ${QUESTION_GEN_VOICES_US:af_heart,af_bella,am_michael}
