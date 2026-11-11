@@ -7,11 +7,13 @@ import com.pte.practice.internal.dto.request.PracticeSaveAndExitRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionActionRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionStartRequest;
 import com.pte.practice.internal.dto.response.PracticeItemResultResponse;
+import com.pte.practice.internal.dto.response.mocktest.PracticeMockTestScoringResponse;
 import com.pte.practice.internal.dto.response.media.PracticeRecordingPlaybackResponse;
 import com.pte.practice.internal.dto.response.PracticeReviewResponse;
 import com.pte.practice.internal.dto.response.PracticeSessionResponse;
 import com.pte.practice.internal.service.PracticeRecordingPlaybackService;
 import com.pte.practice.internal.service.PracticeReviewService;
+import com.pte.practice.internal.service.session.PracticeScoringRequestService;
 import com.pte.practice.internal.service.session.PracticeSessionService;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -38,12 +40,14 @@ public class PracticeSessionController {
     private final PracticeSessionService sessionService;
     private final PracticeReviewService reviewService;
     private final PracticeRecordingPlaybackService playbackService;
+    private final PracticeScoringRequestService scoringRequestService;
 
     public PracticeSessionController(PracticeSessionService sessionService, PracticeReviewService reviewService,
-            PracticeRecordingPlaybackService playbackService) {
+            PracticeRecordingPlaybackService playbackService, PracticeScoringRequestService scoringRequestService) {
         this.sessionService = sessionService;
         this.reviewService = reviewService;
         this.playbackService = playbackService;
+        this.scoringRequestService = scoringRequestService;
     }
 
     @PostMapping
@@ -97,6 +101,21 @@ public class PracticeSessionController {
             @PathVariable UUID itemPublicId) {
         return ApiResponse.success(sessionService.itemResult(publicId, itemPublicId,
                 CurrentUserContext.required()));
+    }
+
+    /** "Chấm điểm" on one submitted speaking or writing answer of a task or skill session. */
+    @PostMapping("/{publicId}/items/{itemPublicId}/scoring")
+    public ApiResponse<PracticeItemResultResponse> requestScoring(
+            @PathVariable UUID publicId,
+            @PathVariable UUID itemPublicId) {
+        return ApiResponse.success(scoringRequestService.requestItem(publicId, itemPublicId,
+                CurrentUserContext.required()));
+    }
+
+    /** "Chấm điểm" on a finished mock test: queues every speaking and writing answer not scored yet. */
+    @PostMapping("/{publicId}/scoring")
+    public ApiResponse<PracticeMockTestScoringResponse> requestMockTestScoring(@PathVariable UUID publicId) {
+        return ApiResponse.success(scoringRequestService.requestMockTest(publicId, CurrentUserContext.required()));
     }
 
     @PostMapping("/{publicId}/items/{itemPublicId}/scoring/retry")

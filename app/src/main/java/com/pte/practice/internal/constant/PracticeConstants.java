@@ -37,6 +37,11 @@ public final class PracticeConstants {
     public static final String PRACTICE_EXAM_DATE_INVALID = "PRACTICE_EXAM_DATE_INVALID";
     public static final String PRACTICE_SCORING_RATE_LIMITED = "PRACTICE_SCORING_RATE_LIMITED";
     public static final String PRACTICE_SCORING_RETRY_NOT_ALLOWED = "PRACTICE_SCORING_RETRY_NOT_ALLOWED";
+    public static final String PRACTICE_SCORING_ALREADY_REQUESTED = "PRACTICE_SCORING_ALREADY_REQUESTED";
+    public static final String PRACTICE_SCORING_NOT_AVAILABLE = "PRACTICE_SCORING_NOT_AVAILABLE";
+    public static final String PRACTICE_MOCK_TEST_NOT_FINISHED = "PRACTICE_MOCK_TEST_NOT_FINISHED";
+    /** How long one queued AI job is expected to hold a worker; spaces out the recovery clocks of a batch. */
+    public static final long PRACTICE_SCORING_QUEUE_SLOT_SECONDS = 30L;
     public static final String PRACTICE_SCORING_EXCHANGE = "pte.practice.scoring";
     public static final String PRACTICE_SCORING_DLX = "pte.practice.scoring.dlx";
     public static final String PRACTICE_SCORING_QUEUE = "pte.practice.scoring.jobs";
@@ -78,6 +83,12 @@ public final class PracticeConstants {
             "You are submitting answers too quickly. Wait a moment and try again.";
     public static final String PRACTICE_SCORING_RETRY_NOT_ALLOWED_MESSAGE =
             "This answer cannot be scored again.";
+    public static final String PRACTICE_SCORING_ALREADY_REQUESTED_MESSAGE =
+            "This answer has already been scored. Re-do the question to score it again.";
+    public static final String PRACTICE_SCORING_NOT_AVAILABLE_MESSAGE =
+            "Only a submitted speaking or writing answer can be scored.";
+    public static final String PRACTICE_MOCK_TEST_NOT_FINISHED_MESSAGE =
+            "Submit the whole mock test before scoring it.";
     public static final String PRACTICE_PRODUCT_NOT_FOUND_MESSAGE =
             "The requested practice product is not available.";
     public static final String PRACTICE_MEDIA_BINDING_REQUIRED_MESSAGE =
