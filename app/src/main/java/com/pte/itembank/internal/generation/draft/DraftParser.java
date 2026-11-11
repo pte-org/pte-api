@@ -4,6 +4,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import com.pte.itembank.internal.generation.exception.GenerationRequestInvalidException;
+import com.pte.itembank.internal.generation.draft.image.PictureDrafts;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -20,6 +21,20 @@ public class DraftParser {
 
     public DraftParser(JsonMapper mapper) {
         this.mapper = mapper;
+    }
+
+    /** The answer hints at the root of a generator response; both languages are required for every task type. */
+    public AnswerHint parseHint(String json) {
+        try {
+            JsonNode root = mapper.readTree(json);
+            return new AnswerHint(requireString(root, "answerHintVi"), requireString(root, "answerHintEn"));
+        } catch (GenerationRequestInvalidException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new GenerationRequestInvalidException(
+                    QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
+                    "Failed to parse JSON response");
+        }
     }
 
     public ItemDraft parse(String json, String taskTypeKey) {
@@ -48,6 +63,7 @@ public class DraftParser {
                         parseDialogueDraft(root);
                 case "DESCRIBE_IMAGE" ->
                         parseChartDraft(root);
+                case QuestionGenerationConstants.PROMPT_KEY_DESCRIBE_IMAGE_PICTURE -> PictureDrafts.parse(root);
                 default -> throw new GenerationRequestInvalidException(
                         QuestionGenerationConstants.GENERATION_SCHEMA_INVALID,
                         "Unsupported task type: " + taskTypeKey);

@@ -165,4 +165,17 @@ class DraftParserTest {
         assertThrows(GenerationRequestInvalidException.class, () ->
                 parser.parse(json, "FILL_IN_THE_BLANKS_DROPDOWN"));
     }
+
+    @Test
+    void parseHint_ReadsBothLanguagesAtTheRoot() {
+        AnswerHint hint = parser.parseHint("{\"answerHintVi\": \"Nghe ý chính\", \"answerHintEn\": \"Listen for the gist\"}");
+        assertEquals("Nghe ý chính", hint.vi());
+        assertEquals("Listen for the gist", hint.en());
+    }
+
+    @Test
+    void parseHint_MissingLanguageIsASchemaError() {
+        assertThrows(GenerationRequestInvalidException.class, () ->
+                parser.parseHint("{\"answerHintVi\": \"Nghe ý chính\"}"));
+    }
 }
