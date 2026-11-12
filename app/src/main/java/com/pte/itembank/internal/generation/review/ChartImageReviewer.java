@@ -25,6 +25,7 @@ public class ChartImageReviewer {
     private static final String PASS = "PASS";
     private static final String IMAGE_PNG = "image/png";
     private static final String USER_INTRO = "Chart data (JSON):\n";
+    private static final String PICTURE_INTRO = "What the picture was asked to show (JSON):\n";
 
     /** The reviewer's answer; {@code issues} is empty when it passed. */
     public record Result(boolean passed, List<String> issues) {
@@ -44,6 +45,18 @@ public class ChartImageReviewer {
         String system = prompts.imageReviewerPrompt().orElseGet(ChartImageReviewDefaults::text);
         String answer = gateway.completeJsonWithImage(LlmRole.REVIEWER, system,
                 USER_INTRO + json.writeValueAsString(data(draft)), IMAGE_PNG, png);
+        return parse(answer);
+    }
+
+    /** Looks at a painted picture together with what it was asked to show. */
+    public Result review(ItemDraft.PictureDraft draft, byte[] png) {
+        String system = prompts.pictureReviewerPrompt().orElseGet(PictureImageReviewDefaults::text);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("title", draft.title());
+        data.put("imagePrompt", draft.imagePrompt());
+        data.put("keyPoints", draft.keyPoints());
+        String answer = gateway.completeJsonWithImage(LlmRole.REVIEWER, system,
+                PICTURE_INTRO + json.writeValueAsString(data), IMAGE_PNG, png);
         return parse(answer);
     }
 

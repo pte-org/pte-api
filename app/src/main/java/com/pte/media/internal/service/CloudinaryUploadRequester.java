@@ -24,21 +24,19 @@ class CloudinaryUploadRequester {
     private final CloudinaryRequestSigner signer;
     private final MediaAccessGuard accessGuard;
     private final PracticeMediaBindingPort practiceMediaBindingService;
-    private final String authoringFolder;
-    private final String submissionFolder;
+    private final CloudinaryFolders folders;
     private final long signatureTtlSeconds;
     private final Clock clock;
 
     CloudinaryUploadRequester(MediaAssetRepository repository, CloudinaryRequestSigner signer,
             MediaAccessGuard accessGuard, PracticeMediaBindingPort practiceMediaBindingService,
-            String authoringFolder, String submissionFolder, long signatureTtlSeconds, Clock clock) {
+            CloudinaryFolders folders, long signatureTtlSeconds, Clock clock) {
         this.signatureTtlSeconds = signatureTtlSeconds;
         this.repository = repository;
         this.signer = signer;
         this.accessGuard = accessGuard;
         this.practiceMediaBindingService = practiceMediaBindingService;
-        this.authoringFolder = authoringFolder;
-        this.submissionFolder = submissionFolder;
+        this.folders = folders;
         this.clock = clock;
     }
 
@@ -74,7 +72,8 @@ class CloudinaryUploadRequester {
         String resourceType = CloudinaryMediaService.IMAGE_TYPES.contains(request.contentType()) ? "image" : "video";
         UUID mediaPublicId = UUID.randomUUID();
         String publicId = mediaPublicId.toString();
-        String folder = studentResponse ? submissionFolder : authoringFolder;
+        String folder = !studentResponse ? folders.questions(request.pool())
+                : practiceResponse ? folders.practiceRecordings() : folders.examAnswers();
         String cloudinaryPublicId = folder + "/" + publicId;
         // Cloudinary defaults to the public `upload` delivery type. Keep the
         // signed upload small and let public media use its stable secure URL.

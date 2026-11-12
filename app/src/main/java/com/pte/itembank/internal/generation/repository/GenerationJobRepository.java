@@ -79,7 +79,7 @@ public interface GenerationJobRepository extends JpaRepository<QuestionGeneratio
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update " + JOB + " j set j.status = " + STATUS + ".CANCELLING "
-            + "where j.publicId = :publicId and j.status = " + STATUS + ".RUNNING")
+            + "where j.publicId = :publicId and j.status in (" + STATUS + ".RUNNING, " + STATUS + ".CANCELLING)")
     int markCancelling(@Param("publicId") UUID publicId);
 
     /** A cancel request whose worker died: nobody is left to honour it, so close the job. */

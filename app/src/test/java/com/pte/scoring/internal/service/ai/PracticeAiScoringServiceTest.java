@@ -90,7 +90,7 @@ class PracticeAiScoringServiceTest {
 
     private PracticeAiScoringService service(List<AiAnswerScorer> scorers, SpeechScoringClient speech,
             EssayScoringClient essay) {
-        return new PracticeAiScoringService(scorers, speech, essay,
+        return new PracticeAiScoringService(scorers, List.of(), speech, essay,
                 new ObjectiveScoringService(JsonMapper.builder().build()), CLOCK, new AiProviderProperties(),
                 rubricResolver);
     }

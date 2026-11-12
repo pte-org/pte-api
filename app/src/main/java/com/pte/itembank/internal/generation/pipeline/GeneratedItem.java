@@ -31,7 +31,8 @@ public record GeneratedItem(CreateQuestionRequest question, String stimulusText,
                 media.audioPromptRef() != null ? media.audioPromptRef() : q.audioPromptRef(),
                 media.imagePromptRef() != null ? media.imagePromptRef() : q.imagePromptRef(),
                 q.referenceAnswerText(), q.correctAnswerText(), q.minWordCount(), q.maxWordCount(), q.options(),
-                q.pool(), q.availableForPractice(), q.availableForExam(), q.cefrLevel());
+                q.pool(), q.availableForPractice(), q.availableForExam(), q.cefrLevel(),
+                q.answerHintVi(), q.answerHintEn());
         return new GeneratedItem(withRefs, stimulusText, topic, source, draft, media.meta());
     }
 }

@@ -29,5 +29,11 @@ public record PracticeProgressEntry(
         String kind,
         String skillCode,
         /** The task type when the session covers exactly one; null otherwise. */
-        String taskCode) {
+        String taskCode,
+        /** Answered speaking/writing items the student has not asked the AI to score yet. */
+        int unscoredAiCount,
+        /** Items queued or being scored by the AI. */
+        int scoringCount,
+        /** Items whose AI scoring failed and can be retried. */
+        int scoringFailedCount) {
 }

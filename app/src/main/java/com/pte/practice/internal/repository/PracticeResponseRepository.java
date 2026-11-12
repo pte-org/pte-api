@@ -36,19 +36,36 @@ public interface PracticeResponseRepository extends JpaRepository<PracticeRespon
             """)
     long countScoringRequestsSince(@Param("studentPublicId") UUID studentPublicId, @Param("since") Instant since);
 
-    /** Questions this student has already had in any practice session, so new sessions can prefer unseen ones. */
+    /**
+     * Questions this student has already answered in any practice session, so a new session puts the unanswered ones
+     * first ("Luyện tiếp" lands on a question not done yet). Questions only drawn into a skipped or discarded
+     * session do not count.
+     */
     @Query("""
             select distinct item.sourceQuestionPublicId from PracticeResponse item, PracticeSession owner
              where item.practiceSessionId = owner.id
                and owner.studentPublicId = :studentPublicId
                and item.taskCode in :taskCodes
                and item.sourceQuestionPublicId is not null
+               and item.status = com.pte.practice.internal.domain.enums.PracticeResponseStatus.ANSWERED
                and item.deleted = false
             """)
     List<UUID> findSeenSourceQuestionIds(@Param("studentPublicId") UUID studentPublicId,
             @Param("taskCodes") Collection<String> taskCodes);
 
     List<PracticeResponse> findByPracticeSessionIdInAndDeletedFalse(Collection<Long> practiceSessionIds);
+
+    /** {@code [publicId, savedPayload]} of the given items whose answer is saved, outside discarded sessions. */
+    @Query("""
+            select item.publicId, item.savedPayload from PracticeResponse item, PracticeSession owner
+             where item.practiceSessionId = owner.id
+               and item.publicId in :itemPublicIds
+               and item.savedPayload is not null
+               and item.deleted = false
+               and owner.deleted = false
+               and owner.status <> com.pte.practice.internal.domain.enums.PracticeSessionStatus.DISCARDED
+            """)
+    List<Object[]> findLivePayloadsByPublicIds(@Param("itemPublicIds") Collection<UUID> itemPublicIds);
 
     /** Distinct questions the student has answered, per task code: {@code [taskCode, count]} rows. */
     @Query("""
@@ -94,4 +111,12 @@ public interface PracticeResponseRepository extends JpaRepository<PracticeRespon
              order by item.orderIndex
             """)
     List<PracticeResponse> findScoringForUpdate(@Param("practiceSessionId") Long practiceSessionId);
+
+    /** Audio prompt files among {@code refs} pinned into any practice answer. */
+    @Query("select item.audioPromptRef from PracticeResponse item where item.audioPromptRef in :refs")
+    List<UUID> findPinnedAudioPromptRefs(@Param("refs") Collection<UUID> refs);
+
+    /** Image prompt files among {@code refs} pinned into any practice answer. */
+    @Query("select item.imagePromptRef from PracticeResponse item where item.imagePromptRef in :refs")
+    List<UUID> findPinnedImagePromptRefs(@Param("refs") Collection<UUID> refs);
 }

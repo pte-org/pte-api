@@ -1,5 +1,7 @@
 package com.pte.media.internal.constant;
 
+import java.time.Duration;
+
 public final class MediaConstants {
 
     public static final String MEDIA_NOT_FOUND = "MEDIA_NOT_FOUND";
@@ -27,6 +29,25 @@ public final class MediaConstants {
     public static final String AUDIO_WEBM = "audio/webm";
     public static final String IMAGE_PNG = "image/png";
     public static final String IMAGE_JPEG = "image/jpeg";
+
+    /** A practice recording younger than this is left alone: its answer may still be on the way. */
+    public static final Duration ORPHAN_AUDIO_GRACE = Duration.ofHours(24);
+    public static final int MEDIA_PURGE_BATCH_SIZE = 100;
+    /** A question file younger than this is left alone: its question or generation job may still be in progress. */
+    public static final Duration UNUSED_AUTHORING_MEDIA_GRACE = Duration.ofHours(24);
+    public static final String CLOUDINARY_DESTROY_RESULT_OK = "ok";
+    public static final String CLOUDINARY_DESTROY_RESULT_NOT_FOUND = "not found";
+
+    /** Root of every stored file when none is configured; each environment should set its own. */
+    public static final String DEFAULT_CLOUDINARY_ROOT_FOLDER = "pte/local";
+    public static final String FOLDER_EXAM = "exam";
+    public static final String FOLDER_PRACTICE = "practice";
+    public static final String FOLDER_QUESTIONS = "questions";
+    public static final String FOLDER_ANSWERS = "answers";
+    public static final String FOLDER_RECORDINGS = "recordings";
+    public static final String POOL_EXAM = "EXAM";
+    public static final String POOL_PRACTICE = "PRACTICE";
+    public static final String QUESTION_POOL_INVALID = "Question pool must be EXAM or PRACTICE";
 
     private MediaConstants() {
     }

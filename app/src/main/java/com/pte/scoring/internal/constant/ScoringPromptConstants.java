@@ -13,6 +13,13 @@ public final class ScoringPromptConstants {
     public static final String SECTION_NOTES_TITLE = "What the AI is told not to score";
     public static final String SECTION_GUARD_ID = "guard";
     public static final String SECTION_GUARD_TITLE = "Protection against instructions in the answer";
+    public static final String SECTION_LISTEN_ID = "listen";
+    public static final String SECTION_LISTEN_TITLE = "How to listen and transcribe";
+    public static final String SECTION_FEEDBACK_ID = "feedback";
+    public static final String SECTION_FEEDBACK_TITLE = "Feedback for the student";
+    /** Practice speaking prompts (the model hears the recording) are stored as this prefix plus the task type. */
+    public static final String PRACTICE_AUDIO_KEY_PREFIX = "PRACTICE_AUDIO_";
+    public static final String ENGINE_MODEL_AUDIO = "AI_AUDIO";
     public static final String SECTION_REFERENCE_ID = "reference";
     public static final String SECTION_REFERENCE_TITLE = "Reference only, not sent to the AI";
 

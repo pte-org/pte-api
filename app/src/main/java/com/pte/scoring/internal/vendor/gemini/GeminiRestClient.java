@@ -78,6 +78,10 @@ public class GeminiRestClient implements StructuredModelClient {
             // Jackson writes byte[] as base64, which is what inlineData.data expects.
             parts.add(Map.of("inlineData", Map.of("mimeType", image.mimeType(), "data", image.data())));
         }
+        if (request.audio() != null) {
+            parts.add(Map.of("inlineData", Map.of("mimeType", request.audio().mimeType(),
+                    "data", request.audio().data())));
+        }
         parts.add(Map.of("text", request.userText()));
         return Map.of(
                 "systemInstruction", Map.of("parts", List.of(Map.of("text", request.systemInstruction()))),

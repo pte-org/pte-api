@@ -92,6 +92,8 @@ public class QuestionCreationService {
         question.setImagePromptRef(request.imagePromptRef());
         question.setReferenceAnswerText(request.referenceAnswerText());
         question.setCorrectAnswerText(request.correctAnswerText());
+        question.setAnswerHintVi(request.answerHintVi());
+        question.setAnswerHintEn(request.answerHintEn());
         question.setMinWordCount(request.minWordCount());
         question.setMaxWordCount(request.maxWordCount());
         addOptions(question, request.options());

@@ -257,6 +257,8 @@ public class PracticeResponseFactory {
         item.setMaxWordCount(content.maxWordCount());
         item.setAudioPromptRef(content.audioPromptRef());
         item.setImagePromptRef(content.imagePromptRef());
+        item.setAnswerHintVi(content.answerHintVi());
+        item.setAnswerHintEn(content.answerHintEn());
         PracticeQuestionEvaluationContent evaluationContent = pin.evaluation();
         item.setReferenceAnswerText(evaluationContent.referenceAnswerText());
         item.setCorrectAnswerText(evaluationContent.correctAnswerText());

@@ -44,7 +44,7 @@ class PracticeRubricProviderTest {
     void rubricTaskTypeFailsAndIsNeverScoredByTheProvidersGenericClient(NonRubricProviderClients clients,
                                                                       String taskType) {
         RubricResolver rubricResolver = mock(RubricResolver.class);
-        PracticeAiScoringService service = new PracticeAiScoringService(List.of(), clients.speech(), clients.essay(),
+        PracticeAiScoringService service = new PracticeAiScoringService(List.of(), List.of(), clients.speech(), clients.essay(),
                 new ObjectiveScoringService(JsonMapper.builder().build()), CLOCK, new AiProviderProperties(),
                 rubricResolver);
 

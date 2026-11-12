@@ -4,6 +4,8 @@ import com.pte.scoring.domain.enums.AiProviderCategory;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.vendor.AiProviderException;
 import com.pte.scoring.internal.vendor.AiScoreResult;
+import com.pte.scoring.internal.vendor.gemini.GeminiResponse;
+import com.pte.scoring.internal.vendor.gemini.PromptUsed;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -57,6 +59,13 @@ final class GeminiScorers {
             if (value != null && !value.isNull()) {
                 detail.put(field, value);
             }
+        }
+    }
+
+    /** Which system prompt the call really sent (stored version or catalog text, with its hash). */
+    static void recordPrompt(Map<String, Object> detail, GeminiResponse response) {
+        if (response.prompt() != null) {
+            detail.put(PromptUsed.DETAIL_KEY, response.prompt());
         }
     }
 

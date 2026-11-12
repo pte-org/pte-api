@@ -33,6 +33,7 @@ public final class ReviewPromptDefaults {
         return new PromptContent(TITLE, List.of(Block.text("", ReviewPromptContent.ROLE)), List.of(
                 section("checklist", "Your Review Checklist", Block.list("", checks)),
                 section("judging", "What you are judging", Block.list("", ReviewPromptContent.JUDGING)),
+                section("student-hints", "Student hints", Block.list("", ReviewPromptContent.STUDENT_HINTS)),
                 section("output", "Output", Block.text("", ReviewPromptContent.OUTPUT_INSTRUCTION),
                         Block.fields("", ReviewPromptContent.OUTPUT_FIELDS))));
     }

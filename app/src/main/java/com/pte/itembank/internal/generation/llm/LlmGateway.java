@@ -17,4 +17,13 @@ public interface LlmGateway {
                                          byte[] image) {
         throw new LlmProviderException(LlmFailureType.REJECTED);
     }
+
+    /**
+     * Paints one PNG from a text description, for a Describe Image picture. A gateway without an image model refuses.
+     *
+     * @throws LlmProviderException classified provider failure
+     */
+    default byte[] generateImage(String prompt) {
+        throw new LlmProviderException(LlmFailureType.REJECTED);
+    }
 }
