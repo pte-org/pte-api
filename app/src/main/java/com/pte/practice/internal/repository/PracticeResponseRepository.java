@@ -36,13 +36,18 @@ public interface PracticeResponseRepository extends JpaRepository<PracticeRespon
             """)
     long countScoringRequestsSince(@Param("studentPublicId") UUID studentPublicId, @Param("since") Instant since);
 
-    /** Questions this student has already had in any practice session, so new sessions can prefer unseen ones. */
+    /**
+     * Questions this student has already answered in any practice session, so a new session puts the unanswered ones
+     * first ("Luyện tiếp" lands on a question not done yet). Questions only drawn into a skipped or discarded
+     * session do not count.
+     */
     @Query("""
             select distinct item.sourceQuestionPublicId from PracticeResponse item, PracticeSession owner
              where item.practiceSessionId = owner.id
                and owner.studentPublicId = :studentPublicId
                and item.taskCode in :taskCodes
                and item.sourceQuestionPublicId is not null
+               and item.status = com.pte.practice.internal.domain.enums.PracticeResponseStatus.ANSWERED
                and item.deleted = false
             """)
     List<UUID> findSeenSourceQuestionIds(@Param("studentPublicId") UUID studentPublicId,
