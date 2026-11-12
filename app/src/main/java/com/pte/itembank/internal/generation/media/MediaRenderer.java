@@ -216,6 +216,13 @@ public class MediaRenderer {
             try {
                 media.deleteGenerated(ref, owner);
             } catch (RuntimeException failure) {
+    /** Removes the stored media of a draft that will not be used; nothing when null. Never throws. */
+    public void discard(RenderedMedia rendered, CurrentUser owner) {
+        if (rendered != null) {
+            discard(rendered.audioPromptRef(), rendered.imagePromptRef(), owner);
+        }
+    }
+
                 LOG.warn("Unused generated media was not removed: errorType={}", failure.getClass().getSimpleName());
             }
         }

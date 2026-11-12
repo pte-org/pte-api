@@ -277,6 +277,26 @@ class GenerationPipelineTest {
     }
 
     @Test
+    void mediaStoredBeforeAnUnexpectedFailureIsRemoved() {
+        ready();
+        var chart = new com.pte.itembank.internal.generation.draft.ItemDraft.ChartDraft("Energy", "bar", "Use",
+                "Year", "TWh", "TWh", List.of("2020", "2021", "2022"), List.of(), List.of());
+        when(generator.generate(any(), any())).thenReturn(new GeneratedItem(mock(CreateQuestionRequest.class),
+                "stimulus", "topic", "llm", chart));
+        when(itemReviewer.review(any(GeneratedItem.class), any(), any(), any(), any()))
+                .thenReturn(new com.pte.itembank.internal.generation.review.ReviewVerdict("PASS", java.util.Map.of(), null));
+        var rendered = new com.pte.itembank.internal.generation.media.RenderedMedia(null, UUID.randomUUID(),
+                java.util.Map.of(), new byte[]{1});
+        when(mediaRenderer.render(any(), any(), any(Integer.class), any(Long.class), any(), any()))
+                .thenReturn(java.util.Optional.of(rendered));
+        org.mockito.Mockito.doThrow(new IllegalStateException("live view down")).when(liveFeed)
+                .media(any(), any(Integer.class), any(), any());
+
+        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.FAILED);
+        verify(mediaRenderer).discard(rendered, admin);
+    }
+
+    @Test
     void anUnexpectedErrorIsRecordedWithoutItsMessage() {
         ready();
         when(generator.generate(any(), any())).thenThrow(new IllegalStateException("contains the secret prompt"));

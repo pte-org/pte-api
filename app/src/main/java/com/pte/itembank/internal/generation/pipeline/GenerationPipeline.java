@@ -82,6 +82,8 @@ public class GenerationPipeline {
         if (!advance(claim, index, ItemStage.GENERATING)) {
             return ItemOutcome.LEASE_LOST;
         }
+        // Media of the current draft not yet handed on: removed if the item fails, so no file is left unused.
+        RenderedMedia stored = null;
         try {
             int maxCalls = allowance.maxCallsPerItem();
             GenerationCallBudget budget = new GenerationCallBudget(maxCalls);
@@ -179,26 +181,29 @@ public class GenerationPipeline {
                     continue;
                 }
                 if (media.isPresent()) {
+                    stored = media.get();
                     item = item.withMedia(images.marked(media.get()));
                     liveFeed.media(claim.jobPublicId(), index, media.get().audioPromptRef(),
                             media.get().imagePromptRef());
                     boolean canRedraw = canRewrite(budget, round, maxRounds);
                     String imageIssues = images.issues(claim.jobPublicId(), index,
                             () -> advance(claim, index, ItemStage.REVIEWING), caller, item, media.get(), canRedraw);
-                    if (imageIssues != null && canRedraw && request.isPicture() && images.pictureRefused()
-                            && images.fallsBackToChart()) {
-                        request = images.fallBack(claim.jobPublicId(), index, request, imageIssues);
-                        feedback = null;
-                        continue;
-                    }
                     if (imageIssues != null && canRedraw) {
-                        feedback = QuestionGenerationConstants.FEEDBACK_IMAGE + " " + imageIssues;
+                        stored = null; // the image check already removed the refused image
+                        if (request.isPicture() && images.pictureRefused() && images.fallsBackToChart()) {
+                            request = images.fallBack(claim.jobPublicId(), index, request, imageIssues);
+                            feedback = null;
+                        } else {
+                            feedback = QuestionGenerationConstants.FEEDBACK_IMAGE + " " + imageIssues;
+                        }
                         continue;
                     }
                 }
                 break;
             }
 
+            // From here the media belongs to the form or to the writer below, which removes it if saving fails.
+            stored = null;
             // Asked from the question form: the person decides whether to save it, so the media stays for the form.
             if (!claim.saveQuestions()) {
                 itemState.ready(claim, index);
@@ -235,6 +240,8 @@ public class GenerationPipeline {
                     unexpected.getClass().getSimpleName());
             return fail(claim, index, QuestionGenerationConstants.GENERATION_INTERNAL_ERROR, null,
                     ItemOutcome.FAILED);
+        } finally {
+            mediaRenderer.discard(stored, caller);
         }
     }
 
