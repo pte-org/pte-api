@@ -11,7 +11,7 @@ Cloudinary after the app issues signed upload parameters.
 | `pte-admin.duckdns.org` | vendor-web and the same API/transport routes |
 Only TCP 22, 80, and 443 should be allowed from the internet. The hosted
 Compose overlay removes host bindings for app, web, PostgreSQL, Redis,
-RabbitMQ, Mailpit, and Jaeger.
+RabbitMQ, and Mailpit.
 
 ## VPS and environment
 

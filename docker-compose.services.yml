@@ -1,6 +1,6 @@
 # Local compose: app, built from source via the shared root Dockerfile.
 # Always run alongside the infra-only docker-compose.yml (which owns the
-# pte-network definition + postgres/redis/rabbitmq/mailpit/jaeger):
+# pte-network definition + postgres/redis/rabbitmq/mailpit):
 #
 #   docker compose --env-file .env \
 #     -f docker-compose.yml -f docker-compose.services.yml up --build
@@ -36,7 +36,6 @@ services:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
-      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       # com.pte.identity.internal.config.SecurityConfig (gateway-removal) —
       # browser FE origins allowed to call this app directly.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
