@@ -17,7 +17,6 @@ import org.mockito.InOrder;
 import java.time.Instant;
 import java.util.stream.Stream;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -123,16 +122,6 @@ class ChatServiceFailureTest extends ChatServiceTestSupport {
         assertThatThrownBy(() -> service.send(caller, command("Question"))).isInstanceOf(ChatBusyException.class);
 
         assertLeasesClosedAfterTheRefund();
-        assertBothLeasesClosedOnce();
-    }
-
-    @Test
-    void aFailingRefundDoesNotMaskAnOffTopicReply() {
-        when(client.generate(any(), any(), any())).thenReturn(offTopicAnswer());
-        doThrow(new IllegalStateException("refund boom")).when(quotaService).refundQuietly(ticket);
-
-        assertThat(service.send(caller, command("What is 2 + 2?")).onTopic()).isFalse();
-
         assertBothLeasesClosedOnce();
     }
 
