@@ -226,8 +226,8 @@ media:
     cloud-name: ${CLOUDINARY_CLOUD_NAME:}
     api-key: ${CLOUDINARY_API_KEY:}
     api-secret: ${CLOUDINARY_API_SECRET:}
-    authoring-folder: ${CLOUDINARY_AUTHORING_FOLDER:pte/authoring}
-    submission-folder: ${CLOUDINARY_SUBMISSION_FOLDER:pte/submissions}
+    # One root per environment (pte/prod, pte/local); files go to {root}/exam|practice/questions|answers|recordings.
+    root-folder: ${CLOUDINARY_ROOT_FOLDER:pte/local}
     # Life of a signed upload or media link; also the cap on the link life any module asks for.
     signature-ttl-seconds: ${CLOUDINARY_SIGNATURE_TTL_SECONDS:900}
 

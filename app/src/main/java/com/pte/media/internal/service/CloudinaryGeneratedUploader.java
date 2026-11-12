@@ -29,19 +29,19 @@ class CloudinaryGeneratedUploader {
 
     private final MediaAssetRepository repository;
     private final CloudinaryRequestSigner signer;
-    private final String authoringFolder;
+    private final CloudinaryFolders folders;
     private final Clock clock;
     private final RestClient restClient;
 
     CloudinaryGeneratedUploader(
             MediaAssetRepository repository,
             CloudinaryRequestSigner signer,
-            String authoringFolder,
+            CloudinaryFolders folders,
             Clock clock,
             RestClient.Builder restClientBuilder) {
         this.repository = repository;
         this.signer = signer;
-        this.authoringFolder = authoringFolder;
+        this.folders = folders;
         this.clock = clock;
         this.restClient = restClientBuilder.build();
     }
@@ -52,16 +52,17 @@ class CloudinaryGeneratedUploader {
      * @param bytes media content
      * @param contentType MIME type
      * @param assetKind "AUDIO_PROMPT" or "IMAGE_PROMPT"
+     * @param pool pool of the question the file is for ("EXAM" or "PRACTICE"), which picks its folder
      * @param owner current user
      * @return UUID of created media asset
      * @throws UnsupportedContentTypeException on invalid content type or size
      */
-    UUID storeGenerated(byte[] bytes, String contentType, String assetKind, CurrentUser owner) {
+    UUID storeGenerated(byte[] bytes, String contentType, String assetKind, String pool, CurrentUser owner) {
         validateInput(bytes, contentType, assetKind);
 
         UUID mediaPublicId = UUID.randomUUID();
         String publicId = mediaPublicId.toString();
-        String cloudinaryPublicId = authoringFolder + "/" + publicId;
+        String cloudinaryPublicId = folders.questions(pool) + "/" + publicId;
         String resourceType = isImageType(contentType) ? "image" : "video";
 
         try {

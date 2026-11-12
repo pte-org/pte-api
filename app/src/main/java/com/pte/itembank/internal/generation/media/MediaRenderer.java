@@ -1,5 +1,6 @@
 package com.pte.itembank.internal.generation.media;
 
+import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import com.pte.itembank.internal.generation.draft.ItemDraft;
 import com.pte.itembank.internal.generation.exception.GenerationMediaException;
@@ -65,16 +66,23 @@ public class MediaRenderer {
         this.media = media;
     }
 
-    /** The media for {@code draft}; empty (and no call made) for a text-only draft. */
+    /**
+     * The media for {@code draft}; empty (and no call made) for a text-only draft. {@code pool} is the pool of the
+     * question being made, which picks the folder the files are stored in.
+     */
     public Optional<RenderedMedia> render(ItemDraft draft, String taskTypeKey, int itemIndex, long seed,
-                                          CurrentUser owner) {
+                                          CurrentUser owner, QuestionPool pool) {
+        String poolName = pool == null ? null : pool.name();
         try {
             return switch (draft) {
-                case ItemDraft.ListeningDraft d -> Optional.of(speak(d.transcript(), taskTypeKey, itemIndex, seed, owner));
-                case ItemDraft.HiwDraft d -> Optional.of(speak(d.transcript(), taskTypeKey, itemIndex, seed, owner));
-                case ItemDraft.DialogueDraft d -> Optional.of(converse(d, taskTypeKey, itemIndex, seed, owner));
-                case ItemDraft.ChartDraft d -> Optional.of(draw(d, owner));
-                case ItemDraft.PictureDraft d -> Optional.of(paint(d, owner));
+                case ItemDraft.ListeningDraft d -> Optional.of(speak(d.transcript(), taskTypeKey, itemIndex, seed, owner,
+                        poolName));
+                case ItemDraft.HiwDraft d -> Optional.of(speak(d.transcript(), taskTypeKey, itemIndex, seed, owner,
+                        poolName));
+                case ItemDraft.DialogueDraft d -> Optional.of(converse(d, taskTypeKey, itemIndex, seed, owner,
+                        poolName));
+                case ItemDraft.ChartDraft d -> Optional.of(draw(d, owner, poolName));
+                case ItemDraft.PictureDraft d -> Optional.of(paint(d, owner, poolName));
                 default -> Optional.empty();
             };
         } catch (GenerationMediaException failure) {
@@ -87,7 +95,8 @@ public class MediaRenderer {
         }
     }
 
-    private RenderedMedia speak(String text, String taskTypeKey, int itemIndex, long seed, CurrentUser owner) {
+    private RenderedMedia speak(String text, String taskTypeKey, int itemIndex, long seed, CurrentUser owner,
+                                String pool) {
         String voice = voices.pick(itemIndex, seed);
         double speed = AudioDurationRules.baseSpeed(taskTypeKey);
         byte[] audio = speech.synthesize(text, voice, speed);
@@ -102,7 +111,7 @@ public class MediaRenderer {
                 throw durationOutOfRange(seconds, rule.get());
             }
         }
-        UUID ref = media.storeGenerated(audio, AUDIO_WAV, AUDIO_PROMPT, owner);
+        UUID ref = media.storeGenerated(audio, AUDIO_WAV, AUDIO_PROMPT, pool, owner);
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("audioPromptRef", ref.toString());
         meta.put("voice", voice);
@@ -112,7 +121,7 @@ public class MediaRenderer {
     }
 
     private RenderedMedia converse(ItemDraft.DialogueDraft draft, String taskTypeKey, int itemIndex, long seed,
-                                   CurrentUser owner) {
+                                   CurrentUser owner, String pool) {
         Map<String, String> voiceBySpeaker = distinctVoices(draft, itemIndex, seed);
         List<DialogueSynthesizer.DialogueTurn> clips = new ArrayList<>();
         if (hasSituation(draft)) {
@@ -129,7 +138,7 @@ public class MediaRenderer {
         if (rule.isPresent() && !rule.get().contains(seconds)) {
             throw durationOutOfRange(seconds, rule.get());
         }
-        UUID ref = media.storeGenerated(audio, AUDIO_WAV, AUDIO_PROMPT, owner);
+        UUID ref = media.storeGenerated(audio, AUDIO_WAV, AUDIO_PROMPT, pool, owner);
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("audioPromptRef", ref.toString());
         meta.put("voices", voiceBySpeaker);
@@ -167,9 +176,9 @@ public class MediaRenderer {
         return assigned;
     }
 
-    private RenderedMedia draw(ItemDraft.ChartDraft draft, CurrentUser owner) {
+    private RenderedMedia draw(ItemDraft.ChartDraft draft, CurrentUser owner, String pool) {
         byte[] png = charts.render(draft);
-        UUID ref = media.storeGenerated(png, IMAGE_PNG, IMAGE_PROMPT, owner);
+        UUID ref = media.storeGenerated(png, IMAGE_PNG, IMAGE_PROMPT, pool, owner);
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("imagePromptRef", ref.toString());
         meta.put("chartType", draft.chartType());
@@ -181,14 +190,14 @@ public class MediaRenderer {
      * Paints the picture with the image model, trying again while attempts are left. When every attempt fails the
      * caller gets {@code GENERATION_IMAGE_FAILED}, which turns the question into a chart.
      */
-    private RenderedMedia paint(ItemDraft.PictureDraft draft, CurrentUser owner) {
+    private RenderedMedia paint(ItemDraft.PictureDraft draft, CurrentUser owner, String pool) {
         LlmGateway gateway = painter.getIfAvailable();
         String lastFailure = "no image model";
         int attempts = pictureSettings().maxAttempts();
         for (int attempt = 1; gateway != null && attempt <= attempts; attempt++) {
             try {
                 byte[] png = gateway.generateImage(draft.imagePrompt());
-                UUID ref = media.storeGenerated(png, IMAGE_PNG, IMAGE_PROMPT, owner);
+                UUID ref = media.storeGenerated(png, IMAGE_PNG, IMAGE_PROMPT, pool, owner);
                 Map<String, Object> meta = new LinkedHashMap<>();
                 meta.put("imagePromptRef", ref.toString());
                 meta.put("imageKind", "PICTURE");
@@ -207,6 +216,13 @@ public class MediaRenderer {
         return prompts.pictureSettings(new PictureSettings(properties.getLlm().getImageMaxAttempts(), false));
     }
 
+    /** Removes the stored media of a draft that will not be used; nothing when null. Never throws. */
+    public void discard(RenderedMedia rendered, CurrentUser owner) {
+        if (rendered != null) {
+            discard(rendered.audioPromptRef(), rendered.imagePromptRef(), owner);
+        }
+    }
+
     /** Removes media that was stored for a question that then could not be created. Never throws. */
     public void discard(UUID audioPromptRef, UUID imagePromptRef, CurrentUser owner) {
         for (UUID ref : java.util.Arrays.asList(audioPromptRef, imagePromptRef)) {
@@ -216,13 +232,6 @@ public class MediaRenderer {
             try {
                 media.deleteGenerated(ref, owner);
             } catch (RuntimeException failure) {
-    /** Removes the stored media of a draft that will not be used; nothing when null. Never throws. */
-    public void discard(RenderedMedia rendered, CurrentUser owner) {
-        if (rendered != null) {
-            discard(rendered.audioPromptRef(), rendered.imagePromptRef(), owner);
-        }
-    }
-
                 LOG.warn("Unused generated media was not removed: errorType={}", failure.getClass().getSimpleName());
             }
         }
