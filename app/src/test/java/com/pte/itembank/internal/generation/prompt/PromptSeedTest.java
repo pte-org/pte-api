@@ -25,7 +25,7 @@ import static org.mockito.Mockito.when;
 
 class PromptSeedTest {
 
-    private static final int GENERATOR_PROMPTS = 22;
+    private static final int GENERATOR_PROMPTS = 23;
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-11-08T00:00:00Z"), ZoneOffset.UTC);
 
     private final PromptContentCodec codec = PromptTestRegistry.codec();
@@ -66,18 +66,18 @@ class PromptSeedTest {
     @Test
     void theSeederAddsEveryMissingPromptOnceAndLeavesExistingOnesAlone() throws IOException {
         AiPromptVersionRepository repository = mock(AiPromptVersionRepository.class);
-        PromptSeeder seeder = new PromptSeeder(repository, codec, scoringSource, CLOCK);
+        PromptSeeder seeder = new PromptSeeder(repository, codec, scoringSource, CLOCK, mock(PromptRequirementUpgrader.class));
 
-        assertThat(seeder.seedMissing()).isEqualTo(GENERATOR_PROMPTS + 3);
+        assertThat(seeder.seedMissing()).isEqualTo(GENERATOR_PROMPTS + 4);
         ArgumentCaptor<AiPromptVersion> saved = ArgumentCaptor.forClass(AiPromptVersion.class);
-        verify(repository, times(GENERATOR_PROMPTS + 3)).save(saved.capture());
+        verify(repository, times(GENERATOR_PROMPTS + 4)).save(saved.capture());
         assertThat(saved.getAllValues()).allSatisfy(version -> {
             assertThat(version.getVersionNo()).isEqualTo(1);
             assertThat(version.getActivatedAt()).isEqualTo(CLOCK.instant());
         });
 
         when(repository.existsByKindAndPromptKey(any(), any())).thenReturn(true);
-        PromptSeeder again = new PromptSeeder(repository, codec, scoringSource, CLOCK);
+        PromptSeeder again = new PromptSeeder(repository, codec, scoringSource, CLOCK, mock(PromptRequirementUpgrader.class));
         org.mockito.Mockito.clearInvocations(repository);
         assertThat(again.seedMissing()).isZero();
         verify(repository, never()).save(any());
@@ -102,10 +102,10 @@ class PromptSeedTest {
         when(scoringSource.find("READ_ALOUD")).thenReturn(java.util.Optional.of(new PromptDocument("SCORING",
                 "READ_ALOUD", "READ_ALOUD", List.of(), "")));
 
-        new PromptSeeder(repository, codec, scoringSource, CLOCK).seedMissing();
+        new PromptSeeder(repository, codec, scoringSource, CLOCK, mock(PromptRequirementUpgrader.class)).seedMissing();
 
         ArgumentCaptor<AiPromptVersion> saved = ArgumentCaptor.forClass(AiPromptVersion.class);
-        verify(repository, times(GENERATOR_PROMPTS + 4)).save(saved.capture());
+        verify(repository, times(GENERATOR_PROMPTS + 5)).save(saved.capture());
         AiPromptVersion scorer = saved.getAllValues().stream()
                 .filter(version -> version.getKind() == AiPromptKind.SCORER).findFirst().orElseThrow();
         PromptContent content = codec.read(scorer.getContent());

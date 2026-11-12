@@ -46,6 +46,21 @@ public final class QuestionGenerationConstants {
     public static final String GENERATION_DUPLICATE_CONTENT = "GENERATION_DUPLICATE_CONTENT";
     public static final String GENERATION_CALL_BUDGET_EXCEEDED = "GENERATION_CALL_BUDGET_EXCEEDED";
     public static final String GENERATION_SCHEMA_INVALID = "GENERATION_SCHEMA_INVALID";
+    // Why a model draft broke its schema; the job stores it as the item failure note.
+    public static final String DRAFT_ARRAY_ITEM_EMPTY = "Empty item in array: %s";
+    public static final String DRAFT_ARRAY_ITEM_NOT_INTEGER = "Non-integer item in array: %s";
+    public static final String DRAFT_ARRAY_MISSING = "Missing or empty required array: %s";
+    public static final String DRAFT_FIELD_MISSING = "Missing or empty required field: %s";
+    public static final String DRAFT_JSON_UNREADABLE = "Failed to parse JSON response";
+    public static final String DRAFT_SERIES_MISSING = "Missing or empty required field: series";
+    public static final String DRAFT_SERIES_VALUES_MISSING = "Series needs a values array";
+    public static final String DRAFT_SERIES_VALUES_NOT_NUMBERS = "Series values must be numbers";
+    public static final String DRAFT_SLOTS_INVALID = "Missing or invalid slots array";
+    public static final String DRAFT_TASK_TYPE_UNSUPPORTED = "Unsupported task type: %s";
+    public static final String DRAFT_TURNS_MISSING = "Missing or empty required field: turns";
+    public static final String PICTURE_PROMPT_TOO_SHORT =
+            "The image prompt must describe the picture in at least %d characters";
+    public static final String PICTURE_KEY_POINTS_OUT_OF_RANGE = "Must have %d-%d key points, got %d";
     public static final String GENERATION_VALIDATION_FAILED = "GENERATION_VALIDATION_FAILED";
     public static final String GENERATION_REVIEW_FAILED = "GENERATION_REVIEW_FAILED";
     public static final String GENERATION_REVIEW_PARSING_FAILED = "GENERATION_REVIEW_PARSING_FAILED";
@@ -68,7 +83,7 @@ public final class QuestionGenerationConstants {
             "itembank.generation.llm generator and reviewer models are required.";
 
     public static final int MAX_ITEMS_PER_JOB_HARD_LIMIT = 10;
-    public static final int MAX_TOPIC_HINT_LENGTH = 200;
+    public static final int MAX_TOPIC_HINT_LENGTH = 500;
     public static final int MAX_FAILURE_NOTE_LENGTH = 300;
     public static final int MAX_PAGE_SIZE = 50;
     public static final long SUBMIT_ADVISORY_LOCK_KEY = 7_340_034L;
@@ -91,6 +106,15 @@ public final class QuestionGenerationConstants {
     public static final String PROMPT_KEY_REVIEWER = "REVIEWER";
     /** The reviewer that looks at a drawn chart (a second REVIEWER prompt). */
     public static final String PROMPT_KEY_IMAGE_REVIEWER = "CHART_IMAGE_REVIEWER";
+    public static final String PROMPT_KEY_PICTURE_REVIEWER = "PICTURE_IMAGE_REVIEWER";
+    /** The writer prompt of a Describe Image question whose image is painted, not drawn from data. */
+    public static final String PROMPT_KEY_DESCRIBE_IMAGE_PICTURE = "DESCRIBE_IMAGE_PICTURE";
+    public static final String GENERATION_IMAGE_FAILED = "GENERATION_IMAGE_FAILED";
+    public static final String GENERATION_IMAGE_KIND_INVALID = "GENERATION_IMAGE_KIND_INVALID";
+    public static final String GENERATION_IMAGE_KIND_INVALID_MESSAGE = "Image kind must be AUTO, CHART or PICTURE.";
+    public static final String PICTURE_ATTEMPTS_INVALID = "maxImageAttempts must be a whole number from 1 to 5.";
+    public static final String PICTURE_FALLBACK_INVALID = "whenImageFails must be ASK or CHART.";
+    public static final String IMAGE_FALLBACK_NOTE = "The AI picture could not be made; switched to a chart. ";
     public static final String GENERATION_IMAGE_REVIEW_FAILED = "GENERATION_IMAGE_REVIEW_FAILED";
     /** What the writer is told when a draft is sent back for something other than the content reviewer's notes. */
     public static final String FEEDBACK_INVALID =

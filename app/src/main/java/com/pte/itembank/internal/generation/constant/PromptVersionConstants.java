@@ -78,6 +78,11 @@ public final class PromptVersionConstants {
     public static final List<String> SHARED_REQUIRED_TOKENS =
             List.of("{cefr}", "{topicHint}", "{avoidTopics}", "{lengthRules}");
 
+    /** Fields of the generator reply the parser requires, so the shared block must keep asking for them. */
+    public static final List<String> SHARED_REQUIRED_PHRASES = List.of("answerHintVi", "answerHintEn");
+    /** The data block the reviewer receives the student hints in, so the reviewer prompt must keep judging it. */
+    public static final List<String> REVIEWER_REQUIRED_PHRASES = List.of("STUDENT HINTS");
+
     // Content problems
     public static final String PROBLEM_TITLE = "The title is required and must be at most 200 characters.";
     public static final String PROBLEM_EMPTY = "A prompt needs at least one block of text.";
@@ -87,5 +92,9 @@ public final class PromptVersionConstants {
     public static final String PROBLEM_FIELDS = "Every output row needs its own field name, written as name: example value.";
     public static final String PROBLEM_TOO_LONG = "A block or the whole prompt is too long.";
     public static final String PROBLEM_MISSING_TOKEN = "The shared block must keep the token ";
+    public static final String PROBLEM_MISSING_PHRASE = "This prompt must keep its required instruction about ";
+    public static final String PROBLEM_LOCKED_SECTION = "This section is used by the system and cannot be changed: ";
+    public static final String PROBLEM_OUTPUT_FIELDS =
+            "Only the example values of the reply can be changed; keep its text and field names in: ";
     public static final String PROBLEM_UNKNOWN_TOKEN = "A task prompt must not contain the token ";
 }

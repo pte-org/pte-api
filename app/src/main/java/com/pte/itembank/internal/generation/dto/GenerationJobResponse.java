@@ -10,7 +10,8 @@ import java.util.UUID;
 public record GenerationJobResponse(
         UUID publicId, String taskType, String cefrLevel, String pool, String topicHint, int requestedCount,
         String status, int succeededCount, int failedCount, String failureCode, Instant createdAt,
-        Instant startedAt, Instant finishedAt, List<GenerationItemResponse> items) {
+        Instant startedAt, Instant finishedAt, List<GenerationItemResponse> items, String imageKind,
+        boolean saveQuestions) {
 
     /** Summary without items, for lists. */
     public static GenerationJobResponse from(QuestionGenerationJob job) {
@@ -22,6 +23,7 @@ public record GenerationJobResponse(
                 job.getPool().name(), job.getTopicHint(), job.getRequestedCount(), job.getStatus().name(),
                 job.getSucceededCount(), job.getFailedCount(), job.getFailureCode(), job.getCreatedAt(),
                 job.getStartedAt(), job.getFinishedAt(),
-                items.stream().map(GenerationItemResponse::from).toList());
+                items.stream().map(GenerationItemResponse::from).toList(),
+                job.getImageKind() == null ? null : job.getImageKind().name(), job.isSaveQuestions());
     }
 }

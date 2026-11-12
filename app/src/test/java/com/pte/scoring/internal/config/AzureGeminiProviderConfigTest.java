@@ -18,8 +18,9 @@ import com.pte.scoring.internal.vendor.gemini.scorer.SummarizeSpokenTextScorer;
 import com.pte.scoring.internal.vendor.gemini.scorer.SummarizeWrittenTextScorer;
 import com.pte.scoring.internal.vendor.gemini.scorer.WriteEssayScorer;
 import com.pte.scoring.internal.vendor.gemini.GeminiRestClient;
-import com.pte.scoring.internal.vendor.gemini.OpenAiCompatibleStructuredClient;
+import com.pte.scoring.internal.vendor.gemini.StoredPromptModelClient;
 import com.pte.scoring.internal.vendor.gemini.StructuredModelClient;
+import com.pte.itembank.PromptTexts;
 import com.pte.scoring.internal.vendor.speech.SpeechAudioLoader;
 import com.pte.scoring.internal.vendor.stub.StubEssayScoringClient;
 import com.pte.scoring.internal.vendor.stub.StubSpeechScoringClient;
@@ -48,6 +49,7 @@ class AzureGeminiProviderConfigTest {
             .withBean(JsonMapper.class, () -> JsonMapper.builder().build())
             .withBean(Clock.class, Clock::systemUTC)
             .withBean(MediaService.class, () -> mock(MediaService.class))
+            .withBean(PromptTexts.class, () -> mock(PromptTexts.class))
             .withUserConfiguration(AiProviderConfig.class, AzureGeminiProviderConfig.class,
                     StubSpeechScoringClient.class, StubEssayScoringClient.class, SpeechAudioLoader.class,
                     ReadAloudScorer.class, RepeatSentenceScorer.class, ShortQuestionScorer.class,
@@ -72,7 +74,8 @@ class AzureGeminiProviderConfigTest {
             assertThat(context).hasNotFailed();
             assertThat(context).hasSingleBean(AzureSpeechRestClient.class);
             assertThat(context).hasSingleBean(AzureSpeechAssessor.class);
-            assertThat(context).hasSingleBean(GeminiRestClient.class);
+            // The vendor client is wrapped so every call goes out with the stored prompt in use.
+            assertThat(context).getBean(StructuredModelClient.class).isInstanceOf(StoredPromptModelClient.class);
             // The legacy stub stays as the fallback for the task types no scorer claims.
             assertThat(context).getBean(SpeechScoringClient.class).isInstanceOf(StubSpeechScoringClient.class);
             assertThat(context.getBeansOfType(AiAnswerScorer.class).values())
@@ -150,7 +153,7 @@ class AzureGeminiProviderConfigTest {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(AzureSpeechRestClient.class);
                     assertThat(context).getBean(StructuredModelClient.class)
-                            .isInstanceOf(OpenAiCompatibleStructuredClient.class);
+                            .isInstanceOf(StoredPromptModelClient.class);
                     assertThat(context.getBeansOfType(AiAnswerScorer.class)).hasSize(10);
                 });
     }

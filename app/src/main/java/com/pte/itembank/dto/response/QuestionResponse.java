@@ -42,7 +42,26 @@ public record QuestionResponse(
         /** The academic who wrote the question; null for legacy rows without an owner. */
         UUID authorUserPublicId,
         /** AI provenance and review sheet; null for hand-written questions. Only exposed to authoring callers. */
-        GenerationMetaResponse generationMeta) {
+        GenerationMetaResponse generationMeta,
+        /** Student-facing hints on how to approach the task; never the answer. */
+        String answerHintVi,
+        String answerHintEn) {
+
+    /** Shape of a response without answer hints. */
+    public QuestionResponse(UUID publicId, String pteTaskType, String section, UUID tenantId, String status,
+            String promptText, UUID audioPromptRef, UUID imagePromptRef, String referenceAnswerText,
+            String correctAnswerText, Integer minWordCount, Integer maxWordCount, List<OptionResponse> options,
+            UUID revisionGroupPublicId, int revisionNumber, UUID supersedesPublicId, boolean current, long version,
+            String rejectionReason, String taskTypeKey, boolean canDeleteDraft, boolean canArchive,
+            String deleteBlockReason, String pool, boolean availableForPractice, boolean availableForExam,
+            boolean previouslyPublished, Instant updatedAt, String cefrLevel, UUID authorUserPublicId,
+            GenerationMetaResponse generationMeta) {
+        this(publicId, pteTaskType, section, tenantId, status, promptText, audioPromptRef, imagePromptRef,
+                referenceAnswerText, correctAnswerText, minWordCount, maxWordCount, options, revisionGroupPublicId,
+                revisionNumber, supersedesPublicId, current, version, rejectionReason, taskTypeKey, canDeleteDraft,
+                canArchive, deleteBlockReason, pool, availableForPractice, availableForExam, previouslyPublished,
+                updatedAt, cefrLevel, authorUserPublicId, generationMeta, null, null);
+    }
 
     /** Shape of a response that does not say who wrote the question or generation metadata. */
     public QuestionResponse(UUID publicId, String pteTaskType, String section, UUID tenantId, String status,

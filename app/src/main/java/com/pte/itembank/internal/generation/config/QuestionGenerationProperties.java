@@ -44,6 +44,8 @@ public class QuestionGenerationProperties {
     @Setter
     public static class Llm {
         private String baseUrl = "";
+        /** The gateway's own web page, linked from the AI overview; empty means the root of the base URL's host. */
+        private String webUrl = "";
         private String apiKey = "";
         private String generatorModel = "Capstone";
         private String reviewerModel = "Capstone";
@@ -54,6 +56,10 @@ public class QuestionGenerationProperties {
         private Duration connectTimeout = Duration.ofSeconds(5);
         private Duration readTimeout = Duration.ofSeconds(90);
         private Duration retryDelay = Duration.ofSeconds(2);
+        /** Text-to-image model of the same gateway, for Describe Image pictures. */
+        private String imageModel = "ag/gemini-3.1-flash-image";
+        /** Paint attempts (provider failures or reviewer refusals) before a picture question becomes a chart. */
+        private int imageMaxAttempts = 2;
         /** Only for the AI overview cost estimate (USD per million tokens); 0 when the gateway does not bill. */
         @DecimalMin("0")
         private BigDecimal priceInputPerMillionUsd = new BigDecimal("0.10");
@@ -66,6 +72,8 @@ public class QuestionGenerationProperties {
     @Setter
     public static class Kokoro {
         private String baseUrl = "";
+        /** The speech service's web page, linked from the AI overview; empty means {@code <base URL>/web/}. */
+        private String webUrl = "";
         private String apiKey = "";
         private Duration timeout = Duration.ofSeconds(300);
         private String voicesUs = "af_heart,af_bella,am_michael";

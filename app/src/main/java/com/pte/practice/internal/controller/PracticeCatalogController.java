@@ -4,7 +4,9 @@ import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.dto.request.PracticePreflightRequest;
 import com.pte.practice.internal.dto.response.PracticeCatalogResponse;
 import com.pte.practice.internal.dto.response.PracticePreflightResponse;
+import com.pte.practice.internal.dto.response.PracticeRubricResponse;
 import com.pte.practice.internal.service.PracticeCatalogService;
+import com.pte.practice.internal.service.catalog.PracticeRubricService;
 import com.pte.practice.internal.service.catalog.PracticeSkillStatsService;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -12,6 +14,7 @@ import jakarta.validation.Valid;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,11 +29,18 @@ public class PracticeCatalogController {
 
     private final PracticeCatalogService catalogService;
     private final PracticeSkillStatsService skillStatsService;
+    private final PracticeRubricService rubricService;
 
     public PracticeCatalogController(PracticeCatalogService catalogService,
-            PracticeSkillStatsService skillStatsService) {
+            PracticeSkillStatsService skillStatsService, PracticeRubricService rubricService) {
         this.catalogService = catalogService;
         this.skillStatsService = skillStatsService;
+        this.rubricService = rubricService;
+    }
+
+    @GetMapping("/rubrics/{taskType}")
+    public ApiResponse<PracticeRubricResponse> rubric(@PathVariable String taskType) {
+        return ApiResponse.success(rubricService.rubricOf(taskType));
     }
 
     @GetMapping

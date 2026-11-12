@@ -10,6 +10,7 @@ import com.pte.practice.internal.exception.PracticeSessionException;
 import com.pte.practice.internal.messaging.PracticeScoringDispatcher;
 import com.pte.practice.internal.messaging.PracticeScoringJob;
 import com.pte.practice.internal.repository.PracticeResponseRepository;
+import com.pte.practice.internal.service.response.PracticeFeedbackReader;
 import com.pte.scoring.CriteriaScores;
 import com.pte.scoring.PracticeAiEvaluation;
 import com.pte.scoring.PracticeScoringFailure;
@@ -53,18 +54,32 @@ public class PracticeScoringStateService {
         this.rubricScales = rubricScales;
     }
 
-    /** First submission of an AI-scored answer: enforce the rate limit, mark SCORING and queue the job after commit. */
+    /** The student asks for an answer's AI score: enforce the rate limit, mark SCORING and queue it after commit. */
     public void startScoring(PracticeSession session, PracticeResponse item, Instant now) {
         begin(session, item, now, 1);
     }
 
+    /**
+     * One answer of a whole mock test scored at once (one student action, so no per-minute limit). The jobs wait for a
+     * free worker, so this one's dispatch time is when its turn is expected; recovery counts from there instead of
+     * failing the end of the queue while it is still waiting.
+     */
+    public void startQueuedScoring(PracticeSession session, PracticeResponse item, Instant now, Duration expectedWait) {
+        prepare(item, now, 1);
+        dispatch(session, item, now.plus(expectedWait));
+    }
+
     private void begin(PracticeSession session, PracticeResponse item, Instant now, int attempts) {
         requireWithinRateLimit(session, now);
+        prepare(item, now, attempts);
+        dispatch(session, item, now);
+    }
+
+    private static void prepare(PracticeResponse item, Instant now, int attempts) {
         item.setScoringRequestedAt(now);
         item.setScoringAttempts(attempts);
         item.setScoringRedispatchCount(0);
         item.setScoringFailureCode(null);
-        dispatch(session, item, now);
     }
 
     /** Stores a result computed inside the answer call (objective types); the item is final immediately. */
@@ -83,9 +98,9 @@ public class PracticeScoringStateService {
         if (item.getScoringStatus() != PracticeScoringStatus.SCORING) {
             return;
         }
-        Instant requestedAt = item.getScoringRequestedAt();
-        if (requestedAt != null
-                && Duration.between(requestedAt, now).getSeconds() > properties.getMaxAgeSeconds()) {
+        Instant startedAt = latest(item.getScoringRequestedAt(), item.getScoringDispatchedAt());
+        if (startedAt != null
+                && Duration.between(startedAt, now).getSeconds() > properties.getMaxAgeSeconds()) {
             markFailed(item, FAILURE_TIMED_OUT);
             itemRepository.saveAndFlush(item);
             return;
@@ -185,7 +200,8 @@ public class PracticeScoringStateService {
                 failed ? item.getScoringFailureCode() : null,
                 isRetryable(item),
                 scored ? item.getAiScoredAt() : null,
-                maximaOf(criteria, item.getTaskCode()));
+                maximaOf(criteria, item.getTaskCode()),
+                scored ? PracticeFeedbackReader.read(jsonMapper, item.getAiDetailJson()) : null);
     }
 
     /** Only Pearson trait scores have a maximum to show; older 0-100 results stay raw numbers. */
@@ -215,6 +231,10 @@ public class PracticeScoringStateService {
         } catch (IllegalArgumentException unknownCode) {
             return false;
         }
+    }
+
+    private static Instant latest(Instant first, Instant second) {
+        return first == null || (second != null && second.isAfter(first)) ? second : first;
     }
 
     private void dispatch(PracticeSession session, PracticeResponse item, Instant now) {

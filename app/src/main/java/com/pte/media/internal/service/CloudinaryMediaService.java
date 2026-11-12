@@ -41,9 +41,9 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
     private final CloudinaryGeneratedUploader generatedUploader;
 
     CloudinaryMediaService(MediaAssetRepository repository, String cloudName, String apiKey, String apiSecret,
-            String authoringFolder, String submissionFolder, PracticeMediaBindingPort practiceMediaBindingService,
+            String rootFolder, PracticeMediaBindingPort practiceMediaBindingService,
             AuditLogService auditLogService, Clock clock, RestClient.Builder restClientBuilder) {
-        this(repository, cloudName, apiKey, apiSecret, authoringFolder, submissionFolder, SIGNATURE_TTL_SECONDS,
+        this(repository, cloudName, apiKey, apiSecret, rootFolder, SIGNATURE_TTL_SECONDS,
                 practiceMediaBindingService, auditLogService, clock, restClientBuilder);
     }
 
@@ -52,18 +52,19 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
             @Value("${media.cloudinary.cloud-name:}") String cloudName,
             @Value("${media.cloudinary.api-key:}") String apiKey,
             @Value("${media.cloudinary.api-secret:}") String apiSecret,
-            @Value("${media.cloudinary.authoring-folder:pte/authoring}") String authoringFolder,
-            @Value("${media.cloudinary.submission-folder:pte/submissions}") String submissionFolder,
+            @Value("${media.cloudinary.root-folder:" + MediaConstants.DEFAULT_CLOUDINARY_ROOT_FOLDER + "}")
+            String rootFolder,
             @Value("${media.cloudinary.signature-ttl-seconds:" + SIGNATURE_TTL_SECONDS + "}") long signatureTtlSeconds,
             PracticeMediaBindingPort practiceMediaBindingService, AuditLogService auditLogService, Clock clock,
             RestClient.Builder restClientBuilder) {
         CloudinaryRequestSigner signer = new CloudinaryRequestSigner(cloudName, apiKey, apiSecret, clock);
         MediaAccessGuard accessGuard = new MediaAccessGuard(practiceMediaBindingService, auditLogService);
+        CloudinaryFolders folders = new CloudinaryFolders(rootFolder);
         this.uploadRequester = new CloudinaryUploadRequester(repository, signer, accessGuard,
-                practiceMediaBindingService, authoringFolder, submissionFolder, signatureTtlSeconds, clock);
+                practiceMediaBindingService, folders, signatureTtlSeconds, clock);
         this.uploadVerifier = new CloudinaryUploadVerifier(repository, signer, accessGuard);
         this.mediaReader = new CloudinaryMediaReader(repository, signer, signatureTtlSeconds);
-        this.generatedUploader = new CloudinaryGeneratedUploader(repository, signer, authoringFolder, clock,
+        this.generatedUploader = new CloudinaryGeneratedUploader(repository, signer, folders, clock,
                 restClientBuilder);
     }
 
@@ -126,8 +127,8 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
 
     /** Server-side upload of AI-generated media (audio or image) for questions. */
     @Transactional
-    public UUID storeGenerated(byte[] bytes, String contentType, String assetKind, CurrentUser owner) {
-        return generatedUploader.storeGenerated(bytes, contentType, assetKind, owner);
+    public UUID storeGenerated(byte[] bytes, String contentType, String assetKind, String pool, CurrentUser owner) {
+        return generatedUploader.storeGenerated(bytes, contentType, assetKind, pool, owner);
     }
 
     /** Removes AI-generated media the caller generated, at Cloudinary and in the database. */

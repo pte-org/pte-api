@@ -47,6 +47,7 @@ practice:
     max-retries: ${PRACTICE_SCORING_MAX_RETRIES:2}
     redispatch-after-seconds: ${PRACTICE_SCORING_REDISPATCH_AFTER_SECONDS:100}
     max-age-seconds: ${PRACTICE_SCORING_MAX_AGE_SECONDS:180}
+    concurrency: ${PRACTICE_SCORING_CONCURRENCY:3}
   # Chat checks entitlement through assertUnlocked, which is fail-closed: with this false every student
   # gets 403 from chat. Set true in every environment that runs chat (dev, staging, production).
   strict-entitlement:
@@ -205,6 +206,9 @@ scoring:
     # gemini = the Google API above; gateway = an OpenAI-compatible /chat/completions service, by default the same
     # Capstone gateway as question generation and the student chat (AI_GATEWAY_*).
     text-vendor: ${SCORING_AI_TEXT_VENDOR:gemini}
+    # Who hears a practice speaking answer under azure-gemini: gateway = the scoring model above listens to the
+    # recording with the Pearson rubric and writes the feedback; azure = the exam path. Exams always use Azure.
+    practice-speech-vendor: ${SCORING_AI_PRACTICE_SPEECH_VENDOR:gateway}
     gateway:
       base-url: ${SCORING_AI_GATEWAY_BASE_URL:${itembank.generation.llm.base-url:}}
       api-key: ${SCORING_AI_GATEWAY_API_KEY:${itembank.generation.llm.api-key:}}
@@ -216,20 +220,18 @@ management:
     web:
       exposure:
         include: health,info
-  tracing:
-    sampling:
-      probability: 1.0
-  otlp:
-    tracing:
-      endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
 
 media:
+  # Removing unused files at Cloudinary is off unless set: local and production share one Cloudinary account, and a
+  # local database does not know every file production uses. Turn it on only where the database is the owner.
+  purge:
+    enabled: ${MEDIA_PURGE_ENABLED:false}
   cloudinary:
     cloud-name: ${CLOUDINARY_CLOUD_NAME:}
     api-key: ${CLOUDINARY_API_KEY:}
     api-secret: ${CLOUDINARY_API_SECRET:}
-    authoring-folder: ${CLOUDINARY_AUTHORING_FOLDER:pte/authoring}
-    submission-folder: ${CLOUDINARY_SUBMISSION_FOLDER:pte/submissions}
+    # One root per environment (pte/prod, pte/local); files go to {root}/exam|practice/questions|answers|recordings.
+    root-folder: ${CLOUDINARY_ROOT_FOLDER:pte/local}
     # Life of a signed upload or media link; also the cap on the link life any module asks for.
     signature-ttl-seconds: ${CLOUDINARY_SIGNATURE_TTL_SECONDS:900}
 
@@ -292,6 +294,7 @@ itembank:
       # The AI gateway (Capstone) shared by generation, its reviewer, the student chat and text scoring.
       # AI_GATEWAY_* is the name to use; QUESTION_GEN_* is still read for older env files.
       base-url: ${AI_GATEWAY_BASE_URL:${QUESTION_GEN_BASE_URL:}}
+      web-url: ${AI_GATEWAY_WEB_URL:}
       api-key: ${AI_GATEWAY_API_KEY:${QUESTION_GEN_API_KEY:}}
       generator-model: ${AI_GATEWAY_MODEL:${QUESTION_GEN_GENERATOR_MODEL:Capstone}}
       reviewer-model: ${QUESTION_GEN_REVIEWER_MODEL:${AI_GATEWAY_MODEL:Capstone}}
@@ -300,12 +303,15 @@ itembank:
       max-tokens: ${QUESTION_GEN_MAX_TOKENS:0}
       connect-timeout: ${QUESTION_GEN_CONNECT_TIMEOUT:5s}
       read-timeout: ${QUESTION_GEN_READ_TIMEOUT:90s}
+      image-model: ${QUESTION_GEN_IMAGE_MODEL:ag/gemini-3.1-flash-image}
+      image-max-attempts: ${QUESTION_GEN_IMAGE_MAX_ATTEMPTS:2}
       retry-delay: ${QUESTION_GEN_RETRY_DELAY:2s}
       # Only for the cost estimate on the AI overview (USD per million tokens).
       price-input-per-million-usd: ${QUESTION_GEN_PRICE_INPUT_PER_MILLION_USD:0.10}
       price-output-per-million-usd: ${QUESTION_GEN_PRICE_OUTPUT_PER_MILLION_USD:0.40}
     kokoro:
       base-url: ${KOKORO_BASE_URL:}
+      web-url: ${KOKORO_WEB_URL:}
       api-key: ${KOKORO_API_KEY:}
       timeout: ${KOKORO_TIMEOUT:300s}
       voices-us: ${QUESTION_GEN_VOICES_US:af_heart,af_bella,am_michael}

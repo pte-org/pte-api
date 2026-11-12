@@ -35,14 +35,15 @@ public class AiPromptVersionQueryService {
     @Transactional(readOnly = true)
     public PromptWorkspaceResponse workspace(String category, String key) {
         AiPromptKind kind = PromptCategories.editableKind(category);
-        List<AiPromptVersion> all = versions.findByKindAndPromptKeyOrderByVersionNoDesc(kind,
-                PromptCategories.normalizedKey(kind, key));
+        String promptKey = PromptCategories.normalizedKey(kind, key);
+        List<AiPromptVersion> all = versions.findByKindAndPromptKeyOrderByVersionNoDesc(kind, promptKey);
         AiPromptVersion live = all.stream().filter(version -> version.getStatus() == AiPromptStatus.ACTIVE).findFirst()
                 .orElseThrow(GenerationPromptNotFoundException::new);
         return new PromptWorkspaceResponse(mapper.toResponse(live),
                 PromptProposals.openProposal(all, live).map(mapper::toResponse).orElse(null),
                 all.stream().filter(version -> ACCEPTED.contains(version.getStatus())).map(mapper::toSummary)
-                        .toList());
+                        .toList(),
+                PromptLocks.lockedSectionIds(kind, promptKey));
     }
 
     @Transactional(readOnly = true)

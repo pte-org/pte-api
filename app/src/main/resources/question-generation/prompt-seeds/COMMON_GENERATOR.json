@@ -26,7 +26,8 @@
             "Always return valid JSON only, no markdown or additional text",
             "Write numbers as words (e.g., \"twenty-five\" not \"25\")",
             "Avoid abbreviations and acronyms where possible",
-            "The passage should be authentic and engaging"
+            "The passage should be authentic and engaging",
+            "Treat the topic hint as the content brief: follow its subject, angle and any picture type it asks for (for example a chart)"
           ],
           "levels": [],
           "sentToAi": true
@@ -72,6 +73,40 @@
             "All strings are properly escaped",
             "All required fields are present",
             "Arrays and objects are properly formatted"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "answer-hints",
+      "title": "Answer Hints",
+      "blocks": [
+        {
+          "type": "LIST",
+          "label": "",
+          "text": "",
+          "items": [
+            "Add two string fields at the root of the JSON: \"answerHintVi\" (Vietnamese) and \"answerHintEn\" (English)"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "answer-hint-style",
+      "title": "How to Write the Hints",
+      "blocks": [
+        {
+          "type": "LIST",
+          "label": "",
+          "text": "",
+          "items": [
+            "Each is a student hint of 2 to 4 short points, one per line, on how to approach this item",
+            "Say what to listen or look for, how to rule out options, or give an outline and structure for a spoken or written answer",
+            "A hint must never state, quote or point to the correct answer, the correct option or a missing word"
           ],
           "levels": [],
           "sentToAi": true

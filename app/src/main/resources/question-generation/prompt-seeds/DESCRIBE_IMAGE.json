@@ -34,7 +34,6 @@
           "label": "",
           "text": "",
           "items": [
-            "Task type (taskType): Always DESCRIBE_IMAGE",
             "Topic: A brief title for the chart (5-10 words, no special characters)",
             "Chart type (chartType): BAR, LINE, PIE or TABLE",
             "Title: The chart title (the same as the topic or slightly expanded)",
@@ -87,7 +86,6 @@
           "label": "",
           "text": "",
           "items": [
-            "taskType: DESCRIBE_IMAGE",
             "topic: Renewable Energy Adoption",
             "chartType: BAR",
             "title: Renewable Energy Adoption by Region (2020-2024)",

@@ -96,6 +96,8 @@ public class QuestionLifecycleService {
         revision.setRevisionNumber(source.getRevisionNumber() + 1);
         revision.setSupersedesPublicId(source.getPublicId());
         revision.setCurrent(false);
+        revision.setAnswerHintVi(source.getAnswerHintVi());
+        revision.setAnswerHintEn(source.getAnswerHintEn());
         applyContent(revision, source.getPromptText(), source.getAudioPromptRef(),
                 source.getImagePromptRef(), source.getReferenceAnswerText(), source.getCorrectAnswerText(),
                 source.getMinWordCount(), source.getMaxWordCount(), source.getOptions().stream()
@@ -181,6 +183,8 @@ public class QuestionLifecycleService {
         applyContent(question, request.promptText(), request.audioPromptRef(),
                 request.imagePromptRef(), request.referenceAnswerText(), request.correctAnswerText(),
                 request.minWordCount(), request.maxWordCount(), request.options());
+        question.setAnswerHintVi(request.answerHintVi());
+        question.setAnswerHintEn(request.answerHintEn());
         // Mark AI-generated questions as edited by human when content is updated
         if (question.getGenerationMeta() != null) {
             generationMetaHelper.markAsEditedByHuman(question);

@@ -165,4 +165,38 @@ class DraftParserTest {
         assertThrows(GenerationRequestInvalidException.class, () ->
                 parser.parse(json, "FILL_IN_THE_BLANKS_DROPDOWN"));
     }
+
+    @Test
+    void parseHint_ReadsBothLanguagesAtTheRoot() {
+        AnswerHint hint = parser.parseHint("{\"answerHintVi\": \"Nghe ý chính\", \"answerHintEn\": \"Listen for the gist\"}");
+        assertEquals("Nghe ý chính", hint.vi());
+        assertEquals("Listen for the gist", hint.en());
+    }
+
+    @Test
+    void parseHint_MissingLanguageIsASchemaError() {
+        assertThrows(GenerationRequestInvalidException.class, () ->
+                parser.parseHint("{\"answerHintVi\": \"Nghe ý chính\"}"));
+    }
+
+    @Test
+    void parseHiwDraft_WorksOutTheChangedPositionsAndIgnoresTheModelsCount() {
+        String json = """
+                {
+                  "topic": "Health",
+                  "transcript": "Regular exercise brings many benefits for the body and mind.",
+                  "displayedText": "Regular exercise brings several benefits for the brain and mind.",
+                  "changedIndexes": [1, 2]
+                }
+                """;
+
+        var hiw = (ItemDraft.HiwDraft) parser.parse(json, "HIGHLIGHT_INCORRECT_WORDS");
+
+        assertArrayEquals(new int[] {3, 7}, hiw.changedIndexes());
+    }
+
+    @Test
+    void changedIndexes_DifferentWordCountsHaveNoPositions() {
+        assertArrayEquals(new int[0], HiwWordDiff.changedIndexes("one two three", "one two"));
+    }
 }

@@ -234,4 +234,30 @@ class ReviewPromptBuilderTest {
 
         assertTrue(prompt.equals("Review a WRITE_ESSAY question."));
     }
+
+    @Test
+    void buildUserPrompt_WithHints_SendsThemAsData() {
+        ItemDraft.PassageDraft draft = new ItemDraft.PassageDraft(
+                "urban farming", "City farming reduces emissions.", List.of("farming reduces emissions"), null);
+        String prompt = builder.buildUserPrompt(draft,
+                new com.pte.itembank.internal.generation.draft.AnswerHint("Đọc to rõ", "Read clearly"),
+                CefrLevel.B2, null);
+        assertTrue(prompt.contains("<<< STUDENT HINTS >>>"));
+        assertTrue(prompt.contains("Read clearly"));
+    }
+
+    @Test
+    void buildSystemPrompt_SaysHowToJudgeTheStudentHints() {
+        when(rubricTraits.find("MC_READING_SINGLE")).thenReturn(Optional.empty());
+        String prompt = builder.buildSystemPrompt("MC_READING_SINGLE");
+        assertTrue(prompt.contains("STUDENT HINTS"));
+        assertTrue(prompt.contains("return FAIL and say how to rewrite the hints"));
+    }
+
+    @Test
+    void buildUserPrompt_WithoutHints_OmitsTheHintBlock() {
+        ItemDraft.PassageDraft draft = new ItemDraft.PassageDraft(
+                "urban farming", "City farming reduces emissions.", List.of("farming reduces emissions"), null);
+        assertFalse(builder.buildUserPrompt(draft, CefrLevel.B2, null).contains("STUDENT HINTS"));
+    }
 }

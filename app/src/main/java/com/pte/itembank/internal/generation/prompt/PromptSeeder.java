@@ -8,6 +8,7 @@ import com.pte.itembank.internal.generation.domain.AiPromptKind;
 import com.pte.itembank.internal.generation.domain.AiPromptVersion;
 import com.pte.itembank.internal.generation.repository.AiPromptVersionRepository;
 import com.pte.itembank.internal.generation.review.ChartImageReviewDefaults;
+import com.pte.itembank.internal.generation.review.PictureImageReviewDefaults;
 import com.pte.itembank.internal.generation.review.ReviewPromptDefaults;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,18 +43,36 @@ public class PromptSeeder implements ApplicationRunner {
     private final PromptContentCodec codec;
     private final ScoringPromptSource scoring;
     private final Clock clock;
+    private final PromptRequirementUpgrader upgrader;
 
     public PromptSeeder(AiPromptVersionRepository versions, PromptContentCodec codec, ScoringPromptSource scoring,
-                        Clock clock) {
+                        Clock clock, PromptRequirementUpgrader upgrader) {
         this.versions = versions;
         this.codec = codec;
         this.scoring = scoring;
         this.clock = clock;
+        this.upgrader = upgrader;
     }
 
     @Override
     public void run(ApplicationArguments args) throws IOException {
         seedMissing();
+        upgradeRequired();
+    }
+
+    /** Adds the instructions the code depends on to live prompts seeded before those instructions shipped. */
+    public int upgradeRequired() throws IOException {
+        try {
+            return upgradeFromSeed(AiPromptKind.SHARED, QuestionGenerationConstants.PROMPT_KEY_COMMON_GENERATOR)
+                    + upgrader.upgrade(AiPromptKind.REVIEWER, QuestionGenerationConstants.PROMPT_KEY_REVIEWER,
+                            ReviewPromptDefaults.content())
+                    + upgradeFromSeed(AiPromptKind.GENERATOR,
+                            QuestionGenerationConstants.PROMPT_KEY_DESCRIBE_IMAGE_PICTURE)
+                    + upgrader.dropObsoleteFields();
+        } catch (DataIntegrityViolationException upgradedByAnotherInstance) {
+            log.info("Prompt requirements were upgraded by another instance");
+            return 0;
+        }
     }
 
     /** Seeds every shipped prompt that has no row yet; returns how many were added. */
@@ -81,6 +100,11 @@ public class PromptSeeder implements ApplicationRunner {
                 QuestionGenerationConstants.PROMPT_KEY_IMAGE_REVIEWER)) {
             added += save(AiPromptKind.REVIEWER, QuestionGenerationConstants.PROMPT_KEY_IMAGE_REVIEWER,
                     ChartImageReviewDefaults.content());
+        }
+        if (!versions.existsByKindAndPromptKey(AiPromptKind.REVIEWER,
+                QuestionGenerationConstants.PROMPT_KEY_PICTURE_REVIEWER)) {
+            added += save(AiPromptKind.REVIEWER, QuestionGenerationConstants.PROMPT_KEY_PICTURE_REVIEWER,
+                    PictureImageReviewDefaults.content());
         }
         return added;
     }
@@ -120,6 +144,13 @@ public class PromptSeeder implements ApplicationRunner {
         }
         return Block.list(block.label(), block.levels().stream()
                 .map(row -> row.level() + LEVEL_SEPARATOR + row.text()).toList());
+    }
+
+    private int upgradeFromSeed(AiPromptKind kind, String promptKey) throws IOException {
+        Resource seed = new PathMatchingResourcePatternResolver().getResource(QuestionGenerationConstants
+                .PROMPT_SEED_PATTERN.replace("classpath*:", "classpath:").replace("*.json", promptKey + ".json"));
+        return upgrader.upgrade(kind, promptKey, codec.read(new String(seed.getInputStream().readAllBytes(),
+                StandardCharsets.UTF_8)));
     }
 
     private int seed(AiPromptKind kind, String promptKey, Resource resource) throws IOException {

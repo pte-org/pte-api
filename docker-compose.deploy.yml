@@ -76,10 +76,6 @@ services:
   mailpit:
     ports: !reset []
 
-  jaeger:
-    mem_limit: 512m
-    ports: !reset []
-
   web-tenant:
     build:
       context: ../pte-web

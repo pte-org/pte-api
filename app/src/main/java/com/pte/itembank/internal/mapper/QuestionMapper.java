@@ -66,7 +66,9 @@ public final class QuestionMapper {
                 question.getUpdatedAt(),
                 question.getCefrLevel() == null ? null : question.getCefrLevel().name(),
                 question.getAuthorUserPublicId(),
-                parseGenerationMeta(question.getGenerationMeta(), jsonMapper));
+                parseGenerationMeta(question.getGenerationMeta(), jsonMapper),
+                question.getAnswerHintVi(),
+                question.getAnswerHintEn());
     }
 
     private static GenerationMetaResponse parseGenerationMeta(String generationMetaJson, JsonMapper jsonMapper) {

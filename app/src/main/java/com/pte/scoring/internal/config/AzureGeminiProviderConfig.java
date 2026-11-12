@@ -6,7 +6,9 @@ import com.pte.scoring.internal.vendor.azure.AzureSpeechAssessor;
 import com.pte.scoring.internal.vendor.azure.AzureSpeechRestClient;
 import com.pte.scoring.internal.vendor.gemini.GeminiRestClient;
 import com.pte.scoring.internal.vendor.gemini.OpenAiCompatibleStructuredClient;
+import com.pte.scoring.internal.vendor.gemini.StoredPromptModelClient;
 import com.pte.scoring.internal.vendor.gemini.StructuredModelClient;
+import com.pte.itembank.PromptTexts;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -66,7 +68,12 @@ public class AzureGeminiProviderConfig {
     }
 
     @Bean
-    public StructuredModelClient scoringModelClient(JsonMapper jsonMapper) {
+    public StructuredModelClient scoringModelClient(JsonMapper jsonMapper, PromptTexts prompts) {
+        // Every scoring call goes out with the prompt in use on the AI prompt pages.
+        return new StoredPromptModelClient(vendorModelClient(jsonMapper), prompts);
+    }
+
+    private StructuredModelClient vendorModelClient(JsonMapper jsonMapper) {
         AiProviderProperties.Gemini gemini = properties.getGemini();
         if (properties.usesGateway()) {
             ScoringGatewayProperties gateway = properties.getGateway();

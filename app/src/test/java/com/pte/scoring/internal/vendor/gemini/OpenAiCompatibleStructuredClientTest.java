@@ -23,6 +23,36 @@ class OpenAiCompatibleStructuredClientTest {
             ProviderGuard.passThrough(OpenAiCompatibleStructuredClient.VENDOR));
 
     @Test
+    void aRecordingIsSentAsInputAudioBeforeTheText() {
+        GeminiRequest request = new GeminiRequest("system", "Score it.", java.util.Map.of("type", "OBJECT"),
+                java.util.List.of(), new GeminiAudio(GeminiAudio.WAV, new byte[]{1, 2, 3}), null);
+
+        JsonNode user = json.valueToTree(client.body(request)).path("messages").path(1).path("content");
+
+        assertThat(user.path(0).path("type").asText()).isEqualTo("input_audio");
+        assertThat(user.path(0).path("input_audio").path("format").asText()).isEqualTo("wav");
+        assertThat(user.path(0).path("input_audio").path("data").asText()).isEqualTo("AQID");
+        assertThat(user.path(1).path("text").asText()).isEqualTo("Score it.");
+    }
+
+    @Test
+    void aTextOnlyCallKeepsThePlainStringContent() {
+        GeminiRequest request = new GeminiRequest("system", "Score it.", java.util.Map.of("type", "OBJECT"),
+                java.util.List.of());
+
+        assertThat(json.valueToTree(client.body(request)).path("messages").path(1).path("content").asText())
+                .isEqualTo("Score it.");
+    }
+
+    @Test
+    void asksForOneJsonBodyInsteadOfAStream() {
+        GeminiRequest request = new GeminiRequest("system", "Score it.", java.util.Map.of("type", "OBJECT"),
+                java.util.List.of());
+
+        assertThat(json.valueToTree(client.body(request)).path("stream").asBoolean(true)).isFalse();
+    }
+
+    @Test
     void readsTheJsonObjectEvenInsideAFenceAndKeepsTheServedModel() {
         GeminiResponse response = client.parse(reply("```json\n{\"content\": 2}\n```", "stop", "capstone-2026"));
 

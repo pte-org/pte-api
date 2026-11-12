@@ -27,7 +27,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -112,26 +111,28 @@ class PracticeResponseServiceScoringTest {
     }
 
     @Test
-    void speechAnswerIsQueuedNotScoredInTheCall() {
+    void speechAnswerIsSavedUnscoredUntilTheStudentAsks() {
         item.setTaskCode("READ_ALOUD");
         item.setRendererKey("READ_ALOUD_V1");
         route(PracticeScoringRoute.AI_SPEECH);
 
         answer("{\"mediaPublicId\":\"" + UUID.randomUUID() + "\"}");
 
-        verify(stateService).startScoring(session, item, NOW);
+        verify(stateService, never()).startScoring(any(), any(), any());
+        assertThat(item.getScoringStatus()).isEqualTo(PracticeScoringStatus.NONE);
         verify(scoringService, never()).scorePracticeAnswer(any());
         assertAnswered();
     }
 
     @Test
-    void writingAnswerIsQueuedNotScoredInTheCall() {
+    void writingAnswerIsSavedUnscoredUntilTheStudentAsks() {
         item.setTaskCode("WRITE_ESSAY");
         route(PracticeScoringRoute.AI_TEXT);
 
         answer("{\"text\":\"An essay.\"}");
 
-        verify(stateService).startScoring(session, item, NOW);
+        verify(stateService, never()).startScoring(any(), any(), any());
+        assertThat(item.getScoringStatus()).isEqualTo(PracticeScoringStatus.NONE);
         verify(scoringService, never()).scorePracticeAnswer(any());
         assertAnswered();
     }
@@ -194,21 +195,6 @@ class PracticeResponseServiceScoringTest {
         assertThatThrownBy(() -> answer("{\"selectedOption\":\"a\"}"))
                 .isInstanceOfSatisfying(PracticeSessionException.class,
                         ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY));
-    }
-
-    @Test
-    void rateLimitedSubmissionLeavesTheItemPending() {
-        item.setTaskCode("READ_ALOUD");
-        route(PracticeScoringRoute.AI_SPEECH);
-        doThrow(new PracticeSessionException(HttpStatus.TOO_MANY_REQUESTS, "PRACTICE_SCORING_RATE_LIMITED", "slow"))
-                .when(stateService).startScoring(session, item, NOW);
-
-        assertThatThrownBy(() -> answer("{\"mediaPublicId\":\"" + UUID.randomUUID() + "\"}"))
-                .isInstanceOfSatisfying(PracticeSessionException.class,
-                        ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
-
-        assertThat(item.getStatus()).isEqualTo(PracticeResponseStatus.PENDING);
-        verify(itemRepository, never()).saveAndFlush(any());
     }
 
     @Test

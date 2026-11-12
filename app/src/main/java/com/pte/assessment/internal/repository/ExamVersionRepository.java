@@ -29,4 +29,14 @@ public interface ExamVersionRepository extends JpaRepository<ExamVersion, Long> 
     @Query("select i from ExamVersion v join v.items i where i.publicId in :itemPublicIds and v.tenantId = :tenantId")
     List<ExamVersionItem> findItemsForTenant(@Param("itemPublicIds") Collection<UUID> itemPublicIds,
             @Param("tenantId") UUID tenantId);
+
+    /** Audio prompt files among {@code refs} frozen into any exam version. */
+    @Query("select item.audioPromptRef from ExamVersion version join version.items item "
+            + "where item.audioPromptRef in :refs")
+    List<UUID> findFrozenAudioPromptRefs(@Param("refs") Collection<UUID> refs);
+
+    /** Image prompt files among {@code refs} frozen into any exam version. */
+    @Query("select item.imagePromptRef from ExamVersion version join version.items item "
+            + "where item.imagePromptRef in :refs")
+    List<UUID> findFrozenImagePromptRefs(@Param("refs") Collection<UUID> refs);
 }
