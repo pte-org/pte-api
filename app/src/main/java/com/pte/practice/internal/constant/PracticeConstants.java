@@ -33,7 +33,7 @@ public final class PracticeConstants {
     public static final String PRACTICE_DETERMINISTIC_SCORING_UNAVAILABLE =
             "PRACTICE_DETERMINISTIC_SCORING_UNAVAILABLE";
     public static final String PRACTICE_PRODUCT_NOT_FOUND = "PRACTICE_PRODUCT_NOT_FOUND";
-    public static final String PRACTICE_QUESTION_COUNT_INVALID = "Question count must be between 1 and 50";
+    public static final String PRACTICE_QUESTION_COUNT_INVALID = "Question count must be at least 1";
     public static final String PRACTICE_EXAM_DATE_INVALID = "PRACTICE_EXAM_DATE_INVALID";
     public static final String PRACTICE_SCORING_RATE_LIMITED = "PRACTICE_SCORING_RATE_LIMITED";
     public static final String PRACTICE_SCORING_RETRY_NOT_ALLOWED = "PRACTICE_SCORING_RETRY_NOT_ALLOWED";
@@ -149,8 +149,8 @@ public final class PracticeConstants {
             "SUMMARIZE_GROUP_DISCUSSION_V1");
     /** Sessions have no session-wide limit since V3; the field stays on the wire as 0 for older clients. */
     public static final int PRACTICE_NO_SESSION_TIME_LIMIT_SECONDS = 0;
-    public static final int PRACTICE_DEFAULT_QUESTION_COUNT = 10;
-    public static final int PRACTICE_MAX_QUESTION_COUNT = 50;
+    /** No count in the start request: every published question of the task type (students submit question by question). */
+    public static final int PRACTICE_ALL_QUESTIONS = Integer.MAX_VALUE;
     public static final String PRACTICE_MOCK_TEST_PATH = "/api/v1/student/practice/mock-tests";
     public static final String PRACTICE_ADMIN_PATH = "/api/v1/admin/practice";
     public static final String PRACTICE_MOCK_TEST_NOT_FOUND = "PRACTICE_MOCK_TEST_NOT_FOUND";
