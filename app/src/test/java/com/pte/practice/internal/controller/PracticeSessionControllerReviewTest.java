@@ -6,6 +6,7 @@ import com.pte.practice.internal.service.PracticeRecordingPlaybackService;
 import com.pte.practice.internal.service.PracticeReviewService;
 import com.pte.practice.internal.service.session.PracticeScoringRequestService;
 import com.pte.practice.internal.service.session.PracticeSessionDiscardService;
+import com.pte.practice.internal.service.session.PracticeSessionFinishService;
 import com.pte.practice.internal.service.session.PracticeSessionService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
@@ -43,7 +44,7 @@ class PracticeSessionControllerReviewTest {
         mvc = MockMvcBuilders.standaloneSetup(
                 new PracticeSessionController(mock(PracticeSessionService.class), reviewService,
                         mock(PracticeRecordingPlaybackService.class), mock(PracticeScoringRequestService.class),
-                        mock(PracticeSessionDiscardService.class)))
+                        mock(PracticeSessionDiscardService.class), mock(PracticeSessionFinishService.class)))
                 .build();
     }
 

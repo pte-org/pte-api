@@ -15,6 +15,7 @@ import com.pte.practice.internal.service.PracticeRecordingPlaybackService;
 import com.pte.practice.internal.service.PracticeReviewService;
 import com.pte.practice.internal.service.session.PracticeScoringRequestService;
 import com.pte.practice.internal.service.session.PracticeSessionDiscardService;
+import com.pte.practice.internal.service.session.PracticeSessionFinishService;
 import com.pte.practice.internal.service.session.PracticeSessionService;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
@@ -43,15 +44,17 @@ public class PracticeSessionController {
     private final PracticeRecordingPlaybackService playbackService;
     private final PracticeScoringRequestService scoringRequestService;
     private final PracticeSessionDiscardService discardService;
+    private final PracticeSessionFinishService finishService;
 
     public PracticeSessionController(PracticeSessionService sessionService, PracticeReviewService reviewService,
             PracticeRecordingPlaybackService playbackService, PracticeScoringRequestService scoringRequestService,
-            PracticeSessionDiscardService discardService) {
+            PracticeSessionDiscardService discardService, PracticeSessionFinishService finishService) {
         this.sessionService = sessionService;
         this.reviewService = reviewService;
         this.playbackService = playbackService;
         this.scoringRequestService = scoringRequestService;
         this.discardService = discardService;
+        this.finishService = finishService;
     }
 
     @PostMapping
@@ -172,6 +175,11 @@ public class PracticeSessionController {
     @PostMapping("/{publicId}/discard")
     public ApiResponse<Boolean> discard(@PathVariable UUID publicId) {
         return ApiResponse.success(discardService.exitWithoutSaving(publicId, CurrentUserContext.required()));
+    }
+
+    @PostMapping("/{publicId}/finish")
+    public ApiResponse<Boolean> finish(@PathVariable UUID publicId) {
+        return ApiResponse.success(finishService.finish(publicId, CurrentUserContext.required()));
     }
 
     @PostMapping("/{publicId}/save-and-exit")
