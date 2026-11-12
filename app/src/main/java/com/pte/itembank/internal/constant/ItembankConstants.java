@@ -106,6 +106,9 @@ public final class ItembankConstants {
     public static final String TASK_TYPE_REQUIRED = "Task type is required";
     public static final String TASK_SKILL_MAPPING_LOAD_FAILED = "Failed to load task-skill mapping from %s";
 
+    /** A deleted question keeps its prompt files this long, so a deletion made by mistake can still be undone. */
+    public static final java.time.Duration DELETED_QUESTION_MEDIA_RETENTION = java.time.Duration.ofDays(30);
+
     private ItembankConstants() {
     }
 }

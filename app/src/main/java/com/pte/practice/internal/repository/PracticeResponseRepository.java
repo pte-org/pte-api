@@ -55,6 +55,18 @@ public interface PracticeResponseRepository extends JpaRepository<PracticeRespon
 
     List<PracticeResponse> findByPracticeSessionIdInAndDeletedFalse(Collection<Long> practiceSessionIds);
 
+    /** {@code [publicId, savedPayload]} of the given items whose answer is saved, outside discarded sessions. */
+    @Query("""
+            select item.publicId, item.savedPayload from PracticeResponse item, PracticeSession owner
+             where item.practiceSessionId = owner.id
+               and item.publicId in :itemPublicIds
+               and item.savedPayload is not null
+               and item.deleted = false
+               and owner.deleted = false
+               and owner.status <> com.pte.practice.internal.domain.enums.PracticeSessionStatus.DISCARDED
+            """)
+    List<Object[]> findLivePayloadsByPublicIds(@Param("itemPublicIds") Collection<UUID> itemPublicIds);
+
     /** Distinct questions the student has answered, per task code: {@code [taskCode, count]} rows. */
     @Query("""
             select item.taskCode, count(distinct item.sourceQuestionPublicId) from PracticeResponse item, PracticeSession owner
@@ -99,4 +111,12 @@ public interface PracticeResponseRepository extends JpaRepository<PracticeRespon
              order by item.orderIndex
             """)
     List<PracticeResponse> findScoringForUpdate(@Param("practiceSessionId") Long practiceSessionId);
+
+    /** Audio prompt files among {@code refs} pinned into any practice answer. */
+    @Query("select item.audioPromptRef from PracticeResponse item where item.audioPromptRef in :refs")
+    List<UUID> findPinnedAudioPromptRefs(@Param("refs") Collection<UUID> refs);
+
+    /** Image prompt files among {@code refs} pinned into any practice answer. */
+    @Query("select item.imagePromptRef from PracticeResponse item where item.imagePromptRef in :refs")
+    List<UUID> findPinnedImagePromptRefs(@Param("refs") Collection<UUID> refs);
 }

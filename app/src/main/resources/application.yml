@@ -222,6 +222,10 @@ management:
         include: health,info
 
 media:
+  # Removing unused files at Cloudinary is off unless set: local and production share one Cloudinary account, and a
+  # local database does not know every file production uses. Turn it on only where the database is the owner.
+  purge:
+    enabled: ${MEDIA_PURGE_ENABLED:false}
   cloudinary:
     cloud-name: ${CLOUDINARY_CLOUD_NAME:}
     api-key: ${CLOUDINARY_API_KEY:}

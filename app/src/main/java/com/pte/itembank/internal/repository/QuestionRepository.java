@@ -239,4 +239,16 @@ public interface QuestionRepository extends JpaRepository<Question, Long>, Quest
             """, nativeQuery = true)
     List<String> findRecentTopicsByTaskType(@Param("taskTypeKey") String taskTypeKey,
             Pageable pageable);
+
+    /** Audio prompt files among {@code refs} used by a live question, or by one deleted after {@code deletedSince}. */
+    @Query("select q.audioPromptRef from Question q where q.audioPromptRef in :refs "
+            + "and (q.deleted = false or q.updatedAt > :deletedSince)")
+    List<UUID> findKeptAudioPromptRefs(@Param("refs") Collection<UUID> refs,
+            @Param("deletedSince") Instant deletedSince);
+
+    /** Image prompt files among {@code refs} used by a live question, or by one deleted after {@code deletedSince}. */
+    @Query("select q.imagePromptRef from Question q where q.imagePromptRef in :refs "
+            + "and (q.deleted = false or q.updatedAt > :deletedSince)")
+    List<UUID> findKeptImagePromptRefs(@Param("refs") Collection<UUID> refs,
+            @Param("deletedSince") Instant deletedSince);
 }
