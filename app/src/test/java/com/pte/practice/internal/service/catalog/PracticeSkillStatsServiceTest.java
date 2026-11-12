@@ -56,6 +56,8 @@ class PracticeSkillStatsServiceTest {
         assertThat(result.sections().get(0).answeredQuestionCount()).isEqualTo(3);
         assertThat(result.sections().get(1).practiceQuestionCount()).isZero();
         assertThat(result.sections().get(1).answeredQuestionCount()).isEqualTo(1);
+        assertThat(result.sections().get(0).taskTypes().get(0).availableQuestionCount()).isEqualTo(12);
+        assertThat(result.sections().get(1).taskTypes().get(0).availableQuestionCount()).isZero();
     }
 
     @Test
