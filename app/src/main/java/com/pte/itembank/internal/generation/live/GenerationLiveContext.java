@@ -3,6 +3,8 @@ package com.pte.itembank.internal.generation.live;
 import com.pte.itembank.internal.generation.llm.LlmRole;
 import com.pte.itembank.internal.generation.llm.TokenSink;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -26,6 +28,15 @@ public final class GenerationLiveContext {
 
     public static void close() {
         CURRENT.remove();
+    }
+
+    /** Reports one check of the item this thread is making; nothing happens outside an item. */
+    public static void check(String step, String status, Map<String, String> facts,
+                             List<LiveEvent.CheckDetail> details) {
+        Slot slot = CURRENT.get();
+        if (slot != null) {
+            slot.feed().check(slot.jobPublicId(), slot.index(), step, status, facts, details);
+        }
     }
 
     /** @return where the agent's text goes, or {@link TokenSink#NONE} when no item is being made on this thread */
