@@ -7,6 +7,7 @@ import com.pte.itembank.internal.generation.live.LiveEvent;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /** Tells the live view each step the reviewer goes through: its prompt, its call and the reading of its verdict. */
 final class ReviewChecks {
@@ -38,8 +39,15 @@ final class ReviewChecks {
     /** The verdict was read: how many checks the reviewer made and how many of them failed. */
     static void verdict(ReviewVerdict verdict) {
         long failed = verdict.checks().values().stream().filter(check -> !check.ok()).count();
+        // The failed criteria with the reviewer's note, and its fix: the reason the draft is written again.
+        String failedChecks = verdict.checks().entrySet().stream().filter(entry -> !entry.getValue().ok())
+                .map(entry -> entry.getKey() + "=" + entry.getValue().note()
+                        + (entry.getValue().estimated() == null ? "" : " (estimated " + entry.getValue().estimated() + ")"))
+                .collect(Collectors.joining(" | "));
         report(GenerationLiveConstants.CHECK_REVIEW_VERDICT, verdict.isPassed()
                         ? GenerationLiveConstants.CHECK_PASSED : GenerationLiveConstants.CHECK_FAILED,
+                Map.of(GenerationLiveConstants.FACT_FAILED_CHECKS, failedChecks,
+                        GenerationLiveConstants.FACT_FIX, String.valueOf(verdict.fixSuggestion())),
                 List.of(new LiveEvent.CheckDetail(GenerationLiveConstants.DETAIL_CRITERIA,
                                 GenerationLiveConstants.UNIT_ITEMS, null, verdict.checks().size()),
                         new LiveEvent.CheckDetail(GenerationLiveConstants.DETAIL_CRITERIA_FAILED,
@@ -48,7 +56,7 @@ final class ReviewChecks {
 
     /** The reviewer's answer could not be read as a verdict. */
     static void unreadable() {
-        report(GenerationLiveConstants.CHECK_REVIEW_VERDICT, GenerationLiveConstants.CHECK_FAILED, List.of());
+        report(GenerationLiveConstants.CHECK_REVIEW_VERDICT, GenerationLiveConstants.CHECK_FAILED, Map.of(), List.of());
     }
 
     private static LiveEvent.CheckDetail count(String key, int value) {
@@ -60,6 +68,11 @@ final class ReviewChecks {
     }
 
     private static void report(String step, String status, List<LiveEvent.CheckDetail> details) {
-        GenerationLiveContext.check(step, status, Map.of(), details);
+        report(step, status, Map.of(), details);
+    }
+
+    private static void report(String step, String status, Map<String, String> facts,
+                               List<LiveEvent.CheckDetail> details) {
+        GenerationLiveContext.check(step, status, facts, details);
     }
 }

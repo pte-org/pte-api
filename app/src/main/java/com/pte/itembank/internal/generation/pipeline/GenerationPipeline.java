@@ -114,6 +114,7 @@ public class GenerationPipeline {
                     return ItemOutcome.CANCELLED; // stopped by a person: the draft in progress is dropped
                 }
                 if (round > 1) {
+                    LOG.info("Generation round {} starts: jobId={}, item={}", round, claim.jobPublicId(), index);
                     advance(claim, index, ItemStage.GENERATING);
                 }
                 try {
@@ -176,6 +177,7 @@ public class GenerationPipeline {
                             || !canRewrite(budget, round, maxRounds)) {
                         throw mediaFailure;
                     }
+                    LOG.info("Generation audio out of range: jobId={}, item={}", claim.jobPublicId(), index);
                     feedback = QuestionGenerationConstants.FEEDBACK_AUDIO_LENGTH + " " + mediaFailure.getUserMessage();
                     continue;
                 }
