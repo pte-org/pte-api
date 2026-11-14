@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Sets or removes keys in an env file without printing any value.
 #   deploy/scripts/env-set.sh .env KEY=value [KEY=value ...] [--unset KEY ...]
-# A key that exists is replaced in place; a new key is appended. The file is backed up first (FILE.bak-<time>) and
+# A key that exists is replaced in place; a new key is appended. The file is backed up first (to ~/pte-env-backups
+# when it exists, else beside FILE) and
 # keeps its permissions, so a production .env stays mode 600. Running it again with the same arguments changes nothing.
 set -euo pipefail
 
@@ -9,7 +10,10 @@ file="${1:?usage: env-set.sh FILE KEY=value ... [--unset KEY ...]}"
 shift
 [ -f "$file" ] || { echo "no such file: $file" >&2; exit 1; }
 
-backup="$file.bak-$(date +%Y%m%d-%H%M%S)"
+# Backups go outside the repository when the server's backup folder exists, so the checkout stays clean for deploys.
+backup_dir="${ENV_BACKUP_DIR:-$HOME/pte-env-backups}"
+[ -d "$backup_dir" ] || backup_dir="$(dirname "$file")"
+backup="$backup_dir/$(basename "$file").bak-$(date +%Y%m%d-%H%M%S)"
 cp -p "$file" "$backup"
 work="$(mktemp)"
 trap 'rm -f "$work"' EXIT
