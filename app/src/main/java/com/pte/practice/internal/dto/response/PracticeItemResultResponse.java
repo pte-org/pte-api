@@ -11,6 +11,7 @@ import java.util.UUID;
  * never the reference or correct answer. {@code retryable} is true only for a FAILED item that may still be re-submitted.
  * {@code subScoreMax} (criterion -> its maximum) is present only when {@code subScores} are Pearson trait scores of a
  * rubric version (shown as achieved / max); it is null for older results, whose sub-scores are raw 0-100 numbers.
+ * {@code promptText} is the transcript of an audio-only task, released only once the item is answered.
  */
 public record PracticeItemResultResponse(
         UUID itemPublicId,
@@ -24,7 +25,8 @@ public record PracticeItemResultResponse(
         String failureCode,
         boolean retryable,
         Instant scoredAt,
-        Map<String, Integer> subScoreMax) {
+        Map<String, Integer> subScoreMax,
+        String promptText) {
 
     public PracticeItemResultResponse {
         subScores = subScores == null ? Map.of() : Map.copyOf(subScores);

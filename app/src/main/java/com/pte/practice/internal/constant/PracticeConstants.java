@@ -104,6 +104,8 @@ public final class PracticeConstants {
     public static final String PRACTICE_CATALOG_VERSION = "2026.10";
     /** Task codes the exam knows but practice never offers (the exam-only unscored warm-up). */
     public static final Set<String> PRACTICE_HIDDEN_TASK_CODES = Set.of("PERSONAL_INTRODUCTION");
+    /** Drag-and-drop and dropdown blank tasks: their options are stored in answer order. */
+    public static final Set<String> BLANK_TASK_CODES = Set.of("FILL_IN_THE_BLANKS_DRAG_AND_DROP", "FILL_IN_THE_BLANKS_DROPDOWN");
     /** Every exam renderer except the hidden Personal Introduction. */
     public static final Set<String> PRACTICE_CLIENT_SUPPORTED_RENDERER_KEYS = Set.of(
             "READ_ALOUD_V1",
