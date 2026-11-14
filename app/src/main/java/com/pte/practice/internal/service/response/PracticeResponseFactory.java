@@ -33,6 +33,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.pte.practice.internal.service.PracticeCatalogService;
+import com.pte.practice.internal.service.PracticeReorderLabels;
 import com.pte.practice.internal.service.mocktest.PracticeMockTestService;
 import com.pte.practice.internal.service.selection.PracticeQuestionPicker;
 import com.pte.practice.internal.service.selection.PracticeQuestionAllocation;
@@ -249,6 +250,13 @@ public class PracticeResponseFactory {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
+    /** What the student sees: Re-order paragraphs are shuffled and relabelled so their order is not the answer. */
+    private List<PracticeQuestionContent.Option> studentOptions(PracticeResponse item, PracticeQuestionContent content) {
+        return PracticeReorderLabels.TASK_CODE.equals(item.getTaskCode())
+                ? PracticeReorderLabels.shuffleAndRelabel(content.options(), new java.security.SecureRandom())
+                : content.options();
+    }
+
     private void pinQuestionContent(PracticeResponse item, PracticeQuestionPin pin) {
         PracticeQuestionContent content = pin.content();
         item.setSourceQuestionPublicId(content.publicId());
@@ -261,7 +269,7 @@ public class PracticeResponseFactory {
         item.setReferenceAnswerText(evaluationContent.referenceAnswerText());
         item.setCorrectAnswerText(evaluationContent.correctAnswerText());
         try {
-            item.setOptionsJson(jsonMapper.writeValueAsString(content.options()));
+            item.setOptionsJson(jsonMapper.writeValueAsString(studentOptions(item, content)));
             item.setObjectiveOptionsJson(jsonMapper.writeValueAsString(evaluationContent.options()));
         } catch (RuntimeException ex) {
             throw new PracticeSessionException(HttpStatus.SERVICE_UNAVAILABLE,
