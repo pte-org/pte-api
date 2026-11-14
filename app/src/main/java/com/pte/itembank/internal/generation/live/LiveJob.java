@@ -65,6 +65,12 @@ final class LiveJob {
         send(GenerationLiveConstants.EVENT_REVIEW, review);
     }
 
+    synchronized void check(LiveEvent.Check check, Instant now) {
+        item(check.index()).check(check);
+        touch(now);
+        send(GenerationLiveConstants.EVENT_CHECK, check);
+    }
+
     synchronized void itemEnded(int index, Instant now) {
         touch(now);
         send(GenerationLiveConstants.EVENT_ITEM, new LiveEvent.Item(index));

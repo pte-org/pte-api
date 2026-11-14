@@ -15,7 +15,21 @@ public final class LiveEvent {
 
     /** {@code activeAgent} is the agent that started last: the writer rewrites a rejected draft while reviewing. */
     public record ItemSnapshot(int index, String stage, String activeAgent, AgentText generator, AgentText reviewer,
-                               UUID audioRef, UUID imageRef, Draft draft, Review review) {
+                               UUID audioRef, UUID imageRef, Draft draft, Review review, List<Check> checks) {
+    }
+
+    /**
+     * One check of the current round of writing (see GenerationLiveConstants.EVENT_CHECK): facts by name for its
+     * summary line, and details listed under it in order.
+     */
+    public record Check(int index, String step, String status, Map<String, String> facts, List<CheckDetail> details) {
+    }
+
+    /**
+     * One line under a check. {@code unit} says how to read it: CHARS, WORDS or ITEMS give {@code count}; TEXT gives
+     * {@code text}; PRESENT only names {@code key}, a field the model wrote.
+     */
+    public record CheckDetail(String key, String unit, String text, Integer count) {
     }
 
     /**

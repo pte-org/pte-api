@@ -88,7 +88,6 @@ public class GenerationPipeline {
             int maxCalls = allowance.maxCallsPerItem();
             GenerationCallBudget budget = new GenerationCallBudget(maxCalls);
 
-            // Generate
             ItemGenerator generator = generators.stream()
                     .filter(candidate -> candidate.supports(claim.taskTypeKey())).findFirst().orElse(null);
             if (generator == null) {
@@ -101,13 +100,11 @@ public class GenerationPipeline {
                     claim.cefrLevel(), claim.pool(), claim.topicHint(), avoidTopics, null,
                     claim.imageKind().resolve(claim.topicHint()));
             GeneratedImageCheck images = new GeneratedImageCheck(properties, imageReviewer, liveFeed, mediaRenderer);
-            // Write, review and make the media until every reviewer is satisfied or the item's calls run out. Each
-            // refusal goes back to the writer as feedback. When the calls run out on a content refusal, the last draft
-            // is still saved, with the reviewer's notes, for a person to finish: a job always yields its questions.
+            // Write, review and make the media until every reviewer is satisfied or the item's calls run out: a broken
+            // answer, a passing provider failure or a refusal goes back to the writer as feedback. When the calls run
+            // out on a content refusal, the last draft is still saved with the reviewer's notes for a person to finish.
+            // The allowance also caps the rounds, even for a generator that does not count its calls.
             String feedback = null;
-            // Every draft is reviewed and, while a whole round still fits in the allowance, written again until it
-            // passes: a broken answer, a passing provider failure or a refusal goes back to the writer, not to the
-            // person. The allowance also caps the rounds, even for a generator that does not count its calls.
             int callsPerRound = properties.getLimits().getMaxCallsPerRound();
             int maxRounds = Math.max(1, maxCalls / callsPerRound);
             GeneratedItem item;
@@ -135,7 +132,9 @@ public class GenerationPipeline {
                 }
                 liveFeed.draft(claim.jobPublicId(), index, round, item.question());
                 // A form-started question is not saved, so a duplicate on the last round is still shown to a person.
-                if (writer.isDuplicate(claim, item)
+                boolean duplicate = writer.isDuplicate(claim, item);
+                DuplicateCheck.report(claim.taskTypeKey(), item, duplicate);
+                if (duplicate
                         && (claim.saveQuestions() || canRewrite(budget, round, maxRounds))) {
                     if (!canRewrite(budget, round, maxRounds)) {
                         return fail(claim, index, QuestionGenerationConstants.GENERATION_DUPLICATE_CONTENT,

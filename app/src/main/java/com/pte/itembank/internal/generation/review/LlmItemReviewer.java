@@ -3,6 +3,7 @@ package com.pte.itembank.internal.generation.review;
 import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.internal.generation.draft.AnswerHint;
 import com.pte.itembank.internal.generation.draft.ItemDraft;
+import com.pte.itembank.internal.generation.exception.GenerationRequestInvalidException;
 import com.pte.itembank.internal.generation.llm.LlmGateway;
 import com.pte.itembank.internal.generation.llm.LlmRole;
 import com.pte.itembank.internal.generation.pipeline.GeneratedItem;
@@ -50,7 +51,20 @@ public class LlmItemReviewer {
         String systemPrompt = promptBuilder.buildSystemPrompt(taskTypeKey);
         String userPrompt = promptBuilder.buildUserPrompt(draft, hint, cefrLevel, fixSuggestion);
 
+        ReviewChecks.prompt(taskTypeKey, cefrLevel, systemPrompt, userPrompt, hint != null,
+                fixSuggestion != null && !fixSuggestion.isBlank());
+
+        ReviewChecks.reviewing();
         String jsonResponse = llmGateway.completeJson(LlmRole.REVIEWER, systemPrompt, userPrompt);
-        return verdictParser.parse(jsonResponse, cefrLevel);
+        ReviewChecks.reviewed(jsonResponse);
+        ReviewVerdict verdict;
+        try {
+            verdict = verdictParser.parse(jsonResponse, cefrLevel);
+        } catch (GenerationRequestInvalidException unreadable) {
+            ReviewChecks.unreadable();
+            throw unreadable;
+        }
+        ReviewChecks.verdict(verdict);
+        return verdict;
     }
 }

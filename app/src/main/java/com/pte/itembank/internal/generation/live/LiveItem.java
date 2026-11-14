@@ -2,7 +2,11 @@ package com.pte.itembank.internal.generation.live;
 
 import com.pte.itembank.internal.generation.llm.LlmRole;
 
+import com.pte.itembank.internal.generation.constant.GenerationLiveConstants;
+
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -18,6 +22,8 @@ final class LiveItem {
     private UUID imageRef;
     private LiveEvent.Draft draft;
     private LiveEvent.Review review;
+    /** The checks of the current round, by step, in the order they started. */
+    private final Map<String, LiveEvent.Check> checks = new LinkedHashMap<>();
 
     LiveItem(int index) {
         this.index = index;
@@ -51,9 +57,20 @@ final class LiveItem {
         review = latest;
     }
 
+    void check(LiveEvent.Check latest) {
+        if (GenerationLiveConstants.CHECK_PROMPT.equals(latest.step())) {
+            // A new round: the media of the last one was refused and removed, so it is no longer shown.
+            checks.clear();
+            audioRef = null;
+            imageRef = null;
+        }
+        checks.put(latest.step(), latest);
+    }
+
     LiveEvent.ItemSnapshot snapshot() {
         return new LiveEvent.ItemSnapshot(index, stage, activeAgent == null ? null : activeAgent.name(),
-                text(LlmRole.GENERATOR), text(LlmRole.REVIEWER), audioRef, imageRef, draft, review);
+                text(LlmRole.GENERATOR), text(LlmRole.REVIEWER), audioRef, imageRef, draft, review,
+                new ArrayList<>(checks.values()));
     }
 
     private LiveEvent.AgentText text(LlmRole agent) {

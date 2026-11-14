@@ -7,6 +7,7 @@ import com.pte.itembank.internal.generation.llm.LlmRole;
 import com.pte.itembank.internal.generation.llm.TokenSink;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -57,6 +58,13 @@ public class GenerationLiveFeed {
                        Map<String, String> notes) {
         registry.open(jobPublicId).review(new LiveEvent.Review(index, kind, passed, fixSuggestion, notes),
                 registry.clock().instant());
+    }
+
+    /** One check inside writing a draft; {@code step} and {@code status} are GenerationLiveConstants CHECK_ names. */
+    public void check(UUID jobPublicId, int index, String step, String status, Map<String, String> facts,
+                      List<LiveEvent.CheckDetail> details) {
+        registry.open(jobPublicId).check(new LiveEvent.Check(index, step, status, Map.copyOf(facts),
+                List.copyOf(details)), registry.clock().instant());
     }
 
     public void itemEnded(UUID jobPublicId, int index) {

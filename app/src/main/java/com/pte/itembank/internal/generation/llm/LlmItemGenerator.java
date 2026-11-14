@@ -68,6 +68,7 @@ public class LlmItemGenerator implements ItemGenerator {
                 : basePrompt + "\n\nA reviewer rejected the previous attempt. Address this feedback and return the complete JSON again:\n"
                         + request.feedback();
         String systemPrompt = GeneratorPromptRenderer.render(commonPrompt, request);
+        DraftChecks.prompt(request, systemPrompt, userPrompt);
 
         ParsedDraft parsed = callAndParse(systemPrompt, userPrompt, taskTypeKey, budget);
         ItemDraft draft = parsed.draft();
@@ -75,6 +76,7 @@ public class LlmItemGenerator implements ItemGenerator {
 
         // One rewrite when the draft breaks structural rules, with the exact rules it broke.
         var issues = draftValidator.validate(draft, taskTypeKey);
+        DraftChecks.rules(draft, issues, false);
         if (!issues.isEmpty() && budget.remaining() > 0) {
             budget.consume();
             String feedback = issues.stream().map(issue -> "- " + issue.message())
@@ -85,6 +87,7 @@ public class LlmItemGenerator implements ItemGenerator {
             draft = parsed.draft();
             hint = parsed.hint();
             issues = draftValidator.validate(draft, taskTypeKey);
+            DraftChecks.rules(draft, issues, issues.isEmpty());
         }
         if (!issues.isEmpty()) {
             throw new GenerationRequestInvalidException(QuestionGenerationConstants.GENERATION_VALIDATION_FAILED,
@@ -105,22 +108,38 @@ public class LlmItemGenerator implements ItemGenerator {
     /** One provider call and strict parse; a malformed JSON gets one more call asking for valid JSON only. */
     private ParsedDraft callAndParse(String systemPrompt, String userPrompt, String taskTypeKey,
                                    GenerationCallBudget budget) {
-        String json = llmGateway.completeJson(LlmRole.GENERATOR, systemPrompt, userPrompt);
+        String json = write(systemPrompt, userPrompt);
         try {
-            return parse(json, taskTypeKey);
+            return checked(parse(json, taskTypeKey));
         } catch (GenerationRequestInvalidException malformed) {
-            if (budget.remaining() <= 0) {
+            boolean retry = budget.remaining() > 0;
+            DraftChecks.jsonBroken(retry);
+            if (!retry) {
                 throw malformed;
             }
             budget.consume();
-            String again = llmGateway.completeJson(LlmRole.GENERATOR, systemPrompt,
+            String again = write(systemPrompt,
                     userPrompt + "\n\nPlease return valid JSON only, with all required fields.");
             try {
-                return parse(again, taskTypeKey);
+                return checked(parse(again, taskTypeKey));
             } catch (GenerationRequestInvalidException stillMalformed) {
+                DraftChecks.jsonBroken(false);
                 throw malformed;
             }
         }
+    }
+
+    /** One call of the writer, reported to the live view while it runs. */
+    private String write(String systemPrompt, String userPrompt) {
+        DraftChecks.writing();
+        String json = llmGateway.completeJson(LlmRole.GENERATOR, systemPrompt, userPrompt);
+        DraftChecks.written(json);
+        return json;
+    }
+
+    private static ParsedDraft checked(ParsedDraft parsed) {
+        DraftChecks.jsonRead(parsed.draft(), parsed.hint());
+        return parsed;
     }
 
     private ParsedDraft parse(String json, String taskTypeKey) {
