@@ -84,7 +84,8 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
     }
 
     /** Trusted module-to-module resolution for approved question media. */
-    @Transactional(readOnly = true)
+    // A missing reference is reported to the caller, which may degrade gracefully; it must not doom the caller's write.
+    @Transactional(readOnly = true, noRollbackFor = MediaNotFoundException.class)
     public PresignedDownloadResponse resolveForTrustedCaller(UUID mediaPublicId, long requestedTtlSeconds,
             UUID tenantId) {
         if (mediaPublicId == null) {
@@ -94,7 +95,7 @@ public class CloudinaryMediaService implements PracticeResponseMediaValidator {
     }
 
     /** Resolves an authorized caller's media set with one repository query. */
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, noRollbackFor = MediaNotFoundException.class)
     public Map<UUID, PresignedDownloadResponse> resolveForTrustedCallers(
             Collection<UUID> mediaPublicIds, long requestedTtlSeconds, UUID tenantId) {
         return mediaReader.resolveForTrustedCallers(mediaPublicIds, requestedTtlSeconds, tenantId);

@@ -40,6 +40,8 @@ class ExamIncidentCommandServiceTest {
     @Mock
     private ExamIncidentRepository incidentRepository;
     @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+    @Mock
     private IncidentHistoryLog historyLog;
     @Mock
     private IdentityService identityService;
@@ -57,7 +59,7 @@ class ExamIncidentCommandServiceTest {
     @BeforeEach
     void setUp() {
         service = new ExamIncidentCommandService(incidentRepository, historyLog, identityService, sessionService,
-                attemptService, new ExamIncidentAccessPolicy(sessionService), new ExamIncidentMapper(), com.pte.TestClocks.fixed());
+                attemptService, new ExamIncidentAccessPolicy(sessionService), new ExamIncidentMapper(), eventPublisher, com.pte.TestClocks.fixed());
         lenient().when(incidentRepository.save(any(ExamIncident.class))).thenAnswer(invocation -> {
             ExamIncident saved = invocation.getArgument(0);
             if (saved.getPublicId() == null) {
