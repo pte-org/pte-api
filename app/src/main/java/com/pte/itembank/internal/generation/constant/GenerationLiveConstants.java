@@ -42,6 +42,8 @@ public final class GenerationLiveConstants {
     public static final String FACT_RETRY = "retry";
     public static final String FACT_FIXED = "fixed";
     public static final String FACT_ISSUES = "issues";
+    public static final String FACT_FAILED_CHECKS = "failedChecks";
+    public static final String FACT_FIX = "fix";
     /** How a detail line under a check is read (see LiveEvent.CheckDetail). */
     public static final String UNIT_CHARS = "CHARS";
     public static final String UNIT_WORDS = "WORDS";
