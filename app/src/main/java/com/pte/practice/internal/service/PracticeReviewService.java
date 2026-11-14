@@ -56,7 +56,8 @@ public class PracticeReviewService {
                 .findByPracticeSessionIdAndDeletedFalseOrderByOrderIndexAsc(session.getId());
         return new PracticeReviewResponse(session.getPublicId(), sessionItems.stream()
                 .map(item -> new PracticeReviewResponse.Item(item.getPublicId(), item.getOrderIndex(), item.getTaskCode(),
-                        item.getDisplayName(), item.getSection(), item.getStatus().name(), item.getPromptText(),
+                        item.getDisplayName(), item.getSection(), item.getStatus().name(),
+                        PracticeTranscriptPolicy.visiblePromptText(item),
                         item.getSavedPayload(), item.getRendererKey(), item.getObjectiveScore(),
                         item.getObjectiveEvaluatedAt(), item.getAiScore(), item.getAiScoreStatus(),
                         PracticeScoringStateService.readSubScores(jsonMapper, item.getAiSubScoresJson()),
