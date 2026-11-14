@@ -81,7 +81,9 @@ public final class PromptVersionConstants {
     /** Fields of the generator reply the parser requires, so the shared block must keep asking for them. */
     public static final List<String> SHARED_REQUIRED_PHRASES = List.of("answerHintVi", "answerHintEn");
     /** The data block the reviewer receives the student hints in, so the reviewer prompt must keep judging it. */
-    public static final List<String> REVIEWER_REQUIRED_PHRASES = List.of("STUDENT HINTS");
+    public static final List<String> REVIEWER_REQUIRED_PHRASES = List.of("STUDENT HINTS", "HIDDEN SCORING DATA");
+    /** The chart writer must scale the data to the level the person chose. */
+    public static final List<String> DESCRIBE_IMAGE_REQUIRED_PHRASES = List.of("DIFFICULTY BY CEFR LEVEL");
 
     // Content problems
     public static final String PROBLEM_TITLE = "The title is required and must be at most 200 characters.";
