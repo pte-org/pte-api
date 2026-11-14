@@ -24,6 +24,9 @@ public final class PromptRequirements {
         if (kind == AiPromptKind.REVIEWER && QuestionGenerationConstants.PROMPT_KEY_REVIEWER.equals(promptKey)) {
             return PromptVersionConstants.REVIEWER_REQUIRED_PHRASES;
         }
+        if (kind == AiPromptKind.GENERATOR && QuestionGenerationConstants.TASK_DESCRIBE_IMAGE.equals(promptKey)) {
+            return PromptVersionConstants.DESCRIBE_IMAGE_REQUIRED_PHRASES;
+        }
         if (kind == AiPromptKind.GENERATOR
                 && QuestionGenerationConstants.PROMPT_KEY_DESCRIBE_IMAGE_PICTURE.equals(promptKey)) {
             return List.of(PictureSettings.MAX_ATTEMPTS, PictureSettings.WHEN_FAILS);

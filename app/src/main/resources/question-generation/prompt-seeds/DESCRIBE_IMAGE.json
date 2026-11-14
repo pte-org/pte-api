@@ -78,6 +78,20 @@
       ]
     },
     {
+      "id": "cefr-difficulty",
+      "title": "Difficulty by CEFR level",
+      "blocks": [
+        {
+          "type": "TEXT",
+          "label": "",
+          "text": "DIFFICULTY BY CEFR LEVEL: the target level is set by the person and must be met through the data itself, staying within the chart type rules.\n1. B1: one clear trend or one obvious leader; 3–5 categories; 1–2 series; whole, well-spaced values.\n2. B2: 2–3 series with a clear contrast; 4–6 categories; one exception to the main pattern.\n3. C1: 2–3 series whose trends differ (one rises while another falls or stays flat); 5–8 categories; at least one crossing or turning point; some values close enough to need careful comparison.\n4. C2: 3 series across 6–8 categories with non-uniform patterns (rise, fall, dip then recovery); lines or bars that cross; small gaps and proportional changes that need precise, nuanced wording; data that invites synthesis (which factor dominates, what changed and when).\n5. Key points grow with the level: at B1 the highest, lowest and main trend; from C1 the relationships, exceptions, turning points and reversals.\n6. When a reviewer asks for more difficulty, change the data (more contrast, crossings, exceptions), not only the wording.",
+          "items": [],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
       "id": "output",
       "title": "Output",
       "blocks": [

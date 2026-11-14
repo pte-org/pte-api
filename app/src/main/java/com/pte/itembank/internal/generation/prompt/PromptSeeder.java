@@ -68,6 +68,7 @@ public class PromptSeeder implements ApplicationRunner {
                             ReviewPromptDefaults.content())
                     + upgradeFromSeed(AiPromptKind.GENERATOR,
                             QuestionGenerationConstants.PROMPT_KEY_DESCRIBE_IMAGE_PICTURE)
+                    + upgradeFromSeed(AiPromptKind.GENERATOR, QuestionGenerationConstants.TASK_DESCRIBE_IMAGE)
                     + upgrader.dropObsoleteFields();
         } catch (DataIntegrityViolationException upgradedByAnotherInstance) {
             log.info("Prompt requirements were upgraded by another instance");

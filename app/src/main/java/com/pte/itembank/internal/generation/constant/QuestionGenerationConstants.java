@@ -109,6 +109,7 @@ public final class QuestionGenerationConstants {
     public static final String PROMPT_KEY_PICTURE_REVIEWER = "PICTURE_IMAGE_REVIEWER";
     /** The writer prompt of a Describe Image question whose image is painted, not drawn from data. */
     public static final String PROMPT_KEY_DESCRIBE_IMAGE_PICTURE = "DESCRIBE_IMAGE_PICTURE";
+    public static final String TASK_DESCRIBE_IMAGE = "DESCRIBE_IMAGE";
     public static final String GENERATION_IMAGE_FAILED = "GENERATION_IMAGE_FAILED";
     public static final String GENERATION_IMAGE_KIND_INVALID = "GENERATION_IMAGE_KIND_INVALID";
     public static final String GENERATION_IMAGE_KIND_INVALID_MESSAGE = "Image kind must be AUTO, CHART or PICTURE.";

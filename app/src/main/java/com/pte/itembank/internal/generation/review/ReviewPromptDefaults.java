@@ -34,6 +34,7 @@ public final class ReviewPromptDefaults {
                 section("checklist", "Your Review Checklist", Block.list("", checks)),
                 section("judging", "What you are judging", Block.list("", ReviewPromptContent.JUDGING)),
                 section("student-hints", "Student hints", Block.list("", ReviewPromptContent.STUDENT_HINTS)),
+                section("hidden-data", "Hidden scoring data", Block.list("", ReviewPromptContent.HIDDEN_DATA)),
                 section("output", "Output", Block.text("", ReviewPromptContent.OUTPUT_INSTRUCTION),
                         Block.fields("", ReviewPromptContent.OUTPUT_FIELDS))));
     }
