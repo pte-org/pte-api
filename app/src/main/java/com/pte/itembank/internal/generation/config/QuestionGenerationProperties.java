@@ -97,7 +97,7 @@ public class QuestionGenerationProperties {
          * or broken draft is written again while a whole round still fits: 40 calls give 8 rounds.
          */
         @Min(1)
-        private int maxCallsPerItem = 40;
+        private int maxCallsPerItem = 15;
         /**
          * Most provider calls one round can make (generation, a JSON retry, a rule rewrite, its JSON retry, a review).
          * Another round starts only while this many calls are left, and the allowance divided by it caps the rounds.
