@@ -45,6 +45,19 @@ public final class ReviewPromptContent {
             "The hints must only explain how to approach the item. If they state, quote or point to the correct "
                     + "answer, option or missing word, return FAIL and say how to rewrite the hints.");
 
+    /** What the test-taker does not see, so the reviewer does not refuse a draft for it. */
+    public static final List<String> HIDDEN_DATA = List.of(
+            "HIDDEN SCORING DATA: keyPoints, referenceDescription, reference, correctIndexes, answer, blanks and "
+                    + "slots are never shown to the test-taker; they are kept for scoring. Never fail a draft because "
+                    + "they state the answer or the main observations.",
+            "The fixed task instruction (for example \"Look at the graph below. In 25 seconds, please speak into the "
+                    + "microphone and describe in detail what the graph is showing.\") is added by the exam "
+                    + "template. A draft without its own instruction is not unclear or unscorable for that reason.",
+            "Judge CEFR fit from what the test-taker works with (the text, audio script, chart data or picture) and "
+                    + "the response it asks for. If the draft reaches the target level, pass cefrFit even when a "
+                    + "harder version could be imagined; put such ideas in fixSuggestion only.",
+            "The verdict is FAIL only when at least one check fails. When every check passes, the verdict is PASS.");
+
     public static final String OUTPUT_INSTRUCTION = "Respond ONLY with valid JSON in this shape. The verdict is PASS or "
             + "FAIL, and every ok is true or false.";
 
