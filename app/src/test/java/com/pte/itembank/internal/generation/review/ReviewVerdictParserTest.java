@@ -75,6 +75,27 @@ class ReviewVerdictParserTest {
     }
 
     @Test
+    void parse_FAILWithEveryCheckPassed_IsPASSWithTheSuggestionKept() {
+        String json = """
+                {
+                  "verdict": "FAIL",
+                  "checks": {
+                    "taskFidelity": {"ok": true, "note": "OK"},
+                    "cefrFit": {"ok": true, "estimated": "C2", "note": "OK"},
+                    "answerKey": {"ok": true, "note": "Clear"},
+                    "scorability": {"ok": true, "note": "Measurable"},
+                    "clarity": {"ok": true, "note": "Clear"},
+                    "safety": {"ok": true, "note": "No issues"}
+                  },
+                  "fixSuggestion": "Consider adding a fourth series"
+                }
+                """;
+        ReviewVerdict verdict = parser.parse(json, CefrLevel.C2);
+        assertTrue(verdict.isPassed());
+        assertEquals("Consider adding a fourth series", verdict.fixSuggestion());
+    }
+
+    @Test
     void parse_CefrOutOfRange_TwoPlus_CoerceToFAIL() {
         // Target B2, estimated C1 (2 bands higher)
         String json = """

@@ -36,6 +36,9 @@ public class ReviewVerdictParser {
             // Fail-closed: if any check is missing or ok=false, make it FAIL
             if (checks.size() < 6 || checks.values().stream().anyMatch(check -> !check.ok())) {
                 verdict = "FAIL";
+            } else if (root.has("verdict")) {
+                // Every check passed: a FAIL then only asks for a harder item, which stays a note in fixSuggestion.
+                verdict = "PASS";
             }
 
             // Fail-closed: if CEFR is out of range, make it FAIL
