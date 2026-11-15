@@ -53,7 +53,11 @@ public class RefreshTokenService {
         if (!token.isActive(clock.instant())) {
             throw new InvalidRefreshTokenException();
         }
-        token.setRevoked(true);
+        // Two refreshes presenting the same token can both pass the check above; only the one whose conditional
+        // update revokes the row may continue, so a token is single-use even under concurrency.
+        if (refreshTokenRepository.revokeIfActive(token.getId()) != 1) {
+            throw new InvalidRefreshTokenException();
+        }
         return new RefreshSession(token.getUserId(), token.getOrganizationId());
     }
 
