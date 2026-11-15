@@ -41,4 +41,19 @@ class SessionAutoCloseWorkerTest {
 
         assertThat(closed).isEqualTo(1);
     }
+
+    @Test
+    void closeDueSessions_oneFailingSessionDoesNotStopTheOthers() {
+        Instant now = Instant.parse("2026-10-13T12:00:00Z");
+        Clock clock = Clock.fixed(now, ZoneOffset.UTC);
+        UUID broken = UUID.randomUUID();
+        UUID healthy = UUID.randomUUID();
+        when(sessionRepository.findDueForAutoClose(now)).thenReturn(List.of(broken, healthy));
+        when(stateService.closeIfDue(broken, now)).thenThrow(new IllegalStateException("cannot close"));
+        when(stateService.closeIfDue(healthy, now)).thenReturn(Optional.of(mock(SessionResponse.class)));
+
+        int closed = new SessionAutoCloseWorker(sessionRepository, stateService, clock).closeDueSessions();
+
+        assertThat(closed).isEqualTo(1);
+    }
 }
