@@ -10,17 +10,14 @@ FROM (VALUES ('proctor.e2e@test.local', 'E2E Proctor'),
              ('examiner.e2e@test.local', 'E2E Examiner')) AS s(username, full_name)
 WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.username = s.username);
 
-INSERT INTO organization_members (public_id, user_id, organization_id, status, deleted, created_at, updated_at)
-SELECT gen_random_uuid(), u.id, o.public_id, 'ACTIVE', false, now(), now()
-FROM users u, organizations o
+UPDATE users u SET organization_id = o.public_id
+FROM organizations o
 WHERE u.username IN ('proctor.e2e@test.local', 'examiner.e2e@test.local') AND o.code = 'e2e'
-  AND NOT EXISTS (SELECT 1 FROM organization_members m WHERE m.user_id = u.id AND m.organization_id = o.public_id);
+  AND u.organization_id IS NULL;
 
-INSERT INTO organization_member_roles (member_id, role)
-SELECT m.id, s.role
+INSERT INTO user_roles (user_id, role)
+SELECT u.id, s.role
 FROM (VALUES ('proctor.e2e@test.local', 'PROCTOR'),
              ('examiner.e2e@test.local', 'EXAMINER')) AS s(username, role)
 JOIN users u ON u.username = s.username
-JOIN organization_members m ON m.user_id = u.id
-JOIN organizations o ON o.public_id = m.organization_id AND o.code = 'e2e'
-WHERE NOT EXISTS (SELECT 1 FROM organization_member_roles r WHERE r.member_id = m.id AND r.role = s.role);
+WHERE NOT EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id = u.id AND r.role = s.role);

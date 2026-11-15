@@ -22,9 +22,9 @@ BEGIN
     JOIN organizations o ON o.public_id=s.tenant_id
     WHERE o.code='e2e' AND s.session_code IN ('UI-WEEK-1','UI-WEEK-3') AND NOT s.deleted
   LOOP
-    IF NOT EXISTS (SELECT 1 FROM organization_members m JOIN users u ON u.id=m.user_id
-        JOIN organization_member_roles r ON r.member_id=m.id
-        WHERE u.public_id=actor AND m.organization_id=exam.tenant_id AND r.role='PROCTOR') THEN
+    IF NOT EXISTS (SELECT 1 FROM users u
+        JOIN user_roles r ON r.user_id=u.id
+        WHERE u.public_id=actor AND u.organization_id=exam.tenant_id AND r.role='PROCTOR') THEN
       RAISE EXCEPTION 'Fixture proctor must belong to the fixture tenant';
     END IF;
     SELECT count(*) INTO attempt_count FROM exam_attempts a
