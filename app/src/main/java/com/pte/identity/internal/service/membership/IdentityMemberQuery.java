@@ -2,13 +2,12 @@ package com.pte.identity.internal.service.membership;
 
 import com.pte.identity.IdentityRoleMember;
 import com.pte.identity.StudentIdentityView;
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
 import com.pte.identity.dto.response.ExaminerIdentityView;
 import com.pte.identity.dto.response.StudentDisplayNameView;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
+import com.pte.identity.internal.repository.UserRepository;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -21,35 +20,33 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Organization-scoped identity reads behind the {@code IdentityService} facade. Every read goes through an active
- * {@link OrganizationMember}; the facade owns the transaction boundaries.
+ * Organization-scoped identity reads behind the {@code IdentityService} facade. Every read filters on the account's
+ * organization; the facade owns the transaction boundaries.
  */
 public class IdentityMemberQuery {
 
-    private final OrganizationMemberRepository memberRepository;
+    private final UserRepository userRepository;
 
-    public IdentityMemberQuery(OrganizationMemberRepository memberRepository) {
-        this.memberRepository = memberRepository;
+    public IdentityMemberQuery(UserRepository userRepository) {
+        this.userRepository = userRepository;
     }
 
     public Optional<StudentIdentityView> findStudentByTenant(UUID publicId, UUID tenantId) {
         if (publicId == null || tenantId == null) {
             return Optional.empty();
         }
-        return memberRepository.findActiveByUserAndOrganization(publicId, tenantId)
-                .filter(member -> member.hasRole(Role.STUDENT))
+        return userRepository.findActiveByUserAndOrganization(publicId, tenantId)
+                .filter(user -> user.hasRole(Role.STUDENT))
                 .map(StudentIdentityView::from);
     }
 
     public boolean isMemberOf(UUID userPublicId, UUID organizationId) {
         return userPublicId != null && organizationId != null
-                && memberRepository.findActiveByUserAndOrganization(userPublicId, organizationId).isPresent();
+                && userRepository.findActiveByUserAndOrganization(userPublicId, organizationId).isPresent();
     }
 
     public List<User> findByTenantIdAndRole(UUID tenantId, Role role) {
-        return memberRepository.findActiveByOrganizationAndRole(tenantId, role).stream()
-                .map(OrganizationMember::getUser)
-                .toList();
+        return userRepository.findActiveByOrganizationAndRole(tenantId, role);
     }
 
     public List<User> findActiveByTenantIdAndRole(UUID tenantId, Role role) {
@@ -62,10 +59,8 @@ public class IdentityMemberQuery {
         if (publicId == null || tenantId == null) {
             return Optional.empty();
         }
-        return memberRepository.findActiveByUserAndOrganization(publicId, tenantId)
-                .filter(member -> member.isActive()
-                        && (member.hasRole(Role.PROCTOR) || member.hasRole(Role.EXAMINER)))
-                .map(OrganizationMember::getUser);
+        return userRepository.findActiveByUserAndOrganization(publicId, tenantId)
+                .filter(user -> user.isActive() && (user.hasRole(Role.PROCTOR) || user.hasRole(Role.EXAMINER)));
     }
 
     public Set<UUID> findActiveStudentPublicIds(UUID tenantId, Collection<UUID> publicIds) {
@@ -76,10 +71,10 @@ public class IdentityMemberQuery {
         if (targetIds.isEmpty()) {
             return Set.of();
         }
-        return memberRepository.findActiveByUsersAndOrganization(targetIds, tenantId).stream()
-                .filter(OrganizationMember::isActive)
-                .filter(member -> member.hasRole(Role.STUDENT))
-                .map(member -> member.getUser().getPublicId())
+        return userRepository.findActiveByUsersAndOrganization(targetIds, tenantId).stream()
+                .filter(User::isActive)
+                .filter(user -> user.hasRole(Role.STUDENT))
+                .map(User::getPublicId)
                 .collect(Collectors.toUnmodifiableSet());
     }
 
@@ -87,8 +82,8 @@ public class IdentityMemberQuery {
         if (role == null) {
             return List.of();
         }
-        return memberRepository.findActiveByRole(role, UserStatus.ACTIVE).stream()
-                .map(member -> new IdentityRoleMember(member.getUser().getPublicId(), member.getOrganizationId()))
+        return userRepository.findActiveByRole(role, UserStatus.ACTIVE).stream()
+                .map(user -> new IdentityRoleMember(user.getPublicId(), user.getOrganizationId()))
                 .toList();
     }
 
@@ -96,9 +91,9 @@ public class IdentityMemberQuery {
         if (tenantId == null || role == null) {
             return List.of();
         }
-        return memberRepository.findActiveByOrganizationAndRole(tenantId, role).stream()
-                .filter(OrganizationMember::isActive)
-                .map(member -> new IdentityRoleMember(member.getUser().getPublicId(), member.getOrganizationId()))
+        return userRepository.findActiveByOrganizationAndRole(tenantId, role).stream()
+                .filter(User::isActive)
+                .map(user -> new IdentityRoleMember(user.getPublicId(), user.getOrganizationId()))
                 .toList();
     }
 
@@ -106,8 +101,8 @@ public class IdentityMemberQuery {
         if (tenantId == null || examinerPublicIds == null || examinerPublicIds.isEmpty()) {
             return List.of();
         }
-        return memberRepository.findActiveByUsersAndOrganization(examinerPublicIds, tenantId).stream()
-                .filter(member -> member.isActive() && member.hasRole(Role.EXAMINER))
+        return userRepository.findActiveByUsersAndOrganization(examinerPublicIds, tenantId).stream()
+                .filter(user -> user.isActive() && user.hasRole(Role.EXAMINER))
                 .map(IdentityMemberQuery::toExaminerView)
                 .toList();
     }
@@ -116,9 +111,8 @@ public class IdentityMemberQuery {
         if (tenantId == null || userPublicIds == null || userPublicIds.isEmpty()) {
             return Map.of();
         }
-        return memberRepository.findActiveByUsersAndOrganization(List.copyOf(userPublicIds), tenantId).stream()
-                .collect(Collectors.toMap(member -> member.getUser().getPublicId(),
-                        member -> member.getUser().getFullName(), (existing, replacement) -> existing));
+        return userRepository.findActiveByUsersAndOrganization(List.copyOf(userPublicIds), tenantId).stream()
+                .collect(Collectors.toMap(User::getPublicId, User::getFullName, (existing, replacement) -> existing));
     }
 
     public Map<UUID, StudentDisplayNameView> getStudentDisplayNames(UUID tenantId,
@@ -130,8 +124,7 @@ public class IdentityMemberQuery {
         if (targetIds.isEmpty()) {
             return Collections.emptyMap();
         }
-        return memberRepository.findActiveByUsersAndOrganization(targetIds, tenantId).stream()
-                .map(OrganizationMember::getUser)
+        return userRepository.findActiveByUsersAndOrganization(targetIds, tenantId).stream()
                 .collect(Collectors.toMap(
                         User::getPublicId,
                         user -> {
@@ -147,13 +140,11 @@ public class IdentityMemberQuery {
         if (publicId == null || tenantId == null || role == null) {
             return Optional.empty();
         }
-        return memberRepository.findActiveByUserAndOrganization(publicId, tenantId)
-                .filter(member -> member.isActive() && member.hasRole(role))
-                .map(OrganizationMember::getUser);
+        return userRepository.findActiveByUserAndOrganization(publicId, tenantId)
+                .filter(user -> user.isActive() && user.hasRole(role));
     }
 
-    static ExaminerIdentityView toExaminerView(OrganizationMember member) {
-        User user = member.getUser();
+    static ExaminerIdentityView toExaminerView(User user) {
         return new ExaminerIdentityView(user.getPublicId(), user.getFullName(), user.getEmail());
     }
 }

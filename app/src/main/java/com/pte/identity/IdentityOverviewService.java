@@ -2,7 +2,7 @@ package com.pte.identity;
 
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.UserStatus;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
+import com.pte.identity.internal.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,10 +21,10 @@ import java.util.UUID;
 @Service
 public class IdentityOverviewService {
 
-    private final OrganizationMemberRepository memberRepository;
+    private final UserRepository userRepository;
 
-    public IdentityOverviewService(OrganizationMemberRepository memberRepository) {
-        this.memberRepository = memberRepository;
+    public IdentityOverviewService(UserRepository userRepository) {
+        this.userRepository = userRepository;
     }
 
     /** Learner totals split by account status; {@code total} counts every non-deleted student. */
@@ -40,7 +40,7 @@ public class IdentityOverviewService {
         long active = 0L;
         long suspended = 0L;
         long total = 0L;
-        List<Object[]> rows = memberRepository.countByOrganizationAndRoleGroupedByStatus(tenantId, Role.STUDENT);
+        List<Object[]> rows = userRepository.countByOrganizationAndRoleGroupedByStatus(tenantId, Role.STUDENT);
         for (Object[] row : rows) {
             UserStatus status = (UserStatus) row[0];
             long count = ((Number) row[1]).longValue();
@@ -57,7 +57,7 @@ public class IdentityOverviewService {
     /** Students created in {@code [from, to)}. */
     @Transactional(readOnly = true)
     public long countStudentsCreatedBetween(UUID tenantId, Instant from, Instant to) {
-        return memberRepository.countByOrganizationAndRoleCreatedBetween(tenantId, Role.STUDENT, from, to);
+        return userRepository.countByOrganizationAndRoleCreatedBetween(tenantId, Role.STUDENT, from, to);
     }
 
     /**
@@ -67,7 +67,7 @@ public class IdentityOverviewService {
     @Transactional(readOnly = true)
     public Map<UUID, Long> studentCountsByTenant() {
         Map<UUID, Long> counts = new HashMap<>();
-        for (Object[] row : memberRepository.countByRoleGroupedByOrganization(Role.STUDENT)) {
+        for (Object[] row : userRepository.countByRoleGroupedByOrganization(Role.STUDENT)) {
             counts.put((UUID) row[0], ((Number) row[1]).longValue());
         }
         return Collections.unmodifiableMap(counts);
@@ -77,7 +77,7 @@ public class IdentityOverviewService {
     public StaffCounts activeStaffCounts(UUID tenantId) {
         long proctors = 0L;
         long examiners = 0L;
-        List<Object[]> rows = memberRepository.countActiveByOrganizationAndRoles(
+        List<Object[]> rows = userRepository.countActiveByOrganizationAndRoles(
                 tenantId, Set.of(Role.PROCTOR, Role.EXAMINER), UserStatus.ACTIVE);
         for (Object[] row : rows) {
             long count = ((Number) row[1]).longValue();

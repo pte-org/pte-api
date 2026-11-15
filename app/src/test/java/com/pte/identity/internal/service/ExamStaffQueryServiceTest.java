@@ -1,12 +1,11 @@
 package com.pte.identity.internal.service;
 
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.InvalidExamStaffQueryException;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
+import com.pte.identity.internal.repository.UserRepository;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,7 +32,7 @@ import static org.mockito.Mockito.when;
 class ExamStaffQueryServiceTest {
 
     @Mock
-    private OrganizationMemberRepository memberRepository;
+    private UserRepository userRepository;
 
     @Test
     void search_filtersAndMapsExamStaffWithBoundedPageRequest() {
@@ -44,16 +43,13 @@ class ExamStaffQueryServiceTest {
         staff.setEmail("alice@example.test");
         staff.setFullName("Alice Examiner");
         staff.setStatus(UserStatus.ACTIVE);
-        OrganizationMember member = new OrganizationMember();
-        member.setUser(staff);
-        member.setOrganizationId(tenantId);
-        member.setStatus(UserStatus.ACTIVE);
-        member.setRoles(Set.of(Role.EXAMINER));
-        when(memberRepository.findPageForExamStaff(eq(tenantId), anySet(), eq(Role.EXAMINER), eq(UserStatus.ACTIVE),
+        staff.setOrganizationId(tenantId);
+        staff.setRoles(Set.of(Role.EXAMINER));
+        when(userRepository.findPageForExamStaff(eq(tenantId), anySet(), eq(Role.EXAMINER), eq(UserStatus.ACTIVE),
                 eq("alice"), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(member), PageRequest.of(2, 100), 201));
+                .thenReturn(new PageImpl<>(List.of(staff), PageRequest.of(2, 100), 201));
 
-        ExamStaffQueryService service = new ExamStaffQueryService(memberRepository);
+        ExamStaffQueryService service = new ExamStaffQueryService(userRepository);
         var result = service.search(2, 500, " Alice ", "examiner", "active", "full_name", "asc",
                 new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN")));
 
@@ -63,16 +59,16 @@ class ExamStaffQueryServiceTest {
         assertThat(result.meta().totalElements()).isEqualTo(201);
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        verify(memberRepository).findPageForExamStaff(eq(tenantId), anySet(), eq(Role.EXAMINER), eq(UserStatus.ACTIVE),
+        verify(userRepository).findPageForExamStaff(eq(tenantId), anySet(), eq(Role.EXAMINER), eq(UserStatus.ACTIVE),
                 eq("alice"), pageable.capture());
         assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
         assertThat(pageable.getValue().getPageSize()).isEqualTo(100);
-        assertThat(pageable.getValue().getSort().getOrderFor("user.fullName").isAscending()).isTrue();
+        assertThat(pageable.getValue().getSort().getOrderFor("fullName").isAscending()).isTrue();
     }
 
     @Test
     void search_rejectsNonExamStaffRoleFilter() {
-        ExamStaffQueryService service = new ExamStaffQueryService(memberRepository);
+        ExamStaffQueryService service = new ExamStaffQueryService(userRepository);
 
         assertThatThrownBy(() -> service.search(0, 20, null, "student", null, null, null,
                 new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("HOST_ADMIN"))))

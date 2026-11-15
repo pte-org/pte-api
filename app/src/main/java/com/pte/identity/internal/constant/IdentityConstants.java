@@ -18,7 +18,6 @@ public final class IdentityConstants {
     public static final String USER_NOT_FOUND = "USER_NOT_FOUND";
     public static final String IDENTITY_NOT_ELIGIBLE = "IDENTITY_NOT_ELIGIBLE";
     public static final String EMAIL_ALREADY_USED = "EMAIL_ALREADY_USED";
-    public static final String HOST_CONTACT_IS_PLATFORM_ACCOUNT = "HOST_CONTACT_IS_PLATFORM_ACCOUNT";
     public static final String USER_EMAIL_REQUIRED = "USER_EMAIL_REQUIRED";
     public static final String STUDENT_ATTEMPT_IN_PROGRESS = "STUDENT_ATTEMPT_IN_PROGRESS";
     public static final String INVALID_PASSWORD_RESET_TOKEN = "INVALID_PASSWORD_RESET_TOKEN";
@@ -63,7 +62,6 @@ public final class IdentityConstants {
     public static final String INVALID_EXAM_STAFF_QUERY = "INVALID_EXAM_STAFF_QUERY";
     public static final String DUPLICATE_EMAIL_IN_BATCH = "DUPLICATE_EMAIL_IN_BATCH";
     public static final String ROSTER_IMPORT_FAILED = "ROSTER_IMPORT_FAILED";
-    public static final int ROSTER_USERNAME_COLLISION_RETRIES = 3;
 
     /** Whole roster rejected because at least one row breaks a format rule; {@code data} lists every row error. */
     public static final String ROSTER_VALIDATION_FAILED = "ROSTER_VALIDATION_FAILED";
