@@ -11,7 +11,6 @@ import org.assertj.core.api.InstanceOfAssertFactories;
 import com.pte.identity.internal.exception.RosterValidationException;
 import com.pte.identity.internal.dto.response.RosterRowError;
 import com.pte.identity.UserCredentialsEmailRequestedEvent;
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
@@ -26,8 +25,9 @@ import com.pte.identity.internal.dto.response.GeneratedCredentialsResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.EmailAlreadyUsedException;
 import com.pte.identity.internal.exception.ForbiddenPasswordResetException;
+import com.pte.identity.internal.exception.StudentAttemptInProgressException;
+import com.pte.identity.internal.exception.UserEmailRequiredException;
 import com.pte.identity.internal.exception.UserNotFoundException;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.audit.AuditLogService;
@@ -58,20 +58,18 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * An account is global and carries the credential; roles and suspension of a tenant user live on its
- * {@link OrganizationMember}. Tenant callers reach only members of their own organization.
+ * An account belongs to one organization (or none) and carries its own credential, roles and status. Tenant callers
+ * reach only accounts of their own organization; an e-mail only has to be unique inside the organization.
  */
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
 
     @Mock
     private UserRepository userRepository;
-
-    @Mock
-    private OrganizationMemberRepository memberRepository;
 
     @Mock
     private OrganizationMemberDirectory memberDirectory;
@@ -102,12 +100,13 @@ class UserServiceTest {
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, memberRepository, memberDirectory, passwordEncoder,
+        userService = new UserService(userRepository, memberDirectory, passwordEncoder,
                 provisioningHelper, bulkCreateWriter, tenancyService, eventPublisher, auditLogService,
                 refreshTokenService, startedAttemptLookup,
                 Clock.fixed(Instant.parse("2026-11-09T03:00:00Z"), ZoneOffset.UTC));
     }
 
+    /** An account with no organization and no roles; the tests below place it into an organization. */
     private User account(Long id, UUID publicId, String oldPassword) {
         User user = new User();
         user.setId(id);
@@ -122,23 +121,30 @@ class UserServiceTest {
         return user;
     }
 
-    private OrganizationMember memberOf(User user, UUID organizationId, Role role) {
-        OrganizationMember member = new OrganizationMember();
-        member.setUser(user);
-        member.setOrganizationId(organizationId);
-        member.setStatus(UserStatus.ACTIVE);
-        member.setRoles(new HashSet<>(Set.of(role)));
-        return member;
+    private User accountOf(User user, UUID organizationId, Role role) {
+        user.setOrganizationId(organizationId);
+        user.setRoles(new HashSet<>(Set.of(role)));
+        return user;
+    }
+
+    private User accountOf(UUID organizationId, Role role) {
+        return accountOf(account(1L, UUID.randomUUID(), null), organizationId, role);
+    }
+
+    private CurrentUser host(UUID tenantId) {
+        return new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+    }
+
+    private CurrentUser platformAdmin() {
+        return new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
     }
 
     @Test
     void me_returnsOrganizationType_fromTenancyModule() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        User user = account(1L, userPublicId, null);
-        OrganizationMember member = memberOf(user, tenantId, Role.HOST_ADMIN);
+        User user = accountOf(account(1L, userPublicId, null), tenantId, Role.HOST_ADMIN);
         when(userRepository.findByPublicId(userPublicId)).thenReturn(Optional.of(user));
-        when(memberDirectory.find(tenantId, userPublicId)).thenReturn(Optional.of(member));
         when(tenancyService.findOrganizationType(tenantId)).thenReturn(Optional.of("SCHOOL"));
 
         UserResponse response = userService.me(new CurrentUser(userPublicId, tenantId, List.of("HOST_ADMIN")));
@@ -149,60 +155,93 @@ class UserServiceTest {
     }
 
     @Test
-    void suspendLocksTheMembershipBeforeChangingExaminerEligibility() {
+    void me_freePracticeStudentWithoutOrganization_hasNoTenantAndNeverAsksTenancy() {
+        UUID userPublicId = UUID.randomUUID();
+        User free = accountOf(account(1L, userPublicId, null), null, Role.STUDENT);
+        when(userRepository.findByPublicId(userPublicId)).thenReturn(Optional.of(free));
+
+        UserResponse response = userService.me(new CurrentUser(userPublicId, null, List.of("STUDENT")));
+
+        assertThat(response.tenantId()).isNull();
+        assertThat(response.organizationType()).isNull();
+        assertThat(response.roles()).containsExactly("STUDENT");
+        verifyNoInteractions(tenancyService);
+    }
+
+    @Test
+    void suspend_locksTheAccountBeforeChangingItAndEndsItsSessions() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        OrganizationMember examiner = memberOf(account(1L, userPublicId, null), tenantId, Role.EXAMINER);
+        User examiner = accountOf(account(1L, userPublicId, null), tenantId, Role.EXAMINER);
         when(memberDirectory.requireMemberForUpdate(tenantId, userPublicId)).thenReturn(examiner);
 
-        UserResponse response = userService.suspend(userPublicId,
-                new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN")));
+        UserResponse response = userService.suspend(userPublicId, host(tenantId));
 
         assertThat(response.status()).isEqualTo("SUSPENDED");
         assertThat(examiner.isSuspended()).isTrue();
         verify(memberDirectory).requireMemberForUpdate(tenantId, userPublicId);
-        verify(refreshTokenService).revokeForMembership(1L, tenantId);
+        verify(refreshTokenService).revokeAllForUser(1L);
     }
 
     @Test
-    void reactivateAlsoLocksTheMembershipBeforeChangingExaminerEligibility() {
+    void suspend_byPlatformAdmin_locksTheAccountByPublicId() {
+        UUID userPublicId = UUID.randomUUID();
+        User author = accountOf(account(1L, userPublicId, null), null, Role.PLATFORM_AUTHOR);
+        when(userRepository.findWithLockByPublicId(userPublicId)).thenReturn(Optional.of(author));
+
+        UserResponse response = userService.suspend(userPublicId, platformAdmin());
+
+        assertThat(response.status()).isEqualTo("SUSPENDED");
+        verify(refreshTokenService).revokeAllForUser(1L);
+        verifyNoInteractions(memberDirectory);
+    }
+
+    @Test
+    void suspend_accountOfAnotherOrganization_isNotFoundAndSessionsStayUntouched() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        OrganizationMember examiner = memberOf(account(1L, userPublicId, null), tenantId, Role.EXAMINER);
+        when(memberDirectory.requireMemberForUpdate(tenantId, userPublicId)).thenThrow(new UserNotFoundException());
+
+        assertThatThrownBy(() -> userService.suspend(userPublicId, host(tenantId)))
+                .isInstanceOf(UserNotFoundException.class);
+
+        verify(refreshTokenService, never()).revokeAllForUser(anyLong());
+    }
+
+    @Test
+    void reactivate_locksTheAccountAndMakesItActiveAgain() {
+        UUID userPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        User examiner = accountOf(account(1L, userPublicId, null), tenantId, Role.EXAMINER);
         examiner.suspend();
         when(memberDirectory.requireMemberForUpdate(tenantId, userPublicId)).thenReturn(examiner);
 
-        UserResponse response = userService.reactivate(userPublicId,
-                new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN")));
+        UserResponse response = userService.reactivate(userPublicId, host(tenantId));
 
         assertThat(response.status()).isEqualTo("ACTIVE");
         verify(memberDirectory).requireMemberForUpdate(tenantId, userPublicId);
     }
 
     @Test
-    void suspendByHost_leavesTheAccountItselfActiveForItsOtherOrganizations() {
+    void reactivate_isIdempotentForAnActiveAccount() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        User user = account(1L, userPublicId, null);
-        OrganizationMember member = memberOf(user, tenantId, Role.STUDENT);
-        when(memberDirectory.requireMemberForUpdate(tenantId, userPublicId)).thenReturn(member);
+        User active = accountOf(account(1L, userPublicId, null), tenantId, Role.STUDENT);
+        when(memberDirectory.requireMemberForUpdate(tenantId, userPublicId)).thenReturn(active);
 
-        userService.suspend(userPublicId, new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN")));
+        UserResponse response = userService.reactivate(userPublicId, host(tenantId));
 
-        assertThat(member.isSuspended()).isTrue();
-        assertThat(user.isSuspended()).isFalse();
+        assertThat(response.status()).isEqualTo("ACTIVE");
     }
 
     @Test
     void resetPassword_overwritesHash_soOldPasswordNoLongerMatchesAndNewOneDoes() {
         UUID userPublicId = UUID.randomUUID();
-        UUID callerId = UUID.randomUUID();
         User user = account(1L, userPublicId, "OldPassword123");
         user.setRoles(Set.of(Role.PLATFORM_AUTHOR));
         when(userRepository.findByPublicIdAndDeletedFalse(userPublicId)).thenReturn(Optional.of(user));
-        when(memberRepository.findByUser_IdAndDeletedFalse(1L)).thenReturn(List.of());
 
-        CurrentUser caller = new CurrentUser(callerId, null, List.of("PLATFORM_ADMIN"));
+        CurrentUser caller = platformAdmin();
         when(provisioningHelper.canManageTarget(caller, user.getRoles())).thenReturn(true);
         UserResponse response = userService.resetPassword(userPublicId,
                 new ResetPasswordRequest("NewPassword456"), caller);
@@ -210,7 +249,9 @@ class UserServiceTest {
         assertThat(response.publicId()).isEqualTo(userPublicId);
         assertThat(passwordEncoder.matches("OldPassword123", user.getCredentialHash())).isFalse();
         assertThat(passwordEncoder.matches("NewPassword456", user.getCredentialHash())).isTrue();
+        assertThat(user.isMustChangePassword()).isTrue();
         verify(userRepository).save(user);
+        verify(refreshTokenService).revokeAllForUser(1L);
         verify(auditLogService).record(eq(caller), eq(IdentityConstants.USER_AGGREGATE),
                 eq(userPublicId.toString()), eq(IdentityConstants.USER_PASSWORD_RESET),
                 eq(IdentityConstants.USER_PASSWORD_RESET_SUMMARY));
@@ -221,22 +262,41 @@ class UserServiceTest {
         UUID userPublicId = UUID.randomUUID();
         when(userRepository.findByPublicIdAndDeletedFalse(userPublicId)).thenReturn(Optional.empty());
 
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
-
         assertThatThrownBy(() ->
-                userService.resetPassword(userPublicId, new ResetPasswordRequest("NewPassword456"), caller))
+                userService.resetPassword(userPublicId, new ResetPasswordRequest("NewPassword456"),
+                        platformAdmin()))
                 .isInstanceOf(UserNotFoundException.class);
 
         verify(userRepository, never()).save(any());
     }
 
     @Test
-    void listForTenant_returnsOnlyThatOrganizationsMembers() {
+    void resetPassword_studentWhoIsMidExam_isRejectedAndKeepsTheirCredential() {
+        UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        OrganizationMember member = memberOf(account(1L, UUID.randomUUID(), null), tenantId, Role.HOST_ADMIN);
-        when(memberRepository.findActiveByOrganization(tenantId)).thenReturn(List.of(member));
+        User student = accountOf(account(1L, userPublicId, "OldPassword123"), tenantId, Role.STUDENT);
+        String hashBefore = student.getCredentialHash();
+        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(student);
+        CurrentUser caller = host(tenantId);
+        when(provisioningHelper.canManageTarget(caller, student.getRoles())).thenReturn(true);
+        when(startedAttemptLookup.hasInProgressAttempt(userPublicId)).thenReturn(true);
 
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
+        assertThatThrownBy(() -> userService.resetPassword(userPublicId,
+                new ResetPasswordRequest("NewPassword456"), caller))
+                .isInstanceOf(StudentAttemptInProgressException.class);
+
+        assertThat(student.getCredentialHash()).isEqualTo(hashBefore);
+        verify(userRepository, never()).save(any());
+        verify(refreshTokenService, never()).revokeAllForUser(anyLong());
+    }
+
+    @Test
+    void listForTenant_returnsOnlyThatOrganizationsAccounts() {
+        UUID tenantId = UUID.randomUUID();
+        User member = accountOf(tenantId, Role.HOST_ADMIN);
+        when(userRepository.findActiveByOrganization(tenantId)).thenReturn(List.of(member));
+
+        CurrentUser caller = platformAdmin();
         when(provisioningHelper.canManageTarget(caller, member.getRoles())).thenReturn(true);
 
         List<UserResponse> result = userService.listForTenant(tenantId, caller);
@@ -246,26 +306,44 @@ class UserServiceTest {
     }
 
     @Test
-    void listForTenant_noMembers_returnsEmptyList() {
+    void listForTenant_dropsAccountsTheCallerMayNotManage() {
         UUID tenantId = UUID.randomUUID();
-        when(memberRepository.findActiveByOrganization(tenantId)).thenReturn(List.of());
+        User hostAdmin = accountOf(tenantId, Role.HOST_ADMIN);
+        when(userRepository.findActiveByOrganization(tenantId)).thenReturn(List.of(hostAdmin));
+        CurrentUser caller = host(tenantId);
+        when(provisioningHelper.canManageTarget(caller, hostAdmin.getRoles())).thenReturn(false);
 
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
         assertThat(userService.listForTenant(tenantId, caller)).isEmpty();
     }
 
     @Test
-    void create_newEmail_createsAccountAndMembership_andRoundTripsProfileFields() {
+    void listForTenant_noAccounts_returnsEmptyList() {
         UUID tenantId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        when(userRepository.findActiveByOrganization(tenantId)).thenReturn(List.of());
+
+        assertThat(userService.listForTenant(tenantId, platformAdmin())).isEmpty();
+    }
+
+    @Test
+    void listByTenant_platformCallerWithoutOrganization_seesNothingAndNeverQueries() {
+        assertThat(userService.listByTenant(platformAdmin())).isEmpty();
+        assertThat(userService.listDirectory(platformAdmin())).isEmpty();
+
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void create_newEmail_createsTheAccountInTheCallersOrganization_andRoundTripsProfileFields() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = host(tenantId);
         CreateUserRequest request = new CreateUserRequest(
-                "student@tenant.example", "Student One", "Password123",
+                "student@tenant.example", "Student One",
                 List.of("STUDENT"), null,
                 "SC-001", "12A1", "0900000000", LocalDate.of(2008, 5, 1));
 
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
         when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.STUDENT));
-        when(memberRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
                 .thenReturn(List.of());
         when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> {
@@ -274,8 +352,6 @@ class UserServiceTest {
             user.setPublicId(UUID.randomUUID());
             return user;
         });
-        when(memberRepository.saveAndFlush(any(OrganizationMember.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
 
         UserResponse response = userService.create(request, caller);
 
@@ -286,52 +362,200 @@ class UserServiceTest {
         assertThat(response.className()).isEqualTo("12A1");
         assertThat(response.phone()).isEqualTo("0900000000");
         assertThat(response.dateOfBirth()).isEqualTo(LocalDate.of(2008, 5, 1));
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getOrganizationId()).isEqualTo(tenantId);
+        assertThat(saved.getValue().getRoles()).containsExactly(Role.STUDENT);
     }
 
     @Test
-    void create_emailOfExistingAccount_joinsThatAccountToTheOrganizationWithoutANewAccount() {
+    void create_staffWithSeveralRoles_keepsEveryRoleOnTheOneAccount() {
         UUID tenantId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        CurrentUser caller = host(tenantId);
         CreateUserRequest request = new CreateUserRequest(
-                "host@tenant.example", "Host Admin", "Password123",
-                List.of("HOST_ADMIN"), null, null, null, null, null);
-        User existing = account(7L, UUID.randomUUID(), "KeepThisPassword1");
-        String existingHash = existing.getCredentialHash();
+                "both@tenant.example", "Both Roles",
+                List.of("EXAMINER", "PROCTOR"), null, null, null, null, null);
 
-        when(userRepository.findByUsername(request.email())).thenReturn(Optional.of(existing));
-        when(memberRepository.findByUser_IdAndOrganizationIdAndDeletedFalse(7L, tenantId))
-                .thenReturn(Optional.empty());
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
-        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.HOST_ADMIN));
-        when(memberRepository.saveAndFlush(any(OrganizationMember.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles()))
+                .thenReturn(Set.of(Role.EXAMINER, Role.PROCTOR));
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
+                .thenReturn(List.of());
+        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        UserResponse response = userService.create(request, caller);
+        userService.create(request, caller);
 
-        assertThat(response.publicId()).isEqualTo(existing.getPublicId());
-        assertThat(response.tenantId()).isEqualTo(tenantId);
-        assertThat(existing.getCredentialHash()).isEqualTo(existingHash);
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getOrganizationId()).isEqualTo(tenantId);
+        assertThat(saved.getValue().getRoles()).containsExactlyInAnyOrder(Role.EXAMINER, Role.PROCTOR);
+        verify(tenancyService, never()).assertCanAddStudents(any(), anyLong());
+    }
+
+    @Test
+    void create_staff_getsAGeneratedUsernameInsteadOfTheEmail() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = host(tenantId);
+        CreateUserRequest request = new CreateUserRequest(
+                "proctor@tenant.example", "Proctor One",
+                List.of("PROCTOR"), null, null, null, null, null);
+
+        when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
+        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.PROCTOR));
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
+                .thenReturn(List.of());
+        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        userService.create(request, caller);
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getUsername()).matches("school\\.[a-hj-km-np-z2-9]{8}");
+        assertThat(saved.getValue().getEmail()).isEqualTo(request.email());
+        verify(tenancyService, never()).assertCanAddStudents(any(), anyLong());
+    }
+
+    @Test
+    void create_staff_emailsTheGeneratedUsernameAndATemporarySecretThatMustBeChanged() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = host(tenantId);
+        CreateUserRequest request = new CreateUserRequest(
+                "proctor@tenant.example", "Proctor One",
+                List.of("PROCTOR"), null, null, null, null, null);
+
+        when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
+        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.PROCTOR));
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
+                .thenReturn(List.of());
+        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        userService.create(request, caller);
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(saved.capture());
+        ArgumentCaptor<UserCredentialsEmailRequestedEvent> event =
+                ArgumentCaptor.forClass(UserCredentialsEmailRequestedEvent.class);
+        verify(eventPublisher).publishEvent(event.capture());
+        assertThat(event.getValue().username()).isEqualTo(saved.getValue().getUsername());
+        assertThat(event.getValue().email()).isEqualTo("proctor@tenant.example");
+        assertThat(event.getValue().tenantId()).isEqualTo(tenantId);
+        assertThat(saved.getValue().isMustChangePassword()).isTrue();
+        assertThat(passwordEncoder.matches(event.getValue().temporaryPassword(),
+                saved.getValue().getCredentialHash())).isTrue();
+    }
+
+    @Test
+    void create_withoutEmail_isRejectedBeforeAnythingIsWritten() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = host(tenantId);
+        CreateUserRequest request = new CreateUserRequest(
+                "  ", "Proctor One", List.of("PROCTOR"), null, null, null, null, null);
+        when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
+        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.PROCTOR));
+
+        assertThatThrownBy(() -> userService.create(request, caller))
+                .isInstanceOf(UserEmailRequiredException.class);
+
         verify(userRepository, never()).saveAndFlush(any(User.class));
     }
 
     @Test
-    void create_emailAlreadyMemberOfTheOrganization_isRejected() {
-        UUID tenantId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+    void create_sameEmailInAnotherOrganization_isAllowed_butRejectedInTheSameOrganization() {
+        UUID tenantA = UUID.randomUUID();
+        UUID tenantB = UUID.randomUUID();
+        CurrentUser hostA = host(tenantA);
+        CurrentUser hostB = host(tenantB);
         CreateUserRequest request = new CreateUserRequest(
-                "host@tenant.example", "Host Admin", "Password123",
-                List.of("HOST_ADMIN"), null, null, null, null, null);
-        User existing = account(7L, UUID.randomUUID(), null);
+                "shared@mail.example", "Shared Person",
+                List.of("EXAMINER"), null, null, null, null, null);
+        User existingInA = accountOf(tenantA, Role.EXAMINER);
+        existingInA.setEmail("shared@mail.example");
 
-        when(userRepository.findByUsername(request.email())).thenReturn(Optional.of(existing));
-        when(memberRepository.findByUser_IdAndOrganizationIdAndDeletedFalse(7L, tenantId))
-                .thenReturn(Optional.of(memberOf(existing, tenantId, Role.HOST_ADMIN)));
+        when(provisioningHelper.resolveTargetTenant(hostA, null)).thenReturn(tenantA);
+        when(provisioningHelper.resolveTargetTenant(hostB, null)).thenReturn(tenantB);
+        when(provisioningHelper.resolveAndAuthorizeRoles(any(CurrentUser.class), eq(request.roles())))
+                .thenReturn(Set.of(Role.EXAMINER));
+        // Each lookup is scoped to one organization, so the other organization's account is invisible to it.
+        when(userRepository.findActiveByOrganizationAndEmails(tenantA, List.of(request.email())))
+                .thenReturn(List.of(existingInA));
+        when(userRepository.findActiveByOrganizationAndEmails(tenantB, List.of(request.email())))
+                .thenReturn(List.of());
+        when(tenancyService.getTenantCode(tenantB)).thenReturn("other");
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThatThrownBy(() -> userService.create(request, hostA)).isInstanceOf(EmailAlreadyUsedException.class);
+        UserResponse created = userService.create(request, hostB);
+
+        assertThat(created.tenantId()).isEqualTo(tenantB);
+        assertThat(created.email()).isEqualTo("shared@mail.example");
+        verify(userRepository, times(1)).saveAndFlush(any(User.class));
+        verify(userRepository, never()).existsByEmailIgnoreCaseAndDeletedFalse(anyString());
+        verify(userRepository, never()).findByUsername(anyString());
+    }
+
+    @Test
+    void create_usernameAlreadyTaken_triesAnotherGeneratedOne() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = host(tenantId);
+        CreateUserRequest request = new CreateUserRequest(
+                "proctor@tenant.example", "Proctor One",
+                List.of("PROCTOR"), null, null, null, null, null);
+
+        when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
+        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.PROCTOR));
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
+                .thenReturn(List.of());
+        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
+        when(userRepository.existsByUsername(anyString())).thenReturn(true, false);
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        userService.create(request, caller);
+
+        verify(userRepository, times(2)).existsByUsername(anyString());
+        verify(userRepository).saveAndFlush(any(User.class));
+    }
+
+    @Test
+    void create_everyGeneratedUsernameIsTaken_failsWithoutSavingAnything() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = host(tenantId);
+        CreateUserRequest request = new CreateUserRequest(
+                "proctor@tenant.example", "Proctor One",
+                List.of("PROCTOR"), null, null, null, null, null);
+
+        when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
+        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.PROCTOR));
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
+                .thenReturn(List.of());
+        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
+        when(userRepository.existsByUsername(anyString())).thenReturn(true);
+
+        assertThatThrownBy(() -> userService.create(request, caller))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(userRepository, never()).saveAndFlush(any(User.class));
+    }
+
+    @Test
+    void create_emailAlreadyUsedInTheOrganization_isRejected() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = host(tenantId);
+        CreateUserRequest request = new CreateUserRequest(
+                "host@tenant.example", "Host Admin",
+                List.of("HOST_ADMIN"), null, null, null, null, null);
+        User existing = accountOf(account(7L, UUID.randomUUID(), null), tenantId, Role.HOST_ADMIN);
+
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
+                .thenReturn(List.of(existing));
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
         when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.HOST_ADMIN));
 
         assertThatThrownBy(() -> userService.create(request, caller)).isInstanceOf(EmailAlreadyUsedException.class);
 
-        verify(memberRepository, never()).saveAndFlush(any(OrganizationMember.class));
+        verify(userRepository, never()).saveAndFlush(any(User.class));
     }
 
     private BulkCreateUserRow row(String email) {
@@ -350,13 +574,13 @@ class UserServiceTest {
     @Test
     void createBulk_givesEveryRowAGeneratedUsername_evenWhenItHasAnEmail() {
         UUID tenantId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        CurrentUser caller = host(tenantId);
         BulkCreateUserRow rowA = row("a@tenant.example");
         BulkCreateUserRow rowB = row("b@tenant.example");
         BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(rowA, rowB), null);
 
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
-        when(memberRepository.findActiveByOrganizationAndEmails(tenantId, List.of(rowA.email(), rowB.email())))
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(rowA.email(), rowB.email())))
                 .thenReturn(List.of());
         when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
         when(bulkCreateWriter.createGeneratedStudent(anyString(), any(UserBulkCreateWriter.Row.class), eq(tenantId)))
@@ -377,7 +601,7 @@ class UserServiceTest {
 
     @Test
     void createBulk_rowWithoutEmailOrFullName_rejectsWholeRosterWithEveryRowError() {
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("HOST_ADMIN"));
+        CurrentUser caller = host(UUID.randomUUID());
         BulkCreateUserRow valid = row("ok@tenant.example");
         BulkCreateUserRow blank = new BulkCreateUserRow(null, " ", null, null, null, null);
         BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(valid, blank), null);
@@ -398,7 +622,7 @@ class UserServiceTest {
 
     @Test
     void createBulk_formatRules_reportInvalidEmailPhoneDateLengthAndDuplicate() {
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), UUID.randomUUID(), List.of("HOST_ADMIN"));
+        CurrentUser caller = host(UUID.randomUUID());
         BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(
                 new BulkCreateUserRow("not-an-email", "A", null, null, "12ab", null),
                 new BulkCreateUserRow("dup@tenant.example", "B", "x".repeat(51), null, "+84 901-234-567",
@@ -422,17 +646,17 @@ class UserServiceTest {
     @Test
     void createBulk_skipsEmailAlreadyInTheOrganization_butStillCreatesOthers() {
         UUID tenantId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        CurrentUser caller = host(tenantId);
         BulkCreateUserRow existing = row("existing@tenant.example");
         BulkCreateUserRow fresh = row("fresh@tenant.example");
         BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(existing, fresh), null);
 
-        User existingUser = new User();
+        User existingUser = accountOf(tenantId, Role.STUDENT);
         existingUser.setEmail(existing.email());
 
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
-        when(memberRepository.findActiveByOrganizationAndEmails(tenantId, List.of(existing.email(), fresh.email())))
-                .thenReturn(List.of(memberOf(existingUser, tenantId, Role.STUDENT)));
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(existing.email(), fresh.email())))
+                .thenReturn(List.of(existingUser));
         when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
         when(bulkCreateWriter.createGeneratedStudent(anyString(), any(UserBulkCreateWriter.Row.class), eq(tenantId)))
                 .thenReturn(Optional.of(writerResult(fresh.email(), "school.ijkl2345", "Ijkl-2345")));
@@ -448,15 +672,36 @@ class UserServiceTest {
     }
 
     @Test
+    void createBulk_emailOnlyKnownInAnotherOrganization_isStillCreatedHere() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = host(tenantId);
+        BulkCreateUserRow shared = row("shared@mail.example");
+        BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(shared), null);
+
+        when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
+        // The lookup is scoped to this organization, so an account of another organization never shows up.
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(shared.email())))
+                .thenReturn(List.of());
+        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
+        when(bulkCreateWriter.createGeneratedStudent(anyString(), any(UserBulkCreateWriter.Row.class), eq(tenantId)))
+                .thenReturn(Optional.of(writerResult(shared.email(), "school.qrst2345", "Qrst-2345")));
+
+        BulkCreateUsersResponse response = userService.createBulk(request, caller);
+
+        assertThat(response.created()).hasSize(1);
+        assertThat(response.skipped()).isEmpty();
+    }
+
+    @Test
     void createBulk_writerLosesConcurrentRaceEveryRetry_skipsThatRowOnly_stillCreatesOthers() {
         UUID tenantId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        CurrentUser caller = host(tenantId);
         BulkCreateUserRow raced = row("raced@tenant.example");
         BulkCreateUserRow fine = row("fine@tenant.example");
         BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(raced, fine), null);
 
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
-        when(memberRepository.findActiveByOrganizationAndEmails(tenantId, List.of(raced.email(), fine.email())))
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(raced.email(), fine.email())))
                 .thenReturn(List.of());
         when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
         when(bulkCreateWriter.createGeneratedStudent(anyString(), any(UserBulkCreateWriter.Row.class), eq(tenantId)))
@@ -478,12 +723,12 @@ class UserServiceTest {
     @Test
     void createBulk_withSendCredentialsEmail_publishesOneEventPerCreatedStudent() {
         UUID tenantId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        CurrentUser caller = host(tenantId);
         BulkCreateUserRow rowA = row("a@tenant.example");
         BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(rowA), null, true);
 
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
-        when(memberRepository.findActiveByOrganizationAndEmails(tenantId, List.of(rowA.email())))
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(rowA.email())))
                 .thenReturn(List.of());
         when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
         when(bulkCreateWriter.createGeneratedStudent(anyString(), any(UserBulkCreateWriter.Row.class), eq(tenantId)))
@@ -503,19 +748,17 @@ class UserServiceTest {
     @Test
     void create_student_getsGeneratedUsername_andEmailOnlyHasToBeUniqueInTheOrganization() {
         UUID tenantId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        CurrentUser caller = host(tenantId);
         CreateUserRequest request = new CreateUserRequest(
-                "student@tenant.example", "Student One", "Password123",
+                "student@tenant.example", "Student One",
                 List.of("STUDENT"), null, null, null, null, null);
 
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
         when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.STUDENT));
-        when(memberRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
                 .thenReturn(List.of());
         when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(memberRepository.saveAndFlush(any(OrganizationMember.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
 
         userService.create(request, caller);
 
@@ -529,14 +772,14 @@ class UserServiceTest {
     @Test
     void create_studentLimitExceeded_rejectsBeforeInsert() {
         UUID tenantId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        CurrentUser caller = host(tenantId);
         CreateUserRequest request = new CreateUserRequest(
-                "student@tenant.example", "Student One", "Password123",
+                "student@tenant.example", "Student One",
                 List.of("STUDENT"), null, null, null, null, null);
 
         when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
         when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.STUDENT));
-        when(memberRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(request.email())))
                 .thenReturn(List.of());
         doThrow(new StudentLimitExceededException(100L, 100L, 1L))
                 .when(tenancyService).assertCanAddStudents(tenantId, 1L);
@@ -545,14 +788,13 @@ class UserServiceTest {
                 .isInstanceOf(StudentLimitExceededException.class);
 
         verify(userRepository, never()).saveAndFlush(any(User.class));
-        verify(memberRepository, never()).saveAndFlush(any(OrganizationMember.class));
     }
 
     @Test
     void changeOwnPassword_updatesHashAndClearsFirstLoginFlag() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        User student = account(1L, userPublicId, "Temporary123");
+        User student = accountOf(account(1L, userPublicId, "Temporary123"), tenantId, Role.STUDENT);
         student.setMustChangePassword(true);
         when(userRepository.findByPublicId(userPublicId)).thenReturn(Optional.of(student));
 
@@ -565,36 +807,45 @@ class UserServiceTest {
     }
 
     @Test
-    void resetPassword_hostAdmin_succeedsAgainstSameTenantStudent() {
+    void changeOwnPassword_freePracticeStudentWithoutOrganization_canChangeTheirOwnPassword() {
+        UUID userPublicId = UUID.randomUUID();
+        User free = accountOf(account(1L, userPublicId, "Temporary123"), null, Role.STUDENT);
+        when(userRepository.findByPublicId(userPublicId)).thenReturn(Optional.of(free));
+
+        userService.changeOwnPassword(new ChangePasswordRequest("Temporary123", "NewPassword456"),
+                new CurrentUser(userPublicId, null, List.of("STUDENT")));
+
+        assertThat(passwordEncoder.matches("NewPassword456", free.getCredentialHash())).isTrue();
+    }
+
+    @Test
+    void resetPassword_hostAdmin_succeedsAgainstSameTenantStudent_andEndsTheirSessions() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        User user = account(1L, userPublicId, "OldPassword123");
-        OrganizationMember student = memberOf(user, tenantId, Role.STUDENT);
+        User student = accountOf(account(1L, userPublicId, "OldPassword123"), tenantId, Role.STUDENT);
         when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(student);
 
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        CurrentUser caller = host(tenantId);
         when(provisioningHelper.canManageTarget(caller, student.getRoles())).thenReturn(true);
-        when(memberDirectory.isExclusivelyOwned(student)).thenReturn(true);
         UserResponse response = userService.resetPassword(userPublicId,
                 new ResetPasswordRequest("NewPassword456"), caller);
 
         assertThat(response.publicId()).isEqualTo(userPublicId);
-        assertThat(passwordEncoder.matches("NewPassword456", user.getCredentialHash())).isTrue();
+        assertThat(passwordEncoder.matches("NewPassword456", student.getCredentialHash())).isTrue();
+        verify(refreshTokenService).revokeAllForUser(1L);
     }
 
     @Test
     void sendGeneratedCredentials_rotatesHash_marksFirstLogin_andPublishesEmailEvent() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        User user = account(1L, userPublicId, "OldPassword123");
+        User user = accountOf(account(1L, userPublicId, "OldPassword123"), tenantId, Role.PROCTOR);
         user.setUsername("tenant.proctor");
         user.setEmail("proctor@tenant.example");
-        OrganizationMember examStaff = memberOf(user, tenantId, Role.PROCTOR);
-        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(examStaff);
+        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(user);
 
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
-        when(provisioningHelper.canManageTarget(caller, examStaff.getRoles())).thenReturn(true);
-        when(memberDirectory.isExclusivelyOwned(examStaff)).thenReturn(true);
+        CurrentUser caller = host(tenantId);
+        when(provisioningHelper.canManageTarget(caller, user.getRoles())).thenReturn(true);
 
         GeneratedCredentialsResponse response = userService.sendGeneratedCredentials(userPublicId, caller);
 
@@ -606,7 +857,10 @@ class UserServiceTest {
         assertThat(passwordEncoder.matches("OldPassword123", user.getCredentialHash())).isFalse();
         assertThat(passwordEncoder.matches(response.temporaryPassword(), user.getCredentialHash())).isTrue();
         assertThat(user.isMustChangePassword()).isTrue();
-        verify(eventPublisher).publishEvent(any(UserCredentialsEmailRequestedEvent.class));
+        ArgumentCaptor<UserCredentialsEmailRequestedEvent> event =
+                ArgumentCaptor.forClass(UserCredentialsEmailRequestedEvent.class);
+        verify(eventPublisher).publishEvent(event.capture());
+        assertThat(event.getValue().tenantId()).isEqualTo(tenantId);
         verify(userRepository).save(user);
     }
 
@@ -614,19 +868,17 @@ class UserServiceTest {
     void sendGeneratedCredentials_withoutEmail_rejectsBeforeHashChange() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        User user = account(1L, userPublicId, "OldPassword123");
+        User user = accountOf(account(1L, userPublicId, "OldPassword123"), tenantId, Role.PROCTOR);
         String hashBefore = user.getCredentialHash();
         user.setUsername("tenant.proctor");
         user.setEmail(null);
-        OrganizationMember examStaff = memberOf(user, tenantId, Role.PROCTOR);
-        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(examStaff);
+        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(user);
 
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
-        when(provisioningHelper.canManageTarget(caller, examStaff.getRoles())).thenReturn(true);
-        when(memberDirectory.isExclusivelyOwned(examStaff)).thenReturn(true);
+        CurrentUser caller = host(tenantId);
+        when(provisioningHelper.canManageTarget(caller, user.getRoles())).thenReturn(true);
 
         assertThatThrownBy(() -> userService.sendGeneratedCredentials(userPublicId, caller))
-                .isInstanceOf(com.pte.identity.internal.exception.UserEmailRequiredException.class);
+                .isInstanceOf(UserEmailRequiredException.class);
 
         assertThat(user.getCredentialHash()).isEqualTo(hashBefore);
         verify(userRepository, never()).save(any());
@@ -637,15 +889,13 @@ class UserServiceTest {
     void generateStudentCredentials_rotatesHash_withoutPublishingEmailEvent() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        User user = account(1L, userPublicId, "OldPassword123");
+        User user = accountOf(account(1L, userPublicId, "OldPassword123"), tenantId, Role.STUDENT);
         user.setUsername("tenant.student");
         user.setEmail(null);
-        OrganizationMember student = memberOf(user, tenantId, Role.STUDENT);
-        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(student);
+        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(user);
 
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
-        when(provisioningHelper.canManageTarget(caller, student.getRoles())).thenReturn(true);
-        when(memberDirectory.isExclusivelyOwned(student)).thenReturn(true);
+        CurrentUser caller = host(tenantId);
+        when(provisioningHelper.canManageTarget(caller, user.getRoles())).thenReturn(true);
 
         GeneratedCredentialsResponse response = userService.generateStudentCredentials(userPublicId, caller);
 
@@ -661,14 +911,28 @@ class UserServiceTest {
     }
 
     @Test
+    void generateStudentCredentials_forAnAccountThatIsNotAStudent_throwsForbidden() {
+        UUID userPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        User proctor = accountOf(account(1L, userPublicId, "OldPassword123"), tenantId, Role.PROCTOR);
+        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(proctor);
+        CurrentUser caller = host(tenantId);
+        when(provisioningHelper.canManageTarget(caller, proctor.getRoles())).thenReturn(true);
+
+        assertThatThrownBy(() -> userService.generateStudentCredentials(userPublicId, caller))
+                .isInstanceOf(ForbiddenPasswordResetException.class);
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
     void resetPassword_hostAdmin_againstSameTenantHostAdmin_throwsForbidden() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        OrganizationMember fellowHostAdmin = memberOf(account(1L, userPublicId, "OldPassword123"), tenantId,
-                Role.HOST_ADMIN);
+        User fellowHostAdmin = accountOf(account(1L, userPublicId, "OldPassword123"), tenantId, Role.HOST_ADMIN);
         when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(fellowHostAdmin);
 
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
+        CurrentUser caller = host(tenantId);
         when(provisioningHelper.canManageTarget(caller, fellowHostAdmin.getRoles())).thenReturn(false);
 
         assertThatThrownBy(() -> userService.resetPassword(userPublicId,
@@ -685,10 +949,8 @@ class UserServiceTest {
 
         when(memberDirectory.requireMember(callerTenantId, userPublicId)).thenThrow(new UserNotFoundException());
 
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), callerTenantId, List.of("HOST_ADMIN"));
-
         assertThatThrownBy(() -> userService.resetPassword(userPublicId,
-                new ResetPasswordRequest("NewPassword456"), caller))
+                new ResetPasswordRequest("NewPassword456"), host(callerTenantId)))
                 .isInstanceOf(UserNotFoundException.class);
 
         verify(userRepository, never()).save(any());
@@ -698,12 +960,10 @@ class UserServiceTest {
     void resetPassword_platformAdmin_stillWorksAgainstHostAdminAnyTenant() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        User user = account(1L, userPublicId, "OldPassword123");
-        OrganizationMember hostAdmin = memberOf(user, tenantId, Role.HOST_ADMIN);
+        User user = accountOf(account(1L, userPublicId, "OldPassword123"), tenantId, Role.HOST_ADMIN);
         when(userRepository.findByPublicIdAndDeletedFalse(userPublicId)).thenReturn(Optional.of(user));
-        when(memberRepository.findByUser_IdAndDeletedFalse(1L)).thenReturn(List.of(hostAdmin));
 
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
+        CurrentUser caller = platformAdmin();
         when(provisioningHelper.canManageTarget(caller, Set.of(Role.HOST_ADMIN))).thenReturn(true);
         UserResponse response = userService.resetPassword(userPublicId,
                 new ResetPasswordRequest("NewPassword456"), caller);
@@ -716,12 +976,10 @@ class UserServiceTest {
     void resetPassword_platformAdmin_againstLowerTenantRole_throwsForbidden() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        User user = account(1L, userPublicId, "OldPassword123");
-        OrganizationMember student = memberOf(user, tenantId, Role.STUDENT);
-        when(userRepository.findByPublicIdAndDeletedFalse(userPublicId)).thenReturn(Optional.of(user));
-        when(memberRepository.findByUser_IdAndDeletedFalse(1L)).thenReturn(List.of(student));
+        User student = accountOf(account(1L, userPublicId, "OldPassword123"), tenantId, Role.STUDENT);
+        when(userRepository.findByPublicIdAndDeletedFalse(userPublicId)).thenReturn(Optional.of(student));
 
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
+        CurrentUser caller = platformAdmin();
         when(provisioningHelper.canManageTarget(caller, Set.of(Role.STUDENT))).thenReturn(false);
 
         assertThatThrownBy(() -> userService.resetPassword(userPublicId,
@@ -729,76 +987,5 @@ class UserServiceTest {
                 .isInstanceOf(ForbiddenPasswordResetException.class);
 
         verify(userRepository, never()).save(any());
-    }
-
-    @Test
-    void resetPassword_hostAdmin_againstAccountSharedWithAnotherOrganization_throwsForbidden() {
-        UUID userPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-        User user = account(1L, userPublicId, "OldPassword123");
-        String hashBefore = user.getCredentialHash();
-        OrganizationMember student = memberOf(user, tenantId, Role.STUDENT);
-        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(student);
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
-        when(provisioningHelper.canManageTarget(caller, student.getRoles())).thenReturn(true);
-        when(memberDirectory.isExclusivelyOwned(student)).thenReturn(false);
-
-        assertThatThrownBy(() -> userService.resetPassword(userPublicId,
-                new ResetPasswordRequest("NewPassword456"), caller))
-                .isInstanceOf(ForbiddenPasswordResetException.class);
-
-        assertThat(user.getCredentialHash()).isEqualTo(hashBefore);
-        verify(userRepository, never()).save(any());
-    }
-
-    @Test
-    void generateStudentCredentials_hostAdmin_againstSharedAccount_throwsForbidden() {
-        UUID userPublicId = UUID.randomUUID();
-        UUID tenantId = UUID.randomUUID();
-        User user = account(1L, userPublicId, "OldPassword123");
-        OrganizationMember student = memberOf(user, tenantId, Role.STUDENT);
-        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(student);
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
-        when(provisioningHelper.canManageTarget(caller, student.getRoles())).thenReturn(true);
-
-        assertThatThrownBy(() -> userService.generateStudentCredentials(userPublicId, caller))
-                .isInstanceOf(ForbiddenPasswordResetException.class);
-
-        verify(userRepository, never()).save(any());
-    }
-
-    @Test
-    void create_staffEmailOfPlatformAccount_isRejectedAndNeverJoinsTheOrganization() {
-        UUID tenantId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
-        CreateUserRequest request = new CreateUserRequest(
-                "admin@test.local", "Admin", "Password123",
-                List.of("PROCTOR"), null, null, null, null, null);
-        User platformAdmin = account(7L, UUID.randomUUID(), "KeepThisPassword1");
-        platformAdmin.setRoles(Set.of(Role.PLATFORM_ADMIN));
-        when(userRepository.findByUsername(request.email())).thenReturn(Optional.of(platformAdmin));
-        when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
-        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.PROCTOR));
-
-        assertThatThrownBy(() -> userService.create(request, caller)).isInstanceOf(EmailAlreadyUsedException.class);
-
-        verify(memberRepository, never()).saveAndFlush(any(OrganizationMember.class));
-    }
-
-    @Test
-    void create_staffEmailHeldByAnotherAccount_isRejected() {
-        UUID tenantId = UUID.randomUUID();
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
-        CreateUserRequest request = new CreateUserRequest(
-                "taken@tenant.example", "Student", "Password123",
-                List.of("PROCTOR"), null, null, null, null, null);
-        when(userRepository.findByUsername(request.email())).thenReturn(Optional.empty());
-        when(userRepository.existsByEmailIgnoreCaseAndDeletedFalse(request.email())).thenReturn(true);
-        when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
-        when(provisioningHelper.resolveAndAuthorizeRoles(caller, request.roles())).thenReturn(Set.of(Role.PROCTOR));
-
-        assertThatThrownBy(() -> userService.create(request, caller)).isInstanceOf(EmailAlreadyUsedException.class);
-
-        verify(userRepository, never()).saveAndFlush(any(User.class));
     }
 }

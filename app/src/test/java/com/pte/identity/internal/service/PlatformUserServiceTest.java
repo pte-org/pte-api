@@ -101,9 +101,24 @@ class PlatformUserServiceTest {
         ArgumentCaptor<User> createdCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).saveAndFlush(createdCaptor.capture());
         assertThat(createdCaptor.getValue().getCredentialHash()).isEqualTo("hash");
+        assertThat(createdCaptor.getValue().getUsername()).isEqualTo("academic@example.com");
         verify(auditLogService).record(eq(caller), eq("PlatformUser"),
                 eq(saved.getPublicId().toString()), eq("PlatformUserCreated"), any(String.class));
         verify(eventPublisher, never()).publishEvent(any(UserCredentialsEmailRequestedEvent.class));
+    }
+
+    @Test
+    void create_platformUser_usernameAlreadyTaken_isRejected() {
+        CurrentUser caller = admin();
+        PlatformUserCreateRequest request = new PlatformUserCreateRequest(
+                "academic@example.com", "Academic User", "Password123!", List.of("ACADEMIC_STAFF"));
+        when(provisioningHelper.resolvePlatformRoles(caller, request.roles()))
+                .thenReturn(Set.of(Role.ACADEMIC_STAFF));
+        when(userRepository.existsByUsername(request.email())).thenReturn(true);
+
+        assertThatThrownBy(() -> service.create(request, caller))
+                .isInstanceOf(com.pte.identity.internal.exception.EmailAlreadyUsedException.class);
+        verify(userRepository, never()).saveAndFlush(any(User.class));
     }
 
     @Test

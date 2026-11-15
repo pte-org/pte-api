@@ -1,7 +1,6 @@
 package com.pte.identity.internal.service;
 
 import com.pte.identity.domain.Role;
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.identity.internal.dto.request.profile.UpdateOwnProfileRequest;
@@ -36,8 +35,7 @@ public class UserProfileService {
             throw new ForbiddenUserManagementException();
         }
 
-        OrganizationMember member = memberDirectory.requireMemberForUpdate(caller.tenantId(), caller.userId());
-        User user = member.getUser();
+        User user = memberDirectory.requireMemberForUpdate(caller.tenantId(), caller.userId());
         user.setFullName(request.fullName().trim());
         user.setPhone(normalizeOptional(request.phone()));
         user.setDateOfBirth(request.dateOfBirth());
@@ -46,7 +44,7 @@ public class UserProfileService {
                 IdentityConstants.USER_PROFILE_UPDATED, IdentityConstants.USER_PROFILE_UPDATED_SUMMARY);
 
         String organizationType = tenancyService.findOrganizationType(caller.tenantId()).orElse(null);
-        return UserMapper.toResponse(member, organizationType);
+        return UserMapper.toResponse(user, organizationType);
     }
 
     private static String normalizeOptional(String value) {

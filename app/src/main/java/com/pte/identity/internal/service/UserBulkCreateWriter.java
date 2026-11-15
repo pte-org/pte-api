@@ -1,9 +1,7 @@
 package com.pte.identity.internal.service;
 
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.util.PasswordGenerator;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -28,13 +26,10 @@ import java.util.UUID;
 public class UserBulkCreateWriter {
 
     private final UserRepository userRepository;
-    private final OrganizationMemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public UserBulkCreateWriter(UserRepository userRepository, OrganizationMemberRepository memberRepository,
-                                 PasswordEncoder passwordEncoder) {
+    public UserBulkCreateWriter(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
-        this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -48,12 +43,14 @@ public class UserBulkCreateWriter {
     /** Empty result means the generated username lost a concurrent race on its unique key. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<Result> createGeneratedStudent(String username, Row row, UUID tenantId) {
-        return persist(newStudent(username, row, true), tenantId);
+        return persist(newStudent(username, row, tenantId, true));
     }
 
-    private User newStudent(String username, Row row, boolean mustChangePassword) {
+    private User newStudent(String username, Row row, UUID tenantId, boolean mustChangePassword) {
         User user = new User();
         user.setUsername(username);
+        user.setOrganizationId(tenantId);
+        user.getRoles().add(Role.STUDENT);
         user.setEmail(row.email());
         user.setFullName(row.fullName());
         user.setStudentCode(row.studentCode());
@@ -64,24 +61,15 @@ public class UserBulkCreateWriter {
         return user;
     }
 
-    private Optional<Result> persist(User user, UUID tenantId) {
+    private Optional<Result> persist(User user) {
         String password = PasswordGenerator.generateReadable();
         user.setCredentialHash(passwordEncoder.encode(password));
         User saved;
         try {
             saved = userRepository.saveAndFlush(user);
-            addStudentMember(saved, tenantId);
         } catch (DataIntegrityViolationException ex) {
             return Optional.empty();
         }
         return Optional.of(new Result(saved, password));
-    }
-
-    private void addStudentMember(User user, UUID tenantId) {
-        OrganizationMember member = new OrganizationMember();
-        member.setUser(user);
-        member.setOrganizationId(tenantId);
-        member.getRoles().add(Role.STUDENT);
-        memberRepository.saveAndFlush(member);
     }
 }
