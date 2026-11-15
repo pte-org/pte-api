@@ -109,8 +109,8 @@ class TenantApplicationReviewPostgresIntegrationTest {
     void tenApproveRejectRacesCommitExactlyOneTerminalDecision() throws Exception {
         when(platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY)).thenReturn(75);
         delegateApplicationReviewToRepository();
-        when(identityService.createHostAdmin(any(), anyString()))
-                .thenAnswer(invocation -> new HostAdminCreated(hostAdmin(invocation.getArgument(1)), "one-time"));
+        when(identityService.createHostAdmin(any(), anyString(), anyString()))
+                .thenAnswer(invocation -> new HostAdminCreated(hostAdmin(invocation.getArgument(2)), "one-time"));
 
         for (int i = 0; i < 10; i++) {
             Organization application = pending("race-" + i);
@@ -131,10 +131,10 @@ class TenantApplicationReviewPostgresIntegrationTest {
                     TenantApplicationStatus.REJECTED);
             if (TenantApplicationMapper.statusOf(persisted) == TenantApplicationStatus.APPROVED) {
                 verify(tenancyService, times(1)).approveApplication(any(Organization.class), any(), anyInt());
-                verify(identityService, times(1)).createHostAdmin(any(), anyString());
+                verify(identityService, times(1)).createHostAdmin(any(), anyString(), anyString());
             } else {
                 verify(tenancyService, never()).approveApplication(any(Organization.class), any(), anyInt());
-                verify(identityService, never()).createHostAdmin(any(), anyString());
+                verify(identityService, never()).createHostAdmin(any(), anyString(), anyString());
             }
         }
     }
@@ -144,7 +144,7 @@ class TenantApplicationReviewPostgresIntegrationTest {
         Organization application = pending("failure");
         when(platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY)).thenReturn(75);
         delegateApplicationReviewToRepository();
-        when(identityService.createHostAdmin(any(), anyString()))
+        when(identityService.createHostAdmin(any(), anyString(), anyString()))
                 .thenThrow(new IllegalStateException("identity unavailable"));
 
         assertThatThrownBy(() -> service.approve(application.getPublicId(),
