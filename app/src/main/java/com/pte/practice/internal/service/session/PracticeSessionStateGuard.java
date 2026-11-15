@@ -5,6 +5,7 @@ import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.response.PracticeSessionResponse;
 import com.pte.practice.internal.exception.PracticeSessionException;
+import com.pte.practice.internal.exception.PracticeSessionExpiredException;
 import com.pte.practice.internal.exception.PracticeSessionNotFoundException;
 import com.pte.practice.internal.mapper.PracticeSessionResponseMapper;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
@@ -34,8 +35,7 @@ class PracticeSessionStateGuard {
                 || isPastDeadline(session, clock.instant())) {
             expire(session);
             saveAndMap(session);
-            throw new PracticeSessionException(HttpStatus.GONE, PracticeConstants.PRACTICE_SESSION_EXPIRED,
-                    PracticeConstants.PRACTICE_SESSION_EXPIRED_MESSAGE);
+            throw new PracticeSessionExpiredException();
         }
         requireVersion(session, expectedVersion);
         if (session.getStatus() != PracticeSessionStatus.IN_PROGRESS) {
