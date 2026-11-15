@@ -72,13 +72,13 @@ class ShortQuestionScorerTest {
     }
 
     @Test
-    void anAliasAlsoScoresOneHundredAndNamesTheAliasThatMatched() {
+    void aLeadingArticleScoresOneHundredAndNamesTheCanonicalAnswer() {
         givenAudioHeardAs("An astronomer!");
 
         AiScoreResult result = scorer.score(request(ANSWER_KEY));
 
         assertThat(result.rawScore()).isEqualTo(100);
-        assertThat(JSON.readTree(result.detailJson()).path("matchedAnswer").asText()).isEqualTo("an astronomer");
+        assertThat(JSON.readTree(result.detailJson()).path("matchedAnswer").asText()).isEqualTo("astronomer");
     }
 
     @Test
