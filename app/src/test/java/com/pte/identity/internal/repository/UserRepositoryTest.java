@@ -1,6 +1,5 @@
 package com.pte.identity.internal.repository;
 
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
@@ -11,6 +10,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -20,16 +20,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * {@code @DataJpaTest} against the real (H2-derived) schema. An account is global: the username is unique across
- * the platform, while e-mail is not, and per-organization roles/status live on {@link OrganizationMember}.
+ * the platform, while e-mail uniqueness is only enforced per organization (a partial unique index that exists in the
+ * migrations, not in this Hibernate-generated schema). Roles, status and organization all live on the account.
  */
 @DataJpaTest
 class UserRepositoryTest {
 
     @Autowired
     private UserRepository userRepository;
-
-    @Autowired
-    private OrganizationMemberRepository memberRepository;
 
     private User persistUser(String username, String email, String fullName, Set<Role> roles) {
         User user = new User();
@@ -41,22 +39,22 @@ class UserRepositoryTest {
         return userRepository.saveAndFlush(user);
     }
 
-    private OrganizationMember join(User user, UUID organizationId, Role role) {
-        OrganizationMember member = new OrganizationMember();
-        member.setUser(user);
-        member.setOrganizationId(organizationId);
-        member.setStatus(UserStatus.ACTIVE);
-        member.setRoles(Set.of(role));
-        return memberRepository.saveAndFlush(member);
+    private User join(User user, UUID organizationId, Role role) {
+        user.setOrganizationId(organizationId);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setRoles(new HashSet<>(Set.of(role)));
+        return userRepository.saveAndFlush(user);
     }
 
     @Test
-    void twoAccounts_canShareTheSameEmail() {
+    void twoAccounts_inDifferentOrganizations_canShareTheSameEmail() {
         String sharedEmail = "shared.student@example.test";
-        persistUser("org-a.aaaaaaaa", sharedEmail, null, Set.of());
-        persistUser("org-b.bbbbbbbb", sharedEmail, null, Set.of());
+        User first = persistUser("org-a.aaaaaaaa", sharedEmail, null, Set.of());
+        User second = persistUser("org-b.bbbbbbbb", sharedEmail, null, Set.of());
+        join(first, UUID.randomUUID(), Role.EXAMINER);
+        join(second, UUID.randomUUID(), Role.EXAMINER);
 
-        assertThat(userRepository.findByEmailIgnoreCaseAndDeletedFalse(sharedEmail)).hasSize(2);
+        assertThat(userRepository.findAll()).filteredOn(found -> sharedEmail.equals(found.getEmail())).hasSize(2);
     }
 
     @Test
@@ -77,11 +75,11 @@ class UserRepositoryTest {
         join(examiner, organizationId, Role.EXAMINER);
         join(student, organizationId, Role.STUDENT);
 
-        Page<OrganizationMember> result = memberRepository.findPageForExamStaff(
+        Page<User> result = userRepository.findPageForExamStaff(
                 organizationId, Set.of(Role.PROCTOR, Role.EXAMINER), Role.EXAMINER,
                 UserStatus.ACTIVE, "examiner", PageRequest.of(0, 20));
 
-        assertThat(result.getContent()).extracting(member -> member.getUser().getUsername())
+        assertThat(result.getContent()).extracting(User::getUsername)
                 .containsExactly("examiner@example.test");
         assertThat(result.getTotalElements()).isEqualTo(1);
     }
@@ -100,11 +98,11 @@ class UserRepositoryTest {
         join(examinerB, organizationId, Role.EXAMINER);
         join(otherExaminer, otherOrganizationId, Role.EXAMINER);
 
-        List<OrganizationMember> locked = memberRepository.findWithLockByUsersAndOrganization(
+        List<User> locked = userRepository.findWithLockByUsersAndOrganization(
                 List.of(examinerB.getPublicId(), otherExaminer.getPublicId(), examinerA.getPublicId()),
                 organizationId);
 
-        assertThat(locked).extracting(member -> member.getUser().getPublicId())
+        assertThat(locked).extracting(User::getPublicId)
                 .containsExactly(examinerA.getPublicId(), examinerB.getPublicId());
     }
 
