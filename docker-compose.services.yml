@@ -1,6 +1,6 @@
 # Local compose: app, built from source via the shared root Dockerfile.
 # Always run alongside the infra-only docker-compose.yml (which owns the
-# pte-network definition + postgres/redis/rabbitmq/mailpit/jaeger):
+# pte-network definition + postgres/redis/rabbitmq/mailpit):
 #
 #   docker compose --env-file .env \
 #     -f docker-compose.yml -f docker-compose.services.yml up --build
@@ -36,7 +36,6 @@ services:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in the env file}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the env file}
-      OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       # com.pte.identity.internal.config.SecurityConfig (gateway-removal) —
       # browser FE origins allowed to call this app directly.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
@@ -71,11 +70,14 @@ services:
       QUESTION_GEN_STUB: ${QUESTION_GEN_STUB:-false}
       # Shared AI gateway (Capstone); the old QUESTION_GEN_* names still work as a fallback.
       AI_GATEWAY_BASE_URL: ${AI_GATEWAY_BASE_URL:-${QUESTION_GEN_BASE_URL:-}}
+      AI_GATEWAY_WEB_URL: ${AI_GATEWAY_WEB_URL:-}
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-${QUESTION_GEN_API_KEY:-}}
       AI_GATEWAY_MODEL: ${AI_GATEWAY_MODEL:-${QUESTION_GEN_GENERATOR_MODEL:-Capstone}}
       QUESTION_GEN_PRICE_INPUT_PER_MILLION_USD: "${QUESTION_GEN_PRICE_INPUT_PER_MILLION_USD:-0.10}"
       QUESTION_GEN_PRICE_OUTPUT_PER_MILLION_USD: "${QUESTION_GEN_PRICE_OUTPUT_PER_MILLION_USD:-0.40}"
       QUESTION_GEN_REVIEWER_MODEL: ${QUESTION_GEN_REVIEWER_MODEL:-Capstone}
+      QUESTION_GEN_IMAGE_MODEL: ${QUESTION_GEN_IMAGE_MODEL:-ag/gemini-3.1-flash-image}
+      QUESTION_GEN_IMAGE_MAX_ATTEMPTS: ${QUESTION_GEN_IMAGE_MAX_ATTEMPTS:-2}
       QUESTION_GEN_GENERATOR_TEMPERATURE: ${QUESTION_GEN_GENERATOR_TEMPERATURE:-0.8}
       QUESTION_GEN_REVIEWER_TEMPERATURE: ${QUESTION_GEN_REVIEWER_TEMPERATURE:-0.0}
       QUESTION_GEN_MAX_TOKENS: ${QUESTION_GEN_MAX_TOKENS:-0}
@@ -92,6 +94,7 @@ services:
       QUESTION_GEN_POLL_DELAY_MS: ${QUESTION_GEN_POLL_DELAY_MS:-3000}
       QUESTION_GEN_LEASE_DURATION: ${QUESTION_GEN_LEASE_DURATION:-10m}
       KOKORO_BASE_URL: ${KOKORO_BASE_URL:-}
+      KOKORO_WEB_URL: ${KOKORO_WEB_URL:-}
       KOKORO_API_KEY: ${KOKORO_API_KEY:-}
       KOKORO_TIMEOUT: ${KOKORO_TIMEOUT:-300s}
       QUESTION_GEN_VOICES_US: ${QUESTION_GEN_VOICES_US:-af_heart,af_bella,am_michael}
@@ -101,8 +104,8 @@ services:
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:?set CLOUDINARY_CLOUD_NAME in the env file}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:?set CLOUDINARY_API_KEY in the env file}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:?set CLOUDINARY_API_SECRET in the env file}
-      CLOUDINARY_AUTHORING_FOLDER: ${CLOUDINARY_AUTHORING_FOLDER:-pte/authoring}
-      CLOUDINARY_SUBMISSION_FOLDER: ${CLOUDINARY_SUBMISSION_FOLDER:-pte/submissions}
+      CLOUDINARY_ROOT_FOLDER: ${CLOUDINARY_ROOT_FOLDER:-pte/local}
+      MEDIA_PURGE_ENABLED: ${MEDIA_PURGE_ENABLED:-false}
       # com.pte.notification (Phase 09) — Mailpit's SMTP port on the docker network.
       MAIL_HOST: ${MAIL_HOST:-mailpit}
       MAIL_PORT: ${MAIL_PORT:-1025}
@@ -188,6 +191,7 @@ services:
       SCORING_AI_CONNECT_TIMEOUT_MS: "${SCORING_AI_CONNECT_TIMEOUT_MS:-2000}"
       SCORING_AI_ESSAY_MODEL: "${SCORING_AI_ESSAY_MODEL:-}"
       SCORING_AI_GATEWAY_TIMEOUT_MS: "${SCORING_AI_GATEWAY_TIMEOUT_MS:-60000}"
+      SCORING_AI_PRACTICE_SPEECH_VENDOR: ${SCORING_AI_PRACTICE_SPEECH_VENDOR:-gateway}
       SCORING_AI_JOB_BUDGET_MS: "${SCORING_AI_JOB_BUDGET_MS:-90000}"
       SCORING_AI_MAX_TOKENS: "${SCORING_AI_MAX_TOKENS:-800}"
       SCORING_AI_MEDIA_URL_TTL_SECONDS: "${SCORING_AI_MEDIA_URL_TTL_SECONDS:-120}"

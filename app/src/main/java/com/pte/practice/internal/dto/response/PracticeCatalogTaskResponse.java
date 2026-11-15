@@ -25,7 +25,8 @@ public record PracticeCatalogTaskResponse(
         boolean timedAvailable,
         String timedUnavailableReason,
         long answeredQuestionCount,
-        Integer averageScore) {
+        Integer averageScore,
+        long availableQuestionCount) {
 
     public PracticeCatalogTaskResponse {
         requiredClientCapabilities = requiredClientCapabilities == null
@@ -50,24 +51,24 @@ public record PracticeCatalogTaskResponse(
             boolean timedAvailable, String timedUnavailableReason) {
         this(code, displayName, section, scored, availability, unavailableReason, profileKey, profileVersion,
                 rendererKey, contractVersion, answerSchemaVersion, requiredClientCapabilities, contentStatus,
-                provenance, timedAvailable, timedUnavailableReason, 0, null);
+                provenance, timedAvailable, timedUnavailableReason, 0, null, 0);
     }
 
     public PracticeCatalogTaskResponse withTimedAvailability(boolean available, String reason) {
         return new PracticeCatalogTaskResponse(code, displayName, section, scored, availability, unavailableReason,
                 profileKey, profileVersion, rendererKey, contractVersion, answerSchemaVersion,
                 requiredClientCapabilities, contentStatus, provenance, available, reason, answeredQuestionCount,
-                averageScore);
+                averageScore, availableQuestionCount);
     }
 
     /**
      * The requesting student's numbers for this task type: distinct questions answered, and the mean score (0-100)
-     * of their scored answers, or null while none is scored.
+     * of their scored answers, or null while none is scored; plus the published questions available to practise.
      */
-    public PracticeCatalogTaskResponse withStats(long answered, Integer average) {
+    public PracticeCatalogTaskResponse withStats(long answered, Integer average, long available) {
         return new PracticeCatalogTaskResponse(code, displayName, section, scored, availability, unavailableReason,
                 profileKey, profileVersion, rendererKey, contractVersion, answerSchemaVersion,
                 requiredClientCapabilities, contentStatus, provenance, timedAvailable, timedUnavailableReason,
-                answered, average);
+                answered, average, available);
     }
 }

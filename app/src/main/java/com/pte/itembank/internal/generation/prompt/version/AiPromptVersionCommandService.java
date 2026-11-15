@@ -62,7 +62,12 @@ public class AiPromptVersionCommandService {
         List<AiPromptVersion> all = versions.findByKindAndPromptKeyOrderByVersionNoDesc(kind, promptKey);
         AiPromptVersion live = all.stream().filter(version -> version.getStatus() == AiPromptStatus.ACTIVE).findFirst()
                 .orElseThrow(GenerationPromptNotFoundException::new);
-        PromptContent clean = validator.validated(kind, request.content());
+        PromptContent clean = validator.validated(kind, promptKey, request.content());
+        List<String> locked = PromptLocks.problems(kind, promptKey, codec.read(live.getContent()), clean);
+        if (!locked.isEmpty()) {
+            throw new AiPromptException(HttpStatus.BAD_REQUEST, PromptVersionConstants.CONTENT_INVALID,
+                    String.join(" ", locked));
+        }
         String hash = codec.hash(clean);
         AiPromptVersion open = PromptProposals.openProposal(all, live).orElse(null);
         if (open == null) {

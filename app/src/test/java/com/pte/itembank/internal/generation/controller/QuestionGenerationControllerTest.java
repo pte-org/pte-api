@@ -69,7 +69,7 @@ class QuestionGenerationControllerTest {
 
     private static GenerationJobResponse job(UUID id, String status) {
         return new GenerationJobResponse(id, "MC_READING_SINGLE", "B2", "PRACTICE", null, 3, status, 0, 0, null,
-                Instant.parse("2026-11-07T10:00:00Z"), null, null, List.of());
+                Instant.parse("2026-11-07T10:00:00Z"), null, null, List.of(), "AUTO", true);
     }
 
     @Test

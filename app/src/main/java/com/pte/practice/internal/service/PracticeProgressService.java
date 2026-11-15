@@ -5,10 +5,13 @@ import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.domain.enums.PracticeProgressStatus;
 import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
+import com.pte.practice.internal.domain.enums.PracticeScoringStatus;
 import com.pte.practice.internal.dto.response.PracticeProgressEntry;
 import com.pte.practice.internal.dto.response.PracticeProgressResponse;
 import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
+import com.pte.scoring.PracticeScoringRoute;
+import com.pte.scoring.ScoringService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,12 +34,14 @@ public class PracticeProgressService {
 
     private final PracticeSessionRepository sessionRepository;
     private final PracticeResponseRepository itemRepository;
+    private final ScoringService scoringService;
     private final Clock clock;
 
     public PracticeProgressService(PracticeSessionRepository sessionRepository,
-            PracticeResponseRepository itemRepository, Clock clock) {
+            PracticeResponseRepository itemRepository, ScoringService scoringService, Clock clock) {
         this.sessionRepository = sessionRepository;
         this.itemRepository = itemRepository;
+        this.scoringService = scoringService;
         this.clock = clock;
     }
 
@@ -50,11 +55,13 @@ public class PracticeProgressService {
                 .findTop100ByStudentPublicIdAndDeletedFalseOrderByCreatedAtDesc(studentPublicId);
         long totalSessionCount = sessionRepository.countByStudentPublicIdAndDeletedFalse(studentPublicId);
         Map<Long, List<PracticeResponse>> itemsBySessionId = itemsBySession(sessions);
+        Map<String, Boolean> aiScoredByTask = new HashMap<>();
         for (PracticeSession session : sessions) {
             if (session.getId() == null) {
                 continue;
             }
-            PracticeProgressEntry entry = toEntry(session, itemsBySessionId.getOrDefault(session.getId(), List.of()));
+            PracticeProgressEntry entry = toEntry(session, itemsBySessionId.getOrDefault(session.getId(), List.of()),
+                    aiScoredByTask);
             if (entry != null) {
                 entries.add(entry);
             }
@@ -90,7 +97,8 @@ public class PracticeProgressService {
         return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) value;
     }
 
-    private PracticeProgressEntry toEntry(PracticeSession session, List<PracticeResponse> items) {
+    private PracticeProgressEntry toEntry(PracticeSession session, List<PracticeResponse> items,
+            Map<String, Boolean> aiScoredByTask) {
         boolean hasResponse = items.stream().anyMatch(this::hasResponse);
         PracticeProgressStatus progressStatus = switch (session.getStatus()) {
             case COMPLETED -> hasResponse ? PracticeProgressStatus.COMPLETED_PENDING_SCORE : null;
@@ -121,7 +129,26 @@ public class PracticeProgressService {
                 averageScore(items),
                 session.effectiveKind().name(),
                 session.getSkillCode(),
-                singleTaskCode(session.getSelectedTaskTypes()));
+                singleTaskCode(session.getSelectedTaskTypes()),
+                (int) items.stream().filter(item -> isUnscoredAi(item, aiScoredByTask)).count(),
+                countScoring(items, PracticeScoringStatus.SCORING),
+                countScoring(items, PracticeScoringStatus.FAILED));
+    }
+
+    /** An answered speaking/writing item still waiting for the student's "Chấm điểm" request. */
+    private boolean isUnscoredAi(PracticeResponse item, Map<String, Boolean> aiScoredByTask) {
+        if (item.getStatus() != PracticeResponseStatus.ANSWERED
+                || item.getScoringStatus() != PracticeScoringStatus.NONE || item.getTaskCode() == null) {
+            return false;
+        }
+        return aiScoredByTask.computeIfAbsent(item.getTaskCode(), code -> {
+            PracticeScoringRoute route = scoringService.practiceScoringRoute(code);
+            return route == PracticeScoringRoute.AI_SPEECH || route == PracticeScoringRoute.AI_TEXT;
+        });
+    }
+
+    private int countScoring(List<PracticeResponse> items, PracticeScoringStatus status) {
+        return (int) items.stream().filter(item -> item.getScoringStatus() == status).count();
     }
 
     private Double averageScore(List<PracticeResponse> items) {

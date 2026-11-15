@@ -2,6 +2,7 @@ package com.pte.itembank.internal.generation.pipeline;
 
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import com.pte.itembank.internal.generation.domain.ItemStage;
+import com.pte.itembank.internal.generation.domain.JobStatus;
 import com.pte.itembank.internal.generation.domain.QuestionGenerationJobItem;
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
@@ -41,6 +42,12 @@ public class GenerationItemStateService {
     @Transactional
     public boolean advance(JobClaim claim, int index, ItemStage stage) {
         return items.advance(claim.jobId(), index, stage, claim.workerId(), clock.instant()) > 0;
+    }
+
+    /** True when someone asked to stop the job while this worker holds it; checked before each rewrite. */
+    @Transactional(readOnly = true)
+    public boolean cancelRequested(JobClaim claim) {
+        return jobs.statusIfLeaseHeld(claim.jobId(), claim.workerId()).contains(JobStatus.CANCELLING);
     }
 
     /** The question went into the form it was asked from; nothing is saved. */

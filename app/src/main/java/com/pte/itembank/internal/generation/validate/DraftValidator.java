@@ -1,5 +1,7 @@
 package com.pte.itembank.internal.generation.validate;
 
+import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
+import com.pte.itembank.internal.generation.draft.image.PictureDrafts;
 import com.pte.itembank.internal.generation.validate.audio.*;
 import com.pte.itembank.internal.generation.draft.ItemDraft;
 import org.springframework.stereotype.Component;
@@ -77,6 +79,8 @@ public class DraftValidator {
             case "SUMMARIZE_GROUP_DISCUSSION" -> dialogueValidator.validateSgd((ItemDraft.DialogueDraft) draft);
             case "RESPOND_TO_A_SITUATION" -> dialogueValidator.validateRts((ItemDraft.DialogueDraft) draft);
             case "DESCRIBE_IMAGE" -> chartValidator.validate((ItemDraft.ChartDraft) draft);
+            case QuestionGenerationConstants.PROMPT_KEY_DESCRIBE_IMAGE_PICTURE ->
+                    PictureDrafts.validate((ItemDraft.PictureDraft) draft);
             default -> List.of();
         };
     }

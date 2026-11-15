@@ -31,7 +31,14 @@ public class PromptRegistry {
 
     /** The instruction prompt of a task type, or null when it has none. Placeholders are filled in by the generator. */
     public String getPrompt(String taskTypeKey) {
-        return generatorContent(taskTypeKey).map(PromptTextAssembler::assemble).orElse(null);
+        return generatorContent(taskTypeKey).map(PictureSettings::withoutSettings).map(PromptTextAssembler::assemble)
+                .orElse(null);
+    }
+
+    /** The picture settings edited on the picture prompt page, or {@code defaults} where it has none. */
+    public PictureSettings pictureSettings(PictureSettings defaults) {
+        return PictureSettings.from(generatorContent(QuestionGenerationConstants.PROMPT_KEY_DESCRIBE_IMAGE_PICTURE),
+                defaults);
     }
 
     /** The instruction shared by all task types; null when it has not been stored. */
@@ -52,6 +59,12 @@ public class PromptRegistry {
     /** The image reviewer's prompt in use, as the text the model receives. */
     public Optional<String> imageReviewerPrompt() {
         return active(AiPromptKind.REVIEWER, QuestionGenerationConstants.PROMPT_KEY_IMAGE_REVIEWER)
+                .map(this::contentOf).map(PromptTextAssembler::assembleWithoutTitle);
+    }
+
+    /** The picture reviewer's prompt in use, as the text the model receives. */
+    public Optional<String> pictureReviewerPrompt() {
+        return active(AiPromptKind.REVIEWER, QuestionGenerationConstants.PROMPT_KEY_PICTURE_REVIEWER)
                 .map(this::contentOf).map(PromptTextAssembler::assembleWithoutTitle);
     }
 

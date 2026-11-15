@@ -76,18 +76,6 @@ services:
       retries: 10
     networks: [pte-network]
 
-  jaeger:
-    image: jaegertracing/all-in-one:1.62.0
-    container_name: pte-jaeger
-    restart: unless-stopped
-    ports:
-      - "${JAEGER_UI_PORT:-16686}:16686"
-      - "${JAEGER_OTLP_GRPC_PORT:-4317}:4317"
-      - "${JAEGER_OTLP_HTTP_PORT:-4318}:4318"
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-    networks: [pte-network]
-
 volumes:
   pte_postgres_data:
     name: pte_postgres_data

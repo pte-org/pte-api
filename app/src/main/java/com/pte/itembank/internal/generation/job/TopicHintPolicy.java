@@ -7,15 +7,22 @@ import java.util.regex.Pattern;
 
 /**
  * The optional topic is user text that ends up inside a prompt, so it is restricted to letters, digits, spaces and a
- * few punctuation marks. That removes control characters, markup, quotes, backticks and braces: nothing that could
+ * few punctuation marks. That removes control characters, markup, backticks and braces: nothing that could
  * close a delimiter or pass for an instruction structure. The prompt builder still wraps it as data.
  */
 public final class TopicHintPolicy {
 
-    private static final Pattern ALLOWED = Pattern.compile("[\\p{L}\\p{N} ,.&()/\\-]+");
+    private static final String ALLOWED_CHARS = "\\p{L}\\p{N} ,.;:'?!&()/\\-";
+    private static final Pattern ALLOWED = Pattern.compile("[" + ALLOWED_CHARS + "]+");
+    private static final Pattern DISALLOWED = Pattern.compile("[^" + ALLOWED_CHARS + "]");
     private static final Pattern WHITESPACE_RUN = Pattern.compile("\\s+");
 
     private TopicHintPolicy() {
+    }
+
+    /** Drops every character a topic may not hold, for text that did not come through {@link #normalize}. */
+    public static String strip(String topic) {
+        return DISALLOWED.matcher(WHITESPACE_RUN.matcher(topic).replaceAll(" ")).replaceAll("").strip();
     }
 
     /** @return the normalized topic, or null when none was given */

@@ -1,5 +1,7 @@
 package com.pte.itembank.internal.generation.draft;
 
+import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
+import com.pte.itembank.internal.generation.draft.image.PictureDrafts;
 import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.dto.request.CreateQuestionRequest;
@@ -64,6 +66,8 @@ public class DraftToQuestionMapper {
             case "RESPOND_TO_A_SITUATION" -> dialogueMapper.mapRespondToASituation((ItemDraft.DialogueDraft) draft, cefr, pool);
             // Chart types (phase 7)
             case "DESCRIBE_IMAGE" -> chartMapper.mapDescribeImage((ItemDraft.ChartDraft) draft, cefr, pool);
+            case QuestionGenerationConstants.PROMPT_KEY_DESCRIBE_IMAGE_PICTURE ->
+                    PictureDrafts.toQuestion((ItemDraft.PictureDraft) draft, cefr, pool);
             default -> throw new IllegalArgumentException("Unsupported task type: " + taskTypeKey);
         };
     }

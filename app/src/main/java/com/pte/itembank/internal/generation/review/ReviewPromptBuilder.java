@@ -2,6 +2,7 @@ package com.pte.itembank.internal.generation.review;
 
 import com.pte.itembank.GenerationRubricTraits;
 import com.pte.itembank.domain.enums.CefrLevel;
+import com.pte.itembank.internal.generation.draft.AnswerHint;
 import com.pte.itembank.internal.generation.draft.ItemDraft;
 import com.pte.itembank.internal.generation.prompt.PromptRegistry;
 import org.springframework.stereotype.Component;
@@ -74,6 +75,11 @@ public class ReviewPromptBuilder {
      * Builds the user prompt for review. Includes the draft in delimiters and any fix suggestions from a previous attempt.
      */
     public String buildUserPrompt(ItemDraft draft, CefrLevel cefrLevel, String fixSuggestion) {
+        return buildUserPrompt(draft, null, cefrLevel, fixSuggestion);
+    }
+
+    /** The user prompt with the item's student hints as data; the reviewer prompt says how to judge them. */
+    public String buildUserPrompt(ItemDraft draft, AnswerHint hint, CefrLevel cefrLevel, String fixSuggestion) {
         StringBuilder sb = new StringBuilder();
         sb.append(String.format("Review this %s question for target CEFR %s:%n%n",
             draft.getClass().getSimpleName(), cefrLevel.name()));
@@ -82,6 +88,11 @@ public class ReviewPromptBuilder {
         sb.append("<<< QUESTION DRAFT >>>\n");
         sb.append(draftToJson(draft)).append("\n");
         sb.append("<<< END DRAFT >>>\n\n");
+        if (hint != null && (hint.vi() != null || hint.en() != null)) {
+            sb.append("<<< STUDENT HINTS >>>\n");
+            sb.append(neutralise(DRAFT_WRITER.writeValueAsString(hint))).append("\n");
+            sb.append("<<< END HINTS >>>\n\n");
+        }
 
         if (fixSuggestion != null && !fixSuggestion.isBlank()) {
             sb.append("Previous attempt feedback:\n");
@@ -99,7 +110,10 @@ public class ReviewPromptBuilder {
      * data block and pose as instructions.
      */
     private String draftToJson(ItemDraft draft) {
-        String json = DRAFT_WRITER.writeValueAsString(draft);
+        return neutralise(DRAFT_WRITER.writeValueAsString(draft));
+    }
+
+    private static String neutralise(String json) {
         return json.replace("<<<", "<<<").replace(">>>", ">>>");
     }
 }

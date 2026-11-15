@@ -1,6 +1,6 @@
 package com.pte.itembank.internal.generation.job;
 
-import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
+import com.pte.itembank.internal.generation.config.GenerationLimits;
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import com.pte.itembank.internal.generation.domain.QuestionGenerationJob;
 import com.pte.itembank.internal.generation.dto.GenerationJobResponse;
@@ -30,16 +30,16 @@ public class QuestionGenerationQueryService {
     private final GenerationJobRepository jobs;
     private final GenerationJobItemRepository items;
     private final GenerationTaskTypeCatalog catalog;
-    private final QuestionGenerationProperties properties;
     private final Clock clock;
+    private final GenerationLimits limits;
 
     public QuestionGenerationQueryService(GenerationJobRepository jobs, GenerationJobItemRepository items,
-                                          GenerationTaskTypeCatalog catalog, QuestionGenerationProperties properties,
-                                          Clock clock) {
+                                          GenerationTaskTypeCatalog catalog, Clock clock,
+                                          GenerationLimits limits) {
+        this.limits = limits;
         this.jobs = jobs;
         this.items = items;
         this.catalog = catalog;
-        this.properties = properties;
         this.clock = clock;
     }
 
@@ -75,6 +75,6 @@ public class QuestionGenerationQueryService {
     public GenerationQuotaResponse quota(CurrentUser caller) {
         GenerationAccessPolicy.requireAuthor(caller);
         long used = jobs.sumRequestedSinceByUser(caller.userId(), clock.instant().truncatedTo(ChronoUnit.DAYS));
-        return new GenerationQuotaResponse(used, properties.getLimits().getMaxItemsPerUserPerDay());
+        return new GenerationQuotaResponse(used, limits.maxItemsPerUserPerDay());
     }
 }

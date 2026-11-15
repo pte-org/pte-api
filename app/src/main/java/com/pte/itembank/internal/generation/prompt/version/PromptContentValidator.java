@@ -7,6 +7,7 @@ import com.pte.itembank.internal.generation.domain.AiPromptKind;
 import com.pte.itembank.internal.generation.exception.AiPromptException;
 import com.pte.itembank.internal.generation.prompt.PromptContent;
 import com.pte.itembank.internal.generation.prompt.PromptFieldsJson;
+import com.pte.itembank.internal.generation.prompt.PictureSettings;
 import com.pte.itembank.internal.generation.prompt.PromptTextAssembler;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -26,6 +27,11 @@ import java.util.Set;
 public class PromptContentValidator {
 
     public PromptContent validated(AiPromptKind kind, PromptContent content) {
+        return validated(kind, null, content);
+    }
+
+    /** Checks a prompt of a known key, which may also have to keep instructions the code depends on. */
+    public PromptContent validated(AiPromptKind kind, String promptKey, PromptContent content) {
         List<String> problems = new ArrayList<>();
         String title = content.title() == null ? "" : content.title().strip();
         if (title.isEmpty() || title.length() > PromptVersionConstants.MAX_TITLE_LENGTH) {
@@ -38,7 +44,7 @@ public class PromptContentValidator {
         }
         PromptContent clean = new PromptContent(title, intro, sections);
         if (problems.isEmpty()) {
-            checkLengthAndTokens(kind, clean, problems);
+            checkLengthAndTokens(kind, promptKey, clean, problems);
         }
         if (!problems.isEmpty()) {
             throw new AiPromptException(HttpStatus.BAD_REQUEST, PromptVersionConstants.CONTENT_INVALID,
@@ -153,8 +159,12 @@ public class PromptContentValidator {
         return Block.fields(label, rows.stream().map(row -> row.name() + ": " + row.value()).toList());
     }
 
-    private static void checkLengthAndTokens(AiPromptKind kind, PromptContent content, List<String> problems) {
+    private static void checkLengthAndTokens(AiPromptKind kind, String promptKey, PromptContent content,
+                                             List<String> problems) {
         String text = PromptTextAssembler.assemble(content);
+        PromptRequirements.missingPhrases(kind, promptKey, text)
+                .forEach(phrase -> problems.add(PromptVersionConstants.PROBLEM_MISSING_PHRASE + phrase + "."));
+        problems.addAll(PictureSettings.problems(promptKey, content));
         if (text.length() > PromptVersionConstants.MAX_ASSEMBLED_LENGTH) {
             problems.add(PromptVersionConstants.PROBLEM_TOO_LONG);
         }

@@ -1,6 +1,7 @@
 package com.pte.scoring.internal.service;
 
 import com.pte.itembank.PromptDocument;
+import com.pte.scoring.internal.vendor.audioscoring.PracticeAudioPrompts;
 import com.pte.itembank.PromptDocument.Block;
 import com.pte.itembank.PromptDocument.BlockType;
 import com.pte.scoring.internal.rubric.catalog.RubricCatalogImpl;
@@ -28,9 +29,24 @@ class ScoringPromptCatalogServiceTest {
 
     @Test
     void everyTaskTypeOfTheCatalogHasASummaryAndADocument() {
-        assertThat(service.summaries()).hasSameSizeAs(catalog.all())
+        assertThat(service.summaries()).hasSize(catalog.all().size() + PracticeAudioPrompts.taskTypes().size())
                 .allSatisfy(summary -> assertThat(service.find(summary.key())).isPresent());
         assertThat(service.find("NOT_A_TASK")).isEmpty();
+        assertThat(service.find("PRACTICE_AUDIO_WRITE_ESSAY")).isEmpty();
+    }
+
+    @Test
+    void aPracticeSpeakingPromptSendsEveryListenedTraitWithTheLevelsLocked() {
+        PromptDocument readAloud = document("PRACTICE_AUDIO_READ_ALOUD");
+
+        assertThat(readAloud.sections()).extracting(PromptDocument.Section::id)
+                .containsExactly("role", "listen", "levels", "notes", "feedback", "guard");
+        assertThat(readAloud.sections()).filteredOn(PromptDocument.Section::locked)
+                .extracting(PromptDocument.Section::id).containsExactly("levels", "guard");
+        assertThat(blocksOf(readAloud, "levels")).extracting(PromptDocument.Block::label)
+                .anySatisfy(label -> assertThat(label).startsWith("PRONUNCIATION"))
+                .anySatisfy(label -> assertThat(label).startsWith("ORAL_FLUENCY"));
+        assertThat(readAloud.assembledText()).contains("Vietnamese", "counted by code");
     }
 
     @Test

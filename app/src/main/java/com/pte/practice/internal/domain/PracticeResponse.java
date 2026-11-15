@@ -104,6 +104,13 @@ public class PracticeResponse extends BaseEntity {
     @Column(name = "response_seconds")
     private Integer responseSeconds;
 
+    /** Answer hints are student-safe guidance and may be delivered before submission. */
+    @Column(name = "answer_hint_vi", columnDefinition = "text")
+    private String answerHintVi;
+
+    @Column(name = "answer_hint_en", columnDefinition = "text")
+    private String answerHintEn;
+
     /** Restricted answer material pinned for post-submit evaluation only. */
     @Column(name = "reference_answer_text", columnDefinition = "text")
     private String referenceAnswerText;

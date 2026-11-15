@@ -19,6 +19,8 @@ public class AiProviderProperties {
 
     public static final String TEXT_VENDOR_GEMINI = "gemini";
     public static final String TEXT_VENDOR_GATEWAY = "gateway";
+    public static final String PRACTICE_SPEECH_GATEWAY = "gateway";
+    public static final String PRACTICE_SPEECH_AZURE = "azure";
 
     @Pattern(regexp = "stub|openai-compatible|azure-gemini", message = ScoringConstants.AI_PROVIDER_INVALID)
     private String provider = "stub";
@@ -41,6 +43,8 @@ public class AiProviderProperties {
     private final Gemini gemini = new Gemini();
 
     private String textVendor = TEXT_VENDOR_GEMINI;
+    @Pattern(regexp = "gateway|azure", message = ScoringConstants.AI_PRACTICE_SPEECH_VENDOR_INVALID)
+    private String practiceSpeechVendor = PRACTICE_SPEECH_GATEWAY;
 
     private final ScoringGatewayProperties gateway = new ScoringGatewayProperties();
 
@@ -187,6 +191,19 @@ public class AiProviderProperties {
 
     public boolean usesGateway() {
         return TEXT_VENDOR_GATEWAY.equalsIgnoreCase(textVendor);
+    }
+
+    /** Who hears a practice recording under azure-gemini: the scoring model itself ({@code gateway}) or Azure. */
+    public String getPracticeSpeechVendor() {
+        return practiceSpeechVendor;
+    }
+
+    public void setPracticeSpeechVendor(String practiceSpeechVendor) {
+        this.practiceSpeechVendor = practiceSpeechVendor;
+    }
+
+    public boolean practiceSpeechUsesModel() {
+        return PRACTICE_SPEECH_GATEWAY.equalsIgnoreCase(practiceSpeechVendor);
     }
 
     @Valid

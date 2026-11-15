@@ -5,10 +5,13 @@ import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.domain.enums.PracticeProgressStatus;
 import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
+import com.pte.practice.internal.domain.enums.PracticeScoringStatus;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.response.PracticeProgressResponse;
 import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
+import com.pte.scoring.PracticeScoringRoute;
+import com.pte.scoring.ScoringService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +35,8 @@ class PracticeProgressServiceTest {
     private PracticeSessionRepository sessionRepository;
     @Mock
     private PracticeResponseRepository itemRepository;
+    @Mock
+    private ScoringService scoringService;
 
     private PracticeProgressService service;
     private UUID studentId;
@@ -40,7 +45,7 @@ class PracticeProgressServiceTest {
     @BeforeEach
     void setUp() {
         studentId = UUID.randomUUID();
-        service = new PracticeProgressService(sessionRepository, itemRepository,
+        service = new PracticeProgressService(sessionRepository, itemRepository, scoringService,
                 Clock.fixed(Instant.parse("2026-10-08T00:00:00Z"), ZoneOffset.UTC));
     }
 
@@ -131,6 +136,31 @@ class PracticeProgressServiceTest {
     }
 
     @Test
+    void countsAiScoringStatesPerSession() {
+        PracticeSession session = session(PracticeSessionStatus.COMPLETED);
+        List<PracticeResponse> items = List.of(
+                scored("READ_ALOUD", PracticeScoringStatus.NONE, session),
+                scored("READ_ALOUD", PracticeScoringStatus.NONE, session),
+                scored("READ_ALOUD", PracticeScoringStatus.SCORING, session),
+                scored("READ_ALOUD", PracticeScoringStatus.FAILED, session),
+                scored("READ_ALOUD", PracticeScoringStatus.SCORED, session),
+                scored("FIB_RW", PracticeScoringStatus.NONE, session));
+        when(sessionRepository.findTop100ByStudentPublicIdAndDeletedFalseOrderByCreatedAtDesc(studentId))
+                .thenReturn(List.of(session));
+        when(sessionRepository.countByStudentPublicIdAndDeletedFalse(studentId)).thenReturn(1L);
+        when(itemRepository.findByPracticeSessionIdInAndDeletedFalseOrderByPracticeSessionIdAscOrderIndexAsc(
+                List.of(session.getId()))).thenReturn(items);
+        when(scoringService.practiceScoringRoute("READ_ALOUD")).thenReturn(PracticeScoringRoute.AI_SPEECH);
+        when(scoringService.practiceScoringRoute("FIB_RW")).thenReturn(PracticeScoringRoute.OBJECTIVE);
+
+        var entry = service.getProgress(studentId).entries().getFirst();
+
+        assertThat(entry.unscoredAiCount()).isEqualTo(2);
+        assertThat(entry.scoringCount()).isEqualTo(1);
+        assertThat(entry.scoringFailedCount()).isEqualTo(1);
+    }
+
+    @Test
     void nullStudentProducesAnEmptyProjection() {
         assertThat(service.getProgress(null).entries()).isEmpty();
     }
@@ -152,6 +182,14 @@ class PracticeProgressServiceTest {
         item.setStatus(status);
         item.setSavedPayload(payload);
         item.setConfidence(confidence);
+        return item;
+    }
+
+    private PracticeResponse scored(String taskCode, PracticeScoringStatus scoring, PracticeSession session) {
+        PracticeResponse item = item(PracticeResponseStatus.ANSWERED, "answer", null);
+        item.setTaskCode(taskCode);
+        item.setScoringStatus(scoring);
+        item.setPracticeSessionId(session.getId());
         return item;
     }
 }

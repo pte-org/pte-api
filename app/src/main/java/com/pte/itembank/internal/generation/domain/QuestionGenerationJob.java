@@ -41,8 +41,13 @@ public class QuestionGenerationJob extends BaseEntity {
     @Column(nullable = false, updatable = false, length = 16)
     private QuestionPool pool;
 
-    @Column(name = "topic_hint", updatable = false, length = 200)
+    @Column(name = "topic_hint", updatable = false, length = 500)
     private String topicHint;
+
+    /** Describe Image only: a chart from data, an AI-painted picture, or AUTO from the topic. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "image_kind", nullable = false, updatable = false, length = 16)
+    private ImageKind imageKind = ImageKind.AUTO;
 
     @Column(name = "requested_count", nullable = false, updatable = false)
     private int requestedCount;

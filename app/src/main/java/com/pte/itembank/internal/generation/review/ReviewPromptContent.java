@@ -39,6 +39,12 @@ public final class ReviewPromptContent {
             "Return FAIL only for a real defect in the content (a wrong or ambiguous answer, the wrong level, "
                     + "unclear wording, unsafe content). Do not fail a question for missing optional metadata.");
 
+    /** What the reviewer checks in the student hints sent with a draft; the system keeps this section required. */
+    public static final List<String> STUDENT_HINTS = List.of(
+            "A draft may come with <<< STUDENT HINTS >>>: a Vietnamese and an English hint for learners.",
+            "The hints must only explain how to approach the item. If they state, quote or point to the correct "
+                    + "answer, option or missing word, return FAIL and say how to rewrite the hints.");
+
     public static final String OUTPUT_INSTRUCTION = "Respond ONLY with valid JSON in this shape. The verdict is PASS or "
             + "FAIL, and every ok is true or false.";
 

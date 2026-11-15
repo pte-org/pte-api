@@ -85,4 +85,28 @@ class PromptContentValidatorTest {
         assertThatThrownBy(() -> validator.validated(AiPromptKind.GENERATOR,
                 new PromptContent("T", List.of(), List.of(empty)))).isInstanceOf(AiPromptException.class);
     }
+
+    @Test
+    void theSharedBlockMustKeepAskingForTheAnswerHints() {
+        PromptContent shared = shipped(AiPromptKind.SHARED, "COMMON_GENERATOR");
+        PromptContent withoutHints = new PromptContent(shared.title(), shared.intro(), shared.sections().stream()
+                .filter(section -> !section.id().equals("answer-hints")).toList());
+
+        assertThatThrownBy(() -> validator.validated(AiPromptKind.SHARED, "COMMON_GENERATOR", withoutHints))
+                .isInstanceOfSatisfying(AiPromptException.class, failure ->
+                        assertThat(failure.getUserMessage()).contains("answerHintVi", "answerHintEn"));
+    }
+
+    @Test
+    void theReviewerMustKeepJudgingTheStudentHints() {
+        PromptContent reviewer = com.pte.itembank.internal.generation.review.ReviewPromptDefaults.content();
+        assertThat(validator.validated(AiPromptKind.REVIEWER, "REVIEWER", reviewer)).isEqualTo(reviewer);
+
+        PromptContent withoutHints = new PromptContent(reviewer.title(), reviewer.intro(), reviewer.sections()
+                .stream().filter(section -> !section.id().equals("student-hints")).toList());
+        assertThatThrownBy(() -> validator.validated(AiPromptKind.REVIEWER, "REVIEWER", withoutHints))
+                .isInstanceOfSatisfying(AiPromptException.class, failure ->
+                        assertThat(failure.getUserMessage()).contains("STUDENT HINTS"));
+        assertThat(validator.validated(AiPromptKind.REVIEWER, "IMAGE_REVIEWER", withoutHints)).isNotNull();
+    }
 }

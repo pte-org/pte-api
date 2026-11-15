@@ -7,11 +7,12 @@ import java.time.Instant;
 import java.util.UUID;
 import java.util.Map;
 
+/** {@code kind} (TASK, SKILL or MOCK_TEST) tells the student page how AI scoring is asked for: per answer or per test. */
 public record PracticeReviewResponse(UUID sessionPublicId, List<Item> items,
-        PracticeEstimatedScoresResponse estimatedScores) {
+        PracticeEstimatedScoresResponse estimatedScores, String kind) {
 
     public PracticeReviewResponse(UUID sessionPublicId, List<Item> items) {
-        this(sessionPublicId, items, null);
+        this(sessionPublicId, items, null, null);
     }
 
     public PracticeReviewResponse {
@@ -21,7 +22,10 @@ public record PracticeReviewResponse(UUID sessionPublicId, List<Item> items,
     public record Item(UUID publicId, int orderIndex, String taskCode, String displayName, String section,
             String status, String promptText, String savedPayload, String rendererKey, Integer objectiveScore,
             Instant objectiveEvaluatedAt, Integer aiScore, String aiScoreStatus, Map<String, Integer> aiSubScores,
-            String aiProvider, String aiModel, Instant aiScoredAt, List<PracticeTaskContentResponse.Option> options) {
+            String aiProvider, String aiModel, Instant aiScoredAt, List<PracticeTaskContentResponse.Option> options,
+            PracticeItemResultResponse result,
+            /** CEFR level of the source question; null when it is unclassified. */
+            String cefrLevel) {
 
         public Item {
             aiSubScores = aiSubScores == null ? Map.of() : Map.copyOf(aiSubScores);

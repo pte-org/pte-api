@@ -50,7 +50,8 @@ public class PracticeSkillStatsService {
                 .map(section -> new PracticeCatalogSectionResponse(section.code(), section.displayName(),
                         section.taskTypes().stream().map(task -> {
                             String code = PracticeTimingService.normalize(task.code());
-                            return task.withStats(answered.getOrDefault(code, 0L), averages.get(code));
+                            return task.withStats(answered.getOrDefault(code, 0L), averages.get(code),
+                                    available.getOrDefault(code, 0L));
                         }).toList(),
                         sum(section, available), sum(section, answered)))
                 .toList();

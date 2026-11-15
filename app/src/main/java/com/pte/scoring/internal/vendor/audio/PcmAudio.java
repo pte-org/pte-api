@@ -6,4 +6,9 @@ public record PcmAudio(short[] samples, int sampleRate) {
     public long durationMs() {
         return samples.length * 1000L / sampleRate;
     }
+
+    /** The whole recording as one canonical WAV file. */
+    public byte[] wav() {
+        return WavEncoder.encode(samples, 0, samples.length, sampleRate);
+    }
 }

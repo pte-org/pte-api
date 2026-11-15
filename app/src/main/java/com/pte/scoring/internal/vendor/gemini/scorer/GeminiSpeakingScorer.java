@@ -98,10 +98,11 @@ abstract class GeminiSpeakingScorer implements AiAnswerScorer {
         GeminiRequest call = new GeminiRequest(
                 GeminiScorers.system(prepared.examiner() + "\n\n" + RubricPromptBuilder.rubricSection(task)),
                 prepared.userText().apply(transcript), RubricSchemaBuilder.speakingSchema(task, detailSchema()),
-                prepared.images());
+                prepared.images(), null, task.taskType());
         CollectedTraits<GeminiResponse> collected = TraitScoreCollector.collect(RubricPromptBuilder.llmTraits(task),
                 () -> gemini.generate(call), GeminiResponse::content);
         detail.put(SCHEMA_ATTEMPTS, collected.attempts());
+        GeminiScorers.recordPrompt(detail, collected.response());
 
         Map<String, Integer> traits = bands.traitsWithContent(collected.scores().get(RubricTraits.CONTENT));
         int itemScore = RubricScorer.score(rubric, new TraitScoreSet(traits, null)).itemScore();

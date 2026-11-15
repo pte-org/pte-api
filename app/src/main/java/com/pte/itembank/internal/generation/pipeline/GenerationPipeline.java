@@ -1,5 +1,6 @@
 package com.pte.itembank.internal.generation.pipeline;
 
+import com.pte.itembank.internal.generation.config.GenerationLimits;
 import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import com.pte.itembank.internal.generation.constant.GenerationLiveConstants;
@@ -15,7 +16,6 @@ import com.pte.itembank.internal.generation.review.ReviewVerdict;
 import com.pte.itembank.internal.generation.exception.GenerationMediaException;
 import com.pte.itembank.internal.generation.exception.GenerationRequestInvalidException;
 import com.pte.itembank.internal.generation.media.MediaRenderer;
-import com.pte.itembank.internal.generation.draft.ItemDraft;
 import com.pte.itembank.internal.generation.review.ChartImageReviewer;
 import com.pte.itembank.internal.generation.media.RenderedMedia;
 import java.util.Optional;
@@ -49,13 +49,15 @@ public class GenerationPipeline {
     private final MediaRenderer mediaRenderer;
     private final GenerationLiveFeed liveFeed;
     private final ChartImageReviewer imageReviewer;
+    private final GenerationLimits allowance;
 
     public GenerationPipeline(List<ItemGenerator> generators, GeneratedQuestionWriter writer,
                               GenerationItemStateService itemState, QuestionGenerationProperties properties,
                               AvoidTopicsProvider avoidTopicsProvider, LlmItemReviewer itemReviewer,
                               MediaRenderer mediaRenderer, GenerationLiveFeed liveFeed,
-                              ChartImageReviewer imageReviewer) {
+                              ChartImageReviewer imageReviewer, GenerationLimits allowance) {
         this.imageReviewer = imageReviewer;
+        this.allowance = allowance;
         this.generators = generators;
         this.writer = writer;
         this.itemState = itemState;
@@ -80,8 +82,11 @@ public class GenerationPipeline {
         if (!advance(claim, index, ItemStage.GENERATING)) {
             return ItemOutcome.LEASE_LOST;
         }
+        // Media of the current draft not yet handed on: removed if the item fails, so no file is left unused.
+        RenderedMedia stored = null;
         try {
-            GenerationCallBudget budget = new GenerationCallBudget(properties.getLimits().getMaxCallsPerItem());
+            int maxCalls = allowance.maxCallsPerItem();
+            GenerationCallBudget budget = new GenerationCallBudget(maxCalls);
 
             // Generate
             ItemGenerator generator = generators.stream()
@@ -93,7 +98,9 @@ public class GenerationPipeline {
 
             String avoidTopics = avoidTopicsProvider.getAvoidTopicsForTaskType(claim.taskTypeKey());
             GenerationRequest request = new GenerationRequest(claim.jobPublicId(), index, claim.taskTypeKey(),
-                    claim.cefrLevel(), claim.pool(), claim.topicHint(), avoidTopics);
+                    claim.cefrLevel(), claim.pool(), claim.topicHint(), avoidTopics, null,
+                    claim.imageKind().resolve(claim.topicHint()));
+            GeneratedImageCheck images = new GeneratedImageCheck(properties, imageReviewer, liveFeed, mediaRenderer);
             // Write, review and make the media until every reviewer is satisfied or the item's calls run out. Each
             // refusal goes back to the writer as feedback. When the calls run out on a content refusal, the last draft
             // is still saved, with the reviewer's notes, for a person to finish: a job always yields its questions.
@@ -102,10 +109,13 @@ public class GenerationPipeline {
             // passes: a broken answer, a passing provider failure or a refusal goes back to the writer, not to the
             // person. The allowance also caps the rounds, even for a generator that does not count its calls.
             int callsPerRound = properties.getLimits().getMaxCallsPerRound();
-            int maxRounds = Math.max(1, properties.getLimits().getMaxCallsPerItem() / callsPerRound);
+            int maxRounds = Math.max(1, maxCalls / callsPerRound);
             GeneratedItem item;
             ReviewVerdict verdict;
             for (int round = 1; ; round++) {
+                if (round > 1 && itemState.cancelRequested(claim)) {
+                    return ItemOutcome.CANCELLED; // stopped by a person: the draft in progress is dropped
+                }
                 if (round > 1) {
                     advance(claim, index, ItemStage.GENERATING);
                 }
@@ -139,7 +149,7 @@ public class GenerationPipeline {
                     break; // the stub generator: nothing to review or render
                 }
                 advance(claim, index, ItemStage.REVIEWING);
-                verdict = itemReviewer.review(item.draft(), claim.taskTypeKey(), claim.cefrLevel(), budget, feedback);
+                verdict = itemReviewer.review(item, claim.taskTypeKey(), claim.cefrLevel(), budget, feedback);
                 reportReview(claim, index, verdict);
                 if (!verdict.isPassed()) {
                     if (canRewrite(budget, round, maxRounds)) {
@@ -154,8 +164,15 @@ public class GenerationPipeline {
                 Optional<RenderedMedia> media;
                 try {
                     media = mediaRenderer.render(item.draft(), claim.taskTypeKey(), index,
-                            claim.jobPublicId().getLeastSignificantBits(), caller);
+                            claim.jobPublicId().getLeastSignificantBits(), caller, claim.pool());
                 } catch (GenerationMediaException mediaFailure) {
+                    if (request.isPicture() && QuestionGenerationConstants.GENERATION_IMAGE_FAILED
+                            .equals(mediaFailure.getCode()) && images.fallsBackToChart()
+                            && canRewrite(budget, round, maxRounds)) {
+                        request = images.fallBack(claim.jobPublicId(), index, request, mediaFailure.getUserMessage());
+                        feedback = null;
+                        continue;
+                    }
                     if (!QuestionGenerationConstants.GENERATION_AUDIO_DURATION_OUT_OF_RANGE.equals(mediaFailure.getCode())
                             || !canRewrite(budget, round, maxRounds)) {
                         throw mediaFailure;
@@ -164,19 +181,29 @@ public class GenerationPipeline {
                     continue;
                 }
                 if (media.isPresent()) {
-                    item = item.withMedia(media.get());
+                    stored = media.get();
+                    item = item.withMedia(images.marked(media.get()));
                     liveFeed.media(claim.jobPublicId(), index, media.get().audioPromptRef(),
                             media.get().imagePromptRef());
                     boolean canRedraw = canRewrite(budget, round, maxRounds);
-                    String imageIssues = imageIssues(claim, caller, index, item, media.get(), canRedraw);
+                    String imageIssues = images.issues(claim.jobPublicId(), index,
+                            () -> advance(claim, index, ItemStage.REVIEWING), caller, item, media.get(), canRedraw);
                     if (imageIssues != null && canRedraw) {
-                        feedback = QuestionGenerationConstants.FEEDBACK_IMAGE + " " + imageIssues;
+                        stored = null; // the image check already removed the refused image
+                        if (request.isPicture() && images.pictureRefused() && images.fallsBackToChart()) {
+                            request = images.fallBack(claim.jobPublicId(), index, request, imageIssues);
+                            feedback = null;
+                        } else {
+                            feedback = QuestionGenerationConstants.FEEDBACK_IMAGE + " " + imageIssues;
+                        }
                         continue;
                     }
                 }
                 break;
             }
 
+            // From here the media belongs to the form or to the writer below, which removes it if saving fails.
+            stored = null;
             // Asked from the question form: the person decides whether to save it, so the media stays for the form.
             if (!claim.saveQuestions()) {
                 itemState.ready(claim, index);
@@ -213,36 +240,9 @@ public class GenerationPipeline {
                     unexpected.getClass().getSimpleName());
             return fail(claim, index, QuestionGenerationConstants.GENERATION_INTERNAL_ERROR, null,
                     ItemOutcome.FAILED);
+        } finally {
+            mediaRenderer.discard(stored, caller);
         }
-    }
-
-    /**
-     * With {@code itembank.generation.review.vision-check} on, a reviewer looks at a drawn chart next to its data.
-     * A refused image is removed and its issues go back to the writer, since the chart is drawn from the writer's
-     * data. When no rewrite is left the last image is kept, so a person still gets a question to check.
-     *
-     * @return the reviewer's issues when it refused the image, or null when it passed
-     */
-    private String imageIssues(JobClaim claim, CurrentUser caller, int index, GeneratedItem item,
-                               RenderedMedia media, boolean canRedraw) {
-        if (!properties.getReview().isVisionCheck() || media.imagePng() == null
-                || !(item.draft() instanceof ItemDraft.ChartDraft chart)) {
-            return null;
-        }
-        advance(claim, index, ItemStage.REVIEWING);
-        ChartImageReviewer.Result look = imageReviewer.review(chart, media.imagePng());
-        liveFeed.review(claim.jobPublicId(), index, GenerationLiveConstants.REVIEW_IMAGE, look.passed(),
-                String.join(" ", look.issues()), Map.of());
-        if (look.passed()) {
-            return null;
-        }
-        if (canRedraw) {
-            mediaRenderer.discard(null, media.imagePromptRef(), caller);
-        } else {
-            LOG.info("Generation chart kept for a person after the last refusal: jobId={}, item={}",
-                    claim.jobPublicId(), index);
-        }
-        return String.join(" ", look.issues());
     }
 
     /** Another round is tried only while its worst case still fits in the item's allowance. */

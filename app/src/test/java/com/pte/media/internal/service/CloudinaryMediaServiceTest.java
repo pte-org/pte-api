@@ -55,11 +55,11 @@ class CloudinaryMediaServiceTest {
                 new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.STUDENT_RESPONSE_AUDIO, 1024L),
                 new CurrentUser(studentId, tenantId, List.of("STUDENT")));
 
-        assertThat(response.folder()).isEqualTo("pte/submissions");
-        assertThat(response.publicId()).startsWith("pte/submissions/");
+        assertThat(response.folder()).isEqualTo("pte/test/exam/answers");
+        assertThat(response.publicId()).startsWith("pte/test/exam/answers/");
         assertThat(response.resourceType()).isEqualTo("video");
         assertThat(response.uploadUrl()).endsWith("/video/upload");
-        String uploadPayload = "folder=pte/submissions&public_id=" + response.mediaPublicId()
+        String uploadPayload = "folder=pte/test/exam/answers&public_id=" + response.mediaPublicId()
                 + "&timestamp=" + response.timestamp();
         String expectedUploadSignature = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-1")
                 .digest((uploadPayload + "test-secret").getBytes(StandardCharsets.UTF_8)));
@@ -90,7 +90,7 @@ class CloudinaryMediaServiceTest {
                         MediaConstants.MAX_SUBMISSION_BYTES),
                 student);
 
-        assertThat(response.folder()).isEqualTo("pte/submissions");
+        assertThat(response.folder()).isEqualTo("pte/test/exam/answers");
         assertThatThrownBy(() -> service().requestUpload(
                 new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.STUDENT_RESPONSE_AUDIO,
                         MediaConstants.MAX_SUBMISSION_BYTES + 1),
@@ -140,6 +140,18 @@ class CloudinaryMediaServiceTest {
     }
 
     @Test
+    void aPracticePoolQuestionFileGoesUnderThePracticeBranch() {
+        when(repository.save(any(MediaAsset.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        CloudinaryUploadResponse response = service().requestUpload(
+                new CloudinaryUploadRequest(MediaConstants.IMAGE_PNG, MediaConstants.IMAGE_PROMPT, 1024L, null, null,
+                        null, MediaConstants.POOL_PRACTICE),
+                new CurrentUser(UUID.randomUUID(), null, List.of("ACADEMIC_STAFF")));
+
+        assertThat(response.folder()).isEqualTo("pte/test/practice/questions");
+    }
+
+    @Test
     void academicStaffCanRequestAuthoringMedia() {
         when(repository.save(any(MediaAsset.class))).thenAnswer(invocation -> invocation.getArgument(0));
         UUID staffId = UUID.randomUUID();
@@ -148,7 +160,7 @@ class CloudinaryMediaServiceTest {
                 new CloudinaryUploadRequest(MediaConstants.AUDIO_WAV, MediaConstants.AUDIO_PROMPT, 1024L),
                 new CurrentUser(staffId, null, List.of("ACADEMIC_STAFF")));
 
-        assertThat(response.folder()).isEqualTo("pte/authoring");
+        assertThat(response.folder()).isEqualTo("pte/test/exam/questions");
         ArgumentCaptor<MediaAsset> captor = ArgumentCaptor.forClass(MediaAsset.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getOwnerPublicId()).isEqualTo(staffId);
@@ -316,7 +328,7 @@ class CloudinaryMediaServiceTest {
     }
 
     private CloudinaryMediaService service() {
-        return new CloudinaryMediaService(repository, "test-cloud", "test-key", "test-secret", "pte/authoring", "pte/submissions", practiceMediaBindingService, null, com.pte.TestClocks.fixed(), org.springframework.web.client.RestClient.builder());
+        return new CloudinaryMediaService(repository, "test-cloud", "test-key", "test-secret", "pte/test", practiceMediaBindingService, null, com.pte.TestClocks.fixed(), org.springframework.web.client.RestClient.builder());
     }
 
     private Map<String, String> query(String rawQuery) {

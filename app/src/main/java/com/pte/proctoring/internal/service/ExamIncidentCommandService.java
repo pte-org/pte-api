@@ -5,6 +5,7 @@ import com.pte.identity.IdentityService;
 import com.pte.identity.dto.response.StudentDisplayNameView;
 import com.pte.proctoring.domain.ExamIncident;
 import com.pte.proctoring.domain.enums.IncidentOrigin;
+import com.pte.proctoring.dto.event.ExamIncidentReportedEvent;
 import com.pte.proctoring.dto.incident.CreateIncidentRequest;
 import com.pte.proctoring.dto.incident.IncidentView;
 import com.pte.proctoring.dto.incident.UpdateIncidentStatusRequest;
@@ -15,6 +16,7 @@ import com.pte.proctoring.internal.policy.IncidentAccessContext;
 import com.pte.proctoring.internal.repository.ExamIncidentRepository;
 import com.pte.session.SessionService;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +37,7 @@ public class ExamIncidentCommandService {
     private final AttemptService attemptService;
     private final ExamIncidentAccessPolicy accessPolicy;
     private final ExamIncidentMapper mapper;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public ExamIncidentCommandService(
@@ -45,6 +48,7 @@ public class ExamIncidentCommandService {
             AttemptService attemptService,
             ExamIncidentAccessPolicy accessPolicy,
             ExamIncidentMapper mapper,
+            ApplicationEventPublisher eventPublisher,
             Clock clock) {
         this.incidentRepository = incidentRepository;
         this.historyLog = historyLog;
@@ -53,6 +57,7 @@ public class ExamIncidentCommandService {
         this.attemptService = attemptService;
         this.accessPolicy = accessPolicy;
         this.mapper = mapper;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
@@ -93,6 +98,9 @@ public class ExamIncidentCommandService {
                 null,
                 ExamIncidentConstants.STATUS_NEW,
                 request.description());
+        // The host admins learn of it from their inbox; the session page alone left reports unnoticed.
+        eventPublisher.publishEvent(new ExamIncidentReportedEvent(saved.getPublicId(), saved.getTenantId(),
+                sessionPublicId, saved.getReporterPublicId(), saved.getTitle(), saved.getSeverity()));
 
         return mapper.toView(saved, resolveStudentName(access.tenantId(), saved.getStudentPublicId()));
     }

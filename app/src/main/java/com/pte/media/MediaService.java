@@ -72,11 +72,12 @@ public class MediaService {
      * @param bytes media content
      * @param contentType MIME type (e.g., "audio/wav" or "image/png")
      * @param assetKind categorization ("AUDIO_PROMPT" or "IMAGE_PROMPT")
+     * @param pool pool of the question the file is for ("EXAM" or "PRACTICE"), which picks its folder
      * @param owner current user who owns the asset
      * @return UUID of the created media asset
      */
-    public UUID storeGenerated(byte[] bytes, String contentType, String assetKind, CurrentUser owner) {
-        return cloudinaryMediaService.storeGenerated(bytes, contentType, assetKind, owner);
+    public UUID storeGenerated(byte[] bytes, String contentType, String assetKind, String pool, CurrentUser owner) {
+        return cloudinaryMediaService.storeGenerated(bytes, contentType, assetKind, pool, owner);
     }
 
     /**

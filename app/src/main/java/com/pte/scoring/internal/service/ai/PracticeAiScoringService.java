@@ -23,6 +23,7 @@ import com.pte.scoring.internal.vendor.AiScoreResult;
 import com.pte.scoring.internal.vendor.AiScoringRequest;
 import com.pte.scoring.internal.vendor.EssayScoringClient;
 import com.pte.scoring.internal.vendor.SpeechScoringClient;
+import com.pte.scoring.internal.vendor.audioscoring.PracticeAudioScorer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -47,7 +48,9 @@ import java.util.Map;
  * registered, otherwise the generic speech or essay client, always inside one
  * {@link AiJobBudget}. A rubric-scored task type is scored with the ACTIVE
  * rubric version (practice has no exam definition to pin one) and only by its
- * task-specific scorer, never by a generic client. It has no persistence or
+ * task-specific scorer, never by a generic client. Practice speaking is heard by
+ * the scoring model itself ({@link PracticeAudioScorer}) unless
+ * {@code scoring.ai.practice-speech-vendor=azure}. It has no persistence or
  * attempt side effects; Practice owns the result snapshot and the dispatch
  * bookkeeping. Keep the two in step.
  */
@@ -59,6 +62,7 @@ public class PracticeAiScoringService {
     private static final String OBJECTIVE_VERSION = "objective-scoring-v1";
 
     private final Map<String, AiAnswerScorer> scorersByTaskType;
+    private final Map<String, PracticeAudioScorer> audioScorersByTaskType;
     private final SpeechScoringClient speechScoringClient;
     private final EssayScoringClient essayScoringClient;
     private final ObjectiveScoringService objectiveScoringService;
@@ -67,17 +71,20 @@ public class PracticeAiScoringService {
     private final RubricResolver rubricResolver;
 
     @Autowired
-    public PracticeAiScoringService(ObjectProvider<AiAnswerScorer> scorers, SpeechScoringClient speechScoringClient,
+    public PracticeAiScoringService(ObjectProvider<AiAnswerScorer> scorers,
+            ObjectProvider<PracticeAudioScorer> audioScorers, SpeechScoringClient speechScoringClient,
             EssayScoringClient essayScoringClient, ObjectiveScoringService objectiveScoringService, Clock clock,
             AiProviderProperties properties, RubricResolver rubricResolver) {
-        this(scorers.orderedStream().toList(), speechScoringClient, essayScoringClient, objectiveScoringService,
-                clock, properties, rubricResolver);
+        this(scorers.orderedStream().toList(), audioScorers.orderedStream().toList(), speechScoringClient,
+                essayScoringClient, objectiveScoringService, clock, properties, rubricResolver);
     }
 
-    PracticeAiScoringService(List<AiAnswerScorer> scorers, SpeechScoringClient speechScoringClient,
-            EssayScoringClient essayScoringClient, ObjectiveScoringService objectiveScoringService, Clock clock,
-            AiProviderProperties properties, RubricResolver rubricResolver) {
+    PracticeAiScoringService(List<AiAnswerScorer> scorers, List<PracticeAudioScorer> audioScorers,
+            SpeechScoringClient speechScoringClient, EssayScoringClient essayScoringClient,
+            ObjectiveScoringService objectiveScoringService, Clock clock, AiProviderProperties properties,
+            RubricResolver rubricResolver) {
         this.scorersByTaskType = byTaskType(scorers);
+        this.audioScorersByTaskType = audioByTaskType(audioScorers);
         this.speechScoringClient = speechScoringClient;
         this.essayScoringClient = essayScoringClient;
         this.objectiveScoringService = objectiveScoringService;
@@ -158,6 +165,10 @@ public class PracticeAiScoringService {
     }
 
     private AiScoreResult callVendor(PracticeScoringRoute route, AiScoringRequest request) {
+        PracticeAudioScorer audioScorer = audioScorersByTaskType.get(request.taskType());
+        if (route == PracticeScoringRoute.AI_SPEECH && audioScorer != null && properties.practiceSpeechUsesModel()) {
+            return audioScorer.score(withActiveRubric(request));
+        }
         AiAnswerScorer scorer = scorersByTaskType.get(request.taskType());
         if (ScoringConstants.RUBRIC_SCORED_TASK_TYPES.contains(request.taskType())) {
             if (scorer == null) {
@@ -226,6 +237,19 @@ public class PracticeAiScoringService {
             for (String taskType : scorer.taskTypes()) {
                 if (table.putIfAbsent(normalize(taskType), scorer) != null) {
                     throw new IllegalStateException("Duplicate practice AI scorer for " + normalize(taskType));
+                }
+            }
+        }
+        return Map.copyOf(table);
+    }
+
+    private static Map<String, PracticeAudioScorer> audioByTaskType(List<PracticeAudioScorer> scorers) {
+        Map<String, PracticeAudioScorer> table = new HashMap<>();
+        for (PracticeAudioScorer scorer : scorers) {
+            for (String taskType : scorer.taskTypes()) {
+                if (table.putIfAbsent(normalize(taskType), scorer) != null) {
+                    throw new IllegalStateException(
+                            ScoringConstants.PRACTICE_AUDIO_SCORER_DUPLICATE.formatted(normalize(taskType)));
                 }
             }
         }

@@ -30,7 +30,7 @@ class CloudinaryPracticeRecordingPlaybackTest {
     private final UUID itemId = UUID.randomUUID();
     private final UUID mediaId = UUID.randomUUID();
     private final CloudinaryMediaService service = new CloudinaryMediaService(repository,
-            "test-cloud", "test-key", "test-secret", "pte/authoring", "pte/submissions",
+            "test-cloud", "test-key", "test-secret", "pte/test",
             liveBinding, null, com.pte.TestClocks.fixed(), org.springframework.web.client.RestClient.builder());
 
     @Test

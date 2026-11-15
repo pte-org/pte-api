@@ -42,6 +42,7 @@ public final class CommonDraftValidator {
             case ItemDraft.DialogueDraft d -> d.situation() + " " + d.turns().stream()
                     .map(ItemDraft.DialogueDraft.Turn::text).collect(java.util.stream.Collectors.joining(" "));
             case ItemDraft.ChartDraft d -> d.title() + " " + String.join(" ", d.categories());
+            case ItemDraft.PictureDraft d -> d.title() + " " + d.imagePrompt() + " " + d.referenceDescription();
         };
     }
 

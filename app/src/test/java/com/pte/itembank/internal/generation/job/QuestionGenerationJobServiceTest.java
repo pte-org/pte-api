@@ -1,5 +1,7 @@
 package com.pte.itembank.internal.generation.job;
 
+import com.pte.billing.BillingSettingsService;
+import com.pte.itembank.internal.generation.config.GenerationLimits;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
 import com.pte.itembank.internal.generation.domain.ItemStage;
@@ -57,7 +59,8 @@ class QuestionGenerationJobServiceTest {
     @BeforeEach
     void setUp() {
         properties.setEnabled(true);
-        service = new QuestionGenerationJobService(jobs, items, catalog, properties, clock);
+        service = new QuestionGenerationJobService(jobs, items, catalog, properties, clock,
+                new GenerationLimits(mock(BillingSettingsService.class, call -> call.getArgument(1)), properties));
         when(catalog.find("MC_READING_SINGLE")).thenReturn(Optional.of(PteTaskType.MC_READING_SINGLE));
         when(jobs.saveAndFlush(any())).thenAnswer(call -> {
             QuestionGenerationJob job = call.getArgument(0);

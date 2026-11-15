@@ -12,7 +12,10 @@ import org.springframework.http.HttpStatus;
 
 import java.time.Instant;
 
-/** Routes a submitted practice answer to inline objective scoring, the AI worker queue, or no scoring. */
+/**
+ * Routes a submitted practice answer: objective types are scored inline, speech and writing wait (NONE) until the
+ * student asks for their AI score, tasks with no score are only recorded.
+ */
 class PracticeAnswerScoringRouter {
 
     private final ScoringService scoringService;
@@ -27,8 +30,8 @@ class PracticeAnswerScoringRouter {
     }
 
     /**
-     * Same split as the exam: objective types are scored inside the call, speech and writing are queued for the
-     * worker, tasks with no score (Personal Introduction) are only recorded.
+     * Objective types are scored inside the call; speech and writing are left unscored until the student presses
+     * "Chấm điểm" (PracticeScoringRequestService); tasks with no score (Personal Introduction) are only recorded.
      */
     void scoreOrQueue(PracticeSession session, PracticeResponse item, Instant now) {
         if (scoringService == null || scoringStateService == null) {
@@ -36,8 +39,7 @@ class PracticeAnswerScoringRouter {
         }
         switch (scoringService.practiceScoringRoute(item.getTaskCode())) {
             case OBJECTIVE -> scoreObjective(session, item, now);
-            case AI_SPEECH, AI_TEXT -> scoringStateService.startScoring(session, item, now);
-            case UNSCORED -> { }
+            case AI_SPEECH, AI_TEXT, UNSCORED -> { }
             case UNSUPPORTED -> throw new PracticeSessionException(HttpStatus.UNPROCESSABLE_ENTITY,
                     PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME,
                     PracticeConstants.PRACTICE_UNSUPPORTED_RUNTIME_MESSAGE);

@@ -41,10 +41,7 @@
           "text": "",
           "items": [
             "topic: Education Technology",
-            "transcript: Online learning platforms have revolutionized how students access educational content today",
-            "question: ",
-            "options: null",
-            "correctIndexes: null"
+            "transcript: Online learning platforms have revolutionized how students access educational content today"
           ],
           "levels": [],
           "sentToAi": true

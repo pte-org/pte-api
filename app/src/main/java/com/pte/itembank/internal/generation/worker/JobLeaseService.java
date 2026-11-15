@@ -56,7 +56,7 @@ public class JobLeaseService {
         jobs.markRunning(job.getId(), workerId, leaseEnd(now), now);
         return Optional.of(new JobClaim(job.getId(), job.getPublicId(), job.getRequestedByUserPublicId(),
                 job.getTaskTypeKey(), job.getCefrLevel(), job.getPool(), job.getTopicHint(), workerId,
-                job.isSaveQuestions()));
+                job.isSaveQuestions(), job.getImageKind()));
     }
 
     /** Separate transaction on purpose: the renewal commits before the slow provider call that follows it. */

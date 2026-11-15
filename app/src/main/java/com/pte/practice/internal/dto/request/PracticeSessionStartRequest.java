@@ -3,7 +3,6 @@ package com.pte.practice.internal.dto.request;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.enums.PracticeTimingMode;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -26,8 +25,6 @@ public record PracticeSessionStartRequest(
         @Valid PracticeCapabilityManifest capabilities,
         PracticeTimingMode timingMode,
         @Min(value = 1, message = PracticeConstants.PRACTICE_QUESTION_COUNT_INVALID)
-        @Max(value = PracticeConstants.PRACTICE_MAX_QUESTION_COUNT,
-                message = PracticeConstants.PRACTICE_QUESTION_COUNT_INVALID)
         Integer questionCount,
         @Pattern(regexp = "SPEAKING|WRITING|READING|LISTENING", message = PracticeConstants.PRACTICE_SESSION_REQUEST_INVALID)
         String skillCode,
@@ -67,6 +64,6 @@ public record PracticeSessionStartRequest(
     }
 
     public int effectiveQuestionCount() {
-        return questionCount == null ? PracticeConstants.PRACTICE_DEFAULT_QUESTION_COUNT : questionCount;
+        return questionCount == null ? PracticeConstants.PRACTICE_ALL_QUESTIONS : questionCount;
     }
 }

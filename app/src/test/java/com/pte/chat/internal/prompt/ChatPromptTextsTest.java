@@ -19,6 +19,11 @@ class ChatPromptTextsTest {
             }
 
             @Override
+            public Optional<ActivePrompt> active(String category, String key) {
+                return Optional.ofNullable(texts.get(key)).map(text -> new ActivePrompt(text, 1, null));
+            }
+
+            @Override
             public void seedIfMissing(String category, String key, String title, List<Part> parts) {
                 // Not needed here.
             }

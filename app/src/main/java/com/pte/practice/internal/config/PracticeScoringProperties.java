@@ -14,6 +14,8 @@ public class PracticeScoringProperties {
     private int maxRetries = 2;
     private int redispatchAfterSeconds = 100;
     private int maxAgeSeconds = 180;
+    /** Practice jobs scored at the same time; a scored mock test queues every AI answer at once. */
+    private int concurrency = 3;
 
     public int getRateLimitPerMinute() {
         return rateLimitPerMinute;
@@ -45,5 +47,13 @@ public class PracticeScoringProperties {
 
     public void setMaxAgeSeconds(int maxAgeSeconds) {
         this.maxAgeSeconds = maxAgeSeconds;
+    }
+
+    public int getConcurrency() {
+        return Math.max(1, concurrency);
+    }
+
+    public void setConcurrency(int concurrency) {
+        this.concurrency = concurrency;
     }
 }

@@ -1,0 +1,94 @@
+{
+  "title": "Describe Image (Picture) Generation Prompt",
+  "intro": [
+    {
+      "type": "TEXT",
+      "label": "",
+      "text": "You are generating a Describe Image task for the PTE exam whose image is a picture, not a chart: a scene, a process or cycle diagram, a map or plan, or an illustration. An image model will paint the picture from your description, and the student must describe what the picture shows.",
+      "items": [],
+      "levels": [],
+      "sentToAi": true
+    }
+  ],
+  "sections": [
+    {
+      "id": "requirements",
+      "title": "Requirements",
+      "blocks": [
+        {
+          "type": "LIST",
+          "label": "",
+          "text": "",
+          "items": [
+            "Choose one picture type that fits the topic: a scene, a process or life cycle with 4 to 6 labelled stages, a map or floor plan, or an illustration",
+            "The image prompt describes everything the picture must show: layout, objects, labels in English, colours and a plain white or simple background",
+            "Labels in the picture are short English words; avoid long sentences, numbers that need exact reading, logos, brand names and real people",
+            "Give 3 to 6 key points: the main elements, the stages or the comparisons a good description would mention",
+            "The reference description is a 60 to 90 word model answer a strong candidate could give in 40 seconds"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "output",
+      "title": "Output",
+      "blocks": [
+        {
+          "type": "FIELDS",
+          "label": "",
+          "text": "",
+          "items": [
+            "topic: Recycling Plastic Bottles",
+            "title: The Four Stages of Recycling Plastic Bottles",
+            "imagePrompt: A clean educational flowchart on a white background showing four labelled stages of recycling plastic bottles from left to right with arrows: Collection, Sorting, Washing and Shredding, Making New Products. Simple flat icons for each stage, short English labels only.",
+            "keyPoints: [\"Bottles are first collected from homes and drop-off points\", \"They are sorted by plastic type\", \"The bottles are washed and shredded into flakes\", \"The flakes are melted into new products\"]",
+            "referenceDescription: The picture shows how plastic bottles are recycled in four stages. First, used bottles are collected from homes and public bins. Next, they are sorted according to the type of plastic. After that, the bottles are washed and shredded into small flakes. Finally, the flakes are melted and turned into new products such as clothing and containers. Overall, the process shows how waste plastic can be reused."
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "instructions",
+      "title": "Instructions",
+      "blocks": [
+        {
+          "type": "TEXT",
+          "label": "",
+          "text": "Return ONLY the JSON object. imagePrompt is sent to the image model as it is, so write it in English. keyPoints is an array of short sentences.",
+          "items": [],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    },
+    {
+      "id": "image-settings",
+      "title": "Image Settings",
+      "blocks": [
+        {
+          "type": "TEXT",
+          "label": "",
+          "text": "Read by the system and not sent to the AI. maxImageAttempts: how many times a picture is painted (1 to 5) before giving up. whenImageFails: ASK shows the person a message and makes the question as a chart only if they agree; CHART makes it as a chart at once.",
+          "items": [],
+          "levels": [],
+          "sentToAi": true
+        },
+        {
+          "type": "FIELDS",
+          "label": "",
+          "text": "",
+          "items": [
+            "maxImageAttempts: 2",
+            "whenImageFails: ASK"
+          ],
+          "levels": [],
+          "sentToAi": true
+        }
+      ]
+    }
+  ]
+}

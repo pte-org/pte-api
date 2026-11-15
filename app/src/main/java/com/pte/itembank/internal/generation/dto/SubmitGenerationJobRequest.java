@@ -13,11 +13,18 @@ public record SubmitGenerationJobRequest(
         @NotBlank String pool,
         @Size(max = QuestionGenerationConstants.MAX_TOPIC_HINT_LENGTH) String topicHint,
         @Min(1) @Max(QuestionGenerationConstants.MAX_ITEMS_PER_JOB_HARD_LIMIT) int count,
-        Boolean saveQuestions) {
+        Boolean saveQuestions,
+        /** Describe Image only: AUTO (default), CHART or PICTURE. */
+        String imageKind) {
 
     /** A batch for the bank: every question is saved as a draft. */
     public SubmitGenerationJobRequest(String taskType, String cefrLevel, String pool, String topicHint, int count) {
-        this(taskType, cefrLevel, pool, topicHint, count, null);
+        this(taskType, cefrLevel, pool, topicHint, count, null, null);
+    }
+
+    public SubmitGenerationJobRequest(String taskType, String cefrLevel, String pool, String topicHint, int count,
+                                      Boolean saveQuestions) {
+        this(taskType, cefrLevel, pool, topicHint, count, saveQuestions, null);
     }
 
     /** False only when asked: a job saves its questions unless it was started from the question form. */

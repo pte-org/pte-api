@@ -99,10 +99,12 @@ abstract class GeminiWritingScorer implements AiAnswerScorer {
         GeminiRequest call = new GeminiRequest(
                 GeminiScorers.system(examiner + "\n\n" + RubricPromptBuilder.rubricSection(task)),
                 GeminiScorers.quoted(sourceLabel, source) + "\n" + GeminiScorers.quoted(answerLabel, shown)
-                        + "\n" + ask, RubricSchemaBuilder.responseSchema(task, extraFields), List.of());
+                        + "\n" + ask, RubricSchemaBuilder.responseSchema(task, extraFields), List.of(), null,
+                task.taskType());
         CollectedTraits<GeminiResponse> collected = TraitScoreCollector.collect(RubricPromptBuilder.llmTraits(task),
                 () -> gemini.generate(call), GeminiResponse::content);
         detail.put(SCHEMA_ATTEMPTS, collected.attempts());
+        GeminiScorers.recordPrompt(detail, collected.response());
 
         Map<String, Integer> traits = traitsInRubricOrder(task, collected.scores(), form);
         int rawScore = RubricScorer.score(rubric, new TraitScoreSet(traits, null)).itemScore();

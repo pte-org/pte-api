@@ -16,7 +16,8 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Practice scoring work queue, shaped like the exam's ({@code ScoringRabbitMqConfig}): no container retry, because
  * redelivering a job would call the vendor again and pay twice; a rejected message goes to the DLQ, where the worker
- * marks the item FAILED. One consumer keeps a practice burst from starving exam scoring in the 512 MB container.
+ * marks the item FAILED. A few consumers ({@code practice.scoring.concurrency}) let a scored mock test finish in
+ * minutes; each job holds one recording, so the count stays small for the 512 MB container.
  */
 @Configuration
 @EnableConfigurationProperties(PracticeScoringProperties.class)
@@ -61,12 +62,13 @@ public class PracticeScoringRabbitMqConfig {
     /** Serves both the work queue and its DLQ listener. */
     @Bean
     public SimpleRabbitListenerContainerFactory practiceScoringRabbitListenerContainerFactory(
-            ConnectionFactory connectionFactory, MessageConverter jsonMessageConverter) {
+            ConnectionFactory connectionFactory, MessageConverter jsonMessageConverter,
+            PracticeScoringProperties properties) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setMessageConverter(jsonMessageConverter);
-        factory.setConcurrentConsumers(1);
-        factory.setMaxConcurrentConsumers(1);
+        factory.setConcurrentConsumers(properties.getConcurrency());
+        factory.setMaxConcurrentConsumers(properties.getConcurrency());
         factory.setPrefetchCount(1);
         factory.setDefaultRequeueRejected(false);
         return factory;

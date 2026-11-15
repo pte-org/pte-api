@@ -54,7 +54,7 @@ class PracticeResponseRepositoryMergeTest {
         responses.saveAllAndFlush(List.of(objective, skipped, deleted, ai, foreign));
 
         assertThat(responses.findSeenSourceQuestionIds(student, List.of("READ_ALOUD")))
-                .containsExactlyInAnyOrder(repeated, skippedQuestion);
+                .containsExactly(repeated); // a skipped question is still to do, so it is not "seen"
         assertThat(responses.findSeenSourceQuestionIds(otherStudent.getStudentPublicId(), List.of("READ_ALOUD")))
                 .containsExactly(foreignQuestion);
         assertThat(responses.findSeenSourceQuestionIds(student, List.of("WRITE_ESSAY"))).isEmpty();

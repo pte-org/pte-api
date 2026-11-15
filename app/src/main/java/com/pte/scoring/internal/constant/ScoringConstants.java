@@ -137,6 +137,11 @@ public final class ScoringConstants {
     public static final String AI_VENDOR_REQUEST_FAILED = "%s request failed: %s";
     public static final String AUDIO_UNSUPPORTED = "Speech audio is not a readable PCM WAV recording";
     public static final String AUDIO_TOO_LONG = "Speech audio is longer than %d seconds";
+    public static final String AI_PRACTICE_SPEECH_VENDOR_INVALID =
+            "scoring.ai.practice-speech-vendor must be gateway or azure";
+    /** Stored as the Describe Image fallback reason when the item has no picture reference at all. */
+    public static final String DESCRIBE_IMAGE_NO_REFERENCE = "NO_IMAGE_REFERENCE";
+    public static final String PRACTICE_AUDIO_SCORER_DUPLICATE = "More than one practice audio scorer handles %s";
 
     private ScoringConstants() {
     }

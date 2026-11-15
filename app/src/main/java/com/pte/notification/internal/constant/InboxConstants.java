@@ -77,6 +77,10 @@ public final class InboxConstants {
     public static final String SESSION_PREVIEW_READY_NOTIFICATION_TITLE = "Exam preview ready";
     public static final String SESSION_PREVIEW_READY_NOTIFICATION_BODY =
             "Exam session '%s' (%s) is ready. Log in to PTE App as a host to preview it without changing the exam status.";
+    public static final String EXAM_INCIDENT_REPORTED_NOTIFICATION_TITLE = "Exam incident reported";
+    public static final String EXAM_INCIDENT_REPORTED_NOTIFICATION_BODY = "A %s incident was reported: %s";
+    /** Incident severities shown as important in the inbox. */
+    public static final java.util.Set<String> IMPORTANT_INCIDENT_SEVERITIES = java.util.Set.of("HIGH", "CRITICAL");
     public static final String SUPPORT_TICKET_SUBMITTED_NOTIFICATION_TITLE = "New feedback received";
     public static final String SUPPORT_TICKET_SUBMITTED_NOTIFICATION_BODY =
             "New %s feedback was submitted for admin review.";

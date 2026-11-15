@@ -1,6 +1,7 @@
 package com.pte.itembank.internal.generation.llm;
 
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
+import com.pte.itembank.internal.generation.draft.AnswerHint;
 import com.pte.itembank.internal.generation.draft.DraftParser;
 import com.pte.itembank.internal.generation.draft.DraftToQuestionMapper;
 import com.pte.itembank.internal.generation.draft.ItemDraft;
@@ -50,7 +51,8 @@ public class LlmItemGenerator implements ItemGenerator {
     public GeneratedItem generate(GenerationRequest request, GenerationCallBudget budget) {
         budget.consume(); // First call: generation
 
-        String taskTypeKey = request.taskTypeKey();
+        // The picture variant of Describe Image has its own writer prompt, draft and mapping.
+        String taskTypeKey = request.promptKey();
         String basePrompt = promptRegistry.getPrompt(taskTypeKey);
         String commonPrompt = promptRegistry.getCommonPrompt();
 
@@ -67,7 +69,9 @@ public class LlmItemGenerator implements ItemGenerator {
                         + request.feedback();
         String systemPrompt = GeneratorPromptRenderer.render(commonPrompt, request);
 
-        ItemDraft draft = callAndParse(systemPrompt, userPrompt, taskTypeKey, budget);
+        ParsedDraft parsed = callAndParse(systemPrompt, userPrompt, taskTypeKey, budget);
+        ItemDraft draft = parsed.draft();
+        AnswerHint hint = parsed.hint();
 
         // One rewrite when the draft breaks structural rules, with the exact rules it broke.
         var issues = draftValidator.validate(draft, taskTypeKey);
@@ -75,9 +79,11 @@ public class LlmItemGenerator implements ItemGenerator {
             budget.consume();
             String feedback = issues.stream().map(issue -> "- " + issue.message())
                     .collect(java.util.stream.Collectors.joining("\n"));
-            draft = callAndParse(systemPrompt, userPrompt
+            parsed = callAndParse(systemPrompt, userPrompt
                     + "\n\nYour previous answer broke these rules. Fix all of them and return the complete JSON again:\n"
                     + feedback, taskTypeKey, budget);
+            draft = parsed.draft();
+            hint = parsed.hint();
             issues = draftValidator.validate(draft, taskTypeKey);
         }
         if (!issues.isEmpty()) {
@@ -87,7 +93,8 @@ public class LlmItemGenerator implements ItemGenerator {
         }
 
         // Map draft to CreateQuestionRequest
-        var createRequest = mapper.map(draft, request.cefrLevel(), request.pool(), taskTypeKey);
+        var createRequest = mapper.map(draft, request.cefrLevel(), request.pool(), taskTypeKey)
+                .withAnswerHint(hint.vi(), hint.en());
 
         // Extract stimulus text for deduplication
         String stimulusText = extractStimulusText(draft);
@@ -96,11 +103,11 @@ public class LlmItemGenerator implements ItemGenerator {
     }
 
     /** One provider call and strict parse; a malformed JSON gets one more call asking for valid JSON only. */
-    private ItemDraft callAndParse(String systemPrompt, String userPrompt, String taskTypeKey,
+    private ParsedDraft callAndParse(String systemPrompt, String userPrompt, String taskTypeKey,
                                    GenerationCallBudget budget) {
         String json = llmGateway.completeJson(LlmRole.GENERATOR, systemPrompt, userPrompt);
         try {
-            return draftParser.parse(json, taskTypeKey);
+            return parse(json, taskTypeKey);
         } catch (GenerationRequestInvalidException malformed) {
             if (budget.remaining() <= 0) {
                 throw malformed;
@@ -109,11 +116,18 @@ public class LlmItemGenerator implements ItemGenerator {
             String again = llmGateway.completeJson(LlmRole.GENERATOR, systemPrompt,
                     userPrompt + "\n\nPlease return valid JSON only, with all required fields.");
             try {
-                return draftParser.parse(again, taskTypeKey);
+                return parse(again, taskTypeKey);
             } catch (GenerationRequestInvalidException stillMalformed) {
                 throw malformed;
             }
         }
+    }
+
+    private ParsedDraft parse(String json, String taskTypeKey) {
+        return new ParsedDraft(draftParser.parse(json, taskTypeKey), draftParser.parseHint(json));
+    }
+
+    private record ParsedDraft(ItemDraft draft, AnswerHint hint) {
     }
 
     private String extractStimulusText(ItemDraft draft) {
@@ -128,6 +142,7 @@ public class LlmItemGenerator implements ItemGenerator {
                     ? d.turns().stream().map(ItemDraft.DialogueDraft.Turn::text).collect(java.util.stream.Collectors.joining(" "))
                     : d.situation();
             case ItemDraft.ChartDraft d -> d.title() + " " + String.join(" ", d.categories()) + " " + d.series();
+            case ItemDraft.PictureDraft d -> d.title() + " " + d.imagePrompt();
         };
     }
 }

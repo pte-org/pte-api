@@ -4,6 +4,9 @@ import com.pte.practice.internal.dto.response.PracticeReviewResponse;
 import com.pte.practice.internal.dto.response.PracticeTaskContentResponse;
 import com.pte.practice.internal.service.PracticeRecordingPlaybackService;
 import com.pte.practice.internal.service.PracticeReviewService;
+import com.pte.practice.internal.service.session.PracticeScoringRequestService;
+import com.pte.practice.internal.service.session.PracticeSessionDiscardService;
+import com.pte.practice.internal.service.session.PracticeSessionFinishService;
 import com.pte.practice.internal.service.session.PracticeSessionService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
@@ -40,7 +43,9 @@ class PracticeSessionControllerReviewTest {
         context.when(CurrentUserContext::required).thenReturn(caller);
         mvc = MockMvcBuilders.standaloneSetup(
                 new PracticeSessionController(mock(PracticeSessionService.class), reviewService,
-                        mock(PracticeRecordingPlaybackService.class))).build();
+                        mock(PracticeRecordingPlaybackService.class), mock(PracticeScoringRequestService.class),
+                        mock(PracticeSessionDiscardService.class), mock(PracticeSessionFinishService.class)))
+                .build();
     }
 
     @AfterEach
@@ -57,7 +62,7 @@ class PracticeSessionControllerReviewTest {
                 new PracticeReviewResponse.Item(itemId, 0, "WRITE_ESSAY", "Write Essay", "WRITING", "ANSWERED",
                         "Prompt", "{\"text\":\"x\"}", "WRITE_ESSAY_V1", null, null, 72, "SCORED",
                         Map.of("content", 70), "GEMINI", "model", scoredAt,
-                        List.of(new PracticeTaskContentResponse.Option(null, "First", 0, null))))));
+                        List.of(new PracticeTaskContentResponse.Option(null, "First", 0, null)), null, "B2"))));
 
         mvc.perform(get("/api/v1/student/practice/sessions/{id}/review", sessionId))
                 .andExpect(status().isOk())

@@ -29,6 +29,7 @@ public class NineRouterLlmGateway implements LlmGateway {
 
     private static final Logger LOG = LoggerFactory.getLogger(NineRouterLlmGateway.class);
     private static final String COMPLETIONS_PATH = "/chat/completions";
+    private static final String IMAGES_PATH = "/images/generations";
     private static final int MAX_ATTEMPTS = 2;
     private static final int UNAUTHORIZED = 401;
     private static final int FORBIDDEN = 403;
@@ -219,6 +220,49 @@ public class NineRouterLlmGateway implements LlmGateway {
             return text;
         }
         return text.substring(firstLineEnd + 1, closing).trim();
+    }
+
+    @Override
+    public byte[] generateImage(String prompt) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("model", llm.getImageModel());
+        request.put("prompt", prompt);
+        request.put("n", 1);
+        request.put("size", "auto");
+        request.put("output_format", "png");
+        long started = System.nanoTime();
+        String response;
+        try {
+            response = restClient.post().uri(IMAGES_PATH).contentType(MediaType.APPLICATION_JSON)
+                    .body(jsonMapper.writeValueAsString(request)).retrieve()
+                    .onStatus(HttpStatusCode::is3xxRedirection, (sent, reply) -> {
+                        throw new LlmProviderException(LlmFailureType.REJECTED);
+                    })
+                    .body(String.class);
+        } catch (RestClientResponseException failure) {
+            throw new LlmProviderException(classify(failure.getStatusCode().value()));
+        } catch (RestClientException failure) {
+            throw new LlmProviderException(LlmFailureType.UNAVAILABLE);
+        }
+        byte[] png = decodeImage(response);
+        LOG.info("Generation image call ok: model={}, durationMs={}, bytes={}", llm.getImageModel(),
+                (System.nanoTime() - started) / NANOS_PER_MILLI, png.length);
+        return png;
+    }
+
+    private byte[] decodeImage(String response) {
+        if (response == null || response.isBlank()) {
+            throw new LlmProviderException(LlmFailureType.EMPTY_RESPONSE);
+        }
+        try {
+            JsonNode image = jsonMapper.readTree(response).path("data").path(0).path("b64_json");
+            if (!image.isTextual() || image.asText().isBlank()) {
+                throw new LlmProviderException(LlmFailureType.EMPTY_RESPONSE);
+            }
+            return Base64.getDecoder().decode(image.asText());
+        } catch (IllegalArgumentException | tools.jackson.core.JacksonException unreadable) {
+            throw new LlmProviderException(LlmFailureType.REJECTED);
+        }
     }
 
     private static LlmFailureType classify(int status) {

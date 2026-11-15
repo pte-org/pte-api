@@ -7,6 +7,7 @@ import com.pte.itembank.PromptDocument.Section;
 import com.pte.itembank.ScoringPromptSource;
 import com.pte.scoring.internal.constant.ScoringPromptConstants;
 import com.pte.scoring.internal.rubric.prompt.RubricPromptBuilder;
+import com.pte.scoring.internal.vendor.audioscoring.PracticeAudioPrompts;
 import com.pte.scoring.internal.vendor.gemini.scorer.GeminiPromptTexts;
 import com.pte.scoring.rubric.RubricCatalog;
 import com.pte.scoring.rubric.TaskRubric;
@@ -35,16 +36,27 @@ public class ScoringPromptCatalogService implements ScoringPromptSource {
 
     @Override
     public List<PromptDocument.Summary> summaries() {
-        return catalog.all().stream()
+        List<PromptDocument.Summary> summaries = new ArrayList<>(catalog.all().stream()
                 .sorted(Comparator.comparing(TaskRubric::taskType))
                 .map(task -> new PromptDocument.Summary(ScoringPromptConstants.CATEGORY_SCORING, task.taskType(),
                         task.taskType(), engines(task)))
-                .toList();
+                .toList());
+        PracticeAudioPrompts.taskTypes().stream().sorted()
+                .map(taskType -> new PromptDocument.Summary(ScoringPromptConstants.CATEGORY_SCORING,
+                        PracticeAudioPrompts.keyOf(taskType), PracticeAudioPrompts.keyOf(taskType),
+                        List.of(ScoringPromptConstants.ENGINE_MODEL_AUDIO)))
+                .forEach(summaries::add);
+        return summaries;
     }
 
+    /** A task type's exam prompt, or a practice speaking prompt ({@code PRACTICE_AUDIO_<TASK>}). */
     @Override
-    public Optional<PromptDocument> find(String taskTypeKey) {
-        return catalog.find(taskTypeKey).map(this::document);
+    public Optional<PromptDocument> find(String key) {
+        Optional<String> practiceTask = PracticeAudioPrompts.taskTypeOf(key);
+        if (practiceTask.isPresent()) {
+            return catalog.find(practiceTask.get()).map(PracticeAudioPrompts::document);
+        }
+        return catalog.find(key).map(this::document);
     }
 
     private PromptDocument document(TaskRubric task) {
@@ -93,7 +105,7 @@ public class ScoringPromptCatalogService implements ScoringPromptSource {
         blocks.add(Block.text("", RubricPromptBuilder.INSTRUCTION));
         aiTraits.forEach(trait -> blocks.add(levelsBlock(trait, true)));
         return new Section(ScoringPromptConstants.SECTION_LEVELS_ID, ScoringPromptConstants.SECTION_LEVELS_TITLE,
-                false, blocks);
+                true, blocks);
     }
 
     private static Optional<Section> notes(TaskRubric task) {

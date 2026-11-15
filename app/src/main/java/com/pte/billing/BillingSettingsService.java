@@ -27,6 +27,15 @@ public class BillingSettingsService implements TenantSuspensionDurationProvider 
         }
     }
 
+    /** A question generation limit; {@code fallback} until its setting row exists. */
+    public int questionGenerationLimit(QuestionGenerationLimit limit, int fallback) {
+        try {
+            return platformSettingService.getInteger(limit.key());
+        } catch (PlatformSettingNotFoundException exception) {
+            return fallback;
+        }
+    }
+
     @Override
     public int defaultSuspensionDays() {
         try {

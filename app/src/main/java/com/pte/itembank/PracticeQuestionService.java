@@ -141,6 +141,8 @@ public class PracticeQuestionService {
                 question.getOptions().stream()
                         .map(option -> new PracticeQuestionContent.Option(
                                 option.getPublicId(), option.getText(), option.getOrderIndex(), option.getBlankIndex()))
-                        .toList());
+                        .toList(),
+                question.getAnswerHintVi(),
+                question.getAnswerHintEn());
     }
 }

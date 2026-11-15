@@ -68,11 +68,11 @@ public class OpenAiCompatibleStructuredClient implements StructuredModelClient {
         return parse(VendorHttp.readJson(jsonMapper, body, VENDOR));
     }
 
-    private Map<String, Object> body(GeminiRequest request) {
+    Map<String, Object> body(GeminiRequest request) {
         String system = request.systemInstruction() + SCHEMA_INSTRUCTION
                 + jsonMapper.writeValueAsString(request.responseSchema());
         Object user;
-        if (request.images().isEmpty()) {
+        if (request.images().isEmpty() && request.audio() == null) {
             user = request.userText();
         } else {
             List<Map<String, Object>> parts = new ArrayList<>();
@@ -80,11 +80,18 @@ public class OpenAiCompatibleStructuredClient implements StructuredModelClient {
                 String url = "data:" + image.mimeType() + ";base64," + Base64.getEncoder().encodeToString(image.data());
                 parts.add(Map.of("type", "image_url", "image_url", Map.of("url", url)));
             }
+            if (request.audio() != null) {
+                parts.add(Map.of("type", "input_audio", "input_audio", Map.of(
+                        "data", Base64.getEncoder().encodeToString(request.audio().data()),
+                        "format", request.audio().format())));
+            }
             parts.add(Map.of("type", "text", "text", request.userText()));
             user = parts;
         }
+        // Some gateways (Capstone) stream server-sent events unless told not to; the reply is read as one JSON body.
         return Map.of(
                 "model", model,
+                "stream", false,
                 "temperature", 0,
                 "response_format", Map.of("type", "json_object"),
                 "messages", List.of(

@@ -160,7 +160,8 @@ public class PracticeSessionResponseMapper {
         return new PracticeTaskContentResponse(PracticeTranscriptPolicy.visiblePromptText(item), item.getMinWordCount(),
                 item.getMaxWordCount(), item.getAudioPromptRef(), item.getImagePromptRef(),
                 withoutAnswerOrder(item, options),
-                urlOf(mediaUrls, item.getAudioPromptRef()), urlOf(mediaUrls, item.getImagePromptRef()));
+                urlOf(mediaUrls, item.getAudioPromptRef()), urlOf(mediaUrls, item.getImagePromptRef()),
+                item.getAnswerHintVi(), item.getAnswerHintEn());
     }
 
     /**

@@ -125,6 +125,13 @@ public class Question extends BaseEntity {
     @Column(columnDefinition = "text")
     private String correctAnswerText;
 
+    /** Student-facing hint on how to approach the task; must never reveal the answer. */
+    @Column(columnDefinition = "text")
+    private String answerHintVi;
+
+    @Column(columnDefinition = "text")
+    private String answerHintEn;
+
     @Column
     private Integer minWordCount;
 

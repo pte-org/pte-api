@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
-/** Reads and first stores the chatbot's prompts for the chat module. */
+/** Reads the chatbot's and the AI scorers' prompts in use, and first stores the chatbot's for the chat module. */
 @Service
 public class PromptTextsService implements PromptTexts {
 
@@ -35,9 +35,15 @@ public class PromptTextsService implements PromptTexts {
 
     @Override
     public Optional<String> activeText(String category, String key) {
+        return active(category, key).map(ActivePrompt::text);
+    }
+
+    @Override
+    public Optional<ActivePrompt> active(String category, String key) {
         return kindOf(category).flatMap(kind -> versions.findByKindAndPromptKeyAndStatus(kind, key,
                         AiPromptStatus.ACTIVE))
-                .map(version -> PromptTextAssembler.assembleWithoutTitle(codec.read(version.getContent())));
+                .map(version -> new ActivePrompt(PromptTextAssembler.assembleWithoutTitle(
+                        codec.read(version.getContent())), version.getVersionNo(), version.getPublicId()));
     }
 
     @Override
@@ -67,7 +73,10 @@ public class PromptTextsService implements PromptTexts {
     }
 
     private static Optional<AiPromptKind> kindOf(String category) {
-        return CHATBOT_CATEGORY.equals(category) ? Optional.of(AiPromptKind.CHATBOT) : Optional.empty();
+        if (CHATBOT_CATEGORY.equals(category)) {
+            return Optional.of(AiPromptKind.CHATBOT);
+        }
+        return SCORING_CATEGORY.equals(category) ? Optional.of(AiPromptKind.SCORER) : Optional.empty();
     }
 
     private static String slug(String title) {

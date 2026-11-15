@@ -21,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.OptimisticLockingFailureException;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
@@ -88,6 +89,27 @@ class PracticeScoringStateServiceTest {
                 .hasFieldOrPropertyWithValue("code", "PRACTICE_SCORING_RATE_LIMITED");
         assertThat(item.getScoringStatus()).isEqualTo(PracticeScoringStatus.NONE);
         verify(dispatcher, never()).dispatchAfterCommit(any());
+    }
+
+    @Test
+    void aQueuedMockTestAnswerSkipsTheRateLimitAndWaitsForItsTurn() {
+        service.startQueuedScoring(session, item, NOW, Duration.ofSeconds(60));
+
+        assertThat(item.getScoringStatus()).isEqualTo(PracticeScoringStatus.SCORING);
+        assertThat(item.getScoringRequestedAt()).isEqualTo(NOW);
+        assertThat(item.getScoringDispatchedAt()).isEqualTo(NOW.plusSeconds(60));
+        verify(itemRepository, never()).countScoringRequestsSince(any(), any());
+        verify(dispatcher).dispatchAfterCommit(any());
+    }
+
+    @Test
+    void aQueuedAnswerIsNeitherResentNorFailedWhileItWaitsForItsTurn() {
+        service.startQueuedScoring(session, item, NOW, Duration.ofSeconds(150));
+
+        service.recover(session, item, NOW.plusSeconds(properties.getMaxAgeSeconds() + 10L));
+
+        assertThat(item.getScoringStatus()).isEqualTo(PracticeScoringStatus.SCORING);
+        assertThat(item.getScoringRedispatchCount()).isZero();
     }
 
     @Test

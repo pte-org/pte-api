@@ -1,9 +1,11 @@
 package com.pte.itembank.internal.generation.review;
 
 import com.pte.itembank.domain.enums.CefrLevel;
+import com.pte.itembank.internal.generation.draft.AnswerHint;
 import com.pte.itembank.internal.generation.draft.ItemDraft;
 import com.pte.itembank.internal.generation.llm.LlmGateway;
 import com.pte.itembank.internal.generation.llm.LlmRole;
+import com.pte.itembank.internal.generation.pipeline.GeneratedItem;
 import com.pte.itembank.internal.generation.pipeline.GenerationCallBudget;
 import org.springframework.stereotype.Component;
 
@@ -32,10 +34,21 @@ public class LlmItemReviewer {
      */
     public ReviewVerdict review(ItemDraft draft, String taskTypeKey, CefrLevel cefrLevel,
                                GenerationCallBudget budget, String fixSuggestion) {
+        return review(draft, null, taskTypeKey, cefrLevel, budget, fixSuggestion);
+    }
+
+    /** Reviews a generated item together with its answer hints, which must not give the answer away. */
+    public ReviewVerdict review(GeneratedItem item, String taskTypeKey, CefrLevel cefrLevel,
+                               GenerationCallBudget budget, String fixSuggestion) {
+        return review(item.draft(), AnswerHint.of(item.question()), taskTypeKey, cefrLevel, budget, fixSuggestion);
+    }
+
+    private ReviewVerdict review(ItemDraft draft, AnswerHint hint, String taskTypeKey, CefrLevel cefrLevel,
+                                 GenerationCallBudget budget, String fixSuggestion) {
         budget.consume(); // One review call
 
         String systemPrompt = promptBuilder.buildSystemPrompt(taskTypeKey);
-        String userPrompt = promptBuilder.buildUserPrompt(draft, cefrLevel, fixSuggestion);
+        String userPrompt = promptBuilder.buildUserPrompt(draft, hint, cefrLevel, fixSuggestion);
 
         String jsonResponse = llmGateway.completeJson(LlmRole.REVIEWER, systemPrompt, userPrompt);
         return verdictParser.parse(jsonResponse, cefrLevel);
