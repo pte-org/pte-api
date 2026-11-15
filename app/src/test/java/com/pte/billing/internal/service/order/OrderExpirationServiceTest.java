@@ -49,6 +49,7 @@ class OrderExpirationServiceTest {
         Order order = Order.pending(UUID.randomUUID(), UUID.randomUUID(), 1_000_000_002L,
                 new BigDecimal("50000.00"), "VND");
         order.setPublicId(publicId);
+        order.attachPaymentLink("https://pay.payos.vn/web/test");
         order.setCreatedAt(Instant.now().minusSeconds(48 * 3_600L));
         when(orderRepository.findByStatusAndDeletedFalseAndCreatedAtLessThanEqual(
                 any(OrderStatus.class), any(Instant.class))).thenReturn(List.of(order));
@@ -66,6 +67,7 @@ class OrderExpirationServiceTest {
         Order order = Order.pending(UUID.randomUUID(), UUID.randomUUID(), 1_000_000_005L,
                 new BigDecimal("50000.00"), "VND");
         order.setPublicId(UUID.randomUUID());
+        order.attachPaymentLink("https://pay.payos.vn/web/test");
         order.setCreatedAt(Instant.now().minusSeconds(48 * 3_600L));
         when(orderRepository.findByStatusAndDeletedFalseAndCreatedAtLessThanEqual(
                 any(OrderStatus.class), any(Instant.class))).thenReturn(List.of(order));
@@ -75,5 +77,22 @@ class OrderExpirationServiceTest {
         assertThat(service.expireDueOrders()).isZero();
 
         verify(orderPersistenceService, never()).expireIfPending(order.getPublicId());
+    }
+
+    @Test
+    void expireDueOrdersExpiresAnOrderThatNeverGotAPaymentLinkWithoutCallingPayOs() {
+        UUID publicId = UUID.randomUUID();
+        Order order = Order.pending(UUID.randomUUID(), UUID.randomUUID(), 1_000_000_006L,
+                new BigDecimal("50000.00"), "VND");
+        order.setPublicId(publicId);
+        order.setCreatedAt(Instant.now().minusSeconds(48 * 3_600L));
+        when(orderRepository.findByStatusAndDeletedFalseAndCreatedAtLessThanEqual(
+                any(OrderStatus.class), any(Instant.class))).thenReturn(List.of(order));
+        when(orderPersistenceService.expireIfPending(publicId)).thenReturn(true);
+
+        assertThat(service.expireDueOrders()).isEqualTo(1);
+
+        verify(payOsClient, never()).cancelPaymentLink(any());
+        verify(orderPersistenceService).expireIfPending(publicId);
     }
 }
