@@ -39,10 +39,8 @@ public final class BrandedEmailTemplate {
                         + " account. The link works once and expires in <strong>" + expiresInMinutes
                         + " minutes</strong>."));
         for (Link link : links) {
-            if (links.size() > 1) {
-                rows.append(accountLabel(link.username()));
-            }
-            rows.append(button(link.url(), "Reset password"));
+            rows.append(accountLabel(link.username()))
+                    .append(button(link.url(), "Reset password"));
         }
         rows.append(paragraph(MUTED, "Did not ask for this? Ignore this email and your password stays the same."))
                 .append(paragraph(MUTED, "Button not working? Copy this link into your browser:"));
@@ -80,32 +78,19 @@ public final class BrandedEmailTemplate {
         return new RenderedEmail(subject, text, page("Your temporary login", rows, year));
     }
 
-    /**
-     * Approval mail. A contact who had no account gets the generated credentials; one who already had an account is
-     * told to sign in with their current password ({@code temporaryPassword} is then null).
-     */
+    /** Approval mail: the Host always gets a new account, so it carries the generated username and password. */
     public static RenderedEmail applicationApproved(String organizationName, String tenantCode, String username,
             String temporaryPassword, int year) {
         String subject = BRAND + " - Your application was approved";
-        boolean newAccount = temporaryPassword != null;
-        String[][] details = newAccount
-                ? new String[][] {{"Organization", organizationName}, {"Tenant code", tenantCode},
-                        {"Username", username}, {"Temporary password", temporaryPassword}}
-                : new String[][] {{"Organization", organizationName}, {"Tenant code", tenantCode},
-                        {"Username", username}};
+        String[][] details = {{"Organization", organizationName}, {"Tenant code", tenantCode},
+                {"Username", username}, {"Temporary password", temporaryPassword}};
         String rows = heading("Your application was approved")
-                + paragraph(BODY, newAccount
-                        ? "Your organization is ready. Sign in with the details below and <strong>change the"
-                                + " password right away</strong>."
-                        : "Your organization was added to your existing account. Sign in with your current"
-                                + " password and choose it.")
+                + paragraph(BODY, "Your organization is ready. Sign in with the details below and <strong>change the"
+                        + " password right away</strong>.")
                 + fields(details);
 
         StringBuilder text = new StringBuilder(BRAND).append("\n\nYour application was approved.\n")
-                .append(newAccount
-                        ? "Sign in with the details below and change the password right away.\n\n"
-                        : "Your organization was added to your existing account. Sign in with your current password"
-                                + " and choose it.\n\n");
+                .append("Sign in with the details below and change the password right away.\n\n");
         for (String[] row : details) {
             text.append(row[0]).append(": ").append(row[1]).append('\n');
         }

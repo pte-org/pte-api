@@ -10,10 +10,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.Locale;
 
 /**
- * Limits reset requests per e-mail and per client address, so the form cannot be used to flood one inbox or to
- * probe many addresses. Keys carry only a hash of the e-mail: Redis never holds an address in clear.
+ * Limits reset requests per e-mail, per username and per client address, so the form cannot be used to flood one
+ * inbox or one account, or to probe many addresses. Keys carry only a hash of the e-mail or username: Redis never
+ * holds either in clear.
  */
 @Component
 public class PasswordResetThrottle {
@@ -47,10 +49,17 @@ public class PasswordResetThrottle {
         this.window = window;
     }
 
-    /** Takes one request from both budgets; false means the caller is over a limit and should be ignored. */
-    public boolean tryAcquire(String normalizedEmail, String clientIp) {
-        return bucket("pwreset:email:" + tokenHasher.hash(normalizedEmail), emailLimit).tryConsume(1)
-                && bucket("pwreset:ip:" + clientIp, ipLimit).tryConsume(1);
+    /**
+     * Takes one request from the e-mail, username and address budgets; false means the caller is over a limit and
+     * should be ignored. The username budget has the same limit as the e-mail one and is keyed by a hash of the
+     * lower-cased name, so one account cannot be flooded from many addresses.
+     */
+    public boolean tryAcquire(String normalizedEmail, String username, String clientIp) {
+        boolean withinEmail = bucket("pwreset:email:" + tokenHasher.hash(normalizedEmail), emailLimit).tryConsume(1);
+        boolean withinUsername =
+                bucket("pwreset:user:" + tokenHasher.hash(username.trim().toLowerCase(Locale.ROOT)), emailLimit)
+                        .tryConsume(1);
+        return withinEmail && withinUsername && bucket("pwreset:ip:" + clientIp, ipLimit).tryConsume(1);
     }
 
     private Bucket bucket(String key, int limit) {
