@@ -99,9 +99,31 @@ public class OrderService {
             return OrderResponse.from(orderPersistenceService.completeFreeOrder(order.getPublicId()));
         }
 
-        String paymentLinkUrl = payOsClient.createPaymentLink(order);
-        return OrderResponse.from(orderPersistenceService.attachPaymentLink(
-                order.getPublicId(), paymentLinkUrl));
+        try {
+            String paymentLinkUrl = payOsClient.createPaymentLink(order);
+            return OrderResponse.from(orderPersistenceService.attachPaymentLink(
+                    order.getPublicId(), paymentLinkUrl));
+        } catch (RuntimeException failure) {
+            releaseReservation(order, failure);
+            throw failure;
+        }
+    }
+
+    /**
+     * The reservation was committed before PayOS was called, so a failed call would leave a pending order that blocks
+     * the next purchase and can never be paid. Cancel the link if PayOS did create one, then the order.
+     */
+    private void releaseReservation(Order order, RuntimeException failure) {
+        try {
+            payOsClient.cancelPaymentLink(order.getOrderCode());
+        } catch (RuntimeException ignored) {
+            // PayOS may not know the order at all; the local order is cancelled either way.
+        }
+        try {
+            orderPersistenceService.cancelIfPending(order.getPublicId());
+        } catch (RuntimeException cleanup) {
+            failure.addSuppressed(cleanup);
+        }
     }
 
     @Transactional(readOnly = true)

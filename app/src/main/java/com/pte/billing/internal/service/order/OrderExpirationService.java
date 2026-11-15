@@ -47,7 +47,10 @@ public class OrderExpirationService {
         for (Order order : orderRepository.findByStatusAndDeletedFalseAndCreatedAtLessThanEqual(
                 OrderStatus.PENDING, cutoff)) {
             try {
-                payOsClient.cancelPaymentLink(order.getOrderCode());
+                // An order that never got a payment link (PayOS failed while creating it) has nothing to cancel there.
+                if (order.getPaymentLinkUrl() != null) {
+                    payOsClient.cancelPaymentLink(order.getOrderCode());
+                }
                 if (orderPersistenceService.expireIfPending(order.getPublicId())) {
                     expired++;
                 }
