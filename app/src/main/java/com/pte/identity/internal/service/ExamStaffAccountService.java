@@ -76,6 +76,6 @@ public class ExamStaffAccountService {
         return new ExamStaffAccountView(user.getPublicId(), user.getFullName(), user.getUsername(), user.getEmail(),
                 user.getPhone(), user.getDateOfBirth(), member.getRoles().stream().map(Enum::name).sorted().toList(),
                 (member.isSuspended() ? UserStatus.SUSPENDED : UserStatus.ACTIVE).name(), user.isMustChangePassword(),
-                !member.hasRole(Role.STUDENT));
+                !member.hasRole(Role.STUDENT), directory.isExclusivelyOwned(member));
     }
 }

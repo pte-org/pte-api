@@ -19,6 +19,7 @@ import com.pte.identity.internal.exception.UserEmailRequiredException;
 import com.pte.identity.internal.mapper.UserMapper;
 import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
+import com.pte.identity.StudentsImportedEvent;
 import com.pte.identity.internal.service.UserBulkCreateWriter;
 import com.pte.identity.internal.service.UserProvisioningHelper;
 import com.pte.identity.internal.util.UsernameGenerator;
@@ -150,6 +151,7 @@ public class UserAccountProvisioner {
         }
         String tenantCode = adding > 0L ? tenancyService.getTenantCode(tenantId) : null;
         List<CreatedUser> created = new ArrayList<>();
+        List<StudentsImportedEvent.ImportedStudent> withClass = new ArrayList<>();
         List<RowError> skipped = new ArrayList<>();
         for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
             BulkCreateUserRow row = rows.get(rowIndex);
@@ -170,11 +172,18 @@ public class UserAccountProvisioner {
             User user = result.get().user();
             created.add(new CreatedUser(user.getPublicId(), user.getUsername(), user.getEmail(), user.getFullName(),
                     result.get().generatedPassword()));
+            if (writerRow.className() != null) {
+                withClass.add(new StudentsImportedEvent.ImportedStudent(user.getPublicId(), writerRow.className()));
+            }
             if (request.shouldSendCredentialsEmail()) {
                 eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(UUID.randomUUID(),
                         user.getPublicId(), tenantId, user.getUsername(), user.getEmail(), user.getFullName(),
                         result.get().generatedPassword()));
             }
+        }
+        if (!withClass.isEmpty()) {
+            // The class name is only text in identity; enrollment places the students into a matching class.
+            eventPublisher.publishEvent(new StudentsImportedEvent(tenantId, withClass));
         }
         return new BulkCreateUsersResponse(created, skipped);
     }
