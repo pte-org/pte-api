@@ -1,7 +1,6 @@
 package com.pte.identity.internal.controller;
 
 import com.pte.identity.internal.dto.request.auth.LoginRequest;
-import com.pte.identity.internal.dto.request.auth.LoginOrganizationOptionsRequest;
 import com.pte.identity.internal.dto.request.auth.RefreshRequest;
 import com.pte.identity.internal.dto.request.auth.ChangePasswordRequest;
 import com.pte.identity.internal.dto.request.auth.PasswordResetConfirmRequest;
@@ -13,7 +12,6 @@ import com.pte.identity.internal.service.passwordreset.PasswordResetService;
 import jakarta.servlet.http.HttpServletRequest;
 import com.pte.identity.internal.dto.request.profile.UpdateOwnProfileRequest;
 import com.pte.identity.internal.dto.response.TokenResponse;
-import com.pte.identity.internal.dto.response.LoginOrganizationOptionResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.service.AuthService;
 import com.pte.identity.internal.service.UserService;
@@ -30,8 +28,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -55,12 +51,6 @@ public class AuthController {
     @PostMapping("/login")
     public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
         return ApiResponse.success(authService.login(request, clientAddress(http)));
-    }
-
-    @PostMapping("/login-options")
-    public ApiResponse<List<LoginOrganizationOptionResponse>> loginOptions(
-            @Valid @RequestBody LoginOrganizationOptionsRequest request, HttpServletRequest http) {
-        return ApiResponse.success(authService.loginOrganizations(request, clientAddress(http)));
     }
 
     @GetMapping("/me")
@@ -88,12 +78,12 @@ public class AuthController {
 
     /**
      * Answers at once and does the work afterwards, so neither the body nor the response time reveals whether the
-     * address has an account.
+     * username and address belong to an account.
      */
     @PostMapping("/password-reset/request")
     public ApiResponse<Void> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request,
             HttpServletRequest http) {
-        passwordResetDispatcher.requestAsync(request.email(), clientAddress(http));
+        passwordResetDispatcher.requestAsync(request.email(), request.username(), clientAddress(http));
         return ApiResponse.success(null);
     }
 

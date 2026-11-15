@@ -1,7 +1,5 @@
 package com.pte.identity.internal.security;
 
-import com.pte.identity.domain.OrganizationMember;
-import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.identity.internal.config.AuthTokenProperties;
@@ -16,15 +14,12 @@ import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
- * Signs a short-lived access JWT for an account. The subject is the account's stable {@code publicId}. When the
- * account signs in to an organization the token carries that organization as {@code tenant_id} and the roles of the
- * membership (plus any platform role the account itself holds); an account without an organization carries only its
- * own roles. {@link com.pte.shared.security.CurrentUserContext} reads these claims locally.
+ * Signs a short-lived access JWT for an account. The subject is the account's stable {@code publicId}. An account
+ * that belongs to an organization carries it as {@code tenant_id}; platform and practice-only accounts have none.
+ * The roles are the account's own. {@link com.pte.shared.security.CurrentUserContext} reads these claims locally.
  */
 @Component
 public class AccessTokenIssuer {
@@ -39,30 +34,20 @@ public class AccessTokenIssuer {
         this.clock = clock;
     }
 
-    /** @param member the membership chosen at login, or null for a platform or practice-only account */
-    public String issue(User user, OrganizationMember member) {
+    public String issue(User user) {
         Instant now = clock.instant();
+        List<String> roles = SecurityRoles.canonicalizeRoles(
+                user.getRoles().stream().map(role -> role.name()).toList());
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
                 .issuer(IdentityConstants.TOKEN_ISSUER)
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(tokenProperties.getAccessTokenTtlSeconds()))
                 .subject(user.getPublicId().toString())
-                .claim(SecurityClaims.ROLES, rolesFor(user, member));
-        if (member != null) {
-            claims.claim(SecurityClaims.TENANT_ID, member.getOrganizationId().toString());
+                .claim(SecurityClaims.ROLES, roles);
+        if (user.getOrganizationId() != null) {
+            claims.claim(SecurityClaims.TENANT_ID, user.getOrganizationId().toString());
         }
         JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).keyId(IdentityConstants.KEY_ID).build();
         return jwtEncoder.encode(JwtEncoderParameters.from(header, claims.build())).getTokenValue();
-    }
-
-    private List<String> rolesFor(User user, OrganizationMember member) {
-        Set<Role> roles = new LinkedHashSet<>();
-        if (member == null) {
-            roles.addAll(user.getRoles());
-        } else {
-            roles.addAll(member.getRoles());
-            user.getRoles().stream().filter(role -> SecurityRoles.isPlatformRole(role.name())).forEach(roles::add);
-        }
-        return SecurityRoles.canonicalizeRoles(roles.stream().map(Role::name).toList());
     }
 }

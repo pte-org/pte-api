@@ -1,58 +1,44 @@
 package com.pte.identity.internal.service;
 
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.config.AuthTokenProperties;
-import com.pte.identity.internal.dto.request.auth.LoginOrganizationOptionsRequest;
 import com.pte.identity.internal.dto.request.auth.LoginRequest;
 import com.pte.identity.internal.dto.request.auth.RefreshRequest;
-import com.pte.identity.internal.dto.response.LoginOrganizationOptionResponse;
 import com.pte.identity.internal.dto.response.TokenResponse;
 import com.pte.identity.internal.exception.InvalidLoginException;
 import com.pte.identity.internal.exception.InvalidRefreshTokenException;
 import com.pte.identity.internal.exception.TooManyLoginAttemptsException;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.security.AccessTokenIssuer;
-import com.pte.tenancy.LoginOrganizationOption;
-import com.pte.tenancy.TenancyService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.Objects;
 
 /**
- * Login / refresh / logout. One account can belong to several organizations: the organization chosen at login is
- * baked into the access token and bound to the refresh token, so a token never crosses organizations. Access is a
- * signed RS256 JWT (stateless, validated in-process), refresh is an opaque rotating token stored hashed.
+ * Login / refresh / logout. An account belongs to at most one organization, so the user name alone decides where a
+ * login lands: the organization is baked into the access token and bound to the refresh token, so a token never
+ * crosses organizations. Access is a signed RS256 JWT (stateless, validated in-process), refresh is an opaque
+ * rotating token stored hashed.
  */
 @Service
 public class AuthService {
 
     private final UserRepository userRepository;
-    private final OrganizationMemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
     private final AccessTokenIssuer accessTokenIssuer;
     private final RefreshTokenService refreshTokenService;
-    private final TenancyService tenancyService;
     private final LoginThrottle loginThrottle;
     private final AuthTokenProperties tokenProperties;
 
-    public AuthService(UserRepository userRepository, OrganizationMemberRepository memberRepository,
-                       PasswordEncoder passwordEncoder, AccessTokenIssuer accessTokenIssuer,
-                       RefreshTokenService refreshTokenService, TenancyService tenancyService,
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder,
+                       AccessTokenIssuer accessTokenIssuer, RefreshTokenService refreshTokenService,
                        LoginThrottle loginThrottle, AuthTokenProperties tokenProperties) {
         this.userRepository = userRepository;
-        this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.accessTokenIssuer = accessTokenIssuer;
         this.refreshTokenService = refreshTokenService;
-        this.tenancyService = tenancyService;
         this.loginThrottle = loginThrottle;
         this.tokenProperties = tokenProperties;
     }
@@ -66,32 +52,10 @@ public class AuthService {
     @Transactional
     public TokenResponse login(LoginRequest request, String clientIp) {
         User user = authenticate(request.username(), request.password(), clientIp);
-        return issueTokens(user, resolveMember(user, request.tenantId()));
-    }
-
-    /**
-     * Verifies the supplied credentials before returning organization choices. This avoids exposing which
-     * organizations an account belongs to for unauthenticated callers while still letting the UI disambiguate.
-     */
-    @Transactional(readOnly = true)
-    public List<LoginOrganizationOptionResponse> loginOrganizations(LoginOrganizationOptionsRequest request) {
-        return loginOrganizations(request, null);
-    }
-
-    @Transactional(readOnly = true)
-    public List<LoginOrganizationOptionResponse> loginOrganizations(LoginOrganizationOptionsRequest request, String clientIp) {
-        User user = authenticate(request.username(), request.password(), clientIp);
-        List<LoginOrganizationOptionResponse> options = new ArrayList<>();
-        Set<UUID> seenOrganizationIds = new HashSet<>();
-        for (OrganizationMember member : memberRepository.findByUser_IdAndDeletedFalse(user.getId())) {
-            if (!member.isActive() || !seenOrganizationIds.add(member.getOrganizationId())) {
-                continue;
-            }
-            tenancyService.findLoginOrganization(member.getOrganizationId())
-                    .map(this::toResponse)
-                    .ifPresent(options::add);
+        if (user.getOrganizationId() == null && user.getRoles().isEmpty()) {
+            throw new InvalidLoginException();
         }
-        return options;
+        return issueTokens(user);
     }
 
     @Transactional
@@ -99,16 +63,10 @@ public class AuthService {
         RefreshSession session = refreshTokenService.consume(request.refreshToken());
         User user = userRepository.findByIdAndDeletedFalse(session.userId())
                 .orElseThrow(InvalidRefreshTokenException::new);
-        if (user.isSuspended()) {
+        if (user.isSuspended() || !Objects.equals(session.organizationId(), user.getOrganizationId())) {
             throw new InvalidRefreshTokenException();
         }
-        OrganizationMember member = null;
-        if (session.organizationId() != null) {
-            member = memberRepository.findByUser_IdAndOrganizationIdAndDeletedFalse(
-                    user.getId(), session.organizationId())
-                    .filter(OrganizationMember::isActive).orElseThrow(InvalidRefreshTokenException::new);
-        }
-        return issueTokens(user, member);
+        return issueTokens(user);
     }
 
     @Transactional
@@ -130,39 +88,9 @@ public class AuthService {
         return user;
     }
 
-    /**
-     * The membership a login signs in to: the requested organization, or the only one the account has. An account
-     * with several organizations must pick one (the client lists them through login options first). An account
-     * with no organization signs in with its own roles (platform or practice-only).
-     */
-    private OrganizationMember resolveMember(User user, UUID requestedOrganizationId) {
-        if (requestedOrganizationId != null) {
-            return memberRepository.findByUser_IdAndOrganizationIdAndDeletedFalse(user.getId(), requestedOrganizationId)
-                    .filter(OrganizationMember::isActive).orElseThrow(InvalidLoginException::new);
-        }
-        List<OrganizationMember> members = memberRepository.findByUser_IdAndDeletedFalse(user.getId()).stream()
-                .filter(OrganizationMember::isActive).toList();
-        if (members.size() > 1) {
-            throw new InvalidLoginException();
-        }
-        if (members.isEmpty()) {
-            if (user.getRoles().isEmpty()) {
-                throw new InvalidLoginException();
-            }
-            return null;
-        }
-        return members.get(0);
-    }
-
-    private LoginOrganizationOptionResponse toResponse(LoginOrganizationOption option) {
-        return new LoginOrganizationOptionResponse(
-                option.tenantId(), option.tenantCode(), option.organizationName(), option.organizationType());
-    }
-
-    private TokenResponse issueTokens(User user, OrganizationMember member) {
-        UUID organizationId = member == null ? null : member.getOrganizationId();
-        String accessToken = accessTokenIssuer.issue(user, member);
-        String refreshToken = refreshTokenService.issue(user, organizationId);
+    private TokenResponse issueTokens(User user) {
+        String accessToken = accessTokenIssuer.issue(user);
+        String refreshToken = refreshTokenService.issue(user, user.getOrganizationId());
         return TokenResponse.bearer(accessToken, refreshToken, tokenProperties.getAccessTokenTtlSeconds(),
                 user.isMustChangePassword());
     }

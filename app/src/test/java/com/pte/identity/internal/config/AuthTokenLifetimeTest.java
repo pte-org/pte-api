@@ -7,7 +7,6 @@ import com.pte.identity.domain.UserStatus;
 import com.pte.identity.internal.domain.RefreshToken;
 import com.pte.identity.internal.dto.request.auth.LoginRequest;
 import com.pte.identity.internal.dto.request.auth.RefreshRequest;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.RefreshTokenRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.security.AccessTokenIssuer;
@@ -16,7 +15,6 @@ import com.pte.identity.internal.service.AuthService;
 import com.pte.identity.internal.service.LoginThrottle;
 import com.pte.identity.internal.service.RefreshSession;
 import com.pte.identity.internal.service.RefreshTokenService;
-import com.pte.tenancy.TenancyService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,7 +23,6 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 
 import java.time.Clock;
-import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -64,7 +61,7 @@ class AuthTokenLifetimeTest {
         when(token.getTokenValue()).thenReturn("signed-fixture");
         when(encoder.encode(any())).thenReturn(token);
         AccessTokenIssuer issuer = new AccessTokenIssuer(encoder, configuredLifetimes(), clock);
-        issuer.issue(student(), null);
+        issuer.issue(student());
 
         ArgumentCaptor<JwtEncoderParameters> encoded = ArgumentCaptor.forClass(JwtEncoderParameters.class);
         verify(encoder).encode(encoded.capture());
@@ -88,19 +85,17 @@ class AuthTokenLifetimeTest {
     void loginAndRefreshResponsesAdvertiseConfiguredAccessLifetime() {
         User user = student();
         UserRepository users = mock(UserRepository.class);
-        OrganizationMemberRepository members = mock(OrganizationMemberRepository.class);
         PasswordEncoder passwords = mock(PasswordEncoder.class);
         AccessTokenIssuer issuer = mock(AccessTokenIssuer.class);
         RefreshTokenService refresh = mock(RefreshTokenService.class);
         when(users.findByUsernameAndDeletedFalse(user.getUsername())).thenReturn(Optional.of(user));
         when(users.findByIdAndDeletedFalse(user.getId())).thenReturn(Optional.of(user));
         when(passwords.matches("fixture-password", "fixture-hash")).thenReturn(true);
-        when(members.findByUser_IdAndDeletedFalse(user.getId())).thenReturn(List.of());
-        when(issuer.issue(user, null)).thenReturn("access-fixture");
+        when(issuer.issue(user)).thenReturn("access-fixture");
         when(refresh.issue(user, null)).thenReturn("refresh-fixture");
         when(refresh.consume("refresh-fixture")).thenReturn(new RefreshSession(user.getId(), null));
-        AuthService auth = new AuthService(users, members, passwords, issuer, refresh,
-                mock(TenancyService.class), mock(LoginThrottle.class), configuredLifetimes());
+        AuthService auth = new AuthService(users, passwords, issuer, refresh,
+                mock(LoginThrottle.class), configuredLifetimes());
 
         assertThat(auth.login(new LoginRequest(user.getUsername(), "fixture-password")).expiresInSeconds()).isEqualTo(1200);
         assertThat(auth.refresh(new RefreshRequest("refresh-fixture")).expiresInSeconds()).isEqualTo(1200);
