@@ -8,6 +8,8 @@ import com.pte.billing.domain.ServicePlan;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.OrderStatus;
 import com.pte.billing.domain.enums.PlanStatus;
+import com.pte.billing.internal.exception.SubscriptionActivationException;
+import org.springframework.http.HttpStatus;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
 import com.pte.billing.CommercialActivationTarget;
@@ -187,6 +189,87 @@ class PayOsWebhookServiceTest {
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
         verify(subscriptionActivationService, never()).activate(any(), any(), any());
+    }
+
+    private Order pendingOrder(UUID tenantId, UUID planId) {
+        return Order.pending(tenantId, planId, ORDER_CODE, new BigDecimal("50000.00"), "VND");
+    }
+
+    @Test
+    void handle_paymentForAnArchivedPlanIsKeptAsPaidAndFlaggedInsteadOfRolledBack() {
+        UUID tenantId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        Order order = pendingOrder(tenantId, planId);
+        ServicePlan plan = activePlan(planId);
+        plan.setStatus(PlanStatus.ARCHIVED);
+        when(payOsClient.verifyWebhookSignature(any(JsonNode.class), org.mockito.ArgumentMatchers.eq("signed")))
+                .thenReturn(true);
+        when(orderRepository.findByOrderCodeForUpdate(ORDER_CODE)).thenReturn(Optional.of(order));
+        when(planRepository.findByPublicId(planId)).thenReturn(Optional.of(plan));
+
+        service.handle(successfulPayload(ORDER_CODE, "signed"));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(order.getPayments()).hasSize(1).noneMatch(OrderPayment::isProcessed);
+        verify(subscriptionActivationService, never()).activate(any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any(CommercialOutcomeConfirmedEvent.class));
+    }
+
+    @Test
+    void handle_paymentForADeletedOrMissingPlanIsAlsoKeptAndFlagged() {
+        UUID tenantId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        Order order = pendingOrder(tenantId, planId);
+        when(payOsClient.verifyWebhookSignature(any(JsonNode.class), org.mockito.ArgumentMatchers.eq("signed")))
+                .thenReturn(true);
+        when(orderRepository.findByOrderCodeForUpdate(ORDER_CODE)).thenReturn(Optional.of(order));
+        when(planRepository.findByPublicId(planId)).thenReturn(Optional.empty());
+
+        service.handle(successfulPayload(ORDER_CODE, "signed"));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(order.getPayments()).hasSize(1).noneMatch(OrderPayment::isProcessed);
+        verify(subscriptionActivationService, never()).activate(any(), any(), any());
+    }
+
+    @Test
+    void handle_activationRefusedWithAClientErrorKeepsThePaymentAndFlagsIt() {
+        UUID tenantId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        Order order = pendingOrder(tenantId, planId);
+        ServicePlan plan = activePlan(planId);
+        when(payOsClient.verifyWebhookSignature(any(JsonNode.class), org.mockito.ArgumentMatchers.eq("signed")))
+                .thenReturn(true);
+        when(orderRepository.findByOrderCodeForUpdate(ORDER_CODE)).thenReturn(Optional.of(order));
+        when(planRepository.findByPublicId(planId)).thenReturn(Optional.of(plan));
+        when(subscriptionActivationService.activate(tenantId, plan, ActivationSource.PAYMENT))
+                .thenThrow(new SubscriptionActivationException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        BillingConstants.SUBSCRIPTION_EXAM_FIELDS_INVALID));
+
+        service.handle(successfulPayload(ORDER_CODE, "signed"));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(order.getPayments()).hasSize(1).noneMatch(OrderPayment::isProcessed);
+        verify(eventPublisher, never()).publishEvent(any(CommercialOutcomeConfirmedEvent.class));
+    }
+
+    @Test
+    void handle_aSystemFailureWhileActivatingStillRollsBackSoPayOsRetries() {
+        UUID tenantId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        Order order = pendingOrder(tenantId, planId);
+        ServicePlan plan = activePlan(planId);
+        SubscriptionActivationException failure = new SubscriptionActivationException(
+                HttpStatus.INTERNAL_SERVER_ERROR, BillingConstants.LICENSE_KEY_GENERATION_FAILED);
+        when(payOsClient.verifyWebhookSignature(any(JsonNode.class), org.mockito.ArgumentMatchers.eq("signed")))
+                .thenReturn(true);
+        when(orderRepository.findByOrderCodeForUpdate(ORDER_CODE)).thenReturn(Optional.of(order));
+        when(planRepository.findByPublicId(planId)).thenReturn(Optional.of(plan));
+        when(subscriptionActivationService.activate(tenantId, plan, ActivationSource.PAYMENT)).thenThrow(failure);
+
+        assertThatThrownBy(() -> service.handle(successfulPayload(ORDER_CODE, "signed"))).isSameAs(failure);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
     }
 
     private String successfulPayload(long orderCode, String signature) {
