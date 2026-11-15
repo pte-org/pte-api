@@ -96,7 +96,8 @@ class ReferenceAnswerScorer {
                     return List.of();
                 }
             }
-            return List.copyOf(values);
+            // Same normalisation as the submitted side, so "London" or " Hydrogen " in the key still match.
+            return values.stream().map(this::normalizeGapValue).toList();
         } catch (Exception ex) {
             return List.of();
         }

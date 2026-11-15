@@ -99,6 +99,11 @@ public class QuestionValidationHelper {
         } else if (requiresCorrectAnswer && !StringUtils.hasText(question.getCorrectAnswerText())) {
             throw new QuestionValidationException(ItembankConstants.CORRECT_ANSWER_REQUIRED);
         }
+        // Text keys are read by the automatic scorers, so a key in the wrong shape could never be scored.
+        if (!requiresOptions && StringUtils.hasText(question.getCorrectAnswerText())
+                && !CorrectAnswerFormat.isValid(taskKey(question), question.getCorrectAnswerText())) {
+            throw new QuestionValidationException(ItembankConstants.INVALID_CORRECT_ANSWER_FORMAT);
+        }
     }
 
     private QuestionType definitionFor(Question question) {
