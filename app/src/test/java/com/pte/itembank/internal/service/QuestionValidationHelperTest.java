@@ -113,6 +113,18 @@ class QuestionValidationHelperTest {
         assertThatCode(() -> helper.validate(summarizeSpokenText("A lecture about bees."))).doesNotThrowAnyException();
     }
 
+    @Test
+    void aiScoredListeningTasksNeedTheTranscriptThatTheScorerJudgesAgainst() {
+        for (PteTaskType type : new PteTaskType[] {PteTaskType.RE_TELL_LECTURE, PteTaskType.SUMMARIZE_SPOKEN_TEXT,
+                PteTaskType.SUMMARIZE_GROUP_DISCUSSION}) {
+            assertThatThrownBy(() -> helper.validate(aiListeningTask(type, " ")))
+                    .as(type.name()).isInstanceOf(QuestionValidationException.class)
+                    .hasMessage(ItembankConstants.REFERENCE_ANSWER_REQUIRED);
+            assertThatCode(() -> helper.validate(aiListeningTask(type, "The original transcript.")))
+                    .as(type.name()).doesNotThrowAnyException();
+        }
+    }
+
     private static Question summarizeSpokenText(String promptText) {
         Question question = new Question();
         question.setPteTaskType(PteTaskType.SUMMARIZE_SPOKEN_TEXT);
@@ -120,6 +132,18 @@ class QuestionValidationHelperTest {
         question.setMinWordCount(50);
         question.setMaxWordCount(70);
         question.setPromptText(promptText);
+        question.setReferenceAnswerText("The lecture transcript the AI summary is judged against.");
+        return question;
+    }
+
+    private static Question aiListeningTask(PteTaskType type, String referenceAnswerText) {
+        Question question = new Question();
+        question.setPteTaskType(type);
+        question.setAudioPromptRef(UUID.randomUUID());
+        question.setPromptText("Instruction shown to the learner.");
+        question.setMinWordCount(50);
+        question.setMaxWordCount(70);
+        question.setReferenceAnswerText(referenceAnswerText);
         return question;
     }
 
