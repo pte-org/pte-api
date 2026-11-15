@@ -39,8 +39,11 @@ public class QuestionValidationHelper {
         boolean requiresReferenceAnswer = definition == null ? type != null && type.requiresReferenceAnswer() : definition.isRequiresReferenceAnswer();
         boolean requiresWordCount = definition == null ? type != null && type.requiresWordCount() : definition.isRequiresWordCount();
 
-        if (question.getMinWordCount() != null && question.getMaxWordCount() != null
-                && question.getMinWordCount() > question.getMaxWordCount()) {
+        // Word limits are counts: never negative, and a minimum above the maximum could never be met by a learner.
+        Integer minWords = question.getMinWordCount();
+        Integer maxWords = question.getMaxWordCount();
+        if ((minWords != null && minWords < 0) || (maxWords != null && maxWords < 0)
+                || (minWords != null && maxWords != null && minWords > maxWords)) {
             throw new QuestionValidationException(ItembankConstants.INVALID_QUESTION_FIELDS);
         }
 

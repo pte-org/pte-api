@@ -125,6 +125,31 @@ class QuestionValidationHelperTest {
         }
     }
 
+    @Test
+    void wordCountLimitsMustBeNonNegativeAndOrdered() {
+        assertThatThrownBy(() -> helper.validate(withWordLimits(-1, 70)))
+                .isInstanceOf(QuestionValidationException.class).hasMessage(ItembankConstants.INVALID_QUESTION_FIELDS);
+        assertThatThrownBy(() -> helper.validate(withWordLimits(50, -5)))
+                .isInstanceOf(QuestionValidationException.class).hasMessage(ItembankConstants.INVALID_QUESTION_FIELDS);
+        assertThatThrownBy(() -> helper.validate(withWordLimits(300, 200)))
+                .isInstanceOf(QuestionValidationException.class).hasMessage(ItembankConstants.INVALID_QUESTION_FIELDS);
+        assertThatThrownBy(() -> helper.validate(withWordLimits(null, -2)))
+                .isInstanceOf(QuestionValidationException.class).hasMessage(ItembankConstants.INVALID_QUESTION_FIELDS);
+        assertThatCode(() -> helper.validate(withWordLimits(50, 50))).doesNotThrowAnyException();
+        assertThatCode(() -> helper.validate(withWordLimits(0, 70))).doesNotThrowAnyException();
+        // A task that does not need limits may still carry just one of them.
+        Question repeat = repeatSentence("Say this sentence.");
+        repeat.setMinWordCount(5);
+        assertThatCode(() -> helper.validate(repeat)).doesNotThrowAnyException();
+    }
+
+    private static Question withWordLimits(Integer min, Integer max) {
+        Question question = summarizeSpokenText("Summarize the lecture.");
+        question.setMinWordCount(min);
+        question.setMaxWordCount(max);
+        return question;
+    }
+
     private static Question summarizeSpokenText(String promptText) {
         Question question = new Question();
         question.setPteTaskType(PteTaskType.SUMMARIZE_SPOKEN_TEXT);
