@@ -9,8 +9,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * Payload-free counters with bounded tags (status, cause, reason): never a question, an answer or a student id.
- * Watch {@code chat.quota.refunded}: refunded calls are free for the student but still cost provider tokens,
- * so a sudden rise means abuse or a provider problem.
+ * Watch {@code chat.quota.refunded}: only failed provider calls are refunded (an off-topic refusal is charged),
+ * so a sudden rise means a provider problem.
  */
 @Component
 @ConditionalOnProperty(name = ChatConstants.PROPERTY_ENABLED, havingValue = "true")

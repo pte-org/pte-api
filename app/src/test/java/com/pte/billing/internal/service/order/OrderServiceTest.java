@@ -14,6 +14,7 @@ import com.pte.billing.internal.exception.order.OrderException;
 import com.pte.billing.internal.repository.OrderRepository;
 import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.billing.internal.vendor.payos.PayOsClient;
+import com.pte.billing.internal.exception.order.PayOsException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -85,6 +86,50 @@ class OrderServiceTest {
         assertThat(response.paymentLinkUrl()).isEqualTo("https://pay.payos.vn/web/test");
         verify(orderPersistenceService).reserve(any(Order.class));
         verify(payOsClient).createPaymentLink(reserved);
+    }
+
+    @Test
+    void createOrder_whenPayOsFailsCancelsTheReservedOrderSoThePlanCanBeBoughtAgain() {
+        UUID tenantId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        ServicePlan plan = activePlan(planId);
+        Order reserved = Order.pending(tenantId, planId, 1_000_000_010L, plan.getPrice(), plan.getCurrency());
+        reserved.setPublicId(UUID.randomUUID());
+        PayOsException failure = new PayOsException(BillingConstants.PAYOS_REQUEST_FAILED);
+        when(planRepository.findByPublicId(planId)).thenReturn(Optional.of(plan));
+        when(orderRepository.existsByTenantIdAndPlanIdAndStatusAndDeletedFalse(
+                tenantId, planId, OrderStatus.PENDING)).thenReturn(false);
+        when(orderRepository.nextOrderCode()).thenReturn(1_000_000_010L);
+        when(orderPersistenceService.reserve(any(Order.class))).thenReturn(reserved);
+        when(payOsClient.createPaymentLink(reserved)).thenThrow(failure);
+
+        assertThatThrownBy(() -> service.createOrder(tenantId, planId)).isSameAs(failure);
+
+        verify(payOsClient).cancelPaymentLink(reserved.getOrderCode());
+        verify(orderPersistenceService).cancelIfPending(reserved.getPublicId());
+        verify(orderPersistenceService, never()).attachPaymentLink(any(), any());
+    }
+
+    @Test
+    void createOrder_stillCancelsTheOrderAndKeepsTheOriginalErrorWhenCancellingTheLinkFails() {
+        UUID tenantId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        ServicePlan plan = activePlan(planId);
+        Order reserved = Order.pending(tenantId, planId, 1_000_000_011L, plan.getPrice(), plan.getCurrency());
+        reserved.setPublicId(UUID.randomUUID());
+        PayOsException failure = new PayOsException(BillingConstants.PAYOS_REQUEST_FAILED);
+        when(planRepository.findByPublicId(planId)).thenReturn(Optional.of(plan));
+        when(orderRepository.existsByTenantIdAndPlanIdAndStatusAndDeletedFalse(
+                tenantId, planId, OrderStatus.PENDING)).thenReturn(false);
+        when(orderRepository.nextOrderCode()).thenReturn(1_000_000_011L);
+        when(orderPersistenceService.reserve(any(Order.class))).thenReturn(reserved);
+        when(payOsClient.createPaymentLink(reserved)).thenThrow(failure);
+        org.mockito.Mockito.doThrow(new PayOsException(BillingConstants.PAYOS_CANCELLATION_FAILED))
+                .when(payOsClient).cancelPaymentLink(reserved.getOrderCode());
+
+        assertThatThrownBy(() -> service.createOrder(tenantId, planId)).isSameAs(failure);
+
+        verify(orderPersistenceService).cancelIfPending(reserved.getPublicId());
     }
 
     @Test

@@ -49,6 +49,7 @@ class OrderExpirationServiceTest {
         Order order = Order.pending(UUID.randomUUID(), UUID.randomUUID(), 1_000_000_002L,
                 new BigDecimal("50000.00"), "VND");
         order.setPublicId(publicId);
+        order.attachPaymentLink("https://pay.payos.vn/web/test");
         order.setCreatedAt(Instant.now().minusSeconds(48 * 3_600L));
         when(orderRepository.findByStatusAndDeletedFalseAndCreatedAtLessThanEqual(
                 any(OrderStatus.class), any(Instant.class))).thenReturn(List.of(order));
@@ -66,6 +67,7 @@ class OrderExpirationServiceTest {
         Order order = Order.pending(UUID.randomUUID(), UUID.randomUUID(), 1_000_000_005L,
                 new BigDecimal("50000.00"), "VND");
         order.setPublicId(UUID.randomUUID());
+        order.attachPaymentLink("https://pay.payos.vn/web/test");
         order.setCreatedAt(Instant.now().minusSeconds(48 * 3_600L));
         when(orderRepository.findByStatusAndDeletedFalseAndCreatedAtLessThanEqual(
                 any(OrderStatus.class), any(Instant.class))).thenReturn(List.of(order));
@@ -75,5 +77,43 @@ class OrderExpirationServiceTest {
         assertThat(service.expireDueOrders()).isZero();
 
         verify(orderPersistenceService, never()).expireIfPending(order.getPublicId());
+    }
+
+    @Test
+    void expireDueOrdersExpiresAnOrderThatNeverGotAPaymentLinkWithoutCallingPayOs() {
+        UUID publicId = UUID.randomUUID();
+        Order order = Order.pending(UUID.randomUUID(), UUID.randomUUID(), 1_000_000_006L,
+                new BigDecimal("50000.00"), "VND");
+        order.setPublicId(publicId);
+        order.setCreatedAt(Instant.now().minusSeconds(48 * 3_600L));
+        when(orderRepository.findByStatusAndDeletedFalseAndCreatedAtLessThanEqual(
+                any(OrderStatus.class), any(Instant.class))).thenReturn(List.of(order));
+        when(orderPersistenceService.expireIfPending(publicId)).thenReturn(true);
+
+        assertThat(service.expireDueOrders()).isEqualTo(1);
+
+        verify(payOsClient, never()).cancelPaymentLink(any());
+        verify(orderPersistenceService).expireIfPending(publicId);
+    }
+
+    @Test
+    void expireDueOrdersKeepsGoingWhenOneOrderFailsWithAnUnexpectedError() {
+        Order broken = Order.pending(UUID.randomUUID(), UUID.randomUUID(), 1_000_000_007L,
+                new BigDecimal("50000.00"), "VND");
+        broken.setPublicId(UUID.randomUUID());
+        broken.setCreatedAt(Instant.now().minusSeconds(48 * 3_600L));
+        Order healthy = Order.pending(UUID.randomUUID(), UUID.randomUUID(), 1_000_000_008L,
+                new BigDecimal("50000.00"), "VND");
+        healthy.setPublicId(UUID.randomUUID());
+        healthy.setCreatedAt(Instant.now().minusSeconds(48 * 3_600L));
+        when(orderRepository.findByStatusAndDeletedFalseAndCreatedAtLessThanEqual(
+                any(OrderStatus.class), any(Instant.class))).thenReturn(List.of(broken, healthy));
+        when(orderPersistenceService.expireIfPending(broken.getPublicId()))
+                .thenThrow(new org.springframework.dao.CannotAcquireLockException("lock timeout"));
+        when(orderPersistenceService.expireIfPending(healthy.getPublicId())).thenReturn(true);
+
+        assertThat(service.expireDueOrders()).isEqualTo(1);
+
+        verify(orderPersistenceService).expireIfPending(healthy.getPublicId());
     }
 }

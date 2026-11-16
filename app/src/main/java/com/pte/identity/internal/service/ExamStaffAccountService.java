@@ -71,6 +71,6 @@ public class ExamStaffAccountService {
     private ExamStaffAccountView view(User user) {
         return new ExamStaffAccountView(user.getPublicId(), user.getFullName(), user.getUsername(), user.getEmail(),
                 user.getPhone(), user.getDateOfBirth(), user.getRoles().stream().map(Enum::name).sorted().toList(),
-                user.getStatus().name(), user.isMustChangePassword(), !user.hasRole(Role.STUDENT));
+                user.getStatus().name(), user.isMustChangePassword(), !user.hasRole(Role.STUDENT), true);
     }
 }

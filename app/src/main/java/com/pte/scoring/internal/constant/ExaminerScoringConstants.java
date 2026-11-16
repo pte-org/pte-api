@@ -76,6 +76,8 @@ public final class ExaminerScoringConstants {
     public static final String AUDIT_ISSUE_REPORTED_PREFIX = "Reported issue ";
     public static final String ON_ATTEMPT = " on attempt ";
     public static final String EXAMINER_ROLE = "EXAMINER";
+    /** The role recorded in audit metadata when a Host Admin, not an examiner, acts on grading work. */
+    public static final String HOST_ADMIN_ROLE = "HOST_ADMIN";
     public static final String EXAMINER_SOURCE = "EXAMINER";
     public static final String FINGERPRINT_SAVE_DRAFT = "SAVE_DRAFT:";
     public static final String FINGERPRINT_FINALIZE = "FINALIZE:";

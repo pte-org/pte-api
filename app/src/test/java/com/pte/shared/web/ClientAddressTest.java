@@ -1,4 +1,4 @@
-package com.pte.identity.internal.util;
+package com.pte.shared.web;
 
 import org.junit.jupiter.api.Test;
 

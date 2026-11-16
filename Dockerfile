@@ -29,6 +29,13 @@ ARG SERVICE_MODULE
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl fontconfig fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
+# The service never needs root: it listens on a port above 1024 and writes only to /tmp (JVM and Tomcat
+# working files). A fixed UID/GID keeps the owner stable across builds. The home directory is there for
+# fontconfig and other per-user caches. /app itself stays owned by root on purpose, so the service cannot
+# rewrite its own jar or directory. Created after the package install above, the only step that needs root.
+RUN groupadd --system --gid 10001 pte \
+    && useradd --system --uid 10001 --gid pte --create-home --home-dir /home/pte --shell /usr/sbin/nologin pte
 WORKDIR /app
-COPY --from=build /workspace/${SERVICE_MODULE}/target/*.jar app.jar
+COPY --from=build --chown=pte:pte /workspace/${SERVICE_MODULE}/target/*.jar app.jar
+USER pte
 ENTRYPOINT ["java", "-jar", "app.jar"]

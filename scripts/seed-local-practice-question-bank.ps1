@@ -194,7 +194,7 @@ $tasks = [ordered]@{
     FILL_IN_THE_BLANKS_DROPDOWN = { param($i) @{ promptText = "Public transport is {{0}} when services are frequent and {{1}} to use."
         options = New-Options @(@("popular", $true, 0, "blankIndex"), @("empty", $false, 0, "blankIndex"),
             @("easy", $true, 1, "blankIndex"), @("hard", $false, 1, "blankIndex")) } }
-    SUMMARIZE_SPOKEN_TEXT = { param($i) @{ audioPromptRef = (Get-PromptAudio); promptText = "Summarize the lecture in 50 to 70 words."; minWordCount = 50; maxWordCount = 70 } }
+    SUMMARIZE_SPOKEN_TEXT = { param($i) @{ audioPromptRef = (Get-PromptAudio); promptText = "Summarize the lecture in 50 to 70 words."; referenceAnswerText = $passages[$i]; minWordCount = 50; maxWordCount = 70 } }
     MC_LISTENING_SINGLE = { param($i) @{ audioPromptRef = (Get-PromptAudio); promptText = "What is the speaker mainly talking about?"
         options = New-Options @(@("A practical announcement.", $true), @("A sports result.", $false), @("A cooking recipe.", $false)) } }
     MC_LISTENING_MULTIPLE = { param($i) @{ audioPromptRef = (Get-PromptAudio); promptText = "Which points does the speaker make?"

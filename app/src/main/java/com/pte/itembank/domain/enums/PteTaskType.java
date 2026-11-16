@@ -98,8 +98,12 @@ public enum PteTaskType {
         return requiresWordCount;
     }
 
-    /** The AI scores a repeated sentence against the reference text. */
+    /**
+     * The AI judges the answer against a source text kept in the reference answer: the sentence to repeat, or the
+     * transcript of the lecture, audio or discussion the learner retells or summarises. Without it the scorer fails.
+     */
     public boolean requiresReferenceAnswer() {
-        return this == REPEAT_SENTENCE;
+        return this == REPEAT_SENTENCE || this == RE_TELL_LECTURE || this == SUMMARIZE_SPOKEN_TEXT
+                || this == SUMMARIZE_GROUP_DISCUSSION;
     }
 }

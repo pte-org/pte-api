@@ -198,15 +198,16 @@ public class GradingCohortService {
     @Scheduled(fixedDelayString = "${scoring.grading-reconciliation.poll-delay-ms:60000}")
     public void reconcileScheduled() {
         for (Grading grading : gateway.frozen()) {
-            if (reconciliationWorker != null) {
-                try {
+            try {
+                if (reconciliationWorker != null) {
                     reconciliationWorker.reconcileSession(grading.sessionPublicId(), grading.tenantId());
-                } catch (Exception ex) {
-                    log.warn("Scheduled grading reconciliation failed for session {} (tenantId={}): {}",
-                            grading.sessionPublicId(), grading.tenantId(), ex.getMessage());
+                } else {
+                    reconcileIfPresent(grading.sessionPublicId(), grading.tenantId());
                 }
-            } else {
-                reconcileIfPresent(grading.sessionPublicId(), grading.tenantId());
+            } catch (Exception ex) {
+                // One session that cannot be reconciled must not stop the others from being reconciled this cycle.
+                log.warn("Scheduled grading reconciliation failed for session {} (tenantId={}): {}",
+                        grading.sessionPublicId(), grading.tenantId(), ex.getMessage());
             }
         }
     }

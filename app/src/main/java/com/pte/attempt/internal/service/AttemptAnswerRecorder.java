@@ -54,6 +54,7 @@ class AttemptAnswerRecorder {
         // transaction only ever reads the version as of its own lock
         // acquisition, never a stale one.
         attempt = access.lockAttempt(attempt);
+        access.requireStillInProgress(attempt);
         ExamItemView currentItem = contentService.itemAt(attempt, attempt.getCurrentOrderIndex());
         if (!currentItem.publicId().equals(pinnedItemPublicId)) {
             throw new NotCurrentTaskException();
@@ -71,6 +72,7 @@ class AttemptAnswerRecorder {
             throw new AttemptAlreadyCompleteException();
         }
         attempt = access.lockAttempt(attempt);
+        access.requireStillInProgress(attempt);
         ExamItemView answerItem = contentService.item(attempt, pinnedItemPublicId)
                 .orElseThrow(NotCurrentTaskException::new);
         // Saving an answer does not move the task pointer. Allow background

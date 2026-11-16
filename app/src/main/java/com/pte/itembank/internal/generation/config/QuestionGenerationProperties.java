@@ -92,6 +92,9 @@ public class QuestionGenerationProperties {
         private int maxItemsPerDayGlobal = 300;
         @Min(1)
         private int maxConcurrentJobs = 3;
+        /** Prompt test runs one user may start in a day; each one is a real provider call. */
+        @Min(1)
+        private int maxPromptTestsPerUserPerDay = 20;
         /**
          * Hard allowance of provider calls for ONE question (each call may retry once inside the gateway). A refused
          * or broken draft is written again while a whole round still fits: 40 calls give 8 rounds.

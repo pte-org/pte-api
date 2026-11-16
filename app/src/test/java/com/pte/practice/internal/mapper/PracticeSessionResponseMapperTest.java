@@ -134,6 +134,46 @@ class PracticeSessionResponseMapperTest {
         assertThat(response.currentTask().content().audioUrl()).isNull();
     }
 
+    @Test
+    void theTranscriptOfAnAudioOnlyTaskIsWithheldWhilePendingButReadAloudKeepsItsText() throws Exception {
+        PracticeResponse repeat = pendingItem();
+        repeat.setTaskCode("REPEAT_SENTENCE");
+        repeat.setPromptText("SECRET TRANSCRIPT");
+        repeat.setAudioPromptRef(UUID.randomUUID());
+        when(itemService.itemsFor(session)).thenReturn(List.of(repeat));
+
+        String json = jsonMapper.writeValueAsString(mapper.toResponse(session));
+
+        assertThat(json).doesNotContain("SECRET TRANSCRIPT");
+        assertThat(mapper.toResponse(session).currentTask().content().promptText()).isNull();
+
+        PracticeResponse readAloud = pendingItem();
+        when(itemService.itemsFor(session)).thenReturn(List.of(readAloud));
+        assertThat(mapper.toResponse(session).currentTask().content().promptText()).isEqualTo("Read this text aloud.");
+    }
+
+    @Test
+    void blankOptionsAreShuffledStablyAndRenumberedSoTheirOrderDoesNotPointAtTheAnswer() {
+        PracticeResponse item = pendingItem();
+        item.setTaskCode("FILL_IN_THE_BLANKS_DRAG_AND_DROP");
+        StringBuilder options = new StringBuilder("[");
+        for (int index = 0; index < 8; index++) {
+            options.append(index == 0 ? "" : ",").append("{\"publicId\":\"").append(UUID.randomUUID())
+                    .append("\",\"text\":\"w").append(index).append("\",\"orderIndex\":").append(index)
+                    .append(",\"blankIndex\":null}");
+        }
+        item.setOptionsJson(options.append("]").toString());
+        when(itemService.itemsFor(session)).thenReturn(List.of(item));
+
+        var first = mapper.toResponse(session).currentTask().content().options();
+        var second = mapper.toResponse(session).currentTask().content().options();
+
+        assertThat(first).isEqualTo(second);
+        assertThat(first).extracting(option -> option.orderIndex()).containsExactly(0, 1, 2, 3, 4, 5, 6, 7);
+        assertThat(first).extracting(option -> option.text()).containsExactlyInAnyOrder(
+                "w0", "w1", "w2", "w3", "w4", "w5", "w6", "w7");
+    }
+
     private PracticeResponse pendingItem() {
         PracticeResponse item = new PracticeResponse();
         item.setPublicId(UUID.randomUUID());

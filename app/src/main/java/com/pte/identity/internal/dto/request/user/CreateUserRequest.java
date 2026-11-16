@@ -1,6 +1,7 @@
 package com.pte.identity.internal.dto.request.user;
 
 import com.pte.identity.internal.constant.IdentityConstants;
+import com.pte.identity.internal.validation.MaxUtf8Bytes;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;

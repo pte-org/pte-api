@@ -4,6 +4,7 @@ import com.pte.practice.internal.config.PracticeScoringProperties;
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeResponse;
+import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
 import com.pte.practice.internal.domain.enums.PracticeScoringStatus;
 import com.pte.practice.internal.dto.response.PracticeItemResultResponse;
 import com.pte.practice.internal.exception.PracticeSessionException;
@@ -201,6 +202,7 @@ public class PracticeScoringStateService {
                 isRetryable(item),
                 scored ? item.getAiScoredAt() : null,
                 maximaOf(criteria, item.getTaskCode()),
+                item.getStatus() == PracticeResponseStatus.ANSWERED ? item.getPromptText() : null,
                 scored ? PracticeFeedbackReader.read(jsonMapper, item.getAiDetailJson()) : null);
     }
 

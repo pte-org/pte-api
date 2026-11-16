@@ -56,7 +56,7 @@ class ChatServiceFlowPostgresTest extends ChatFlowPostgresBase {
     }
 
     @Test
-    void anOffTopicQuestionIsRefundedAndCountedAsRefused() throws IOException {
+    void anOffTopicQuestionIsChargedAndCountedAsRefused() throws IOException {
         ChatFlowHarness h = start();
         h.server.enqueue(200, GeminiResponses.offTopic());
 
@@ -64,9 +64,9 @@ class ChatServiceFlowPostgresTest extends ChatFlowPostgresBase {
 
         assertThat(reply.onTopic()).isFalse();
         assertThat(reply.markdown()).isEqualTo(ChatPrompts.refusal("en"));
-        assertThat(reply.quota().used()).isZero();
-        assertThat(reply.quota().remaining()).isEqualTo(20);
-        assertThat(h.used(alice)).isZero();
+        assertThat(reply.quota().used()).isEqualTo(1);
+        assertThat(reply.quota().remaining()).isEqualTo(19);
+        assertThat(h.used(alice)).isEqualTo(1);
         assertThat(data.dailyTotals(ChatFlowHarness.DAY)).containsEntry("messages", 1L).containsEntry("refused", 1L)
                 .containsEntry("ok", 0L);
     }
@@ -159,16 +159,28 @@ class ChatServiceFlowPostgresTest extends ChatFlowPostgresBase {
     }
 
     @Test
-    void aRefundedMessageGivesTheSlotBackSoTheStudentCanAskAgain() throws IOException {
+    void aRefundedProviderFailureGivesTheSlotBackSoTheStudentCanAskAgain() throws IOException {
         ChatFlowHarness h = start(p -> p.setDailyLimit(1));
-        h.server.enqueue(200, GeminiResponses.offTopic());
+        h.server.enqueue(500, "");
         h.server.enqueue(200, GeminiResponses.onTopic("now on topic"));
-        h.send(alice, "off topic");
+        assertThatThrownBy(() -> h.send(alice, "provider fails")).isInstanceOf(ChatBusyException.class);
 
         ChatReply reply = h.send(alice, "on topic");
 
         assertThat(reply.markdown()).isEqualTo("now on topic");
         assertThat(h.used(alice)).isEqualTo(1);
+    }
+
+    @Test
+    void anOffTopicMessageKeepsItsSlotSoTheLimitIsReachedAndTheNextQuestionIsRejected() throws IOException {
+        ChatFlowHarness h = start(p -> p.setDailyLimit(1));
+        h.server.enqueue(200, GeminiResponses.offTopic());
+        h.send(alice, "off topic");
+
+        assertThatThrownBy(() -> h.send(alice, "on topic")).isInstanceOf(ChatQuotaExceededException.class);
+
+        assertThat(h.used(alice)).isEqualTo(1);
+        assertThat(h.server.requestCount()).isEqualTo(1);
     }
 
     @Test

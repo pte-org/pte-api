@@ -10,11 +10,12 @@ import com.pte.billing.CommercialOutcomeConfirmedEvent;
 import com.pte.billing.CommercialOutcomeType;
 import com.pte.billing.domain.enums.ActivationSource;
 import com.pte.billing.domain.enums.OrderStatus;
+import com.pte.billing.domain.enums.PlanStatus;
 import com.pte.billing.domain.enums.PlanType;
 import com.pte.billing.internal.constant.BillingConstants;
 import com.pte.billing.internal.dto.response.SubscriptionActivationResponse;
 import com.pte.billing.internal.exception.order.PaymentWebhookException;
-import com.pte.billing.internal.exception.plan.PlanNotFoundException;
+import com.pte.billing.internal.exception.SubscriptionActivationException;
 import com.pte.billing.internal.repository.OrderRepository;
 import com.pte.billing.internal.repository.ServicePlanRepository;
 import com.pte.billing.internal.vendor.payos.PayOsClient;
@@ -89,15 +90,29 @@ public class PayOsWebhookService {
         if (order.getStatus() != OrderStatus.PENDING) {
             // An expired/cancelled order must never be resurrected by a late
             // notification, but the valid notification is still acknowledged.
+            LOGGER.warn("Signed PayOS payment for an order that is no longer pending, orderCode={} status={}; "
+                    + "money was received and needs a manual refund or reconciliation",
+                    orderCode, order.getStatus());
             receipt.markProcessed();
             return;
         }
 
         verifyOrderAmounts(order, payload.path("data"));
-        ServicePlan plan = planRepository.findByPublicId(order.getPlanId())
-                .orElseThrow(PlanNotFoundException::new);
-        SubscriptionActivationResponse activation = subscriptionActivationService.activate(
-                order.getTenantId(), plan, ActivationSource.PAYMENT);
+        ServicePlan plan = planRepository.findByPublicId(order.getPlanId()).orElse(null);
+        if (plan == null || plan.isDeleted() || plan.getStatus() != PlanStatus.ACTIVE) {
+            settlePaidWithoutActivation(order, "the plan is no longer available");
+            return;
+        }
+        SubscriptionActivationResponse activation;
+        try {
+            activation = subscriptionActivationService.activate(order.getTenantId(), plan, ActivationSource.PAYMENT);
+        } catch (SubscriptionActivationException refused) {
+            if (refused.getStatus().is5xxServerError()) {
+                throw refused; // a system failure: roll back so PayOS retries the notification
+            }
+            settlePaidWithoutActivation(order, refused.getMessage());
+            return;
+        }
         order.markPaid(clock.instant());
         eventPublisher.publishEvent(new CommercialOutcomeConfirmedEvent(
                 order.getTenantId(),
@@ -110,6 +125,19 @@ public class PayOsWebhookService {
                 activation.grantedStudentSlots(),
                 activation.startsAt()));
         receipt.markProcessed();
+    }
+
+    /**
+     * The customer has paid (the signature and the amount were verified) but the plan can no longer be activated, for
+     * example because it was archived after the order was placed. Rolling back would lose the receipt and make PayOS
+     * retry for nothing, so the order is recorded as paid and the receipt is left unprocessed: that, together with the
+     * error log, is what operations reconcile by hand (activate the plan or refund).
+     */
+    private void settlePaidWithoutActivation(Order order, String reason) {
+        order.markPaid(clock.instant());
+        LOGGER.error("PayOS payment received but the plan was not activated, orderCode={} tenantId={} planId={}: {}. "
+                + "Reconcile by hand (activate the plan or refund).",
+                order.getOrderCode(), order.getTenantId(), order.getPlanId(), reason);
     }
 
     /** Failed or cancelled payments change nothing; they are kept as a receipt when the order is known. */

@@ -99,6 +99,21 @@ public class OrderPersistenceService {
         return order;
     }
 
+    /**
+     * Cancels an order whose payment link could not be created, so the buyer is not blocked by a pending order
+     * that can never be paid. Does nothing when the order has already moved on.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean cancelIfPending(UUID publicId) {
+        Order order = orderRepository.findByPublicIdForUpdateAndDeletedFalse(publicId).orElse(null);
+        if (order == null || order.getStatus() != OrderStatus.PENDING) {
+            return false;
+        }
+        order.cancel();
+        orderRepository.saveAndFlush(order);
+        return true;
+    }
+
     @Transactional
     public boolean expireIfPending(UUID publicId) {
         Order order = orderRepository.findByPublicIdForUpdateAndDeletedFalse(publicId)

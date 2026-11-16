@@ -28,6 +28,13 @@ class TaskRuntimeContractDescriptorTest {
                 .isTrue();
         assertThat(TaskRuntimeProfileRegistry.authoringRequirementsFor("READ_ALOUD").requiresReferenceAnswer())
                 .isFalse();
+        // The AI scorers of these tasks read the transcript from the reference answer and fail without it.
+        for (String taskType : new String[] {"RE_TELL_LECTURE", "SUMMARIZE_SPOKEN_TEXT", "SUMMARIZE_GROUP_DISCUSSION"}) {
+            assertThat(TaskRuntimeProfileRegistry.authoringRequirementsFor(taskType).requiresReferenceAnswer())
+                    .as(taskType).isTrue();
+        }
+        assertThat(TaskRuntimeProfileRegistry.authoringRequirementsFor("DESCRIBE_IMAGE").requiresReferenceAnswer())
+                .isFalse();
         assertThat(TaskRuntimeProfileRegistry.authoringRequirementsFor("SUMMARIZE_SPOKEN_TEXT").requiresPromptText())
                 .isTrue();
     }

@@ -72,6 +72,29 @@ class OrderPersistenceServiceTest {
     }
 
     @Test
+    void cancelIfPendingCancelsAPendingOrderAndLeavesAnyOtherOrderAlone() {
+        Order pending = Order.pending(UUID.randomUUID(), UUID.randomUUID(), 1_000_000_020L,
+                new BigDecimal("50000.00"), "VND");
+        pending.setPublicId(UUID.randomUUID());
+        when(orderRepository.findByPublicIdForUpdateAndDeletedFalse(pending.getPublicId()))
+                .thenReturn(Optional.of(pending));
+
+        assertThat(service.cancelIfPending(pending.getPublicId())).isTrue();
+        assertThat(pending.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        verify(orderRepository).saveAndFlush(pending);
+
+        Order paid = Order.pending(UUID.randomUUID(), UUID.randomUUID(), 1_000_000_021L,
+                new BigDecimal("50000.00"), "VND");
+        paid.setPublicId(UUID.randomUUID());
+        paid.markPaid(java.time.Instant.now());
+        when(orderRepository.findByPublicIdForUpdateAndDeletedFalse(paid.getPublicId())).thenReturn(Optional.of(paid));
+
+        assertThat(service.cancelIfPending(paid.getPublicId())).isFalse();
+        assertThat(paid.getStatus()).isEqualTo(OrderStatus.PAID);
+        verify(orderRepository, never()).saveAndFlush(paid);
+    }
+
+    @Test
     void expireIfPendingDoesNotPublishWhenPaymentAlreadyWonTheLock() {
         Order order = Order.pending(UUID.randomUUID(), UUID.randomUUID(), 1_000_000_007L,
                 new BigDecimal("50000.00"), "VND");

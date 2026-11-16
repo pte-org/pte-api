@@ -335,6 +335,23 @@ class ExaminerWorkflowCommandServiceTest {
     }
 
     @Test
+    void resolveIssue_isAuditedWithTheHostAdminRoleNotTheExaminerRole() {
+        GradingIssue issue = new GradingIssue(tenantId, 7L, UUID.randomUUID(),
+                ExaminerGradingIssueType.OTHER, "desc", examiner.userId(), NOW.minusSeconds(30));
+        issue.setPublicId(UUID.randomUUID());
+        when(issueRepository.findByTenantIdAndPublicIdAndDeletedFalse(tenantId, issue.getPublicId()))
+                .thenReturn(Optional.of(issue));
+        when(assignmentRepository.findById(7L)).thenReturn(Optional.of(assignment));
+
+        service.resolveIssue(issue.getPublicId(), new ResolveGradingIssueRequest(UUID.randomUUID(), "Fixed"), examiner);
+
+        org.mockito.ArgumentCaptor<ExaminerWorkRecorder.Entry> entry =
+                org.mockito.ArgumentCaptor.forClass(ExaminerWorkRecorder.Entry.class);
+        verify(recorder).record(eq(examiner), eq(assignment.getPublicId()), isNull(), anyString(), entry.capture());
+        assertThat(entry.getValue().metadata().actorRole()).isEqualTo("HOST_ADMIN");
+    }
+
+    @Test
     void resolveIssue_issueWhoseAssignmentVanished_isNotFound() {
         GradingIssue issue = new GradingIssue(tenantId, 8L, null, ExaminerGradingIssueType.OTHER, "d",
                 examiner.userId(), NOW);

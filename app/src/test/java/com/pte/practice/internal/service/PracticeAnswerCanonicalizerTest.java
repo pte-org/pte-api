@@ -46,6 +46,43 @@ class PracticeAnswerCanonicalizerTest {
                 .contains("2,0,1");
     }
 
+    private static final String REORDER_KEY = """
+            [{"text":"A first","correct":true,"orderIndex":0},{"text":"B second","correct":true,"orderIndex":1},
+             {"text":"C third","correct":true,"orderIndex":2}]
+            """;
+    // The student saw them shuffled: label 0 = "C third", 1 = "A first", 2 = "B second".
+    private static final String REORDER_SHOWN = """
+            [{"text":"C third","orderIndex":0},{"text":"A first","orderIndex":1},{"text":"B second","orderIndex":2}]
+            """;
+
+    @Test
+    void reOrderMapsShuffledStudentLabelsBackToTheOriginalIndexes() {
+        // Learner puts A, B, C in order = labels 1,2,0 = the correct original order 0,1,2.
+        assertThat(canonicalizer.canonicalize("RE_ORDER_PARAGRAPHS_V1", "{\"order\":[\"1\",\"2\",\"0\"]}",
+                REORDER_KEY, REORDER_SHOWN)).contains("0,1,2");
+        assertThat(canonicalizer.canonicalize("RE_ORDER_PARAGRAPHS_V1", "{\"order\":[\"0\",\"1\",\"2\"]}",
+                REORDER_KEY, REORDER_SHOWN)).contains("2,0,1");
+    }
+
+    @Test
+    void reOrderOfAnItemPinnedBeforeShufflingKeepsItsLabels() {
+        String legacyShown = """
+                [{"text":"A first","orderIndex":0},{"text":"B second","orderIndex":1},{"text":"C third","orderIndex":2}]
+                """;
+        assertThat(canonicalizer.canonicalize("RE_ORDER_PARAGRAPHS_V1", "{\"order\":[\"2\",\"0\",\"1\"]}",
+                REORDER_KEY, legacyShown)).contains("2,0,1");
+    }
+
+    @Test
+    void reOrderWithDuplicateParagraphTextFailsClosed() {
+        String duplicateKey = """
+                [{"text":"Same","correct":true,"orderIndex":0},{"text":"Same","correct":true,"orderIndex":1}]
+                """;
+        String shown = "[{\"text\":\"Same\",\"orderIndex\":0},{\"text\":\"Same\",\"orderIndex\":1}]";
+        assertThat(canonicalizer.canonicalize("RE_ORDER_PARAGRAPHS_V1", "{\"order\":[\"0\",\"1\"]}",
+                duplicateKey, shown)).isEmpty();
+    }
+
     @Test
     void dragAndDropMapsPlacedWordsToTheirOptionIndexByGap() {
         assertThat(canonical("FILL_IN_THE_BLANKS_DRAG_AND_DROP_V1",

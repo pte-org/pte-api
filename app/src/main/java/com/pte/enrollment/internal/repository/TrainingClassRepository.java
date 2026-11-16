@@ -16,6 +16,9 @@ public interface TrainingClassRepository extends JpaRepository<TrainingClass, Lo
 
     List<TrainingClass> findByProgram_PublicIdAndDeletedFalseOrderByCreatedAtAsc(UUID programPublicId);
 
+    /** Classes of an organization with this name, any program; the import assigns only when exactly one is usable. */
+    List<TrainingClass> findByOrganizationIdAndNameIgnoreCaseAndDeletedFalse(UUID organizationId, String name);
+
     boolean existsByProgram_PublicIdAndNameIgnoreCaseAndDeletedFalse(UUID programPublicId, String name);
 
     /** Overview: active, non-deleted classes of a tenant whose program is not deleted either. */

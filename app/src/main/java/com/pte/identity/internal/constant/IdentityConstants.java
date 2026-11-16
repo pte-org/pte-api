@@ -99,6 +99,9 @@ public final class IdentityConstants {
     public static final String DATE_OF_BIRTH_NOT_IN_FUTURE = "Date of birth cannot be in the future";
     public static final String PASSWORD_REQUIRED = "Password is required";
     public static final String PASSWORD_MIN_LENGTH = "Password must be at least 8 characters";
+    /** BCrypt refuses more than 72 bytes; the limit is in UTF-8 bytes, so accented characters count for more. */
+    public static final int PASSWORD_MAX_BYTES = 72;
+    public static final String PASSWORD_TOO_LONG = "Password must be at most 72 bytes (about 72 plain characters, fewer with accents)";
     public static final String AT_LEAST_ONE_ROLE_REQUIRED = "At least one role is required";
     public static final String AT_LEAST_ONE_ROW_REQUIRED = "At least one row is required";
     public static final String REFRESH_TOKEN_REQUIRED = "Refresh token is required";

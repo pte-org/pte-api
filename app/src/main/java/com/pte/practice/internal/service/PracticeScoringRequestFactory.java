@@ -25,7 +25,7 @@ public class PracticeScoringRequestFactory {
     /** @throws PracticeScoringException INVALID_PAYLOAD when the saved answer has no scoreable form */
     public PracticeScoringRequest build(PracticeResponse item, UUID tenantId) {
         String payload = canonicalizer.canonicalize(item.getRendererKey(), item.getSavedPayload(),
-                item.getObjectiveOptionsJson()).orElseThrow(
+                item.getObjectiveOptionsJson(), item.getOptionsJson()).orElseThrow(
                         () -> new PracticeScoringException(PracticeScoringFailure.INVALID_PAYLOAD));
         return new PracticeScoringRequest(item.getTaskCode(), payload, item.getPromptText(),
                 item.getReferenceAnswerText(), item.getCorrectAnswerText(), item.getImagePromptRef(),
