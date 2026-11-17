@@ -1,6 +1,7 @@
 package com.pte.identity.internal.dto.request.user;
 
 import com.pte.identity.internal.constant.IdentityConstants;
+import com.pte.identity.internal.validation.MaxUtf8Bytes;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -18,6 +19,7 @@ public record PlatformUserCreateRequest(
         String fullName,
 
         @Size(min = 8, message = IdentityConstants.PASSWORD_MIN_LENGTH)
+        @MaxUtf8Bytes(value = IdentityConstants.PASSWORD_MAX_BYTES, message = IdentityConstants.PASSWORD_TOO_LONG)
         String password,
 
         @NotEmpty(message = IdentityConstants.AT_LEAST_ONE_ROLE_REQUIRED)

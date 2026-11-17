@@ -30,6 +30,8 @@ class PasswordResetThrottleTest {
     private BucketProxy emailBucket;
     @Mock
     private BucketProxy ipBucket;
+    @Mock
+    private BucketProxy userBucket;
 
     private final TokenHasher tokenHasher = new TokenHasher();
     private PasswordResetThrottle throttle;
@@ -40,46 +42,99 @@ class PasswordResetThrottleTest {
     }
 
     @Test
-    void allowsTheRequestWhenBothBucketsHaveRoom() {
+    void allowsTheRequestWhenAllThreeBucketsHaveRoom() {
         stubBuckets();
+        stubUsernameBucket();
         when(emailBucket.tryConsume(1)).thenReturn(true);
+        when(userBucket.tryConsume(1)).thenReturn(true);
         when(ipBucket.tryConsume(1)).thenReturn(true);
 
-        assertThat(throttle.tryAcquire("host@x.vn", "203.0.113.9")).isTrue();
+        assertThat(throttle.tryAcquire("host@x.vn", "host-1", "203.0.113.9")).isTrue();
     }
 
     @Test
     void refusesWhenTheEmailBucketIsEmpty() {
         stubBuckets();
+        stubUsernameBucket();
         when(emailBucket.tryConsume(1)).thenReturn(false);
+        when(userBucket.tryConsume(1)).thenReturn(true);
 
-        assertThat(throttle.tryAcquire("host@x.vn", "203.0.113.9")).isFalse();
+        assertThat(throttle.tryAcquire("host@x.vn", "host-1", "203.0.113.9")).isFalse();
         verify(ipBucket, never()).tryConsume(1);
     }
 
     @Test
     void refusesWhenTheAddressBucketIsEmpty() {
         stubBuckets();
+        stubUsernameBucket();
         when(emailBucket.tryConsume(1)).thenReturn(true);
+        when(userBucket.tryConsume(1)).thenReturn(true);
         when(ipBucket.tryConsume(1)).thenReturn(false);
 
-        assertThat(throttle.tryAcquire("host@x.vn", "203.0.113.9")).isFalse();
+        assertThat(throttle.tryAcquire("host@x.vn", "host-1", "203.0.113.9")).isFalse();
+    }
+
+    @Test
+    void refusesWhenTheUsernameBucketIsEmpty() {
+        stubBuckets();
+        stubUsernameBucket();
+        when(emailBucket.tryConsume(1)).thenReturn(true);
+        when(userBucket.tryConsume(1)).thenReturn(false);
+
+        assertThat(throttle.tryAcquire("host@x.vn", "Host-1", "203.0.113.9")).isFalse();
+        verify(ipBucket, never()).tryConsume(1);
+    }
+
+    @Test
+    void allowsTheRequestWhenTheUsernameBucketHasRoomToo() {
+        stubBuckets();
+        stubUsernameBucket();
+        when(emailBucket.tryConsume(1)).thenReturn(true);
+        when(userBucket.tryConsume(1)).thenReturn(true);
+        when(ipBucket.tryConsume(1)).thenReturn(true);
+
+        assertThat(throttle.tryAcquire("host@x.vn", "host-1", "203.0.113.9")).isTrue();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void usernameBudgetIsKeyedByAHashOfTheLowerCasedName() {
+        stubBuckets();
+        stubUsernameBucket();
+        when(emailBucket.tryConsume(1)).thenReturn(true);
+        when(userBucket.tryConsume(1)).thenReturn(true);
+        when(ipBucket.tryConsume(1)).thenReturn(true);
+
+        throttle.tryAcquire("host@x.vn", "Host-1", "203.0.113.9");
+
+        ArgumentCaptor<String> keys = ArgumentCaptor.forClass(String.class);
+        verify(proxyManager, org.mockito.Mockito.times(3)).getProxy(keys.capture(), any(Supplier.class));
+        assertThat(keys.getAllValues()).noneMatch(key -> key.toLowerCase().contains("host-1"));
+        assertThat(keys.getAllValues()).anyMatch(key -> key.contains(tokenHasher.hash("host-1")));
     }
 
     @Test
     @SuppressWarnings("unchecked")
     void keysNeverContainTheEmailInClear() {
         stubBuckets();
+        stubUsernameBucket();
         when(emailBucket.tryConsume(1)).thenReturn(true);
+        when(userBucket.tryConsume(1)).thenReturn(true);
         when(ipBucket.tryConsume(1)).thenReturn(true);
 
-        throttle.tryAcquire("host@x.vn", "203.0.113.9");
+        throttle.tryAcquire("host@x.vn", "host-1", "203.0.113.9");
 
         ArgumentCaptor<String> keys = ArgumentCaptor.forClass(String.class);
-        verify(proxyManager, org.mockito.Mockito.times(2)).getProxy(keys.capture(), any(Supplier.class));
+        verify(proxyManager, org.mockito.Mockito.times(3)).getProxy(keys.capture(), any(Supplier.class));
         assertThat(keys.getAllValues()).noneMatch(key -> key.contains("host@x.vn"));
         assertThat(keys.getAllValues()).anyMatch(key -> key.contains(tokenHasher.hash("host@x.vn")));
         assertThat(keys.getAllValues()).anyMatch(key -> key.contains("203.0.113.9"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private void stubUsernameBucket() {
+        when(proxyManager.getProxy(org.mockito.ArgumentMatchers.contains(tokenHasher.hash("host-1")),
+                any(Supplier.class))).thenReturn(userBucket);
     }
 
     @SuppressWarnings("unchecked")

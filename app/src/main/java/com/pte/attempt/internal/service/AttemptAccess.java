@@ -1,7 +1,9 @@
 package com.pte.attempt.internal.service;
 
 import com.pte.attempt.domain.ExamAttempt;
+import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.internal.constant.AttemptConstants;
+import com.pte.attempt.internal.exception.AttemptAlreadyCompleteException;
 import com.pte.attempt.internal.exception.AttemptNotFoundException;
 import com.pte.attempt.internal.repository.ExamAttemptRepository;
 import com.pte.session.SessionService;
@@ -60,6 +62,19 @@ class AttemptAccess {
         return attemptRepository.findWithLockById(attemptId)
                 .orElseThrow(() -> new IllegalStateException(
                         String.format(AttemptConstants.ATTEMPT_DISAPPEARED_MID_TRANSACTION, attemptId)));
+    }
+
+    /**
+     * Refuses to go on when the attempt is no longer in progress, judged by the database and not by the copy this
+     * transaction loaded before it waited for the session lock: a submit that committed in the meantime is invisible
+     * in that copy, and an answer written after it would differ from the one that was scored. Call it once the lock
+     * is held.
+     */
+    void requireStillInProgress(ExamAttempt attempt) {
+        AttemptStatus current = attemptRepository.findStatusById(attempt.getId()).orElse(attempt.getStatus());
+        if (current != AttemptStatus.IN_PROGRESS) {
+            throw new AttemptAlreadyCompleteException();
+        }
     }
 
     /**

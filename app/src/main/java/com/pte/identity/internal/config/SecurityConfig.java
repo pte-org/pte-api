@@ -2,6 +2,7 @@ package com.pte.identity.internal.config;
 
 import com.pte.shared.security.ResourceServerJwt;
 import com.pte.shared.web.RateLimitFilter;
+import com.pte.shared.web.RateLimitSettings;
 import io.github.bucket4j.distributed.proxy.ProxyManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -28,7 +29,7 @@ import java.util.Map;
  * don't exist inside a monolith — a call between modules is a Java method
  * call, not an HTTP request with its own trust boundary to defend.
  *
- * <p>CORS and per-tenant rate limiting were ported in here from {@code
+ * <p>CORS and rate limiting (per user, per tenant, per client address) were ported in here from {@code
  * gateway/src/main/java/com/pte/gateway/config/SecurityConfig.java} and
  * {@code RateLimitConfig.java} when gateway was removed (plans/modular-
  * monolith gateway-removal) — those two concerns had nowhere else to live
@@ -45,7 +46,7 @@ public class SecurityConfig {
     // admin-only list/approve/reject endpoints live under
     // "/admin/applications" specifically so they never fall inside this rule.
     private static final List<String> PUBLIC_PATHS = List.of(
-            "/api/v1/auth/login", "/api/v1/auth/login-options",
+            "/api/v1/auth/login",
             "/api/v1/auth/refresh", "/api/v1/auth/logout",
             "/api/v1/auth/password-reset/request", "/api/v1/auth/password-reset/confirm",
             "/api/v1/auth/password-reset/validate",
@@ -58,8 +59,14 @@ public class SecurityConfig {
             CorsConfigurationSource corsConfigurationSource,
             ProxyManager<String> rateLimitProxyManager,
             JsonMapper jsonMapper,
-            @Value("${rate-limit.per-second:40}") int rateLimitPerSecond,
+            @Value("${rate-limit.per-second:40}") int userRateLimitPerSecond,
+            @Value("${rate-limit.tenant-multiplier:5}") int tenantRateLimitMultiplier,
+            @Value("${rate-limit.anonymous-per-second:10}") int anonymousRateLimitPerSecond,
             @Value("${rate-limit.redeem-per-second:5}") int redeemRateLimitPerSecond) throws Exception {
+        // Matched against request.getRequestURI(); Nginx preserves the versioned /api/v1 path sent by the browser.
+        RateLimitSettings rateLimits = new RateLimitSettings(userRateLimitPerSecond,
+                Math.multiplyExact(userRateLimitPerSecond, tenantRateLimitMultiplier), anonymousRateLimitPerSecond,
+                Map.of("/api/v1/license-code-redemptions", redeemRateLimitPerSecond));
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .csrf(csrf -> csrf.disable())
@@ -69,11 +76,7 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(ResourceServerJwt.rolesConverter())))
-                .addFilterAfter(
-                        new RateLimitFilter(rateLimitProxyManager, jsonMapper, rateLimitPerSecond,
-                                // Matched against request.getRequestURI(); Nginx preserves the
-                                // versioned /api/v1 path sent by the browser.
-                                Map.of("/api/v1/license-code-redemptions", redeemRateLimitPerSecond)),
+                .addFilterAfter(new RateLimitFilter(rateLimitProxyManager, jsonMapper, rateLimits),
                         BearerTokenAuthenticationFilter.class);
         return http.build();
     }

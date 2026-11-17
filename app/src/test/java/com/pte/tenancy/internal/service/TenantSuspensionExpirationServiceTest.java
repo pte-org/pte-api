@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +38,7 @@ class TenantSuspensionExpirationServiceTest {
                 .findByStatusAndSuspendedUntilIsNotNullAndSuspendedUntilLessThanEqualAndDeletedFalse(
                         OrganizationStatus.SUSPENDED, now))
                 .thenReturn(List.of(due));
+        when(organizationRepository.findByPublicId(due.getPublicId())).thenReturn(Optional.of(due));
 
         TenantSuspensionExpirationService service = new TenantSuspensionExpirationService(
                 organizationRepository, Clock.fixed(now, ZoneOffset.UTC));
@@ -58,6 +60,7 @@ class TenantSuspensionExpirationServiceTest {
                 .findByStatusAndSuspendedUntilIsNotNullAndSuspendedUntilLessThanEqualAndDeletedFalse(
                         OrganizationStatus.SUSPENDED, now))
                 .thenReturn(List.of(due), List.of());
+        when(organizationRepository.findByPublicId(due.getPublicId())).thenReturn(Optional.of(due));
 
         TenantSuspensionExpirationService service = new TenantSuspensionExpirationService(
                 organizationRepository, Clock.fixed(now, ZoneOffset.UTC), auditLogService);
@@ -77,5 +80,26 @@ class TenantSuspensionExpirationServiceTest {
         tenant.setStatus(status);
         tenant.setSuspendedUntil(suspendedUntil);
         return tenant;
+    }
+
+    @Test
+    void reactivateDueTenants_oneTenantFailingDoesNotKeepTheOthersSuspended() {
+        Instant now = Instant.parse("2026-10-17T00:00:00Z");
+        Organization broken = suspendedTenant(now.minusSeconds(1), OrganizationStatus.SUSPENDED);
+        Organization healthy = suspendedTenant(now.minusSeconds(1), OrganizationStatus.SUSPENDED);
+        when(organizationRepository
+                .findByStatusAndSuspendedUntilIsNotNullAndSuspendedUntilLessThanEqualAndDeletedFalse(
+                        OrganizationStatus.SUSPENDED, now))
+                .thenReturn(List.of(broken, healthy));
+        when(organizationRepository.findByPublicId(broken.getPublicId()))
+                .thenThrow(new IllegalStateException("cannot load"));
+        when(organizationRepository.findByPublicId(healthy.getPublicId())).thenReturn(Optional.of(healthy));
+
+        TenantSuspensionExpirationService service = new TenantSuspensionExpirationService(
+                organizationRepository, Clock.fixed(now, ZoneOffset.UTC));
+
+        assertThat(service.reactivateDueTenants()).isEqualTo(1);
+        assertThat(healthy.getStatus()).isEqualTo(OrganizationStatus.ACTIVE);
+        assertThat(broken.getStatus()).isEqualTo(OrganizationStatus.SUSPENDED);
     }
 }

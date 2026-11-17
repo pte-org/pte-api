@@ -20,7 +20,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * The deterministic, Docker-free core of the send flow: the order of the steps, what is counted for an answer
- * or a refusal, and the reply. Failure and refund rules live in {@link ChatServiceFailureTest}, input rules in
+ * or a refusal, and the reply. Failure and refund rules (only a provider failure is refunded; an off-topic answer is charged) live in {@link ChatServiceFailureTest}, input rules in
  * {@link ChatServiceValidationTest}.
  */
 class ChatServiceTest extends ChatServiceTestSupport {
@@ -112,7 +112,7 @@ class ChatServiceTest extends ChatServiceTestSupport {
     // ---- an off-topic question ---------------------------------------------------------------------------
 
     @Test
-    void anOffTopicQuestionIsRefundedAndAnsweredWithTheFixedRefusalInTheAskedLanguage() {
+    void anOffTopicQuestionIsChargedAndAnsweredWithTheFixedRefusalInTheAskedLanguage() {
         org.mockito.Mockito.when(client.generate(any(), any(), any())).thenReturn(offTopicAnswer());
 
         ChatReply english = service.send(caller, command("What is 2 + 2?", null, "en"));
@@ -121,7 +121,7 @@ class ChatServiceTest extends ChatServiceTestSupport {
         assertThat(english.markdown()).isEqualTo(ChatPrompts.refusal("en"));
         assertThat(vietnamese.markdown()).isEqualTo(ChatPrompts.refusal("vi"));
         assertThat(english.onTopic()).isFalse();
-        verify(quotaService, times(2)).refundQuietly(ticket);
+        verify(quotaService, never()).refundQuietly(any());
     }
 
     @Test
@@ -144,30 +144,29 @@ class ChatServiceTest extends ChatServiceTestSupport {
     }
 
     @Test
-    void anOffTopicQuestionIsRefundedExactlyOnceBeforeTheReplyQuotaIsReadAndBeforeTheLeasesClose() {
+    void anOffTopicQuestionIsNeverRefundedAndTheReplyQuotaIsReadBeforeTheLeasesClose() {
         org.mockito.Mockito.when(client.generate(any(), any(), any())).thenReturn(offTopicAnswer());
         InOrder order = inOrder(client, quotaService, slotLease, studentLease);
 
         ChatReply reply = service.send(caller, command("What is 2 + 2?"));
 
         order.verify(client).generate(any(), any(), any());
-        order.verify(quotaService).refundQuietly(ticket);
         order.verify(quotaService).snapshot(ticket);
         order.verify(slotLease).close();
         order.verify(studentLease).close();
-        verify(quotaService, times(1)).refundQuietly(ticket);
+        verify(quotaService, never()).refundQuietly(any());
         assertThat(reply.quota()).isSameAs(chargedSnapshot);
     }
 
     // ---- metrics -----------------------------------------------------------------------------------------
 
     @Test
-    void anOffTopicRefundIsCountedAsARefundWithABoundedCause() {
+    void anOffTopicQuestionIsNotCountedAsARefund() {
         org.mockito.Mockito.when(client.generate(any(), any(), any())).thenReturn(offTopicAnswer());
 
         service.send(caller, command("What is 2 + 2?"));
 
-        verify(observability).quotaRefunded(anyString());
+        verify(observability, never()).quotaRefunded(any());
     }
 
     @Test

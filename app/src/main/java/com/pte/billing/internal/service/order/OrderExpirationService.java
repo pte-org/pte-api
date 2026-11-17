@@ -47,7 +47,10 @@ public class OrderExpirationService {
         for (Order order : orderRepository.findByStatusAndDeletedFalseAndCreatedAtLessThanEqual(
                 OrderStatus.PENDING, cutoff)) {
             try {
-                payOsClient.cancelPaymentLink(order.getOrderCode());
+                // An order that never got a payment link (PayOS failed while creating it) has nothing to cancel there.
+                if (order.getPaymentLinkUrl() != null) {
+                    payOsClient.cancelPaymentLink(order.getOrderCode());
+                }
                 if (orderPersistenceService.expireIfPending(order.getPublicId())) {
                     expired++;
                 }
@@ -55,6 +58,9 @@ public class OrderExpirationService {
                 // Keep it PENDING so a transient PayOS outage is retried and
                 // the local state never claims a link was cancelled when it was not.
                 log.warn("Could not expire pending order {}: {}", order.getOrderCode(), ex.getMessage());
+            } catch (RuntimeException ex) {
+                // A lock timeout, a concurrent webhook or a vanished row on one order must not stop the others.
+                log.warn("Could not expire pending order {}", order.getOrderCode(), ex);
             }
         }
         if (expired > 0) {

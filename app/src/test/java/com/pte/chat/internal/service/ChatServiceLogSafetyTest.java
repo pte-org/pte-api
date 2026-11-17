@@ -130,10 +130,11 @@ class ChatServiceLogSafetyTest extends ChatServiceTestSupport {
 
     @Test
     void aFailingRefundLogsNoStudentText() {
-        when(client.generate(any(), any(), any())).thenReturn(offTopicAnswer());
+        when(client.generate(any(), any(), any()))
+                .thenThrow(new ChatAiException(ChatAiFailureReason.TIMEOUT, "timed out"));
         doThrow(leakyDatabaseError()).when(quotaService).refundQuietly(any());
 
-        service.send(caller, command(QUESTION));
+        assertThatThrownBy(() -> service.send(caller, command(QUESTION))).isInstanceOf(ChatBusyException.class);
 
         assertSomethingWasLoggedButNoSecrets();
     }

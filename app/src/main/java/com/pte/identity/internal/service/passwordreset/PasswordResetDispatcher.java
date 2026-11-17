@@ -53,10 +53,10 @@ public class PasswordResetDispatcher {
         this.ownedExecutor = null;
     }
 
-    public void requestAsync(String email, String clientIp) {
+    public void requestAsync(String email, String username, String clientIp) {
         executor.execute(() -> {
             try {
-                passwordResetService.request(email, clientIp);
+                passwordResetService.request(email, username, clientIp);
             } catch (RuntimeException ex) {
                 // Never log the address: it identifies the person who asked.
                 log.warn("Password reset request failed: {}", ex.getClass().getSimpleName());

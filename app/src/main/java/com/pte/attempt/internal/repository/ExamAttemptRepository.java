@@ -57,6 +57,13 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, Long>,
     @Query("SELECT a FROM ExamAttempt a WHERE a.id = :id")
     Optional<ExamAttempt> findWithLockById(@Param("id") Long id);
 
+    /**
+     * The status as the database holds it right now. A scalar projection is never served from the persistence context,
+     * so unlike {@link #findWithLockById} it is not stale after waiting for a lock another transaction released.
+     */
+    @Query("SELECT a.status FROM ExamAttempt a WHERE a.id = :id")
+    Optional<AttemptStatus> findStatusById(@Param("id") Long id);
+
     /** Tenant-scoped, not student-owned — used by proctoring's force-submit (Phase 09), where the actor is a verified proctor command, not the student. */
     Optional<ExamAttempt> findByPublicIdAndTenantId(UUID publicId, UUID tenantId);
 

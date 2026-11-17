@@ -145,20 +145,6 @@ class TenancyServiceTest {
         tenancyService.assertTenantActive(tenantId);
     }
 
-    @Test
-    void findLoginOrganization_allowsSuspendedTenantForAuthentication() {
-        UUID tenantId = UUID.randomUUID();
-        Organization tenant = tenant(tenantId, 100);
-        tenant.setCode("suspended-school");
-        tenant.setName("Suspended School");
-        tenant.setOrganizationType("SCHOOL");
-        tenant.setStatus(OrganizationStatus.SUSPENDED);
-        when(organizationRepository.findByPublicId(tenantId)).thenReturn(Optional.of(tenant));
-
-        assertThat(tenancyService.findLoginOrganization(tenantId)).isPresent()
-                .get().extracting("tenantId").isEqualTo(tenantId);
-    }
-
     private Organization tenant(UUID publicId, int studentLimit) {
         Organization tenant = new Organization();
         tenant.setPublicId(publicId);

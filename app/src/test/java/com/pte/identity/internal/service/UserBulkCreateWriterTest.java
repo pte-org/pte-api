@@ -1,9 +1,7 @@
 package com.pte.identity.internal.service;
 
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,15 +29,12 @@ class UserBulkCreateWriterTest {
     @Mock
     private UserRepository userRepository;
 
-    @Mock
-    private OrganizationMemberRepository memberRepository;
-
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private UserBulkCreateWriter writer;
 
     @BeforeEach
     void setUp() {
-        writer = new UserBulkCreateWriter(userRepository, memberRepository, passwordEncoder);
+        writer = new UserBulkCreateWriter(userRepository, passwordEncoder);
     }
 
     private UserBulkCreateWriter.Row row() {
@@ -57,7 +52,7 @@ class UserBulkCreateWriterTest {
     }
 
     @Test
-    void createGeneratedStudent_savesGeneratedUsernameEmailCredentialAndStudentMembership() {
+    void createGeneratedStudent_savesGeneratedUsernameEmailCredentialOrganizationAndStudentRole() {
         UUID tenantId = UUID.randomUUID();
         stubSaveAssigningIds();
 
@@ -71,10 +66,25 @@ class UserBulkCreateWriterTest {
         assertThat(user.isMustChangePassword()).isTrue();
         assertThat(result.get().generatedPassword()).matches("^[2-9A-HJ-NP-Za-hj-np-z]{4}-[2-9A-HJ-NP-Za-hj-np-z]{4}$");
         assertThat(passwordEncoder.matches(result.get().generatedPassword(), user.getCredentialHash())).isTrue();
-        ArgumentCaptor<OrganizationMember> member = ArgumentCaptor.forClass(OrganizationMember.class);
-        verify(memberRepository).saveAndFlush(member.capture());
-        assertThat(member.getValue().getOrganizationId()).isEqualTo(tenantId);
-        assertThat(member.getValue().getRoles()).containsExactly(Role.STUDENT);
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getOrganizationId()).isEqualTo(tenantId);
+        assertThat(saved.getValue().getRoles()).containsExactly(Role.STUDENT);
+    }
+
+    @Test
+    void createGeneratedStudent_sameEmailInTwoOrganizations_createsTwoSeparateAccounts() {
+        stubSaveAssigningIds();
+        UUID tenantA = UUID.randomUUID();
+        UUID tenantB = UUID.randomUUID();
+
+        User first = writer.createGeneratedStudent("a.aaaaaaaa", row(), tenantA).orElseThrow().user();
+        User second = writer.createGeneratedStudent("b.bbbbbbbb", row(), tenantB).orElseThrow().user();
+
+        assertThat(first).isNotSameAs(second);
+        assertThat(first.getEmail()).isEqualTo(second.getEmail());
+        assertThat(first.getOrganizationId()).isEqualTo(tenantA);
+        assertThat(second.getOrganizationId()).isEqualTo(tenantB);
     }
 
     @Test
@@ -92,7 +102,7 @@ class UserBulkCreateWriterTest {
     }
 
     @Test
-    void createGeneratedStudent_usernameLosesConcurrentRace_returnsEmpty_neverCreatesMembership() {
+    void createGeneratedStudent_usernameLosesConcurrentRace_returnsEmpty() {
         when(userRepository.saveAndFlush(any(User.class)))
                 .thenThrow(new DataIntegrityViolationException("unique violation"));
 
@@ -100,7 +110,6 @@ class UserBulkCreateWriterTest {
                 UUID.randomUUID());
 
         assertThat(result).isEmpty();
-        verify(memberRepository, never()).saveAndFlush(any());
     }
 
     @Test

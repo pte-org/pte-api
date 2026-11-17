@@ -22,6 +22,7 @@ import com.pte.itembank.internal.generation.repository.AiPromptVersionRepository
 import com.pte.itembank.internal.generation.review.ReviewPromptBuilder;
 import com.pte.itembank.internal.generation.review.ReviewPromptContent;
 import com.pte.itembank.internal.generation.review.ReviewVerdictParser;
+import com.pte.itembank.internal.generation.usage.PromptTestQuota;
 import com.pte.itembank.internal.generation.validate.DraftValidator;
 import com.pte.itembank.internal.generation.validate.ValidationIssue;
 import com.pte.shared.exception.DomainException;
@@ -42,7 +43,8 @@ import java.util.stream.Collectors;
  * Tries a changed prompt on the real model: it asks for one question with the prompt, then checks that the answer
  * parses and passes the same structure checks a generated question must pass. The result is stored with the version,
  * tied to its content, and is what allows sending the version for approval. The model call runs outside any
- * database transaction because it can take a while.
+ * database transaction because it can take a while. Each run is a paid call, so {@link PromptTestQuota} caps how
+ * many one user may start in a day.
  */
 @Service
 public class PromptTestService {
@@ -67,11 +69,14 @@ public class PromptTestService {
     private final DraftValidator draftValidator;
     private final ReviewPromptBuilder reviewPrompts;
     private final ReviewVerdictParser verdictParser;
+    private final PromptTestQuota quota;
     private final Clock clock;
 
     PromptTestService(AiPromptVersionRepository versions, PromptContentCodec codec, PromptRegistry registry,
                       ObjectProvider<LlmGateway> gateway, DraftParser draftParser, DraftValidator draftValidator,
-                      ReviewPromptBuilder reviewPrompts, ReviewVerdictParser verdictParser, Clock clock) {
+                      ReviewPromptBuilder reviewPrompts, ReviewVerdictParser verdictParser, PromptTestQuota quota,
+                      Clock clock) {
+        this.quota = quota;
         this.versions = versions;
         this.codec = codec;
         this.registry = registry;
@@ -99,6 +104,8 @@ public class PromptTestService {
             throw new AiPromptException(HttpStatus.SERVICE_UNAVAILABLE, PromptVersionConstants.TEST_UNAVAILABLE,
                     PromptVersionConstants.TEST_UNAVAILABLE_MESSAGE);
         }
+        // Counted only now, after every cheap refusal, and before the paid call.
+        quota.consume(caller.userId());
         Outcome outcome = attempt(llm, version);
         version.recordTest(outcome.passed(), truncate(outcome.note(), PromptVersionConstants.MAX_TEST_NOTE_LENGTH),
                 caller.userId(), clock.instant());

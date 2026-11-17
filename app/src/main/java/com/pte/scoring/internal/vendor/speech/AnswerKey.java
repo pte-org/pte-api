@@ -13,6 +13,8 @@ import java.util.Set;
  */
 public final class AnswerKey {
 
+    private static final Set<String> LEADING_ARTICLES = Set.of("a", "an", "the");
+
     private final List<String> acceptedAnswers;
     private final List<List<String>> acceptedTokens;
 
@@ -27,7 +29,7 @@ public final class AnswerKey {
         Set<List<String>> seen = new HashSet<>();
         if (text != null) {
             for (String part : text.split("/")) {
-                List<String> normalized = TokenAlignment.normalize(part);
+                List<String> normalized = matchTokens(part);
                 if (!normalized.isEmpty() && seen.add(normalized)) {
                     answers.add(part.trim());
                     tokens.add(normalized);
@@ -37,6 +39,18 @@ public final class AnswerKey {
         return new AnswerKey(List.copyOf(answers), List.copyOf(tokens));
     }
 
+    /**
+     * Words compared for a match. A leading article is dropped on both sides, so "a thermometer" matches a key of
+     * "thermometer" (and the reverse); it is kept when it is the only word, and articles inside the answer stay.
+     */
+    private static List<String> matchTokens(String text) {
+        List<String> tokens = TokenAlignment.normalize(text);
+        if (tokens.size() > 1 && LEADING_ARTICLES.contains(tokens.get(0))) {
+            return List.copyOf(tokens.subList(1, tokens.size()));
+        }
+        return tokens;
+    }
+
     /** Canonical answer first, then the aliases. */
     public List<String> acceptedAnswers() {
         return acceptedAnswers;
@@ -44,7 +58,7 @@ public final class AnswerKey {
 
     /** The accepted answer the transcript matches, as written in the key. */
     public Optional<String> match(String transcript) {
-        List<String> spoken = TokenAlignment.normalize(transcript);
+        List<String> spoken = matchTokens(transcript);
         for (int i = 0; i < acceptedTokens.size(); i++) {
             if (acceptedTokens.get(i).equals(spoken)) {
                 return Optional.of(acceptedAnswers.get(i));

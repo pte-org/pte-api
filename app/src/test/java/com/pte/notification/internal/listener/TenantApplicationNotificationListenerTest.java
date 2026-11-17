@@ -67,32 +67,17 @@ class TenantApplicationNotificationListenerTest {
         UUID applicationId = UUID.randomUUID();
         listener.onApplicationApproved(new TenantApplicationApprovedEvent(
                 applicationId, UUID.randomUUID(), "Acme School", "acme", "contact@acme.example",
-                "contact@acme.example", "Gener4ted!"));
+                "acme.k7m2p9qx", "Gener4ted!"));
 
         ArgumentCaptor<String> text = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> html = ArgumentCaptor.forClass(String.class);
         verify(dispatchService).dispatchExternalSensitive(eq(NotificationType.TENANT_APPLICATION_APPROVED),
                 eq("contact@acme.example"), org.mockito.ArgumentMatchers.any(UUID.class), contains(":approved"),
                 contains("approved"), text.capture(), html.capture());
-        assertThat(text.getValue()).contains("Tenant code: acme").contains("Username: contact@acme.example")
+        assertThat(text.getValue()).contains("Tenant code: acme").contains("Username: acme.k7m2p9qx")
                 .contains("Temporary password: Gener4ted!");
         assertThat(html.getValue()).contains("<!DOCTYPE html>").contains("Gener4ted!").contains("Acme School");
         assertThat(text.getValue() + html.getValue()).doesNotContain(applicationId.toString());
-    }
-
-    @Test
-    void approved_forExistingAccountIssuesNoPassword() {
-        listener.onApplicationApproved(new TenantApplicationApprovedEvent(
-                UUID.randomUUID(), UUID.randomUUID(), "Acme School", "acme", "contact@acme.example",
-                "contact@acme.example", null));
-
-        ArgumentCaptor<String> text = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<String> html = ArgumentCaptor.forClass(String.class);
-        verify(dispatchService).dispatchExternalSensitive(eq(NotificationType.TENANT_APPLICATION_APPROVED),
-                eq("contact@acme.example"), org.mockito.ArgumentMatchers.any(UUID.class), contains(":approved"),
-                contains("approved"), text.capture(), html.capture());
-        assertThat(text.getValue()).doesNotContain("Temporary password: ").contains("existing account");
-        assertThat(html.getValue()).doesNotContain("Temporary password").contains("existing account");
     }
 
     @Test

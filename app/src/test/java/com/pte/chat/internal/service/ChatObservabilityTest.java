@@ -70,14 +70,14 @@ class ChatObservabilityTest {
 
     @Test
     void quotaRefundedCountsPerCause() {
-        observability.quotaRefunded("off_topic");
+        observability.quotaRefunded("setup_failure");
         observability.quotaRefunded("provider_failure");
-        observability.quotaRefunded("off_topic");
+        observability.quotaRefunded("setup_failure");
 
         assertThat(total()).isEqualTo(3.0);
         assertThat(registry.getMeters()).hasSize(2);
         assertThat(names()).allMatch(name -> name.startsWith("chat."));
-        assertThat(tagValues()).containsExactlyInAnyOrder("off_topic", "provider_failure");
+        assertThat(tagValues()).containsExactlyInAnyOrder("setup_failure", "provider_failure");
     }
 
     @Test
@@ -114,7 +114,7 @@ class ChatObservabilityTest {
     @Test
     void differentEventsNeverShareAMeterId() {
         observability.messageCounted("OK");
-        observability.quotaRefunded("off_topic");
+        observability.quotaRefunded("setup_failure");
         observability.refundFailed();
         observability.providerFailed(ChatAiFailureReason.TIMEOUT);
         observability.slotRejected();

@@ -3,6 +3,12 @@ package com.pte.itembank.internal.generation.live;
 import com.pte.itembank.internal.generation.llm.LlmRole;
 import com.pte.itembank.internal.generation.llm.TokenSink;
 
+import com.pte.itembank.internal.generation.constant.GenerationLiveConstants;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -11,6 +17,8 @@ import java.util.UUID;
  * provider call outside an item (or on another thread) finds nothing and is not streamed.
  */
 public final class GenerationLiveContext {
+
+    private static final Logger LOG = LoggerFactory.getLogger(GenerationLiveContext.class);
 
     private record Slot(GenerationLiveFeed feed, UUID jobPublicId, int index) {
     }
@@ -26,6 +34,20 @@ public final class GenerationLiveContext {
 
     public static void close() {
         CURRENT.remove();
+    }
+
+    /** Reports one check of the item this thread is making; nothing happens outside an item. */
+    public static void check(String step, String status, Map<String, String> facts,
+                             List<LiveEvent.CheckDetail> details) {
+        Slot slot = CURRENT.get();
+        if (slot != null && GenerationLiveConstants.CHECK_FAILED.equals(status)) {
+            // Why a round is written again: kept in the log, since the live view forgets a job soon after it ends.
+            LOG.info("Generation check failed: jobId={}, item={}, step={}, facts={}", slot.jobPublicId(), slot.index(),
+                    step, facts);
+        }
+        if (slot != null) {
+            slot.feed().check(slot.jobPublicId(), slot.index(), step, status, facts, details);
+        }
     }
 
     /** @return where the agent's text goes, or {@link TokenSink#NONE} when no item is being made on this thread */

@@ -23,17 +23,14 @@ FROM (VALUES ('student1.e2e@test.local', 'Nguyễn Văn An', 'E2E-001'),
              ('student4.e2e@test.local', 'Phạm Thu Hà', 'E2E-004')) AS s(username, full_name, student_code)
 WHERE NOT EXISTS (SELECT 1 FROM public.users u WHERE u.username = s.username)
 @@
-INSERT INTO public.organization_members (public_id, user_id, organization_id, status, deleted, created_at, updated_at)
-SELECT gen_random_uuid(), u.id, o.public_id, 'ACTIVE', false, now(), now()
-FROM public.users u, public.organizations o
-WHERE o.code = 'e2e' AND u.username LIKE 'student_.e2e@test.local'
-  AND NOT EXISTS (SELECT 1 FROM public.organization_members m WHERE m.user_id = u.id AND m.organization_id = o.public_id)
+UPDATE public.users u SET organization_id = o.public_id
+FROM public.organizations o
+WHERE o.code = 'e2e' AND u.username LIKE 'student_.e2e@test.local' AND u.organization_id IS NULL
 @@
-INSERT INTO public.organization_member_roles (member_id, role)
-SELECT m.id, 'STUDENT' FROM public.organization_members m
-JOIN public.users u ON u.id = m.user_id
+INSERT INTO public.user_roles (user_id, role)
+SELECT u.id, 'STUDENT' FROM public.users u
 WHERE u.username LIKE 'student_.e2e@test.local'
-  AND NOT EXISTS (SELECT 1 FROM public.organization_member_roles r WHERE r.member_id = m.id AND r.role = 'STUDENT')
+  AND NOT EXISTS (SELECT 1 FROM public.user_roles r WHERE r.user_id = u.id AND r.role = 'STUDENT')
 @@
 INSERT INTO public.class_students (public_id, class_id, student_public_id, organization_id, deleted, created_at, updated_at)
 SELECT gen_random_uuid(), c.id, u.public_id, c.organization_id, false, now(), now()

@@ -14,7 +14,6 @@ import com.pte.identity.internal.exception.StudentAttemptInProgressException;
 import com.pte.identity.internal.exception.UserEmailRequiredException;
 import com.pte.identity.internal.exception.UserNotFoundException;
 import com.pte.identity.internal.repository.UserRepository;
-import com.pte.identity.internal.service.OrganizationMemberDirectory;
 import com.pte.identity.internal.service.RefreshTokenService;
 import com.pte.identity.internal.service.UserProvisioningHelper;
 import com.pte.identity.internal.service.user.ManagedUserResolver.Target;
@@ -34,7 +33,6 @@ import java.util.UUID;
 public class UserCredentialRotation {
 
     private final UserRepository userRepository;
-    private final OrganizationMemberDirectory memberDirectory;
     private final PasswordEncoder passwordEncoder;
     private final UserProvisioningHelper provisioningHelper;
     private final ManagedUserResolver targetResolver;
@@ -43,13 +41,12 @@ public class UserCredentialRotation {
     private final RefreshTokenService refreshTokenService;
     private final StartedAttemptLookup startedAttemptLookup;
 
-    public UserCredentialRotation(UserRepository userRepository, OrganizationMemberDirectory memberDirectory,
+    public UserCredentialRotation(UserRepository userRepository,
             PasswordEncoder passwordEncoder, UserProvisioningHelper provisioningHelper,
             ManagedUserResolver targetResolver, ApplicationEventPublisher eventPublisher,
             AuditLogService auditLogService, RefreshTokenService refreshTokenService,
             StartedAttemptLookup startedAttemptLookup) {
         this.userRepository = userRepository;
-        this.memberDirectory = memberDirectory;
         this.passwordEncoder = passwordEncoder;
         this.provisioningHelper = provisioningHelper;
         this.targetResolver = targetResolver;
@@ -88,7 +85,7 @@ public class UserCredentialRotation {
     public GeneratedCredentialsResponse generateStudentCredentials(UUID publicId, CurrentUser caller) {
         Target target = targetResolver.findScoped(publicId, caller, false);
         if (!provisioningHelper.canManageTarget(caller, target.roles())
-                || !target.roles().contains(Role.STUDENT) || !mayChangeCredential(caller, target)) {
+                || !target.roles().contains(Role.STUDENT)) {
             throw new ForbiddenPasswordResetException();
         }
         User user = target.user();
@@ -118,18 +115,11 @@ public class UserCredentialRotation {
                 IdentityConstants.USER_PASSWORD_CHANGED_SELF, IdentityConstants.USER_PASSWORD_CHANGED_SELF_SUMMARY);
     }
 
+    /** An account belongs to one organization, so a Host that reaches it may change its credential. */
     private void requireMayChangeCredential(CurrentUser caller, Target target) {
-        if (!provisioningHelper.canManageTarget(caller, target.roles()) || !mayChangeCredential(caller, target)) {
+        if (!provisioningHelper.canManageTarget(caller, target.roles())) {
             throw new ForbiddenPasswordResetException();
         }
-    }
-
-    /**
-     * The credential is global to the account. A Host may change it only for an account the organization alone
-     * owns; platform operators are judged by the union of the account's roles instead.
-     */
-    private boolean mayChangeCredential(CurrentUser caller, Target target) {
-        return caller.isPlatformUser() || target.member() != null && memberDirectory.isExclusivelyOwned(target.member());
     }
 
     private String rotateTemporaryPassword(Target target) {

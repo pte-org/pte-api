@@ -13,6 +13,12 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
 
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 
+    /** Claims one token for good: 1 if this call revoked it, 0 if someone else already had. Atomic in the database. */
+    @Modifying
+    @Query("update RefreshToken token set token.revoked = true "
+            + "where token.id = :id and token.revoked = false and token.deleted = false")
+    int revokeIfActive(@Param("id") Long id);
+
     @Modifying
     @Query("update RefreshToken token set token.revoked = true "
             + "where token.userId = :userId and token.revoked = false and token.deleted = false")

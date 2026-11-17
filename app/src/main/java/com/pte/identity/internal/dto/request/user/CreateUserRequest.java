@@ -1,10 +1,10 @@
 package com.pte.identity.internal.dto.request.user;
 
 import com.pte.identity.internal.constant.IdentityConstants;
+import com.pte.identity.internal.validation.MaxUtf8Bytes;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -18,6 +18,8 @@ import java.util.UUID;
  * Platform callers may only assign HOST_ADMIN; HOST_ADMIN callers may assign
  * the lower tenant roles.
  * The four profile fields are optional and apply to any role, not just STUDENT.
+ * There is no credential field: the account gets a generated username and a temporary secret, both e-mailed to the
+ * account's address.
  */
 public record CreateUserRequest(
         @NotBlank(message = IdentityConstants.EMAIL_REQUIRED)
@@ -26,10 +28,6 @@ public record CreateUserRequest(
 
         @NotBlank(message = IdentityConstants.FULL_NAME_REQUIRED)
         String fullName,
-
-        @NotBlank(message = IdentityConstants.PASSWORD_REQUIRED)
-        @Size(min = 8, message = IdentityConstants.PASSWORD_MIN_LENGTH)
-        String password,
 
         @NotEmpty(message = IdentityConstants.AT_LEAST_ONE_ROLE_REQUIRED)
         List<String> roles,

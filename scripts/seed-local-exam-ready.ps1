@@ -202,14 +202,12 @@ function Ensure-HostUser {
         $user = Invoke-SeedApi -Method POST -Path "/api/v1/users" -Token $script:AdminToken -Body @{
             email    = $Email
             fullName = "Local Seed Host"
-            password = $Password
             roles    = @("HOST_ADMIN")
             tenantId = $TenantId
         }
     }
-    else {
-        $null = Invoke-SeedApi -Method POST -Path "/api/v1/users/$($user.publicId)/reset-password" -Token $script:AdminToken -Body @{ newPassword = $Password }
-    }
+    # A created account gets a random temporary secret (e-mailed), so always set the known seed secret.
+    $null = Invoke-SeedApi -Method POST -Path "/api/v1/users/$($user.publicId)/reset-password" -Token $script:AdminToken -Body @{ newPassword = $Password }
     return $user
 }
 
@@ -225,14 +223,11 @@ function Ensure-StudentUser {
         $user = Invoke-SeedApi -Method POST -Path "/api/v1/users" -Token $script:HostToken -Body @{
             email       = $Email
             fullName    = "Local Seed Student"
-            password    = $Password
             roles       = @("STUDENT")
             studentCode = "SEED-$($SeedKey.ToUpperInvariant())"
         }
     }
-    else {
-        $null = Invoke-SeedApi -Method POST -Path "/api/v1/users/$($user.publicId)/reset-password" -Token $script:HostToken -Body @{ newPassword = $Password }
-    }
+    $null = Invoke-SeedApi -Method POST -Path "/api/v1/users/$($user.publicId)/reset-password" -Token $script:HostToken -Body @{ newPassword = $Password }
     return $user
 }
 
@@ -423,9 +418,9 @@ $script:OrganizationId = $organization.publicId
 
 Write-Host "== Creating or reusing host and student accounts =="
 $hostUser = Ensure-HostUser -TenantId $tenant.publicId -Email $hostEmail -Password $SeedPassword
-$script:HostToken = Get-Token -Username $hostEmail -Password $SeedPassword
+$script:HostToken = Get-Token -Username $hostUser.username -Password $SeedPassword
 $studentUser = Ensure-StudentUser -Email $studentEmail -Password $SeedPassword
-$studentToken = Get-Token -Username $studentEmail -Password $SeedPassword
+$studentToken = Get-Token -Username $studentUser.username -Password $SeedPassword
 
 Write-Host "== Creating or reusing program, class, and class membership =="
 $program = Ensure-Program -OrganizationId $script:OrganizationId -Name $programName
@@ -556,8 +551,8 @@ Write-Host ""
 Write-Host "== Local exam seed complete =="
 Write-Host "Tenant:       $($tenant.publicId) ($($tenant.code))"
 Write-Host "Organization: $($organization.publicId)"
-Write-Host "Host login:   $hostEmail"
-Write-Host "Student login: $studentEmail"
+Write-Host "Host login:   $($hostUser.username) ($hostEmail)"
+Write-Host "Student login: $($studentUser.username) ($studentEmail)"
 Write-Host "Program:      $($program.publicId)"
 Write-Host "Class:        $($class.publicId)"
 Write-Host "Plan:         $($plan.publicId)"

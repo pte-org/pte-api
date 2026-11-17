@@ -25,13 +25,12 @@ END;
 $$
 @@
 CREATE OR REPLACE VIEW public.identity_staff_student_search_view AS
- SELECT om.organization_id AS tenant_id,
+ SELECT u.organization_id AS tenant_id,
     u.public_id AS student_public_id,
     COALESCE(NULLIF(TRIM(BOTH FROM u.full_name), ''::text), (u.username)::text, (u.email)::text) AS display_name,
     u.email
-   FROM (public.users u
-     JOIN public.organization_members om ON ((om.user_id = u.id) AND (om.deleted = false)))
-  WHERE (u.deleted = false)
+   FROM public.users u
+  WHERE (u.deleted = false) AND (u.organization_id IS NOT NULL)
 @@
 CREATE OR REPLACE VIEW public.identity_student_directory AS
  SELECT u.id,
@@ -40,15 +39,15 @@ CREATE OR REPLACE VIEW public.identity_student_directory AS
     u.full_name,
     u.student_code,
     u.phone,
-    om.status,
-    om.created_at,
-    om.organization_id AS tenant_id,
+    u.status,
+    u.created_at,
+    u.organization_id AS tenant_id,
     u.deleted,
     u.username,
     u.must_change_password
-   FROM ((public.users u
-     JOIN public.organization_members om ON ((om.user_id = u.id) AND (om.deleted = false)))
-     JOIN public.organization_member_roles omr ON ((omr.member_id = om.id) AND ((omr.role)::text = 'STUDENT'::text)))
+   FROM (public.users u
+     JOIN public.user_roles ur ON ((ur.user_id = u.id) AND ((ur.role)::text = 'STUDENT'::text)))
+  WHERE (u.organization_id IS NOT NULL)
 @@
 DROP TRIGGER IF EXISTS question_publication_history ON public.questions
 @@
@@ -123,4 +122,6 @@ CREATE TABLE IF NOT EXISTS public.notification_inbox_snapshots (
 )
 @@
 CREATE INDEX IF NOT EXISTS idx_inbox_snapshot_owner ON public.notification_inbox_snapshots (recipient_user_public_id, tenant_id, expires_at)
+@@
+CREATE UNIQUE INDEX IF NOT EXISTS uk_users_organization_email ON public.users (organization_id, lower(btrim(email))) WHERE deleted = false AND organization_id IS NOT NULL AND email IS NOT NULL
 @@

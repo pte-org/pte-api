@@ -36,7 +36,7 @@ DECLARE
     source_media bigint; media_id bigint; media_uuid uuid;
     session_id bigint; session_uuid uuid; subscription_id bigint; subscription_uuid uuid;
     attempt_id bigint; attempt_uuid uuid; answer_id bigint; answer_uuid uuid;
-    assignment_id bigint; user_id bigint; member_id bigint; evaluation_id bigint;
+    assignment_id bigint; user_id bigint; evaluation_id bigint;
     item record; fixture record; role_name text; user_name text; n integer; k integer;
     eligible integer; copy_patch jsonb; registration_id bigint;
 BEGIN
@@ -69,20 +69,17 @@ BEGIN
           'class_name','UI Week Demo','phone',NULL,'date_of_birth',NULL,
           'credential_hash',(SELECT password_hash FROM ui_seed_config),
           'status','ACTIVE','must_change_password',false));
-      ELSIF NOT EXISTS (SELECT 1 FROM organization_members m
-          JOIN organization_member_roles r ON r.member_id=m.id
-          WHERE m.user_id=user_id AND m.organization_id=tenant AND NOT m.deleted
-            AND m.status='ACTIVE' AND r.role=role_name) THEN
-        RAISE EXCEPTION 'Existing fixture username has unexpected membership: %',user_name;
+      ELSIF NOT EXISTS (SELECT 1 FROM users u
+          JOIN user_roles r ON r.user_id=u.id
+          WHERE u.id=user_id AND u.organization_id=tenant AND NOT u.deleted
+            AND u.status='ACTIVE' AND r.role=role_name) THEN
+        RAISE EXCEPTION 'Existing fixture username has unexpected organization or role: %',user_name;
       END IF;
-      INSERT INTO organization_members(public_id,user_id,organization_id,status,deleted,created_at,updated_at)
-        SELECT gen_random_uuid(),user_id,tenant,'ACTIVE',false,now(),now()
-        WHERE NOT EXISTS(SELECT 1 FROM organization_members m WHERE m.user_id=user_id AND m.organization_id=tenant);
-      SELECT m.id INTO STRICT member_id FROM organization_members m
-        WHERE m.user_id=user_id AND m.organization_id=tenant;
-      INSERT INTO organization_member_roles(member_id,role)
-        SELECT member_id,role_name WHERE NOT EXISTS(
-          SELECT 1 FROM organization_member_roles r WHERE r.member_id=member_id AND r.role=role_name);
+      -- One username = one organization: a freshly copied fixture carries the source user's organization;
+      -- an existing one was checked above. Only the role row may still be missing.
+      INSERT INTO user_roles(user_id,role)
+        SELECT user_id,role_name WHERE NOT EXISTS(
+          SELECT 1 FROM user_roles r WHERE r.user_id=user_id AND r.role=role_name);
     END LOOP;
     SELECT public_id INTO STRICT proctor_id FROM users WHERE username='proctor.ui@test.local';
     SELECT public_id INTO STRICT examiner_id FROM users WHERE username='examiner.ui@test.local';

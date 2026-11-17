@@ -141,7 +141,7 @@ public class TenantApplicationService {
             int freeStudentLimit = platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY);
             Organization tenant = tenancyService.approveApplication(application, caller.userId(), freeStudentLimit);
             HostAdminCreated hostAdmin = identityService.createHostAdmin(
-                    tenant.getPublicId(), application.getContactEmail());
+                    tenant.getPublicId(), tenant.getCode(), application.getContactEmail());
             audit(caller, BillingConstants.AUDIT_APPLICATION_REVIEW, application.getPublicId(),
                     BillingConstants.AUDIT_APPLICATION_APPROVED_SUMMARY);
             eventPublisher.publishEvent(new TenantApplicationApprovedEvent(

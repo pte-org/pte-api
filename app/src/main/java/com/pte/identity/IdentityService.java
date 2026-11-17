@@ -3,11 +3,9 @@ package com.pte.identity;
 import com.pte.identity.dto.response.ExaminerIdentityView;
 import com.pte.identity.dto.response.StudentDisplayNameView;
 import com.pte.identity.domain.HostAdminCreated;
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.constant.IdentityConstants;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.service.membership.HostAdminProvisioner;
 import com.pte.identity.internal.service.membership.IdentityMemberLocks;
@@ -32,27 +30,24 @@ import java.util.UUID;
  * The only door other modules use to reach {@code identity}. The repositories stay in {@code internal/}: a module
  * reaching straight into another module's repository is exactly the shortcut the module boundaries forbid.
  *
- * <p>Every organization-scoped read goes through {@link OrganizationMember}: an account is visible to an
- * organization only while it holds an active membership there.
+ * <p>Every organization-scoped read filters on {@code users.organization_id}: an account is visible to an
+ * organization only while it belongs to it.
  */
 @Service
 public class IdentityService implements StudentCountProvider {
 
     private final UserRepository userRepository;
-    private final OrganizationMemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
     private final IdentityMemberQuery memberQuery;
     private final IdentityMemberLocks memberLocks;
     private final HostAdminProvisioner hostAdminProvisioner;
 
-    public IdentityService(UserRepository userRepository, OrganizationMemberRepository memberRepository,
-            PasswordEncoder passwordEncoder) {
+    public IdentityService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
-        this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
-        this.memberQuery = new IdentityMemberQuery(memberRepository);
-        this.memberLocks = new IdentityMemberLocks(userRepository, memberRepository);
-        this.hostAdminProvisioner = new HostAdminProvisioner(userRepository, memberRepository, passwordEncoder);
+        this.memberQuery = new IdentityMemberQuery(userRepository);
+        this.memberLocks = new IdentityMemberLocks(userRepository);
+        this.hostAdminProvisioner = new HostAdminProvisioner(userRepository, passwordEncoder);
     }
 
     public Optional<User> findById(UUID publicId) {
@@ -69,7 +64,7 @@ public class IdentityService implements StudentCountProvider {
         return userRepository.findByPublicId(publicId).isPresent();
     }
 
-    /** Whether the account holds an active membership in the organization (any role). */
+    /** Whether the account is an active account of the organization (any role). */
     @Transactional(readOnly = true)
     public boolean isMemberOf(UUID userPublicId, UUID organizationId) {
         return memberQuery.isMemberOf(userPublicId, organizationId);
@@ -205,17 +200,17 @@ public class IdentityService implements StudentCountProvider {
 
     @Override
     public long countStudents(UUID tenantId) {
-        return memberRepository.countByOrganizationIdAndRole(tenantId, Role.STUDENT);
+        return userRepository.countByOrganizationIdAndRole(tenantId, Role.STUDENT);
     }
 
     /**
      * {@code billing.TenantApplicationService.approve()}: makes the contact the first HOST_ADMIN of a newly approved
-     * organization. If the e-mail already belongs to an account (for example a Host registering a second
-     * organization), that account simply gains a membership and no new credentials are generated. Joins the
-     * caller's transaction.
+     * organization. The Host always gets a new account of that organization with a generated
+     * {@code {tenantCode}.{random}} username and a one-time password, even when the e-mail is used elsewhere (for
+     * example by a Host of another organization). Joins the caller's transaction.
      */
-    public HostAdminCreated createHostAdmin(UUID tenantId, String email) {
-        return hostAdminProvisioner.createHostAdmin(tenantId, email);
+    public HostAdminCreated createHostAdmin(UUID tenantId, String tenantCode, String email) {
+        return hostAdminProvisioner.createHostAdmin(tenantId, tenantCode, email);
     }
 
     /** Returns minimal display names and email addresses for enrolled students within the tenant. */
@@ -229,13 +224,6 @@ public class IdentityService implements StudentCountProvider {
     @Transactional(readOnly = true)
     public boolean isActiveProctor(UUID userPublicId, UUID tenantId) {
         return findActiveProctorInTenant(userPublicId, tenantId).isPresent();
-    }
-
-    /** The application contact e-mail belongs to a platform operator account, which cannot administer a tenant. */
-    public static final class HostContactNotAllowedException extends DomainException {
-        public HostContactNotAllowedException() {
-            super(HttpStatus.CONFLICT, IdentityConstants.HOST_CONTACT_IS_PLATFORM_ACCOUNT);
-        }
     }
 
     /** Stable 404 contract for cross-tenant, wrong-role, deleted, or suspended identities. */

@@ -273,4 +273,21 @@ class GradingCohortServiceTest {
                 new AttemptGradingCandidateView(outstandingAttemptId, outstandingStudentId, "IN_PROGRESS",
                         "outstanding-v1", false, null)));
     }
+
+    @Test
+    void scheduledReconciliationWithoutAWorkerKeepsGoingWhenOneSessionFails() {
+        UUID brokenSession = UUID.randomUUID();
+        UUID healthySession = UUID.randomUUID();
+        SessionGradingGateway.Grading broken = new SessionGradingGateway.Grading(brokenSession, tenantId, null, null,
+                null, null, null, null);
+        SessionGradingGateway.Grading healthy = new SessionGradingGateway.Grading(healthySession, tenantId, null, null,
+                null, null, null, null);
+        when(gateway.frozen()).thenReturn(List.of(broken, healthy));
+        when(gateway.grading(tenantId, brokenSession)).thenThrow(new IllegalStateException("cannot load"));
+        when(gateway.grading(tenantId, healthySession)).thenReturn(Optional.empty());
+
+        service.reconcileScheduled();
+
+        verify(gateway).grading(tenantId, healthySession);
+    }
 }

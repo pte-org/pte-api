@@ -40,6 +40,15 @@ class BrandedEmailTemplateTest {
     }
 
     @Test
+    void passwordReset_withASingleLinkStillNamesTheAccountAndNeverAnOrganization() {
+        RenderedEmail email = BrandedEmailTemplate.passwordReset(List.of(ALICE), 30, 2026);
+
+        assertThat(email.html()).contains("Account:", ">alice<");
+        assertThat(email.text()).contains("- alice: https://host.example/reset-password?token=aaa");
+        assertThat(email.html().toLowerCase()).doesNotContain("organization", "organisation");
+    }
+
+    @Test
     void passwordReset_saysHowLongTheLinkWorksFromTheConfiguredValue() {
         RenderedEmail email = BrandedEmailTemplate.passwordReset(List.of(ALICE), 45, 2026);
 
@@ -60,8 +69,7 @@ class BrandedEmailTemplateTest {
     void passwordReset_escapesEverythingTheAccountControls() {
         Link hostile = new Link("<b onmouseover=\"x\">&", "https://h.example/r?token=a&b=\"c");
 
-        // A username only shows when one address has several accounts, so give it a second one.
-        RenderedEmail email = BrandedEmailTemplate.passwordReset(List.of(hostile, ALICE), 30, 2026);
+        RenderedEmail email = BrandedEmailTemplate.passwordReset(List.of(hostile), 30, 2026);
 
         assertThat(email.html()).doesNotContain("<b onmouseover");
         assertThat(email.html()).contains("&lt;b onmouseover=&quot;x&quot;&gt;&amp;");

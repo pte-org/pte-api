@@ -34,22 +34,22 @@ class PasswordResetDispatcherTest {
 
     @Test
     void requestAsync_returnsBeforeTheServiceRuns_thenRunsItWithTheSameArguments() {
-        dispatcher.requestAsync("host@x.vn", "198.51.100.7");
+        dispatcher.requestAsync("host@x.vn", "host-1", "198.51.100.7");
 
         assertThat(queued).hasSize(1);
         verifyNoInteractions(passwordResetService);
 
         queued.get(0).run();
 
-        verify(passwordResetService).request("host@x.vn", "198.51.100.7");
+        verify(passwordResetService).request("host@x.vn", "host-1", "198.51.100.7");
     }
 
     @Test
     void requestAsync_swallowsAServiceFailure() {
         doThrow(new IllegalStateException("redis down")).when(passwordResetService)
-                .request("host@x.vn", "198.51.100.7");
+                .request("host@x.vn", "host-1", "198.51.100.7");
 
-        dispatcher.requestAsync("host@x.vn", "198.51.100.7");
+        dispatcher.requestAsync("host@x.vn", "host-1", "198.51.100.7");
 
         assertThatCode(() -> queued.get(0).run()).doesNotThrowAnyException();
     }

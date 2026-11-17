@@ -39,8 +39,11 @@ public class QuestionValidationHelper {
         boolean requiresReferenceAnswer = definition == null ? type != null && type.requiresReferenceAnswer() : definition.isRequiresReferenceAnswer();
         boolean requiresWordCount = definition == null ? type != null && type.requiresWordCount() : definition.isRequiresWordCount();
 
-        if (question.getMinWordCount() != null && question.getMaxWordCount() != null
-                && question.getMinWordCount() > question.getMaxWordCount()) {
+        // Word limits are counts: never negative, and a minimum above the maximum could never be met by a learner.
+        Integer minWords = question.getMinWordCount();
+        Integer maxWords = question.getMaxWordCount();
+        if ((minWords != null && minWords < 0) || (maxWords != null && maxWords < 0)
+                || (minWords != null && maxWords != null && minWords > maxWords)) {
             throw new QuestionValidationException(ItembankConstants.INVALID_QUESTION_FIELDS);
         }
 
@@ -98,6 +101,11 @@ public class QuestionValidationHelper {
             }
         } else if (requiresCorrectAnswer && !StringUtils.hasText(question.getCorrectAnswerText())) {
             throw new QuestionValidationException(ItembankConstants.CORRECT_ANSWER_REQUIRED);
+        }
+        // Text keys are read by the automatic scorers, so a key in the wrong shape could never be scored.
+        if (!requiresOptions && StringUtils.hasText(question.getCorrectAnswerText())
+                && !CorrectAnswerFormat.isValid(taskKey(question), question.getCorrectAnswerText())) {
+            throw new QuestionValidationException(ItembankConstants.INVALID_CORRECT_ANSWER_FORMAT);
         }
     }
 

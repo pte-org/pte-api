@@ -30,9 +30,10 @@ import java.util.UUID;
  * charge and the provider call. Nothing the student typed or was answered is stored: the earlier turns arrive with
  * the request, and the only thing kept afterwards is a count and the tokens (see {@link ChatUsageRecorder}).
  *
- * <p>Every path after the charge ends in either an answer or a refund. The refund is attempted before the
- * student lock and the slot are released, and a failing refund never hides the original outcome. The provider
- * call is made once: there is no retry anywhere.
+ * <p>Every message that reaches the provider and gets a reply is charged, an off-topic refusal included: the
+ * call was made and paid for, and a free refusal would let a student ask without limit. Only a failed provider
+ * call is refunded. That refund is attempted before the student lock and the slot are released, and a failing
+ * refund never hides the original outcome. The provider call is made once: there is no retry anywhere.
  *
  * <p>Locks and the slot live in memory, so the per-student and global limits hold for a single backend
  * instance only; the quota itself is in the database and is correct for any number of instances.
@@ -42,7 +43,6 @@ import java.util.UUID;
 public class ChatService {
 
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
-    private static final String CAUSE_OFF_TOPIC = "off_topic";
     private static final String CAUSE_PROVIDER = "provider_failure";
 
     private final PracticeEntitlementGate entitlementGate;
@@ -108,7 +108,7 @@ public class ChatService {
             return failed(ticket, ChatAiUsage.NONE, null);
         }
         if (!answer.onTopic()) {
-            refund(ticket, CAUSE_OFF_TOPIC);
+            // The charge stands: the provider was called, and a free refusal would make off-topic questions unlimited.
             usageRecorder.record(answer.model(), ChatConstants.STATUS_REFUSED, answer.usage());
             return new ChatReply(promptTexts.refusal(input.language(), input.message()), false, quotaService.snapshot(ticket));
         }

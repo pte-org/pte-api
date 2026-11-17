@@ -1,9 +1,7 @@
 package com.pte.enrollment.internal.repository;
 
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.tenancy.domain.Organization;
 import com.pte.tenancy.domain.enums.FacilityType;
@@ -33,9 +31,6 @@ class StudentRosterRepositoryTest {
     private UserRepository userRepository;
 
     @Autowired
-    private OrganizationMemberRepository memberRepository;
-
-    @Autowired
     private OrganizationRepository organizationRepository;
 
     @Autowired
@@ -44,14 +39,71 @@ class StudentRosterRepositoryTest {
     @BeforeEach
     void createIdentityReadView() {
         jdbcTemplate.execute("""
-                CREATE VIEW identity_student_directory AS
+                CREATE OR REPLACE VIEW identity_student_directory AS
                 SELECT u.id, u.public_id, u.email, u.full_name, u.student_code, u.phone,
-                       om.status, om.created_at, om.organization_id AS tenant_id, u.deleted, u.username,
+                       u.status, u.created_at, u.organization_id AS tenant_id, u.deleted, u.username,
                        u.must_change_password
                 FROM users u
-                JOIN organization_members om ON om.user_id = u.id AND om.deleted = FALSE
-                JOIN organization_member_roles omr ON omr.member_id = om.id AND omr.role = 'STUDENT'
+                JOIN user_roles ur ON ur.user_id = u.id AND ur.role = 'STUDENT'
+                WHERE u.organization_id IS NOT NULL
                 """);
+    }
+
+    @Test
+    void freePracticeStudentWithoutOrganization_isNeverOnAnyRoster() {
+        Organization organization = new Organization();
+        organization.setCode("roster-" + UUID.randomUUID());
+        organization.setName("Roster Tenant " + UUID.randomUUID());
+        organization.setOrganizationType("SCHOOL");
+        organization.setPackageName("starter");
+        organization.setStudentLimit(100);
+        organization.setFacilityType(FacilityType.MAIN);
+        organization.setStatus(OrganizationStatus.ACTIVE);
+        organization = organizationRepository.saveAndFlush(organization);
+
+        Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
+        User enrolled = student("enrolled@example.test", createdAt);
+        enroll(enrolled, organization.getPublicId());
+        User free = student("free@example.test", createdAt);
+        free.setRoles(new HashSet<>(java.util.Set.of(Role.STUDENT)));
+        userRepository.saveAndFlush(free);
+
+        Page<StudentRosterRow> page = rosterRepository.findPageForTenant(
+                organization.getPublicId(), "", null, null, "ALL", "ALL", "CREATED_AT", "ASC", PageRequest.of(0, 10));
+
+        assertThat(page.getContent()).singleElement()
+                .extracting(StudentRosterRow::getStudentPublicId)
+                .isEqualTo(enrolled.getPublicId().toString());
+    }
+
+    @Test
+    void studentOfAnotherOrganization_isNotOnTheRoster() {
+        Organization orgA = saveOrganization();
+        Organization orgB = saveOrganization();
+        Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
+        User inA = student("a@example.test", createdAt);
+        enroll(inA, orgA.getPublicId());
+        User inB = student("b@example.test", createdAt);
+        enroll(inB, orgB.getPublicId());
+
+        Page<StudentRosterRow> page = rosterRepository.findPageForTenant(
+                orgA.getPublicId(), "", null, null, "ALL", "ALL", "CREATED_AT", "ASC", PageRequest.of(0, 10));
+
+        assertThat(page.getContent()).singleElement()
+                .extracting(StudentRosterRow::getStudentPublicId)
+                .isEqualTo(inA.getPublicId().toString());
+    }
+
+    private Organization saveOrganization() {
+        Organization organization = new Organization();
+        organization.setCode("roster-" + UUID.randomUUID());
+        organization.setName("Roster Tenant " + UUID.randomUUID());
+        organization.setOrganizationType("SCHOOL");
+        organization.setPackageName("starter");
+        organization.setStudentLimit(100);
+        organization.setFacilityType(FacilityType.MAIN);
+        organization.setStatus(OrganizationStatus.ACTIVE);
+        return organizationRepository.saveAndFlush(organization);
     }
 
     @Test
@@ -107,10 +159,8 @@ class StudentRosterRepositoryTest {
     }
 
     private void enroll(User user, UUID organizationPublicId) {
-        OrganizationMember member = new OrganizationMember();
-        member.setUser(user);
-        member.setOrganizationId(organizationPublicId);
-        member.setRoles(new HashSet<>(java.util.Set.of(Role.STUDENT)));
-        memberRepository.saveAndFlush(member);
+        user.setOrganizationId(organizationPublicId);
+        user.setRoles(new HashSet<>(java.util.Set.of(Role.STUDENT)));
+        userRepository.saveAndFlush(user);
     }
 }
