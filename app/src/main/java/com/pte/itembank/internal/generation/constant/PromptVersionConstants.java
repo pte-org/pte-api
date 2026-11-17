@@ -41,6 +41,7 @@ public final class PromptVersionConstants {
     public static final String AUTHOR_ONLY = "AI_PROMPT_AUTHOR_ONLY";
     public static final String NO_CHANGE = "AI_PROMPT_NO_CHANGE";
     public static final String TEST_NOT_SUPPORTED = "AI_PROMPT_TEST_NOT_SUPPORTED";
+    public static final String TEST_DAILY_LIMIT_REACHED = "AI_PROMPT_TEST_DAILY_LIMIT_REACHED";
 
     // Messages shown to the user
     public static final String VERSION_NOT_FOUND_MESSAGE = "Prompt version not found.";
@@ -57,6 +58,8 @@ public final class PromptVersionConstants {
     public static final String TEST_UNAVAILABLE_MESSAGE = "The AI provider is not available, so the prompt cannot be tested.";
     public static final String TEST_NOT_SUPPORTED_MESSAGE =
             "Testing a scoring prompt is not available yet; an admin can apply the change without a test.";
+    public static final String TEST_DAILY_LIMIT_REACHED_MESSAGE =
+            "You have used all of today's prompt tests. Try again tomorrow.";
     public static final String NO_CHANGE_MESSAGE = "Nothing changed compared with the version in use.";
     public static final String AUTHOR_ONLY_MESSAGE = "Only the author, a manager or an admin can change this version.";
 
@@ -81,7 +84,9 @@ public final class PromptVersionConstants {
     /** Fields of the generator reply the parser requires, so the shared block must keep asking for them. */
     public static final List<String> SHARED_REQUIRED_PHRASES = List.of("answerHintVi", "answerHintEn");
     /** The data block the reviewer receives the student hints in, so the reviewer prompt must keep judging it. */
-    public static final List<String> REVIEWER_REQUIRED_PHRASES = List.of("STUDENT HINTS");
+    public static final List<String> REVIEWER_REQUIRED_PHRASES = List.of("STUDENT HINTS", "HIDDEN SCORING DATA");
+    /** The chart writer must scale the data to the level the person chose. */
+    public static final List<String> DESCRIBE_IMAGE_REQUIRED_PHRASES = List.of("DIFFICULTY BY CEFR LEVEL");
 
     // Content problems
     public static final String PROBLEM_TITLE = "The title is required and must be at most 200 characters.";

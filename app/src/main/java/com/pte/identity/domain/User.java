@@ -1,7 +1,6 @@
 package com.pte.identity.domain;
 
 import com.pte.shared.domain.BaseEntity;
-import com.pte.shared.security.SecurityRoles;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -19,15 +18,18 @@ import lombok.Setter;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
 /**
- * A person's account. One account can belong to several organizations: tenant-scoped roles live on
- * {@link OrganizationMember}, one row per organization. {@code roles} holds only the account's own roles —
- * platform roles (PLATFORM_ADMIN and friends) and STUDENT for a practice-only account with no organization.
+ * An account. One username belongs to at most one organization ({@code organizationId}, the organization's public
+ * id, the same value other modules call {@code tenantId}); platform accounts and free practice students have none.
+ * {@code roles} holds every role of the account and {@code status} is its only suspension state. A person who works
+ * for two organizations has two accounts. An e-mail is unique per organization (a partial unique index).
  */
 @Entity
 @Table(name = "users", indexes = {
         @Index(name = "idx_users_email", columnList = "email"),
+        @Index(name = "idx_users_organization", columnList = "organization_id"),
         @Index(name = "uk_users_username", columnList = "username", unique = true)
 })
 @Getter
@@ -36,8 +38,9 @@ import java.util.Set;
 public class User extends BaseEntity {
 
     /**
-     * The login key, unique across the platform. Equals {@code email} for every role except an imported STUDENT,
-     * whose roster-generated username is prefixed with its organization's code.
+     * The login key, unique across the platform. Organization accounts (students and staff) get a generated
+     * {@code {tenant.code}.{random}} username; platform accounts (and staff created before that change) keep their
+     * {@code email} as the username.
      */
     @Column(nullable = false)
     private String username;
@@ -59,7 +62,11 @@ public class User extends BaseEntity {
     @Column(nullable = false)
     private boolean mustChangePassword = false;
 
-    /** The account's own roles (platform roles, or STUDENT for practice-only). Organization roles are on members. */
+    /** The organization this account belongs to (public id); null for platform accounts and free practice students. */
+    @Column(name = "organization_id")
+    private UUID organizationId;
+
+    /** Every role of the account: platform roles, or the organization roles (HOST_ADMIN, PROCTOR, STUDENT, ...). */
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))
     @Column(name = "role", nullable = false)
@@ -83,16 +90,20 @@ public class User extends BaseEntity {
         return status == UserStatus.SUSPENDED;
     }
 
+    public boolean hasRole(Role role) {
+        return roles.contains(role);
+    }
+
+    /** Usable: not suspended. Callers add the tenant check themselves. */
+    public boolean isActive() {
+        return !isSuspended();
+    }
+
     public void suspend() {
         this.status = UserStatus.SUSPENDED;
     }
 
     public void reactivate() {
         this.status = UserStatus.ACTIVE;
-    }
-
-    /** Whether the account itself holds a platform role; such an account must never join an organization. */
-    public boolean hasPlatformRole() {
-        return roles.stream().anyMatch(role -> SecurityRoles.isPlatformRole(role.name()));
     }
 }

@@ -1,6 +1,5 @@
 package com.pte.practice.internal.service.session;
 
-import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.enums.PracticeSessionKind;
@@ -14,7 +13,7 @@ import com.pte.practice.internal.dto.request.PracticeSessionActionRequest;
 import com.pte.practice.internal.dto.request.PracticeSessionStartRequest;
 import com.pte.practice.internal.dto.response.PracticeItemResultResponse;
 import com.pte.practice.internal.dto.response.PracticeSessionResponse;
-import com.pte.practice.internal.exception.PracticeSessionException;
+import com.pte.practice.internal.exception.PracticeSessionExpiredException;
 import com.pte.practice.internal.mapper.PracticeSessionResponseMapper;
 import com.pte.practice.internal.repository.PracticeSessionRepository;
 import com.pte.practice.internal.service.PracticeCatalogService;
@@ -28,7 +27,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -131,7 +129,7 @@ public class PracticeSessionService {
         return stateGuard.saveAndMap(session);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = PracticeSessionExpiredException.class)
     public PracticeSessionResponse heartbeat(UUID publicId, PracticeSessionActionRequest request,
             String rawIdempotencyKey, CurrentUser caller) {
         String idempotencyKey = requireIdempotencyKey(rawIdempotencyKey);
@@ -146,8 +144,7 @@ public class PracticeSessionService {
                 || stateGuard.isPastDeadline(session, clock.instant())) {
             stateGuard.expire(session);
             stateGuard.saveAndMap(session);
-            throw new PracticeSessionException(HttpStatus.GONE, PracticeConstants.PRACTICE_SESSION_EXPIRED,
-                    PracticeConstants.PRACTICE_SESSION_EXPIRED_MESSAGE);
+            throw new PracticeSessionExpiredException();
         }
         stateGuard.requireVersion(session, request.clientVersion());
         if (session.getStatus() != PracticeSessionStatus.IN_PROGRESS) {
@@ -158,7 +155,7 @@ public class PracticeSessionService {
         return stateGuard.saveAndMap(session);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = PracticeSessionExpiredException.class)
     public PracticeSessionResponse answer(UUID publicId, UUID itemPublicId, PracticeAnswerRequest request,
             String rawIdempotencyKey, CurrentUser caller) {
         String idempotencyKey = requireIdempotencyKey(rawIdempotencyKey);
@@ -201,7 +198,7 @@ public class PracticeSessionService {
         return itemService.retryScoring(session, item, clock.instant());
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = PracticeSessionExpiredException.class)
     public PracticeSessionResponse skip(UUID publicId, UUID itemPublicId, PracticeSessionActionRequest request,
             String rawIdempotencyKey, CurrentUser caller) {
         String idempotencyKey = requireIdempotencyKey(rawIdempotencyKey);
@@ -221,7 +218,7 @@ public class PracticeSessionService {
         return stateGuard.saveAndMap(session);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = PracticeSessionExpiredException.class)
     public PracticeSessionResponse saveDraft(UUID publicId, UUID itemPublicId, PracticeDraftRequest request,
             String rawIdempotencyKey, CurrentUser caller) {
         String idempotencyKey = requireIdempotencyKey(rawIdempotencyKey);
@@ -239,7 +236,7 @@ public class PracticeSessionService {
         return stateGuard.saveAndMap(session);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = PracticeSessionExpiredException.class)
     public PracticeSessionResponse saveAndExit(UUID publicId, PracticeSaveAndExitRequest request,
             String rawIdempotencyKey, CurrentUser caller) {
         String idempotencyKey = requireIdempotencyKey(rawIdempotencyKey);
@@ -259,8 +256,7 @@ public class PracticeSessionService {
                 && stateGuard.isPastDeadline(session, clock.instant())) {
             stateGuard.expire(session);
             stateGuard.saveAndMap(session);
-            throw new PracticeSessionException(HttpStatus.GONE, PracticeConstants.PRACTICE_SESSION_EXPIRED,
-                    PracticeConstants.PRACTICE_SESSION_EXPIRED_MESSAGE);
+            throw new PracticeSessionExpiredException();
         }
 
         if (request.itemPublicId() == null && request.payload() != null && !request.payload().isBlank()) {

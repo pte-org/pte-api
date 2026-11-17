@@ -20,16 +20,29 @@ import com.pte.itembank.internal.generation.validate.ValidationIssue;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
+import org.springframework.http.HttpStatus;
+import com.pte.itembank.internal.generation.domain.AiPromptKind;
+import com.pte.itembank.internal.generation.exception.GenerationLimitException;
+import com.pte.itembank.internal.generation.usage.PromptTestQuota;
 import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class PromptTestServiceTest {
@@ -43,13 +56,91 @@ class PromptTestServiceTest {
     private final CurrentUser author = PromptVersionTestKit.staff();
     private final ItemDraft draft = new ItemDraft.ChoiceDraft("t", "p", "q", List.of("a", "b"), List.of(0));
 
+    private final PromptTestQuota quota = mock(PromptTestQuota.class);
+
     @SuppressWarnings("unchecked")
     private PromptTestService service(LlmGateway available) {
         ObjectProvider<LlmGateway> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(available);
         return new PromptTestService(kit.repository, PromptVersionTestKit.CODEC, PromptTestRegistry.create(),
                 provider, parser, validator, new ReviewPromptBuilder(mock(GenerationRubricTraits.class),
-                PromptTestRegistry.create()), new ReviewVerdictParser(), PromptVersionTestKit.CLOCK);
+                PromptTestRegistry.create()), new ReviewVerdictParser(), quota, PromptVersionTestKit.CLOCK);
+    }
+
+    @Test
+    void aReachedDailyCapStopsTheRunBeforeTheModelAndRecordsNothing() {
+        AiPromptVersion version = newDraft(TASK);
+        clearInvocations(kit.repository); // forget the saving done while preparing the draft
+        doThrow(new GenerationLimitException(PromptVersionConstants.TEST_DAILY_LIMIT_REACHED,
+                PromptVersionConstants.TEST_DAILY_LIMIT_REACHED_MESSAGE)).when(quota).consume(author.userId());
+
+        assertThatThrownBy(() -> service(gateway).run(version.getPublicId(), author))
+                .isInstanceOfSatisfying(GenerationLimitException.class, failure -> {
+                    assertThat(failure.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+                    assertThat(failure.getCode()).isEqualTo(PromptVersionConstants.TEST_DAILY_LIMIT_REACHED);
+                });
+
+        verifyNoInteractions(gateway);
+        verify(kit.repository, never()).saveAndFlush(any(AiPromptVersion.class));
+        assertThat(version.getTestedAt()).isNull();
+        assertThat(version.hasPassingTest()).isFalse();
+    }
+
+    @Test
+    void anUnavailableProviderDoesNotUseUpTheQuota() {
+        AiPromptVersion version = newDraft(TASK);
+
+        assertThatThrownBy(() -> service(null).run(version.getPublicId(), author))
+                .isInstanceOf(AiPromptException.class);
+
+        verifyNoInteractions(quota);
+    }
+
+    @Test
+    void aVersionThatCannotBeTestedNowDoesNotUseUpTheQuota() {
+        AiPromptVersion live = kit.live(AiPromptKind.GENERATOR, TASK);
+
+        assertThatThrownBy(() -> service(gateway).run(live.getPublicId(), PromptVersionTestKit.admin()))
+                .isInstanceOfSatisfying(AiPromptException.class,
+                        failure -> assertThat(failure.getCode()).isEqualTo(PromptVersionConstants.NOT_EDITABLE));
+
+        verifyNoInteractions(quota, gateway);
+    }
+
+    @Test
+    void anUnknownVersionDoesNotUseUpTheQuota() {
+        assertThatThrownBy(() -> service(gateway).run(UUID.randomUUID(), author))
+                .isInstanceOf(AiPromptException.class);
+
+        verifyNoInteractions(quota, gateway);
+    }
+
+    @Test
+    void aPermittedRunCountsOnceForTheCallerAndBeforeTheModelCall() {
+        AiPromptVersion version = newDraft(TASK);
+        when(gateway.completeJson(any(), any(), any())).thenReturn("{}");
+        when(parser.parse(any(), any())).thenReturn(draft);
+        when(validator.validate(any(), any())).thenReturn(List.of());
+
+        service(gateway).run(version.getPublicId(), author);
+
+        InOrder order = inOrder(quota, gateway);
+        order.verify(quota).consume(author.userId());
+        order.verify(gateway).completeJson(any(), any(), any());
+        verify(quota, times(1)).consume(any());
+        verify(gateway, times(1)).completeJson(any(), any(), any());
+    }
+
+    @Test
+    void aProviderFailureAfterTheRunWasCountedStaysCountedAndIsReportedAsAFailedTest() {
+        AiPromptVersion version = newDraft(TASK);
+        when(gateway.completeJson(any(), any(), any())).thenThrow(new LlmProviderException(LlmFailureType.UNAVAILABLE));
+
+        PromptTestResponse result = service(gateway).run(version.getPublicId(), author);
+
+        assertThat(result.passed()).isFalse();
+        verify(quota, times(1)).consume(author.userId());
+        verifyNoMoreInteractions(quota);
     }
 
     private AiPromptVersion newDraft(String key) {

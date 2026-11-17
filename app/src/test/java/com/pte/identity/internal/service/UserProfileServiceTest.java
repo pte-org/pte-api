@@ -1,6 +1,5 @@
 package com.pte.identity.internal.service;
 
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
@@ -56,13 +55,12 @@ class UserProfileServiceTest {
     void updateOwnProfile_updatesEditableFields_andKeepsTenantScope() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        OrganizationMember member = memberWithId(userPublicId, tenantId);
-        User user = member.getUser();
+        User user = accountWithId(userPublicId, tenantId);
         CurrentUser caller = new CurrentUser(userPublicId, tenantId, List.of("HOST_ADMIN"));
         UpdateOwnProfileRequest request = new UpdateOwnProfileRequest(
                 "  Updated Host  ", " 0900000000 ", LocalDate.of(1990, 5, 20));
 
-        when(memberDirectory.requireMemberForUpdate(tenantId, userPublicId)).thenReturn(member);
+        when(memberDirectory.requireMemberForUpdate(tenantId, userPublicId)).thenReturn(user);
         when(tenancyService.findOrganizationType(tenantId)).thenReturn(Optional.of("SCHOOL"));
 
         UserResponse response = userProfileService.updateOwnProfile(request, caller);
@@ -93,7 +91,7 @@ class UserProfileServiceTest {
     }
 
     @Test
-    void updateOwnProfile_throwsWhenCallerIsNotAMemberOfTheirTenant() {
+    void updateOwnProfile_throwsWhenCallerIsNotAnAccountOfTheirTenant() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         CurrentUser caller = new CurrentUser(userPublicId, tenantId, List.of("HOST_ADMIN"));
@@ -106,7 +104,7 @@ class UserProfileServiceTest {
         verify(auditLogService, never()).record(any(), any(), any(), any(), any());
     }
 
-    private OrganizationMember memberWithId(UUID publicId, UUID tenantId) {
+    private User accountWithId(UUID publicId, UUID tenantId) {
         User user = new User();
         user.setId(1L);
         user.setPublicId(publicId);
@@ -114,11 +112,8 @@ class UserProfileServiceTest {
         user.setEmail("host@tenant.example");
         user.setFullName("Host Admin");
         user.setStatus(UserStatus.ACTIVE);
-        OrganizationMember member = new OrganizationMember();
-        member.setUser(user);
-        member.setOrganizationId(tenantId);
-        member.setStatus(UserStatus.ACTIVE);
-        member.setRoles(new HashSet<>(Set.of(Role.HOST_ADMIN)));
-        return member;
+        user.setOrganizationId(tenantId);
+        user.setRoles(new HashSet<>(Set.of(Role.HOST_ADMIN)));
+        return user;
     }
 }

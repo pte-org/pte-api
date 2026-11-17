@@ -1,0 +1,48 @@
+name: Migration guard
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - "app/src/main/resources/db/migration/**"
+      - "scripts/check-migrations.sh"
+      - "scripts/tests/check-migrations-test.sh"
+      - ".github/workflows/migration-guard.yml"
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Branch to compare with (pull requests in this repository target dev)
+        required: false
+        default: dev
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Merged migrations are immutable
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The guard compares with the base branch, so it needs the history, not a shallow clone.
+          fetch-depth: 0
+
+      - name: Test the guard itself
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/tests/check-migrations-test.sh
+
+      # A database that already ran a migration refuses to start once that file is edited or renumbered.
+      - name: Check migrations against the base branch
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref || inputs.base || 'dev' }}
+        run: |
+          set -euo pipefail
+          bash scripts/check-migrations.sh "origin/${BASE_REF}"

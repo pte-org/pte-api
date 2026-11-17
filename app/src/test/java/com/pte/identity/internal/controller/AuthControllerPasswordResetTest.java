@@ -50,10 +50,11 @@ class AuthControllerPasswordResetTest {
         http.setRemoteAddr("10.0.0.5");
         http.addHeader("X-Forwarded-For", "203.0.113.1, 198.51.100.7");
 
-        ApiResponse<Void> response = controller.requestPasswordReset(new PasswordResetRequest("host@x.vn"), http);
+        ApiResponse<Void> response = controller.requestPasswordReset(new PasswordResetRequest("host@x.vn", "host-1"),
+                http);
 
         assertThat(response.success()).isTrue();
-        verify(passwordResetDispatcher).requestAsync("host@x.vn", "198.51.100.7");
+        verify(passwordResetDispatcher).requestAsync("host@x.vn", "host-1", "198.51.100.7");
         verifyNoInteractions(passwordResetService);
     }
 
@@ -62,9 +63,21 @@ class AuthControllerPasswordResetTest {
         MockHttpServletRequest http = new MockHttpServletRequest();
         http.setRemoteAddr("10.0.0.5");
 
-        controller.requestPasswordReset(new PasswordResetRequest("host@x.vn"), http);
+        controller.requestPasswordReset(new PasswordResetRequest("host@x.vn", "host-1"), http);
 
-        verify(passwordResetDispatcher).requestAsync("host@x.vn", "10.0.0.5");
+        verify(passwordResetDispatcher).requestAsync("host@x.vn", "host-1", "10.0.0.5");
+    }
+
+    @Test
+    void requestBody_requiresBothTheEmailAndTheUsername() {
+        try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+            var validator = factory.getValidator();
+
+            assertThat(validator.validate(new PasswordResetRequest("host@x.vn", "host-1"))).isEmpty();
+            assertThat(validator.validate(new PasswordResetRequest("host@x.vn", null))).hasSize(1);
+            assertThat(validator.validate(new PasswordResetRequest("host@x.vn", "  "))).hasSize(1);
+            assertThat(validator.validate(new PasswordResetRequest(" ", "host-1"))).hasSize(1);
+        }
     }
 
     @Test

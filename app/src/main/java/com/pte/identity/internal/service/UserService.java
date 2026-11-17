@@ -1,6 +1,5 @@
 package com.pte.identity.internal.service;
 
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.dto.request.user.BulkCreateUsersRequest;
@@ -13,10 +12,10 @@ import com.pte.identity.internal.dto.response.GeneratedCredentialsResponse;
 import com.pte.identity.internal.dto.response.UserDirectoryEntryResponse;
 import com.pte.identity.internal.dto.response.UserResponse;
 import com.pte.identity.internal.exception.EmailAlreadyUsedException;
+import org.springframework.dao.DataIntegrityViolationException;
 import com.pte.identity.internal.exception.ForbiddenUserManagementException;
 import com.pte.identity.internal.exception.UserNotFoundException;
 import com.pte.identity.internal.mapper.UserMapper;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.service.user.ManagedUserResolver;
 import com.pte.identity.internal.service.user.ManagedUserResolver.Target;
@@ -38,14 +37,13 @@ import java.util.UUID;
 
 /**
  * User provisioning + lookup, tenant-isolated. A host manages only accounts that are members of its own
- * organization; a platform admin can target an organization. An e-mail that already belongs to an account joins
- * that account to the organization instead of creating a second account.
+ * organization; a platform admin can target an organization. Every organization account is a new account with a
+ * generated username; an e-mail only has to be unique inside the organization.
  */
 @Service
 public class UserService {
 
     private final UserRepository userRepository;
-    private final OrganizationMemberRepository memberRepository;
     private final OrganizationMemberDirectory memberDirectory;
     private final UserProvisioningHelper provisioningHelper;
     private final TenancyService tenancyService;
@@ -54,23 +52,21 @@ public class UserService {
     private final UserAccountProvisioner accountProvisioner;
     private final UserCredentialRotation credentialRotation;
 
-    public UserService(UserRepository userRepository, OrganizationMemberRepository memberRepository,
+    public UserService(UserRepository userRepository,
                        OrganizationMemberDirectory memberDirectory, PasswordEncoder passwordEncoder,
                        UserProvisioningHelper provisioningHelper, UserBulkCreateWriter bulkCreateWriter,
                        TenancyService tenancyService, ApplicationEventPublisher eventPublisher,
                        AuditLogService auditLogService, RefreshTokenService refreshTokenService,
                        StartedAttemptLookup startedAttemptLookup, Clock clock) {
         this.userRepository = userRepository;
-        this.memberRepository = memberRepository;
         this.memberDirectory = memberDirectory;
         this.provisioningHelper = provisioningHelper;
         this.tenancyService = tenancyService;
         this.refreshTokenService = refreshTokenService;
-        this.targetResolver = new ManagedUserResolver(userRepository, memberRepository, memberDirectory,
-                provisioningHelper);
-        this.accountProvisioner = new UserAccountProvisioner(userRepository, memberRepository, passwordEncoder,
+        this.targetResolver = new ManagedUserResolver(userRepository, memberDirectory, provisioningHelper);
+        this.accountProvisioner = new UserAccountProvisioner(userRepository, passwordEncoder,
                 provisioningHelper, bulkCreateWriter, tenancyService, eventPublisher, clock);
-        this.credentialRotation = new UserCredentialRotation(userRepository, memberDirectory, passwordEncoder,
+        this.credentialRotation = new UserCredentialRotation(userRepository, passwordEncoder,
                 provisioningHelper, targetResolver, eventPublisher, auditLogService, refreshTokenService,
                 startedAttemptLookup);
     }
@@ -102,15 +98,14 @@ public class UserService {
         if (caller == null || caller.tenantId() == null || !caller.hasRole(Role.HOST_ADMIN.name())) {
             throw new ForbiddenUserManagementException();
         }
-        OrganizationMember member = memberDirectory.requireMemberForUpdate(caller.tenantId(), publicId);
-        if (!member.hasRole(Role.STUDENT) || !memberDirectory.isExclusivelyOwned(member)) {
+        User user = memberDirectory.requireMemberForUpdate(caller.tenantId(), publicId);
+        if (!user.hasRole(Role.STUDENT)) {
             throw new ForbiddenUserManagementException();
         }
-        User user = member.getUser();
         String email = UserAccountProvisioner.normalizeOptional(request.email());
         // A Student's e-mail only has to be unique inside the organization: the same person in another
         // organization is a separate account.
-        if (email != null && memberRepository.existsCanonicalEmail(caller.tenantId(),
+        if (email != null && userRepository.existsCanonicalEmail(caller.tenantId(),
                 email.toLowerCase(Locale.ROOT), publicId)) {
             throw new EmailAlreadyUsedException();
         }
@@ -118,18 +113,22 @@ public class UserService {
         user.setEmail(email);
         user.setPhone(UserAccountProvisioner.normalizeOptional(request.phone()));
         user.setDateOfBirth(request.dateOfBirth());
-        return UserMapper.toResponse(member);
+        try {
+            userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException ex) {
+            // Concurrent edit to the same e-mail: the unique (organization, e-mail) index is the backstop.
+            throw new EmailAlreadyUsedException();
+        }
+        return UserMapper.toResponse(user);
     }
 
     @Transactional(readOnly = true)
     public UserResponse me(CurrentUser caller) {
         User user = userRepository.findByPublicId(caller.userId())
                 .orElseThrow(UserNotFoundException::new);
-        OrganizationMember member = caller.tenantId() == null ? null
-                : memberDirectory.find(caller.tenantId(), caller.userId()).orElse(null);
-        String organizationType = caller.tenantId() == null ? null
-                : tenancyService.findOrganizationType(caller.tenantId()).orElse(null);
-        return UserMapper.toResponse(user, member, organizationType);
+        String organizationType = user.getOrganizationId() == null ? null
+                : tenancyService.findOrganizationType(user.getOrganizationId()).orElse(null);
+        return UserMapper.toResponse(user, organizationType);
     }
 
     @Transactional(readOnly = true)
@@ -138,7 +137,7 @@ public class UserService {
         if (tenantId == null) {
             return List.of();
         }
-        return memberRepository.findActiveByOrganization(tenantId).stream()
+        return userRepository.findActiveByOrganization(tenantId).stream()
                 .filter(member -> provisioningHelper.canManageTarget(caller, member.getRoles()))
                 .map(UserMapper::toResponse)
                 .toList();
@@ -155,9 +154,8 @@ public class UserService {
         if (tenantId == null) {
             return List.of();
         }
-        return memberRepository.findActiveByOrganization(tenantId).stream()
-                .map(member -> new UserDirectoryEntryResponse(member.getUser().getPublicId(),
-                        member.getUser().getFullName()))
+        return userRepository.findActiveByOrganization(tenantId).stream()
+                .map(user -> new UserDirectoryEntryResponse(user.getPublicId(), user.getFullName()))
                 .toList();
     }
 
@@ -165,11 +163,7 @@ public class UserService {
     public UserResponse suspend(UUID publicId, CurrentUser caller) {
         Target target = targetResolver.findScoped(publicId, caller, true);
         target.suspend();
-        if (target.member() != null) {
-            refreshTokenService.revokeForMembership(target.user().getId(), target.organizationId());
-        } else {
-            refreshTokenService.revokeAllForUser(target.user().getId());
-        }
+        refreshTokenService.revokeAllForUser(target.user().getId());
         return target.toResponse();
     }
 
@@ -214,7 +208,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public List<UserResponse> listForTenant(UUID tenantId, CurrentUser caller) {
         provisioningHelper.authorizePlatformTenantListing(caller);
-        return memberRepository.findActiveByOrganization(tenantId).stream()
+        return userRepository.findActiveByOrganization(tenantId).stream()
                 .filter(member -> provisioningHelper.canManageTarget(caller, member.getRoles()))
                 .map(UserMapper::toResponse)
                 .toList();

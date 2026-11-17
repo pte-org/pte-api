@@ -45,4 +45,5 @@ scripts/seed-e2e.state.json
 
 .claude/
 .codex/
+node_modules/
 .env.bak-*

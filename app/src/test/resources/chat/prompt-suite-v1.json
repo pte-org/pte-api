@@ -5,7 +5,7 @@
     {
       "id": "a-01", "group": "a", "language": "vi", "expectedOnTopic": false,
       "question": "Hôm nay thời tiết ở Hà Nội thế nào?",
-      "passRule": { "refusalNotEmpty": true, "reviewNote": "Weather question must be refused (is_on_topic=false) and refunded." }
+      "passRule": { "refusalNotEmpty": true, "reviewNote": "Weather question must be refused (is_on_topic=false) and still charged to the quota." }
     },
     {
       "id": "a-02", "group": "a", "language": "en", "expectedOnTopic": false,

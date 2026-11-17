@@ -65,6 +65,8 @@ final class GeneratedImageCheck {
         if (look.passed()) {
             return null;
         }
+        LOG.info("Generation image refused: jobId={}, item={}, redraw={}, issues={}", jobPublicId, index, canRedraw,
+                String.join(" | ", look.issues()));
         if (canRedraw) {
             mediaRenderer.discard(null, media.imagePromptRef(), caller);
         } else {

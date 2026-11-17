@@ -41,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * {@code max-concurrent} 20. Here: 150 ms provider latency (20x faster), {@code max-concurrent} 4, daily limit 5,
  * 60 students, 300 sends. Students are a mix: 4 already at the limit (7 sends each, all must be refused with
  * 429), 6 heavy (12 sends each, they reach the limit), 50 normal (4 sends each). The fake provider fails
- * every 10th call with HTTP 500 and answers every 5th (offset 3) off-topic, so refunds are exercised.
+ * every 10th call with HTTP 500 and answers every 5th (offset 3) off-topic. Only provider failures are refunded; an off-topic answer is charged.
  * <ul>
  * <li>Phase A, steady (150 sends): the test never lets more than {@code max-concurrent} sends overlap, so the
  *     global gate can never be full: the number of 503 from the gate must be exactly 0.</li>
@@ -251,7 +251,8 @@ class ChatLoadPostgresTest extends ChatFlowPostgresBase {
         // Per-student quota: never above the limit, equal to the seed plus the successful sends.
         for (int s = 0; s < STUDENTS; s++) {
             int seed = s < AT_LIMIT_STUDENTS ? LIMIT : 0;
-            long studentOk = byStudent.getOrDefault(s, List.of()).stream().filter(o -> o == Outcome.OK).count();
+            long studentOk = byStudent.getOrDefault(s, List.of()).stream()
+                    .filter(o -> o == Outcome.OK || o == Outcome.REFUSED).count();
             int used = stack.data.used(ids.get(s), ChatFlowHarness.DAY);
             assertThat(used).as("student %d used", s).isLessThanOrEqualTo(LIMIT)
                     .isEqualTo((int) (seed + studentOk));
@@ -269,14 +270,16 @@ class ChatLoadPostgresTest extends ChatFlowPostgresBase {
         assertThat(strayDays).as("usage rows on another day").isZero();
         long totalUsed = jdbc.queryForObject("SELECT coalesce(sum(used), 0) FROM chat_usage", new MapSqlParameterSource(),
                 Long.class);
-        assertThat(totalUsed).as("sum of counters == seeded + OK sends").isEqualTo((long) AT_LIMIT_STUDENTS * LIMIT + ok);
+        assertThat(totalUsed).as("sum of counters == seeded + OK + REFUSED sends")
+                .isEqualTo((long) AT_LIMIT_STUDENTS * LIMIT + ok + refused);
 
-        // Refunds: every off-topic and failed call restored the counter, none of the refunds failed.
-        assertThat(Math.round(stack.meter("chat.quota.refunded"))).as("refunds == REFUSED + FAILED")
-                .isEqualTo(refused + failedRows);
+        // Refunds: only failed calls restored the counter (off-topic is charged), none of the refunds failed.
+        assertThat(Math.round(stack.meter("chat.quota.refunded"))).as("refunds == FAILED only")
+                .isEqualTo(failedRows);
         assertThat(stack.meter("chat.quota.refund.failed")).isZero();
         assertThat(Math.round(stack.meter("chat.inflight.rejected"))).as("409 meter").isEqualTo(conflict);
-        assertThat(refused + failedRows).as("refunds were exercised").isPositive();
+        assertThat(failedRows).as("refunds were exercised").isPositive();
+        assertThat(refused).as("charged off-topic replies were exercised").isPositive();
         assertThat(quota429).as("the quota (429) path was exercised").isPositive();
         assertThat(ok).as("some sends succeeded").isPositive();
 

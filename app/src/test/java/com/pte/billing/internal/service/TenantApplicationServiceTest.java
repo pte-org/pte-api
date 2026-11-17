@@ -161,7 +161,7 @@ class TenantApplicationServiceTest {
 
         User hostAdminUser = new User();
         hostAdminUser.setPublicId(UUID.randomUUID());
-        hostAdminUser.setUsername("contact@acme.example");
+        hostAdminUser.setUsername("acme.k7m2p9qx");
         hostAdminUser.setRoles(Set.of(Role.HOST_ADMIN));
         HostAdminCreated hostAdmin = new HostAdminCreated(hostAdminUser, "Gener4ted!");
 
@@ -172,7 +172,7 @@ class TenantApplicationServiceTest {
             application.approve(reviewerId, Instant.parse("2026-10-17T00:00:00Z"));
             return application;
         });
-        when(identityService.createHostAdmin(applicationId, "contact@acme.example")).thenReturn(hostAdmin);
+        when(identityService.createHostAdmin(applicationId, "acme", "contact@acme.example")).thenReturn(hostAdmin);
 
         CurrentUser caller = new CurrentUser(reviewerId, null, List.of("PLATFORM_MANAGER"));
         service.approve(applicationId, caller);
@@ -185,7 +185,7 @@ class TenantApplicationServiceTest {
         ArgumentCaptor<TenantApplicationApprovedEvent> eventCaptor =
                 ArgumentCaptor.forClass(TenantApplicationApprovedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
-        assertThat(eventCaptor.getValue().hostAdminUsername()).isEqualTo("contact@acme.example");
+        assertThat(eventCaptor.getValue().hostAdminUsername()).isEqualTo("acme.k7m2p9qx");
         assertThat(eventCaptor.getValue().hostAdminPassword()).isEqualTo("Gener4ted!");
     }
 
@@ -212,7 +212,7 @@ class TenantApplicationServiceTest {
         assertThatThrownBy(() -> service.approve(applicationId, caller))
                 .isInstanceOf(ApplicationNotPendingException.class);
         verify(tenancyService, never()).approveApplication(any(), any(), anyInt());
-        verify(identityService, never()).createHostAdmin(any(), any());
+        verify(identityService, never()).createHostAdmin(any(), any(), any());
     }
 
     @Test
@@ -261,7 +261,7 @@ class TenantApplicationServiceTest {
         assertThatThrownBy(() -> service.approve(applicationId,
                 new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"))))
                 .isInstanceOf(RequestedTaxCodeAlreadyUsedException.class);
-        verify(identityService, never()).createHostAdmin(any(), any());
+        verify(identityService, never()).createHostAdmin(any(), any(), any());
         assertThat(TenantApplicationMapper.statusOf(application)).isEqualTo(TenantApplicationStatus.PENDING);
     }
 

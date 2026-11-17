@@ -1,23 +1,17 @@
 package com.pte.identity.internal.service;
 
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
 import com.pte.identity.internal.config.AuthTokenProperties;
-import com.pte.identity.internal.dto.request.auth.LoginOrganizationOptionsRequest;
 import com.pte.identity.internal.dto.request.auth.LoginRequest;
 import com.pte.identity.internal.dto.request.auth.RefreshRequest;
-import com.pte.identity.internal.dto.response.LoginOrganizationOptionResponse;
 import com.pte.identity.internal.dto.response.TokenResponse;
 import com.pte.identity.internal.exception.InvalidLoginException;
 import com.pte.identity.internal.exception.InvalidRefreshTokenException;
 import com.pte.identity.internal.exception.TooManyLoginAttemptsException;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.security.AccessTokenIssuer;
-import com.pte.tenancy.LoginOrganizationOption;
-import com.pte.tenancy.TenancyService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,7 +20,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -39,9 +32,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Login keys on the globally unique username. Platform roles sit on the account and sign in without an
- * organization; tenant roles sit on the membership. One test per role (not a parameterized/looped test) so a single
- * role silently falling through is its own failure, not hidden inside a shared assertion.
+ * Login keys on the globally unique username. An account belongs to at most one organization and carries all its
+ * roles: platform accounts and free practice students have no organization and sign in without one, every other
+ * account lands in its own organization. One test per role (not a parameterized/looped test) so a single role
+ * silently falling through is its own failure, not hidden inside a shared assertion.
  */
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -52,16 +46,10 @@ class AuthServiceTest {
     private UserRepository userRepository;
 
     @Mock
-    private OrganizationMemberRepository memberRepository;
-
-    @Mock
     private AccessTokenIssuer accessTokenIssuer;
 
     @Mock
     private RefreshTokenService refreshTokenService;
-
-    @Mock
-    private TenancyService tenancyService;
 
     @Mock
     private LoginThrottle loginThrottle;
@@ -72,8 +60,8 @@ class AuthServiceTest {
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(userRepository, memberRepository, passwordEncoder,
-                accessTokenIssuer, refreshTokenService, tenancyService, loginThrottle, tokenProperties);
+        authService = new AuthService(userRepository, passwordEncoder,
+                accessTokenIssuer, refreshTokenService, loginThrottle, tokenProperties);
     }
 
     private User activeUser(Long id, Set<Role> roles, String username) {
@@ -89,13 +77,10 @@ class AuthServiceTest {
         return user;
     }
 
-    private OrganizationMember memberOf(User user, UUID organizationId, Role role) {
-        OrganizationMember member = new OrganizationMember();
-        member.setUser(user);
-        member.setOrganizationId(organizationId);
-        member.setStatus(UserStatus.ACTIVE);
-        member.setRoles(Set.of(role));
-        return member;
+    private User organizationAccount(Long id, UUID organizationId, Role role, String username) {
+        User user = activeUser(id, Set.of(role), username);
+        user.setOrganizationId(organizationId);
+        return user;
     }
 
     private void assertPlatformLoginSucceeds(Role role) {
@@ -103,22 +88,19 @@ class AuthServiceTest {
         User user = activeUser(1L, Set.of(role), username);
 
         when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
-        when(memberRepository.findByUser_IdAndDeletedFalse(1L)).thenReturn(List.of());
-        when(accessTokenIssuer.issue(user, null)).thenReturn("access-token");
+        when(accessTokenIssuer.issue(user)).thenReturn("access-token");
         when(refreshTokenService.issue(user, null)).thenReturn("refresh-token");
 
         assertBearerPair(authService.login(new LoginRequest(username, PASSWORD)));
     }
 
-    private void assertMemberLoginSucceeds(Role role) {
+    private void assertOrganizationLoginSucceeds(Role role) {
         UUID organizationId = UUID.randomUUID();
         String username = role.name().toLowerCase() + "@tenant.example";
-        User user = activeUser(1L, Set.of(), username);
-        OrganizationMember member = memberOf(user, organizationId, role);
+        User user = organizationAccount(1L, organizationId, role, username);
 
         when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
-        when(memberRepository.findByUser_IdAndDeletedFalse(1L)).thenReturn(List.of(member));
-        when(accessTokenIssuer.issue(user, member)).thenReturn("access-token");
+        when(accessTokenIssuer.issue(user)).thenReturn("access-token");
         when(refreshTokenService.issue(user, organizationId)).thenReturn("refresh-token");
 
         assertBearerPair(authService.login(new LoginRequest(username, PASSWORD)));
@@ -143,39 +125,75 @@ class AuthServiceTest {
 
     @Test
     void login_hostAdmin_succeeds() {
-        assertMemberLoginSucceeds(Role.HOST_ADMIN);
+        assertOrganizationLoginSucceeds(Role.HOST_ADMIN);
     }
 
     @Test
     void login_examiner_succeeds() {
-        assertMemberLoginSucceeds(Role.EXAMINER);
+        assertOrganizationLoginSucceeds(Role.EXAMINER);
     }
 
     @Test
     void login_proctor_succeeds() {
-        assertMemberLoginSucceeds(Role.PROCTOR);
+        assertOrganizationLoginSucceeds(Role.PROCTOR);
     }
 
     @Test
     void login_student_succeeds() {
-        assertMemberLoginSucceeds(Role.STUDENT);
+        assertOrganizationLoginSucceeds(Role.STUDENT);
     }
 
     @Test
     void login_studentWithTemporaryPassword_returnsMustChangePasswordFlag() {
         UUID organizationId = UUID.randomUUID();
         String username = "school.abcdefgh";
-        User user = activeUser(1L, Set.of(), username);
+        User user = organizationAccount(1L, organizationId, Role.STUDENT, username);
         user.setMustChangePassword(true);
-        OrganizationMember member = memberOf(user, organizationId, Role.STUDENT);
         when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
-        when(memberRepository.findByUser_IdAndDeletedFalse(1L)).thenReturn(List.of(member));
-        when(accessTokenIssuer.issue(user, member)).thenReturn("access-token");
+        when(accessTokenIssuer.issue(user)).thenReturn("access-token");
         when(refreshTokenService.issue(user, organizationId)).thenReturn("refresh-token");
 
         TokenResponse response = authService.login(new LoginRequest(username, PASSWORD));
 
         assertThat(response.mustChangePassword()).isTrue();
+    }
+
+    @Test
+    void login_accountLandsInItsOwnOrganization_withoutAnyOrganizationChoice() {
+        UUID organizationId = UUID.randomUUID();
+        String username = "school.owner001";
+        User user = organizationAccount(1L, organizationId, Role.HOST_ADMIN, username);
+        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
+        when(accessTokenIssuer.issue(user)).thenReturn("access-token");
+        when(refreshTokenService.issue(user, organizationId)).thenReturn("refresh-token");
+
+        authService.login(new LoginRequest(username, PASSWORD));
+
+        verify(accessTokenIssuer).issue(user);
+        verify(refreshTokenService).issue(user, organizationId);
+    }
+
+    @Test
+    void login_freePracticeStudentWithoutOrganization_getsATokenWithoutATenant() {
+        String username = "free.student@example.test";
+        User user = activeUser(1L, Set.of(Role.STUDENT), username);
+        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
+        when(accessTokenIssuer.issue(user)).thenReturn("access-token");
+        when(refreshTokenService.issue(user, null)).thenReturn("refresh-token");
+
+        assertBearerPair(authService.login(new LoginRequest(username, PASSWORD)));
+        verify(refreshTokenService).issue(user, null);
+    }
+
+    @Test
+    void login_accountWithoutOrganizationAndWithoutRoles_isRejected() {
+        String username = "stranded@example.test";
+        User user = activeUser(1L, Set.of(), username);
+        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest(username, PASSWORD)))
+                .isInstanceOf(InvalidLoginException.class);
+        verify(accessTokenIssuer, never()).issue(any());
     }
 
     @Test
@@ -197,12 +215,13 @@ class AuthServiceTest {
 
     @Test
     void login_suspendedUser_throwsInvalidLoginWithoutCheckingPassword() {
-        User user = activeUser(1L, Set.of(), "host@tenant.example");
+        User user = organizationAccount(1L, UUID.randomUUID(), Role.HOST_ADMIN, "host@tenant.example");
         user.setStatus(UserStatus.SUSPENDED);
         when(userRepository.findByUsernameAndDeletedFalse("host@tenant.example")).thenReturn(Optional.of(user));
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("host@tenant.example", PASSWORD)))
                 .isInstanceOf(InvalidLoginException.class);
+        verify(accessTokenIssuer, never()).issue(any());
     }
 
     @Test
@@ -210,6 +229,16 @@ class AuthServiceTest {
         when(userRepository.findByUsernameAndDeletedFalse("archived@example.test")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("archived@example.test", PASSWORD)))
+                .isInstanceOf(InvalidLoginException.class);
+    }
+
+    @Test
+    void login_accountWithoutCredential_throwsInvalidLogin() {
+        User user = organizationAccount(1L, UUID.randomUUID(), Role.STUDENT, "passwordless@example.test");
+        user.setCredentialHash(null);
+        when(userRepository.findByUsernameAndDeletedFalse("passwordless@example.test")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("passwordless@example.test", PASSWORD)))
                 .isInstanceOf(InvalidLoginException.class);
     }
 
@@ -223,128 +252,61 @@ class AuthServiceTest {
     }
 
     @Test
-    void login_accountInSeveralOrganizations_requiresOrganizationSelection() {
-        UUID firstOrganizationId = UUID.randomUUID();
-        UUID secondOrganizationId = UUID.randomUUID();
-        String username = "shared@tenant.example";
-        User user = activeUser(1L, Set.of(), username);
-        OrganizationMember first = memberOf(user, firstOrganizationId, Role.HOST_ADMIN);
-        OrganizationMember second = memberOf(user, secondOrganizationId, Role.HOST_ADMIN);
-
-        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
-        when(memberRepository.findByUser_IdAndDeletedFalse(1L)).thenReturn(List.of(first, second));
-        assertThatThrownBy(() -> authService.login(new LoginRequest(username, PASSWORD)))
-                .isInstanceOf(InvalidLoginException.class);
-
-        when(memberRepository.findByUser_IdAndOrganizationIdAndDeletedFalse(1L, secondOrganizationId))
-                .thenReturn(Optional.of(second));
-        when(accessTokenIssuer.issue(user, second)).thenReturn("access-token");
-        when(refreshTokenService.issue(user, secondOrganizationId)).thenReturn("refresh-token");
-
-        TokenResponse response = authService.login(new LoginRequest(username, PASSWORD, secondOrganizationId));
-
-        assertThat(response.accessToken()).isEqualTo("access-token");
-    }
-
-    @Test
-    void loginOrganizations_returnsEveryOrganizationOfTheAuthenticatedAccount() {
-        UUID firstOrganizationId = UUID.randomUUID();
-        UUID secondOrganizationId = UUID.randomUUID();
-        String username = "shared@tenant.example";
-        User user = activeUser(1L, Set.of(), username);
-        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
-        when(memberRepository.findByUser_IdAndDeletedFalse(1L)).thenReturn(List.of(
-                memberOf(user, firstOrganizationId, Role.HOST_ADMIN),
-                memberOf(user, secondOrganizationId, Role.STUDENT)));
-        when(tenancyService.findLoginOrganization(firstOrganizationId)).thenReturn(Optional.of(
-                new LoginOrganizationOption(firstOrganizationId, "alpha", "Alpha Center", "language-center")));
-        when(tenancyService.findLoginOrganization(secondOrganizationId)).thenReturn(Optional.of(
-                new LoginOrganizationOption(secondOrganizationId, "beta", "Beta School", "school")));
-
-        List<LoginOrganizationOptionResponse> options = authService.loginOrganizations(
-                new LoginOrganizationOptionsRequest(username, PASSWORD));
-
-        assertThat(options).containsExactly(
-                new LoginOrganizationOptionResponse(firstOrganizationId, "alpha", "Alpha Center", "language-center"),
-                new LoginOrganizationOptionResponse(secondOrganizationId, "beta", "Beta School", "school"));
-    }
-
-    @Test
-    void loginOrganizations_keepsSuspendedTenantSelectableForAuthentication() {
+    void refresh_staysInTheOrganizationOfTheAccount() {
         UUID organizationId = UUID.randomUUID();
-        String username = "shared@suspended.example";
-        User user = activeUser(1L, Set.of(), username);
-        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
-        when(memberRepository.findByUser_IdAndDeletedFalse(1L)).thenReturn(List.of(
-                memberOf(user, organizationId, Role.HOST_ADMIN)));
-        when(tenancyService.findLoginOrganization(organizationId)).thenReturn(Optional.of(
-                new LoginOrganizationOption(organizationId, "suspended-school", "Suspended School", "school")));
+        User user = organizationAccount(7L, organizationId, Role.HOST_ADMIN, "host@school.vn");
+        when(refreshTokenService.consume("raw")).thenReturn(new RefreshSession(7L, organizationId));
+        when(userRepository.findByIdAndDeletedFalse(7L)).thenReturn(Optional.of(user));
+        when(accessTokenIssuer.issue(user)).thenReturn("access-2");
+        when(refreshTokenService.issue(user, organizationId)).thenReturn("refresh-2");
 
-        assertThat(authService.loginOrganizations(new LoginOrganizationOptionsRequest(username, PASSWORD)))
-                .containsExactly(new LoginOrganizationOptionResponse(
-                        organizationId, "suspended-school", "Suspended School", "school"));
+        TokenResponse response = authService.refresh(new RefreshRequest("raw"));
+
+        assertThat(response.accessToken()).isEqualTo("access-2");
+        assertThat(response.refreshToken()).isEqualTo("refresh-2");
     }
 
     @Test
-    void login_suspendedMembership_isRejectedEvenWithTheRightPassword() {
-        UUID organizationId = UUID.randomUUID();
-        String username = "suspended@tenant.example";
-        User user = activeUser(1L, Set.of(), username);
-        OrganizationMember member = memberOf(user, organizationId, Role.STUDENT);
-        member.suspend();
-        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
-        when(memberRepository.findByUser_IdAndDeletedFalse(1L)).thenReturn(List.of(member));
+    void refresh_platformAccountWithoutOrganization_staysWithoutOne() {
+        User user = activeUser(8L, Set.of(Role.PLATFORM_ADMIN), "admin@platform.example");
+        when(refreshTokenService.consume("raw")).thenReturn(new RefreshSession(8L, null));
+        when(userRepository.findByIdAndDeletedFalse(8L)).thenReturn(Optional.of(user));
+        when(accessTokenIssuer.issue(user)).thenReturn("access-2");
+        when(refreshTokenService.issue(user, null)).thenReturn("refresh-2");
 
-        assertThatThrownBy(() -> authService.login(new LoginRequest(username, PASSWORD)))
-                .isInstanceOf(InvalidLoginException.class);
+        assertThat(authService.refresh(new RefreshRequest("raw")).accessToken()).isEqualTo("access-2");
     }
 
     @Test
-    void login_chosenOrganizationWithSuspendedMembership_isRejected() {
+    void refresh_tokenBoundToAnotherOrganization_isRejected() {
         UUID organizationId = UUID.randomUUID();
-        String username = "suspended@tenant.example";
-        User user = activeUser(1L, Set.of(), username);
-        OrganizationMember member = memberOf(user, organizationId, Role.STUDENT);
-        member.suspend();
-        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
-        when(memberRepository.findByUser_IdAndOrganizationIdAndDeletedFalse(1L, organizationId))
-                .thenReturn(Optional.of(member));
-
-        assertThatThrownBy(() -> authService.login(new LoginRequest(username, PASSWORD, organizationId)))
-                .isInstanceOf(InvalidLoginException.class);
-    }
-
-    @Test
-    void refresh_suspendedMembership_isRejected() {
-        UUID organizationId = UUID.randomUUID();
-        User user = activeUser(9L, Set.of(), "suspended@tenant.example");
-        OrganizationMember member = memberOf(user, organizationId, Role.STUDENT);
-        member.suspend();
-        when(refreshTokenService.consume("refresh-token")).thenReturn(new RefreshSession(9L, organizationId));
+        User user = organizationAccount(9L, organizationId, Role.STUDENT, "student@tenant.example");
+        when(refreshTokenService.consume("refresh-token")).thenReturn(new RefreshSession(9L, UUID.randomUUID()));
         when(userRepository.findByIdAndDeletedFalse(9L)).thenReturn(Optional.of(user));
-        when(memberRepository.findByUser_IdAndOrganizationIdAndDeletedFalse(9L, organizationId))
-                .thenReturn(Optional.of(member));
 
         assertThatThrownBy(() -> authService.refresh(new RefreshRequest("refresh-token")))
                 .isInstanceOf(InvalidRefreshTokenException.class);
+        verify(accessTokenIssuer, never()).issue(any());
     }
 
     @Test
-    void loginOrganizations_omitsOrganizationsWhereTheMembershipIsSuspended() {
-        UUID activeOrganizationId = UUID.randomUUID();
-        UUID suspendedOrganizationId = UUID.randomUUID();
-        String username = "two@tenant.example";
-        User user = activeUser(1L, Set.of(), username);
-        OrganizationMember suspended = memberOf(user, suspendedOrganizationId, Role.STUDENT);
-        suspended.suspend();
-        when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
-        when(memberRepository.findByUser_IdAndDeletedFalse(1L)).thenReturn(List.of(
-                memberOf(user, activeOrganizationId, Role.HOST_ADMIN), suspended));
-        when(tenancyService.findLoginOrganization(activeOrganizationId)).thenReturn(Optional.of(
-                new LoginOrganizationOption(activeOrganizationId, "alpha", "Alpha Center", "school")));
+    void refresh_suspendedAccount_isRejected() {
+        UUID organizationId = UUID.randomUUID();
+        User user = organizationAccount(9L, organizationId, Role.STUDENT, "suspended@tenant.example");
+        user.suspend();
+        when(refreshTokenService.consume("refresh-token")).thenReturn(new RefreshSession(9L, organizationId));
+        when(userRepository.findByIdAndDeletedFalse(9L)).thenReturn(Optional.of(user));
 
-        assertThat(authService.loginOrganizations(new LoginOrganizationOptionsRequest(username, PASSWORD)))
-                .extracting(LoginOrganizationOptionResponse::tenantId).containsExactly(activeOrganizationId);
+        assertThatThrownBy(() -> authService.refresh(new RefreshRequest("refresh-token")))
+                .isInstanceOf(InvalidRefreshTokenException.class);
+        verify(accessTokenIssuer, never()).issue(any());
+    }
+
+    @Test
+    void logout_revokesTheRefreshToken() {
+        authService.logout(new RefreshRequest("refresh-token"));
+
+        verify(refreshTokenService).revoke("refresh-token");
     }
 
     @Test
@@ -383,21 +345,11 @@ class AuthServiceTest {
         String username = "admin@platform.example";
         User user = activeUser(1L, Set.of(Role.PLATFORM_ADMIN), username);
         when(userRepository.findByUsernameAndDeletedFalse(username)).thenReturn(Optional.of(user));
-        when(memberRepository.findByUser_IdAndDeletedFalse(1L)).thenReturn(List.of());
-        when(accessTokenIssuer.issue(user, null)).thenReturn("access-token");
+        when(accessTokenIssuer.issue(user)).thenReturn("access-token");
         when(refreshTokenService.issue(user, null)).thenReturn("refresh-token");
 
         assertBearerPair(authService.login(new LoginRequest(username, PASSWORD), "203.0.113.9"));
         verify(loginThrottle).clear(username, "203.0.113.9");
         verify(loginThrottle, never()).recordFailure(any(), any());
-    }
-
-    @Test
-    void loginOrganizations_isRefusedWhenTheAccountIsLocked() {
-        when(loginThrottle.isLocked("two@tenant.example", "203.0.113.9")).thenReturn(true);
-
-        assertThatThrownBy(() -> authService.loginOrganizations(
-                new LoginOrganizationOptionsRequest("two@tenant.example", PASSWORD), "203.0.113.9"))
-                .isInstanceOf(TooManyLoginAttemptsException.class);
     }
 }

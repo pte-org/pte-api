@@ -193,7 +193,7 @@ public class ExaminerWorkflowCommandService {
         recorder.record(user, work.getPublicId(), null,
                 ExaminerScoringConstants.AUDIT_RESOLVED_ISSUE_FORMAT.formatted(issuePublicId, work.getAttemptPublicId()),
                 new ExaminerWorkRecorder.Entry(issue.getAnswerPublicId(), ExaminerGradingOperation.RESOLVE_ISSUE,
-                        work.getWorkVersion(), null, new ExaminerGradingAuditMetadata(user.userId(), ExaminerScoringConstants.EXAMINER_ROLE,
+                        work.getWorkVersion(), null, new ExaminerGradingAuditMetadata(user.userId(), ExaminerScoringConstants.HOST_ADMIN_ROLE,
                                 work.getPublicId(), null, null, 1L,
                                 ExaminerScoringConstants.AUDIT_RESOLUTION_PREFIX + request.resolution().trim())));
 

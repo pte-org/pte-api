@@ -207,7 +207,7 @@ class ChatServiceConcurrencyPostgresTest extends ChatFlowPostgresBase {
     }
 
     @Test
-    void aRefusalAfterMidnightRefundsTheChargedDayAndLeavesTheNewDayAlone() throws Exception {
+    void aRefusalAfterMidnightKeepsTheChargeOnTheChargedDayAndLeavesTheNewDayAlone() throws Exception {
         ChatFlowHarness h = start();
         h.clock.set(Instant.parse("2026-10-28T16:59:59Z"));
         data.setUsed(alice, ChatFlowHarness.DAY, 4);
@@ -219,9 +219,9 @@ class ChatServiceConcurrencyPostgresTest extends ChatFlowPostgresBase {
         ChatReply reply = result(call);
 
         assertThat(reply.onTopic()).isFalse();
-        assertThat(h.used(alice)).isEqualTo(4);
+        assertThat(h.used(alice)).isEqualTo(5);
         assertThat(data.usageRows(alice, NEXT_DAY)).isZero();
-        assertThat(reply.quota().used()).isEqualTo(4);
+        assertThat(reply.quota().used()).isEqualTo(5);
         assertThat(reply.quota().resetAt()).isEqualTo(DAY_RESET);
     }
 

@@ -15,6 +15,7 @@ import com.pte.practice.internal.dto.response.PracticeTaskContentResponse;
 import com.pte.practice.internal.dto.response.PracticeTaskResponse;
 import com.pte.practice.internal.service.PracticeCatalogService;
 import com.pte.practice.internal.service.PracticeResponseService;
+import com.pte.practice.internal.service.PracticeTranscriptPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -23,11 +24,14 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 
@@ -153,10 +157,34 @@ public class PracticeSessionResponseMapper {
             }
         }
         Map<UUID, String> mediaUrls = presignPromptMedia(item, tenantId);
-        return new PracticeTaskContentResponse(item.getPromptText(), item.getMinWordCount(),
-                item.getMaxWordCount(), item.getAudioPromptRef(), item.getImagePromptRef(), options,
+        return new PracticeTaskContentResponse(PracticeTranscriptPolicy.visiblePromptText(item), item.getMinWordCount(),
+                item.getMaxWordCount(), item.getAudioPromptRef(), item.getImagePromptRef(),
+                withoutAnswerOrder(item, options),
                 urlOf(mediaUrls, item.getAudioPromptRef()), urlOf(mediaUrls, item.getImagePromptRef()),
                 item.getAnswerHintVi(), item.getAnswerHintEn());
+    }
+
+    /**
+     * Blank options are stored answer first (each correct word before its distractors), so their order would point at
+     * the answer. They are shuffled with a seed from the item id, which keeps the order stable across reads, and
+     * renumbered by position. Blank answers match on the option text, never on {@code orderIndex}.
+     */
+    private List<PracticeTaskContentResponse.Option> withoutAnswerOrder(PracticeResponse item,
+            List<PracticeTaskContentResponse.Option> options) {
+        if (!PracticeConstants.BLANK_TASK_CODES.contains(item.getTaskCode()) || options.size() < 2) {
+            return options;
+        }
+        UUID id = item.getPublicId();
+        Random random = new Random(id.getMostSignificantBits() ^ id.getLeastSignificantBits());
+        List<PracticeTaskContentResponse.Option> shuffled = new ArrayList<>(options);
+        Collections.shuffle(shuffled, random);
+        List<PracticeTaskContentResponse.Option> renumbered = new ArrayList<>(shuffled.size());
+        for (int position = 0; position < shuffled.size(); position++) {
+            PracticeTaskContentResponse.Option option = shuffled.get(position);
+            renumbered.add(new PracticeTaskContentResponse.Option(option.publicId(), option.text(), position,
+                    option.blankIndex()));
+        }
+        return renumbered;
     }
 
     /** Immutable maps reject a null key, and a task may have no audio or no image. */

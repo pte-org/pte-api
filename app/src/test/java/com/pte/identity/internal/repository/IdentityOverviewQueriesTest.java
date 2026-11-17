@@ -3,7 +3,6 @@ package com.pte.identity.internal.repository;
 import com.pte.identity.IdentityOverviewService;
 import com.pte.identity.IdentityOverviewService.StaffCounts;
 import com.pte.identity.IdentityOverviewService.StudentStatusCounts;
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
@@ -39,14 +38,11 @@ class IdentityOverviewQueriesTest {
     private UserRepository users;
 
     @Autowired
-    private OrganizationMemberRepository members;
-
-    @Autowired
     private EntityManager em;
 
     /**
-     * A tenant user is an account plus its membership; a null tenant is a platform account holding the roles itself.
-     * Status and soft-delete are set on both, since organization queries read the membership and the account.
+     * An account carries its organization and all its roles; a null tenant is a platform account or a free practice
+     * student (no organization).
      */
     private User user(UUID tenant, UserStatus status, boolean deleted, Instant createdAt, Role... roles) {
         User u = new User();
@@ -54,26 +50,13 @@ class IdentityOverviewQueriesTest {
         u.setEmail(u.getUsername() + "@example.test");
         u.setStatus(status);
         u.setDeleted(deleted);
-        if (tenant == null) {
-            u.setRoles(new HashSet<>(Arrays.asList(roles)));
-        }
+        u.setOrganizationId(tenant);
+        u.setRoles(new HashSet<>(Arrays.asList(roles)));
         users.saveAndFlush(u);
-        Long createdId = u.getId();
-        String createdEntity = "User";
-        if (tenant != null) {
-            OrganizationMember m = new OrganizationMember();
-            m.setUser(u);
-            m.setOrganizationId(tenant);
-            m.setStatus(status);
-            m.setRoles(new HashSet<>(Arrays.asList(roles)));
-            members.saveAndFlush(m);
-            createdId = m.getId();
-            createdEntity = "OrganizationMember";
-        }
         if (createdAt != null) {
             // createdAt is @CreationTimestamp + not updatable: rewrite it with a bulk update.
-            em.createQuery("update " + createdEntity + " e set e.createdAt = :createdAt where e.id = :id")
-                    .setParameter("createdAt", createdAt).setParameter("id", createdId).executeUpdate();
+            em.createQuery("update User e set e.createdAt = :createdAt where e.id = :id")
+                    .setParameter("createdAt", createdAt).setParameter("id", u.getId()).executeUpdate();
         }
         em.clear();
         return u;
@@ -130,6 +113,17 @@ class IdentityOverviewQueriesTest {
         student(tenant, UserStatus.ACTIVE);
 
         assertThat(service.studentStatusCounts(tenant).total()).isEqualTo(1);
+    }
+
+    @Test
+    void freePracticeStudentsWithoutAnOrganizationAreNeverCountedForATenant() {
+        UUID tenant = UUID.randomUUID();
+        student(null, UserStatus.ACTIVE); // free practice student: STUDENT role, no organization
+        student(tenant, UserStatus.ACTIVE);
+
+        assertThat(service.studentStatusCounts(tenant)).isEqualTo(new StudentStatusCounts(1, 1, 0));
+        assertThat(service.countStudentsCreatedBetween(tenant, Instant.EPOCH, Instant.parse("2100-01-01T00:00:00Z")))
+                .isEqualTo(1);
     }
 
     // ---- countStudentsCreatedBetween ----

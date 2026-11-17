@@ -2,7 +2,6 @@ package com.pte.identity.internal.service.passwordreset;
 
 import com.pte.identity.internal.service.RefreshTokenService;
 import com.pte.identity.PasswordResetEmailRequestedEvent;
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.internal.config.PasswordResetProperties;
@@ -10,7 +9,6 @@ import com.pte.identity.internal.config.WebAppProperties;
 import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.identity.internal.domain.PasswordResetToken;
 import com.pte.identity.internal.exception.InvalidPasswordResetTokenException;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.PasswordResetTokenRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.security.TokenHasher;
@@ -36,7 +34,8 @@ import java.util.UUID;
 
 /**
  * Self-service password reset for everyone except Students (whose organization resets for them). A request never
- * reveals whether the address belongs to an account: it simply returns, and a mail follows only when it does.
+ * reveals whether the username and address belong to an account: it simply returns, and a mail follows only when
+ * they do.
  */
 @Service
 public class PasswordResetService {
@@ -44,7 +43,6 @@ public class PasswordResetService {
     private static final int TOKEN_BYTES = 32;
 
     private final UserRepository userRepository;
-    private final OrganizationMemberRepository memberRepository;
     private final PasswordResetTokenRepository tokenRepository;
     private final TokenHasher tokenHasher;
     private final PasswordEncoder passwordEncoder;
@@ -58,13 +56,12 @@ public class PasswordResetService {
     private final Duration tokenTtl;
     private final SecureRandom random = new SecureRandom();
 
-    public PasswordResetService(UserRepository userRepository, OrganizationMemberRepository memberRepository,
+    public PasswordResetService(UserRepository userRepository,
             PasswordResetTokenRepository tokenRepository, TokenHasher tokenHasher, PasswordEncoder passwordEncoder,
             RefreshTokenService refreshTokenService, AuditLogService auditLogService,
             ApplicationEventPublisher eventPublisher, PasswordResetThrottle throttle, Clock clock,
             WebAppProperties webProperties, PasswordResetProperties properties) {
         this.userRepository = userRepository;
-        this.memberRepository = memberRepository;
         this.tokenRepository = tokenRepository;
         this.tokenHasher = tokenHasher;
         this.passwordEncoder = passwordEncoder;
@@ -78,23 +75,28 @@ public class PasswordResetService {
         this.tokenTtl = Duration.ofMinutes(properties.getTokenTtlMinutes());
     }
 
+    /**
+     * Sends a reset link to the one account named by {@code username}, and only when {@code email} is that
+     * account's e-mail. A blank e-mail or username returns without doing anything.
+     */
     @Transactional
-    public void request(String email, String clientIp) {
-        String normalized = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
-        if (normalized.isEmpty() || !throttle.tryAcquire(normalized, clientIp)) {
+    public void request(String email, String username, String clientIp) {
+        String typedEmail = email == null ? "" : email.trim();
+        String normalized = typedEmail.toLowerCase(Locale.ROOT);
+        String account = username == null ? "" : username.trim();
+        if (normalized.isEmpty() || account.isEmpty() || !throttle.tryAcquire(normalized, account, clientIp)) {
             return;
         }
-        List<PasswordResetEmailRequestedEvent.Link> links = new ArrayList<>();
-        for (User user : userRepository.findAllByEmailIgnoreCaseAndDeletedFalse(normalized)) {
-            Set<Role> roles = rolesOf(user);
-            if (isEligible(user, roles)) {
-                links.add(issueLink(user, roles));
-            }
-        }
-        if (!links.isEmpty()) {
-            eventPublisher.publishEvent(new PasswordResetEmailRequestedEvent(UUID.randomUUID(), normalized, links,
-                    (int) tokenTtl.toMinutes()));
-        }
+        userRepository.findByUsernameAndDeletedFalse(account)
+                .filter(found -> found.getEmail() != null && typedEmail.equalsIgnoreCase(found.getEmail().trim()))
+                .ifPresent(user -> {
+                    Set<Role> roles = rolesOf(user);
+                    if (isEligible(user, roles)) {
+                        PasswordResetEmailRequestedEvent.Link link = issueLink(user, roles);
+                        eventPublisher.publishEvent(new PasswordResetEmailRequestedEvent(UUID.randomUUID(), normalized,
+                                List.of(link), (int) tokenTtl.toMinutes()));
+                    }
+                });
     }
 
     /**
@@ -161,9 +163,6 @@ public class PasswordResetService {
     private Set<Role> rolesOf(User user) {
         Set<Role> roles = EnumSet.noneOf(Role.class);
         roles.addAll(user.getRoles());
-        for (OrganizationMember member : memberRepository.findByUser_IdAndDeletedFalse(user.getId())) {
-            roles.addAll(member.getRoles());
-        }
         return roles;
     }
 

@@ -113,6 +113,43 @@ class QuestionValidationHelperTest {
         assertThatCode(() -> helper.validate(summarizeSpokenText("A lecture about bees."))).doesNotThrowAnyException();
     }
 
+    @Test
+    void aiScoredListeningTasksNeedTheTranscriptThatTheScorerJudgesAgainst() {
+        for (PteTaskType type : new PteTaskType[] {PteTaskType.RE_TELL_LECTURE, PteTaskType.SUMMARIZE_SPOKEN_TEXT,
+                PteTaskType.SUMMARIZE_GROUP_DISCUSSION}) {
+            assertThatThrownBy(() -> helper.validate(aiListeningTask(type, " ")))
+                    .as(type.name()).isInstanceOf(QuestionValidationException.class)
+                    .hasMessage(ItembankConstants.REFERENCE_ANSWER_REQUIRED);
+            assertThatCode(() -> helper.validate(aiListeningTask(type, "The original transcript.")))
+                    .as(type.name()).doesNotThrowAnyException();
+        }
+    }
+
+    @Test
+    void wordCountLimitsMustBeNonNegativeAndOrdered() {
+        assertThatThrownBy(() -> helper.validate(withWordLimits(-1, 70)))
+                .isInstanceOf(QuestionValidationException.class).hasMessage(ItembankConstants.INVALID_QUESTION_FIELDS);
+        assertThatThrownBy(() -> helper.validate(withWordLimits(50, -5)))
+                .isInstanceOf(QuestionValidationException.class).hasMessage(ItembankConstants.INVALID_QUESTION_FIELDS);
+        assertThatThrownBy(() -> helper.validate(withWordLimits(300, 200)))
+                .isInstanceOf(QuestionValidationException.class).hasMessage(ItembankConstants.INVALID_QUESTION_FIELDS);
+        assertThatThrownBy(() -> helper.validate(withWordLimits(null, -2)))
+                .isInstanceOf(QuestionValidationException.class).hasMessage(ItembankConstants.INVALID_QUESTION_FIELDS);
+        assertThatCode(() -> helper.validate(withWordLimits(50, 50))).doesNotThrowAnyException();
+        assertThatCode(() -> helper.validate(withWordLimits(0, 70))).doesNotThrowAnyException();
+        // A task that does not need limits may still carry just one of them.
+        Question repeat = repeatSentence("Say this sentence.");
+        repeat.setMinWordCount(5);
+        assertThatCode(() -> helper.validate(repeat)).doesNotThrowAnyException();
+    }
+
+    private static Question withWordLimits(Integer min, Integer max) {
+        Question question = summarizeSpokenText("Summarize the lecture.");
+        question.setMinWordCount(min);
+        question.setMaxWordCount(max);
+        return question;
+    }
+
     private static Question summarizeSpokenText(String promptText) {
         Question question = new Question();
         question.setPteTaskType(PteTaskType.SUMMARIZE_SPOKEN_TEXT);
@@ -120,6 +157,18 @@ class QuestionValidationHelperTest {
         question.setMinWordCount(50);
         question.setMaxWordCount(70);
         question.setPromptText(promptText);
+        question.setReferenceAnswerText("The lecture transcript the AI summary is judged against.");
+        return question;
+    }
+
+    private static Question aiListeningTask(PteTaskType type, String referenceAnswerText) {
+        Question question = new Question();
+        question.setPteTaskType(type);
+        question.setAudioPromptRef(UUID.randomUUID());
+        question.setPromptText("Instruction shown to the learner.");
+        question.setMinWordCount(50);
+        question.setMaxWordCount(70);
+        question.setReferenceAnswerText(referenceAnswerText);
         return question;
     }
 

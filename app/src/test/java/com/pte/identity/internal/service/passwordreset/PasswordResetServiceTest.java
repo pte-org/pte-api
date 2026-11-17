@@ -2,7 +2,6 @@ package com.pte.identity.internal.service.passwordreset;
 
 import com.pte.identity.internal.service.RefreshTokenService;
 import com.pte.identity.PasswordResetEmailRequestedEvent;
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
@@ -11,12 +10,12 @@ import com.pte.identity.internal.config.WebAppProperties;
 import com.pte.identity.internal.constant.IdentityConstants;
 import com.pte.identity.internal.domain.PasswordResetToken;
 import com.pte.identity.internal.exception.InvalidPasswordResetTokenException;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.PasswordResetTokenRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.identity.internal.security.TokenHasher;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
+import com.pte.shared.security.SecurityRoles;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -64,8 +63,6 @@ class PasswordResetServiceTest {
     @Mock
     private UserRepository userRepository;
     @Mock
-    private OrganizationMemberRepository memberRepository;
-    @Mock
     private PasswordResetTokenRepository tokenRepository;
     @Mock
     private RefreshTokenService refreshTokenService;
@@ -82,19 +79,19 @@ class PasswordResetServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PasswordResetService(userRepository, memberRepository, tokenRepository, tokenHasher,
+        service = new PasswordResetService(userRepository, tokenRepository, tokenHasher,
                 passwordEncoder, refreshTokenService, auditLogService, eventPublisher, throttle,
                 Clock.fixed(NOW, ZoneOffset.UTC), webProperties(), new PasswordResetProperties());
-        lenient().when(throttle.tryAcquire(anyString(), anyString())).thenReturn(true);
+        lenient().when(throttle.tryAcquire(anyString(), anyString(), anyString())).thenReturn(true);
     }
 
     // ---- request ----
 
     @Test
     void request_unknownEmail_doesNothing() {
-        when(userRepository.findAllByEmailIgnoreCaseAndDeletedFalse("nobody@x.vn")).thenReturn(List.of());
+        when(userRepository.findByUsernameAndDeletedFalse("nobody@x.vn")).thenReturn(Optional.empty());
 
-        service.request("nobody@x.vn", CLIENT_IP);
+        service.request("nobody@x.vn", "nobody@x.vn", CLIENT_IP);
 
         verify(tokenRepository, never()).save(any());
         verify(eventPublisher, never()).publishEvent(any());
@@ -103,10 +100,10 @@ class PasswordResetServiceTest {
     @Test
     void request_hostAccount_storesOnlyAHashAndMailsATenantPortalLink() {
         User host = account(1L, "host@x.vn");
-        stubMember(host, Role.HOST_ADMIN);
-        when(userRepository.findAllByEmailIgnoreCaseAndDeletedFalse("host@x.vn")).thenReturn(List.of(host));
+        withRole(host, Role.HOST_ADMIN);
+        when(userRepository.findByUsernameAndDeletedFalse("host@x.vn")).thenReturn(Optional.of(host));
 
-        service.request("host@x.vn", CLIENT_IP);
+        service.request("host@x.vn", "host@x.vn", CLIENT_IP);
 
         PasswordResetEmailRequestedEvent event = capturedEvent();
         assertThat(event.email()).isEqualTo("host@x.vn");
@@ -127,10 +124,9 @@ class PasswordResetServiceTest {
     void request_platformAccount_getsALinkToTheAdminPortal() {
         User admin = account(2L, "admin@x.vn");
         admin.setRoles(new HashSet<>(Set.of(Role.PLATFORM_ADMIN)));
-        when(userRepository.findAllByEmailIgnoreCaseAndDeletedFalse("admin@x.vn")).thenReturn(List.of(admin));
-        when(memberRepository.findByUser_IdAndDeletedFalse(2L)).thenReturn(List.of());
+        when(userRepository.findByUsernameAndDeletedFalse("admin@x.vn")).thenReturn(Optional.of(admin));
 
-        service.request("admin@x.vn", CLIENT_IP);
+        service.request("admin@x.vn", "admin@x.vn", CLIENT_IP);
 
         assertThat(capturedEvent().links().get(0).url()).startsWith(ADMIN_URL + "/reset-password?token=");
     }
@@ -138,25 +134,48 @@ class PasswordResetServiceTest {
     @Test
     void request_studentAccount_isIgnored() {
         User student = account(3L, "student@x.vn");
-        stubMember(student, Role.STUDENT);
-        when(userRepository.findAllByEmailIgnoreCaseAndDeletedFalse("student@x.vn")).thenReturn(List.of(student));
+        withRole(student, Role.STUDENT);
+        when(userRepository.findByUsernameAndDeletedFalse("student@x.vn")).thenReturn(Optional.of(student));
 
-        service.request("student@x.vn", CLIENT_IP);
+        service.request("student@x.vn", "student@x.vn", CLIENT_IP);
 
         verify(tokenRepository, never()).save(any());
         verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
-    void request_accountThatIsAlsoAStudentInAnotherOrganization_isIgnored() {
+    void request_accountHoldingAStudentRoleAlongsideAnotherRole_isIgnored() {
         User both = account(4L, "both@x.vn");
-        OrganizationMember asProctor = memberOf(both, Role.PROCTOR);
-        OrganizationMember asStudent = memberOf(both, Role.STUDENT);
-        when(memberRepository.findByUser_IdAndDeletedFalse(4L)).thenReturn(List.of(asProctor, asStudent));
-        when(userRepository.findAllByEmailIgnoreCaseAndDeletedFalse("both@x.vn")).thenReturn(List.of(both));
+        withRole(both, Role.PROCTOR);
+        both.getRoles().add(Role.STUDENT);
+        when(userRepository.findByUsernameAndDeletedFalse("both@x.vn")).thenReturn(Optional.of(both));
 
-        service.request("both@x.vn", CLIENT_IP);
+        service.request("both@x.vn", "both@x.vn", CLIENT_IP);
 
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void request_freePracticeStudentWithoutOrganization_isIgnored() {
+        User free = account(9L, "free@x.vn");
+        free.setOrganizationId(null);
+        free.setRoles(new HashSet<>(Set.of(Role.STUDENT)));
+        when(userRepository.findByUsernameAndDeletedFalse("free@x.vn")).thenReturn(Optional.of(free));
+
+        service.request("free@x.vn", "free@x.vn", CLIENT_IP);
+
+        verify(tokenRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void request_accountWithoutAnyRole_isIgnored() {
+        User roleless = account(10L, "none@x.vn");
+        when(userRepository.findByUsernameAndDeletedFalse("none@x.vn")).thenReturn(Optional.of(roleless));
+
+        service.request("none@x.vn", "none@x.vn", CLIENT_IP);
+
+        verify(tokenRepository, never()).save(any());
         verify(eventPublisher, never()).publishEvent(any());
     }
 
@@ -164,62 +183,162 @@ class PasswordResetServiceTest {
     void request_suspendedAccount_isIgnored() {
         User suspended = account(5L, "gone@x.vn");
         suspended.setStatus(UserStatus.SUSPENDED);
-        lenient().when(memberRepository.findByUser_IdAndDeletedFalse(5L))
-                .thenReturn(List.of(memberOf(suspended, Role.HOST_ADMIN)));
-        when(userRepository.findAllByEmailIgnoreCaseAndDeletedFalse("gone@x.vn")).thenReturn(List.of(suspended));
+        withRole(suspended, Role.HOST_ADMIN);
+        when(userRepository.findByUsernameAndDeletedFalse("gone@x.vn")).thenReturn(Optional.of(suspended));
 
-        service.request("gone@x.vn", CLIENT_IP);
+        service.request("gone@x.vn", "gone@x.vn", CLIENT_IP);
 
         verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
-    void request_emailSharedByTwoAccounts_sendsOneMailWithALinkPerAccount() {
-        User first = account(6L, "first");
-        first.setEmail("shared@x.vn");
-        User second = account(7L, "second");
-        second.setEmail("shared@x.vn");
-        stubMember(first, Role.HOST_ADMIN);
-        stubMember(second, Role.EXAMINER);
-        when(userRepository.findAllByEmailIgnoreCaseAndDeletedFalse("shared@x.vn"))
-                .thenReturn(List.of(first, second));
-
-        service.request("shared@x.vn", CLIENT_IP);
-
-        PasswordResetEmailRequestedEvent event = capturedEvent();
-        assertThat(event.links()).extracting(PasswordResetEmailRequestedEvent.Link::username)
-                .containsExactly("first", "second");
-        assertThat(event.links().get(0).url()).isNotEqualTo(event.links().get(1).url());
-    }
-
-    @Test
     void request_invalidatesTheAccountsEarlierLinksBeforeIssuingANewOne() {
         User host = account(1L, "host@x.vn");
-        stubMember(host, Role.HOST_ADMIN);
-        when(userRepository.findAllByEmailIgnoreCaseAndDeletedFalse("host@x.vn")).thenReturn(List.of(host));
+        withRole(host, Role.HOST_ADMIN);
+        when(userRepository.findByUsernameAndDeletedFalse("host@x.vn")).thenReturn(Optional.of(host));
 
-        service.request("host@x.vn", CLIENT_IP);
+        service.request("host@x.vn", "host@x.vn", CLIENT_IP);
 
         verify(tokenRepository).invalidateActiveByUserId(1L, NOW);
     }
 
     @Test
     void request_normalisesTheEmailBeforeLookupAndThrottling() {
-        when(userRepository.findAllByEmailIgnoreCaseAndDeletedFalse("host@x.vn")).thenReturn(List.of());
+        when(userRepository.findByUsernameAndDeletedFalse("host-1")).thenReturn(Optional.empty());
 
-        service.request("  Host@X.vn ", CLIENT_IP);
+        service.request("  Host@X.vn ", "host-1", CLIENT_IP);
 
-        verify(throttle).tryAcquire("host@x.vn", CLIENT_IP);
-        verify(userRepository).findAllByEmailIgnoreCaseAndDeletedFalse("host@x.vn");
+        verify(throttle).tryAcquire("host@x.vn", "host-1", CLIENT_IP);
+        verify(userRepository).findByUsernameAndDeletedFalse("host-1");
     }
 
     @Test
-    void request_overTheLimit_doesNotEvenLookTheEmailUp() {
-        when(throttle.tryAcquire("host@x.vn", CLIENT_IP)).thenReturn(false);
+    void request_overTheLimit_doesNotEvenLookTheAccountUp() {
+        when(throttle.tryAcquire("host@x.vn", "host-1", CLIENT_IP)).thenReturn(false);
 
-        service.request("host@x.vn", CLIENT_IP);
+        service.request("host@x.vn", "host-1", CLIENT_IP);
 
-        verify(userRepository, never()).findAllByEmailIgnoreCaseAndDeletedFalse(anyString());
+        verify(userRepository, never()).findByUsernameAndDeletedFalse(anyString());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void request_blankOrMissingUsername_doesNothingAndSpendsNoBudget() {
+        service.request("host@x.vn", "", CLIENT_IP);
+        service.request("host@x.vn", "   ", CLIENT_IP);
+        service.request("host@x.vn", null, CLIENT_IP);
+
+        verify(throttle, never()).tryAcquire(anyString(), anyString(), anyString());
+        verify(userRepository, never()).findByUsernameAndDeletedFalse(anyString());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    // ---- request with a username ----
+
+    @Test
+    void request_usernameAndMatchingEmail_issuesOneTokenForThatAccountOnly() {
+        User first = account(6L, "first");
+        first.setEmail("shared@x.vn");
+        User second = account(7L, "second");
+        second.setEmail("shared@x.vn");
+        withRole(first, Role.HOST_ADMIN);
+        withRole(second, Role.EXAMINER);
+        when(userRepository.findByUsernameAndDeletedFalse("first")).thenReturn(Optional.of(first));
+
+        service.request("  Shared@X.vn ", " first ", CLIENT_IP);
+
+        PasswordResetEmailRequestedEvent event = capturedEvent();
+        assertThat(event.links()).extracting(PasswordResetEmailRequestedEvent.Link::username).containsExactly("first");
+        assertThat(capturedToken().getUserId()).isEqualTo(6L);
+        verify(tokenRepository, org.mockito.Mockito.times(1)).save(any());
+        verify(throttle).tryAcquire("shared@x.vn", "first", CLIENT_IP);
+    }
+
+    @Test
+    void request_storedEmailInMixedCaseWithSpaces_stillMatches() {
+        User first = account(6L, "first");
+        first.setEmail("  First.Last@X.vn ");
+        withRole(first, Role.HOST_ADMIN);
+        when(userRepository.findByUsernameAndDeletedFalse("first")).thenReturn(Optional.of(first));
+
+        service.request("first.last@x.vn", "first", CLIENT_IP);
+
+        assertThat(capturedEvent().links()).hasSize(1);
+    }
+
+    @Test
+    void request_usernameInAnotherCase_isAnotherAccountAsAtLogin() {
+        when(userRepository.findByUsernameAndDeletedFalse("First")).thenReturn(Optional.empty());
+
+        service.request("first@x.vn", "First", CLIENT_IP);
+
+        verify(userRepository).findByUsernameAndDeletedFalse("First");
+        verify(tokenRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void request_accountWithoutAnEmail_doesNothing() {
+        User noEmail = account(8L, "first");
+        noEmail.setEmail(null);
+        withRole(noEmail, Role.HOST_ADMIN);
+        when(userRepository.findByUsernameAndDeletedFalse("first")).thenReturn(Optional.of(noEmail));
+
+        service.request("first@x.vn", "first", CLIENT_IP);
+
+        verify(tokenRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void request_usernameWithAnotherAccountsEmail_doesNothing() {
+        User first = account(6L, "first");
+        first.setEmail("first@x.vn");
+        withRole(first, Role.HOST_ADMIN);
+        when(userRepository.findByUsernameAndDeletedFalse("first")).thenReturn(Optional.of(first));
+
+        service.request("other@x.vn", "first", CLIENT_IP);
+
+        verify(tokenRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void request_unknownUsername_doesNothing() {
+        when(userRepository.findByUsernameAndDeletedFalse("nobody")).thenReturn(Optional.empty());
+
+        service.request("host@x.vn", "nobody", CLIENT_IP);
+
+        verify(tokenRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void request_usernameOfAStudentOrSuspendedAccount_doesNothing() {
+        User student = account(3L, "demo.student");
+        student.setEmail("s@x.vn");
+        withRole(student, Role.STUDENT);
+        User suspended = account(5L, "demo.gone");
+        suspended.setEmail("s@x.vn");
+        suspended.setStatus(UserStatus.SUSPENDED);
+        withRole(suspended, Role.EXAMINER);
+        when(userRepository.findByUsernameAndDeletedFalse("demo.student")).thenReturn(Optional.of(student));
+        when(userRepository.findByUsernameAndDeletedFalse("demo.gone")).thenReturn(Optional.of(suspended));
+
+        service.request("s@x.vn", "demo.student", CLIENT_IP);
+        service.request("s@x.vn", "demo.gone", CLIENT_IP);
+
+        verify(tokenRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void request_overTheUsernameBudget_doesNotEvenLookTheUsernameUp() {
+        when(throttle.tryAcquire("host@x.vn", "host", CLIENT_IP)).thenReturn(false);
+
+        service.request("host@x.vn", "host", CLIENT_IP);
+
+        verify(userRepository, never()).findByUsernameAndDeletedFalse(anyString());
         verify(eventPublisher, never()).publishEvent(any());
     }
 
@@ -229,7 +348,7 @@ class PasswordResetServiceTest {
     void confirm_validToken_changesThePasswordAndSignsEverySessionOut() {
         User host = account(1L, "host@x.vn");
         host.setMustChangePassword(true);
-        stubMember(host, Role.HOST_ADMIN);
+        withRole(host, Role.HOST_ADMIN);
         PasswordResetToken token = tokenFor("raw-token", 1L, NOW.plusSeconds(60));
         when(userRepository.findByIdAndDeletedFalse(1L)).thenReturn(Optional.of(host));
         when(tokenRepository.markUsed(token.getId(), NOW)).thenReturn(1);
@@ -298,7 +417,7 @@ class PasswordResetServiceTest {
     @Test
     void isUsable_aValidLink_isTrueAndChangesNothing() {
         User host = account(1L, "host@x.vn");
-        stubMember(host, Role.HOST_ADMIN);
+        withRole(host, Role.HOST_ADMIN);
         tokenFor("raw-token", 1L, NOW.plusSeconds(60));
         when(userRepository.findByIdAndDeletedFalse(1L)).thenReturn(Optional.of(host));
 
@@ -380,9 +499,10 @@ class PasswordResetServiceTest {
         return token;
     }
 
-    private void stubMember(User user, Role role) {
-        lenient().when(memberRepository.findByUser_IdAndDeletedFalse(user.getId()))
-                .thenReturn(List.of(memberOf(user, role)));
+    /** Gives the account its one role; a platform role leaves it outside every organization. */
+    private void withRole(User user, Role role) {
+        user.setRoles(new HashSet<>(Set.of(role)));
+        user.setOrganizationId(SecurityRoles.isPlatformRole(role.name()) ? null : UUID.randomUUID());
     }
 
     private User account(Long id, String username) {
@@ -394,14 +514,5 @@ class PasswordResetServiceTest {
         user.setStatus(UserStatus.ACTIVE);
         user.setCredentialHash(passwordEncoder.encode("OldPassword123"));
         return user;
-    }
-
-    private OrganizationMember memberOf(User user, Role role) {
-        OrganizationMember member = new OrganizationMember();
-        member.setUser(user);
-        member.setOrganizationId(UUID.randomUUID());
-        member.setStatus(UserStatus.ACTIVE);
-        member.setRoles(new HashSet<>(Set.of(role)));
-        return member;
     }
 }

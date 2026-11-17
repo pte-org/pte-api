@@ -23,7 +23,7 @@ import java.time.Duration;
  * the same Redis (same host/port as {@code spring.data.redis.*}) through
  * Bucket4j's own Lettuce integration instead. String keys via a combined
  * codec (StringCodec for keys, ByteArrayCodec for the serialized bucket
- * state Bucket4j writes) so callers never hand-encode a tenant id to bytes.
+ * state Bucket4j writes) so callers never hand-encode a bucket key to bytes.
  */
 @Configuration
 public class RateLimitConfig {
@@ -40,7 +40,7 @@ public class RateLimitConfig {
         return redisClient.connect(RedisCodec.of(StringCodec.UTF8, ByteArrayCodec.INSTANCE));
     }
 
-    // Idle tenant buckets expire out of Redis on their own instead of
+    // Idle buckets (per user, per tenant and per client address) expire out of Redis on their own instead of
     // accumulating forever: once a bucket has been untouched long enough
     // that it would have fully refilled anyway, there's nothing left to
     // preserve. See Bucket4j's ExpirationAfterWriteStrategy docs.

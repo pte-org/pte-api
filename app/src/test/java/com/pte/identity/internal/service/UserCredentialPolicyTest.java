@@ -1,7 +1,6 @@
 package com.pte.identity.internal.service;
 
 import com.pte.identity.UserCredentialsEmailRequestedEvent;
-import com.pte.identity.domain.OrganizationMember;
 import com.pte.identity.domain.Role;
 import com.pte.identity.domain.User;
 import com.pte.identity.domain.UserStatus;
@@ -10,7 +9,6 @@ import com.pte.identity.internal.dto.request.auth.ChangePasswordRequest;
 import com.pte.identity.internal.dto.request.auth.ResetPasswordRequest;
 import com.pte.identity.internal.dto.response.GeneratedCredentialsResponse;
 import com.pte.identity.internal.exception.StudentAttemptInProgressException;
-import com.pte.identity.internal.repository.OrganizationMemberRepository;
 import com.pte.identity.internal.repository.UserRepository;
 import com.pte.shared.StartedAttemptLookup;
 import com.pte.shared.audit.AuditLogService;
@@ -53,8 +51,6 @@ class UserCredentialPolicyTest {
     @Mock
     private UserRepository userRepository;
     @Mock
-    private OrganizationMemberRepository memberRepository;
-    @Mock
     private OrganizationMemberDirectory memberDirectory;
     @Mock
     private UserProvisioningHelper provisioningHelper;
@@ -76,7 +72,7 @@ class UserCredentialPolicyTest {
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, memberRepository, memberDirectory, passwordEncoder,
+        userService = new UserService(userRepository, memberDirectory, passwordEncoder,
                 provisioningHelper, bulkCreateWriter, tenancyService, eventPublisher, auditLogService,
                 refreshTokenService, startedAttemptLookup, java.time.Clock.systemUTC());
     }
@@ -158,7 +154,6 @@ class UserCredentialPolicyTest {
         User host = account(1L, userPublicId, OLD_PASSWORD);
         host.setRoles(Set.of(Role.HOST_ADMIN));
         when(userRepository.findByPublicIdAndDeletedFalse(userPublicId)).thenReturn(Optional.of(host));
-        when(memberRepository.findByUser_IdAndDeletedFalse(1L)).thenReturn(List.of());
         CurrentUser admin = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
         when(provisioningHelper.canManageTarget(admin, host.getRoles())).thenReturn(true);
 
@@ -214,11 +209,10 @@ class UserCredentialPolicyTest {
         UUID tenantId = UUID.randomUUID();
         User proctor = account(1L, userPublicId, OLD_PASSWORD);
         proctor.setEmail("proctor@tenant.example");
-        OrganizationMember member = memberOf(proctor, tenantId, Role.PROCTOR);
-        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(member);
+        placeIn(proctor, tenantId, Role.PROCTOR);
+        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(proctor);
         CurrentUser host = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
-        when(provisioningHelper.canManageTarget(host, member.getRoles())).thenReturn(true);
-        when(memberDirectory.isExclusivelyOwned(member)).thenReturn(true);
+        when(provisioningHelper.canManageTarget(host, proctor.getRoles())).thenReturn(true);
 
         userService.sendGeneratedCredentials(userPublicId, host);
 
@@ -265,18 +259,17 @@ class UserCredentialPolicyTest {
     private record Scenario(UUID userPublicId, User user, CurrentUser caller, String hashBefore) {
     }
 
-    /** A Host (same organization, sole owner of the account) managing a Student, optionally with an e-mail. */
+    /** A Host managing a Student of the same organization, optionally with an e-mail. */
     private Scenario hostManagesStudent(boolean withEmail) {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         User user = account(1L, userPublicId, OLD_PASSWORD);
         user.setUsername("tenant.student");
         user.setEmail(withEmail ? "student@tenant.example" : null);
-        OrganizationMember member = memberOf(user, tenantId, Role.STUDENT);
-        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(member);
+        placeIn(user, tenantId, Role.STUDENT);
+        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(user);
         CurrentUser host = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
-        when(provisioningHelper.canManageTarget(host, member.getRoles())).thenReturn(true);
-        when(memberDirectory.isExclusivelyOwned(member)).thenReturn(true);
+        when(provisioningHelper.canManageTarget(host, user.getRoles())).thenReturn(true);
         return new Scenario(userPublicId, user, host, user.getCredentialHash());
     }
 
@@ -299,12 +292,8 @@ class UserCredentialPolicyTest {
         return user;
     }
 
-    private OrganizationMember memberOf(User user, UUID organizationId, Role role) {
-        OrganizationMember member = new OrganizationMember();
-        member.setUser(user);
-        member.setOrganizationId(organizationId);
-        member.setStatus(UserStatus.ACTIVE);
-        member.setRoles(new HashSet<>(Set.of(role)));
-        return member;
+    private void placeIn(User user, UUID organizationId, Role role) {
+        user.setOrganizationId(organizationId);
+        user.setRoles(new HashSet<>(Set.of(role)));
     }
 }
