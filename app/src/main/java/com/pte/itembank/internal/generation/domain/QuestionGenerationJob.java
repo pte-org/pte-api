@@ -80,4 +80,16 @@ public class QuestionGenerationJob extends BaseEntity {
 
     @Column(name = "failure_code", length = 64)
     private String failureCode;
+
+    /** Owning batch, null for a standalone job. Set together with the two fields below (ck_qgen_jobs_batch_fields). */
+    @Column(name = "batch_id", updatable = false)
+    private Long batchId;
+
+    /** Run order inside the batch; children run one after another. */
+    @Column(name = "batch_seq", updatable = false)
+    private Integer batchSeq;
+
+    /** Index of the batch row this child generates. */
+    @Column(name = "batch_row_index", updatable = false)
+    private Integer batchRowIndex;
 }

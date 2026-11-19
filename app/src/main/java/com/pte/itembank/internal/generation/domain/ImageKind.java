@@ -24,6 +24,15 @@ public enum ImageKind {
         return topicHint != null && DATA_WORDS.matcher(topicHint.toLowerCase(Locale.ROOT)).find() ? CHART : PICTURE;
     }
 
+    /**
+     * As {@link #resolve(String)}, but while AI pictures are turned off AUTO never becomes PICTURE: it falls back to a
+     * chart, so a disabled image provider is never called. An explicit kind is kept (PICTURE is refused at submit).
+     */
+    public ImageKind resolve(String topicHint, boolean pictureEnabled) {
+        ImageKind resolved = resolve(topicHint);
+        return this == AUTO && resolved == PICTURE && !pictureEnabled ? CHART : resolved;
+    }
+
     /** The stored kind for a request value; a missing value is AUTO, an unknown one is refused by the caller. */
     public static ImageKind parse(String raw) {
         return raw == null || raw.isBlank() ? AUTO : ImageKind.valueOf(raw.strip().toUpperCase(Locale.ROOT));

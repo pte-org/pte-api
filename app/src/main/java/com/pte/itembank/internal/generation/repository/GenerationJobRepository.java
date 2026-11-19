@@ -32,32 +32,66 @@ public interface GenerationJobRepository extends JpaRepository<QuestionGeneratio
 
     Page<QuestionGenerationJob> findByRequestedByUserPublicIdAndDeletedFalse(UUID requestedBy, Pageable pageable);
 
-    long countByStatusIn(Collection<JobStatus> statuses);
+    /** The job list without batch children (they are shown inside their batch). */
+    Page<QuestionGenerationJob> findByBatchIdIsNullAndDeletedFalse(Pageable pageable);
+
+    Page<QuestionGenerationJob> findByRequestedByUserPublicIdAndBatchIdIsNullAndDeletedFalse(UUID requestedBy,
+                                                                                            Pageable pageable);
 
     boolean existsByRequestedByUserPublicIdAndStatusIn(UUID requestedBy, Collection<JobStatus> statuses);
 
-    @Query("select coalesce(sum(j.requestedCount), 0) from " + JOB + " j where j.createdAt >= :since")
+    boolean existsByRequestedByUserPublicIdAndSaveQuestionsTrueAndStatusIn(UUID requestedBy,
+                                                                          Collection<JobStatus> statuses);
+
+    /**
+     * Quota usage. A job cancelled before it ever started (a batch child stopped by cancel or a fatal failure, or a
+     * queued job cancelled) is refunded; a job that started counts in full, even for items that failed.
+     */
+    String NOT_REFUNDED = " and not (j.status = " + STATUS + ".CANCELLED and j.startedAt is null)";
+
+    @Query("select coalesce(sum(j.requestedCount), 0) from " + JOB + " j where j.createdAt >= :since" + NOT_REFUNDED)
     long sumRequestedSince(@Param("since") Instant since);
 
     @Query("select coalesce(sum(j.requestedCount), 0) from " + JOB
-            + " j where j.requestedByUserPublicId = :user and j.createdAt >= :since")
+            + " j where j.requestedByUserPublicId = :user and j.createdAt >= :since" + NOT_REFUNDED)
     long sumRequestedSinceByUser(@Param("user") UUID user, @Param("since") Instant since);
 
     /** Serializes submissions so the global caps cannot be exceeded by concurrent requests (released at commit). */
     @Query(value = "select 1 from (select pg_advisory_xact_lock(:key)) as locked", nativeQuery = true)
     Integer lockSubmissions(@Param("key") long key);
 
-    /** The oldest job a worker may take: queued, or running/cancelling with an expired lease. Skips locked rows. */
+    /** Serializes claims across instances so the concurrency cap is checked and taken atomically (released at commit). */
+    @Query(value = "select 1 from (select pg_advisory_xact_lock(:key)) as locked", nativeQuery = true)
+    Integer lockClaims(@Param("key") long key);
+
+    /**
+     * A job whose worker died (lease expired). Plain select: claimers are serialized by {@link #lockClaims} and every
+     * later change is a guarded update, so no job row lock is held before a batch row lock (batch-first lock order).
+     */
     @Query(value = """
             select id from question_generation_jobs
-            where deleted = false
-              and (status = 'QUEUED'
-                   or (status in ('RUNNING', 'CANCELLING') and lease_until < :now))
-            order by created_at
+            where deleted = false and status in ('RUNNING', 'CANCELLING') and lease_until < :now
+            order by lease_until
             limit 1
-            for update skip locked
             """, nativeQuery = true)
-    List<Long> lockNextClaimable(@Param("now") Instant now);
+    List<Long> findNextResumable(@Param("now") Instant now);
+
+    /** The next queued job: standalone and preview jobs first, then batch children in batch and run order. */
+    @Query(value = """
+            select id from question_generation_jobs
+            where deleted = false and status = 'QUEUED'
+            order by (batch_id is not null), created_at, batch_seq, id
+            limit 1
+            """, nativeQuery = true)
+    List<Long> findNextQueued();
+
+    /** Jobs a worker currently holds a live lease on: what the concurrency cap counts. */
+    @Query("select count(j) from " + JOB + " j where j.deleted = false and j.status in (" + STATUS + ".RUNNING, "
+            + STATUS + ".CANCELLING) and j.leaseUntil >= :now")
+    long countLiveLeases(@Param("now") Instant now);
+
+    @Query("select j.batchId from " + JOB + " j where j.id = :id")
+    List<Long> findBatchIdById(@Param("id") Long id);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update " + JOB + " j set j.status = " + STATUS + ".RUNNING, j.workerId = :workerId, "
@@ -74,8 +108,34 @@ public interface GenerationJobRepository extends JpaRepository<QuestionGeneratio
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update " + JOB + " j set j.status = " + STATUS + ".CANCELLED, j.finishedAt = :now "
-            + "where j.publicId = :publicId and j.status = " + STATUS + ".QUEUED")
+            + "where j.publicId = :publicId and j.status in (" + STATUS + ".PENDING, " + STATUS + ".QUEUED)")
     int cancelQueued(@Param("publicId") UUID publicId, @Param("now") Instant now);
+
+    List<QuestionGenerationJob> findByBatchIdOrderByBatchSeqAsc(Long batchId);
+
+    boolean existsByBatchIdAndStatusIn(Long batchId, Collection<JobStatus> statuses);
+
+    /**
+     * Lets the next child of the batch run: the PENDING child with the lowest seq becomes QUEUED. Guarded on PENDING,
+     * so calling it twice for the same finished child promotes once per call at most and never a running child.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            update question_generation_jobs set status = 'QUEUED'
+            where id = (select id from question_generation_jobs
+                        where batch_id = :batchId and status = 'PENDING' and deleted = false
+                        order by batch_seq limit 1)
+              and status = 'PENDING'
+            """, nativeQuery = true)
+    int promoteNext(@Param("batchId") Long batchId);
+
+    /** Closes the children nobody holds (waiting or queued). started_at stays null, so their quota is refunded. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update " + JOB + " j set j.status = " + STATUS + ".CANCELLED, j.finishedAt = :now, "
+            + "j.failureCode = :failureCode where j.batchId = :batchId and j.status in (" + STATUS + ".PENDING, "
+            + STATUS + ".QUEUED)")
+    int cancelPending(@Param("batchId") Long batchId, @Param("now") Instant now,
+                      @Param("failureCode") String failureCode);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update " + JOB + " j set j.status = " + STATUS + ".CANCELLING "

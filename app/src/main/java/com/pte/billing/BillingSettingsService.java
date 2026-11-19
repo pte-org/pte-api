@@ -1,12 +1,15 @@
 package com.pte.billing;
 
 import com.pte.billing.internal.constant.BillingConstants;
+import com.pte.billing.internal.exception.setting.PlatformSettingInvalidException;
 import com.pte.billing.internal.exception.setting.PlatformSettingNotFoundException;
 import com.pte.billing.internal.service.PlatformSettingService;
 import com.pte.tenancy.TenantSuspensionDurationProvider;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /** Public billing boundary for business settings consumed by other modules. */
+@Slf4j
 @Service
 public class BillingSettingsService implements TenantSuspensionDurationProvider {
 
@@ -27,11 +30,17 @@ public class BillingSettingsService implements TenantSuspensionDurationProvider 
         }
     }
 
-    /** A question generation limit; {@code fallback} until its setting row exists. */
+    /**
+     * A question generation limit; {@code fallback} until its setting row exists, or when the stored value is invalid
+     * (negative, unparsable, out of range) so a bad row never turns into "unlimited".
+     */
     public int questionGenerationLimit(QuestionGenerationLimit limit, int fallback) {
         try {
             return platformSettingService.getInteger(limit.key());
         } catch (PlatformSettingNotFoundException exception) {
+            return fallback;
+        } catch (PlatformSettingInvalidException exception) {
+            log.warn("Invalid platform setting {}; using deployment value {}", limit.key(), fallback);
             return fallback;
         }
     }

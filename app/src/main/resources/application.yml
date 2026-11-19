@@ -296,6 +296,10 @@ itembank:
     enabled: ${QUESTION_GEN_ENABLED:false}
     # Deterministic stub generator: test, local and local-schema profiles only (startup fails elsewhere).
     stub: ${QUESTION_GEN_STUB:false}
+    # Batch submit (many questions in sequential child jobs). Enable only after every instance runs the batch code.
+    batch-enabled: ${QUESTION_GEN_BATCH_ENABLED:false}
+    # AI-painted Describe Image pictures; off until the image provider is reliable (charts still work).
+    picture-enabled: ${QUESTION_GEN_PICTURE_ENABLED:false}
     llm:
       # The AI gateway (Capstone) shared by generation, its reviewer, the student chat and text scoring.
       # AI_GATEWAY_* is the name to use; QUESTION_GEN_* is still read for older env files.
@@ -326,6 +330,7 @@ itembank:
       vision-check: ${QUESTION_GEN_VISION_CHECK:false}
     limits:
       max-items-per-job: ${QUESTION_GEN_MAX_ITEMS_PER_JOB:10}
+      max-items-per-batch: ${QUESTION_GEN_MAX_ITEMS_PER_BATCH:50}
       max-items-per-user-per-day: ${QUESTION_GEN_MAX_ITEMS_PER_USER_PER_DAY:100}
       max-items-per-day-global: ${QUESTION_GEN_MAX_ITEMS_PER_DAY_GLOBAL:300}
       max-concurrent-jobs: ${QUESTION_GEN_MAX_CONCURRENT_JOBS:3}

@@ -22,6 +22,10 @@ public final class ChatConstants {
 
     public static final String ZONE_ID = "Asia/Ho_Chi_Minh";
     public static final ZoneId ZONE = ZoneId.of(ZONE_ID);
+    /** A daily limit of exactly 0 means unlimited: messages are still counted, never refused. */
+    public static final int UNLIMITED_DAILY_LIMIT = 0;
+    /** Upsert guard used when the daily limit is unlimited, so the counter keeps counting. */
+    public static final int NO_DAILY_LIMIT_GUARD = Integer.MAX_VALUE;
 
     /** Length of {@code chat_message.question}; a larger {@code chat.ai.max-input-chars} would fail the insert. */
     public static final int MAX_QUESTION_CHARS = 4000;

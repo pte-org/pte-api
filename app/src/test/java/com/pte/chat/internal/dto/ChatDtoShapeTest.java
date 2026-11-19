@@ -54,15 +54,16 @@ class ChatDtoShapeTest {
     void theMessageResponseHasTheAgreedFieldsAndNoSessionOrCacheFlag() {
         assertThat(components(ChatMessageResponse.class)).containsExactly(
                 Map.entry("markdown", String.class), Map.entry("onTopic", boolean.class),
-                Map.entry("remaining", int.class), Map.entry("limit", int.class),
-                Map.entry("resetAt", Instant.class));
+                Map.entry("remaining", Integer.class), Map.entry("limit", Integer.class),
+                Map.entry("resetAt", Instant.class), Map.entry("unlimited", boolean.class));
     }
 
     @Test
     void theQuotaResponseHasTheAgreedFields() {
         assertThat(components(ChatQuotaResponse.class)).containsExactly(
-                Map.entry("used", int.class), Map.entry("remaining", int.class),
-                Map.entry("limit", int.class), Map.entry("resetAt", Instant.class));
+                Map.entry("used", int.class), Map.entry("remaining", Integer.class),
+                Map.entry("limit", Integer.class), Map.entry("resetAt", Instant.class),
+                Map.entry("unlimited", boolean.class));
     }
 
     @Test

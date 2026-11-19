@@ -130,9 +130,17 @@ class ChatAiPropertiesValidatorTest {
     }
 
     @Test
-    void enabled_with_zero_daily_limit_is_reported() {
+    void enabled_with_zero_daily_limit_means_unlimited_and_is_valid() {
         ChatAiProperties properties = validEnabled();
         properties.setDailyLimit(0);
+
+        assertThat(ChatAiPropertiesValidator.validate(properties)).isEmpty();
+    }
+
+    @Test
+    void enabled_with_negative_daily_limit_is_reported() {
+        ChatAiProperties properties = validEnabled();
+        properties.setDailyLimit(-1);
 
         assertThat(ChatAiPropertiesValidator.validate(properties)).hasSize(1);
     }
@@ -200,7 +208,7 @@ class ChatAiPropertiesValidatorTest {
         properties.setEnabled(true);
         properties.setApiKey("");
         properties.setModel("gemini-flash-latest");
-        properties.setDailyLimit(0);
+        properties.setDailyLimit(-1);
         properties.setMaxInputChars(0);
         properties.setMaxTokens(-1);
         properties.setHistorySize(0);

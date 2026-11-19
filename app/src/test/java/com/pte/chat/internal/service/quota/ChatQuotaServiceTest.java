@@ -69,6 +69,37 @@ class ChatQuotaServiceTest {
     }
 
     @Test
+    void aZeroLimitIsUnlimitedFiftyMessagesAreChargedAndCountedNeverRefused() {
+        properties.setDailyLimit(ChatConstants.UNLIMITED_DAILY_LIMIT);
+        service = new ChatQuotaService(repository, properties, clock, observability);
+        when(repository.consume(STUDENT, DAY, ChatConstants.NO_DAILY_LIMIT_GUARD)).thenReturn(OptionalInt.of(1));
+
+        for (int message = 0; message < 50; message++) {
+            assertThat(service.consume(STUDENT)).isEqualTo(new ChatQuotaTicket(STUDENT, DAY));
+        }
+        when(repository.used(STUDENT, DAY)).thenReturn(50);
+
+        assertThat(service.snapshot(STUDENT)).isEqualTo(new ChatQuotaSnapshot(50, null, null, null, true));
+        verify(repository, org.mockito.Mockito.times(50)).consume(STUDENT, DAY, ChatConstants.NO_DAILY_LIMIT_GUARD);
+    }
+
+    @Test
+    void aZeroLimitNeverThrowsEvenIfTheGuardedUpsertReturnsNoRow() {
+        properties.setDailyLimit(ChatConstants.UNLIMITED_DAILY_LIMIT);
+        service = new ChatQuotaService(repository, properties, clock, observability);
+        when(repository.consume(STUDENT, DAY, ChatConstants.NO_DAILY_LIMIT_GUARD)).thenReturn(OptionalInt.empty());
+
+        assertThatCode(() -> service.consume(STUDENT)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void regressionTheTwentyFirstMessageIsRefusedWithTheDefaultLimit() {
+        when(repository.consume(STUDENT, DAY, 20)).thenReturn(OptionalInt.empty());
+
+        assertThatThrownBy(() -> service.consume(STUDENT)).isInstanceOf(ChatQuotaExceededException.class);
+    }
+
+    @Test
     void consumeUsesTheConfiguredDailyLimit() {
         properties.setDailyLimit(3);
         service = new ChatQuotaService(repository, properties, clock, observability);
@@ -146,14 +177,14 @@ class ChatQuotaServiceTest {
 
         ChatQuotaSnapshot snapshot = service.snapshot(STUDENT);
 
-        assertThat(snapshot).isEqualTo(new ChatQuotaSnapshot(7, 13, 20, DAY_RESET));
+        assertThat(snapshot).isEqualTo(new ChatQuotaSnapshot(7, 13, 20, DAY_RESET, false));
     }
 
     @Test
     void snapshotOfAStudentWithoutAnyRowIsFullyAvailable() {
         when(repository.used(STUDENT, DAY)).thenReturn(0);
 
-        assertThat(service.snapshot(STUDENT)).isEqualTo(new ChatQuotaSnapshot(0, 20, 20, DAY_RESET));
+        assertThat(service.snapshot(STUDENT)).isEqualTo(new ChatQuotaSnapshot(0, 20, 20, DAY_RESET, false));
     }
 
     @Test
@@ -185,8 +216,8 @@ class ChatQuotaServiceTest {
         ChatQuotaSnapshot charged = service.snapshot(ticket);
         ChatQuotaSnapshot today = service.snapshot(STUDENT);
 
-        assertThat(charged).isEqualTo(new ChatQuotaSnapshot(1, 19, 20, DAY_RESET));
-        assertThat(today).isEqualTo(new ChatQuotaSnapshot(0, 20, 20, NEXT_DAY_RESET));
+        assertThat(charged).isEqualTo(new ChatQuotaSnapshot(1, 19, 20, DAY_RESET, false));
+        assertThat(today).isEqualTo(new ChatQuotaSnapshot(0, 20, 20, NEXT_DAY_RESET, false));
     }
 
     @Test

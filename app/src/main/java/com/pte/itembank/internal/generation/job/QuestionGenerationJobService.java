@@ -6,7 +6,9 @@ import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionPool;
 import com.pte.itembank.internal.generation.config.GenerationLimits;
 import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
+import com.pte.itembank.internal.generation.constant.BatchGenerationConstants;
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
+import com.pte.itembank.internal.generation.domain.BatchStatus;
 import com.pte.itembank.internal.generation.domain.ItemStage;
 import com.pte.itembank.internal.generation.domain.JobStatus;
 import com.pte.itembank.internal.generation.domain.QuestionGenerationJob;
@@ -16,8 +18,8 @@ import com.pte.itembank.internal.generation.dto.SubmitGenerationJobRequest;
 import com.pte.itembank.internal.generation.exception.GenerationDisabledException;
 import com.pte.itembank.internal.generation.exception.GenerationJobConflictException;
 import com.pte.itembank.internal.generation.exception.GenerationJobNotFoundException;
-import com.pte.itembank.internal.generation.exception.GenerationLimitException;
 import com.pte.itembank.internal.generation.exception.GenerationRequestInvalidException;
+import com.pte.itembank.internal.generation.repository.GenerationBatchRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
 import com.pte.shared.security.CurrentUser;
@@ -27,10 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -43,17 +43,22 @@ public class QuestionGenerationJobService {
 
     private final GenerationJobRepository jobs;
     private final GenerationJobItemRepository items;
+    private final GenerationBatchRepository batches;
     private final GenerationTaskTypeCatalog catalog;
     private final QuestionGenerationProperties properties;
     private final Clock clock;
     private final GenerationLimits limits;
+    private final GenerationQuotaGuard quota;
 
     public QuestionGenerationJobService(GenerationJobRepository jobs, GenerationJobItemRepository items,
-                                        GenerationTaskTypeCatalog catalog, QuestionGenerationProperties properties,
-                                        Clock clock, GenerationLimits limits) {
+                                        GenerationBatchRepository batches, GenerationTaskTypeCatalog catalog,
+                                        QuestionGenerationProperties properties, GenerationLimits limits,
+                                        GenerationQuotaGuard quota, Clock clock) {
         this.limits = limits;
+        this.quota = quota;
         this.jobs = jobs;
         this.items = items;
+        this.batches = batches;
         this.catalog = catalog;
         this.properties = properties;
         this.clock = clock;
@@ -69,13 +74,13 @@ public class QuestionGenerationJobService {
                 QuestionGenerationConstants.GENERATION_TASK_TYPE_UNSUPPORTED,
                 QuestionGenerationConstants.GENERATION_TASK_TYPE_UNSUPPORTED_MESSAGE));
         checkCount(request.count());
-        CefrLevel cefr = parseCefr(request.cefrLevel());
-        QuestionPool pool = parsePool(request.pool());
+        CefrLevel cefr = GenerationRequestFields.cefr(request.cefrLevel());
+        QuestionPool pool = GenerationRequestFields.pool(request.pool());
         String topicHint = TopicHintPolicy.normalize(request.topicHint());
-        ImageKind imageKind = parseImageKind(request.imageKind());
+        ImageKind imageKind = GenerationRequestFields.imageKind(request.imageKind(), properties.isPictureEnabled());
 
         jobs.lockSubmissions(QuestionGenerationConstants.SUBMIT_ADVISORY_LOCK_KEY);
-        checkCaps(caller, request.count());
+        checkCaps(caller, request.count(), request.savesQuestions());
 
         Instant now = clock.instant();
         QuestionGenerationJob job = new QuestionGenerationJob();
@@ -115,6 +120,11 @@ public class QuestionGenerationJobService {
         QuestionGenerationJob job = jobs.findByPublicIdAndDeletedFalse(publicId)
                 .orElseThrow(GenerationJobNotFoundException::new);
         GenerationAccessPolicy.requireAccess(caller, job);
+        if (job.getBatchId() != null) {
+            // A child cancelled alone would leave its batch to promote the next one; the batch is the unit to cancel.
+            throw new GenerationJobConflictException(BatchGenerationConstants.GENERATION_JOB_PART_OF_BATCH,
+                    BatchGenerationConstants.GENERATION_JOB_PART_OF_BATCH_MESSAGE);
+        }
         Instant now = clock.instant();
         if (jobs.cancelQueued(publicId, now) > 0) {
             items.cancelOpenUnleased(job.getId(), now);
@@ -134,55 +144,19 @@ public class QuestionGenerationJobService {
         }
     }
 
-    private void checkCaps(CurrentUser caller, int count) {
-        if (jobs.existsByRequestedByUserPublicIdAndStatusIn(caller.userId(), JobStatus.ACTIVE)) {
+    /**
+     * One open saving unit per writer: a saving job, or a batch (whose children are saving jobs). A preview job from
+     * the question form saves nothing and is exempt, so the form keeps working while a batch runs.
+     */
+    private void checkCaps(CurrentUser caller, int count, boolean savesQuestions) {
+        if (savesQuestions && (batches.existsByRequestedByUserPublicIdAndStatusIn(caller.userId(), BatchStatus.OPEN)
+                || jobs.existsByRequestedByUserPublicIdAndSaveQuestionsTrueAndStatusIn(caller.userId(),
+                JobStatus.OPEN))) {
             throw new GenerationJobConflictException(QuestionGenerationConstants.GENERATION_JOB_ALREADY_RUNNING,
                     QuestionGenerationConstants.GENERATION_JOB_ALREADY_RUNNING_MESSAGE);
         }
-        Instant dayStart = clock.instant().truncatedTo(ChronoUnit.DAYS);
-        if (jobs.sumRequestedSinceByUser(caller.userId(), dayStart) + count > limits.maxItemsPerUserPerDay()) {
-            throw new GenerationLimitException(QuestionGenerationConstants.GENERATION_DAILY_LIMIT_REACHED,
-                    QuestionGenerationConstants.GENERATION_DAILY_LIMIT_REACHED_MESSAGE);
-        }
-        if (jobs.sumRequestedSince(dayStart) + count > limits.maxItemsPerDayGlobal()) {
-            throw new GenerationLimitException(QuestionGenerationConstants.GENERATION_GLOBAL_LIMIT_REACHED,
-                    QuestionGenerationConstants.GENERATION_GLOBAL_LIMIT_REACHED_MESSAGE);
-        }
-        if (jobs.countByStatusIn(JobStatus.ACTIVE) >= limits.maxConcurrentJobs()) {
-            throw new GenerationLimitException(QuestionGenerationConstants.GENERATION_TOO_MANY_JOBS,
-                    QuestionGenerationConstants.GENERATION_TOO_MANY_JOBS_MESSAGE);
-        }
-    }
-
-    private static CefrLevel parseCefr(String raw) {
-        try {
-            CefrLevel level = CefrLevel.parseOrNull(raw);
-            if (level != null) {
-                return level;
-            }
-        } catch (IllegalArgumentException unknown) {
-            // falls through to the same error as a missing value
-        }
-        throw invalid(QuestionGenerationConstants.GENERATION_CEFR_INVALID,
-                QuestionGenerationConstants.GENERATION_CEFR_INVALID_MESSAGE);
-    }
-
-    private static QuestionPool parsePool(String raw) {
-        try {
-            return QuestionPool.valueOf(raw.trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException unknown) {
-            throw invalid(QuestionGenerationConstants.GENERATION_POOL_INVALID,
-                    QuestionGenerationConstants.GENERATION_POOL_INVALID_MESSAGE);
-        }
-    }
-
-    private static ImageKind parseImageKind(String raw) {
-        try {
-            return ImageKind.parse(raw);
-        } catch (IllegalArgumentException unknown) {
-            throw invalid(QuestionGenerationConstants.GENERATION_IMAGE_KIND_INVALID,
-                    QuestionGenerationConstants.GENERATION_IMAGE_KIND_INVALID_MESSAGE);
-        }
+        quota.requireWithin(caller, count);
+        // No concurrency check here: a busy system leaves the job QUEUED; the cap is enforced at claim.
     }
 
     private static GenerationRequestInvalidException invalid(String code, String message) {

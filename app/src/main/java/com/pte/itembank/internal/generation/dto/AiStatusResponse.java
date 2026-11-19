@@ -10,7 +10,9 @@ public record AiStatusResponse(boolean generationEnabled, String generatorModel,
                                Limits limits) {
 
     /** The ceilings that keep generation cost bounded. */
+    /** A daily or batch value of 0 is unlimited (flagged); {@code effectiveMaxItemsPerBatch} is the cap in force. */
     public record Limits(int maxItemsPerJob, int maxItemsPerUserPerDay, int maxItemsPerDayGlobal,
-                         int maxConcurrentJobs, int maxCallsPerItem) {
+                         int maxConcurrentJobs, int maxCallsPerItem, boolean userDailyUnlimited,
+                         boolean globalDailyUnlimited, boolean batchUnlimited, int effectiveMaxItemsPerBatch) {
     }
 }

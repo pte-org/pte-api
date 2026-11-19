@@ -52,10 +52,10 @@ abstract class ChatServiceTestSupport {
     final ChatQuotaTicket ticket = new ChatQuotaTicket(STUDENT, DAY);
     /** What the quota service reports for the charged day after the call. */
     final ChatQuotaSnapshot chargedSnapshot =
-            new ChatQuotaSnapshot(1, 19, 20, Instant.parse("2026-10-28T17:00:00Z"));
+            new ChatQuotaSnapshot(1, 19, 20, Instant.parse("2026-10-28T17:00:00Z"), false);
     /** What the quota service reports for today when nothing was charged. */
     final ChatQuotaSnapshot todaySnapshot =
-            new ChatQuotaSnapshot(4, 16, 20, Instant.parse("2026-10-28T17:00:00Z"));
+            new ChatQuotaSnapshot(4, 16, 20, Instant.parse("2026-10-28T17:00:00Z"), false);
 
     ChatService service;
 
