@@ -68,6 +68,11 @@ services:
       # ':-' also covers a variable left empty in the env file, which Spring would otherwise read as ''.
       QUESTION_GEN_ENABLED: ${QUESTION_GEN_ENABLED:-false}
       QUESTION_GEN_STUB: ${QUESTION_GEN_STUB:-false}
+      # Batch generation (PENDING batch children) only once every instance runs the new code; AI pictures off until
+      # the image provider is reliable (AUTO falls back to a chart).
+      QUESTION_GEN_BATCH_ENABLED: ${QUESTION_GEN_BATCH_ENABLED:-false}
+      QUESTION_GEN_PICTURE_ENABLED: ${QUESTION_GEN_PICTURE_ENABLED:-false}
+      QUESTION_GEN_MAX_ITEMS_PER_BATCH: ${QUESTION_GEN_MAX_ITEMS_PER_BATCH:-50}
       # Shared AI gateway (Capstone); the old QUESTION_GEN_* names still work as a fallback.
       AI_GATEWAY_BASE_URL: ${AI_GATEWAY_BASE_URL:-${QUESTION_GEN_BASE_URL:-}}
       AI_GATEWAY_WEB_URL: ${AI_GATEWAY_WEB_URL:-}
