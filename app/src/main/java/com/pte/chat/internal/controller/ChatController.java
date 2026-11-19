@@ -42,13 +42,13 @@ public class ChatController {
         ChatReply reply = chatService.send(caller, new ChatSendCommand(request.message(), request.taskType(),
                 request.language(), request.exercisePrompt(), history));
         return ApiResponse.success(new ChatMessageResponse(reply.markdown(), reply.onTopic(),
-                reply.quota().remaining(), reply.quota().limit(), reply.quota().resetAt()));
+                reply.quota().remaining(), reply.quota().limit(), reply.quota().resetAt(), reply.quota().unlimited()));
     }
 
     @GetMapping(ChatConstants.QUOTA_PATH)
     public ApiResponse<ChatQuotaResponse> quota() {
         ChatQuotaSnapshot snapshot = chatService.quota(CurrentUserContext.required());
         return ApiResponse.success(new ChatQuotaResponse(snapshot.used(), snapshot.remaining(), snapshot.limit(),
-                snapshot.resetAt()));
+                snapshot.resetAt(), snapshot.unlimited()));
     }
 }

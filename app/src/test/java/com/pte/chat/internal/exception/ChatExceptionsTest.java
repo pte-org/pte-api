@@ -19,7 +19,7 @@ class ChatExceptionsTest {
 
     private static List<DomainException> all() {
         return List.of(
-                new ChatQuotaExceededException(new ChatQuotaSnapshot(20, 0, 20, RESET_AT)),
+                new ChatQuotaExceededException(new ChatQuotaSnapshot(20, 0, 20, RESET_AT, false)),
                 new ChatRequestInFlightException(),
                 new ChatBusyException(),
                 new ChatInvalidRequestException("message is too long"));
@@ -27,7 +27,7 @@ class ChatExceptionsTest {
 
     @Test
     void quotaExceededIs429WithTheStableCode() {
-        DomainException ex = new ChatQuotaExceededException(new ChatQuotaSnapshot(20, 0, 20, RESET_AT));
+        DomainException ex = new ChatQuotaExceededException(new ChatQuotaSnapshot(20, 0, 20, RESET_AT, false));
 
         assertThat(ex.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
         assertThat(ex.getCode()).isEqualTo(ChatConstants.ERR_QUOTA_EXCEEDED);
@@ -36,7 +36,7 @@ class ChatExceptionsTest {
     @Test
     @SuppressWarnings("unchecked")
     void quotaExceededCarriesResetAtLimitAndRemainingZeroAsTheResponseData() {
-        DomainException ex = new ChatQuotaExceededException(new ChatQuotaSnapshot(20, 0, 20, RESET_AT));
+        DomainException ex = new ChatQuotaExceededException(new ChatQuotaSnapshot(20, 0, 20, RESET_AT, false));
 
         assertThat(ex.getData()).isInstanceOf(Map.class);
         Map<String, Object> data = (Map<String, Object>) ex.getData();
@@ -50,7 +50,7 @@ class ChatExceptionsTest {
     @SuppressWarnings("unchecked")
     void quotaExceededDataFollowsTheSnapshot() {
         DomainException ex = new ChatQuotaExceededException(
-                new ChatQuotaSnapshot(5, 0, 5, Instant.parse("2026-12-31T17:00:00Z")));
+                new ChatQuotaSnapshot(5, 0, 5, Instant.parse("2026-12-31T17:00:00Z"), false));
 
         Map<String, Object> data = (Map<String, Object>) ex.getData();
         assertThat(data.get("resetAt")).isEqualTo("2026-12-31T17:00:00Z");

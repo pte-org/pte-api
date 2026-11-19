@@ -6,13 +6,15 @@
     "historyItemMaxChars": 20000,
     "historyTotalMaxChars": 24000
   },
-  "quota": { "used": 3, "remaining": 17, "limit": 20, "resetAt": "2026-10-29T17:00:00Z" },
+  "quota": { "used": 3, "remaining": 17, "limit": 20, "resetAt": "2026-10-29T17:00:00Z", "unlimited": false },
+  "unlimitedQuota": { "used": 50, "remaining": null, "limit": null, "resetAt": null, "unlimited": true },
   "reply": {
     "markdown": "Use **present perfect**.",
     "onTopic": true,
     "remaining": 16,
     "limit": 20,
-    "resetAt": "2026-10-29T17:00:00Z"
+    "resetAt": "2026-10-29T17:00:00Z",
+    "unlimited": false
   },
   "quotaExceededError": {
     "code": "CHAT_QUOTA_EXCEEDED",

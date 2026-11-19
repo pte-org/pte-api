@@ -52,7 +52,7 @@ public final class ChatAiPropertiesValidator {
                 problems.add(ChatConstants.CONFIG_MODEL_LATEST_MESSAGE);
             }
         }
-        requireAtLeastOne(problems, "chat.ai.daily-limit", properties.getDailyLimit());
+        requireNonNegative(problems, "chat.ai.daily-limit", properties.getDailyLimit());
         requireAtLeastOne(problems, "chat.ai.max-input-chars", properties.getMaxInputChars());
         if (gemini) {
             requireAtLeastOne(problems, "chat.ai.max-tokens", properties.getMaxTokens());
@@ -97,6 +97,12 @@ public final class ChatAiPropertiesValidator {
 
     private static void requireNotNegative(List<String> problems, String name, java.math.BigDecimal value) {
         if (value == null || value.signum() < 0) {
+            problems.add(ChatConstants.CONFIG_NOT_NEGATIVE_TEMPLATE.formatted(name));
+        }
+    }
+
+    private static void requireNonNegative(List<String> problems, String name, int value) {
+        if (value < 0) {
             problems.add(ChatConstants.CONFIG_NOT_NEGATIVE_TEMPLATE.formatted(name));
         }
     }

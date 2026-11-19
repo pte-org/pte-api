@@ -90,15 +90,22 @@ class ChatApiContractTest {
 
     @Test
     void quotaMatchesTheContract() throws Exception {
-        when(chatService.quota(any())).thenReturn(new ChatQuotaSnapshot(3, 17, 20, RESET_AT));
+        when(chatService.quota(any())).thenReturn(new ChatQuotaSnapshot(3, 17, 20, RESET_AT, false));
 
         assertThat(body(get(BASE + ChatConstants.QUOTA_PATH)).get("data")).isEqualTo(contract.get("quota"));
     }
 
     @Test
+    void anUnlimitedQuotaMatchesTheContract() throws Exception {
+        when(chatService.quota(any())).thenReturn(new ChatQuotaSnapshot(50, null, null, null, true));
+
+        assertThat(body(get(BASE + ChatConstants.QUOTA_PATH)).get("data")).isEqualTo(contract.get("unlimitedQuota"));
+    }
+
+    @Test
     void aReplyMatchesTheContract() throws Exception {
         when(chatService.send(any(), any())).thenReturn(
-                new ChatReply("Use **present perfect**.", true, new ChatQuotaSnapshot(4, 16, 20, RESET_AT)));
+                new ChatReply("Use **present perfect**.", true, new ChatQuotaSnapshot(4, 16, 20, RESET_AT, false)));
 
         JsonNode response = body(post(BASE + ChatConstants.MESSAGES_PATH).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"message\":\"Question\"}"));
@@ -108,7 +115,7 @@ class ChatApiContractTest {
 
     @Test
     void theQuotaExceededErrorCarriesTheCodeAndTheDataTheWebClientReads() throws Exception {
-        when(chatService.send(any(), any())).thenThrow(new ChatQuotaExceededException(new ChatQuotaSnapshot(20, 0, 20, RESET_AT)));
+        when(chatService.send(any(), any())).thenThrow(new ChatQuotaExceededException(new ChatQuotaSnapshot(20, 0, 20, RESET_AT, false)));
 
         JsonNode response = body(post(BASE + ChatConstants.MESSAGES_PATH).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"message\":\"Question\"}"));
