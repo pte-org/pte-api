@@ -224,8 +224,57 @@ class GenerationRepositoryQueriesTest {
         assertThat(jobs.sumRequestedSinceByUser(requester, Instant.EPOCH)).isEqualTo(3);
         assertThat(jobs.sumRequestedSinceByUser(requester, Instant.now().plus(Duration.ofDays(1)))).isZero();
         assertThat(jobs.sumRequestedSince(Instant.EPOCH)).isGreaterThanOrEqualTo(3);
-        assertThat(jobs.countByStatusIn(JobStatus.ACTIVE)).isGreaterThanOrEqualTo(1);
+        assertThat(jobs.countLiveLeases(NOW)).isGreaterThanOrEqualTo(1);
+        assertThat(jobs.countLiveLeases(LEASE.plusSeconds(1))).isZero();
         assertThat(jobs.existsByRequestedByUserPublicIdAndStatusIn(requester, JobStatus.ACTIVE)).isTrue();
         assertThat(jobs.existsByRequestedByUserPublicIdAndStatusIn(requester, List.of(JobStatus.COMPLETED))).isFalse();
+    }
+
+    @Test
+    void theNextQueuedJobPrefersStandaloneJobsThenBatchChildrenInRunOrder() {
+        QuestionGenerationJob first = queuedJob(99L, 0);
+        QuestionGenerationJob second = queuedJob(99L, 1);
+        QuestionGenerationJob standalone = queuedJob(null, null);
+
+        assertThat(jobs.findNextQueued()).containsExactly(standalone.getId());
+        jobs.cancelQueued(standalone.getPublicId(), NOW);
+        assertThat(jobs.findNextQueued()).containsExactly(first.getId());
+        assertThat(jobs.findBatchIdById(second.getId())).containsExactly(99L);
+    }
+
+    @Test
+    void onlyAnExpiredLeaseIsResumable() {
+        QuestionGenerationJob job = running("worker-a");
+
+        assertThat(jobs.findNextResumable(NOW)).doesNotContain(job.getId());
+        assertThat(jobs.findNextResumable(LEASE.plusSeconds(1))).contains(job.getId());
+    }
+
+    private QuestionGenerationJob queuedJob(Long batchId, Integer seq) {
+        QuestionGenerationJob job = new QuestionGenerationJob();
+        job.setRequestedByUserPublicId(UUID.randomUUID());
+        job.setTaskTypeKey("MC_READING_SINGLE");
+        job.setCefrLevel(CefrLevel.B2);
+        job.setPool(QuestionPool.PRACTICE);
+        job.setRequestedCount(1);
+        job.setBatchId(batchId);
+        job.setBatchSeq(seq);
+        job.setBatchRowIndex(seq == null ? null : 0);
+        return jobs.saveAndFlush(job);
+    }
+
+    @Test
+    void aJobCancelledBeforeItStartedIsRefundedFromTheQuota() {
+        QuestionGenerationJob neverStarted = queuedJob(null, null);
+        UUID requester = neverStarted.getRequestedByUserPublicId();
+        assertThat(jobs.sumRequestedSinceByUser(requester, Instant.EPOCH)).isEqualTo(1);
+
+        jobs.cancelQueued(neverStarted.getPublicId(), NOW);
+        assertThat(jobs.sumRequestedSinceByUser(requester, Instant.EPOCH)).isZero();
+
+        QuestionGenerationJob started = running("worker-a");
+        jobs.markCancelling(started.getPublicId());
+        jobs.finish(started.getId(), "worker-a", JobStatus.CANCELLED, null, NOW);
+        assertThat(jobs.sumRequestedSinceByUser(started.getRequestedByUserPublicId(), Instant.EPOCH)).isEqualTo(3);
     }
 }

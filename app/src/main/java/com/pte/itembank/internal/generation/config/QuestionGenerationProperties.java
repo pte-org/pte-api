@@ -1,5 +1,6 @@
 package com.pte.itembank.internal.generation.config;
 
+import com.pte.itembank.internal.generation.constant.BatchGenerationConstants;
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
@@ -28,6 +29,12 @@ public class QuestionGenerationProperties {
 
     /** Use the deterministic stub generator (test, local and local-schema profiles only). */
     private boolean stub;
+
+    /** Batch submit; off until every app instance runs code that understands PENDING batch children. */
+    private boolean batchEnabled;
+
+    /** AI-painted pictures (Describe Image); off while the image provider is unreliable. */
+    private boolean pictureEnabled;
 
     @Valid
     private final Llm llm = new Llm();
@@ -86,9 +93,15 @@ public class QuestionGenerationProperties {
         @Min(1)
         @Max(QuestionGenerationConstants.MAX_ITEMS_PER_JOB_HARD_LIMIT)
         private int maxItemsPerJob = QuestionGenerationConstants.MAX_ITEMS_PER_JOB_HARD_LIMIT;
-        @Min(1)
+        /** 0 = no own limit (the hard cap still applies). */
+        @Min(0)
+        @Max(BatchGenerationConstants.MAX_ITEMS_PER_BATCH_HARD_LIMIT)
+        private int maxItemsPerBatch = BatchGenerationConstants.DEFAULT_MAX_ITEMS_PER_BATCH;
+        /** 0 = unlimited. */
+        @Min(0)
         private int maxItemsPerUserPerDay = 100;
-        @Min(1)
+        /** 0 = unlimited. */
+        @Min(0)
         private int maxItemsPerDayGlobal = 300;
         @Min(1)
         private int maxConcurrentJobs = 3;

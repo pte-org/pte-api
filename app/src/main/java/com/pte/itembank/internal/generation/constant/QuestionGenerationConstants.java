@@ -11,6 +11,8 @@ public final class QuestionGenerationConstants {
     public static final String GENERATION_TOPIC_HINT_INVALID = "GENERATION_TOPIC_HINT_INVALID";
     public static final String GENERATION_DAILY_LIMIT_REACHED = "GENERATION_DAILY_LIMIT_REACHED";
     public static final String GENERATION_GLOBAL_LIMIT_REACHED = "GENERATION_GLOBAL_LIMIT_REACHED";
+    /** No longer returned: a busy system queues the job instead (cap enforced at claim). Kept for old clients' code maps. */
+    @Deprecated
     public static final String GENERATION_TOO_MANY_JOBS = "GENERATION_TOO_MANY_JOBS";
     public static final String GENERATION_JOB_ALREADY_RUNNING = "GENERATION_JOB_ALREADY_RUNNING";
     public static final String GENERATION_JOB_NOT_FOUND = "GENERATION_JOB_NOT_FOUND";
@@ -28,8 +30,6 @@ public final class QuestionGenerationConstants {
     public static final String GENERATION_DAILY_LIMIT_REACHED_MESSAGE = "You reached the daily generation limit.";
     public static final String GENERATION_GLOBAL_LIMIT_REACHED_MESSAGE =
             "The platform reached the daily generation limit.";
-    public static final String GENERATION_TOO_MANY_JOBS_MESSAGE =
-            "Too many generation jobs are running. Try again in a few minutes.";
     public static final String GENERATION_JOB_ALREADY_RUNNING_MESSAGE =
             "You already have a generation job in progress.";
     public static final String GENERATION_JOB_NOT_FOUND_MESSAGE = "Generation job not found.";
@@ -83,10 +83,14 @@ public final class QuestionGenerationConstants {
             "itembank.generation.llm generator and reviewer models are required.";
 
     public static final int MAX_ITEMS_PER_JOB_HARD_LIMIT = 10;
+    /** A batch size or daily limit of exactly 0 means unlimited. */
+    public static final int UNLIMITED = 0;
     public static final int MAX_TOPIC_HINT_LENGTH = 500;
     public static final int MAX_FAILURE_NOTE_LENGTH = 300;
     public static final int MAX_PAGE_SIZE = 50;
     public static final long SUBMIT_ADVISORY_LOCK_KEY = 7_340_034L;
+    /** Serializes worker claims across instances; must differ from {@link #SUBMIT_ADVISORY_LOCK_KEY}. */
+    public static final long CLAIM_ADVISORY_LOCK_KEY = 7_340_035L;
     public static final int META_SCHEMA_VERSION = 1;
     public static final String PROMPT_VERSION = "2026-11-07";
     public static final int ESTIMATED_SECONDS_TEXT = 45;

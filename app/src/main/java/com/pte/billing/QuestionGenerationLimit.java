@@ -2,15 +2,18 @@ package com.pte.billing;
 
 /**
  * The AI question generation limits a platform admin edits on the AI overview page, each stored as a platform setting.
- * The range is what the settings page accepts; the default is the deployment value used until then.
+ * The range is what the settings page accepts; the default is the deployment value used until then. For the batch
+ * size and the two daily limits, 0 means unlimited (the batch size then falls back to the hard cap).
  */
 public enum QuestionGenerationLimit {
 
     ITEMS_PER_JOB("question_generation_max_items_per_job", 10, 1, 50, "questions",
             "Questions one generation job may ask for"),
-    ITEMS_PER_USER_PER_DAY("question_generation_max_items_per_user_per_day", 100, 1, 10_000, "questions",
+    ITEMS_PER_BATCH("question_generation_max_items_per_batch", 50, 0, 500, "questions",
+            "Questions one generation batch may ask for"),
+    ITEMS_PER_USER_PER_DAY("question_generation_max_items_per_user_per_day", 100, 0, 10_000, "questions",
             "Questions one admin may generate per day"),
-    ITEMS_PER_DAY("question_generation_max_items_per_day", 300, 1, 100_000, "questions",
+    ITEMS_PER_DAY("question_generation_max_items_per_day", 300, 0, 100_000, "questions",
             "Questions all admins together may generate per day"),
     CONCURRENT_JOBS("question_generation_max_concurrent_jobs", 3, 1, 20, "jobs",
             "Generation jobs that may run at the same time"),

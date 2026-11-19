@@ -1,6 +1,8 @@
 package com.pte.itembank.internal.generation.job;
 
+import com.pte.itembank.internal.generation.domain.QuestionGenerationBatch;
 import com.pte.itembank.internal.generation.domain.QuestionGenerationJob;
+import com.pte.itembank.internal.generation.exception.GenerationBatchNotFoundException;
 import com.pte.itembank.internal.generation.exception.GenerationJobNotFoundException;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.SecurityRoles;
@@ -34,6 +36,14 @@ public final class GenerationAccessPolicy {
         requireAuthor(caller);
         if (!seesAllJobs(caller) && !caller.userId().equals(job.getRequestedByUserPublicId())) {
             throw new GenerationJobNotFoundException();
+        }
+    }
+
+    /** Same rule as for jobs: staff only reach their own batches; another writer's batch answers as not found. */
+    public static void requireAccess(CurrentUser caller, QuestionGenerationBatch batch) {
+        requireAuthor(caller);
+        if (!seesAllJobs(caller) && !caller.userId().equals(batch.getRequestedByUserPublicId())) {
+            throw new GenerationBatchNotFoundException();
         }
     }
 }

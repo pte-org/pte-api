@@ -15,6 +15,7 @@ import java.util.UUID;
 import static com.pte.itembank.internal.generation.repository.GenerationJobRepository.ITEM;
 import static com.pte.itembank.internal.generation.repository.GenerationJobRepository.JOB;
 import static com.pte.itembank.internal.generation.repository.GenerationJobRepository.STAGE;
+import static com.pte.itembank.internal.generation.repository.GenerationJobRepository.STATUS;
 
 /** Item changes made by the worker are guarded by the job lease, so a worker that lost its lease changes nothing. */
 public interface GenerationJobItemRepository extends JpaRepository<QuestionGenerationJobItem, Long> {
@@ -75,4 +76,21 @@ public interface GenerationJobItemRepository extends JpaRepository<QuestionGener
     @Query("update " + ITEM + " i set i.stage = " + STAGE + ".CANCELLED, i.updatedAt = :now "
             + "where i.jobId = :jobId" + OPEN_STAGES)
     int cancelOpenUnleased(@Param("jobId") Long jobId, @Param("now") Instant now);
+
+    /** Items of the batch children nobody holds (PENDING or QUEUED); call before those children are cancelled. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update " + ITEM + " i set i.stage = " + STAGE + ".CANCELLED, i.updatedAt = :now where i.jobId in "
+            + "(select j.id from " + JOB + " j where j.batchId = :batchId and j.status in (" + STATUS + ".PENDING, "
+            + STATUS + ".QUEUED))" + OPEN_STAGES)
+    int cancelOpenUnleasedByBatch(@Param("batchId") Long batchId, @Param("now") Instant now);
+
+    /** Item count per stage over every child of the batch: the batch progress in one query. */
+    @Query("select i.stage, count(i) from " + ITEM + " i where i.jobId in (select j.id from " + JOB
+            + " j where j.batchId = :batchId) group by i.stage")
+    List<Object[]> countStagesByBatch(@Param("batchId") Long batchId);
+
+    /** Questions saved by any child of the batch (deleted or not): the only ids a bulk draft delete may touch. */
+    @Query("select i.questionPublicId from " + ITEM + " i where i.questionPublicId is not null and i.jobId in "
+            + "(select j.id from " + JOB + " j where j.batchId = :batchId)")
+    List<UUID> findSavedQuestionPublicIdsByBatch(@Param("batchId") Long batchId);
 }

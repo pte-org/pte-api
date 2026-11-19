@@ -152,7 +152,7 @@ class ChatServiceFailureTest extends ChatServiceTestSupport {
     @Test
     void anExhaustedQuotaIsReportedAsIsAndBothLeasesAreReleasedWithoutARefundOrACount() {
         ChatQuotaExceededException exhausted = new ChatQuotaExceededException(
-                new ChatQuotaSnapshot(20, 0, 20, Instant.parse("2026-10-28T17:00:00Z")));
+                new ChatQuotaSnapshot(20, 0, 20, Instant.parse("2026-10-28T17:00:00Z"), false));
         when(quotaService.consume(STUDENT)).thenThrow(exhausted);
 
         assertThatThrownBy(() -> service.send(caller, command("Question"))).isSameAs(exhausted);

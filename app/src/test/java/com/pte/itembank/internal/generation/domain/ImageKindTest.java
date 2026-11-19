@@ -22,4 +22,12 @@ class ImageKindTest {
         assertThat(ImageKind.parse(" picture ")).isEqualTo(ImageKind.PICTURE);
         assertThatThrownBy(() -> ImageKind.parse("video")).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void whileAiPicturesAreOffAutoNeverBecomesAPicture() {
+        assertThat(ImageKind.AUTO.resolve("A busy city market", false)).isEqualTo(ImageKind.CHART);
+        assertThat(ImageKind.AUTO.resolve("A busy city market", true)).isEqualTo(ImageKind.PICTURE);
+        assertThat(ImageKind.AUTO.resolve("Energy use as a table", false)).isEqualTo(ImageKind.CHART);
+        assertThat(ImageKind.PICTURE.resolve(null, false)).isEqualTo(ImageKind.PICTURE);
+    }
 }

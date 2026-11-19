@@ -103,7 +103,7 @@ class ChatControllerTest {
     }
 
     private static ChatReply reply(String markdown, boolean onTopic, int remaining) {
-        return new ChatReply(markdown, onTopic, new ChatQuotaSnapshot(20 - remaining, remaining, 20, RESET_AT));
+        return new ChatReply(markdown, onTopic, new ChatQuotaSnapshot(20 - remaining, remaining, 20, RESET_AT, false));
     }
 
     // ---- POST /messages ------------------------------------------------------------------------------------
@@ -269,7 +269,7 @@ class ChatControllerTest {
 
     static Stream<Arguments> serviceErrors() {
         return Stream.of(
-                Arguments.of(new ChatQuotaExceededException(new ChatQuotaSnapshot(20, 0, 20, RESET_AT)), 429,
+                Arguments.of(new ChatQuotaExceededException(new ChatQuotaSnapshot(20, 0, 20, RESET_AT, false)), 429,
                         "CHAT_QUOTA_EXCEEDED"),
                 Arguments.of(new ChatRequestInFlightException(), 409, "CHAT_REQUEST_IN_FLIGHT"),
                 Arguments.of(new ChatBusyException(), 503, "CHAT_BUSY"),
@@ -294,7 +294,7 @@ class ChatControllerTest {
     @Test
     void theQuotaExceededBodyCarriesResetAtLimitAndZeroRemaining() throws Exception {
         when(chatService.send(any(), any())).thenThrow(
-                new ChatQuotaExceededException(new ChatQuotaSnapshot(20, 0, 20, RESET_AT)));
+                new ChatQuotaExceededException(new ChatQuotaSnapshot(20, 0, 20, RESET_AT, false)));
 
         mvc.perform(post(MESSAGES).contentType(MediaType.APPLICATION_JSON).content(body("Question")))
                 .andExpect(status().isTooManyRequests())
@@ -316,7 +316,7 @@ class ChatControllerTest {
 
     @Test
     void theQuotaEndpointReturnsUsedRemainingLimitAndResetAt() throws Exception {
-        when(chatService.quota(any())).thenReturn(new ChatQuotaSnapshot(5, 15, 20, RESET_AT));
+        when(chatService.quota(any())).thenReturn(new ChatQuotaSnapshot(5, 15, 20, RESET_AT, false));
 
         mvc.perform(get(QUOTA))
                 .andExpect(status().isOk())
@@ -348,7 +348,7 @@ class ChatControllerTest {
     @Test
     void aStudentIsLetIn() throws Exception {
         authenticate("STUDENT");
-        when(chatService.quota(any())).thenReturn(new ChatQuotaSnapshot(0, 20, 20, RESET_AT));
+        when(chatService.quota(any())).thenReturn(new ChatQuotaSnapshot(0, 20, 20, RESET_AT, false));
 
         mvc.perform(get(QUOTA)).andExpect(status().isOk());
 

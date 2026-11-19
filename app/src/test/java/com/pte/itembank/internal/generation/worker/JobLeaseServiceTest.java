@@ -2,13 +2,19 @@ package com.pte.itembank.internal.generation.worker;
 
 import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.domain.enums.QuestionPool;
+import com.pte.billing.BillingSettingsService;
+import com.pte.itembank.internal.generation.batch.BatchChainingService;
+import com.pte.itembank.internal.generation.config.GenerationLimits;
 import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
+import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import com.pte.itembank.internal.generation.domain.JobStatus;
 import com.pte.itembank.internal.generation.domain.QuestionGenerationJob;
 import com.pte.itembank.internal.generation.pipeline.JobClaim;
+import com.pte.itembank.internal.generation.repository.GenerationBatchRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -23,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -34,8 +41,12 @@ class JobLeaseServiceTest {
 
     private final GenerationJobRepository jobs = mock(GenerationJobRepository.class);
     private final GenerationJobItemRepository items = mock(GenerationJobItemRepository.class);
+    private final GenerationBatchRepository batches = mock(GenerationBatchRepository.class);
     private final QuestionGenerationProperties properties = new QuestionGenerationProperties();
-    private final JobLeaseService service = new JobLeaseService(jobs, items, properties,
+    private final GenerationLimits limits =
+            new GenerationLimits(mock(BillingSettingsService.class, call -> call.getArgument(1)), properties);
+    private final BatchChainingService chaining = mock(BatchChainingService.class);
+    private final JobLeaseService service = new JobLeaseService(jobs, items, batches, limits, properties, chaining,
             Clock.fixed(NOW, ZoneOffset.UTC));
     private final JobClaim claim = new JobClaim(5L, UUID.randomUUID(), UUID.randomUUID(), "MC_READING_SINGLE",
             CefrLevel.B2, QuestionPool.PRACTICE, null, "worker-1");
@@ -52,9 +63,18 @@ class JobLeaseServiceTest {
         return job;
     }
 
+    private void queued(QuestionGenerationJob job, Long batchId) {
+        when(jobs.findNextResumable(NOW)).thenReturn(List.of());
+        when(jobs.findNextQueued()).thenReturn(List.of(job.getId()));
+        when(jobs.findBatchIdById(job.getId())).thenReturn(batchId == null ? List.of() : List.of(batchId));
+        when(jobs.findById(job.getId())).thenReturn(Optional.of(job));
+        when(jobs.markRunning(eq(job.getId()), any(), any(), any())).thenReturn(1);
+    }
+
     @Test
     void nothingIsClaimedWhenNoJobIsWaiting() {
-        when(jobs.lockNextClaimable(NOW)).thenReturn(List.of());
+        when(jobs.findNextResumable(NOW)).thenReturn(List.of());
+        when(jobs.findNextQueued()).thenReturn(List.of());
 
         assertThat(service.claimNext("worker-1")).isEmpty();
         verify(jobs, never()).markRunning(anyLong(), any(), any(), any());
@@ -63,8 +83,7 @@ class JobLeaseServiceTest {
     @Test
     void aQueuedJobIsClaimedWithALeaseOfTheConfiguredLength() {
         properties.getWorker().setLeaseDuration(Duration.ofMinutes(10));
-        when(jobs.lockNextClaimable(NOW)).thenReturn(List.of(5L));
-        when(jobs.findById(5L)).thenReturn(Optional.of(job(JobStatus.QUEUED)));
+        queued(job(JobStatus.QUEUED), null);
 
         Optional<JobClaim> taken = service.claimNext("worker-1");
 
@@ -73,12 +92,82 @@ class JobLeaseServiceTest {
         assertThat(taken.get().workerId()).isEqualTo("worker-1");
         assertThat(taken.get().requesterId()).isEqualTo(claim.requesterId());
         verify(jobs).markRunning(5L, "worker-1", NOW.plus(Duration.ofMinutes(10)), NOW);
+        verify(batches, never()).findByIdForUpdate(anyLong());
+    }
+
+    @Test
+    void theClaimLockIsTakenBeforeAnyCandidateIsRead() {
+        queued(job(JobStatus.QUEUED), null);
+
+        service.claimNext("worker-1");
+
+        InOrder order = inOrder(jobs);
+        order.verify(jobs).lockClaims(QuestionGenerationConstants.CLAIM_ADVISORY_LOCK_KEY);
+        order.verify(jobs).findNextResumable(NOW);
+        order.verify(jobs).countLiveLeases(NOW);
+        order.verify(jobs).findNextQueued();
+    }
+
+    @Test
+    void atTheCapAQueuedJobWaits() {
+        properties.getLimits().setMaxConcurrentJobs(2);
+        queued(job(JobStatus.QUEUED), null);
+        when(jobs.countLiveLeases(NOW)).thenReturn(2L);
+
+        assertThat(service.claimNext("worker-1")).isEmpty();
+        verify(jobs, never()).findNextQueued();
+        verify(jobs, never()).markRunning(anyLong(), any(), any(), any());
+    }
+
+    @Test
+    void atTheCapAJobWhoseWorkerDiedIsStillResumed() {
+        properties.getLimits().setMaxConcurrentJobs(1);
+        when(jobs.findNextResumable(NOW)).thenReturn(List.of(5L));
+        when(jobs.findById(5L)).thenReturn(Optional.of(job(JobStatus.RUNNING)));
+        when(jobs.countLiveLeases(NOW)).thenReturn(1L);
+        when(jobs.markRunning(eq(5L), eq("worker-2"), any(), eq(NOW))).thenReturn(1);
+
+        assertThat(service.claimNext("worker-2")).isPresent();
+        verify(jobs, never()).countLiveLeases(any());
+    }
+
+    @Test
+    void aBatchChildLocksItsBatchBeforeTheJobIsMarkedRunning() {
+        QuestionGenerationJob child = job(JobStatus.QUEUED);
+        child.setBatchId(40L);
+        queued(child, 40L);
+
+        assertThat(service.claimNext("worker-1")).isPresent();
+
+        InOrder order = inOrder(batches, jobs);
+        order.verify(batches).findByIdForUpdate(40L);
+        order.verify(jobs).markRunning(eq(5L), eq("worker-1"), any(), eq(NOW));
+        order.verify(batches).markRunning(40L, NOW);
+    }
+
+    @Test
+    void aCancelThatWonSinceTheSelectLeavesNothingClaimed() {
+        QuestionGenerationJob child = job(JobStatus.QUEUED);
+        queued(child, 40L);
+        when(jobs.markRunning(anyLong(), any(), any(), any())).thenReturn(0);
+
+        assertThat(service.claimNext("worker-1")).isEmpty();
+        verify(batches, never()).markRunning(anyLong(), any());
+    }
+
+    @Test
+    void aJobNoLongerQueuedAfterTheBatchLockIsNotClaimed() {
+        queued(job(JobStatus.CANCELLED), 40L);
+
+        assertThat(service.claimNext("worker-1")).isEmpty();
+        verify(jobs, never()).markRunning(anyLong(), any(), any(), any());
     }
 
     @Test
     void aRunningJobWhoseLeaseExpiredIsResumedByTheNewWorker() {
-        when(jobs.lockNextClaimable(NOW)).thenReturn(List.of(5L));
+        when(jobs.findNextResumable(NOW)).thenReturn(List.of(5L));
         when(jobs.findById(5L)).thenReturn(Optional.of(job(JobStatus.RUNNING)));
+        when(jobs.markRunning(anyLong(), any(), any(), any())).thenReturn(1);
 
         assertThat(service.claimNext("worker-2")).isPresent();
         verify(jobs).markRunning(eq(5L), eq("worker-2"), any(), eq(NOW));
@@ -86,7 +175,7 @@ class JobLeaseServiceTest {
 
     @Test
     void aCancelRequestWhoseWorkerDiedIsClosedNotResumed() {
-        when(jobs.lockNextClaimable(NOW)).thenReturn(List.of(5L));
+        when(jobs.findNextResumable(NOW)).thenReturn(List.of(5L));
         when(jobs.findById(5L)).thenReturn(Optional.of(job(JobStatus.CANCELLING)));
 
         assertThat(service.claimNext("worker-2")).isEmpty();
@@ -158,5 +247,57 @@ class JobLeaseServiceTest {
 
         verify(jobs).finish(5L, "worker-1", JobStatus.FAILED, "GENERATION_PROVIDER_AUTH", NOW);
         verify(jobs, never()).finish(anyLong(), any(), eq(JobStatus.COMPLETED), isNull(), any());
+    }
+
+    @Test
+    void aBatchChildLocksItsBatchBeforeFinishingAndThenChains() {
+        when(jobs.findBatchIdById(5L)).thenReturn(List.of(40L));
+        when(jobs.findById(5L)).thenReturn(Optional.of(job(JobStatus.RUNNING)));
+        when(jobs.finish(anyLong(), any(), any(), any(), any())).thenReturn(1);
+
+        service.finish(claim, JobStatus.FAILED, "GENERATION_PROVIDER_AUTH");
+
+        InOrder order = inOrder(batches, jobs, chaining);
+        order.verify(batches).findByIdForUpdate(40L);
+        order.verify(jobs).finish(5L, "worker-1", JobStatus.FAILED, "GENERATION_PROVIDER_AUTH", NOW);
+        order.verify(chaining).onChildTerminal(40L, 5L);
+    }
+
+    @Test
+    void aFinishThatLostItsLeaseNeverChains() {
+        when(jobs.findBatchIdById(5L)).thenReturn(List.of(40L));
+        when(jobs.findById(5L)).thenReturn(Optional.of(job(JobStatus.RUNNING)));
+        when(jobs.finish(anyLong(), any(), any(), any(), any())).thenReturn(0);
+
+        service.finish(claim, null, null);
+
+        verify(chaining, never()).onChildTerminal(anyLong(), anyLong());
+    }
+
+    @Test
+    void aStandaloneJobFinishesWithoutTouchingBatches() {
+        when(jobs.findBatchIdById(5L)).thenReturn(List.of());
+        when(jobs.findById(5L)).thenReturn(Optional.of(job(JobStatus.RUNNING)));
+        when(jobs.finish(anyLong(), any(), any(), any(), any())).thenReturn(1);
+
+        service.finish(claim, null, null);
+
+        verify(batches, never()).findByIdForUpdate(anyLong());
+        verify(chaining, never()).onChildTerminal(anyLong(), anyLong());
+    }
+
+    @Test
+    void aStaleCancelOfABatchChildLocksTheBatchFirstAndChains() {
+        when(jobs.findNextResumable(NOW)).thenReturn(List.of(5L));
+        when(jobs.findById(5L)).thenReturn(Optional.of(job(JobStatus.CANCELLING)));
+        when(jobs.findBatchIdById(5L)).thenReturn(List.of(40L));
+        when(jobs.finishStaleCancelling(5L, NOW)).thenReturn(1);
+
+        assertThat(service.claimNext("worker-2")).isEmpty();
+
+        InOrder order = inOrder(batches, jobs, chaining);
+        order.verify(batches).findByIdForUpdate(40L);
+        order.verify(jobs).finishStaleCancelling(5L, NOW);
+        order.verify(chaining).onChildTerminal(40L, 5L);
     }
 }

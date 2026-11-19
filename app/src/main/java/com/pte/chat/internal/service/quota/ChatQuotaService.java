@@ -43,9 +43,10 @@ public class ChatQuotaService {
     public ChatQuotaTicket consume(UUID studentId) {
         LocalDate day = LocalDate.now(vnClock);
         int limit = properties.getDailyLimit();
-        OptionalInt used = repository.consume(studentId, day, limit);
-        if (used.isEmpty()) {
-            throw new ChatQuotaExceededException(new ChatQuotaSnapshot(limit, 0, limit, resetAt(day)));
+        boolean unlimited = limit == ChatConstants.UNLIMITED_DAILY_LIMIT;
+        OptionalInt used = repository.consume(studentId, day, unlimited ? ChatConstants.NO_DAILY_LIMIT_GUARD : limit);
+        if (used.isEmpty() && !unlimited) {
+            throw new ChatQuotaExceededException(new ChatQuotaSnapshot(limit, 0, limit, resetAt(day), false));
         }
         return new ChatQuotaTicket(studentId, day);
     }
@@ -70,7 +71,10 @@ public class ChatQuotaService {
     private ChatQuotaSnapshot snapshot(UUID studentId, LocalDate day) {
         int limit = properties.getDailyLimit();
         int used = repository.used(studentId, day);
-        return new ChatQuotaSnapshot(used, Math.max(limit - used, 0), limit, resetAt(day));
+        if (limit == ChatConstants.UNLIMITED_DAILY_LIMIT) {
+            return new ChatQuotaSnapshot(used, null, null, null, true);
+        }
+        return new ChatQuotaSnapshot(used, Math.max(limit - used, 0), limit, resetAt(day), false);
     }
 
     private static Instant resetAt(LocalDate day) {
