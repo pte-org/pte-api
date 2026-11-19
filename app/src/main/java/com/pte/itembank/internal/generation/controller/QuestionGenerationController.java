@@ -71,8 +71,9 @@ public class QuestionGenerationController {
 
     @GetMapping("/jobs")
     public ApiResponse<PagedResult<GenerationJobResponse>> list(@RequestParam(defaultValue = "0") int page,
-                                                                @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(queryService.list(page, size, currentUser()));
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "false") boolean includeBatchChildren) {
+        return ApiResponse.success(queryService.list(page, size, includeBatchChildren, currentUser()));
     }
 
     @PatchMapping("/jobs/{publicId}/status")

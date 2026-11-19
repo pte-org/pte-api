@@ -104,30 +104,33 @@ class QuestionGenerationPostgresIntegrationTest {
     }
 
     @Test
-    void theClaimSkipsAJobWhoseLeaseHasNotExpiredAndTakesAnExpiredOne() {
+    void onlyAnExpiredLeaseIsResumable() {
         QuestionGenerationJob queued = job(UUID.randomUUID(), JobStatus.QUEUED);
         Instant now = Instant.now();
         tx(() -> jobs.markRunning(queued.getId(), "worker-a", now.plus(Duration.ofMinutes(10)), now));
 
-        assertThat(tx(() -> jobs.lockNextClaimable(now))).doesNotContain(queued.getId());
-        assertThat(tx(() -> jobs.lockNextClaimable(now.plus(Duration.ofMinutes(11))))).contains(queued.getId());
+        assertThat(tx(() -> jobs.findNextResumable(now))).doesNotContain(queued.getId());
+        assertThat(tx(() -> jobs.findNextResumable(now.plus(Duration.ofMinutes(11))))).contains(queued.getId());
+        assertThat(tx(() -> jobs.countLiveLeases(now))).isGreaterThanOrEqualTo(1);
     }
 
     @Test
-    void aLockedRowIsSkippedByASecondClaimer() {
-        QuestionGenerationJob queued = job(UUID.randomUUID(), JobStatus.QUEUED);
-        Instant now = Instant.now();
-
-        List<Long> secondClaim = tx(() -> {
-            List<Long> first = jobs.lockNextClaimable(now);
-            assertThat(first).contains(queued.getId());
+    void theClaimAdvisoryLockSerializesClaimers() {
+        Boolean acquiredInside = tx(() -> {
+            jobs.lockClaims(7_340_035L);
             return new TransactionTemplate(transactions,
                     new org.springframework.transaction.support.DefaultTransactionDefinition(
                             org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW))
-                    .execute(inner -> jobs.lockNextClaimable(now));
+                    .execute(inner -> (Boolean) entityManagerTryLock());
         });
 
-        assertThat(secondClaim).doesNotContain(queued.getId());
+        assertThat(acquiredInside).isFalse();
+    }
+
+    @Autowired jakarta.persistence.EntityManager entityManager;
+
+    private Object entityManagerTryLock() {
+        return entityManager.createNativeQuery("select pg_try_advisory_xact_lock(7340035)").getSingleResult();
     }
 
     @Test

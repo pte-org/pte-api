@@ -1,9 +1,13 @@
 package com.pte.itembank.internal.generation.worker;
 
+import com.pte.itembank.internal.generation.batch.BatchChainingService;
+import com.pte.itembank.internal.generation.config.GenerationLimits;
 import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
+import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import com.pte.itembank.internal.generation.domain.JobStatus;
 import com.pte.itembank.internal.generation.domain.QuestionGenerationJob;
 import com.pte.itembank.internal.generation.pipeline.JobClaim;
+import com.pte.itembank.internal.generation.repository.GenerationBatchRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
 import org.springframework.stereotype.Service;
@@ -24,39 +28,55 @@ public class JobLeaseService {
 
     private final GenerationJobRepository jobs;
     private final GenerationJobItemRepository items;
+    private final GenerationBatchRepository batches;
+    private final GenerationLimits limits;
     private final QuestionGenerationProperties properties;
+    private final BatchChainingService chaining;
     private final Clock clock;
 
     public JobLeaseService(GenerationJobRepository jobs, GenerationJobItemRepository items,
-                           QuestionGenerationProperties properties, Clock clock) {
+                           GenerationBatchRepository batches, GenerationLimits limits,
+                           QuestionGenerationProperties properties, BatchChainingService chaining, Clock clock) {
+        this.chaining = chaining;
         this.jobs = jobs;
         this.items = items;
+        this.batches = batches;
+        this.limits = limits;
         this.properties = properties;
         this.clock = clock;
     }
 
     /**
-     * Takes the oldest queued job, or a running one whose lease expired (its worker died). A cancel request whose
-     * worker died is closed here instead of resumed.
+     * Takes a job for this worker, under the claim advisory lock so the concurrency cap holds across instances.
+     * A job whose worker died is always resumed first, even at the cap (it replaces a dead lease); a cancel request
+     * whose worker died is closed instead. Otherwise, below the cap, the next queued job is taken: standalone and
+     * preview jobs before batch children.
      */
     @Transactional
     public Optional<JobClaim> claimNext(String workerId) {
         Instant now = clock.instant();
-        List<Long> ids = jobs.lockNextClaimable(now);
-        if (ids.isEmpty()) {
+        jobs.lockClaims(QuestionGenerationConstants.CLAIM_ADVISORY_LOCK_KEY);
+        List<Long> resumable = jobs.findNextResumable(now);
+        if (!resumable.isEmpty()) {
+            return resume(resumable.get(0), workerId, now);
+        }
+        if (jobs.countLiveLeases(now) >= limits.maxConcurrentJobs()) {
             return Optional.empty();
         }
-        QuestionGenerationJob job = jobs.findById(ids.get(0)).orElseThrow();
-        if (job.getStatus() == JobStatus.CANCELLING) {
-            items.cancelOpenUnleased(job.getId(), now);
-            jobs.finishStaleCancelling(job.getId(), now);
-            jobs.refreshCounters(job.getId());
+        List<Long> queued = jobs.findNextQueued();
+        if (queued.isEmpty()) {
             return Optional.empty();
         }
-        jobs.markRunning(job.getId(), workerId, leaseEnd(now), now);
-        return Optional.of(new JobClaim(job.getId(), job.getPublicId(), job.getRequestedByUserPublicId(),
-                job.getTaskTypeKey(), job.getCefrLevel(), job.getPool(), job.getTopicHint(), workerId,
-                job.isSaveQuestions(), job.getImageKind()));
+        Long batchId = lockBatchOf(queued.get(0));
+        QuestionGenerationJob job = jobs.findById(queued.get(0)).orElseThrow();
+        // Guarded: a cancel that won since the select leaves the job not QUEUED, so nothing is claimed.
+        if (job.getStatus() != JobStatus.QUEUED || jobs.markRunning(job.getId(), workerId, leaseEnd(now), now) == 0) {
+            return Optional.empty();
+        }
+        if (batchId != null) {
+            batches.markRunning(batchId, now);
+        }
+        return Optional.of(claimOf(job, workerId));
     }
 
     /** Separate transaction on purpose: the renewal commits before the slow provider call that follows it. */
@@ -76,10 +96,12 @@ public class JobLeaseService {
 
     /**
      * Closes the job. A pending cancel request always wins; otherwise {@code requested} is used, and when it is null
-     * the job is COMPLETED if at least one question was saved and FAILED if none was.
+     * the job is COMPLETED if at least one question was saved and FAILED if none was. A batch child locks its batch
+     * row first and, only when its guarded update succeeded (a lost lease never chains), lets the batch move on.
      */
     @Transactional
     public void finish(JobClaim claim, JobStatus requested, String failureCode) {
+        Long batchId = lockBatchOf(claim.jobId());
         jobs.refreshCounters(claim.jobId());
         QuestionGenerationJob job = jobs.findById(claim.jobId()).orElseThrow();
         JobStatus status;
@@ -90,7 +112,47 @@ public class JobLeaseService {
         } else {
             status = job.getSucceededCount() > 0 ? JobStatus.COMPLETED : JobStatus.FAILED;
         }
-        jobs.finish(claim.jobId(), claim.workerId(), status, failureCode, clock.instant());
+        if (jobs.finish(claim.jobId(), claim.workerId(), status, failureCode, clock.instant()) == 1
+                && batchId != null) {
+            chaining.onChildTerminal(batchId, claim.jobId());
+        }
+    }
+
+    private Optional<JobClaim> resume(Long jobId, String workerId, Instant now) {
+        QuestionGenerationJob job = jobs.findById(jobId).orElseThrow();
+        if (job.getStatus() == JobStatus.CANCELLING) {
+            Long batchId = lockBatchOf(jobId);
+            items.cancelOpenUnleased(jobId, now);
+            int closed = jobs.finishStaleCancelling(jobId, now);
+            jobs.refreshCounters(jobId);
+            if (closed == 1 && batchId != null) {
+                chaining.onChildTerminal(batchId, jobId);
+            }
+            return Optional.empty();
+        }
+        if (jobs.markRunning(job.getId(), workerId, leaseEnd(now), now) == 0) {
+            return Optional.empty();
+        }
+        return Optional.of(claimOf(job, workerId));
+    }
+
+    /**
+     * Locks the batch row of a batch child and returns its id (null for a standalone job). Batch row first, then the
+     * job rows, on every path (claim, finish, stale cancel, batch cancel), so they cannot deadlock.
+     */
+    private Long lockBatchOf(Long jobId) {
+        List<Long> found = jobs.findBatchIdById(jobId);
+        Long batchId = found.isEmpty() ? null : found.get(0);
+        if (batchId != null) {
+            batches.findByIdForUpdate(batchId);
+        }
+        return batchId;
+    }
+
+    private static JobClaim claimOf(QuestionGenerationJob job, String workerId) {
+        return new JobClaim(job.getId(), job.getPublicId(), job.getRequestedByUserPublicId(), job.getTaskTypeKey(),
+                job.getCefrLevel(), job.getPool(), job.getTopicHint(), workerId, job.isSaveQuestions(),
+                job.getImageKind());
     }
 
     private Instant leaseEnd(Instant now) {

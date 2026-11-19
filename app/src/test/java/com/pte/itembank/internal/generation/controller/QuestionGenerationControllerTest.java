@@ -5,6 +5,7 @@ import com.pte.itembank.internal.generation.live.GenerationLiveSubscriptions;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import com.pte.itembank.internal.generation.dto.GenerationJobResponse;
 import com.pte.itembank.internal.generation.dto.GenerationQuotaResponse;
+import com.pte.itembank.internal.generation.dto.QuotaScope;
 import com.pte.itembank.internal.generation.dto.GenerationTaskTypeResponse;
 import com.pte.itembank.internal.generation.exception.GenerationLimitException;
 import com.pte.itembank.internal.generation.job.QuestionGenerationJobService;
@@ -69,7 +70,7 @@ class QuestionGenerationControllerTest {
 
     private static GenerationJobResponse job(UUID id, String status) {
         return new GenerationJobResponse(id, "MC_READING_SINGLE", "B2", "PRACTICE", null, 3, status, 0, 0, null,
-                Instant.parse("2026-11-07T10:00:00Z"), null, null, List.of(), "AUTO", true);
+                Instant.parse("2026-11-07T10:00:00Z"), null, null, List.of(), "AUTO", true, null, null);
     }
 
     @Test
@@ -140,7 +141,7 @@ class QuestionGenerationControllerTest {
     void getAndListReturnTheServiceResults() throws Exception {
         UUID id = UUID.randomUUID();
         when(queryService.get(id, admin)).thenReturn(job(id, "RUNNING"));
-        when(queryService.list(0, 20, admin)).thenReturn(new PagedResult<>(List.of(job(id, "RUNNING")),
+        when(queryService.list(0, 20, false, admin)).thenReturn(new PagedResult<>(List.of(job(id, "RUNNING")),
                 new PageMeta(0, 20, 1, 1, true, true, false, false)));
 
         mvc.perform(get("/api/v1/question-generation/jobs/{id}", id))
@@ -170,7 +171,7 @@ class QuestionGenerationControllerTest {
     void taskTypesAndQuotaAreExposedForTheForm() throws Exception {
         when(queryService.taskTypes(admin)).thenReturn(
                 List.of(new GenerationTaskTypeResponse("MC_READING_SINGLE", "READING", false, false, 45)));
-        when(queryService.quota(admin)).thenReturn(new GenerationQuotaResponse(12, 100));
+        when(queryService.quota(admin)).thenReturn(new GenerationQuotaResponse(12, 100, 88, false, QuotaScope.USER, 50));
 
         mvc.perform(get("/api/v1/question-generation/task-types"))
                 .andExpect(status().isOk())
@@ -179,7 +180,11 @@ class QuestionGenerationControllerTest {
         mvc.perform(get("/api/v1/question-generation/quota"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.usedToday").value(12))
-                .andExpect(jsonPath("$.data.dailyLimit").value(100));
+                .andExpect(jsonPath("$.data.dailyLimit").value(100))
+                .andExpect(jsonPath("$.data.remaining").value(88))
+                .andExpect(jsonPath("$.data.unlimited").value(false))
+                .andExpect(jsonPath("$.data.scope").value("USER"))
+                .andExpect(jsonPath("$.data.maxItemsPerBatch").value(50));
     }
 
     @Test

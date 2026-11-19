@@ -98,7 +98,7 @@ public class GenerationPipeline {
             String avoidTopics = avoidTopicsProvider.getAvoidTopicsForTaskType(claim.taskTypeKey());
             GenerationRequest request = new GenerationRequest(claim.jobPublicId(), index, claim.taskTypeKey(),
                     claim.cefrLevel(), claim.pool(), claim.topicHint(), avoidTopics, null,
-                    claim.imageKind().resolve(claim.topicHint()));
+                    claim.imageKind().resolve(claim.topicHint(), properties.isPictureEnabled()));
             GeneratedImageCheck images = new GeneratedImageCheck(properties, imageReviewer, liveFeed, mediaRenderer);
             // Write, review and make the media until every reviewer is satisfied or the item's calls run out: a broken
             // answer, a passing provider failure or a refusal goes back to the writer as feedback. When the calls run

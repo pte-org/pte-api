@@ -15,6 +15,7 @@ import com.pte.itembank.internal.generation.exception.GenerationJobConflictExcep
 import com.pte.itembank.internal.generation.exception.GenerationJobNotFoundException;
 import com.pte.itembank.internal.generation.exception.GenerationLimitException;
 import com.pte.itembank.internal.generation.exception.GenerationRequestInvalidException;
+import com.pte.itembank.internal.generation.repository.GenerationBatchRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
 import com.pte.shared.security.CurrentUser;
@@ -50,6 +51,7 @@ class QuestionGenerationJobServiceTest {
 
     private final GenerationJobRepository jobs = mock(GenerationJobRepository.class);
     private final GenerationJobItemRepository items = mock(GenerationJobItemRepository.class);
+    private final GenerationBatchRepository batches = mock(GenerationBatchRepository.class);
     private final GenerationTaskTypeCatalog catalog = mock(GenerationTaskTypeCatalog.class);
     private final QuestionGenerationProperties properties = new QuestionGenerationProperties();
     private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
@@ -59,8 +61,9 @@ class QuestionGenerationJobServiceTest {
     @BeforeEach
     void setUp() {
         properties.setEnabled(true);
-        service = new QuestionGenerationJobService(jobs, items, catalog, properties, clock,
-                new GenerationLimits(mock(BillingSettingsService.class, call -> call.getArgument(1)), properties));
+        GenerationLimits limits = new GenerationLimits(mock(BillingSettingsService.class, call -> call.getArgument(1)), properties);
+        service = new QuestionGenerationJobService(jobs, items, batches, catalog, properties, limits,
+                new GenerationQuotaGuard(jobs, limits, clock), clock);
         when(catalog.find("MC_READING_SINGLE")).thenReturn(Optional.of(PteTaskType.MC_READING_SINGLE));
         when(jobs.saveAndFlush(any())).thenAnswer(call -> {
             QuestionGenerationJob job = call.getArgument(0);
@@ -98,7 +101,7 @@ class QuestionGenerationJobServiceTest {
 
         InOrder order = inOrder(jobs);
         order.verify(jobs).lockSubmissions(anyLong());
-        order.verify(jobs).existsByRequestedByUserPublicIdAndStatusIn(eq(admin.userId()), any());
+        order.verify(jobs).existsByRequestedByUserPublicIdAndSaveQuestionsTrueAndStatusIn(eq(admin.userId()), any());
         order.verify(jobs).saveAndFlush(any());
     }
 
@@ -182,10 +185,35 @@ class QuestionGenerationJobServiceTest {
 
     @Test
     void aSecondActiveJobOfTheSameAdminIsAConflict() {
-        when(jobs.existsByRequestedByUserPublicIdAndStatusIn(eq(admin.userId()), any())).thenReturn(true);
+        when(jobs.existsByRequestedByUserPublicIdAndSaveQuestionsTrueAndStatusIn(eq(admin.userId()), any()))
+                .thenReturn(true);
 
         assertThatThrownBy(() -> service.submit(request(1), admin)).isInstanceOf(GenerationJobConflictException.class);
         verify(jobs, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void anOpenBatchBlocksASavingJobButNotAPreview() {
+        when(batches.existsByRequestedByUserPublicIdAndStatusIn(eq(admin.userId()), any())).thenReturn(true);
+        when(jobs.existsByRequestedByUserPublicIdAndSaveQuestionsTrueAndStatusIn(eq(admin.userId()), any()))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> service.submit(request(1), admin)).isInstanceOf(GenerationJobConflictException.class);
+        SubmitGenerationJobRequest preview =
+                new SubmitGenerationJobRequest("MC_READING_SINGLE", "B2", "PRACTICE", null, 1, false);
+        assertThat(service.submit(preview, admin).saveQuestions()).isFalse();
+    }
+
+    @Test
+    void anExplicitPictureIsRefusedWhileAiPicturesAreOff() {
+        SubmitGenerationJobRequest picture =
+                new SubmitGenerationJobRequest("MC_READING_SINGLE", "B2", "PRACTICE", null, 1, null, "PICTURE");
+
+        assertThatThrownBy(() -> service.submit(picture, admin))
+                .isInstanceOf(GenerationRequestInvalidException.class)
+                .extracting("code").isEqualTo("GENERATION_PICTURE_DISABLED");
+        properties.setPictureEnabled(true);
+        assertThat(service.submit(picture, admin).imageKind()).isEqualTo("PICTURE");
     }
 
     @Test
@@ -204,10 +232,10 @@ class QuestionGenerationJobServiceTest {
     }
 
     @Test
-    void tooManyActiveJobsAcrossAdminsAreRefused() {
-        when(jobs.countByStatusIn(any())).thenReturn(3L);
+    void aBusySystemQueuesTheJobInsteadOfRefusingIt() {
+        properties.getLimits().setMaxConcurrentJobs(1);
 
-        assertThatThrownBy(() -> service.submit(request(1), admin)).isInstanceOf(GenerationLimitException.class);
+        assertThat(service.submit(request(1), admin).status()).isEqualTo("QUEUED");
     }
 
     @Test
@@ -260,6 +288,18 @@ class QuestionGenerationJobServiceTest {
         when(jobs.findByPublicIdAndDeletedFalse(publicId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.cancel(publicId, admin)).isInstanceOf(GenerationJobNotFoundException.class);
+    }
+
+    @Test
+    void aBatchChildCannotBeCancelledAlone() {
+        UUID publicId = UUID.randomUUID();
+        QuestionGenerationJob child = jobWith(publicId, JobStatus.QUEUED);
+        child.setBatchId(40L);
+        when(jobs.findByPublicIdAndDeletedFalse(publicId)).thenReturn(Optional.of(child));
+
+        assertThatThrownBy(() -> service.cancel(publicId, admin)).isInstanceOf(GenerationJobConflictException.class)
+                .extracting("code").isEqualTo("GENERATION_JOB_PART_OF_BATCH");
+        verify(jobs, never()).cancelQueued(any(), any());
     }
 
     private static QuestionGenerationJob jobWith(UUID publicId, JobStatus status) {
