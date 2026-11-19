@@ -48,6 +48,24 @@ class PlatformSettingServiceTest {
     }
 
     @Test
+    void zeroIsAcceptedAndNegativeRefusedForTheUnlimitableGenerationLimits() {
+        for (String key : List.of("question_generation_max_items_per_batch",
+                "question_generation_max_items_per_user_per_day", "question_generation_max_items_per_day")) {
+            when(platformSettingRepository.findByKey(key)).thenReturn(Optional.of(setting(key, "0")));
+            assertThat(service.getInteger(key)).isZero();
+        }
+        when(platformSettingRepository.findByKey("question_generation_max_items_per_job"))
+                .thenReturn(Optional.of(setting("question_generation_max_items_per_job", "0")));
+        assertThatThrownBy(() -> service.getInteger("question_generation_max_items_per_job"))
+                .isInstanceOf(PlatformSettingInvalidException.class);
+        when(platformSettingRepository.findByKey("question_generation_max_items_per_day"))
+                .thenReturn(Optional.of(setting("question_generation_max_items_per_day", "-1")));
+        service = new PlatformSettingService(platformSettingRepository);
+        assertThatThrownBy(() -> service.getInteger("question_generation_max_items_per_day"))
+                .isInstanceOf(PlatformSettingInvalidException.class);
+    }
+
+    @Test
     void updateInvalidatesCacheAndReturnsTheNewValue() {
         PlatformSetting setting = setting("free_student_limit", "50");
         when(platformSettingRepository.findByKey("free_student_limit")).thenReturn(Optional.of(setting));

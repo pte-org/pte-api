@@ -32,7 +32,11 @@ public class AiOverviewService {
                 ProviderLinks.speechPage(kokoro.getWebUrl(), kokoro.getBaseUrl()),
                 hasText(kokoro.getApiKey()), prompts.getPromptVersion(), catalog.supported().size(),
                 new AiStatusResponse.Limits(allowance.maxItemsPerJob(), allowance.maxItemsPerUserPerDay(),
-                        allowance.maxItemsPerDayGlobal(), allowance.maxConcurrentJobs(), allowance.maxCallsPerItem()));
+                        allowance.maxItemsPerDayGlobal(), allowance.maxConcurrentJobs(), allowance.maxCallsPerItem(),
+                        GenerationLimits.isUnlimited(allowance.maxItemsPerUserPerDay()),
+                        GenerationLimits.isUnlimited(allowance.maxItemsPerDayGlobal()),
+                        GenerationLimits.isUnlimited(allowance.maxItemsPerBatch()),
+                        allowance.effectiveMaxItemsPerBatch()));
     }
 
     private static boolean hasText(String value) {

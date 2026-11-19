@@ -116,6 +116,20 @@ class AiAdminServicesTest {
     }
 
     @Test
+    void theStatusFlagsUnlimitedLimitsAndTheEffectiveBatchCap() {
+        QuestionGenerationProperties properties = new QuestionGenerationProperties();
+        properties.getLimits().setMaxItemsPerUserPerDay(0);
+        properties.getLimits().setMaxItemsPerBatch(0);
+
+        AiStatusResponse.Limits limits = overview(properties).status().limits();
+
+        assertThat(limits.userDailyUnlimited()).isTrue();
+        assertThat(limits.globalDailyUnlimited()).isFalse();
+        assertThat(limits.batchUnlimited()).isTrue();
+        assertThat(limits.effectiveMaxItemsPerBatch()).isEqualTo(500);
+    }
+
+    @Test
     void theStatusReportsWhetherKeysExistAndEachProvidersHostAndPageWithoutSecrets() {
         QuestionGenerationProperties properties = new QuestionGenerationProperties();
         properties.setEnabled(true);
