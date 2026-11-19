@@ -251,4 +251,9 @@ public interface QuestionRepository extends JpaRepository<Question, Long>, Quest
             + "and (q.deleted = false or q.updatedAt > :deletedSince)")
     List<UUID> findKeptImagePromptRefs(@Param("refs") Collection<UUID> refs,
             @Param("deletedSince") Instant deletedSince);
+
+    /** The drafts among {@code publicIds} that are still live (bulk draft delete of a generation batch). */
+    @Query("select q.publicId from Question q where q.publicId in :publicIds and q.deleted = false "
+            + "and q.status = com.pte.itembank.domain.enums.QuestionStatus.DRAFT")
+    List<UUID> findDraftPublicIdsIn(@Param("publicIds") Collection<UUID> publicIds);
 }
