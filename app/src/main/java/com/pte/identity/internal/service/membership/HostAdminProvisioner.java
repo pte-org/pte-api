@@ -34,6 +34,8 @@ public class HostAdminProvisioner {
         user.getRoles().add(Role.HOST_ADMIN);
         String password = PasswordGenerator.generateReadable();
         user.setCredentialHash(passwordEncoder.encode(password));
+        // The generated password is mailed in clear text, so the Host must replace it at first sign-in.
+        user.setMustChangePassword(true);
         return new HostAdminCreated(userRepository.saveAndFlush(user), password);
     }
 }
