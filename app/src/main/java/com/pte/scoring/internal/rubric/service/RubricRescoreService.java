@@ -1,5 +1,6 @@
 package com.pte.scoring.internal.rubric.service;
 
+import com.pte.scoring.domain.ScoringDomainConstants;
 import com.pte.scoring.domain.ScoringRubricVersion;
 import com.pte.scoring.domain.enums.ScoreSource;
 import com.pte.scoring.domain.enums.ScoringMethod;
@@ -75,6 +76,10 @@ public class RubricRescoreService {
         }
         if (answer.provisionalScore() == null) {
             return view(answer, ItemTraceKind.NOT_SCORED, null, null);
+        }
+        if (ScoringDomainConstants.AI_BLANK_ANSWER_PROVIDER.equals(answer.aiProvider())
+                && answer.traitScores().isEmpty()) {
+            return view(answer, ItemTraceKind.BLANK_ANSWER, null, null);
         }
         if (answer.traitScores().isEmpty() || answer.rubricVersionPublicId() == null) {
             return view(answer, ItemTraceKind.LEGACY_NO_TRACE, null, null);
