@@ -3,6 +3,12 @@ package com.pte.scoring.domain;
 /** Stable invariant messages for scoring-domain state transitions. */
 public final class ScoringDomainConstants {
 
+    /**
+     * An answer with no content (the candidate pressed Next without answering) scores 0 by rule, with no vendor call.
+     * It is recorded under a REAL provider category so the zero stays publishable like any other machine score.
+     */
+    public static final String AI_BLANK_ANSWER_PROVIDER = "blank-answer-rule";
+    public static final String AI_BLANK_ANSWER_FEEDBACK = "No answer was submitted.";
     public static final String RAW_SCORE_RANGE_INVALID = "rawScore must be between 0 and 100";
     public static final String EXAMINER_SCORE_RANGE_INVALID = "Examiner score must be between 0 and 100";
     public static final String EXAMINER_SCORE_IMMUTABLE = "Submitted Examiner score is immutable";
