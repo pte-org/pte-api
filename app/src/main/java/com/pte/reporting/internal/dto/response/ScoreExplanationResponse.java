@@ -30,5 +30,25 @@ public record ScoreExplanationResponse(
         List<ItemExplanationResponse> items,
         List<TaskTypeAverageResponse> taskTypeAverages,
         List<SkillExplanationResponse> skills,
-        SkillExplanationResponse overall) {
+        SkillExplanationResponse overall,
+        /** The exam template's display name, so the page never has to show its id; null when it cannot be found. */
+        String examDefinitionName) {
+
+    /** Built by the mapper before the template name is looked up. */
+    public ScoreExplanationResponse(UUID attemptPublicId, UUID sessionPublicId, boolean published, Instant publishedAt,
+            Integer schemaVersion, boolean traceAvailable, boolean includesUnselectedAiScores,
+            UUID examDefinitionPublicId, Integer examDefinitionVersion, UUID rubricVersionPublicId,
+            RubricParametersView rubricParameters, List<ItemExplanationResponse> items,
+            List<TaskTypeAverageResponse> taskTypeAverages, List<SkillExplanationResponse> skills,
+            SkillExplanationResponse overall) {
+        this(attemptPublicId, sessionPublicId, published, publishedAt, schemaVersion, traceAvailable,
+                includesUnselectedAiScores, examDefinitionPublicId, examDefinitionVersion, rubricVersionPublicId,
+                rubricParameters, items, taskTypeAverages, skills, overall, null);
+    }
+
+    public ScoreExplanationResponse withExamDefinitionName(String name) {
+        return new ScoreExplanationResponse(attemptPublicId, sessionPublicId, published, publishedAt, schemaVersion,
+                traceAvailable, includesUnselectedAiScores, examDefinitionPublicId, examDefinitionVersion,
+                rubricVersionPublicId, rubricParameters, items, taskTypeAverages, skills, overall, name);
+    }
 }

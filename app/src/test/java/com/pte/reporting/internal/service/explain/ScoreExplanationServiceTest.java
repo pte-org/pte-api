@@ -62,6 +62,8 @@ class ScoreExplanationServiceTest {
     private final ScoringService scoringService = mock(ScoringService.class);
     private final ExamResultRepository results = mock(ExamResultRepository.class);
     private final ScoreExplanationAccess access = mock(ScoreExplanationAccess.class);
+    private final com.pte.assessment.ExamDefinitionService examDefinitionService =
+            mock(com.pte.assessment.ExamDefinitionService.class);
     private final ReportSnapshotCodec codec = new ReportSnapshotCodec(JsonMapper.builder().build());
 
     @Test
@@ -70,6 +72,9 @@ class ScoreExplanationServiceTest {
                 .withUnselectedAiAnswer(ExplanationFixtureBuilder.DESCRIBE_IMAGE).build());
         ScoreAggregationService aggregation = fixture.aggregationService(scoringService);
         ScoreExplanationService service = service(fixture, aggregation);
+        var template = mock(com.pte.assessment.dto.response.ExamDefinitionResponse.class);
+        when(template.name()).thenReturn("PTE Academic 50+");
+        when(examDefinitionService.getByPublicId(org.mockito.ArgumentMatchers.any())).thenReturn(template);
 
         ScoreExplanationResponse explanation = service.explain(ATTEMPT_ID, HOST);
         ProvisionalScoreSummary live = aggregation.aggregateProvisional(ATTEMPT_ID, TENANT_ID);
@@ -83,6 +88,7 @@ class ScoreExplanationServiceTest {
         assertItemTracesMatchItemScores(explanation);
         assertThat(explanation.rubricParameters().versionPublicId()).isEqualTo(fixture.pinnedVersion().getPublicId());
         assertThat(explanation.rubricParameters().taskTypes()).hasSize(10);
+        assertThat(explanation.examDefinitionName()).isEqualTo("PTE Academic 50+");
     }
 
     @Test
@@ -192,7 +198,7 @@ class ScoreExplanationServiceTest {
             ScoreAggregationService aggregation) {
         when(access.requireReadable(ATTEMPT_ID, HOST)).thenReturn(ATTEMPT);
         return new ScoreExplanationService(access, results, codec, scoringService, aggregation,
-                fixture.traceService());
+                fixture.traceService(), examDefinitionService);
     }
 
     private ExplanationFixtureBuilder.Fixture stubbed(ExplanationFixtureBuilder.Fixture fixture) {

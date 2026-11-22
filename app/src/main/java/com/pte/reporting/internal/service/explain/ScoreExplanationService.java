@@ -1,5 +1,7 @@
 package com.pte.reporting.internal.service.explain;
 
+import com.pte.shared.exception.DomainException;
+import com.pte.assessment.ExamDefinitionService;
 import com.pte.attempt.dto.response.AttemptSummaryView;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.reporting.domain.ExamResult;
@@ -39,20 +41,41 @@ public class ScoreExplanationService {
     private final ScoringService scoringService;
     private final ScoreAggregationService aggregationService;
     private final RubricTraceService rubricTraceService;
+    private final ExamDefinitionService examDefinitionService;
 
     public ScoreExplanationService(ScoreExplanationAccess access, ExamResultRepository examResultRepository,
             ReportSnapshotCodec snapshotCodec, ScoringService scoringService,
-            ScoreAggregationService aggregationService, RubricTraceService rubricTraceService) {
+            ScoreAggregationService aggregationService, RubricTraceService rubricTraceService,
+            ExamDefinitionService examDefinitionService) {
         this.access = access;
         this.examResultRepository = examResultRepository;
         this.snapshotCodec = snapshotCodec;
         this.scoringService = scoringService;
         this.aggregationService = aggregationService;
         this.rubricTraceService = rubricTraceService;
+        this.examDefinitionService = examDefinitionService;
     }
 
     @Transactional(readOnly = true)
     public ScoreExplanationResponse explain(UUID attemptPublicId, CurrentUser caller) {
+        ScoreExplanationResponse response = explainWithoutTemplateName(attemptPublicId, caller);
+        return response.withExamDefinitionName(templateName(response.examDefinitionPublicId()));
+    }
+
+    /** The pinned template may since be retired; a lookup that fails only leaves the name out. */
+    private String templateName(UUID examDefinitionPublicId) {
+        if (examDefinitionPublicId == null) {
+            return null;
+        }
+        try {
+            var template = examDefinitionService.getByPublicId(examDefinitionPublicId);
+            return template == null ? null : template.name();
+        } catch (DomainException ex) {
+            return null;
+        }
+    }
+
+    private ScoreExplanationResponse explainWithoutTemplateName(UUID attemptPublicId, CurrentUser caller) {
         AttemptSummaryView attempt = access.requireReadable(attemptPublicId, caller);
         ExamResult report = examResultRepository.findByAttemptPublicId(attemptPublicId).orElse(null);
         if (report != null && report.isPublished()) {
