@@ -71,6 +71,11 @@ public class GradingCompletionEvaluator {
                     satisfiedItems++;
                     continue;
                 }
+                if (answer.isScoredAsBlankAnswer()) {
+                    // The by-rule zero of an empty answer: the same "left blank" case as a missing row.
+                    satisfiedItems++;
+                    continue;
+                }
                 ScoringMethod method = answer.getScoringMethod();
                 if (method == null) {
                     reasons.add(GradingConstants.SCORING_METHOD_UNAVAILABLE);
