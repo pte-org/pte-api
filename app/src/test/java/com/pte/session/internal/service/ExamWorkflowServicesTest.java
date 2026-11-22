@@ -341,6 +341,19 @@ class ExamWorkflowServicesTest {
     }
 
     @Test
+    void deleteDraft_alsoDeletesAGeneratedButUnpublishedExam() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        session.setStatus(SessionStatus.READY);
+        when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
+
+        draftService.deleteDraft(session.getPublicId(), hostAdmin);
+
+        assertThat(session.isDeleted()).isTrue();
+        verify(sessionRepository).save(session);
+    }
+
+    @Test
     void deleteDraft_rejectsPublishedSession() {
         ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
                 com.pte.session.domain.enums.LockdownMode.STRICT);

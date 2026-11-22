@@ -231,7 +231,9 @@ public class ExamDraftService {
     @Transactional
     public void deleteDraft(UUID sessionPublicId, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
-        if (session.getStatus() != SessionStatus.DRAFT) {
+        // READY is generated but never published: nobody is enrolled yet, so it can go like a draft. This is also
+        // how the create wizard cleans up when publishing fails after the questions were generated.
+        if (session.getStatus() != SessionStatus.DRAFT && session.getStatus() != SessionStatus.READY) {
             throw new ExamDraftNotDeletableException();
         }
         session.setDeleted(true);

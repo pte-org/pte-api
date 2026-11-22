@@ -101,7 +101,7 @@ public final class SessionConstants {
     public static final String SESSION_NOT_CANCELLABLE_FRIENDLY =
             "This exam can no longer be cancelled in its current state.";
     public static final String EXAM_DRAFT_NOT_DELETABLE_FRIENDLY =
-            "Only an unpublished exam draft can be deleted.";
+            "Only an exam that has not been published yet can be deleted.";
     public static final String SESSION_WINDOW_OUTSIDE_SUBSCRIPTION_FRIENDLY =
             "The exam window must fit within the selected subscription period.";
     public static final String SESSION_WINDOW_OUTSIDE_SUBSCRIPTION_RANGE_FRIENDLY =
