@@ -182,6 +182,22 @@ class ExamWorkflowServicesTest {
     }
 
     @Test
+    void createDraft_windowClashingWithAScheduledExamOnTheSameBundle_isRejectedBeforeSaving() {
+        stubSubscriptionForDraft();
+        var scheduled = new com.pte.session.domain.ExamSession();
+        scheduled.setPublicId(UUID.randomUUID());
+        scheduled.setName("Morning mock");
+        when(sessionRepository.findFirstOverlapping(subscriptionId, opensAt, closesAt, null))
+                .thenReturn(java.util.Optional.of(scheduled));
+
+        assertThatThrownBy(() -> draftService.createDraft(new CreateExamDraftRequest(
+                "Second mock", templateId, subscriptionId, opensAt, closesAt,
+                ExamMode.OFFICIAL_EXAM, null, null, 50), hostAdmin))
+                .isInstanceOf(com.pte.session.internal.exception.capacity.SessionTimeConflictException.class);
+        verify(sessionRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void createDraft_partialSkillSelection_isRejected() {
         when(examDefinitionService.findActiveForTenant(templateId, tenantId)).thenReturn(Optional.of(
                 twoSkillTemplateResponse()));
